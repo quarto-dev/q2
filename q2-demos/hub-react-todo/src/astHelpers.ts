@@ -81,6 +81,51 @@ export function extractTodoItems(todoDiv: Annotated_Block): TodoItem[] {
 }
 
 /**
+ * Toggle a checkbox item in the AST and return a new (cloned) AST.
+ * Returns null if the item can't be found or toggled.
+ */
+export function toggleCheckbox(ast: RustQmdJson, itemIndex: number): RustQmdJson | null {
+  // Deep clone to avoid mutating React state
+  const cloned: RustQmdJson = JSON.parse(JSON.stringify(ast))
+
+  const todoDiv = findTodoDiv(cloned)
+  if (!todoDiv || todoDiv.t !== 'Div') return null
+
+  const divContent = todoDiv.c[1] as Annotated_Block[]
+  const bulletList = divContent.find(b => b.t === 'BulletList')
+  if (!bulletList || bulletList.t !== 'BulletList') return null
+
+  const listItems = bulletList.c
+  if (itemIndex < 0 || itemIndex >= listItems.length) return null
+
+  const item = listItems[itemIndex]
+  if (!item || item.length === 0) return null
+
+  const block = item[0]
+  if (!block || (block.t !== 'Plain' && block.t !== 'Para')) return null
+
+  const inlines = block.c as Annotated_Inline[]
+  if (!inlines || inlines.length === 0) return null
+
+  const firstInline = inlines[0]
+  if (!firstInline || firstInline.t !== 'Span') return null
+
+  // Toggle the checkbox content
+  const spanContent = firstInline.c[1] as Annotated_Inline[]
+  const isChecked = spanContent.length > 0 && spanContent.some(i => i.t === 'Str' && i.c === 'x')
+
+  if (isChecked) {
+    // Uncheck: clear the span content
+    firstInline.c[1] = []
+  } else {
+    // Check: add Str("x") to the span content
+    firstInline.c[1] = [{ t: 'Str', c: 'x', s: 0 } as Annotated_Inline]
+  }
+
+  return cloned
+}
+
+/**
  * Concatenate inline nodes into plain text.
  */
 function inlinesToText(inlines: Annotated_Inline[]): string {

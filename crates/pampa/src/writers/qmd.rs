@@ -1491,14 +1491,22 @@ fn write_span(
         }
     }
 
-    // Spans always use bracket syntax: [content]{#id .class key=value}
-    // Even empty attributes should be written as [content]{} for proper roundtripping
+    // Spans use bracket syntax: [content]{#id .class key=value}
+    // When attributes are empty, omit the {} suffix — the parser treats [content]
+    // as a Span regardless. For empty content + empty attrs, write [ ] with a space
+    // for readability and to distinguish from empty-cell [] in list tables.
     write!(buf, "[")?;
+    if span.content.is_empty() && is_empty_attr(&span.attr) {
+        write!(buf, " ]")?;
+        return Ok(());
+    }
     for inline in &span.content {
         write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]")?;
-    write_attr(&span.attr, buf, ctx)?;
+    if !is_empty_attr(&span.attr) {
+        write_attr(&span.attr, buf, ctx)?;
+    }
     Ok(())
 }
 

@@ -11,6 +11,7 @@ use pampa::pandoc::Pandoc;
 use pampa::writers;
 use proptest::prelude::*;
 use quarto_ast_reconcile::compute_reconciliation;
+use std::io::Cursor;
 
 // =============================================================================
 // Helpers
@@ -34,6 +35,35 @@ fn write_qmd(ast: &Pandoc) -> String {
     let mut buf = Vec::new();
     writers::qmd::write(ast, &mut buf).expect("Failed to write QMD");
     String::from_utf8(buf).expect("Writer produced invalid UTF-8")
+}
+
+/// Write a Pandoc AST to JSON.
+fn write_json(ast: &Pandoc) -> String {
+    let mut buf = Vec::new();
+    let context = pampa::pandoc::ASTContext::default();
+    writers::json::write(ast, &context, &mut buf).expect("Failed to write JSON");
+    String::from_utf8(buf).expect("Writer produced invalid UTF-8")
+}
+
+/// Read a Pandoc AST from JSON.
+fn read_json(json: &str) -> Pandoc {
+    let mut cursor = Cursor::new(json.as_bytes());
+    pampa::readers::json::read(&mut cursor)
+        .expect("Failed to read JSON")
+        .0
+}
+
+/// Simulate the WASM incremental_write_qmd path:
+/// 1. Parse original_qmd to get original_ast with accurate source spans
+/// 2. JSON round-trip the new_ast (simulates client serialization/deserialization)
+/// 3. Compute reconciliation plan and run incremental_write
+fn incremental_write_via_json_roundtrip(original_qmd: &str, new_ast: &Pandoc) -> String {
+    let original_ast = parse_qmd(original_qmd);
+    let json = write_json(new_ast);
+    let new_ast_from_json = read_json(&json);
+    let plan = compute_reconciliation(&original_ast, &new_ast_from_json);
+    writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast_from_json, &plan)
+        .expect("incremental_write failed")
 }
 
 // =============================================================================
@@ -160,6 +190,107 @@ fn idempotent_with_front_matter() {
 #[test]
 fn idempotent_with_front_matter_multiple_keys() {
     assert_idempotent("---\ntitle: Hello\nauthor: World\n---\n\nA paragraph.\n");
+}
+
+// =============================================================================
+// Metadata gap preservation — bd-1kvf
+// =============================================================================
+//
+// When the incremental writer rewrites a block (e.g., a Div with a toggled
+// checkbox), the blank line between the YAML front matter and the first block
+// must be preserved. This tests the WASM path where the new AST comes from
+// JSON round-trip (which loses source_info accuracy in metadata).
+
+#[test]
+fn metadata_gap_preserved_when_block_rewritten_via_json() {
+    // Document with front matter + blank line + div containing a checkbox list
+    let original_qmd = "\
+---
+title: Hello
+---
+
+::: {#todo}
+
+* [x] First item
+* [x] Second item
+
+:::
+";
+
+    // Parse to get the AST, then modify it (toggle first checkbox)
+    let mut new_ast = parse_qmd(original_qmd);
+
+    // Navigate: blocks[0] = Div -> content[0] = BulletList -> content[0][0] = Plain -> content[0] = Span
+    // Toggle the first checkbox from [x] to [ ] by clearing the span content
+    if let pampa::pandoc::Block::Div(ref mut div) = new_ast.blocks[0] {
+        if let pampa::pandoc::Block::BulletList(ref mut bl) = div.content[0] {
+            if let pampa::pandoc::Block::Plain(ref mut plain) = bl.content[0][0] {
+                if let pampa::pandoc::Inline::Span(ref mut span) = plain.content[0] {
+                    span.content.clear(); // Toggle [x] -> [ ]
+                }
+            }
+        }
+    }
+
+    // Run through JSON round-trip path (simulates WASM/client)
+    let result = incremental_write_via_json_roundtrip(original_qmd, &new_ast);
+
+    // The blank line between --- and ::: {#todo} must be preserved
+    assert!(
+        result.contains("---\n\n::: {#todo}") || result.contains("---\n\n:::"),
+        "Blank line between front matter and first block was lost!\nResult:\n{}",
+        result
+    );
+}
+
+#[test]
+fn metadata_gap_preserved_when_paragraph_rewritten_via_json() {
+    // Simpler case: front matter + blank line + paragraph
+    let original_qmd = "\
+---
+title: Hello
+---
+
+A paragraph.
+";
+
+    let mut new_ast = parse_qmd(original_qmd);
+    // Change the paragraph text
+    if let pampa::pandoc::Block::Paragraph(ref mut p) = new_ast.blocks[0] {
+        p.content = vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
+            text: "Modified paragraph.".to_string(),
+            source_info: quarto_source_map::SourceInfo::default(),
+        })];
+    }
+
+    let result = incremental_write_via_json_roundtrip(original_qmd, &new_ast);
+
+    assert!(
+        result.contains("---\n\n"),
+        "Blank line between front matter and first block was lost!\nResult:\n{}",
+        result
+    );
+}
+
+#[test]
+fn metadata_gap_preserved_identical_ast_via_json() {
+    // Even with NO changes, JSON round-trip should preserve the gap
+    let original_qmd = "\
+---
+title: Hello
+---
+
+A paragraph.
+";
+
+    let ast = parse_qmd(original_qmd);
+    let result = incremental_write_via_json_roundtrip(original_qmd, &ast);
+
+    assert_eq!(
+        result, original_qmd,
+        "Idempotence violated when AST goes through JSON round-trip!\nExpected:\n{:?}\nGot:\n{:?}",
+        original_qmd, result
+    );
 }
 
 // --- Mixed documents ---

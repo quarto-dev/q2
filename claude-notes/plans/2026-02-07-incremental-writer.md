@@ -667,7 +667,84 @@ Property 2 is the simplest to test and should be the FIRST property verified. It
 - [x] Wire into WASM module (`wasm-quarto-hub-client`) — `incremental_write_qmd(original_qmd, new_ast_json)` export added
 - [x] Wire into `quarto-sync-client` `updateFileAst` path — `ASTOptions.incrementalWriteQmd` optional, fallback to `writeQmd`
 - [x] Wire into hub-react-todo demo — `wasm.ts` wrapper + `useSyncedAst.ts` passes `incrementalWriteQmd`
-- [ ] End-to-end test with hub-client (requires WASM build — manual verification)
+- [ ] End-to-end: hub-react-todo checkbox toggle writes back to document (see Phase 4b below)
+
+### Phase 4b: End-to-End — Checkbox Toggle in hub-react-todo
+
+Minimal end-to-end demo: when a user clicks a checkbox in the todo list UI, the change flows through the incremental writer and back into the synced QMD document.
+
+#### Current state of the demo
+
+The demo app has these components:
+- **`App.tsx`** — Root, hardcodes sync server + doc ID + file path
+- **`TodoApp.tsx`** — Connects `useSyncedAst` hook to `TodoList` component via `astHelpers`
+- **`TodoList.tsx`** — Renders checkboxes. Already has an `onToggle?: (index: number) => void` prop, but it's never passed (checkboxes are disabled/read-only)
+- **`useSyncedAst.ts`** — React hook that creates a sync client with AST options, returns `{ ast, connected, error, connecting }`. Stores the client in a ref but does **not** expose `updateFileAst`
+- **`astHelpers.ts`** — `findTodoDiv(ast)` finds the `Div#todo` block, `extractTodoItems(todoDiv)` extracts `{ checked, label, itemIndex }` from the BulletList inside it
+
+#### AST structure for checkboxes
+
+QMD source:
+```
+:::{#todo}
+- [ ] Unchecked item
+- [x] Checked item
+:::
+```
+
+Parsed AST (simplified):
+```
+Div (id="todo")
+  BulletList
+    Item 0: [Plain: [Span([], []),        Space, Str("Unchecked"), Space, Str("item")]]   ← unchecked
+    Item 1: [Plain: [Span([], [Str("x")]), Space, Str("Checked"),  Space, Str("item")]]   ← checked
+```
+
+The checkbox state lives in the `Span`'s inline content:
+- **Unchecked**: `Span(["", [], []], [])` — empty inline content
+- **Checked**: `Span(["", [], []], [Str("x")])` — contains `Str("x")`
+
+To toggle: mutate the Span's `c[1]` (inline content array) between `[]` and `[{t: "Str", c: "x", s: 0}]`.
+
+#### Implementation steps
+
+- [x] **Step 1: Add `toggleCheckbox` to `astHelpers.ts`**
+  - Takes `(ast: RustQmdJson, itemIndex: number) → RustQmdJson | null`
+  - Deep-clones via `JSON.parse(JSON.stringify(ast))`
+  - Navigates to `Div#todo → BulletList → items[itemIndex] → Plain → inlines[0] (Span)`
+  - Toggles: if Span content has Str("x"), clears to `[]`; otherwise sets to `[{t: "Str", c: "x", s: 0}]`
+  - Returns null on navigation failure
+
+- [x] **Step 2: Expose `updateFileAst` from `useSyncedAst`**
+  - Added `updateAst: ((ast: RustQmdJson) => void) | null` to `SyncedAstState`
+  - Stable `useCallback` that calls `clientRef.current.updateFileAst(filePathRef.current, ast)`
+  - Returns `updateAst` when connected, null otherwise
+
+- [x] **Step 3: Wire `onToggle` through `TodoApp` → `TodoList`**
+  - `TodoApp` destructures `updateAst` from hook, passes to `TodoFromAst`
+  - `TodoFromAst` creates `onToggle` callback: `toggleCheckbox(ast, itemIndex)` → `updateAst(newAst)`
+  - `TodoList` receives `onToggle` (enables checkboxes) or undefined (disables them)
+
+- [ ] **Step 4: Verify the round-trip**
+  - `npm run build:all` succeeds
+  - Run the demo against a live sync server (or local test)
+  - Toggle a checkbox → the QMD text in the synced document changes (only the checkbox span, rest preserved verbatim)
+  - The AST change notification fires back → UI updates to reflect the new state
+
+#### Data flow
+
+```
+User clicks checkbox
+  → TodoList.onToggle(itemIndex)
+  → TodoApp: newAst = toggleCheckbox(ast, itemIndex)
+  → useSyncedAst: client.updateFileAst(filePath, newAst)
+  → quarto-sync-client: incrementalWriteQmd(cachedSource, newAst)
+  → WASM: parse original → reconcile → incremental_write → result QMD
+  → sync client: updateText(doc, ['text'], resultQmd)  [Automerge diffs]
+  → Automerge syncs to peers
+  → onFileChanged fires → tryParseAndNotify → onASTChanged
+  → useSyncedAst: setAst(newAst) → React re-renders with updated checkbox
+```
 
 ### Phase 5 (Future): Inline Splicing
 - [ ] Investigate inline source span contiguity

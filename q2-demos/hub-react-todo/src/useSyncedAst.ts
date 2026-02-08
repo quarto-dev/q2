@@ -5,7 +5,7 @@
  * the latest successfully parsed AST as React state.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createSyncClient } from '@quarto/quarto-sync-client'
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import { initWasm, parseQmdContent, writeQmdFromAst, incrementalWriteQmd } from './wasm.ts'
@@ -15,6 +15,8 @@ export interface SyncedAstState {
   connected: boolean
   error: string | null
   connecting: boolean
+  /** Write a modified AST back to the synced document. Null when not connected. */
+  updateAst: ((ast: RustQmdJson) => void) | null
 }
 
 interface SyncedAstParams {
@@ -31,12 +33,25 @@ export function useSyncedAst(params: SyncedAstParams | null): SyncedAstState {
 
   // Use ref for the client so we can disconnect on cleanup
   const clientRef = useRef<ReturnType<typeof createSyncClient> | null>(null)
+  const filePathRef = useRef<string | null>(null)
+
+  // Stable callback for writing AST changes back to the synced document
+  const updateAst = useCallback((newAst: RustQmdJson) => {
+    const client = clientRef.current
+    const path = filePathRef.current
+    if (!client || !path) {
+      console.warn('[useSyncedAst] Cannot update AST: not connected')
+      return
+    }
+    client.updateFileAst(path, newAst)
+  }, [])
 
   useEffect(() => {
     if (!params) return
 
     let cancelled = false
     const { syncServer, indexDocId, filePath } = params
+    filePathRef.current = filePath
 
     async function connect() {
       setConnecting(true)
@@ -105,5 +120,5 @@ export function useSyncedAst(params: SyncedAstParams | null): SyncedAstState {
     }
   }, [params?.syncServer, params?.indexDocId, params?.filePath])
 
-  return { ast, connected, error, connecting }
+  return { ast, connected, error, connecting, updateAst: connected ? updateAst : null }
 }

@@ -5,9 +5,9 @@
 
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import { useSyncedAst } from './useSyncedAst.ts'
-import { findTodoDiv, extractTodoItems } from './astHelpers.ts'
+import { findTodoDiv, extractTodoItems, toggleCheckbox } from './astHelpers.ts'
 import { TodoList } from './TodoList.tsx'
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 
 interface TodoAppProps {
   syncServer: string
@@ -20,7 +20,7 @@ export function TodoApp({ syncServer, indexDocId, filePath }: TodoAppProps) {
     () => ({ syncServer, indexDocId, filePath }),
     [syncServer, indexDocId, filePath],
   )
-  const { ast, connected, error, connecting } = useSyncedAst(params)
+  const { ast, connected, error, connecting, updateAst } = useSyncedAst(params)
 
   if (error) {
     return (
@@ -55,11 +55,25 @@ export function TodoApp({ syncServer, indexDocId, filePath }: TodoAppProps) {
     )
   }
 
-  return <TodoFromAst ast={ast} filePath={filePath} />
+  return <TodoFromAst ast={ast} filePath={filePath} updateAst={updateAst} />
 }
 
-function TodoFromAst({ ast, filePath }: { ast: RustQmdJson; filePath: string }) {
+interface TodoFromAstProps {
+  ast: RustQmdJson
+  filePath: string
+  updateAst: ((ast: RustQmdJson) => void) | null
+}
+
+function TodoFromAst({ ast, filePath, updateAst }: TodoFromAstProps) {
   const todoDiv = findTodoDiv(ast)
+
+  const onToggle = useCallback((itemIndex: number) => {
+    if (!updateAst) return
+    const newAst = toggleCheckbox(ast, itemIndex)
+    if (newAst) {
+      updateAst(newAst)
+    }
+  }, [ast, updateAst])
 
   if (!todoDiv) {
     return (
@@ -85,7 +99,7 @@ function TodoFromAst({ ast, filePath }: { ast: RustQmdJson; filePath: string }) 
       <p style={{ fontSize: '12px', color: '#888' }}>
         Live from <code>{filePath}</code> — {items.length} item{items.length !== 1 ? 's' : ''}
       </p>
-      <TodoList items={items} />
+      <TodoList items={items} onToggle={updateAst ? onToggle : undefined} />
     </div>
   )
 }
