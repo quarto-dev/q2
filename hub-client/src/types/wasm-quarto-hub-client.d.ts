@@ -37,6 +37,8 @@ declare module 'wasm-quarto-hub-client' {
   // QMD parsing and AST conversion functions
   export function parse_qmd_content(content: string): string;
   export function ast_to_qmd(ast_json: string): string;
+  /** Incrementally write a modified AST back to QMD, preserving unchanged source text. */
+  export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
 
   // Response type for parse/write operations
   export interface AstResponse {

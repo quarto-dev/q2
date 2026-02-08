@@ -646,18 +646,29 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
   /**
    * Update a file's content by providing a new AST.
-   * The AST is converted to QMD text using the provided writeQmd function,
-   * then the text is synced via updateFileContent.
+   * When incrementalWriteQmd is available and the original source is cached,
+   * uses the incremental writer to preserve unchanged portions verbatim.
+   * Otherwise falls back to writeQmd for a full rewrite.
    *
    * Requires astOptions to be provided when creating the sync client.
-   * Throws if writeQmd throws or if astOptions was not configured.
+   * Throws if writeQmd/incrementalWriteQmd throws or if astOptions was not configured.
    */
   function updateFileAst(path: string, ast: unknown): void {
     if (!astOptions) {
       throw new Error('updateFileAst called without astOptions configured');
     }
 
-    const qmdText = astOptions.writeQmd(ast);
+    let qmdText: string;
+    const cached = astCache.get(path);
+
+    if (astOptions.incrementalWriteQmd && cached) {
+      // Use incremental writer with cached original source
+      qmdText = astOptions.incrementalWriteQmd(cached.source, ast);
+    } else {
+      // Fallback to full rewrite
+      qmdText = astOptions.writeQmd(ast);
+    }
+
     updateFileContent(path, qmdText);
   }
 

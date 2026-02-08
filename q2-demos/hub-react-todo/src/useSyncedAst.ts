@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createSyncClient } from '@quarto/quarto-sync-client'
 import type { RustQmdJson } from '@quarto/pandoc-types'
-import { initWasm, parseQmdContent, writeQmdFromAst } from './wasm.ts'
+import { initWasm, parseQmdContent, writeQmdFromAst, incrementalWriteQmd } from './wasm.ts'
 
 export interface SyncedAstState {
   ast: RustQmdJson | null
@@ -75,6 +75,8 @@ export function useSyncedAst(params: SyncedAstParams | null): SyncedAstState {
         {
           parseQmd: (content: string) => parseQmdContent(content),
           writeQmd: (astValue: unknown) => writeQmdFromAst(astValue as RustQmdJson),
+          incrementalWriteQmd: (originalQmd: string, newAst: unknown) =>
+            incrementalWriteQmd(originalQmd, newAst as RustQmdJson),
           fileFilter: (path: string) => path === filePath,
         },
       )

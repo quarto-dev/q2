@@ -2,7 +2,7 @@
 
 **Beads issue:** `bd-2t4o`
 **Parent plan:** `claude-notes/plans/2026-02-06-ast-sync-client-api.md` (Phase 2)
-**Status:** Phases 0-3 COMPLETE — all property tests passing. Ready for Phase 4 (integration)
+**Status:** Phases 0-4 COMPLETE — all property tests passing, WASM export + sync client integration done
 **Branch:** `feature/incremental-writer`
 
 ## Resumption Notes
@@ -38,7 +38,13 @@ When continuing this work in a new session, read this plan file first. Key conte
     - 12 proptests (4 idempotence levels, 4 roundtrip mutations, 1 equivalence, 1 verbatim, 2 monotonicity)
     - 7 sugar/desugar tests (2 list-table roundtrip, 3 idempotence, 2 incremental roundtrip near sugared blocks)
     - 2 ignored (definition-list roundtrip — pre-existing writer bug)
-11. **Next steps:** Phase 4 (integration) — wire into WASM module and hub-client
+11. **Phase 4 integration is DONE:**
+    - WASM export: `incremental_write_qmd(original_qmd, new_ast_json)` in `wasm-quarto-hub-client/src/lib.rs` — re-parses `original_qmd` internally for guaranteed correct source spans, deserializes `new_ast_json`, computes reconciliation, calls incremental writer
+    - Sync client: `ASTOptions.incrementalWriteQmd` optional field in `quarto-sync-client/src/types.ts`, used in `updateFileAst` when available with cached source
+    - Demo app: `hub-react-todo/src/wasm.ts` wrapper + wired into `useSyncedAst.ts`
+    - TypeScript type declarations updated in `hub-client/src/types/wasm-quarto-hub-client.d.ts`
+    - New dependency: `quarto-ast-reconcile` added to `wasm-quarto-hub-client/Cargo.toml`
+12. **Next steps:** End-to-end verification (requires WASM build via `npm run build:all`), then Phase 5 (future: inline splicing)
 
 ## Overview
 
@@ -658,9 +664,10 @@ Property 2 is the simplest to test and should be the FIRST property verified. It
 - [x] All property tests green (40 tests total: 28 hand-crafted + 12 proptests)
 
 ### Phase 4: Integration
-- [ ] Wire into WASM module (`wasm-quarto-hub-client`)
-- [ ] Wire into `quarto-sync-client` `updateFileAst` path
-- [ ] End-to-end test with hub-client
+- [x] Wire into WASM module (`wasm-quarto-hub-client`) — `incremental_write_qmd(original_qmd, new_ast_json)` export added
+- [x] Wire into `quarto-sync-client` `updateFileAst` path — `ASTOptions.incrementalWriteQmd` optional, fallback to `writeQmd`
+- [x] Wire into hub-react-todo demo — `wasm.ts` wrapper + `useSyncedAst.ts` passes `incrementalWriteQmd`
+- [ ] End-to-end test with hub-client (requires WASM build — manual verification)
 
 ### Phase 5 (Future): Inline Splicing
 - [ ] Investigate inline source span contiguity

@@ -118,6 +118,17 @@ export interface ASTOptions {
   writeQmd: (ast: unknown) => string;
 
   /**
+   * Incrementally write a modified AST back to QMD text, preserving unchanged
+   * portions of the original source text verbatim. Falls back to `writeQmd`
+   * if not provided or if the original source is not cached.
+   *
+   * @param originalQmd - The original QMD source text
+   * @param newAst - The modified AST to write
+   * @returns The new QMD text with unchanged portions preserved
+   */
+  incrementalWriteQmd?: (originalQmd: string, newAst: unknown) => string;
+
+  /**
    * Filter which files should be parsed.
    * Defaults to matching .qmd files only if not provided.
    */

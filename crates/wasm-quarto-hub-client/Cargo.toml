@@ -14,6 +14,7 @@ sha2 = "0.10"
 
 [dependencies]
 pampa = { path = "../pampa", default-features = false }
+quarto-ast-reconcile = { path = "../quarto-ast-reconcile" }
 quarto-core = { path = "../quarto-core" }
 quarto-error-reporting = { path = "../quarto-error-reporting" }
 quarto-lsp-core = { path = "../quarto-lsp-core" }

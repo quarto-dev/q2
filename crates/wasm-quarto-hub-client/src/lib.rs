@@ -2153,3 +2153,87 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
         .unwrap(),
     }
 }
+
+/// Incrementally write a modified AST back to QMD, preserving unchanged
+/// portions of the original source text verbatim.
+///
+/// Re-parses `original_qmd` internally to obtain an AST with accurate source
+/// spans, then computes a reconciliation plan against the new AST and applies
+/// the incremental writer.
+///
+/// # Arguments
+/// * `original_qmd` - The original QMD source text
+/// * `new_ast_json` - JSON-serialized Pandoc AST representing the modified document
+///
+/// # Returns
+/// JSON: `{ "success": true, "qmd": "<result-qmd-text>" }`
+/// or `{ "success": false, "error": "...", "diagnostics": [...] }`
+#[wasm_bindgen]
+pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
+    use pampa::readers::json::read as json_read;
+    use pampa::wasm_entry_points::qmd_to_pandoc;
+    use pampa::writers::incremental::incremental_write;
+    use quarto_ast_reconcile::compute_reconciliation;
+
+    // Step 1: Parse original QMD to get AST with accurate source spans
+    let (original_ast, _original_context) = match qmd_to_pandoc(original_qmd.as_bytes()) {
+        Ok(result) => result,
+        Err(error_strings) => {
+            let error_msg = error_strings.join("\n");
+            return serde_json::to_string(&AstResponse {
+                success: false,
+                ast: None,
+                qmd: None,
+                error: Some(format!("Failed to parse original QMD: {}", error_msg)),
+                diagnostics: None,
+            })
+            .unwrap();
+        }
+    };
+
+    // Step 2: Deserialize new AST from JSON
+    let mut cursor = std::io::Cursor::new(new_ast_json.as_bytes());
+    let (new_ast, _new_context) = match json_read(&mut cursor) {
+        Ok(result) => result,
+        Err(e) => {
+            return serde_json::to_string(&AstResponse {
+                success: false,
+                ast: None,
+                qmd: None,
+                error: Some(format!("Failed to parse new AST JSON: {}", e)),
+                diagnostics: None,
+            })
+            .unwrap();
+        }
+    };
+
+    // Step 3: Compute reconciliation plan
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+
+    // Step 4: Incremental write
+    match incremental_write(original_qmd, &original_ast, &new_ast, &plan) {
+        Ok(result_qmd) => serde_json::to_string(&AstResponse {
+            success: true,
+            ast: None,
+            qmd: Some(result_qmd),
+            error: None,
+            diagnostics: None,
+        })
+        .unwrap(),
+        Err(diags) => {
+            let error_msg = diags
+                .iter()
+                .map(|d| d.to_text(None))
+                .collect::<Vec<_>>()
+                .join("\n");
+            serde_json::to_string(&AstResponse {
+                success: false,
+                ast: None,
+                qmd: None,
+                error: Some(format!("Incremental write failed: {}", error_msg)),
+                diagnostics: None,
+            })
+            .unwrap()
+        }
+    }
+}

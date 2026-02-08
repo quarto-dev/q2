@@ -5,6 +5,7 @@
 declare module 'wasm-quarto-hub-client' {
   export function parse_qmd_content(content: string): string;
   export function ast_to_qmd(ast_json: string): string;
+  export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
 
   export interface AstResponse {
     success: boolean;
