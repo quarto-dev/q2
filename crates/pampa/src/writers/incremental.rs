@@ -12,6 +12,8 @@
 
 use crate::pandoc::{Block, Pandoc};
 use quarto_ast_reconcile::types::{BlockAlignment, ReconciliationPlan};
+use quarto_ast_reconcile::{structural_eq_blocks, structural_eq_inlines};
+use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use quarto_source_map::SourceInfo;
 use std::ops::Range;
 
@@ -208,13 +210,20 @@ fn emit_metadata_prefix(
     if let Some(start) = first_block_start {
         if start > 0 {
             // There is a metadata prefix region
-            if metadata_structurally_equal(&original_ast.meta, &new_ast.meta) {
+            if metadata_content_eq(&original_ast.meta, &new_ast.meta) {
                 // Metadata unchanged — copy verbatim
                 result.push_str(&original_qmd[..start]);
             } else {
-                // Metadata changed — rewrite
+                // Metadata changed — rewrite the front matter, but preserve
+                // the original gap (blank lines) between the closing --- and
+                // the first block.
                 let meta_str = write_metadata_to_string(&new_ast.meta)?;
                 result.push_str(&meta_str);
+
+                // Find where the original front matter content ends (the closing ---)
+                // and preserve the gap between it and the first block.
+                let gap = find_metadata_trailing_gap(original_qmd, start);
+                result.push_str(gap);
             }
             return Ok(true);
         }
@@ -222,6 +231,28 @@ fn emit_metadata_prefix(
 
     // No metadata prefix
     Ok(false)
+}
+
+/// Find the gap (whitespace) between the end of the YAML front matter and the
+/// first block. The `first_block_start` is the byte offset where the first
+/// block begins. We look backwards from that offset to find where the
+/// closing `---\n` ends, and return the gap between them.
+fn find_metadata_trailing_gap(original_qmd: &str, first_block_start: usize) -> &str {
+    // The metadata region is original_qmd[..first_block_start].
+    // The closing `---` is followed by `\n`, and then there may be blank lines
+    // before the first block. The write_metadata_to_string function already
+    // emits `---\n` at the end, so we need to find just the extra whitespace.
+    //
+    // Look for the last occurrence of "---\n" in the metadata region.
+    let meta_region = &original_qmd[..first_block_start];
+    if let Some(closing_pos) = meta_region.rfind("---\n") {
+        let after_closing = closing_pos + 4; // skip past "---\n"
+        &original_qmd[after_closing..first_block_start]
+    } else {
+        // No closing --- found (shouldn't happen for valid front matter).
+        // Fall back to a single newline separator.
+        "\n"
+    }
 }
 
 /// Compute the separator between two adjacent blocks in the result.
@@ -363,14 +394,52 @@ fn write_metadata_to_string(
     })
 }
 
-/// Compare two ConfigValue metadata structures for structural equality.
+/// Compare two ConfigValue metadata structures for content equality,
+/// ignoring source_info and merge_op at all levels.
 ///
-/// This is a simple equality check. If metadata is unchanged, we preserve
-/// the original front matter verbatim (including comments, formatting, etc.).
-fn metadata_structurally_equal(
-    a: &quarto_pandoc_types::ConfigValue,
-    b: &quarto_pandoc_types::ConfigValue,
-) -> bool {
-    // Use the PartialEq implementation on ConfigValue
-    a == b
+/// This is needed because the incremental writer may compare an AST parsed
+/// from QMD (with real source positions) against one deserialized from JSON
+/// (with default source positions). The derived PartialEq on ConfigValue
+/// includes source_info, which would incorrectly report them as different.
+fn metadata_content_eq(a: &ConfigValue, b: &ConfigValue) -> bool {
+    config_value_content_eq(a, b)
+}
+
+/// Recursively compare two ConfigValues, ignoring source_info and merge_op.
+fn config_value_content_eq(a: &ConfigValue, b: &ConfigValue) -> bool {
+    config_value_kind_content_eq(&a.value, &b.value)
+}
+
+/// Compare two ConfigValueKind values for content equality.
+fn config_value_kind_content_eq(a: &ConfigValueKind, b: &ConfigValueKind) -> bool {
+    match (a, b) {
+        (ConfigValueKind::Scalar(a), ConfigValueKind::Scalar(b)) => a == b,
+        (ConfigValueKind::PandocInlines(a), ConfigValueKind::PandocInlines(b)) => {
+            structural_eq_inlines(a, b)
+        }
+        (ConfigValueKind::PandocBlocks(a), ConfigValueKind::PandocBlocks(b)) => {
+            structural_eq_blocks(a, b)
+        }
+        (ConfigValueKind::Path(a), ConfigValueKind::Path(b)) => a == b,
+        (ConfigValueKind::Glob(a), ConfigValueKind::Glob(b)) => a == b,
+        (ConfigValueKind::Expr(a), ConfigValueKind::Expr(b)) => a == b,
+        (ConfigValueKind::Array(a), ConfigValueKind::Array(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(a, b)| config_value_content_eq(a, b))
+        }
+        (ConfigValueKind::Map(a), ConfigValueKind::Map(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(a, b)| config_map_entry_content_eq(a, b))
+        }
+        _ => false, // Different variants
+    }
+}
+
+/// Compare two ConfigMapEntry values for content equality, ignoring key_source.
+fn config_map_entry_content_eq(a: &ConfigMapEntry, b: &ConfigMapEntry) -> bool {
+    a.key == b.key && config_value_content_eq(&a.value, &b.value)
 }

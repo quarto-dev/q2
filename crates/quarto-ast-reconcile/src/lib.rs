@@ -27,7 +27,7 @@ pub use apply::apply_reconciliation;
 pub use compute::{compute_reconciliation, compute_reconciliation_for_blocks};
 pub use hash::{
     HashCache, compute_block_hash_fresh, compute_blocks_hash_fresh, compute_inline_hash_fresh,
-    structural_eq_block, structural_eq_blocks, structural_eq_inline,
+    structural_eq_block, structural_eq_blocks, structural_eq_inline, structural_eq_inlines,
 };
 pub use types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,

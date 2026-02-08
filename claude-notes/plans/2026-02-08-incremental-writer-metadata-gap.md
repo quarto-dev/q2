@@ -57,23 +57,25 @@ User clicks checkbox → toggleCheckbox() modifies AST clone
 
 ### Phase 2: Fix Bug 1 — metadata comparison
 
-- [ ] Replace `metadata_structurally_equal()` with a comparison that ignores `source_info`
-      and `merge_op`. Options:
-  - (a) Write a custom `config_value_content_eq()` recursive comparator
-  - (b) Serialize both to a canonical form and compare strings
-  - (c) Add a `content_eq()` method to `ConfigValue` in quarto-pandoc-types
-  - Option (a) is recommended: most precise and doesn't require changing quarto-pandoc-types
+- [x] Replace `metadata_structurally_equal()` with a comparison that ignores `source_info`
+      and `merge_op`. Used option (a): custom `config_value_content_eq()` recursive comparator.
+  - Added `config_value_content_eq()`, `config_value_kind_content_eq()`, and
+    `config_map_entry_content_eq()` in `incremental.rs`
+  - Uses `structural_eq_inlines`/`structural_eq_blocks` from `quarto_ast_reconcile` for
+    PandocInlines/PandocBlocks cases
+  - Added `structural_eq_inlines` to `quarto_ast_reconcile` re-exports
 
 ### Phase 3: Fix Bug 2 — separator after metadata rewrite
 
-- [ ] In `emit_metadata_prefix`, when metadata is rewritten, also compute and append the
+- [x] In `emit_metadata_prefix`, when metadata is rewritten, also compute and append the
       appropriate separator between the closing `---` and the first block.
-  - When original doc had a gap (blank line), preserve it: `original_qmd[meta_end..first_block_start]`
-  - When no original doc context (new metadata from scratch), use `\n` as default separator
+  - Added `find_metadata_trailing_gap()` helper that extracts the gap between the
+    closing `---\n` and the first block start from the original document
+  - Applied in the rewrite branch of `emit_metadata_prefix`
 
 ### Phase 4: Verify
 
-- [ ] Run all tests: `cargo nextest run --workspace`
+- [x] Run all tests: `cargo nextest run --workspace` — 6250 tests pass, 0 failures
 - [ ] Reproduce in browser: toggle checkbox, verify blank line preserved in hub-client editor
 - [ ] Verify bullet style inside div is still `*` (expected: rewrite uses canonical writer)
 
