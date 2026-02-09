@@ -1614,13 +1614,23 @@ fn write_rawinline(
     buf: &mut dyn std::io::Write,
     _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    // Only output raw content if it's for markdown format
     if raw.format == "markdown" {
+        // Markdown raw content is emitted directly
+        write!(buf, "{}", raw.text)
+    } else if raw.format == "html" && is_html_comment(&raw.text) {
+        // HTML comments are emitted in native syntax (bd-1066)
         write!(buf, "{}", raw.text)
     } else {
         // For other formats, use raw span notation with = prefix
         write!(buf, "`{}`{{={}}}", raw.text, raw.format)
     }
+}
+
+/// Check if a raw HTML string is an HTML comment (<!-- ... -->).
+/// The text may have leading whitespace from the tree-sitter node span.
+fn is_html_comment(text: &str) -> bool {
+    let trimmed = text.trim_start();
+    trimmed.starts_with("<!--") && trimmed.ends_with("-->")
 }
 fn write_note(
     note: &crate::pandoc::Note,

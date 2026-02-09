@@ -1030,8 +1030,20 @@ fn native_visitor<T: Write>(
         "caption" => process_caption(node, children, context),
         "pipe_table" => process_pipe_table(node, children, context),
         "comment" => {
-            let range = node_location(node);
-            PandocNativeIntermediate::IntermediateUnknown(range)
+            // HTML comments (<!-- ... -->) are preserved as RawInline(html)
+            // so they survive round-tripping through the AST and are not lost
+            // during incremental writes. See bd-1066.
+            //
+            // We do NOT trim the text because the comment node's span may
+            // include leading whitespace that the writer must reproduce to
+            // maintain correct spacing (e.g., "Hello <!-- comment --> world"
+            // — the space before <!-- is part of the comment node).
+            let text = node.utf8_text(input_bytes).unwrap().to_string();
+            PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+                format: "html".to_string(),
+                text,
+                source_info: node_source_info_with_context(node, context),
+            }))
         }
         "html_element" => {
             // Extract the text from the HTML element node

@@ -1,7 +1,7 @@
 # HTML Comment Preservation in Incremental Writer
 
 **Beads issue:** `bd-1066`
-**Status:** Diagnosis complete, fix plan drafted
+**Status:** Phases 1-3 complete, Phase 4 edge cases remain
 
 ## Problem Summary
 
@@ -41,19 +41,28 @@ QMD source: "Hello <!-- comment --> world."
 
 4. **Comments near structural changes**: If blocks are added/removed around a comment, the reconciler might fail to align the empty Para, marking it as `UseAfter` → `Rewrite`.
 
-## Diagnostic Tests Added
+## Tests
 
 File: `crates/pampa/tests/incremental_writer_tests.rs`
 
-| Test | Status | What it verifies |
-|------|--------|-----------------|
-| `idempotent_with_standalone_comment` | PASS | Identity reconciliation preserves standalone comments |
-| `comment_preserved_when_adjacent_block_changes` | PASS | Adjacent block change doesn't affect standalone comment block |
-| `comment_lost_when_containing_paragraph_rewritten` | PASS | Inline comment dropped when paragraph is rewritten |
-| `comment_inside_blockquote_lost_on_rewrite` | PASS | Comment in blockquote lost when blockquote is rewritten |
-| `comment_block_lost_when_blocks_added` | PASS | Standalone comment survives block insertion (reconciler aligns empty Paras) |
+12 tests verify comment preservation after the fix:
 
-All tests pass — they document the current (buggy) behavior. The "lost" tests assert that comments ARE lost, confirming the bug.
+| Test | What it verifies |
+|------|-----------------|
+| `idempotent_with_standalone_comment` | Identity reconciliation preserves standalone comments |
+| `idempotent_with_inline_comment` | Identity reconciliation preserves inline comments |
+| `idempotent_with_comment_in_blockquote` | Identity reconciliation preserves comments in blockquotes |
+| `idempotent_with_multiple_comments` | Multiple comments in one paragraph survive |
+| `idempotent_with_edge_position_comments` | Comments at start/end of document survive |
+| `comment_preserved_when_adjacent_block_changes` | Adjacent block change doesn't affect standalone comment block |
+| `inline_comment_preserved_when_paragraph_rewritten` | Inline comment survives paragraph rewrite |
+| `comment_inside_blockquote_preserved_on_rewrite` | Comment in blockquote survives blockquote rewrite |
+| `comment_block_preserved_when_blocks_added` | Standalone comment survives block insertion |
+| `roundtrip_inline_comment` | Standard write round-trips inline comments |
+| `roundtrip_standalone_comment` | Standard write round-trips standalone comments |
+| `roundtrip_comment_in_blockquote` | Standard write round-trips comments in blockquotes |
+
+Additionally, 45 JSON snapshot tests were updated to reflect the new `RawInline` output for comments.
 
 ## Key Code Locations
 
@@ -138,20 +147,19 @@ Don't fix the AST. Instead, modify the incremental writer to check for "hidden c
 - [x] Document key code locations
 - [x] Create beads issue (bd-1066)
 
-### Phase 2: Fix Design (TODO — needs user input)
-- [ ] Decide on fix approach (A+B recommended, but user may prefer C or D)
-- [ ] If A+B: Design the comment detection heuristic for the writer
-- [ ] If C: Design the Comment AST node type and serialization format
-- [ ] Consider impact on Lua filters, JSON serialization, WASM exports
-- [ ] Consider interaction with the `\!` escaping in the reader
+### Phase 2: Fix Design (COMPLETE — Approach A+B chosen)
+- [x] Decide on fix approach: A+B (parser preserves + writer emits native syntax)
+- [x] Design the comment detection heuristic for the writer (`is_html_comment`)
+- [x] Confirmed no impact on `\!` escaping — tree-sitter provides raw text without escaping
 
-### Phase 3: Implementation (TODO)
-- [ ] Implement chosen fix
-- [ ] Convert diagnostic "comment_lost_*" tests to pass (comment preserved)
-- [ ] Add round-trip tests: `<!-- comment -->` → parse → write → `<!-- comment -->`
-- [ ] Test with incremental writer (inline comments survive paragraph rewrite)
-- [ ] Test with standard writer (full write preserves comments)
-- [ ] Full workspace test suite
+### Phase 3: Implementation (COMPLETE)
+- [x] Implement parser fix: `comment` → `RawInline(html, text)` in `treesitter.rs:1032`
+- [x] Implement writer fix: `write_rawinline` emits native `<!-- -->` for HTML comments in `qmd.rs`
+- [x] Convert diagnostic tests to verify comment preservation (12 tests)
+- [x] Test with incremental writer (inline comments survive paragraph rewrite)
+- [x] Test with standard writer (full write preserves comments)
+- [x] Update 45 JSON snapshot tests
+- [x] Full workspace test suite: 6262 tests pass, 0 failures
 
 ### Phase 4: Edge Cases (TODO)
 - [ ] Multi-line comments: `<!-- multi\nline\ncomment -->`
