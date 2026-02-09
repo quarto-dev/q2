@@ -1308,3 +1308,84 @@ fn roundtrip_comment_in_blockquote() {
         "> <!-- comment -->\n> Changed text.\n",
     );
 }
+
+// --- Phase 4: Edge case tests ---
+
+/// Multi-line inline comment idempotence.
+#[test]
+fn idempotent_with_multiline_inline_comment() {
+    assert_idempotent("Text <!-- multi\nline\ncomment --> done.\n");
+}
+
+/// Multi-line standalone block comment idempotence.
+#[test]
+fn idempotent_with_multiline_block_comment() {
+    assert_idempotent("Before.\n\n<!--\nmulti\nline\nblock\n-->\n\nAfter.\n");
+}
+
+/// Empty comment idempotence.
+#[test]
+fn idempotent_with_empty_comment() {
+    assert_idempotent("Before <!-- --> after.\n");
+}
+
+/// Comment with double dashes inside idempotence.
+#[test]
+fn idempotent_with_dashes_in_comment() {
+    assert_idempotent("Has <!-- double -- dashes --> inside.\n");
+}
+
+/// Multi-line inline comment preserved on rewrite.
+#[test]
+fn multiline_comment_preserved_on_rewrite() {
+    let original = "Text <!-- multi\nline\ncomment --> done.\n";
+    let new = "Changed <!-- multi\nline\ncomment --> done.\n";
+
+    let original_ast = parse_qmd(original);
+    let new_ast = parse_qmd(new);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+
+    let result = writers::incremental::incremental_write(original, &original_ast, &new_ast, &plan)
+        .expect("incremental_write failed");
+
+    assert!(
+        result.contains("<!-- multi\nline\ncomment -->"),
+        "Multi-line comment lost in incremental write:\n{:?}",
+        result
+    );
+}
+
+/// Multi-line block comment preserved when adjacent block changes.
+#[test]
+fn multiline_block_comment_preserved_on_adjacent_change() {
+    let original = "Before.\n\n<!--\nmulti\nline\n-->\n\nAfter.\n";
+    let new = "Changed.\n\n<!--\nmulti\nline\n-->\n\nAfter.\n";
+
+    let original_ast = parse_qmd(original);
+    let new_ast = parse_qmd(new);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+
+    let result = writers::incremental::incremental_write(original, &original_ast, &new_ast, &plan)
+        .expect("incremental_write failed");
+
+    assert!(
+        result.contains("<!--\nmulti\nline\n-->"),
+        "Multi-line block comment lost:\n{:?}",
+        result
+    );
+}
+
+/// Empty comment round-trips through standard writer.
+#[test]
+fn roundtrip_empty_comment() {
+    assert_roundtrip("Before <!-- --> after.\n", "Changed <!-- --> after.\n");
+}
+
+/// Comment with special characters round-trips.
+#[test]
+fn roundtrip_comment_with_dashes() {
+    assert_roundtrip(
+        "Has <!-- double -- dashes --> inside.\n",
+        "Changed <!-- double -- dashes --> inside.\n",
+    );
+}
