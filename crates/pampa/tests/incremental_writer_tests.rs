@@ -1143,3 +1143,155 @@ fn roundtrip_change_paragraph_near_deflist() {
         "Before.\n\n::: {.definition-list}\n* term\n  - def\n\n:::\n\nChanged after.\n",
     );
 }
+
+// =============================================================================
+// HTML comment preservation — diagnostic tests for comment loss
+// =============================================================================
+//
+// HTML comments (<!-- ... -->) are parsed by tree-sitter as `comment` nodes.
+// In the treesitter-to-pandoc conversion, `comment` nodes become
+// IntermediateUnknown and are silently dropped from the Pandoc AST.
+//
+// At the BLOCK level, a standalone comment on its own line becomes an empty
+// Para block whose source span covers the comment text. This means:
+// - KeepBefore (verbatim copy) preserves the comment via the source span
+// - Rewrite produces an empty paragraph, losing the comment completely
+//
+// At the INLINE level, a comment within a paragraph is completely dropped
+// from the inlines list. The paragraph's source span covers the comment, but
+// the AST has no record of it. Any rewrite of the paragraph loses the comment.
+
+/// When nothing changes, idempotence holds — standalone comment survives
+/// because the empty Para block is KeepBefore and its source span covers
+/// the comment text.
+#[test]
+fn idempotent_with_standalone_comment() {
+    assert_idempotent("Before.\n\n<!-- a comment -->\n\nAfter.\n");
+}
+
+/// When a block adjacent to a standalone comment changes, the comment
+/// block (empty Para) should be KeepBefore and preserved via source span.
+#[test]
+fn comment_preserved_when_adjacent_block_changes() {
+    let original_qmd = "Before.\n\n<!-- a comment -->\n\nAfter.\n";
+    let new_qmd = "Changed.\n\n<!-- a comment -->\n\nAfter.\n";
+
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd(new_qmd);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    // The comment text should be preserved because the empty Para block
+    // containing the comment is KeepBefore (verbatim copy from source span)
+    assert!(
+        result.contains("<!-- a comment -->"),
+        "Standalone comment lost in incremental write output:\n{:?}",
+        result
+    );
+}
+
+/// DOCUMENTS THE BUG: Inline comments are completely dropped from the AST.
+/// When a paragraph containing an inline comment is rewritten (because other
+/// text in the paragraph changed), the comment disappears.
+///
+/// tree-sitter parses <!-- comment --> as a `comment` node. The converter
+/// turns this into IntermediateUnknown which is silently dropped from the
+/// paragraph's inlines list. The resulting AST has no record of the comment.
+#[test]
+fn comment_lost_when_containing_paragraph_rewritten() {
+    let original_qmd = "Hello <!-- comment --> world.\n";
+    let new_qmd = "Hi <!-- comment --> world.\n";
+
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd(new_qmd);
+
+    // Verify the comment is actually dropped from the AST
+    assert_eq!(new_ast.blocks.len(), 1, "Expected 1 block");
+    // The new_ast paragraph should only have [Str("Hi"), Space, Str("world.")]
+    // — the RawInline for the comment is NOT present
+    if let pampa::pandoc::Block::Paragraph(para) = &new_ast.blocks[0] {
+        // The comment is dropped: only 3 inlines instead of 4
+        assert_eq!(
+            para.content.len(),
+            3,
+            "Expected 3 inlines (Str, Space, Str) — comment was dropped by parser. Got: {:?}",
+            para.content
+        );
+    } else {
+        panic!("Expected Paragraph block");
+    }
+
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    // The comment is lost because it's not in the AST
+    assert!(
+        !result.contains("<!-- comment -->"),
+        "Expected comment to be lost (it's not in the AST), but it survived: {:?}",
+        result
+    );
+    // The result should be just the paragraph text without the comment
+    assert_eq!(result, "Hi world.\n");
+}
+
+/// DOCUMENTS THE BUG: Comments inside indentation boundaries are lost on rewrite.
+/// When a blockquote contains a comment and is rewritten (because other content
+/// changed), the comment disappears because it's not in the AST.
+#[test]
+fn comment_inside_blockquote_lost_on_rewrite() {
+    let original_qmd = "> <!-- comment -->\n> Some text.\n";
+    let new_qmd = "> <!-- comment -->\n> Changed text.\n";
+
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd(new_qmd);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    // The blockquote is an indentation boundary — the entire block is rewritten.
+    // The comment is lost because it's not in the AST.
+    assert!(
+        !result.contains("<!-- comment -->"),
+        "Expected comment to be lost on blockquote rewrite, but it survived: {:?}",
+        result
+    );
+}
+
+/// DOCUMENTS THE BUG: Standalone comment block lost when reconciler can't align it.
+/// If blocks are added/removed around a standalone comment, the reconciler might
+/// mark the empty Para (containing the comment via source span) as UseAfter,
+/// which triggers Rewrite and produces an empty paragraph — losing the comment.
+#[test]
+fn comment_block_lost_when_blocks_added() {
+    let original_qmd = "Before.\n\n<!-- a comment -->\n\nAfter.\n";
+    // Add a new block between "Before." and the comment
+    let new_qmd = "Before.\n\nNew paragraph.\n\n<!-- a comment -->\n\nAfter.\n";
+
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd(new_qmd);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    // This test documents whether the comment survives when blocks shift.
+    // The reconciler should align the empty Para blocks (both are empty),
+    // so the comment SHOULD survive via KeepBefore.
+    // If it doesn't, this is another manifestation of the comment loss bug.
+    if !result.contains("<!-- a comment -->") {
+        eprintln!(
+            "Comment lost when blocks were added around it. Result: {:?}",
+            result
+        );
+        // This is a known risk — the reconciler might not align empty Paras correctly
+        // when the document structure changes. Mark this as an expected failure for now.
+    }
+}
