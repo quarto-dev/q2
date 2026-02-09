@@ -173,6 +173,7 @@ mod tests {
     }
 
     /// A stage that always fails
+    #[allow(dead_code)]
     struct FailingStage;
 
     #[async_trait]

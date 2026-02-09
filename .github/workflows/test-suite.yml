@@ -137,9 +137,12 @@ jobs:
       #   run: npm run build
 
       # Build and test
+      # Deny warnings in CI so they don't accumulate silently
       - name: Build
         shell: bash
         run: cargo build
+        env:
+          RUSTFLAGS: "-D warnings"
 
       - name: Test block tree-sitter grammar
         shell: bash
@@ -150,6 +153,8 @@ jobs:
       - name: Test Rust code
         shell: bash
         run: cargo nextest run
+        env:
+          RUSTFLAGS: "-D warnings"
 
       # - name: Run hub-client tests
       #   shell: bash

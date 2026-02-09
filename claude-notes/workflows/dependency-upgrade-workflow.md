@@ -119,12 +119,25 @@ cargo update --dry-run
 # Apply
 cargo update
 
-# Verify everything still builds and passes
+# Verify everything still builds and passes with no warnings
 cargo build --workspace
+cargo build --workspace --tests
 cargo nextest run --workspace
 ```
 
-If tests pass, commit:
+**Important: Fix new compiler warnings immediately.** Dependency upgrades
+frequently deprecate methods or change APIs in ways that introduce warnings.
+Check for warnings after both `cargo build --workspace` (library/binary code)
+and `cargo build --workspace --tests` (test code), and fix them before
+committing. Common warning categories after upgrades:
+
+- **Deprecated methods** — check the crate's changelog/migration guide for
+  the replacement API
+- **Unused `Result`** — new versions may change return types; propagate
+  with `?` or use `let _ =`
+- **Changed trait bounds** — may require updating generic constraints
+
+If tests pass and warnings are clean, commit:
 
 ```bash
 git add Cargo.lock
@@ -154,15 +167,18 @@ cargo outdated --workspace
 cargo upgrade --dry-run    # Preview changes
 cargo upgrade              # Apply
 
-# Verify
+# Verify (build + tests + warnings)
 cargo build --workspace
+cargo build --workspace --tests
 cargo nextest run --workspace
 
 # Also verify WASM builds since Cargo.toml changed
 cargo xtask verify
 ```
 
-If everything passes, commit:
+**Fix any new compiler warnings before committing** (see Phase 1 for details).
+
+If everything passes and is warning-clean, commit:
 
 ```bash
 git add Cargo.toml Cargo.lock
@@ -193,7 +209,8 @@ cargo upgrade --incompatible -p <crate_name>
 # See what broke
 cargo build --workspace 2>&1 | head -100
 
-# Fix compile errors, then verify
+# Fix compile errors AND warnings, then verify
+cargo build --workspace --tests   # also check test code for warnings
 cargo nextest run --workspace
 cargo xtask verify
 

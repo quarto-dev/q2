@@ -16,6 +16,9 @@
  * - Feature flags allow selective enabling/disabling of node types
  */
 
+// Some generators are defined for completeness but not yet used in tests.
+#![allow(dead_code)]
+
 use hashlink::LinkedHashMap;
 use proptest::prelude::*;
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
