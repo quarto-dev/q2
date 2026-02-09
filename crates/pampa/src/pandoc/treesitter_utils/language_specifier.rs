@@ -165,6 +165,7 @@ pub fn process_nested_language_specifier(
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]

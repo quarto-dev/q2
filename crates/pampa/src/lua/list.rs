@@ -141,7 +141,7 @@ fn create_concat_method(lua: &Lua) -> Result<Function> {
 
         // Copy metatable from first list
         if let Some(mt) = list1.metatable() {
-            result.set_metatable(Some(mt));
+            result.set_metatable(Some(mt))?;
         }
 
         // Copy elements from first list
@@ -291,7 +291,7 @@ fn create_clone_method(lua: &Lua) -> Result<Function> {
 
         // Copy metatable
         if let Some(mt) = table.metatable() {
-            result.set_metatable(Some(mt));
+            result.set_metatable(Some(mt))?;
         }
 
         // Copy elements (shallow)
@@ -327,11 +327,11 @@ fn create_filter_method(lua: &Lua) -> Result<Function> {
 
         // Copy metatable
         if let Some(mt) = table.metatable() {
-            result.set_metatable(Some(mt));
+            result.set_metatable(Some(mt))?;
         } else {
             // Fall back to List metatable
             let list_mt = get_or_create_list_metatable(lua)?;
-            result.set_metatable(Some(list_mt));
+            result.set_metatable(Some(list_mt))?;
         }
 
         let mut j = 0usize;
@@ -459,7 +459,7 @@ fn create_map_method(lua: &Lua) -> Result<Function> {
 
         // Use base List metatable for map results (matching Pandoc behavior)
         let list_mt = get_or_create_list_metatable(lua)?;
-        result.set_metatable(Some(list_mt));
+        result.set_metatable(Some(list_mt))?;
 
         for i in 1..=len {
             let val: Value = table.raw_get(i)?;
@@ -500,7 +500,7 @@ fn create_new_method(lua: &Lua) -> Result<Function> {
         };
 
         // Set the metatable (mt is the List metatable itself)
-        result.set_metatable(Some(mt));
+        result.set_metatable(Some(mt))?;
 
         Ok(result)
     })
@@ -555,7 +555,7 @@ pub fn create_inlines_table(lua: &Lua, inlines: &[crate::pandoc::Inline]) -> Res
     }
 
     let mt = get_or_create_inlines_metatable(lua)?;
-    table.set_metatable(Some(mt));
+    table.set_metatable(Some(mt))?;
 
     Ok(Value::Table(table))
 }
@@ -568,7 +568,7 @@ pub fn create_blocks_table(lua: &Lua, blocks: &[crate::pandoc::Block]) -> Result
     }
 
     let mt = get_or_create_blocks_metatable(lua)?;
-    table.set_metatable(Some(mt));
+    table.set_metatable(Some(mt))?;
 
     Ok(Value::Table(table))
 }
@@ -658,12 +658,12 @@ mod tests {
         let mt = get_or_create_list_metatable(&lua).unwrap();
 
         let list1 = lua.create_table().unwrap();
-        list1.set_metatable(Some(mt.clone()));
+        list1.set_metatable(Some(mt.clone())).unwrap();
         list1.set(1, "a").unwrap();
         list1.set(2, "b").unwrap();
 
         let list2 = lua.create_table().unwrap();
-        list2.set_metatable(Some(mt.clone()));
+        list2.set_metatable(Some(mt.clone())).unwrap();
         list2.set(1, "c").unwrap();
         list2.set(2, "d").unwrap();
 
@@ -684,12 +684,12 @@ mod tests {
         let mt = get_or_create_list_metatable(&lua).unwrap();
 
         let list1 = lua.create_table().unwrap();
-        list1.set_metatable(Some(mt.clone()));
+        list1.set_metatable(Some(mt.clone())).unwrap();
         list1.set(1, 1).unwrap();
         list1.set(2, 2).unwrap();
 
         let list2 = lua.create_table().unwrap();
-        list2.set_metatable(Some(mt.clone()));
+        list2.set_metatable(Some(mt.clone())).unwrap();
         list2.set(1, 1).unwrap();
         list2.set(2, 2).unwrap();
 
@@ -706,11 +706,11 @@ mod tests {
         let mt = get_or_create_list_metatable(&lua).unwrap();
 
         let list1 = lua.create_table().unwrap();
-        list1.set_metatable(Some(mt.clone()));
+        list1.set_metatable(Some(mt.clone())).unwrap();
         list1.set(1, 1).unwrap();
 
         let list2 = lua.create_table().unwrap();
-        list2.set_metatable(Some(mt.clone()));
+        list2.set_metatable(Some(mt.clone())).unwrap();
         list2.set(1, 2).unwrap();
 
         lua.globals().set("list1", list1).unwrap();
@@ -726,12 +726,12 @@ mod tests {
         let mt = get_or_create_list_metatable(&lua).unwrap();
 
         let list1 = lua.create_table().unwrap();
-        list1.set_metatable(Some(mt.clone()));
+        list1.set_metatable(Some(mt.clone())).unwrap();
         list1.set(1, 1).unwrap();
         list1.set(2, 2).unwrap();
 
         let list2 = lua.create_table().unwrap();
-        list2.set_metatable(Some(mt.clone()));
+        list2.set_metatable(Some(mt.clone())).unwrap();
         list2.set(1, 1).unwrap();
 
         lua.globals().set("list1", list1).unwrap();
@@ -748,11 +748,11 @@ mod tests {
         let mt2 = get_or_create_inlines_metatable(&lua).unwrap();
 
         let list1 = lua.create_table().unwrap();
-        list1.set_metatable(Some(mt1));
+        list1.set_metatable(Some(mt1)).unwrap();
         list1.set(1, 1).unwrap();
 
         let list2 = lua.create_table().unwrap();
-        list2.set_metatable(Some(mt2));
+        list2.set_metatable(Some(mt2)).unwrap();
         list2.set(1, 1).unwrap();
 
         lua.globals().set("list1", list1).unwrap();
@@ -786,7 +786,7 @@ mod tests {
         // list1 has no metatable
 
         let list2 = lua.create_table().unwrap();
-        list2.set_metatable(Some(mt)); // list2 has metatable
+        list2.set_metatable(Some(mt)).unwrap(); // list2 has metatable
 
         // One has metatable, one doesn't
         let result: bool = eq_fn.call((list1, list2)).unwrap();
@@ -799,7 +799,7 @@ mod tests {
         let mt = get_or_create_list_metatable(&lua).unwrap();
 
         let list = lua.create_table().unwrap();
-        list.set_metatable(Some(mt));
+        list.set_metatable(Some(mt)).unwrap();
         list.set(1, "a").unwrap();
         list.set(2, "b").unwrap();
         list.set(3, "c").unwrap();

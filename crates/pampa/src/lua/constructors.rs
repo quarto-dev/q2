@@ -1626,7 +1626,7 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     ));
                 }
             };
-            table.set_metatable(Some(mt));
+            table.set_metatable(Some(mt))?;
             Ok(table)
         })?,
     )?;
@@ -1651,7 +1651,7 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     ));
                 }
             };
-            table.set_metatable(Some(mt));
+            table.set_metatable(Some(mt))?;
             Ok(table)
         })?,
     )?;

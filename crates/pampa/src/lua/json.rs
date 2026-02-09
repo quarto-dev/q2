@@ -484,7 +484,7 @@ mod tests {
             .create_function(|_, _: Value| Ok(r#"{"custom": true}"#.to_string()))
             .unwrap();
         metatable.set("__tojson", tojson_fn).unwrap();
-        table.set_metatable(Some(metatable));
+        table.set_metatable(Some(metatable)).unwrap();
 
         let result: String = encode.call(table).unwrap();
         assert_eq!(result, r#"{"custom": true}"#);

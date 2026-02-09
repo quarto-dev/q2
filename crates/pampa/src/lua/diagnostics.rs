@@ -300,7 +300,7 @@ fn get_caller_location(lua: &Lua) -> (String, i64) {
     for level in 1..=10 {
         if let Some(result) = lua.inspect_stack(level, |debug| {
             let source: mlua::DebugSource = debug.source();
-            let line = debug.curr_line();
+            let line = debug.current_line();
 
             // Skip C functions (internal mlua calls)
             // Accept "Lua", "main" (for main chunks), and any other non-C sources
@@ -310,7 +310,7 @@ fn get_caller_location(lua: &Lua) -> (String, i64) {
                 // Only return if it looks like a real source (has meaningful content)
                 let src_str: String = src.to_string();
                 if !src_str.is_empty() && src_str != "=[C]" {
-                    return Some((src_str, line as i64));
+                    return Some((src_str, line.unwrap_or(0) as i64));
                 }
             }
             None

@@ -40,6 +40,15 @@ This applies even at the end of sessions. Prepare the commit but wait for approv
 
 When asked to 'stage and commit everything' or 'commit all changes', stage ALL modified/untracked files (`git add -A`), not just the files Claude edited in the current session.
 
+### Snapshot Test Changes
+
+When a commit includes updated or new snapshot files (`.snap` files under `snapshots/`), **always explicitly document these changes** in the commit message and in conversation with the user. Snapshot changes can hide unwanted regressions. Specifically:
+
+1. **Report the count** of snapshot files added/modified/removed.
+2. **Summarize what changed** — e.g., "45 HTML comment snapshots updated: comments now appear as `RawInline` instead of being dropped."
+3. **Call out any surprising changes** — if a snapshot changed in a way that wasn't obviously expected from the code change, flag it for review.
+4. After committing, **list the affected snapshot files** so the user can review the diffs before pushing.
+
 ## **WORK TRACKING**
 
 We use br (beads_rust) for issue tracking instead of Markdown TODOs or external tools.

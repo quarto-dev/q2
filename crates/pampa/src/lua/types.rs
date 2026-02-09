@@ -1398,7 +1398,7 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
     for level in 1..=5 {
         if let Some(result) = lua.inspect_stack(level, |debug| {
             let source: mlua::DebugSource = debug.source();
-            let line = debug.curr_line();
+            let line = debug.current_line();
 
             // Check if this is a Lua source (not a C function)
             if source.what != "C"
@@ -1406,8 +1406,7 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
             {
                 // The source often starts with "@" for file paths
                 let path: &str = src.strip_prefix("@").unwrap_or(&src);
-                // Convert line number from i32, negative means unknown
-                let line_num = if line >= 0 { line as usize } else { 0 };
+                let line_num = line.unwrap_or(0);
                 return Some(SourceInfo::filter_provenance(path.to_string(), line_num));
             }
             None

@@ -150,7 +150,7 @@ Don't fix the AST. Instead, modify the incremental writer to check for "hidden c
 ### Phase 2: Fix Design (COMPLETE — Approach A+B chosen)
 - [x] Decide on fix approach: A+B (parser preserves + writer emits native syntax)
 - [x] Design the comment detection heuristic for the writer (`is_html_comment`)
-- [x] Confirmed no impact on `\!` escaping — tree-sitter provides raw text without escaping
+- [x] ~~Confirmed no impact on `\!` escaping~~ **WRONG**: inline parser produces `html_element` (not `comment`), and the `html_element` handler escapes `!` → `\!`. See Phase 4 notes.
 
 ### Phase 3: Implementation (COMPLETE)
 - [x] Implement parser fix: `comment` → `RawInline(html, text)` in `treesitter.rs:1032`
@@ -161,7 +161,26 @@ Don't fix the AST. Instead, modify the incremental writer to check for "hidden c
 - [x] Update 45 JSON snapshot tests
 - [x] Full workspace test suite: 6262 tests pass, 0 failures
 
-### Phase 4: Edge Cases (TODO)
+### Phase 4: Edge Cases (IN PROGRESS)
+
+**Important discovery:** The inline tree-sitter grammar classifies `<!-- -->` as
+`html_element`, NOT `comment`. The `comment` node type only appears in some
+contexts (the snapshot test fixtures use it). The `html_element` handler applies
+`\!` escaping to the text, producing `<\!-- ... -->` in the RawInline text.
+This means:
+
+1. The `is_html_comment` check in `write_rawinline` must also handle escaped text
+   (`<\!--` in addition to `<!--`).
+2. The Phase 2 note "Confirmed no impact on `\!` escaping" was **wrong** — the
+   escaping does affect the round-trip path through the standard writer.
+3. The incremental writer tests pass because they test idempotence (KeepBefore
+   copies verbatim) and the rewrite path happens to work for the specific test
+   cases — but a full `parse → standard_write → parse` cycle through the binary
+   does NOT preserve native comment syntax.
+
+**Next steps:**
+- [ ] Fix `is_html_comment` to handle `<\!--` escaped form
+- [ ] Investigate whether `html_element` handler should detect comments and skip `\!` escaping
 - [ ] Multi-line comments: `<!-- multi\nline\ncomment -->`
 - [ ] Nested comment-like text: `<!-- <!-- nested --> -->`
 - [ ] Comments adjacent to other constructs (lists, code blocks, divs)

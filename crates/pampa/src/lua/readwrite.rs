@@ -103,7 +103,7 @@ pub fn create_reader_options_table(lua: &Lua, opts: Option<Table>) -> Result<Tab
     // Set metatable for type identification
     let mt = lua.create_table()?;
     mt.set("__name", "ReaderOptions")?;
-    table.set_metatable(Some(mt));
+    table.set_metatable(Some(mt))?;
 
     Ok(table)
 }
@@ -131,7 +131,7 @@ pub fn create_writer_options_table(lua: &Lua, opts: Option<Table>) -> Result<Tab
     // Set metatable for type identification
     let mt = lua.create_table()?;
     mt.set("__name", "WriterOptions")?;
-    table.set_metatable(Some(mt));
+    table.set_metatable(Some(mt))?;
 
     Ok(table)
 }
@@ -333,7 +333,7 @@ fn rust_pandoc_to_lua_table(lua: &Lua, pandoc: &Pandoc) -> Result<Value> {
     // Set metatable with __name for type identification
     let mt = lua.create_table()?;
     mt.set("__name", "Pandoc")?;
-    doc.set_metatable(Some(mt));
+    doc.set_metatable(Some(mt))?;
 
     Ok(Value::Table(doc))
 }
@@ -1100,7 +1100,10 @@ mod tests {
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(result.as_str().unwrap(), "hello");
+        assert_eq!(
+            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
+            "hello"
+        );
 
         // Boolean
         let config = ConfigValue {
@@ -1213,7 +1216,10 @@ mod tests {
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(result.as_str().unwrap(), "/some/path");
+        assert_eq!(
+            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
+            "/some/path"
+        );
 
         // Glob
         let config = ConfigValue {
@@ -1222,7 +1228,10 @@ mod tests {
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(result.as_str().unwrap(), "*.md");
+        assert_eq!(
+            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
+            "*.md"
+        );
 
         // Expr
         let config = ConfigValue {
@@ -1231,7 +1240,10 @@ mod tests {
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
-        assert_eq!(result.as_str().unwrap(), "1 + 2");
+        assert_eq!(
+            result.as_string().and_then(|s| s.to_str().ok()).unwrap(),
+            "1 + 2"
+        );
     }
 
     #[test]

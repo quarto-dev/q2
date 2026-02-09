@@ -3042,12 +3042,12 @@ mod tests {
         use crate::pandoc::ast_context::ASTContext;
 
         // Create a reference in metadata
-        let reference = meta_map(vec![
+        let _reference = meta_map(vec![
             ("id", meta_string("test2020")),
             ("type", meta_string("book")),
             ("title", meta_string("Test Book")),
         ]);
-        let author = meta_map(vec![
+        let _author = meta_map(vec![
             ("family", meta_string("Author")),
             ("given", meta_string("Test")),
         ]);

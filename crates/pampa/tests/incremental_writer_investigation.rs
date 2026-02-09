@@ -63,6 +63,7 @@ fn block_source_info(block: &Block) -> &SourceInfo {
 }
 
 /// Extract the text that a block's source span covers in the original input.
+#[allow(dead_code)]
 fn block_text<'a>(input: &'a str, block: &Block) -> &'a str {
     let (start, end) = block_span(block);
     &input[start..end]
@@ -613,7 +614,7 @@ fn span_inner_metadata() {
 
 #[test]
 fn span_horizontal_rule() {
-    let input = "Before.\n\n---\n\nAfter.\n";
+    let _input = "Before.\n\n---\n\nAfter.\n";
     // Note: --- at the start of a doc is YAML front matter, but between blocks
     // it could be a horizontal rule. Let's use *** to be unambiguous.
     let input2 = "Before.\n\n***\n\nAfter.\n";
