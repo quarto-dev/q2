@@ -10,8 +10,10 @@
  * Copyright (c) 2026 Posit, PBC
  */
 
-use crate::pandoc::{Block, Pandoc};
-use quarto_ast_reconcile::types::{BlockAlignment, ReconciliationPlan};
+use crate::pandoc::{Block, Inline, Pandoc};
+use quarto_ast_reconcile::types::{
+    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
+};
 use quarto_ast_reconcile::{structural_eq_blocks, structural_eq_inlines};
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use quarto_source_map::SourceInfo;
@@ -32,7 +34,7 @@ pub struct TextEdit {
     pub replacement: String,
 }
 
-/// An entry in the coarsened plan: either copy verbatim or rewrite.
+/// An entry in the coarsened plan: either copy verbatim, rewrite, or inline-splice.
 #[derive(Debug)]
 enum CoarsenedEntry {
     /// Copy this byte range verbatim from original_qmd.
@@ -46,6 +48,15 @@ enum CoarsenedEntry {
     Rewrite {
         /// Index into new_ast.blocks
         new_idx: usize,
+    },
+    /// Splice inlines within a block without rewriting the entire block.
+    /// The block structure (prefix, suffix) is preserved from the original;
+    /// only the inline content region is replaced with assembled new content.
+    InlineSplice {
+        /// Pre-computed block text: original block with inline content replaced.
+        block_text: String,
+        /// Index of this block in original_ast.blocks (for gap computation)
+        orig_idx: usize,
     },
 }
 
@@ -74,7 +85,7 @@ pub fn incremental_write(
     plan: &ReconciliationPlan,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
     // Step 1: Coarsen the reconciliation plan
-    let coarsened = coarsen(original_ast, plan);
+    let coarsened = coarsen(original_qmd, original_ast, new_ast, plan)?;
 
     // Step 2: Assemble the result string
     assemble(original_qmd, original_ast, new_ast, &coarsened)
@@ -92,7 +103,7 @@ pub fn compute_incremental_edits(
 ) -> Result<Vec<TextEdit>, Vec<quarto_error_reporting::DiagnosticMessage>> {
     // For now, compute the full result string and diff at block-span granularity.
     // A future optimization could compute edits directly from the coarsened plan.
-    let coarsened = coarsen(original_ast, plan);
+    let coarsened = coarsen(original_qmd, original_ast, new_ast, plan)?;
     compute_edits_from_coarsened(original_qmd, original_ast, new_ast, &coarsened)
 }
 
@@ -102,14 +113,19 @@ pub fn compute_incremental_edits(
 
 /// Convert a hierarchical ReconciliationPlan into a flat Vec<CoarsenedEntry>.
 ///
-/// Conservative strategy (Phase 2): all RecurseIntoContainer become Rewrite.
-/// Future optimization: for non-boundary containers (Div, Figure, NoteDefinitionFencedBlock),
-/// could recursively coarsen inner blocks.
-fn coarsen(original_ast: &Pandoc, plan: &ReconciliationPlan) -> Vec<CoarsenedEntry> {
-    plan.block_alignments
-        .iter()
-        .enumerate()
-        .map(|(result_idx, alignment)| match alignment {
+/// Phase 5 strategy: for RecurseIntoContainer blocks that are inline-content blocks
+/// (Paragraph, Plain, Header) with inline plans that pass the safety check,
+/// produce InlineSplice entries. All other RecurseIntoContainer become Rewrite.
+fn coarsen(
+    original_qmd: &str,
+    original_ast: &Pandoc,
+    new_ast: &Pandoc,
+    plan: &ReconciliationPlan,
+) -> Result<Vec<CoarsenedEntry>, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut entries = Vec::with_capacity(plan.block_alignments.len());
+
+    for (result_idx, alignment) in plan.block_alignments.iter().enumerate() {
+        let entry = match alignment {
             BlockAlignment::KeepBefore(orig_idx) => {
                 let span = block_source_span(&original_ast.blocks[*orig_idx]);
                 CoarsenedEntry::Verbatim {
@@ -120,14 +136,57 @@ fn coarsen(original_ast: &Pandoc, plan: &ReconciliationPlan) -> Vec<CoarsenedEnt
             BlockAlignment::UseAfter(_after_idx) => CoarsenedEntry::Rewrite {
                 new_idx: result_idx,
             },
-            BlockAlignment::RecurseIntoContainer { .. } => {
-                // Conservative: rewrite the entire block if any children changed
-                CoarsenedEntry::Rewrite {
-                    new_idx: result_idx,
+            BlockAlignment::RecurseIntoContainer {
+                before_idx,
+                after_idx,
+            } => {
+                // Check if this block has an inline plan and is safe to splice
+                if let Some(inline_plan) = plan.inline_plans.get(&result_idx) {
+                    let orig_block = &original_ast.blocks[*before_idx];
+                    let new_block = &new_ast.blocks[*after_idx];
+
+                    if let (Some(orig_inlines), Some(new_inlines)) =
+                        (block_inlines(orig_block), block_inlines(new_block))
+                    {
+                        if !orig_inlines.is_empty()
+                            && is_inline_splice_safe(new_inlines, inline_plan)
+                        {
+                            // Safe to splice — assemble the patched block text
+                            let block_text = assemble_inline_splice(
+                                original_qmd,
+                                orig_block,
+                                orig_inlines,
+                                new_inlines,
+                                inline_plan,
+                            )?;
+                            CoarsenedEntry::InlineSplice {
+                                block_text,
+                                orig_idx: *before_idx,
+                            }
+                        } else {
+                            CoarsenedEntry::Rewrite {
+                                new_idx: result_idx,
+                            }
+                        }
+                    } else {
+                        // Not an inline-content block — fall back to Rewrite
+                        CoarsenedEntry::Rewrite {
+                            new_idx: result_idx,
+                        }
+                    }
+                } else {
+                    // No inline plan — this is a block container (Div, BlockQuote, etc.)
+                    // Fall back to Rewrite
+                    CoarsenedEntry::Rewrite {
+                        new_idx: result_idx,
+                    }
                 }
             }
-        })
-        .collect()
+        };
+        entries.push(entry);
+    }
+
+    Ok(entries)
 }
 
 // =============================================================================
@@ -175,6 +234,7 @@ fn assemble(
             CoarsenedEntry::Rewrite { new_idx } => {
                 write_block_to_string(&new_ast.blocks[*new_idx])?
             }
+            CoarsenedEntry::InlineSplice { block_text, .. } => block_text.clone(),
         };
 
         result.push_str(&block_text);
@@ -267,20 +327,22 @@ fn compute_separator<'a>(
     curr_entry: &CoarsenedEntry,
     prev_block_text: Option<&str>,
 ) -> &'a str {
-    // Try to use original gap for consecutive verbatim blocks
-    if let (
-        Some(CoarsenedEntry::Verbatim {
-            orig_idx: prev_idx, ..
-        }),
-        CoarsenedEntry::Verbatim {
-            orig_idx: curr_idx, ..
-        },
-    ) = (prev_entry, curr_entry)
-    {
-        if *curr_idx == *prev_idx + 1 {
+    // Try to use original gap for consecutive blocks that preserve original positions
+    let prev_orig_idx = match prev_entry {
+        Some(CoarsenedEntry::Verbatim { orig_idx, .. }) => Some(*orig_idx),
+        Some(CoarsenedEntry::InlineSplice { orig_idx, .. }) => Some(*orig_idx),
+        _ => None,
+    };
+    let curr_orig_idx = match curr_entry {
+        CoarsenedEntry::Verbatim { orig_idx, .. } => Some(*orig_idx),
+        CoarsenedEntry::InlineSplice { orig_idx, .. } => Some(*orig_idx),
+        _ => None,
+    };
+    if let (Some(prev_idx), Some(curr_idx)) = (prev_orig_idx, curr_orig_idx) {
+        if curr_idx == prev_idx + 1 {
             // Consecutive in original — use original gap
-            let prev_span = block_source_span(&original_ast.blocks[*prev_idx]);
-            let curr_span = block_source_span(&original_ast.blocks[*curr_idx]);
+            let prev_span = block_source_span(&original_ast.blocks[prev_idx]);
+            let curr_span = block_source_span(&original_ast.blocks[curr_idx]);
             return &original_qmd[prev_span.end..curr_span.start];
         }
     }
@@ -442,4 +504,304 @@ fn config_value_kind_content_eq(a: &ConfigValueKind, b: &ConfigValueKind) -> boo
 /// Compare two ConfigMapEntry values for content equality, ignoring key_source.
 fn config_map_entry_content_eq(a: &ConfigMapEntry, b: &ConfigMapEntry) -> bool {
     a.key == b.key && config_value_content_eq(&a.value, &b.value)
+}
+
+// =============================================================================
+// Inline Splicing (Phase 5)
+// =============================================================================
+
+/// Extract the inline content of a block, if it's an inline-content block.
+///
+/// Returns `Some(&[Inline])` for Paragraph, Plain, and Header blocks;
+/// `None` for all other block types (which contain blocks or are leaf blocks).
+fn block_inlines(block: &Block) -> Option<&[Inline]> {
+    match block {
+        Block::Paragraph(p) => Some(&p.content),
+        Block::Plain(p) => Some(&p.content),
+        Block::Header(h) => Some(&h.content),
+        _ => None,
+    }
+}
+
+/// Assemble the block text for an InlineSplice entry.
+///
+/// Takes the original block text and replaces the inline content region
+/// with the assembled new inline content from the reconciliation plan.
+///
+/// The block structure (prefix and suffix) is preserved from the original.
+/// For example, a header's `## ` prefix and trailing `\n` are kept verbatim.
+fn assemble_inline_splice(
+    original_qmd: &str,
+    orig_block: &Block,
+    orig_inlines: &[Inline],
+    new_inlines: &[Inline],
+    plan: &InlineReconciliationPlan,
+) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let block_span = block_source_span(orig_block);
+
+    // Compute the inline content region within the block
+    let inline_start = inline_source_span(&orig_inlines[0]).start;
+    let inline_end = inline_source_span(orig_inlines.last().unwrap()).end;
+
+    // Block prefix: bytes before the first inline (e.g., "## " for headers)
+    let prefix = &original_qmd[block_span.start..inline_start];
+    // Block suffix: bytes after the last inline (e.g., "\n")
+    let suffix = &original_qmd[inline_end..block_span.end];
+
+    // Assemble the new inline content
+    let inline_content = assemble_inline_content(original_qmd, orig_inlines, new_inlines, plan)?;
+
+    Ok(format!("{}{}{}", prefix, inline_content, suffix))
+}
+
+/// Assemble the inline content from a reconciliation plan.
+///
+/// Walks the inline alignments and produces the result text by:
+/// - KeepBefore: copying the original inline's bytes verbatim
+/// - UseAfter: writing the new inline to a string
+/// - RecurseIntoContainer: preserving delimiters, recursing into children
+fn assemble_inline_content(
+    original_qmd: &str,
+    orig_inlines: &[Inline],
+    new_inlines: &[Inline],
+    plan: &InlineReconciliationPlan,
+) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut result = String::new();
+
+    for (result_idx, alignment) in plan.inline_alignments.iter().enumerate() {
+        match alignment {
+            InlineAlignment::KeepBefore(orig_idx) => {
+                let span = inline_source_span(&orig_inlines[*orig_idx]);
+                result.push_str(&original_qmd[span]);
+            }
+            InlineAlignment::UseAfter(after_idx) => {
+                let text = write_inline_to_string(&new_inlines[*after_idx])?;
+                result.push_str(&text);
+            }
+            InlineAlignment::RecurseIntoContainer {
+                before_idx,
+                after_idx,
+            } => {
+                let text = assemble_recursed_container(
+                    original_qmd,
+                    &orig_inlines[*before_idx],
+                    &new_inlines[*after_idx],
+                    plan.inline_container_plans.get(&result_idx),
+                )?;
+                result.push_str(&text);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// Assemble the text for a recursed container inline.
+///
+/// Preserves the container's delimiters from the original source and
+/// recursively assembles the children from the nested plan.
+fn assemble_recursed_container(
+    original_qmd: &str,
+    orig_inline: &Inline,
+    new_inline: &Inline,
+    nested_plan: Option<&InlineReconciliationPlan>,
+) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let orig_span = inline_source_span(orig_inline);
+
+    let Some(plan) = nested_plan else {
+        // No nested plan — container content is structurally identical.
+        // Keep the original container bytes verbatim.
+        return Ok(original_qmd[orig_span].to_string());
+    };
+
+    let orig_children = inline_children(orig_inline);
+    let new_children = inline_children(new_inline);
+
+    if orig_children.is_empty() {
+        // No children to recurse into — keep original verbatim
+        return Ok(original_qmd[orig_span].to_string());
+    }
+
+    // Opening delimiter: bytes from container start to first child start
+    let first_child_start = inline_source_span(&orig_children[0]).start;
+    let opening = &original_qmd[orig_span.start..first_child_start];
+
+    // Closing delimiter: bytes from last child end to container end
+    let last_child_end = inline_source_span(orig_children.last().unwrap()).end;
+    let closing = &original_qmd[last_child_end..orig_span.end];
+
+    // Recursively assemble children
+    let children_text = assemble_inline_content(original_qmd, orig_children, new_children, plan)?;
+
+    Ok(format!("{}{}{}", opening, children_text, closing))
+}
+
+// =============================================================================
+// Inline Splicing: Safety Check
+// =============================================================================
+
+/// Check if an inline reconciliation plan can be safely spliced without
+/// indentation context.
+///
+/// Safe iff every inline we'd actually write (UseAfter or rewritten within
+/// RecurseIntoContainer) has a break-free subtree. This guarantees that no
+/// inline patch output contains a `\n` character, so indentation prefixes
+/// from enclosing BlockQuote/BulletList/OrderedList contexts are preserved.
+///
+/// See: claude-notes/plans/2026-02-10-inline-splicing.md
+pub fn is_inline_splice_safe(new_inlines: &[Inline], plan: &InlineReconciliationPlan) -> bool {
+    for (result_idx, alignment) in plan.inline_alignments.iter().enumerate() {
+        match alignment {
+            InlineAlignment::KeepBefore(_) => {
+                // Preserved verbatim from original source — always safe.
+                // The original bytes already contain correct indentation.
+            }
+            InlineAlignment::UseAfter(after_idx) => {
+                // We'll write this inline fresh into a plain buffer.
+                // If its subtree contains SoftBreak/LineBreak, the written
+                // output will contain \n without indentation prefixes.
+                if inline_subtree_has_break(&new_inlines[*after_idx]) {
+                    return false;
+                }
+            }
+            InlineAlignment::RecurseIntoContainer { after_idx, .. } => {
+                // We'll recursively patch this container's children.
+                // Check the nested plan: any child we write must also be break-free.
+                if let Some(nested_plan) = plan.inline_container_plans.get(&result_idx) {
+                    let children = inline_children(&new_inlines[*after_idx]);
+                    if !is_inline_splice_safe(children, nested_plan) {
+                        return false;
+                    }
+                }
+                // If no nested plan, the container content is structurally
+                // identical — it will be kept verbatim (safe).
+            }
+        }
+    }
+    true
+}
+
+/// Returns true if the inline or any descendant is SoftBreak or LineBreak.
+pub fn inline_subtree_has_break(inline: &Inline) -> bool {
+    matches!(inline, Inline::SoftBreak(_) | Inline::LineBreak(_))
+        || inline_children(inline)
+            .iter()
+            .any(|child| inline_subtree_has_break(child))
+}
+
+/// Extract the child inlines of a container inline.
+///
+/// Returns an empty slice for leaf inlines (Str, Space, Code, etc.)
+/// and for Note inlines (which contain Blocks, not Inlines).
+pub fn inline_children(inline: &Inline) -> &[Inline] {
+    match inline {
+        // Container inlines with inline content
+        Inline::Emph(e) => &e.content,
+        Inline::Strong(s) => &s.content,
+        Inline::Underline(u) => &u.content,
+        Inline::Strikeout(s) => &s.content,
+        Inline::Superscript(s) => &s.content,
+        Inline::Subscript(s) => &s.content,
+        Inline::SmallCaps(s) => &s.content,
+        Inline::Quoted(q) => &q.content,
+        Inline::Cite(c) => &c.content,
+        Inline::Link(l) => &l.content,
+        Inline::Image(i) => &i.content,
+        Inline::Span(s) => &s.content,
+        Inline::Insert(i) => &i.content,
+        Inline::Delete(d) => &d.content,
+        Inline::Highlight(h) => &h.content,
+        Inline::EditComment(e) => &e.content,
+        // Leaf inlines and special cases — no inline children
+        Inline::Str(_)
+        | Inline::Code(_)
+        | Inline::Space(_)
+        | Inline::SoftBreak(_)
+        | Inline::LineBreak(_)
+        | Inline::Math(_)
+        | Inline::RawInline(_)
+        | Inline::Shortcode(_)
+        | Inline::NoteReference(_)
+        | Inline::Attr(_, _)
+        | Inline::Note(_) // Note contains Blocks, not Inlines
+        | Inline::Custom(_) => &[],
+    }
+}
+
+/// Extract the SourceInfo from an Inline.
+pub fn inline_source_info(inline: &Inline) -> &SourceInfo {
+    match inline {
+        Inline::Str(s) => &s.source_info,
+        Inline::Emph(e) => &e.source_info,
+        Inline::Strong(s) => &s.source_info,
+        Inline::Underline(u) => &u.source_info,
+        Inline::Strikeout(s) => &s.source_info,
+        Inline::Superscript(s) => &s.source_info,
+        Inline::Subscript(s) => &s.source_info,
+        Inline::SmallCaps(s) => &s.source_info,
+        Inline::Quoted(q) => &q.source_info,
+        Inline::Cite(c) => &c.source_info,
+        Inline::Code(c) => &c.source_info,
+        Inline::Space(s) => &s.source_info,
+        Inline::SoftBreak(s) => &s.source_info,
+        Inline::LineBreak(l) => &l.source_info,
+        Inline::Math(m) => &m.source_info,
+        Inline::RawInline(r) => &r.source_info,
+        Inline::Link(l) => &l.source_info,
+        Inline::Image(i) => &i.source_info,
+        Inline::Note(n) => &n.source_info,
+        Inline::Span(s) => &s.source_info,
+        Inline::Shortcode(sc) => &sc.source_info,
+        Inline::NoteReference(nr) => &nr.source_info,
+        Inline::Attr(_, attr_si) => {
+            // Attr inlines don't have a single source_info like other inlines.
+            // Use the id source if available, otherwise return a static default.
+            if let Some(ref id_si) = attr_si.id {
+                id_si
+            } else {
+                static DUMMY: std::sync::LazyLock<SourceInfo> =
+                    std::sync::LazyLock::new(SourceInfo::default);
+                &DUMMY
+            }
+        }
+        Inline::Insert(i) => &i.source_info,
+        Inline::Delete(d) => &d.source_info,
+        Inline::Highlight(h) => &h.source_info,
+        Inline::EditComment(e) => &e.source_info,
+        Inline::Custom(c) => &c.source_info,
+    }
+}
+
+/// Extract the byte range (start..end) from an Inline's source_info.
+pub fn inline_source_span(inline: &Inline) -> Range<usize> {
+    let si = inline_source_info(inline);
+    si.start_offset()..si.end_offset()
+}
+
+/// Write a single inline to a String using the standard QMD writer.
+///
+/// This writes without indentation context — only safe for inlines whose
+/// subtree contains no SoftBreak/LineBreak (as guaranteed by
+/// `is_inline_splice_safe`).
+pub fn write_inline_to_string(
+    inline: &Inline,
+) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut buf = Vec::new();
+    qmd::write_single_inline(inline, &mut buf)?;
+    let result = String::from_utf8(buf).map_err(|e| {
+        vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("UTF-8 error during write")
+                .with_code("Q-3-2")
+                .problem(format!("Inline writer produced invalid UTF-8: {}", e))
+                .build(),
+        ]
+    })?;
+    // Debug assertion: the safety check should have ensured no newlines
+    debug_assert!(
+        !result.contains('\n'),
+        "write_inline_to_string produced output with newline: {:?}. \
+         This inline should have been rejected by is_inline_splice_safe.",
+        result,
+    );
+    Ok(result)
 }

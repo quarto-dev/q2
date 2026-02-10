@@ -1907,6 +1907,34 @@ pub fn write_single_block<T: std::io::Write>(
     Ok(())
 }
 
+/// Write a single inline to the given buffer, using a fresh context.
+///
+/// This writes the inline **without** any indentation context (no BlockQuoteContext,
+/// BulletListContext, etc.). This means the output is only correct for inlines
+/// whose subtree does not contain SoftBreak or LineBreak — otherwise the `\n`
+/// in the output would be missing indentation prefixes.
+///
+/// Used by the incremental writer's inline splicing (Phase 5) to produce
+/// replacement text for individual inline patches.
+pub fn write_single_inline<T: std::io::Write>(
+    inline: &crate::pandoc::Inline,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut ctx = QmdWriterContext::new();
+    if let Err(e) = write_inline(inline, buf, &mut ctx) {
+        return Err(vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                .with_code("Q-3-1")
+                .problem(format!("Failed to write inline: {}", e))
+                .build(),
+        ]);
+    }
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
+    Ok(())
+}
+
 /// Write metadata (YAML front matter) to the given buffer.
 ///
 /// This is a public wrapper around `write_config_value_meta`, intended for use
