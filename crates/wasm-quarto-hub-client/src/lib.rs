@@ -1253,6 +1253,211 @@ pub async fn create_project(choice_id: &str, title: &str) -> String {
 }
 
 // ============================================================================
+// FORMAT CONVERSION API
+// ============================================================================
+//
+// These functions provide QMD <-> JSON conversion using pampa entry points.
+
+use pampa::readers;
+use pampa::writers;
+
+/// Convert Pandoc AST JSON back to QMD format.
+///
+/// # Arguments
+/// * `ast_json` - Pandoc AST as JSON string
+///
+/// # Returns
+/// JSON: `{ "success": true, "qmd": "..." }` or `{ "success": false, "error": "..." }`
+#[wasm_bindgen]
+pub async fn write_qmd(ast_json: &str) -> String {
+    // Parse JSON to Pandoc AST
+    let (doc, context) = match readers::json::read(&mut ast_json.as_bytes()) {
+        Ok(result) => result,
+        Err(e) => {
+            return serde_json::to_string(&AstResponse {
+                success: false,
+                error: Some(format!("Failed to parse AST JSON: {:?}", e)),
+                ast: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap();
+        }
+    };
+
+    // Write to QMD
+    let mut buf = Vec::new();
+    match writers::qmd::write(&doc, &mut buf) {
+        Ok(_) => match String::from_utf8(buf) {
+            Ok(qmd) => serde_json::to_string(&AstResponse {
+                success: true,
+                error: None,
+                ast: Some(qmd),
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap(),
+            Err(e) => serde_json::to_string(&AstResponse {
+                success: false,
+                error: Some(format!("Failed to convert QMD to string: {:?}", e)),
+                ast: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap(),
+        },
+        Err(e) => serde_json::to_string(&AstResponse {
+            success: false,
+            error: Some(format!("Failed to write QMD: {:?}", e)),
+            ast: None,
+            diagnostics: None,
+            warnings: None,
+        })
+        .unwrap(),
+    }
+}
+
+/// Convert between document formats (qmd <-> json).
+///
+/// # Arguments
+/// * `document` - Input document content
+/// * `input_format` - Input format: "qmd" or "json"
+/// * `output_format` - Output format: "qmd" or "json"
+///
+/// # Returns
+/// JSON: `{ "success": true, "ast": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// // Convert QMD to JSON
+/// const result = JSON.parse(await convert(qmdContent, "qmd", "json"));
+///
+/// // Convert JSON back to QMD
+/// const result2 = JSON.parse(await convert(jsonAst, "json", "qmd"));
+/// ```
+#[wasm_bindgen]
+pub async fn convert(document: &str, input_format: &str, output_format: &str) -> String {
+    // Parse input
+    let (doc, context) = match input_format {
+        "qmd" => match pampa::wasm_entry_points::qmd_to_pandoc(document.as_bytes()) {
+            Ok(result) => result,
+            Err(e) => {
+                return serde_json::to_string(&AstResponse {
+                    success: false,
+                    error: Some(format!("Failed to parse QMD: {:?}", e)),
+                    ast: None,
+                    diagnostics: None,
+                    warnings: None,
+                })
+                .unwrap();
+            }
+        },
+        "json" => match readers::json::read(&mut document.as_bytes()) {
+            Ok(result) => result,
+            Err(e) => {
+                return serde_json::to_string(&AstResponse {
+                    success: false,
+                    error: Some(format!("Failed to parse JSON: {:?}", e)),
+                    ast: None,
+                    diagnostics: None,
+                    warnings: None,
+                })
+                .unwrap();
+            }
+        },
+        _ => {
+            return serde_json::to_string(&AstResponse {
+                success: false,
+                error: Some(format!("Unsupported input format: {}", input_format)),
+                ast: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap();
+        }
+    };
+
+    // Write output
+    let output = match output_format {
+        "qmd" => {
+            let mut buf = Vec::new();
+            match writers::qmd::write(&doc, &mut buf) {
+                Ok(_) => match String::from_utf8(buf) {
+                    Ok(qmd) => qmd,
+                    Err(e) => {
+                        return serde_json::to_string(&AstResponse {
+                            success: false,
+                            error: Some(format!("Failed to convert QMD to string: {:?}", e)),
+                            ast: None,
+                            diagnostics: None,
+                            warnings: None,
+                        })
+                        .unwrap();
+                    }
+                },
+                Err(e) => {
+                    return serde_json::to_string(&AstResponse {
+                        success: false,
+                        error: Some(format!("Failed to write QMD: {:?}", e)),
+                        ast: None,
+                        diagnostics: None,
+                        warnings: None,
+                    })
+                    .unwrap();
+                }
+            }
+        }
+        "json" => {
+            let mut buf = Vec::new();
+            match writers::json::write(&doc, &context, &mut buf) {
+                Ok(_) => match String::from_utf8(buf) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        return serde_json::to_string(&AstResponse {
+                            success: false,
+                            error: Some(format!("Failed to convert JSON to string: {:?}", e)),
+                            ast: None,
+                            diagnostics: None,
+                            warnings: None,
+                        })
+                        .unwrap();
+                    }
+                },
+                Err(e) => {
+                    return serde_json::to_string(&AstResponse {
+                        success: false,
+                        error: Some(format!("Failed to write JSON: {:?}", e)),
+                        ast: None,
+                        diagnostics: None,
+                        warnings: None,
+                    })
+                    .unwrap();
+                }
+            }
+        }
+        _ => {
+            return serde_json::to_string(&AstResponse {
+                success: false,
+                error: Some(format!("Unsupported output format: {}", output_format)),
+                ast: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap();
+        }
+    };
+
+    serde_json::to_string(&AstResponse {
+        success: true,
+        error: None,
+        ast: Some(output),
+        diagnostics: None,
+        warnings: None,
+    })
+    .unwrap()
+}
+
+// ============================================================================
 // LSP INTELLIGENCE API
 // ============================================================================
 //

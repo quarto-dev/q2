@@ -37,6 +37,8 @@ interface WasmModuleExtended {
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
   parse_qmd_to_ast: (content: string) => Promise<string>;
+  write_qmd: (astJson: string) => Promise<string>;
+  convert: (document: string, inputFormat: string, outputFormat: string) => Promise<string>;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
   lsp_get_folding_ranges: (path: string) => string;
@@ -331,6 +333,24 @@ export interface ParseResult {
 }
 
 /**
+ * Result of writing AST to QMD format.
+ */
+export interface WriteQmdResult {
+  success: boolean;
+  qmd: string;
+  error?: string;
+}
+
+/**
+ * Result of converting between formats.
+ */
+export interface ConvertResult {
+  success: boolean;
+  output: string;
+  error?: string;
+}
+
+/**
  * Parse QMD content to Pandoc AST JSON, handling errors gracefully.
  *
  * This function parses QMD markdown into a Pandoc AST representation,
@@ -393,6 +413,116 @@ export async function parseQmdToAst(
     console.error('Parse error:', err);
     return {
       ast: '',
+      success: false,
+      error: err instanceof Error ? err.message : JSON.stringify(err),
+    };
+  }
+}
+
+/**
+ * Convert Pandoc AST JSON back to QMD format.
+ *
+ * This function takes a Pandoc AST represented as a JSON string and
+ * converts it back to QMD markdown format.
+ *
+ * @param astJson - Pandoc AST as JSON string
+ * @returns Write result with QMD string or error information
+ *
+ * @example
+ * ```typescript
+ * const ast = '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[...]}';
+ * const result = await writeQmd(ast);
+ * if (result.success) {
+ *   console.log("QMD:", result.qmd);
+ * }
+ * ```
+ */
+export async function writeQmd(astJson: string): Promise<WriteQmdResult> {
+  try {
+    await initWasm();
+    const wasm = getWasm();
+    const responseJson = await wasm.write_qmd(astJson);
+
+    // The response reuses AstResponse structure, but with "qmd" in the "ast" field
+    const response: { success: boolean; ast?: string; error?: string } = JSON.parse(responseJson);
+
+    if (response.success) {
+      return {
+        qmd: response.ast || '',
+        success: true,
+      };
+    } else {
+      return {
+        qmd: '',
+        success: false,
+        error: response.error || 'Unknown write error',
+      };
+    }
+  } catch (err) {
+    console.error('Write QMD error:', err);
+    return {
+      qmd: '',
+      success: false,
+      error: err instanceof Error ? err.message : JSON.stringify(err),
+    };
+  }
+}
+
+/**
+ * Convert between document formats (QMD <-> JSON).
+ *
+ * This function provides generic format conversion capabilities,
+ * allowing you to convert between QMD and Pandoc AST JSON.
+ *
+ * @param document - Input document content
+ * @param inputFormat - Input format: "qmd" or "json"
+ * @param outputFormat - Output format: "qmd" or "json"
+ * @returns Convert result with output string or error information
+ *
+ * @example
+ * ```typescript
+ * // Convert QMD to JSON
+ * const jsonResult = await convert(qmdContent, "qmd", "json");
+ * if (jsonResult.success) {
+ *   const ast = JSON.parse(jsonResult.output);
+ * }
+ *
+ * // Convert JSON back to QMD
+ * const qmdResult = await convert(astJson, "json", "qmd");
+ * if (qmdResult.success) {
+ *   console.log("QMD:", qmdResult.output);
+ * }
+ * ```
+ */
+export async function convert(
+  document: string,
+  inputFormat: 'qmd' | 'json',
+  outputFormat: 'qmd' | 'json'
+): Promise<ConvertResult> {
+  try {
+    await initWasm();
+    const wasm = getWasm();
+    const responseJson = await wasm.convert(document, inputFormat, outputFormat);
+
+    // The response reuses AstResponse structure, but with output in the "ast" field
+    const response: { success: boolean; ast?: string; error?: string } = JSON.parse(responseJson);
+
+    if (response.success) {
+      return {
+        output: response.ast || '',
+        success: true,
+      };
+    } else {
+      return {
+        output: '',
+        success: false,
+        error: response.error || 'Unknown conversion error',
+      };
+    }
+  } catch (err) {
+    console.error('Convert error:', err);
+    return {
+      output: '',
       success: false,
       error: err instanceof Error ? err.message : JSON.stringify(err),
     };
