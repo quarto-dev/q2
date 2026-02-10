@@ -1,0 +1,6 @@
+---
+source: crates/pampa/tests/test.rs
+assertion_line: 359
+expression: output
+---
+{"astContext":{"files":[{"line_breaks":[20],"name":"tests/snapshots/json/anchor-shorthand-02-in-paragraph.qmd","total_length":21}],"sourceInfoPool":[{"d":0,"r":[0,6],"t":0},{"d":0,"r":[6,7],"t":0},{"d":0,"r":[7,13],"t":0},{"d":0,"r":[13,14],"t":0},{"d":0,"r":[14,20],"t":0},{"d":0,"r":[0,21],"t":0}]},"blocks":[{"c":[{"c":"Before","s":0,"t":"Str"},{"s":1,"t":"Space"},{"t":"Link","c":[["",["anchor"],[]],[{"c":"foo","s":2,"t":"Str"}],["#foo",""]],"s":2,"attrS":{"classes":[],"id":null,"kvs":[]},"targetS":[null,null]},{"s":3,"t":"Space"},{"c":"after.","s":4,"t":"Str"}],"s":5,"t":"Para"}],"meta":{},"pandoc-api-version":[1,23,1]}

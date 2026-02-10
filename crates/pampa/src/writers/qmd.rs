@@ -1345,11 +1345,43 @@ fn write_linebreak(
     writeln!(buf)
 }
 
+/// Check if a link matches the anchor shorthand pattern: `[id](#id){.anchor}`
+/// Returns the anchor id if it matches, None otherwise.
+fn anchor_shorthand_id(link: &crate::pandoc::Link) -> Option<&str> {
+    // Must have exactly one class "anchor", no id, no key-value pairs
+    let (ref id, ref classes, ref kvs) = link.attr;
+    if !id.is_empty() || classes.len() != 1 || classes[0] != "anchor" || !kvs.is_empty() {
+        return None;
+    }
+    // Must have no title
+    if !link.target.1.is_empty() {
+        return None;
+    }
+    // Content must be a single Str node
+    if link.content.len() != 1 {
+        return None;
+    }
+    let text = match &link.content[0] {
+        crate::pandoc::Inline::Str(s) => &s.text,
+        _ => return None,
+    };
+    // Target must be "#" + the same text
+    let target_id = link.target.0.strip_prefix('#')?;
+    if target_id != text {
+        return None;
+    }
+    Some(target_id)
+}
+
 fn write_link(
     link: &crate::pandoc::Link,
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    // Anchor shorthand: [id](#id){.anchor} -> <#id>
+    if let Some(anchor_id) = anchor_shorthand_id(link) {
+        return write!(buf, "<#{}>", anchor_id);
+    }
     write!(buf, "[")?;
     for inline in &link.content {
         write_inline(inline, buf, ctx)?;

@@ -1,0 +1,5 @@
+Hyphenated: <#foo-bar>
+
+Underscored: <#foo_bar>
+
+Numeric: <#123>

@@ -1,0 +1,6 @@
+---
+source: crates/pampa/tests/test.rs
+assertion_line: 359
+expression: output
+---
+{"astContext":{"files":[{"line_breaks":[24],"name":"tests/snapshots/json/anchor-shorthand-03-hyphenated.qmd","total_length":25}],"sourceInfoPool":[{"d":0,"r":[0,4],"t":0},{"d":0,"r":[4,5],"t":0},{"d":0,"r":[5,7],"t":0},{"d":0,"r":[7,8],"t":0},{"d":0,"r":[8,18],"t":0},{"d":0,"r":[18,19],"t":0},{"d":0,"r":[19,24],"t":0},{"d":0,"r":[0,25],"t":0}]},"blocks":[{"c":[{"c":"Link","s":0,"t":"Str"},{"s":1,"t":"Space"},{"c":"to","s":2,"t":"Str"},{"s":3,"t":"Space"},{"t":"Link","c":[["",["anchor"],[]],[{"c":"foo-bar","s":4,"t":"Str"}],["#foo-bar",""]],"s":4,"attrS":{"classes":[],"id":null,"kvs":[]},"targetS":[null,null]},{"s":5,"t":"Space"},{"c":"here.","s":6,"t":"Str"}],"s":7,"t":"Para"}],"meta":{},"pandoc-api-version":[1,23,1]}

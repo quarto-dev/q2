@@ -1,0 +1,6 @@
+---
+source: crates/pampa/tests/test.rs
+assertion_line: 359
+expression: output
+---
+{"astContext":{"files":[{"line_breaks":[17],"name":"tests/snapshots/json/anchor-shorthand-01-simple.qmd","total_length":18}],"sourceInfoPool":[{"d":0,"r":[0,2],"t":0},{"d":0,"r":[2,3],"t":0},{"d":0,"r":[3,9],"t":0},{"d":0,"r":[9,10],"t":0},{"d":[[2,0,6],[3,6,1]],"r":[0,7],"t":2},{"d":0,"r":[10,11],"t":0},{"d":0,"r":[11,17],"t":0},{"d":0,"r":[0,18],"t":0}]},"blocks":[{"c":[{"c":"An","s":0,"t":"Str"},{"s":1,"t":"Space"},{"c":"anchor:","s":4,"t":"Str"},{"s":5,"t":"Space"},{"t":"Link","c":[["",["anchor"],[]],[{"c":"foo","s":6,"t":"Str"}],["#foo",""]],"s":6,"attrS":{"classes":[],"id":null,"kvs":[]},"targetS":[null,null]}],"s":7,"t":"Para"}],"meta":{},"pandoc-api-version":[1,23,1]}

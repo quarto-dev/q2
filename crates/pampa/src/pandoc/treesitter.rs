@@ -47,8 +47,8 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Emph, Inline, LineBreak, Math, MathType, Note, NoteReference, QuoteType, RawInline, SoftBreak,
-    Space, Str, Strikeout, Strong, Subscript, Superscript,
+    Emph, Inline, LineBreak, Link, Math, MathType, Note, NoteReference, QuoteType, RawInline,
+    SoftBreak, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{node_location, node_source_info_with_context};
@@ -61,6 +61,16 @@ use std::io::Write;
 use crate::traversals::bottomup_traverse_concrete_tree;
 
 use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
+
+/// Parse anchor shorthand `<#identifier>` and return the identifier.
+/// Returns None if the text doesn't match the pattern (empty id, contains whitespace or `>`).
+fn parse_anchor_shorthand(text: &str) -> Option<&str> {
+    let inner = text.strip_prefix("<#")?.strip_suffix('>')?;
+    if inner.is_empty() || inner.contains(char::is_whitespace) || inner.contains('>') {
+        return None;
+    }
+    Some(inner)
+}
 
 fn get_block_source_info(block: &Block) -> &quarto_source_map::SourceInfo {
     match block {
@@ -1051,26 +1061,112 @@ fn native_visitor<T: Write>(
             let raw_text = node.utf8_text(input_bytes).unwrap();
             let text = raw_text.trim().to_string();
 
-            // Get the source info with whitespace trimming for the warning
-            use crate::pandoc::location::{SourceInfoOptions, node_source_info_with_options};
-            let trimmed_source_info =
-                node_source_info_with_options(node, context, &SourceInfoOptions::trim_all());
+            // Check for anchor shorthand: <#identifier>
+            // Desugars to [identifier](#identifier){.anchor}
+            if let Some(anchor_id) = parse_anchor_shorthand(&text) {
+                use hashlink::LinkedHashMap;
 
-            // Create a warning (not error) about the auto-conversion
-            let msg = DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
-                .with_code("Q-2-9")
-                .with_location(trimmed_source_info)
-                .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
-                .add_hint("To be explicit, use: `<element>`{=html}")
-                .build();
-            error_collector.add(msg);
+                // Tree-sitter may include leading/trailing whitespace in the
+                // html_element node. Split those out as separate Space nodes,
+                // mirroring the approach in uri_autolink.rs.
+                let raw_text_str = raw_text;
+                let leading_ws = raw_text_str.len() - raw_text_str.trim_start().len();
+                let trailing_ws = raw_text_str.len() - raw_text_str.trim_end().len();
 
-            // Convert to RawInline with format="html"
-            PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
-                format: "html".to_string(),
-                text,
-                source_info: node_source_info_with_context(node, context),
-            }))
+                let node_range = node_location(node);
+                let mut result = Vec::new();
+
+                if leading_ws > 0 {
+                    let space_range = quarto_source_map::Range {
+                        start: node_range.start.clone(),
+                        end: quarto_source_map::Location {
+                            offset: node_range.start.offset + leading_ws,
+                            row: node_range.start.row,
+                            column: node_range.start.column + leading_ws,
+                        },
+                    };
+                    result.push(Inline::Space(Space {
+                        source_info: quarto_source_map::SourceInfo::from_range(
+                            context.current_file_id(),
+                            space_range,
+                        ),
+                    }));
+                }
+
+                let link_range = quarto_source_map::Range {
+                    start: quarto_source_map::Location {
+                        offset: node_range.start.offset + leading_ws,
+                        row: node_range.start.row,
+                        column: node_range.start.column + leading_ws,
+                    },
+                    end: quarto_source_map::Location {
+                        offset: node_range.end.offset - trailing_ws,
+                        row: node_range.end.row,
+                        column: node_range.end.column - trailing_ws,
+                    },
+                };
+                let source_info = quarto_source_map::SourceInfo::from_range(
+                    context.current_file_id(),
+                    link_range,
+                );
+
+                result.push(Inline::Link(Link {
+                    attr: (
+                        String::new(),
+                        vec!["anchor".to_string()],
+                        LinkedHashMap::new(),
+                    ),
+                    content: vec![Inline::Str(Str {
+                        text: anchor_id.to_string(),
+                        source_info: source_info.clone(),
+                    })],
+                    target: (format!("#{}", anchor_id), String::new()),
+                    source_info,
+                    attr_source: AttrSourceInfo::empty(),
+                    target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
+                }));
+
+                if trailing_ws > 0 {
+                    let space_range = quarto_source_map::Range {
+                        start: quarto_source_map::Location {
+                            offset: node_range.end.offset - trailing_ws,
+                            row: node_range.end.row,
+                            column: node_range.end.column - trailing_ws,
+                        },
+                        end: node_range.end.clone(),
+                    };
+                    result.push(Inline::Space(Space {
+                        source_info: quarto_source_map::SourceInfo::from_range(
+                            context.current_file_id(),
+                            space_range,
+                        ),
+                    }));
+                }
+
+                PandocNativeIntermediate::IntermediateInlines(result)
+            } else {
+                // Get the source info with whitespace trimming for the warning
+                use crate::pandoc::location::{SourceInfoOptions, node_source_info_with_options};
+                let trimmed_source_info =
+                    node_source_info_with_options(node, context, &SourceInfoOptions::trim_all());
+
+                // Create a warning (not error) about the auto-conversion
+                let msg =
+                    DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
+                        .with_code("Q-2-9")
+                        .with_location(trimmed_source_info)
+                        .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
+                        .add_hint("To be explicit, use: `<element>`{=html}")
+                        .build();
+                error_collector.add(msg);
+
+                // Convert to RawInline with format="html"
+                PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+                    format: "html".to_string(),
+                    text,
+                    source_info: node_source_info_with_context(node, context),
+                }))
+            }
         }
         _ => {
             writeln!(

@@ -1,0 +1,1 @@
+No normalize: [Foo](#foo){.anchor}
