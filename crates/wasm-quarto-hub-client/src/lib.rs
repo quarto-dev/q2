@@ -869,7 +869,7 @@ pub async fn parse_qmd_to_ast(content: &str) -> String {
             // Serialize the AST to JSON using pampa's writer
             let mut buf = Vec::new();
             let json_config = pampa::writers::json::JsonConfig {
-                include_inline_locations: false,
+                include_inline_locations: true,
             };
 
             let ast_json = match pampa::writers::json::write_with_config(
