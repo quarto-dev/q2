@@ -1521,3 +1521,111 @@ fn roundtrip_comment_with_dashes() {
         "Changed <!-- double -- dashes --> inside.\n",
     );
 }
+
+// =============================================================================
+// Missing trailing newline — bd-1c6x
+// =============================================================================
+//
+// The QMD reader internally pads input with `\n` if it doesn't end with one,
+// producing source spans relative to the padded (longer) input. When the
+// incremental writer receives the *original* (unpadded) string, it panics
+// trying to slice at a byte index that is out of bounds.
+
+/// Idempotence when document has no trailing newline.
+#[test]
+fn idempotent_no_trailing_newline() {
+    assert_idempotent("Hello world.");
+}
+
+/// Idempotence: multiple blocks, no trailing newline.
+#[test]
+fn idempotent_two_paragraphs_no_trailing_newline() {
+    assert_idempotent("First paragraph.\n\nSecond paragraph.");
+}
+
+/// Roundtrip: modify a paragraph in a document with no trailing newline.
+#[test]
+fn roundtrip_no_trailing_newline() {
+    assert_roundtrip(
+        "First paragraph.\n\nSecond paragraph.",
+        "First paragraph.\n\nModified second.",
+    );
+}
+
+/// Roundtrip via JSON: no trailing newline (mimics WASM path).
+#[test]
+fn roundtrip_no_trailing_newline_via_json() {
+    let original_qmd = "## Title {.feature created=\"2026-02-10\"}\n\nParagraph.";
+    let new_qmd = "## Title {.feature created=\"2026-02-10\" status=\"todo\"}\n\nParagraph.";
+    let new_ast = parse_qmd(new_qmd);
+    let result = incremental_write_via_json_roundtrip(original_qmd, &new_ast);
+    let result_ast = parse_qmd(&result);
+    assert_eq!(result_ast.blocks.len(), new_ast.blocks.len());
+    for (result_block, new_block) in result_ast.blocks.iter().zip(new_ast.blocks.iter()) {
+        assert!(
+            quarto_ast_reconcile::structural_eq_block(result_block, new_block),
+            "Block structural mismatch after JSON roundtrip (no trailing newline)"
+        );
+    }
+}
+
+/// Kanban-like document with no trailing newline — the original crash scenario.
+#[test]
+fn roundtrip_kanban_no_trailing_newline() {
+    let original_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.", // <-- no trailing \n
+    );
+    let new_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\" status=\"done\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.", // <-- no trailing \n
+    );
+    assert_roundtrip(original_qmd, new_qmd);
+}
+
+/// Kanban-like document with no trailing newline, via JSON roundtrip (WASM path).
+#[test]
+fn roundtrip_kanban_no_trailing_newline_via_json() {
+    let original_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.", // <-- no trailing \n
+    );
+    let new_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\" status=\"done\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.", // <-- no trailing \n
+    );
+    let new_ast = parse_qmd(new_qmd);
+    let result = incremental_write_via_json_roundtrip(original_qmd, &new_ast);
+    let result_ast = parse_qmd(&result);
+    assert_eq!(result_ast.blocks.len(), new_ast.blocks.len());
+    for (result_block, new_block) in result_ast.blocks.iter().zip(new_ast.blocks.iter()) {
+        assert!(
+            quarto_ast_reconcile::structural_eq_block(result_block, new_block),
+            "Block structural mismatch in kanban no-trailing-newline JSON roundtrip"
+        );
+    }
+}

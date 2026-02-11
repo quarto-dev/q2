@@ -84,11 +84,25 @@ pub fn incremental_write(
     new_ast: &Pandoc,
     plan: &ReconciliationPlan,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    // The QMD reader internally pads input with '\n' when it doesn't end with
+    // one, producing source spans relative to the padded input. We must use the
+    // same padded string so that block source spans are valid byte indices.
+    let mut padded_storage = None;
+    let (qmd, did_pad) = ensure_trailing_newline(original_qmd, &mut padded_storage);
+
     // Step 1: Coarsen the reconciliation plan
-    let coarsened = coarsen(original_qmd, original_ast, new_ast, plan)?;
+    let coarsened = coarsen(qmd, original_ast, new_ast, plan)?;
 
     // Step 2: Assemble the result string
-    assemble(original_qmd, original_ast, new_ast, &coarsened)
+    let mut result = assemble(qmd, original_ast, new_ast, &coarsened)?;
+
+    // If we padded the input, strip the trailing '\n' from the result so that
+    // the output preserves the original document's trailing-newline convention.
+    if did_pad && result.ends_with('\n') {
+        result.pop();
+    }
+
+    Ok(result)
 }
 
 /// Compute minimal text edits to transform `original_qmd` into the incremental write result.
@@ -101,10 +115,27 @@ pub fn compute_incremental_edits(
     new_ast: &Pandoc,
     plan: &ReconciliationPlan,
 ) -> Result<Vec<TextEdit>, Vec<quarto_error_reporting::DiagnosticMessage>> {
-    // For now, compute the full result string and diff at block-span granularity.
-    // A future optimization could compute edits directly from the coarsened plan.
-    let coarsened = coarsen(original_qmd, original_ast, new_ast, plan)?;
-    compute_edits_from_coarsened(original_qmd, original_ast, new_ast, &coarsened)
+    // Same trailing-newline normalization as incremental_write (see comment there).
+    let mut padded_storage = None;
+    let (qmd, did_pad) = ensure_trailing_newline(original_qmd, &mut padded_storage);
+
+    let coarsened = coarsen(qmd, original_ast, new_ast, plan)?;
+    let mut edits = compute_edits_from_coarsened(qmd, original_ast, new_ast, &coarsened)?;
+
+    if did_pad {
+        // Edits reference the padded string. Adjust ranges and replacement text
+        // so they apply to the original (unpadded) string.
+        for edit in &mut edits {
+            if edit.range.end > original_qmd.len() {
+                edit.range.end = original_qmd.len();
+            }
+            if edit.replacement.ends_with('\n') {
+                edit.replacement.pop();
+            }
+        }
+    }
+
+    Ok(edits)
 }
 
 // =============================================================================
@@ -391,6 +422,28 @@ fn compute_edits_from_coarsened(
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/// Ensure `original_qmd` ends with `'\n'`, returning either the original
+/// string or a padded copy stored in `storage`.
+///
+/// The QMD reader internally pads input with `'\n'` if missing, so source
+/// spans in the resulting AST reference the padded byte length. This helper
+/// lets callers work with the same padded string without allocating when the
+/// input already ends with `'\n'` (the common case).
+///
+/// Returns `(normalized_str, did_pad)`.
+fn ensure_trailing_newline<'a>(
+    original_qmd: &'a str,
+    storage: &'a mut Option<String>,
+) -> (&'a str, bool) {
+    if original_qmd.ends_with('\n') {
+        (original_qmd, false)
+    } else {
+        let padded = format!("{}\n", original_qmd);
+        *storage = Some(padded);
+        (storage.as_ref().unwrap().as_str(), true)
+    }
+}
 
 /// Extract the byte range (start..end) from a Block's source_info.
 fn block_source_span(block: &Block) -> Range<usize> {
