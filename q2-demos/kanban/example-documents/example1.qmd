@@ -1,0 +1,26 @@
+# Cards
+
+## Work Week {.milestone deadline="2026-03-25" created="2026-02-10T08:56"}
+
+Items:
+
+- [ ] [Project Export](#project-export)
+
+## Posit::conf {.milestone deadline="2026-07-25" created="2026-02-10T09:00"}
+
+Items:
+
+- [ ] [Connect cloud integration](#connect-cloud-integration)
+
+## Project Export {.feature created="2026-02-10T14:30"}
+
+## Connect cloud integration {.feature created="2026-02-10T14:32"}
+
+Depends on:
+
+- [ACLs for automerge](#acls-for-automerge)
+
+## ACLs for automerge {.feature created="2026-02-10T14:40"}
+
+Automerge doesn't naturally support read-only modes. We will need a websocket proxy that understands which
+users are allowed to send patches for which documents, or some related tech. 

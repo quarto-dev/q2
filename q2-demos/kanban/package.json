@@ -1,0 +1,41 @@
+{
+  "name": "hub-kanban",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build:wasm": "node ../../hub-client/scripts/build-wasm.js",
+    "build:all": "npm run build:wasm && npm run build",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest watch --config vitest.integration.config.ts",
+    "test:wasm": "vitest run --config vitest.wasm.config.ts",
+    "test:wasm:watch": "vitest watch --config vitest.wasm.config.ts",
+    "test:ci": "npm run test && npm run test:integration && npm run test:wasm"
+  },
+  "dependencies": {
+    "@quarto/pandoc-types": "*",
+    "@quarto/quarto-sync-client": "*",
+    "idb": "^8.0.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^26.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vite-plugin-wasm": "^3.5.0",
+    "vitest": "^3.1.1"
+  }
+}
