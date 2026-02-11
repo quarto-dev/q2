@@ -20,49 +20,18 @@ export function App() {
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      <h1 style={{ fontSize: '24px' }}>Quarto Hub - Kanban</h1>
-
       {activeConnection ? (
-        <>
-          <div style={{
-            marginBottom: '12px',
-            padding: '8px',
-            background: '#f0f0f0',
-            borderRadius: '4px',
-            fontSize: '13px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}>
-            <div>
-              <strong>{activeConnection.description}</strong>
-              {' — '}
-              <code>{activeConnection.filePath}</code>
-              {' @ '}
-              <span style={{ color: '#666' }}>{activeConnection.syncServer}</span>
-            </div>
-            <button
-              onClick={handleBack}
-              style={{
-                padding: '4px 12px',
-                background: 'none',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '13px',
-              }}
-            >
-              Disconnect
-            </button>
-          </div>
-          <KanbanApp
-            syncServer={activeConnection.syncServer}
-            indexDocId={activeConnection.indexDocId}
-            filePath={activeConnection.filePath}
-          />
-        </>
+        <KanbanApp
+          syncServer={activeConnection.syncServer}
+          indexDocId={activeConnection.indexDocId}
+          filePath={activeConnection.filePath}
+          onDisconnect={handleBack}
+        />
       ) : (
-        <ConnectionSelector onSelect={handleSelect} />
+        <>
+          <h1 style={{ fontSize: '24px' }}>Quarto Hub - Kanban</h1>
+          <ConnectionSelector onSelect={handleSelect} />
+        </>
       )}
     </div>
   )

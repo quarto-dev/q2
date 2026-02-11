@@ -20,9 +20,10 @@ interface KanbanAppProps {
   syncServer: string
   indexDocId: string
   filePath: string
+  onDisconnect: () => void
 }
 
-export function KanbanApp({ syncServer, indexDocId, filePath }: KanbanAppProps) {
+export function KanbanApp({ syncServer, indexDocId, filePath, onDisconnect }: KanbanAppProps) {
   const params = useMemo(
     () => ({ syncServer, indexDocId, filePath }),
     [syncServer, indexDocId, filePath],
@@ -62,20 +63,31 @@ export function KanbanApp({ syncServer, indexDocId, filePath }: KanbanAppProps) 
     )
   }
 
-  return <KanbanBoard ast={ast} filePath={filePath} updateAst={updateAst} />
+  return (
+    <KanbanBoard
+      ast={ast}
+      filePath={filePath}
+      indexDocId={indexDocId}
+      updateAst={updateAst}
+      onDisconnect={onDisconnect}
+    />
+  )
 }
 
 interface KanbanBoardProps {
   ast: RustQmdJson
   filePath: string
+  indexDocId: string
   updateAst: ((ast: RustQmdJson) => void) | null
+  onDisconnect: () => void
 }
 
-function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
+function KanbanBoard({ ast, filePath, indexDocId, updateAst, onDisconnect }: KanbanBoardProps) {
   const board = useMemo(() => buildBoard(ast), [ast])
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('board')
   const [showNewCardForm, setShowNewCardForm] = useState(false)
+  const [copiedDocId, setCopiedDocId] = useState(false)
 
   const onStatusChange = useCallback((cardId: string, newStatus: CardStatus) => {
     if (!updateAst) return
@@ -98,24 +110,73 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
     }
   }, [ast, updateAst])
 
+  const copyDocId = useCallback(() => {
+    navigator.clipboard.writeText(indexDocId).then(() => {
+      setCopiedDocId(true)
+      setTimeout(() => setCopiedDocId(false), 1500)
+    })
+  }, [indexDocId])
+
   // Keep the selected card in sync with the latest AST data
   const currentSelectedCard = selectedCard
     ? board.cards.find(c => c.id === selectedCard.id) ?? null
     : null
 
+  const cardCount = board.cards.length
+
   return (
     <div>
-      {/* Toolbar: info + view switcher + new card button */}
+      {/* Unified toolbar */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: '12px',
+        padding: '8px 12px',
+        background: '#f0f0f0',
+        borderRadius: '6px',
+        gap: '12px',
       }}>
-        <p style={{ fontSize: '12px', color: '#888', margin: 0 }}>
-          Live from <code>{filePath}</code> — {board.cards.length} card{board.cards.length !== 1 ? 's' : ''}
-        </p>
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        {/* Left: title + info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', minWidth: 0 }}>
+          <strong style={{ flexShrink: 0 }}>Kanban</strong>
+          <span style={{ color: '#999' }}>&mdash;</span>
+          <code style={{ fontSize: '12px' }}>{filePath}</code>
+          <span style={{ color: '#999' }}>&mdash;</span>
+          <span style={{ color: '#666', flexShrink: 0 }}>{cardCount} card{cardCount !== 1 ? 's' : ''}</span>
+          <span style={{ color: '#999' }}>&middot;</span>
+          <span
+            onClick={copyDocId}
+            title="Click to copy index document ID"
+            style={{
+              color: copiedDocId ? '#16a34a' : '#888',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontFamily: 'monospace',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {copiedDocId ? 'Copied!' : indexDocId}
+          </span>
+        </div>
+
+        {/* Right: actions */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+          <button
+            onClick={onDisconnect}
+            style={{
+              padding: '4px 12px',
+              background: 'none',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            Disconnect
+          </button>
           {updateAst && (
             <button
               onClick={() => setShowNewCardForm(true)}
@@ -127,24 +188,43 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
                 color: '#fff',
                 cursor: 'pointer',
                 fontSize: '13px',
-                marginRight: '8px',
               }}
             >
               + New Card
             </button>
           )}
-          <button
-            onClick={() => setViewMode('board')}
-            style={viewMode === 'board' ? activeTabStyle : tabStyle}
-          >
-            Board
-          </button>
-          <button
-            onClick={() => setViewMode('calendar')}
-            style={viewMode === 'calendar' ? activeTabStyle : tabStyle}
-          >
-            Calendar
-          </button>
+          {/* Joined Board/Calendar toggle group */}
+          <div style={{ display: 'flex' }}>
+            <button
+              onClick={() => setViewMode('board')}
+              style={{
+                padding: '4px 12px',
+                fontSize: '13px',
+                cursor: 'pointer',
+                border: '1px solid #ccc',
+                borderRadius: '4px 0 0 4px',
+                borderRight: 'none',
+                background: viewMode === 'board' ? '#2563eb' : '#fff',
+                color: viewMode === 'board' ? '#fff' : '#666',
+              }}
+            >
+              Board
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              style={{
+                padding: '4px 12px',
+                fontSize: '13px',
+                cursor: 'pointer',
+                border: '1px solid #ccc',
+                borderRadius: '0 4px 4px 0',
+                background: viewMode === 'calendar' ? '#2563eb' : '#fff',
+                color: viewMode === 'calendar' ? '#fff' : '#666',
+              }}
+            >
+              Calendar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -177,21 +257,4 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
       )}
     </div>
   )
-}
-
-const tabStyle: React.CSSProperties = {
-  background: 'none',
-  border: '1px solid #ccc',
-  borderRadius: '4px',
-  padding: '4px 12px',
-  cursor: 'pointer',
-  fontSize: '13px',
-  color: '#666',
-}
-
-const activeTabStyle: React.CSSProperties = {
-  ...tabStyle,
-  background: '#2563eb',
-  borderColor: '#2563eb',
-  color: '#fff',
 }
