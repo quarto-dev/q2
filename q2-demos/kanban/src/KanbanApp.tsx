@@ -4,11 +4,12 @@
  */
 
 import type { RustQmdJson } from '@quarto/pandoc-types'
-import type { CardStatus } from './types.ts'
+import type { KanbanCard, CardStatus } from './types.ts'
 import { useSyncedAst } from './useSyncedAst.ts'
 import { buildBoard, setCardStatus } from './astHelpers.ts'
 import { BoardView } from './components/BoardView.tsx'
-import { useMemo, useCallback } from 'react'
+import { CardDetailView } from './components/CardDetailView.tsx'
+import { useState, useMemo, useCallback } from 'react'
 
 interface KanbanAppProps {
   syncServer: string
@@ -67,6 +68,7 @@ interface KanbanBoardProps {
 
 function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
   const board = useMemo(() => buildBoard(ast), [ast])
+  const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null)
 
   const onStatusChange = useCallback((cardId: string, newStatus: CardStatus) => {
     if (!updateAst) return
@@ -76,6 +78,15 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
     }
   }, [ast, updateAst])
 
+  const onCardClick = useCallback((card: KanbanCard) => {
+    setSelectedCard(card)
+  }, [])
+
+  // Keep the selected card in sync with the latest AST data
+  const currentSelectedCard = selectedCard
+    ? board.cards.find(c => c.id === selectedCard.id) ?? null
+    : null
+
   return (
     <div>
       <p style={{ fontSize: '12px', color: '#888', marginBottom: '12px' }}>
@@ -84,7 +95,15 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
       <BoardView
         cards={board.cards}
         onStatusChange={updateAst ? onStatusChange : undefined}
+        onCardClick={onCardClick}
       />
+      {currentSelectedCard && (
+        <CardDetailView
+          card={currentSelectedCard}
+          onClose={() => setSelectedCard(null)}
+          onStatusChange={updateAst ? onStatusChange : undefined}
+        />
+      )}
     </div>
   )
 }

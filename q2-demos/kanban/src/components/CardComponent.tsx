@@ -45,7 +45,23 @@ export function CardComponent({ card, onStatusChange, onCardClick }: CardCompone
           <option value="doing">doing</option>
           <option value="done">done</option>
         </select>
-        <strong style={{ flex: 1, fontSize: '14px' }}>{card.title}</strong>
+        <strong
+          style={{
+            flex: 1,
+            fontSize: '14px',
+            cursor: onCardClick ? 'pointer' : 'default',
+            textDecoration: onCardClick ? 'none' : 'none',
+          }}
+          onClick={() => onCardClick?.(card)}
+          onMouseEnter={(e) => {
+            if (onCardClick) (e.currentTarget as HTMLElement).style.textDecoration = 'underline'
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.textDecoration = 'none'
+          }}
+        >
+          {card.title}
+        </strong>
         {card.type && (
           <span style={{
             fontSize: '11px',
