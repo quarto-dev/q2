@@ -150,6 +150,7 @@ fn coarsen(
                     {
                         if !orig_inlines.is_empty()
                             && is_inline_splice_safe(new_inlines, inline_plan)
+                            && block_attrs_eq(orig_block, new_block)
                         {
                             // Safe to splice — assemble the patched block text
                             let block_text = assemble_inline_splice(
@@ -509,6 +510,47 @@ fn config_map_entry_content_eq(a: &ConfigMapEntry, b: &ConfigMapEntry) -> bool {
 // =============================================================================
 // Inline Splicing (Phase 5)
 // =============================================================================
+
+/// Check whether two blocks have equal source-visible attributes.
+///
+/// InlineSplice preserves the original block's prefix and suffix verbatim.
+/// The suffix includes any explicit attribute text (e.g., `{.feature status="todo"}`).
+/// If that text needs to change, InlineSplice produces wrong output.
+///
+/// We compare classes and key-value pairs (which are always in the source when present).
+/// For the ID (attr.0), we only compare when the original block has an explicitly written
+/// ID (`attr_source.id.is_some()`). Auto-generated IDs (derived from header text) are not
+/// in the source, so changes to them don't affect the suffix and don't need Rewrite.
+fn block_attrs_eq(a: &Block, b: &Block) -> bool {
+    match (a, b) {
+        (Block::Header(ha), Block::Header(hb)) => {
+            let id_eq = if ha.attr_source.id.is_some() {
+                ha.attr.0 == hb.attr.0
+            } else {
+                true
+            };
+            id_eq && ha.attr.1 == hb.attr.1 && ha.attr.2 == hb.attr.2
+        }
+        (Block::CodeBlock(ca), Block::CodeBlock(cb)) => {
+            let id_eq = if ca.attr_source.id.is_some() {
+                ca.attr.0 == cb.attr.0
+            } else {
+                true
+            };
+            id_eq && ca.attr.1 == cb.attr.1 && ca.attr.2 == cb.attr.2
+        }
+        (Block::Div(da), Block::Div(db)) => {
+            let id_eq = if da.attr_source.id.is_some() {
+                da.attr.0 == db.attr.0
+            } else {
+                true
+            };
+            id_eq && da.attr.1 == db.attr.1 && da.attr.2 == db.attr.2
+        }
+        // Blocks without attributes are always attr-equal
+        _ => true,
+    }
+}
 
 /// Extract the inline content of a block, if it's an inline-content block.
 ///

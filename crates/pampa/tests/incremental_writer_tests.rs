@@ -453,6 +453,138 @@ fn roundtrip_change_header_text() {
     assert_roundtrip("## Title\n\nParagraph.\n", "## New Title\n\nParagraph.\n");
 }
 
+#[test]
+fn roundtrip_add_header_attribute() {
+    assert_roundtrip(
+        "## Title {.feature created=\"2026-02-10\"}\n\nParagraph.\n",
+        "## Title {.feature created=\"2026-02-10\" status=\"todo\"}\n\nParagraph.\n",
+    );
+}
+
+#[test]
+fn roundtrip_change_header_attribute() {
+    assert_roundtrip(
+        "## Title {.feature status=\"todo\"}\n\nParagraph.\n",
+        "## Title {.feature status=\"done\"}\n\nParagraph.\n",
+    );
+}
+
+#[test]
+fn roundtrip_add_header_attribute_with_frontmatter() {
+    assert_roundtrip(
+        "---\ntitle: my board\n---\n\n## Title {.feature created=\"2026-02-10\"}\n\nParagraph.\n",
+        "---\ntitle: my board\n---\n\n## Title {.feature created=\"2026-02-10\" status=\"todo\"}\n\nParagraph.\n",
+    );
+}
+
+#[test]
+fn roundtrip_add_header_attribute_via_json_roundtrip() {
+    // Simulates the WASM path: parse original, parse new, JSON-serialize new AST,
+    // JSON-deserialize, then incremental write
+    let original_qmd = "## Title {.feature created=\"2026-02-10\"}\n\nParagraph.\n";
+    let new_qmd = "## Title {.feature created=\"2026-02-10\" status=\"todo\"}\n\nParagraph.\n";
+    let new_ast = parse_qmd(new_qmd);
+    let result = incremental_write_via_json_roundtrip(original_qmd, &new_ast);
+    let result_ast = parse_qmd(&result);
+    assert_eq!(result_ast.blocks.len(), new_ast.blocks.len());
+    for (result_block, new_block) in result_ast.blocks.iter().zip(new_ast.blocks.iter()) {
+        assert!(
+            quarto_ast_reconcile::structural_eq_block(result_block, new_block),
+            "Block structural mismatch after JSON roundtrip"
+        );
+    }
+}
+
+#[test]
+fn roundtrip_kanban_status_change() {
+    // Reproduces the kanban demo scenario: multiple cards, change status on one
+    let original_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.\n",
+    );
+    let new_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\" status=\"todo\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.\n",
+    );
+    assert_roundtrip(original_qmd, new_qmd);
+}
+
+#[test]
+fn roundtrip_kanban_status_change_via_json() {
+    // Same as above but going through JSON roundtrip path (like WASM)
+    let original_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.\n",
+    );
+    let new_qmd = concat!(
+        "---\ntitle: test kanban\n---\n\n",
+        "# Cards\n\n",
+        "## Work Week {.milestone deadline=\"2026-03-25\" created=\"2026-02-10\"}\n\n",
+        "Items:\n\n",
+        "- [ ] [Project Export](#project-export)\n\n",
+        "## Project Export {.feature created=\"2026-02-10\" status=\"todo\"}\n\n",
+        "## ACLs {.feature created=\"2026-02-10\"}\n\n",
+        "Some body text.\n",
+    );
+    let new_ast = parse_qmd(new_qmd);
+    let result = incremental_write_via_json_roundtrip(original_qmd, &new_ast);
+    let result_ast = parse_qmd(&result);
+    assert_eq!(result_ast.blocks.len(), new_ast.blocks.len());
+}
+
+/// Changing an explicit ID (`{#custom-id}` → `{#new-id}`) should produce correct output.
+/// The explicit ID is in the source suffix, so InlineSplice would preserve the old ID.
+/// The fix should detect that the explicit ID changed and fall back to Rewrite.
+#[test]
+fn roundtrip_change_explicit_header_id() {
+    assert_roundtrip(
+        "## Title {#custom-id .feature}\n\nParagraph.\n",
+        "## Title {#new-id .feature}\n\nParagraph.\n",
+    );
+}
+
+/// When only the auto-generated ID changes (because header text changed),
+/// InlineSplice should still be used — no explicit `{#id}` should appear in output.
+/// This is a regression guard: the ID comparison must NOT trigger Rewrite for auto-generated IDs.
+#[test]
+fn roundtrip_auto_id_change_no_explicit_id_in_output() {
+    let original_qmd = "## Hello World\n\nParagraph.\n";
+    let new_qmd = "## Goodbye World\n\nParagraph.\n";
+
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd(new_qmd);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    // Should NOT contain an explicit ID attribute — auto-generated IDs stay implicit
+    assert!(
+        !result.contains("{#"),
+        "Auto-generated ID should not appear as explicit attribute in output.\nGot: {:?}",
+        result
+    );
+    assert_eq!(result, "## Goodbye World\n\nParagraph.\n");
+}
+
 // --- Verbatim preservation tests ---
 
 /// Verify that unchanged blocks preserve their EXACT text (byte-for-byte).

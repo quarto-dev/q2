@@ -783,6 +783,19 @@ which is incorrect (the second line would exit the block quote).
 
 At top level (no enclosing indentation boundary), SoftBreak/LineBreak changes are safe to splice because there's no prefix to propagate.
 
+#### Bug Fix: Attribute Changes Must Bypass InlineSplice (bd-rcdo)
+
+InlineSplice preserves the original block's suffix verbatim, which includes
+attribute text (e.g., `{.feature status="todo"}`). When attributes change but
+inline content doesn't, InlineSplice silently drops the new attributes.
+
+**Fix:** `block_attrs_eq()` guard in `coarsen` compares source-visible
+attributes before allowing InlineSplice. Compares classes, key-value pairs,
+and the ID only when explicitly written (`attr_source.id.is_some()`).
+Auto-generated IDs (not in source) are correctly skipped.
+
+See `claude-notes/plans/2026-02-11-inline-splice-attr-bug.md` for full details.
+
 ## Open Questions
 
 1–2. ~~**Source span coverage and block separator handling**~~: **Resolved by experiments.** Block spans are "content + trailing `\n`" with 1-byte `\n` gaps between them. Assembly strategy: copy spans verbatim, insert `\n` separator between blocks. One quirk: BulletList absorbs the trailing blank line into its span (zero-width gap to next block). YAML front matter is not in `doc.blocks` — the incremental writer must preserve the prefix before the first block's start offset. See "Source Span Experimental Findings" section for full details.
