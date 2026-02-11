@@ -76,6 +76,36 @@
   border-top: 1px solid #1f3460;
 }
 
+.export-zip-btn {
+  width: 100%;
+  padding: 10px 16px;
+  background: #1a1a2e;
+  border: 1px solid #646cff;
+  border-radius: 6px;
+  color: #646cff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 8px;
+}
+
+.export-zip-btn:hover {
+  background: #646cff;
+  color: #fff;
+}
+
+.export-zip-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.export-error {
+  font-size: 12px;
+  color: #ff6b6b;
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+
 .choose-project-btn {
   width: 100%;
   padding: 10px 16px;

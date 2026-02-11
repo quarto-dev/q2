@@ -44,3 +44,4 @@ export type { SyncClient } from './client.js';
 
 // Export utilities
 export { computeSHA256 } from './hash.js';
+export { exportProjectAsZip } from './export-zip.js';

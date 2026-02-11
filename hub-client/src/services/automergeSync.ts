@@ -7,6 +7,7 @@
 
 import {
   createSyncClient,
+  exportProjectAsZip as exportZip,
   type SyncClient,
   type SyncClientCallbacks,
   type Patch,
@@ -209,6 +210,14 @@ export function getFileHandle(path: string) {
  */
 export function getFilePaths(): string[] {
   return ensureClient().getFilePaths();
+}
+
+/**
+ * Export all project files as a ZIP archive.
+ * Returns a Uint8Array containing the ZIP file bytes.
+ */
+export function exportProjectAsZip(): Uint8Array {
+  return exportZip(ensureClient());
 }
 
 // ============================================================================

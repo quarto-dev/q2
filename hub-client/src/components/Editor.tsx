@@ -10,6 +10,7 @@ import {
   createBinaryFile,
   deleteFile,
   renameFile,
+  exportProjectAsZip,
 } from '../services/automergeSync';
 import type { Diagnostic } from '../types/diagnostic';
 import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
@@ -677,6 +678,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                   <ProjectTab
                     project={project}
                     onChooseNewProject={onDisconnect}
+                    onExportZip={exportProjectAsZip}
                   />
                 );
               case 'status':
