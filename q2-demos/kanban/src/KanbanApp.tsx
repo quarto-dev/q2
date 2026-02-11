@@ -6,10 +6,12 @@
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import type { KanbanCard, CardStatus } from './types.ts'
 import { useSyncedAst } from './useSyncedAst.ts'
-import { buildBoard, setCardStatus } from './astHelpers.ts'
+import { buildBoard, setCardStatus, addCard } from './astHelpers.ts'
 import { BoardView } from './components/BoardView.tsx'
 import { CalendarView } from './components/CalendarView.tsx'
 import { CardDetailView } from './components/CardDetailView.tsx'
+import { NewCardForm } from './components/NewCardForm.tsx'
+import type { NewCardData } from './components/NewCardForm.tsx'
 import { useState, useMemo, useCallback } from 'react'
 
 type ViewMode = 'board' | 'calendar'
@@ -73,6 +75,7 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
   const board = useMemo(() => buildBoard(ast), [ast])
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('board')
+  const [showNewCardForm, setShowNewCardForm] = useState(false)
 
   const onStatusChange = useCallback((cardId: string, newStatus: CardStatus) => {
     if (!updateAst) return
@@ -86,6 +89,15 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
     setSelectedCard(card)
   }, [])
 
+  const onNewCard = useCallback((data: NewCardData) => {
+    if (!updateAst) return
+    const newAst = addCard(ast, data)
+    if (newAst) {
+      updateAst(newAst)
+      setShowNewCardForm(false)
+    }
+  }, [ast, updateAst])
+
   // Keep the selected card in sync with the latest AST data
   const currentSelectedCard = selectedCard
     ? board.cards.find(c => c.id === selectedCard.id) ?? null
@@ -93,7 +105,7 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
 
   return (
     <div>
-      {/* Toolbar: info + view switcher */}
+      {/* Toolbar: info + view switcher + new card button */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -103,7 +115,24 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
         <p style={{ fontSize: '12px', color: '#888', margin: 0 }}>
           Live from <code>{filePath}</code> — {board.cards.length} card{board.cards.length !== 1 ? 's' : ''}
         </p>
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {updateAst && (
+            <button
+              onClick={() => setShowNewCardForm(true)}
+              style={{
+                padding: '4px 12px',
+                border: 'none',
+                borderRadius: '4px',
+                background: '#16a34a',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '13px',
+                marginRight: '8px',
+              }}
+            >
+              + New Card
+            </button>
+          )}
           <button
             onClick={() => setViewMode('board')}
             style={viewMode === 'board' ? activeTabStyle : tabStyle}
@@ -137,6 +166,13 @@ function KanbanBoard({ ast, filePath, updateAst }: KanbanBoardProps) {
           card={currentSelectedCard}
           onClose={() => setSelectedCard(null)}
           onStatusChange={updateAst ? onStatusChange : undefined}
+        />
+      )}
+
+      {showNewCardForm && (
+        <NewCardForm
+          onSubmit={onNewCard}
+          onClose={() => setShowNewCardForm(false)}
         />
       )}
     </div>

@@ -336,7 +336,7 @@ describe('toggleMilestoneItem', () => {
 
 describe('addCard', () => {
   it('appends a new card at the end of the document', () => {
-    const result = addCard(ast, 'New Feature', 'feature')
+    const result = addCard(ast, { title: 'New Feature', type: 'feature' })
     expect(result).not.toBeNull()
 
     const cards = extractCards(result!)
@@ -347,7 +347,7 @@ describe('addCard', () => {
   })
 
   it('sets created timestamp', () => {
-    const result = addCard(ast, 'Test Card', 'task')!
+    const result = addCard(ast, { title: 'Test Card', type: 'task' })!
     const cards = extractCards(result)
     const newCard = cards[cards.length - 1]
     expect(newCard.created).toBeDefined()
@@ -356,13 +356,13 @@ describe('addCard', () => {
   })
 
   it('does not mutate the original AST', () => {
-    addCard(ast, 'Test', 'bug')
+    addCard(ast, { title: 'Test', type: 'bug' })
     expect(extractCards(ast)).toHaveLength(5)
   })
 
   it('generates unique slugs for duplicate titles', () => {
     // Add a card with a title that would clash with "Project Export"
-    const result = addCard(ast, 'Project Export', 'feature')!
+    const result = addCard(ast, { title: 'Project Export', type: 'feature' })!
     const cards = extractCards(result)
     const ids = cards.map(c => c.id)
     // Should have 6 unique ids
@@ -370,7 +370,7 @@ describe('addCard', () => {
   })
 
   it('creates card with no type', () => {
-    const result = addCard(ast, 'Generic Card')!
+    const result = addCard(ast, { title: 'Generic Card' })!
     const cards = extractCards(result)
     const newCard = cards[cards.length - 1]
     expect(newCard.type).toBeUndefined()

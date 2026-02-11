@@ -200,9 +200,20 @@ export function toggleMilestoneItem(ast: RustQmdJson, cardId: string, itemIndex:
 }
 
 /**
+ * Options for creating a new card.
+ */
+export interface AddCardOptions {
+  title: string
+  type?: CardType
+  status?: CardStatus
+  deadline?: string  // YYYY-MM-DD
+}
+
+/**
  * Add a new card at the end of the document. Returns a new (cloned) AST.
  */
-export function addCard(ast: RustQmdJson, title: string, type?: CardType): RustQmdJson | null {
+export function addCard(ast: RustQmdJson, options: AddCardOptions): RustQmdJson | null {
+  const { title, type, status, deadline } = options
   const cloned: RustQmdJson = JSON.parse(JSON.stringify(ast))
 
   // Generate a slug from the title
@@ -219,6 +230,8 @@ export function addCard(ast: RustQmdJson, title: string, type?: CardType): RustQ
   const classes = type ? [type] : []
   const now = new Date().toISOString().replace(/:\d{2}\.\d+Z$/, '')
   const kvs: [string, string][] = [['created', now]]
+  if (status) kvs.push(['status', status])
+  if (deadline) kvs.push(['deadline', deadline])
 
   const inlineParts: Annotated_Inline[] = []
   const words = title.split(' ')
