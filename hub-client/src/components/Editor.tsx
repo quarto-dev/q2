@@ -725,6 +725,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
               // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
               pasteAs: { enabled: false },
+              // Move hover/diagnostic widgets to a fixed container outside the editor's
+              // overflow:hidden boundary, preventing them from being clipped by the navbar.
+              fixedOverflowWidgets: true,
+              // Prefer showing hover below the line. This prevents diagnostic popups near
+              // the top of the editor from overlapping the navbar.
+              hover: { above: false },
             }}
           />
         </div>
