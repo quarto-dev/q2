@@ -18,21 +18,23 @@ export function App() {
     setActiveConnection(null)
   }, [])
 
-  return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      {activeConnection ? (
+  if (activeConnection) {
+    return (
+      <div style={{ fontFamily: 'system-ui, sans-serif' }}>
         <KanbanApp
           syncServer={activeConnection.syncServer}
           indexDocId={activeConnection.indexDocId}
           filePath={activeConnection.filePath}
           onDisconnect={handleBack}
         />
-      ) : (
-        <>
-          <h1 style={{ fontSize: '24px' }}>Quarto Hub - Kanban</h1>
-          <ConnectionSelector onSelect={handleSelect} />
-        </>
-      )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ fontFamily: 'system-ui, sans-serif', maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+      <h1 style={{ fontSize: '24px' }}>Quarto Hub - Kanban</h1>
+      <ConnectionSelector onSelect={handleSelect} />
     </div>
   )
 }

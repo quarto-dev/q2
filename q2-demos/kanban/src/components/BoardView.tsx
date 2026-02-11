@@ -27,9 +27,7 @@ export function BoardView({ cards, onStatusChange, onCardClick }: BoardViewProps
         )
         return (
           <div key={label} style={{
-            background: '#fafafa',
-            borderRadius: '8px',
-            padding: '12px',
+            padding: '12px 0',
           }}>
             <h3 style={{
               fontSize: '14px',

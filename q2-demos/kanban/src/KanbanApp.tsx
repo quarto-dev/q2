@@ -126,15 +126,13 @@ function KanbanBoard({ ast, filePath, indexDocId, updateAst, onDisconnect }: Kan
 
   return (
     <div>
-      {/* Unified toolbar */}
+      {/* App-level toolbar — full viewport width, no rounded corners */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: '12px',
-        padding: '8px 12px',
+        padding: '8px 20px',
         background: '#f0f0f0',
-        borderRadius: '6px',
         gap: '12px',
       }}>
         {/* Left: title + info */}
@@ -228,18 +226,21 @@ function KanbanBoard({ ast, filePath, indexDocId, updateAst, onDisconnect }: Kan
         </div>
       </div>
 
-      {viewMode === 'board' ? (
-        <BoardView
-          cards={board.cards}
-          onStatusChange={updateAst ? onStatusChange : undefined}
-          onCardClick={onCardClick}
-        />
-      ) : (
-        <CalendarView
-          cards={board.cards}
-          onCardClick={onCardClick}
-        />
-      )}
+      {/* Content area — constrained width */}
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '16px 20px' }}>
+        {viewMode === 'board' ? (
+          <BoardView
+            cards={board.cards}
+            onStatusChange={updateAst ? onStatusChange : undefined}
+            onCardClick={onCardClick}
+          />
+        ) : (
+          <CalendarView
+            cards={board.cards}
+            onCardClick={onCardClick}
+          />
+        )}
+      </div>
 
       {currentSelectedCard && (
         <CardDetailView
