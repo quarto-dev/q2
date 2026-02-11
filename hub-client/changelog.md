@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-02-11
+
+- [`0dbd3fcc`](https://github.com/quarto-dev/kyoto/commits/0dbd3fcc): Fix diagnostic popups clipped by navbar near top of editor
+
 ### 2026-02-04
 
 - [`3ed1c1bf`](https://github.com/quarto-dev/kyoto/commits/3ed1c1bf): Make default sync server configurable via VITE_DEFAULT_SYNC_SERVER env var
