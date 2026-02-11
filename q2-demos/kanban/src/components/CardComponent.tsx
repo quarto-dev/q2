@@ -8,6 +8,7 @@ import type { Annotated_Inline } from '@quarto/pandoc-types'
 interface CardComponentProps {
   card: KanbanCard
   onStatusChange?: (cardId: string, newStatus: CardStatus) => void
+  onCardClick?: (card: KanbanCard) => void
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -17,7 +18,7 @@ const TYPE_COLORS: Record<string, string> = {
   task: '#e8f5e9',
 }
 
-export function CardComponent({ card, onStatusChange }: CardComponentProps) {
+export function CardComponent({ card, onStatusChange, onCardClick }: CardComponentProps) {
   const bgColor = card.type ? TYPE_COLORS[card.type] ?? '#f5f5f5' : '#f5f5f5'
 
   return (

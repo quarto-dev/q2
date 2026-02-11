@@ -1,5 +1,5 @@
 /**
- * Board view: renders cards in status columns (todo / doing / done / unset).
+ * Board view: renders cards in horizontal status rows (todo / doing / done / unset).
  */
 
 import type { KanbanCard, CardStatus } from '../types.ts'
@@ -8,24 +8,21 @@ import { CardComponent } from './CardComponent.tsx'
 interface BoardViewProps {
   cards: KanbanCard[]
   onStatusChange?: (cardId: string, newStatus: CardStatus) => void
+  onCardClick?: (card: KanbanCard) => void
 }
 
-const COLUMNS: { status: CardStatus | null; label: string }[] = [
+const ROWS: { status: CardStatus | null; label: string }[] = [
   { status: 'todo', label: 'Todo' },
   { status: 'doing', label: 'Doing' },
   { status: 'done', label: 'Done' },
   { status: null, label: 'Unset' },
 ]
 
-export function BoardView({ cards, onStatusChange }: BoardViewProps) {
+export function BoardView({ cards, onStatusChange, onCardClick }: BoardViewProps) {
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: `repeat(${COLUMNS.length}, 1fr)`,
-      gap: '16px',
-    }}>
-      {COLUMNS.map(({ status, label }) => {
-        const columnCards = cards.filter(c =>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {ROWS.map(({ status, label }) => {
+        const rowCards = cards.filter(c =>
           status === null ? c.status === undefined : c.status === status
         )
         return (
@@ -33,7 +30,6 @@ export function BoardView({ cards, onStatusChange }: BoardViewProps) {
             background: '#fafafa',
             borderRadius: '8px',
             padding: '12px',
-            minHeight: '200px',
           }}>
             <h3 style={{
               fontSize: '14px',
@@ -44,16 +40,24 @@ export function BoardView({ cards, onStatusChange }: BoardViewProps) {
             }}>
               {label}
               <span style={{ color: '#999', fontWeight: 400, marginLeft: '6px' }}>
-                ({columnCards.length})
+                ({rowCards.length})
               </span>
             </h3>
-            {columnCards.map(card => (
-              <CardComponent
-                key={card.id}
-                card={card}
-                onStatusChange={onStatusChange}
-              />
-            ))}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}>
+              {rowCards.map(card => (
+                <div key={card.id} style={{ width: '280px', flexShrink: 0 }}>
+                  <CardComponent
+                    card={card}
+                    onStatusChange={onStatusChange}
+                    onCardClick={onCardClick}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )
       })}
