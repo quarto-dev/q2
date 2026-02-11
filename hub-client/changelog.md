@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-02-11
 
+- [`21d81563`](https://github.com/quarto-dev/q2/commits/21d81563): Add project ZIP export to quarto-sync-client and hub-client
 - [`0dbd3fcc`](https://github.com/quarto-dev/q2/commits/0dbd3fcc): Fix diagnostic popups clipped by navbar near top of editor
 
 ### 2026-02-04
