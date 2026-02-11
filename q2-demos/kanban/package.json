@@ -7,6 +7,8 @@
     "build:wasm": "node ../../hub-client/scripts/build-wasm.js",
     "build:all": "npm run build:wasm && npm run build",
     "dev": "vite",
+    "dev:fresh": "npm run preflight && vite",
+    "preflight": "npm run build:wasm && npm run typecheck",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
