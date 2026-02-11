@@ -44,12 +44,12 @@ export function BoardView({ cards, onStatusChange, onCardClick }: BoardViewProps
               </span>
             </h3>
             <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '8px',
             }}>
               {rowCards.map(card => (
-                <div key={card.id} style={{ width: '280px', flexShrink: 0 }}>
+                <div key={card.id}>
                   <CardComponent
                     card={card}
                     onStatusChange={onStatusChange}
