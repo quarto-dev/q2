@@ -29,6 +29,21 @@ export function CardComponent({ card, onStatusChange }: CardComponentProps) {
       background: bgColor,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+        <select
+          value={card.status ?? ''}
+          onChange={(e) => {
+            const val = e.target.value as CardStatus
+            if (val && onStatusChange) {
+              onStatusChange(card.id, val)
+            }
+          }}
+          style={{ fontSize: '12px', padding: '2px 4px', flexShrink: 0 }}
+        >
+          <option value="">—</option>
+          <option value="todo">todo</option>
+          <option value="doing">doing</option>
+          <option value="done">done</option>
+        </select>
         <strong style={{ flex: 1, fontSize: '14px' }}>{card.title}</strong>
         {card.type && (
           <span style={{
@@ -49,24 +64,6 @@ export function CardComponent({ card, onStatusChange }: CardComponentProps) {
       )}
 
       <BodyPreview bodyBlocks={card.bodyBlocks} />
-
-      <div style={{ marginTop: '8px' }}>
-        <select
-          value={card.status ?? ''}
-          onChange={(e) => {
-            const val = e.target.value as CardStatus
-            if (val && onStatusChange) {
-              onStatusChange(card.id, val)
-            }
-          }}
-          style={{ fontSize: '12px', padding: '2px 4px' }}
-        >
-          <option value="">—</option>
-          <option value="todo">todo</option>
-          <option value="doing">doing</option>
-          <option value="done">done</option>
-        </select>
-      </div>
     </div>
   )
 }
