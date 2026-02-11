@@ -1,0 +1,7 @@
+## project {.a-class}
+
+## bare header
+
+## with explicit id {#custom-id}
+
+## with explicit matching id {#with-explicit-matching-id .extra}

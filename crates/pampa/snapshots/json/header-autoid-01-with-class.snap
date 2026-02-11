@@ -1,0 +1,6 @@
+---
+source: crates/pampa/tests/test.rs
+assertion_line: 359
+expression: output
+---
+{"astContext":{"files":[{"line_breaks":[21],"name":"tests/snapshots/json/header-autoid-01-with-class.qmd","total_length":22}],"sourceInfoPool":[{"d":0,"r":[3,10],"t":0},{"d":0,"r":[0,22],"t":0},{"d":0,"r":[12,20],"t":0}]},"blocks":[{"t":"Header","c":[2,["project",["a-class"],[]],[{"c":"project","s":0,"t":"Str"}]],"s":1,"attrS":{"classes":[2],"id":null,"kvs":[]}}],"meta":{},"pandoc-api-version":[1,23,1]}
