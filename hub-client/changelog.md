@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-02-12
+
+- [`f94cdc91`](https://github.com/quarto-dev/q2/commits/f94cdc91): Add new file templates feature with project-specific .qmd templates in _quarto-hub-templates
+
 ### 2026-02-11
 
 - [`21d81563`](https://github.com/quarto-dev/q2/commits/21d81563): Add project ZIP export to quarto-sync-client and hub-client
