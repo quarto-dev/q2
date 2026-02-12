@@ -100,6 +100,24 @@ declare module 'wasm-quarto-hub-client' {
     files?: ProjectFile[];
   }
 
+  // Template processing functions
+  /** Process a template file: extract template-name and produce stripped content. */
+  export function prepare_template(content: string): string;
+
+  /** Response type for prepare_template */
+  export type PrepareTemplateResponse =
+    | {
+        success: true;
+        /** The template-name metadata value, or null if not present */
+        template_name: string | null;
+        /** The template content with template-name removed from frontmatter */
+        stripped_content: string;
+      }
+    | {
+        success: false;
+        error: string;
+      };
+
   export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
   export default function __wbg_init(

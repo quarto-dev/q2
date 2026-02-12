@@ -12,6 +12,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { isBinaryExtension, isTextExtension } from '../types/project';
 import { validateFileSize, FILE_SIZE_LIMITS } from '../services/resourceService';
+import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
 import './NewFileDialog.css';
 
 export interface NewFileDialogProps {
@@ -47,6 +48,11 @@ export default function NewFileDialog({
   const [isDragOver, setIsDragOver] = useState(false);
   const [filePreviews, setFilePreviews] = useState<FilePreview[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Template state
+  const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
 
   const filenameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +118,24 @@ export default function NewFileDialog({
     }
   }, [isOpen, initialFilename]);
 
+  // Load templates when dialog opens in text mode
+  useEffect(() => {
+    if (isOpen && mode === 'text') {
+      setLoadingTemplates(true);
+      discoverTemplates()
+        .then((discovered) => {
+          setTemplates(discovered);
+        })
+        .catch((err) => {
+          console.warn('[NewFileDialog] Failed to load templates:', err);
+          setTemplates([]);
+        })
+        .finally(() => {
+          setLoadingTemplates(false);
+        });
+    }
+  }, [isOpen, mode]);
+
   // Focus filename input when dialog opens in text mode
   useEffect(() => {
     if (isOpen && mode === 'text') {
@@ -128,6 +152,9 @@ export default function NewFileDialog({
       setMode('text');
       setIsDragOver(false);
       setIsUploading(false);
+      setTemplates([]);
+      setSelectedTemplate(null);
+      setLoadingTemplates(false);
     }
   }, [isOpen]);
 
@@ -200,9 +227,11 @@ export default function NewFileDialog({
       return;
     }
 
-    onCreateTextFile(filename, '');
+    // Use template content if selected, otherwise empty
+    const content = selectedTemplate?.strippedContent ?? '';
+    onCreateTextFile(filename, content);
     onClose();
-  }, [filename, validateFilename, onCreateTextFile, onClose]);
+  }, [filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
   // Handle upload files
   const handleUploadFiles = useCallback(async () => {
@@ -283,18 +312,41 @@ export default function NewFileDialog({
         <div className="dialog-content">
           {mode === 'text' ? (
             <div className="text-file-form">
-              <label htmlFor="filename">Filename:</label>
-              <input
-                ref={filenameInputRef}
-                id="filename"
-                type="text"
-                value={filename}
-                onChange={(e) => {
-                  setFilename(e.target.value);
-                  setError(null);
-                }}
-                placeholder="e.g., chapter1.qmd"
-              />
+              {templates.length > 0 && (
+                <div className="template-selector">
+                  <label htmlFor="template">Template:</label>
+                  <select
+                    id="template"
+                    value={selectedTemplate?.path ?? ''}
+                    onChange={(e) => {
+                      const template = templates.find((t) => t.path === e.target.value);
+                      setSelectedTemplate(template ?? null);
+                    }}
+                    disabled={loadingTemplates}
+                  >
+                    <option value="">Blank file</option>
+                    {templates.map((t) => (
+                      <option key={t.path} value={t.path}>
+                        {t.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="filename-input">
+                <label htmlFor="filename">Filename:</label>
+                <input
+                  ref={filenameInputRef}
+                  id="filename"
+                  type="text"
+                  value={filename}
+                  onChange={(e) => {
+                    setFilename(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="e.g., chapter1.qmd"
+                />
+              </div>
               {error && <div className="error-message">{error}</div>}
             </div>
           ) : (

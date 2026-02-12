@@ -16,6 +16,8 @@ export default mergeConfig(
     test: {
       // Use jsdom for DOM APIs and React component testing
       environment: 'jsdom',
+      // Enable globals like expect, describe, it for jest-dom compatibility
+      globals: true,
       // Only include integration test files
       include: ['src/**/*.integration.test.ts', 'src/**/*.integration.test.tsx'],
       // Setup file for DOM polyfills and test utilities

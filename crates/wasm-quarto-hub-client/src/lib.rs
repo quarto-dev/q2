@@ -2237,3 +2237,135 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
         }
     }
 }
+
+// ============================================================================
+// TEMPLATE PROCESSING
+// ============================================================================
+
+/// Response type for template preparation.
+#[derive(Serialize)]
+struct PrepareTemplateResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    template_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stripped_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl PrepareTemplateResponse {
+    fn success(template_name: Option<String>, stripped_content: String) -> String {
+        serde_json::to_string(&PrepareTemplateResponse {
+            success: true,
+            template_name,
+            stripped_content: Some(stripped_content),
+            error: None,
+        })
+        .unwrap()
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&PrepareTemplateResponse {
+            success: false,
+            template_name: None,
+            stripped_content: None,
+            error: Some(msg.to_string()),
+        })
+        .unwrap()
+    }
+}
+
+/// Process a template file: extract template-name and produce stripped content.
+///
+/// This function parses a QMD template file, extracts the `template-name` metadata
+/// field (if present), removes it from the document metadata, and re-serializes
+/// the document to QMD format.
+///
+/// # Arguments
+/// * `content` - The QMD source text of the template
+///
+/// # Returns
+/// JSON response:
+/// - Success: `{ "success": true, "template_name": "..." | null, "stripped_content": "..." }`
+/// - Error: `{ "success": false, "error": "..." }`
+///
+/// The `template_name` field is `null` if no `template-name` metadata was found.
+/// The `stripped_content` contains the template with `template-name` removed from
+/// the YAML frontmatter.
+#[wasm_bindgen]
+pub fn prepare_template(content: &str) -> String {
+    use pampa::wasm_entry_points::qmd_to_pandoc;
+    use pampa::writers::qmd::write as qmd_write;
+
+    // Step 1: Parse QMD to Pandoc AST
+    let (mut pandoc, _context) = match qmd_to_pandoc(content.as_bytes()) {
+        Ok(result) => result,
+        Err(error_strings) => {
+            return PrepareTemplateResponse::error(&format!(
+                "Failed to parse template: {}",
+                error_strings.join("; ")
+            ));
+        }
+    };
+
+    // Step 2: Extract and remove template-name from metadata
+    let template_name = extract_and_remove_template_name(&mut pandoc.meta);
+
+    // Step 3: Re-serialize to QMD
+    let mut buf = Vec::new();
+    match qmd_write(&pandoc, &mut buf) {
+        Ok(_) => {}
+        Err(diags) => {
+            let error_msg = diags
+                .iter()
+                .map(|d| d.to_text(None))
+                .collect::<Vec<_>>()
+                .join("\n");
+            return PrepareTemplateResponse::error(&format!(
+                "Failed to write template: {}",
+                error_msg
+            ));
+        }
+    }
+
+    let stripped_content = match String::from_utf8(buf) {
+        Ok(s) => s,
+        Err(e) => {
+            return PrepareTemplateResponse::error(&format!("Invalid UTF-8 in output: {}", e));
+        }
+    };
+
+    PrepareTemplateResponse::success(template_name, stripped_content)
+}
+
+/// Extract the `template-name` field from metadata and remove it.
+///
+/// If the metadata is a Map and contains a `template-name` key, this function:
+/// 1. Extracts the value as plain text
+/// 2. Removes the entry from the map
+/// 3. Returns the extracted value
+///
+/// Returns `None` if metadata is not a Map or doesn't contain `template-name`.
+fn extract_and_remove_template_name(meta: &mut ConfigValue) -> Option<String> {
+    use quarto_pandoc_types::config_value::ConfigValueKind;
+
+    if let ConfigValueKind::Map(entries) = &mut meta.value {
+        // Find and extract the template-name value
+        let mut template_name = None;
+
+        // Find the index of template-name entry
+        let idx = entries.iter().position(|e| e.key == "template-name");
+
+        if let Some(idx) = idx {
+            // Extract the value before removing
+            template_name = entries[idx].value.as_plain_text();
+            // Remove the entry
+            entries.remove(idx);
+        }
+
+        template_name
+    } else {
+        None
+    }
+}
