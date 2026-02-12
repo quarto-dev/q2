@@ -1,0 +1,148 @@
+---
+title: "Themes"
+---
+
+Quarto Hub supports theme customization through Bootswatch themes and custom SCSS files.
+
+## Default Theme
+
+By default, documents render with the standard Bootstrap theme. This provides clean, readable styling suitable for most documents.
+
+## Bootswatch Themes
+
+[Bootswatch](https://bootswatch.com/) provides a collection of free themes for Bootstrap. You can apply any Bootswatch theme by specifying it in your document's frontmatter.
+
+### Using a Theme
+
+Add a `theme` option to your document's YAML frontmatter:
+
+```yaml
+---
+title: "My Document"
+format:
+  html:
+    theme: cosmo
+---
+```
+
+### Available Themes
+
+Quarto Hub includes all standard Bootswatch themes:
+
+| Theme | Description |
+|-------|-------------|
+| `default` | Standard Bootstrap |
+| `cerulean` | Calm blue sky |
+| `cosmo` | Extra harmony (default for Quarto) |
+| `cyborg` | Dark with neon accents |
+| `darkly` | Flatly in night mode |
+| `flatly` | Flat and clean |
+| `journal` | Crisp like a newspaper |
+| `litera` | Literary inspiration |
+| `lumen` | Light and shadow |
+| `lux` | Luxury styling |
+| `materia` | Material design inspired |
+| `minty` | Fresh mint flavor |
+| `morph` | Soft neumorphism |
+| `pulse` | Vibrant and fun |
+| `quartz` | Glass-like design |
+| `sandstone` | Warm and soft |
+| `simplex` | Mini and simple |
+| `sketchy` | Hand-drawn look |
+| `slate` | Shades of gray |
+| `solar` | Spin on Solarized |
+| `spacelab` | Silvery and sleek |
+| `superhero` | Bold and heroic |
+| `united` | Ubuntu orange |
+| `vapor` | Cyberpunk vibes |
+| `yeti` | Friendly and soft |
+| `zephyr` | Breezy and light |
+
+## Custom SCSS
+
+For more control, you can create custom SCSS files that extend or override theme styles.
+
+### Creating a Custom Theme
+
+1. Create an SCSS file in your project (e.g., `custom.scss`)
+2. Reference it in your frontmatter along with a base theme:
+
+```yaml
+---
+title: "My Document"
+format:
+  html:
+    theme:
+      - cosmo
+      - custom.scss
+---
+```
+
+### SCSS Variables
+
+Your custom SCSS can override Bootstrap and Bootswatch variables:
+
+```scss
+// custom.scss
+
+// Override primary color
+$primary: #8B5CF6;
+
+// Override font family
+$font-family-base: "Georgia", serif;
+
+// Override heading styles
+$headings-font-weight: 600;
+```
+
+### Adding Custom Styles
+
+You can also add entirely new CSS rules:
+
+```scss
+// custom.scss
+
+// Style callout blocks
+.callout {
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+// Custom heading underlines
+h2 {
+  border-bottom: 2px solid $primary;
+  padding-bottom: 0.5rem;
+}
+```
+
+### Theme Layering
+
+When you specify multiple themes, they are applied in order:
+
+```yaml
+theme:
+  - cosmo        # Base theme
+  - brand.scss   # Brand colors
+  - custom.scss  # Additional customizations
+```
+
+Later files override earlier ones, so put your most specific customizations last.
+
+## Theme Caching
+
+Quarto Hub caches compiled CSS to improve performance. The cache is automatically invalidated when:
+
+- You modify your custom SCSS files
+- The built-in SCSS resources are updated
+
+If you're seeing stale styles, try refreshing the page.
+
+## Limitations
+
+Some theme features available in full Quarto are not yet supported:
+
+- Theme `light` and `dark` mode switching
+- Some advanced SCSS functions
+- Theme preview without page reload
+
+These features may be added in future releases.

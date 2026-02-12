@@ -1,0 +1,136 @@
+---
+title: "Projects"
+---
+
+Quarto Hub organizes your work into projects. Each project is a self-contained collection of files that can be edited, previewed, and shared.
+
+## Creating a Project
+
+When you first open Quarto Hub or click **New Project**, you'll see the project creation dialog.
+
+### Project Types
+
+Choose from available project types:
+
+| Type | Description |
+|------|-------------|
+| **Default** | A simple project with a single `index.qmd` document |
+| **Website** | A multi-page website with navigation and `_quarto.yml` configuration |
+
+### Project Title
+
+Enter a title for your project. This appears in the toolbar and is used when sharing.
+
+### What Gets Created
+
+When you create a project, Quarto Hub generates starter files appropriate for the project type:
+
+**Default project:**
+```
+index.qmd
+```
+
+**Website project:**
+```
+_quarto.yml
+index.qmd
+about.qmd
+```
+
+## Project Configuration
+
+### `_quarto.yml`
+
+The `_quarto.yml` file contains project-wide configuration:
+
+```yaml
+project:
+  type: website
+
+website:
+  title: "My Project"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - about.qmd
+
+format:
+  html:
+    theme: cosmo
+```
+
+This file controls:
+
+- Project type
+- Website navigation
+- Default format options
+- Theme settings
+
+### Editing Configuration
+
+Click on `_quarto.yml` in the file sidebar to edit it. Changes take effect on the next render.
+
+## Opening Projects
+
+### From URL
+
+Projects can be opened directly via URL. If someone shares a project link with you, clicking it will open that project in Quarto Hub.
+
+### Local Storage
+
+Quarto Hub stores your projects in the browser's local storage. When you return to Quarto Hub, your recent projects are available.
+
+::: {.callout-note}
+Browser local storage is limited and specific to your device and browser. For persistent, cross-device access, use the sharing features.
+:::
+
+## Project Files
+
+### Adding Files
+
+Use the **+ New** button to add files to your project. See [File Management](files.qmd) for details.
+
+### File Structure
+
+Organize your project files however makes sense for your content:
+
+```
+my-website/
+  _quarto.yml
+  index.qmd
+  about.qmd
+  posts/
+    first-post.qmd
+    second-post.qmd
+  images/
+    logo.png
+    diagram.svg
+  styles/
+    custom.scss
+```
+
+### Special Files
+
+Some files have special meaning in Quarto projects:
+
+| File | Purpose |
+|------|---------|
+| `_quarto.yml` | Project configuration |
+| `index.qmd` | Default landing page |
+| `_quarto-hub-templates/` | File templates directory |
+
+## Limitations
+
+Current prototype limitations:
+
+- **No project import/export**: Projects exist only in browser storage or via sync
+- **No Git integration**: Version control is not available
+- **Single project view**: You can only have one project open at a time
+
+These features may be added in future releases.
+
+## See Also
+
+- [File Management](files.qmd) - Managing files within a project
+- [Collaboration](collaboration.qmd) - Sharing and syncing projects

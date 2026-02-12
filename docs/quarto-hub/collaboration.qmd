@@ -1,0 +1,127 @@
+---
+title: "Collaboration"
+---
+
+Quarto Hub supports real-time collaboration, allowing multiple people to edit the same project simultaneously.
+
+## How It Works
+
+Quarto Hub uses [Automerge](https://automerge.org/), a conflict-free replicated data type (CRDT) library, to synchronize changes between collaborators.
+
+### Key Concepts
+
+- **Real-time sync**: Changes propagate to all connected users within seconds
+- **Conflict-free**: Multiple users can edit simultaneously without conflicts
+- **Offline support**: Edits made offline sync when you reconnect
+- **No central server required**: Sync can work peer-to-peer (though a relay server helps with connectivity)
+
+## Sharing a Project
+
+### Share Dialog
+
+1. Click the **Share** button in the toolbar
+2. Copy the generated sharing URL
+3. Send the URL to your collaborators
+
+### Sharing URL
+
+The sharing URL contains a project identifier that connects collaborators to the same document. Anyone with the URL can access and edit the project.
+
+::: {.callout-warning}
+## Security Consideration
+
+The sharing URL grants full edit access to anyone who has it. Only share URLs with people you trust, and consider the URL as sensitive as a password.
+
+Currently, there is no read-only sharing mode or access control. These features may be added in future releases.
+:::
+
+## Collaborating
+
+### Joining a Shared Project
+
+1. Click the sharing URL you received
+2. Quarto Hub opens with the shared project
+3. You can immediately start editing
+
+### Seeing Others' Changes
+
+When collaborators make changes:
+
+- The document updates automatically
+- The preview re-renders to show the new content
+- There's no need to refresh or manually sync
+
+### Presence (Coming Soon)
+
+Future versions may show:
+
+- Who else is currently viewing the project
+- Where each collaborator's cursor is located
+- Which file each person is editing
+
+## Sync Server
+
+### Default Server
+
+Quarto Hub connects to a default sync server that relays changes between collaborators. This server:
+
+- Facilitates connections between browsers
+- Temporarily stores changes for offline users
+- Does not permanently store your document content
+
+### Self-Hosting
+
+For organizations that need more control, the sync server can be self-hosted. Configuration details are available in the technical documentation.
+
+## Best Practices
+
+### Coordination
+
+Even with real-time sync, it helps to coordinate with collaborators:
+
+- Communicate about who's editing which sections
+- Use comments or callouts to mark work-in-progress areas
+- Check in regularly to avoid duplicated effort
+
+### Backup
+
+While Automerge is designed for reliability, it's good practice to:
+
+- Export important projects periodically
+- Keep copies of critical documents outside Quarto Hub
+- Don't rely solely on browser storage for important work
+
+## Limitations
+
+Current prototype limitations:
+
+- **No access control**: Anyone with the URL has full edit access
+- **No presence indicators**: You can't see who else is online
+- **No change history**: There's no undo for others' changes or version history
+- **No comments**: Inline commenting is not yet available
+
+These features may be added in future releases.
+
+## Troubleshooting
+
+### Changes Not Syncing
+
+If changes aren't appearing for collaborators:
+
+1. Check your internet connection
+2. Refresh the page
+3. Verify everyone is using the same sharing URL
+
+### Conflicting Edits
+
+Automerge handles most conflicts automatically. If you see unexpected content:
+
+1. Don't panic - no data is lost
+2. Review the merged content
+3. Make any necessary corrections
+4. Changes will sync to all collaborators
+
+## See Also
+
+- [Projects](projects.qmd) - Creating and managing projects
+- [File Management](files.qmd) - Working with project files

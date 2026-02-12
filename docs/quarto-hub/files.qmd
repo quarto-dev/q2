@@ -1,0 +1,95 @@
+---
+title: "File Management"
+---
+
+Quarto Hub provides a complete file management system for organizing your project files directly in the browser.
+
+## File Sidebar
+
+The file sidebar on the left shows all files in your project. Click on any file to open it in the editor.
+
+### Navigation
+
+- **Click** a file to open it
+- **Folders** can be expanded and collapsed by clicking the arrow
+- Files are organized alphabetically within each folder
+
+### File Icons
+
+Different file types display with distinct icons:
+
+- `.qmd` files show a Quarto icon
+- Image files (`.png`, `.jpg`, `.svg`) show an image icon
+- Other files show a generic document icon
+
+## Creating New Files
+
+Click the **+ New** button in the toolbar to open the New File dialog.
+
+### New Text File
+
+1. Select the **New Text File** tab
+2. If templates are available, choose one from the **Template** dropdown (or leave as "Blank file")
+3. Enter a filename (e.g., `chapter-2.qmd`)
+4. Click **Create**
+
+The file will be created in the current directory and opened in the editor.
+
+### Upload File
+
+1. Select the **Upload File** tab
+2. Either:
+   - **Drag and drop** files onto the drop zone
+   - Click **Browse Files** to select files from your computer
+3. Click **Upload**
+
+Supported upload types include images (PNG, JPG, SVG) and PDFs.
+
+## File Organization
+
+### Creating Folders
+
+To create a file in a new folder, include the folder path in the filename:
+
+```
+images/diagram.png
+chapters/introduction.qmd
+```
+
+The folder will be created automatically if it doesn't exist.
+
+### Moving and Renaming
+
+File moving and renaming are not yet supported in the UI. This functionality is planned for a future release.
+
+## Supported File Types
+
+### Editable Text Files
+
+These files can be opened and edited in the Monaco editor:
+
+- `.qmd` - Quarto markdown (with live preview)
+- `.md` - Markdown
+- `.yml`, `.yaml` - YAML configuration
+- `.css`, `.scss` - Stylesheets
+- `.html` - HTML files
+- `.js`, `.ts` - JavaScript/TypeScript
+- `.json` - JSON data
+
+### Binary Files
+
+These files can be uploaded and used in documents but cannot be edited:
+
+- `.png`, `.jpg`, `.jpeg`, `.gif` - Images
+- `.svg` - Vector graphics
+- `.pdf` - PDF documents
+
+## Special Directories
+
+### `_quarto-hub-templates/`
+
+This directory holds [file templates](templates.qmd). Template files are `.qmd` files that appear in the New File dialog's template dropdown.
+
+### `_quarto.yml`
+
+The project configuration file. This file defines project-wide settings like the project type and default format options.

@@ -1,0 +1,173 @@
+---
+title: "File Templates"
+---
+
+File templates allow you to create reusable starting points for new documents. When templates are available, they appear in the New File dialog's dropdown menu.
+
+## What Are Templates?
+
+Templates are regular `.qmd` files stored in a special directory. When you create a new file and select a template, the new file is pre-populated with the template's content.
+
+This is useful for:
+
+- Maintaining consistent document structure across a project
+- Pre-filling common frontmatter options
+- Including boilerplate content that every document needs
+
+## Creating Templates
+
+### Template Directory
+
+Create a directory called `_quarto-hub-templates` at the root of your project:
+
+```
+my-project/
+  _quarto-hub-templates/
+    article.qmd
+    report.qmd
+    presentation.qmd
+  _quarto.yml
+  index.qmd
+```
+
+### Template Files
+
+Each `.qmd` file in this directory becomes a template. Create a template by adding a file with the content you want new documents to start with.
+
+### Template Name
+
+Add a `template-name` field to your template's frontmatter to give it a display name:
+
+```yaml
+---
+template-name: "Research Article"
+title: "Untitled Article"
+author: ""
+date: today
+format: html
+---
+
+# Introduction
+
+Start your introduction here.
+
+# Methods
+
+Describe your methods.
+
+# Results
+
+Present your findings.
+
+# Discussion
+
+Discuss the implications.
+```
+
+When this template is used, the `template-name` field is automatically removed from the new file - only the actual document content is copied.
+
+### Filename Fallback
+
+If you don't include a `template-name`, the filename (without extension) is used as the display name. For example, `quick-note.qmd` would appear as "quick-note" in the dropdown.
+
+## Using Templates
+
+1. Click **+ New** to open the New File dialog
+2. In the **New Text File** tab, select a template from the **Template** dropdown
+3. Enter a filename for your new document
+4. Click **Create**
+
+The new file will be created with the template's content (minus the `template-name` field).
+
+## Example Templates
+
+### Article Template
+
+```yaml
+---
+template-name: "Article"
+title: "Untitled"
+author: ""
+format:
+  html:
+    toc: true
+---
+
+# Introduction
+
+# Main Content
+
+# Conclusion
+```
+
+### Meeting Notes Template
+
+```yaml
+---
+template-name: "Meeting Notes"
+title: "Meeting Notes"
+date: today
+---
+
+## Attendees
+
+-
+
+## Agenda
+
+1.
+
+## Discussion
+
+## Action Items
+
+- [ ]
+```
+
+### Blog Post Template
+
+```yaml
+---
+template-name: "Blog Post"
+title: "Post Title"
+author: "Your Name"
+date: today
+categories: []
+format:
+  html:
+    toc: true
+---
+
+Write your introduction here.
+
+## Section 1
+
+## Section 2
+
+## Conclusion
+```
+
+## Organization
+
+### Top-Level Only
+
+Only `.qmd` files directly in `_quarto-hub-templates/` are recognized as templates. Files in subdirectories are ignored:
+
+```
+_quarto-hub-templates/
+  article.qmd          # Recognized as template
+  report.qmd           # Recognized as template
+  drafts/              # Subdirectory ignored
+    old-template.qmd   # NOT a template
+```
+
+### Visibility
+
+The `_quarto-hub-templates` directory is visible in the file sidebar. This makes it easy to edit and manage your templates directly in Quarto Hub.
+
+## Tips
+
+- **Keep templates focused**: Create multiple specific templates rather than one complex template
+- **Use meaningful names**: The `template-name` appears in the dropdown, so make it descriptive
+- **Include placeholders**: Add empty sections or placeholder text to guide document authors
+- **Set smart defaults**: Pre-fill frontmatter options that rarely change

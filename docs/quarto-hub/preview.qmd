@@ -1,0 +1,103 @@
+---
+title: "Live Preview"
+---
+
+Quarto Hub renders your documents in real-time, showing you exactly how they will look as you write.
+
+## Real-Time Rendering
+
+The preview panel updates automatically as you type. There's a brief delay (debouncing) to avoid excessive re-renders while you're actively editing.
+
+### How It Works
+
+1. You edit the document in the Monaco editor
+2. After a short pause in typing, the content is sent to the WASM rendering engine
+3. The engine parses the Quarto markdown and generates HTML
+4. The preview panel displays the rendered result
+
+All rendering happens locally in your browser - no server round-trip is required.
+
+## Preview Panel
+
+The preview panel shows your rendered document with full styling:
+
+- **Bootstrap CSS** provides the base styling
+- **Bootswatch themes** can customize the appearance
+- **Custom SCSS** allows further customization
+
+### Resizing
+
+Drag the divider between the editor and preview to adjust their relative sizes.
+
+## Scroll Synchronization
+
+The editor and preview panels stay synchronized as you navigate:
+
+- **Scrolling the editor** scrolls the preview to show the corresponding content
+- **Clicking in the preview** moves the editor cursor to that location
+
+This makes it easy to work on specific sections of long documents.
+
+## Error Display
+
+When your document contains syntax errors, the preview panel shows helpful diagnostics:
+
+### Error Overlay
+
+Parse errors display in an overlay with:
+
+- **Error message** describing the problem
+- **Line and column** where the error occurred
+- **Code snippet** showing the problematic area
+
+### Editor Markers
+
+Errors also appear as red squiggly underlines in the editor, similar to a code IDE. Hover over the underline to see the error message.
+
+### Warning Indicators
+
+Warnings (non-fatal issues) appear as yellow underlines and don't prevent rendering.
+
+## Document Outline
+
+The outline panel (accessible via the sidebar tabs) shows the structure of your document:
+
+- **Headings** are listed hierarchically
+- **Click** a heading to jump to that section
+- **Collapsible sections** for nested heading structures
+
+The outline updates automatically as you edit.
+
+## Supported Content
+
+The preview renders most Quarto markdown features:
+
+- Headings, paragraphs, and text formatting
+- Lists (ordered, unordered, and definition lists)
+- Links and images
+- Code blocks with syntax highlighting
+- Tables
+- Block quotes and callouts
+- Mathematical notation (LaTeX)
+- Footnotes
+
+### Limitations
+
+Some features that work in full Quarto are not yet supported in Quarto Hub:
+
+- Code execution (Python, R, etc.)
+- Cross-references
+- Citations and bibliographies
+- Some advanced layout features
+
+These limitations exist because Quarto Hub runs entirely in the browser without access to external compute engines.
+
+## Performance
+
+Rendering performance depends on document complexity:
+
+- **Simple documents** render nearly instantly
+- **Large documents** with many elements may take a moment
+- **Complex math** can slow rendering slightly
+
+The debounce delay helps maintain smooth editing even with slower renders.

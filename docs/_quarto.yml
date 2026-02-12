@@ -12,6 +12,8 @@ website:
         text: Syntax
       - href: writers/index.qmd
         text: Writers
+      - href: quarto-hub/index.qmd
+        text: Quarto Hub
       - text: "Library Docs"
         menu:
           - href: ../library-docs/index.qmd

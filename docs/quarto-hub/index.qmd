@@ -1,0 +1,49 @@
+---
+title: "Quarto Hub"
+---
+
+## Overview
+
+Quarto Hub is a browser-based collaborative editor for Quarto documents. It provides real-time editing, live preview, and seamless collaboration without requiring any local software installation.
+
+::: {.callout-warning}
+## Prototype Software
+
+Quarto Hub is currently a prototype under active development. Features may change, and some functionality may be incomplete. Use it to explore and experiment, but be aware that it is not yet production-ready.
+:::
+
+## Key Features
+
+- **Browser-Based**: Edit Quarto documents directly in your web browser with no installation required
+- **Live Preview**: See your rendered document update in real-time as you type
+- **Collaborative Editing**: Multiple users can edit the same project simultaneously
+- **Theme Support**: Choose from Bootswatch themes or create custom styles with SCSS
+- **File Templates**: Create project-specific templates for consistent document structure
+
+## Getting Started
+
+1. **Open Quarto Hub**: Navigate to the Quarto Hub URL in your browser
+2. **Create or Open a Project**: Use the project selector to create a new project or open an existing one
+3. **Edit Your Document**: Use the Monaco-based editor on the left to write your Quarto markdown
+4. **View the Preview**: The right panel shows your rendered document, updating as you type
+
+## Interface Overview
+
+The Quarto Hub interface is divided into several areas:
+
+- **Toolbar**: Project name, file tabs, and action buttons
+- **File Sidebar**: Navigate and manage project files
+- **Editor**: Monaco-based text editor with syntax highlighting
+- **Preview Panel**: Live-rendered view of your document
+- **Outline Panel**: Navigate your document structure
+
+## Learn More
+
+Explore the detailed documentation for each feature:
+
+- [File Management](files.qmd) - Create, upload, and organize files
+- [Live Preview](preview.qmd) - Understand the rendering and preview system
+- [Themes](themes.qmd) - Customize your document appearance
+- [Templates](templates.qmd) - Create reusable file templates
+- [Projects](projects.qmd) - Create and manage Quarto projects
+- [Collaboration](collaboration.qmd) - Share and collaborate with others
