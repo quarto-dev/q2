@@ -281,14 +281,14 @@ Entries are grouped by date under level-three headers. Add your entry under toda
 ```
 ### YYYY-MM-DD
 
-- [`<short-hash>`](https://github.com/quarto-dev/kyoto/commits/<short-hash>): One-sentence description
+- [`<short-hash>`](https://github.com/quarto-dev/q2/commits/<short-hash>): One-sentence description
 ```
 
 Example:
 ```
 ### 2026-01-10
 
-- [`e6f742c`](https://github.com/quarto-dev/kyoto/commits/e6f742c): Refactor navigation to VS Code-style collapsible sidebar
+- [`e6f742c`](https://github.com/quarto-dev/q2/commits/e6f742c): Refactor navigation to VS Code-style collapsible sidebar
 ```
 
 The changelog is rendered in the About section of the hub-client UI.
