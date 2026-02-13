@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-02-13
 
+- [`59623fcc`](https://github.com/quarto-dev/q2/commits/59623fcc): Improve file rename UX: select-all on start, no-op on same name
 - [`35513dbd`](https://github.com/quarto-dev/q2/commits/35513dbd): Add editable filenames with whitespace/dot sanitization to upload dialog
 
 ### 2026-02-12
