@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-02-13
+
+- [`35513dbd`](https://github.com/quarto-dev/q2/commits/35513dbd): Add editable filenames with whitespace/dot sanitization to upload dialog
+
 ### 2026-02-12
 
 - [`f94cdc91`](https://github.com/quarto-dev/q2/commits/f94cdc91): Add new file templates feature with project-specific .qmd templates in `_quarto-hub-templates`
