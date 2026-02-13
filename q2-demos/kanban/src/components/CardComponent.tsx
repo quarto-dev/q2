@@ -9,6 +9,8 @@ interface CardComponentProps {
   card: KanbanCard
   onStatusChange?: (cardId: string, newStatus: CardStatus) => void
   onCardClick?: (card: KanbanCard) => void
+  /** Whether to show the status dropdown. Default true. Set false when card position implies status. */
+  showStatusDropdown?: boolean
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -18,7 +20,7 @@ const TYPE_COLORS: Record<string, string> = {
   task: '#e8f5e9',
 }
 
-export function CardComponent({ card, onStatusChange, onCardClick }: CardComponentProps) {
+export function CardComponent({ card, onStatusChange, onCardClick, showStatusDropdown = true }: CardComponentProps) {
   const bgColor = card.type ? TYPE_COLORS[card.type] ?? '#f5f5f5' : '#f5f5f5'
 
   return (
@@ -30,21 +32,23 @@ export function CardComponent({ card, onStatusChange, onCardClick }: CardCompone
       background: bgColor,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-        <select
-          value={card.status ?? ''}
-          onChange={(e) => {
-            const val = e.target.value as CardStatus
-            if (val && onStatusChange) {
-              onStatusChange(card.id, val)
-            }
-          }}
-          style={{ fontSize: '12px', padding: '2px 4px', flexShrink: 0 }}
-        >
-          <option value="">—</option>
-          <option value="todo">todo</option>
-          <option value="doing">doing</option>
-          <option value="done">done</option>
-        </select>
+        {showStatusDropdown && (
+          <select
+            value={card.status ?? ''}
+            onChange={(e) => {
+              const val = e.target.value as CardStatus
+              if (val && onStatusChange) {
+                onStatusChange(card.id, val)
+              }
+            }}
+            style={{ fontSize: '12px', padding: '2px 4px', flexShrink: 0 }}
+          >
+            <option value="">—</option>
+            <option value="todo">todo</option>
+            <option value="doing">doing</option>
+            <option value="done">done</option>
+          </select>
+        )}
         <strong
           style={{
             flex: 1,

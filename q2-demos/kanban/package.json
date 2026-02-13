@@ -21,6 +21,8 @@
     "test:ci": "npm run test && npm run test:integration && npm run test:wasm"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
     "@quarto/pandoc-types": "*",
     "@quarto/quarto-sync-client": "*",
     "idb": "^8.0.3",
