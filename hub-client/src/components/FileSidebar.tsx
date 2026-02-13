@@ -180,13 +180,20 @@ export default function FileSidebar({
     setRenamingFile(file);
     setRenameValue(file.path);
     closeContextMenu();
-    // Focus input after render
-    setTimeout(() => renameInputRef.current?.focus(), 0);
+    // Focus input and select all text after render
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 0);
   }, [closeContextMenu]);
 
   const handleRenameSubmit = useCallback(() => {
     if (renamingFile && renameValue.trim() && onRenameFile) {
-      onRenameFile(renamingFile, renameValue.trim());
+      const newPath = renameValue.trim();
+      // Only rename if the path actually changed; same path = cancel
+      if (newPath !== renamingFile.path) {
+        onRenameFile(renamingFile, newPath);
+      }
     }
     setRenamingFile(null);
     setRenameValue('');
