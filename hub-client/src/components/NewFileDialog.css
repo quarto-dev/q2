@@ -202,12 +202,29 @@
   gap: 2px;
 }
 
-.file-preview .file-name {
+.file-preview .file-name-input {
+  width: 100%;
+  padding: 4px 8px;
+  background: #383838;
+  border: 1px solid #555;
+  border-radius: 4px;
   color: #fff;
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+.file-preview .file-name-input:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.file-preview .file-name-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-preview.has-error .file-name-input {
+  border-color: #f87171;
 }
 
 .file-preview .file-size {

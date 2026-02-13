@@ -11,7 +11,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { isBinaryExtension, isTextExtension } from '../types/project';
-import { validateFileSize, FILE_SIZE_LIMITS } from '../services/resourceService';
+import { validateFileSize, FILE_SIZE_LIMITS, sanitizeFilename } from '../services/resourceService';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
 import './NewFileDialog.css';
 
@@ -20,7 +20,7 @@ export interface NewFileDialogProps {
   existingPaths: string[];
   onClose: () => void;
   onCreateTextFile: (path: string, content: string) => void;
-  onUploadBinaryFile: (file: File) => void;
+  onUploadBinaryFile: (file: File, targetName: string) => void;
   /** Optional pre-filled files from drag-and-drop */
   initialFiles?: File[];
   /** Optional initial filename for text file creation (e.g., from clicking a link to a non-existent file) */
@@ -48,6 +48,7 @@ export default function NewFileDialog({
   const [isDragOver, setIsDragOver] = useState(false);
   const [filePreviews, setFilePreviews] = useState<FilePreview[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [editedNames, setEditedNames] = useState<Map<File, string>>(new Map());
 
   // Template state
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
@@ -100,6 +101,17 @@ export default function NewFileDialog({
     }
 
     setFilePreviews(previews);
+
+    // Populate edited names with sanitized defaults
+    setEditedNames((prev) => {
+      const next = new Map(prev);
+      for (const { file } of previews) {
+        if (!next.has(file)) {
+          next.set(file, sanitizeFilename(file.name));
+        }
+      }
+      return next;
+    });
   }, []);
 
   // Handle initial files from drag-and-drop
@@ -152,6 +164,7 @@ export default function NewFileDialog({
       setMode('text');
       setIsDragOver(false);
       setIsUploading(false);
+      setEditedNames(new Map());
       setTemplates([]);
       setSelectedTemplate(null);
       setLoadingTemplates(false);
@@ -219,6 +232,33 @@ export default function NewFileDialog({
     [existingPaths]
   );
 
+  // Validate an upload filename, checking against existing paths and other files in the batch
+  const validateUploadFilename = useCallback(
+    (name: string, currentFile: File): string | null => {
+      if (!name.trim()) {
+        return 'Filename is required';
+      }
+
+      if (/[<>:"|?*\\]/.test(name)) {
+        return 'Filename contains invalid characters';
+      }
+
+      if (existingPaths.includes(name)) {
+        return 'A file with this name already exists';
+      }
+
+      // Check for duplicates with other files in the batch
+      for (const [file, editedName] of editedNames) {
+        if (file !== currentFile && editedName === name) {
+          return 'Duplicate filename in upload batch';
+        }
+      }
+
+      return null;
+    },
+    [existingPaths, editedNames]
+  );
+
   // Handle create text file
   const handleCreateTextFile = useCallback(() => {
     const validationError = validateFilename(filename);
@@ -241,12 +281,23 @@ export default function NewFileDialog({
       return;
     }
 
+    // Validate all edited filenames before uploading
+    for (const { file } of validFiles) {
+      const targetName = editedNames.get(file) ?? file.name;
+      const validationError = validateUploadFilename(targetName, file);
+      if (validationError) {
+        setError(`"${targetName}": ${validationError}`);
+        return;
+      }
+    }
+
     setIsUploading(true);
     setError(null);
 
     try {
       for (const { file } of validFiles) {
-        onUploadBinaryFile(file);
+        const targetName = editedNames.get(file) ?? file.name;
+        onUploadBinaryFile(file, targetName);
       }
       onClose();
     } catch (err) {
@@ -254,11 +305,16 @@ export default function NewFileDialog({
     } finally {
       setIsUploading(false);
     }
-  }, [filePreviews, onUploadBinaryFile, onClose]);
+  }, [filePreviews, editedNames, validateUploadFilename, onUploadBinaryFile, onClose]);
 
   // Remove a file from preview
   const removeFilePreview = useCallback((file: File) => {
     setFilePreviews((prev) => prev.filter((p) => p.file !== file));
+    setEditedNames((prev) => {
+      const next = new Map(prev);
+      next.delete(file);
+      return next;
+    });
   }, []);
 
   // Handle key press
@@ -367,33 +423,59 @@ export default function NewFileDialog({
                   </>
                 ) : (
                   <div className="file-previews">
-                    {filePreviews.map(({ file, preview, error: fileError }) => (
-                      <div
-                        key={file.name}
-                        className={`file-preview ${fileError ? 'has-error' : ''}`}
-                      >
-                        {preview ? (
-                          <img src={preview} alt={file.name} />
-                        ) : (
-                          <span className="file-icon">📄</span>
-                        )}
-                        <div className="file-info">
-                          <span className="file-name">{file.name}</span>
-                          <span className="file-size">
-                            {(file.size / 1024).toFixed(1)} KB
-                          </span>
-                          {fileError && (
-                            <span className="file-error">{fileError}</span>
-                          )}
-                        </div>
-                        <button
-                          className="remove-btn"
-                          onClick={() => removeFilePreview(file)}
+                    {filePreviews.map(({ file, preview, error: fileError }) => {
+                      const editedName = editedNames.get(file) ?? file.name;
+                      const nameError = fileError ? null : validateUploadFilename(editedName, file);
+                      return (
+                        <div
+                          key={file.name}
+                          className={`file-preview ${fileError || nameError ? 'has-error' : ''}`}
                         >
-                          &times;
-                        </button>
-                      </div>
-                    ))}
+                          {preview ? (
+                            <img src={preview} alt={editedName} />
+                          ) : (
+                            <span className="file-icon">📄</span>
+                          )}
+                          <div className="file-info">
+                            <input
+                              className="file-name-input"
+                              type="text"
+                              value={editedName}
+                              onChange={(e) => {
+                                setEditedNames((prev) => {
+                                  const next = new Map(prev);
+                                  next.set(file, e.target.value);
+                                  return next;
+                                });
+                                setError(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Escape') {
+                                  e.stopPropagation();
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                              disabled={!!fileError}
+                            />
+                            <span className="file-size">
+                              {(file.size / 1024).toFixed(1)} KB
+                            </span>
+                            {fileError && (
+                              <span className="file-error">{fileError}</span>
+                            )}
+                            {nameError && (
+                              <span className="file-error">{nameError}</span>
+                            )}
+                          </div>
+                          <button
+                            className="remove-btn"
+                            onClick={() => removeFilePreview(file)}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      );
+                    })}
                     <button
                       className="add-more-btn"
                       onClick={() => fileInputRef.current?.click()}
@@ -435,6 +517,7 @@ export default function NewFileDialog({
               disabled={
                 filePreviews.length === 0 ||
                 filePreviews.every((p) => !!p.error) ||
+                filePreviews.some((p) => !p.error && !!validateUploadFilename(editedNames.get(p.file) ?? p.file.name, p.file)) ||
                 isUploading
               }
             >

@@ -106,6 +106,60 @@ export function binaryToDataUrl(content: Uint8Array, mimeType: string): string {
 }
 
 /**
+ * Unicode whitespace pattern: matches all Unicode whitespace characters.
+ * Includes ASCII whitespace (\s), non-breaking space, em/en/thin/hair spaces,
+ * line/paragraph separators, narrow no-break space, mathematical space,
+ * ideographic space, and zero-width no-break space (BOM).
+ */
+const UNICODE_WHITESPACE = /[\s\u00A0\u2000-\u200B\u2028\u2029\u202F\u205F\u3000\uFEFF]+/g;
+
+/**
+ * Sanitize a filename for use in markdown references.
+ *
+ * - Replaces all Unicode whitespace with hyphens
+ * - Replaces interior dots (all except the last, which is the extension separator) with hyphens
+ * - Collapses consecutive hyphens into a single hyphen
+ * - Trims leading/trailing hyphens (preserving leading dots for dotfiles)
+ */
+export function sanitizeFilename(name: string): string {
+  // Step 1: Strip leading/trailing whitespace (before any replacement,
+  // so we can detect dotfiles like "  .file.png" → ".file.png")
+  let result = name.replace(/^[\s\u00A0\u2000-\u200B\u2028\u2029\u202F\u205F\u3000\uFEFF]+/, '')
+    .replace(/[\s\u00A0\u2000-\u200B\u2028\u2029\u202F\u205F\u3000\uFEFF]+$/, '');
+
+  // Step 2: Replace interior whitespace with hyphens
+  result = result.replace(UNICODE_WHITESPACE, '-');
+
+  // Step 3: Replace interior dots with hyphens.
+  // Find the last dot — that's the extension separator. Replace all earlier dots.
+  // For dotfiles (e.g., ".gitignore"), lastDot is 0, so no replacement happens.
+  // For dotfiles with extensions (e.g., ".file.png"), preserve the leading dot.
+  const lastDot = result.lastIndexOf('.');
+  if (lastDot > 0) {
+    const stem = result.slice(0, lastDot);
+    const ext = result.slice(lastDot);
+    // Preserve leading dot for dotfiles: only replace dots after position 0
+    const sanitizedStem = stem.startsWith('.')
+      ? '.' + stem.slice(1).replace(/\./g, '-')
+      : stem.replace(/\./g, '-');
+    result = sanitizedStem + ext;
+  }
+
+  // Step 4: Collapse consecutive hyphens
+  result = result.replace(/-{2,}/g, '-');
+
+  // Step 5: Trim leading/trailing hyphens, but preserve leading dot for dotfiles
+  if (result.startsWith('.')) {
+    const afterDot = result.slice(1).replace(/^-+/, '').replace(/-+$/, '');
+    result = '.' + afterDot;
+  } else {
+    result = result.replace(/^-+/, '').replace(/-+$/, '');
+  }
+
+  return result;
+}
+
+/**
  * Size limits for binary files
  */
 export const FILE_SIZE_LIMITS = {

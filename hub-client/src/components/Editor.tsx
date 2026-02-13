@@ -558,10 +558,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   }, []);
 
   // Handle uploading a binary file (with optional markdown insertion for images)
-  const handleUploadBinaryFile = useCallback(async (file: File) => {
+  const handleUploadBinaryFile = useCallback(async (file: File, targetName: string) => {
     try {
       const { content: binaryContent, mimeType } = await processFileForUpload(file);
-      const result = await createBinaryFile(file.name, binaryContent, mimeType);
+      const result = await createBinaryFile(targetName, binaryContent, mimeType);
 
       // If this is an image and we have a pending drop position, insert markdown
       if (file.type.startsWith('image/') && pendingDropPositionRef.current && editorRef.current) {
