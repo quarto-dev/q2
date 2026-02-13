@@ -309,6 +309,124 @@ fn test_loose_list_blank_line_between_items() {
 }
 
 // ============================================================================
+// Tight list with nested sublist tests (CommonMark spec section 5.3)
+// https://spec.commonmark.org/0.31.2/#lists
+// A list is loose only if items are separated by blank lines or contain
+// two block elements with a blank line between them. A nested sublist
+// immediately following content (no blank line) does NOT make the list loose.
+// ============================================================================
+
+#[test]
+fn test_tight_list_with_nested_sublist_beginning() {
+    // * foo
+    //   * bar
+    // * baz
+    // The outer list is tight: no blank lines between items.
+    // "foo" and "baz" should be Plain, not Para.
+    let input = "* foo\n  * bar\n* baz";
+
+    let pandoc = parse_qmd(input);
+
+    assert!(matches!(&pandoc.blocks[0], Block::BulletList(_)));
+
+    if let Block::BulletList(list) = &pandoc.blocks[0] {
+        assert_eq!(list.content.len(), 2, "Expected 2 items in outer list");
+
+        // Item 1: should be [Plain("foo"), BulletList([Plain("bar")])]
+        let item1 = &list.content[0];
+        assert!(
+            matches!(item1.first(), Some(Block::Plain(_))),
+            "First item should start with Plain (tight list), got {:?}",
+            item1.first()
+        );
+        assert!(
+            item1.iter().any(|b| matches!(b, Block::BulletList(_))),
+            "First item should contain a nested BulletList"
+        );
+
+        // Item 2: should be [Plain("baz")]
+        let item2 = &list.content[1];
+        assert!(
+            matches!(item2.first(), Some(Block::Plain(_))),
+            "Second item should start with Plain (tight list), got {:?}",
+            item2.first()
+        );
+    }
+}
+
+#[test]
+fn test_tight_list_with_nested_sublist_middle() {
+    // * a
+    // * b
+    //   * c
+    // * d
+    // The outer list is tight: no blank lines between items.
+    // All outer items should be Plain.
+    let input = "* a\n* b\n  * c\n* d";
+
+    let pandoc = parse_qmd(input);
+
+    assert!(matches!(&pandoc.blocks[0], Block::BulletList(_)));
+
+    if let Block::BulletList(list) = &pandoc.blocks[0] {
+        assert_eq!(list.content.len(), 3, "Expected 3 items in outer list");
+
+        // Item 1: [Plain("a")]
+        assert!(
+            matches!(list.content[0].first(), Some(Block::Plain(_))),
+            "Item 'a' should be Plain, got {:?}",
+            list.content[0].first()
+        );
+
+        // Item 2: [Plain("b"), BulletList([Plain("c")])]
+        assert!(
+            matches!(list.content[1].first(), Some(Block::Plain(_))),
+            "Item 'b' should be Plain, got {:?}",
+            list.content[1].first()
+        );
+
+        // Item 3: [Plain("d")]
+        assert!(
+            matches!(list.content[2].first(), Some(Block::Plain(_))),
+            "Item 'd' should be Plain, got {:?}",
+            list.content[2].first()
+        );
+    }
+}
+
+#[test]
+fn test_loose_list_with_nested_sublist_has_blank_lines() {
+    // * foo
+    //
+    //   * bar
+    //
+    // * baz
+    // The outer list is loose: blank lines between items.
+    // "foo" and "baz" should be Para.
+    let input = "* foo\n\n  * bar\n\n* baz";
+
+    let pandoc = parse_qmd(input);
+
+    assert!(matches!(&pandoc.blocks[0], Block::BulletList(_)));
+
+    if let Block::BulletList(list) = &pandoc.blocks[0] {
+        // Item 1: should be [Para("foo"), BulletList(...)]
+        assert!(
+            matches!(list.content[0].first(), Some(Block::Paragraph(_))),
+            "First item should be Para in loose list, got {:?}",
+            list.content[0].first()
+        );
+
+        // Item 2: should be [Para("baz")]
+        assert!(
+            matches!(list.content[1].first(), Some(Block::Paragraph(_))),
+            "Second item should be Para in loose list, got {:?}",
+            list.content[1].first()
+        );
+    }
+}
+
+// ============================================================================
 // Ordered list tests
 // ============================================================================
 

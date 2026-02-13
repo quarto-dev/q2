@@ -27,7 +27,8 @@ pub enum PandocNativeIntermediate {
     // Target for links and images: (url, title, url_range, title_range)
     IntermediateTarget(String, String, Range, Range),
     IntermediateUnknown(Range),
-    IntermediateListItem(Blocks, Range, Option<ListAttributes>),
+    /// (blocks, range, ordered_list_attrs, has_blank_line_between_blocks)
+    IntermediateListItem(Blocks, Range, Option<ListAttributes>, bool),
     IntermediateOrderedListMarker(usize, Range),
     IntermediateMetadataString(String, Range),
     IntermediateCell(Cell),

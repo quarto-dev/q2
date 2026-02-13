@@ -122,8 +122,12 @@ fn process_list(
 
         // List markers are processed by native_visitor before reaching here,
         // so children are always IntermediateListItem values
-        let PandocNativeIntermediate::IntermediateListItem(blocks, child_range, ordered_list) =
-            child
+        let PandocNativeIntermediate::IntermediateListItem(
+            blocks,
+            child_range,
+            ordered_list,
+            item_has_blank_line_between_blocks,
+        ) = child
         else {
             // Skip non-list-item intermediates (shouldn't happen in practice)
             continue;
@@ -180,13 +184,18 @@ fn process_list(
             continue;
         }
 
-        // Check if this item has multiple blocks
-        // According to CommonMark/Pandoc, any item with multiple blocks makes the list loose
-        // (regardless of whether there are blank lines between the blocks)
+        // Check if this item has multiple blocks with a blank line between them.
+        // Per the CommonMark spec (https://spec.commonmark.org/0.31.2/#lists),
+        // a list is loose only if items are separated by blank lines or contain
+        // "two block-level elements with a blank line between them."
+        // A nested sublist immediately following content (no blank line) does NOT
+        // make the list loose. The blank line detection is done in process_list_item
+        // by examining tree-sitter block_continuation nodes.
         if blocks.len() > 1
             && blocks
                 .iter()
                 .any(|block| matches!(block, Block::Paragraph(_)))
+            && item_has_blank_line_between_blocks
         {
             has_loose_item = true;
         }
@@ -322,11 +331,40 @@ fn process_list_item(
             }
         })
         .collect();
+    let has_blank_line = list_item_has_blank_line_between_blocks(list_item_node);
     PandocNativeIntermediate::IntermediateListItem(
         children,
         node_location(list_item_node),
         list_attr,
+        has_blank_line,
     )
+}
+
+/// Detect whether a list item's tree-sitter node contains a blank line between
+/// its block-level children. This is done by checking whether any `pandoc_paragraph`
+/// child that precedes another block-level sibling contains a `block_continuation`
+/// spanning multiple rows. In tree-sitter's QMD grammar, a `block_continuation`
+/// that spans multiple rows indicates it absorbed a blank line.
+fn list_item_has_blank_line_between_blocks(list_item_node: &tree_sitter::Node) -> bool {
+    let child_count = list_item_node.named_child_count();
+    for i in 0..child_count {
+        let child = list_item_node.named_child(i).unwrap();
+        if child.kind() == "pandoc_paragraph" && i + 1 < child_count {
+            // This paragraph is followed by another block-level sibling.
+            // Check if the paragraph has a block_continuation that spans
+            // multiple rows (which means it absorbed a blank line).
+            let para_child_count = child.named_child_count();
+            for j in 0..para_child_count {
+                let para_child = child.named_child(j).unwrap();
+                if para_child.kind() == "block_continuation"
+                    && para_child.end_position().row > para_child.start_position().row
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 // Standalone function to process intermediate inline elements into Inline objects
