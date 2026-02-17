@@ -821,10 +821,10 @@ pub async fn render_qmd_content_with_options(
     // Create a virtual path for this content
     let path = Path::new("/input.qmd");
 
-    // Create project context, optionally with format config for source location tracking
+    // Create project context, optionally with metadata for source location tracking
     let project = if wasm_options.source_location {
-        let format_config = ConfigValue::from_path(&["format", "html", "source-location"], "full");
-        let project_config = ProjectConfig::with_format_config(format_config);
+        let metadata = ConfigValue::from_path(&["format", "html", "source-location"], "full");
+        let project_config = ProjectConfig::with_metadata(metadata);
         let dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
         ProjectContext {
             dir: dir.clone(),

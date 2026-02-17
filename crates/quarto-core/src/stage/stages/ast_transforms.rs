@@ -11,7 +11,7 @@
 //! document, including callouts, cross-references, metadata normalization, etc.
 
 use async_trait::async_trait;
-use quarto_config::MergedConfig;
+use quarto_config::{MergedConfig, resolve_format_config};
 
 use crate::pipeline::build_transform_pipeline;
 use crate::render::{BinaryDependencies, RenderContext};
@@ -105,21 +105,37 @@ impl PipelineStage for AstTransformsStage {
         };
 
         // Merge project config with document metadata.
-        // Project format_config provides defaults that document metadata can override.
-        // This enables WASM to inject settings like `format.html.source-location: full`.
-        if let Some(format_config) = ctx
+        // Both project and document metadata are flattened for the target format
+        // before merging. This extracts format-specific settings (e.g., format.html.*)
+        // and merges them with top-level settings.
+        //
+        // Precedence (lowest to highest):
+        // 1. Project top-level settings
+        // 2. Project format-specific settings (format.{target}.*)
+        // 3. Document top-level settings
+        // 4. Document format-specific settings (format.{target}.*)
+        if let Some(project_metadata) = ctx
             .project
             .config
             .as_ref()
-            .and_then(|c| c.format_config.as_ref())
+            .and_then(|c| c.metadata.as_ref())
         {
+            let target_format = ctx.format.identifier.as_str();
+
+            // Flatten project metadata for target format
+            let project_for_format = resolve_format_config(project_metadata, target_format);
+
+            // Flatten document metadata for target format
+            let doc_for_format = resolve_format_config(&doc.ast.meta, target_format);
+
             // MergedConfig: later layers (document) override earlier layers (project)
-            let merged = MergedConfig::new(vec![format_config, &doc.ast.meta]);
+            let merged = MergedConfig::new(vec![&project_for_format, &doc_for_format]);
             if let Ok(materialized) = merged.materialize() {
                 trace_event!(
                     ctx,
                     EventLevel::Debug,
-                    "merged project config with document metadata"
+                    "merged project config with document metadata for format '{}'",
+                    target_format
                 );
                 doc.ast.meta = materialized;
             }
@@ -343,5 +359,327 @@ mod tests {
         let output = stage.run(input, &mut ctx).await.unwrap();
 
         assert!(output.into_document_ast().is_some());
+    }
+
+    // ============================================================================
+    // Project Metadata Merging Tests
+    // ============================================================================
+
+    use crate::project::ProjectConfig;
+    use quarto_pandoc_types::ConfigValue;
+    use quarto_source_map::SourceInfo;
+
+    /// Helper to create a ConfigValue map from key-value pairs
+    fn config_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let map_entries: Vec<ConfigMapEntry> = entries
+            .into_iter()
+            .map(|(k, v)| ConfigMapEntry {
+                key: k.to_string(),
+                key_source: SourceInfo::default(),
+                value: v,
+            })
+            .collect();
+        ConfigValue::new_map(map_entries, SourceInfo::default())
+    }
+
+    /// Helper to create a scalar string ConfigValue
+    fn config_str(s: &str) -> ConfigValue {
+        ConfigValue::new_string(s, SourceInfo::default())
+    }
+
+    /// Helper to create a scalar bool ConfigValue
+    fn config_bool(b: bool) -> ConfigValue {
+        ConfigValue::new_bool(b, SourceInfo::default())
+    }
+
+    #[tokio::test]
+    async fn test_project_metadata_merging_basic() {
+        // Project has title, document has author
+        // Result should have both
+        let runtime = Arc::new(MockRuntime);
+
+        let project_metadata = config_map(vec![("title", config_str("Project Title"))]);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        // Document has author metadata
+        let doc_metadata = config_map(vec![("author", config_str("John Doe"))]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // Both title from project and author from document should be present
+        assert!(result.ast.meta.get("title").is_some());
+        assert!(result.ast.meta.get("author").is_some());
+        assert_eq!(
+            result.ast.meta.get("title").unwrap().as_str(),
+            Some("Project Title")
+        );
+        assert_eq!(
+            result.ast.meta.get("author").unwrap().as_str(),
+            Some("John Doe")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_project_metadata_document_overrides_project() {
+        // Both project and document have title
+        // Document title should win
+        let runtime = Arc::new(MockRuntime);
+
+        let project_metadata = config_map(vec![("title", config_str("Project Title"))]);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        // Document also has title
+        let doc_metadata = config_map(vec![("title", config_str("Document Title"))]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // Document title should override project title
+        assert_eq!(
+            result.ast.meta.get("title").unwrap().as_str(),
+            Some("Document Title")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_project_format_specific_settings_inherited() {
+        // Project has format.html.toc: true
+        // Document should inherit toc setting when rendering to HTML
+        let runtime = Arc::new(MockRuntime);
+
+        let project_metadata = config_map(vec![(
+            "format",
+            config_map(vec![("html", config_map(vec![("toc", config_bool(true))]))]),
+        )]);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        // Document has no metadata
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // toc should be inherited from project's format.html settings
+        assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(true));
+        // format key should be removed (flattened)
+        assert!(result.ast.meta.get("format").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_document_format_specific_overrides_project() {
+        // Project has format.html.toc: true
+        // Document has format.html.toc: false
+        // Document setting should win
+        let runtime = Arc::new(MockRuntime);
+
+        let project_metadata = config_map(vec![(
+            "format",
+            config_map(vec![("html", config_map(vec![("toc", config_bool(true))]))]),
+        )]);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        // Document has format.html.toc: false
+        let doc_metadata = config_map(vec![(
+            "format",
+            config_map(vec![(
+                "html",
+                config_map(vec![("toc", config_bool(false))]),
+            )]),
+        )]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // Document's toc: false should override project's toc: true
+        assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_non_target_format_settings_ignored() {
+        // Project has format.pdf.documentclass
+        // Should be ignored when rendering to HTML
+        let runtime = Arc::new(MockRuntime);
+
+        let project_metadata = config_map(vec![
+            ("title", config_str("My Doc")),
+            (
+                "format",
+                config_map(vec![(
+                    "pdf",
+                    config_map(vec![("documentclass", config_str("article"))]),
+                )]),
+            ),
+        ]);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html(); // Rendering to HTML, not PDF
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // title should be present
+        assert_eq!(
+            result.ast.meta.get("title").unwrap().as_str(),
+            Some("My Doc")
+        );
+        // documentclass from pdf format should NOT be present
+        assert!(result.ast.meta.get("documentclass").is_none());
+        // format key should be removed
+        assert!(result.ast.meta.get("format").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_top_level_overridden_by_format_specific() {
+        // Project has top-level toc: true and format.html.toc: false
+        // format.html.toc should win
+        let runtime = Arc::new(MockRuntime);
+
+        let project_metadata = config_map(vec![
+            ("toc", config_bool(true)),
+            (
+                "format",
+                config_map(vec![(
+                    "html",
+                    config_map(vec![("toc", config_bool(false))]),
+                )]),
+            ),
+        ]);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // format.html.toc: false should override top-level toc: true
+        assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(false));
     }
 }

@@ -1,0 +1,8 @@
+title: "Format Specific Test Project"
+toc: false
+format:
+  html:
+    toc: true
+    toc-depth: 2
+  pdf:
+    documentclass: article

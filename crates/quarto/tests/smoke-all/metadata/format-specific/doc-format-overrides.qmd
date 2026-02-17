@@ -1,0 +1,22 @@
+---
+format:
+  html:
+    toc: false
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["Format Specific Test Project"]
+        - ["<nav[^>]*id=\"TOC\"", "toc-title"]
+---
+
+This document disables TOC via format.html.toc: false,
+overriding the project's format.html.toc: true.
+
+## Section One
+
+Content here.
+
+## Section Two
+
+More content.

@@ -26,6 +26,7 @@ quarto-source-map.workspace = true
 quarto-doctemplate.workspace = true
 quarto-error-reporting.workspace = true
 quarto-config.workspace = true
+quarto-yaml.workspace = true
 quarto-ast-reconcile.workspace = true
 quarto-analysis.workspace = true
 pampa.workspace = true
@@ -48,6 +49,7 @@ base64.workspace = true
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros"] }
+yaml-rust2.workspace = true
 
 [lints]
 workspace = true

@@ -1,0 +1,12 @@
+---
+format: html
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["<title>Project Title From Config</title>", "Project Author"]
+        - []
+---
+
+This document has no title in frontmatter.
+It should inherit the title and author from `_quarto.yml`.

@@ -3276,6 +3276,7 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-util",
+ "quarto-yaml",
  "regex",
  "runtimelib",
  "serde",
@@ -3288,6 +3289,7 @@ dependencies = [
  "tracing",
  "uuid",
  "which 8.0.0",
+ "yaml-rust2",
 ]
 
 [[package]]

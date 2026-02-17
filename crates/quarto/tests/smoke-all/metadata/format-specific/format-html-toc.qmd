@@ -1,0 +1,24 @@
+---
+format: html
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["<nav[^>]*id=\"TOC\"", "toc-title", "First Section", "Second Section"]
+        - ["documentclass"]
+---
+
+This document tests that format.html.toc: true from `_quarto.yml`
+is inherited correctly, even though the top-level toc: false exists.
+
+## First Section
+
+Some content in the first section.
+
+## Second Section
+
+Some content in the second section.
+
+### Subsection
+
+This should NOT appear in TOC since toc-depth is 2.

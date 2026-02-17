@@ -36,12 +36,12 @@
 //!         children: [...]
 //! ```
 
-use pampa::toc::{TocConfig, generate_toc};
+use pampa::toc::{generate_toc, TocConfig};
 use quarto_pandoc_types::pandoc::Pandoc;
 
-use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
+use crate::Result;
 
 /// Transform that generates TOC from document headings.
 ///
@@ -73,9 +73,10 @@ impl AstTransform for TocGenerateTransform {
         "toc-generate"
     }
 
-    fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        // Check if TOC auto-generation is requested
-        let should_generate = match ctx.format_metadata("toc") {
+    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+        // Check if TOC auto-generation is requested.
+        // Read from ast.meta which contains merged project + document metadata.
+        let should_generate = match ast.meta.get("toc") {
             Some(v) if v.as_bool() == Some(true) => true,
             Some(v) if v.as_str() == Some("auto") => true,
             _ => false,
@@ -92,15 +93,17 @@ impl AstTransform for TocGenerateTransform {
             return Ok(());
         }
 
-        // Read configuration from format metadata
-        let depth = ctx
-            .format_metadata("toc-depth")
-            .and_then(|v| v.as_i64())
+        // Read configuration from ast.meta (merged project + document metadata)
+        let depth = ast
+            .meta
+            .get("toc-depth")
+            .and_then(|v| v.as_int())
             .unwrap_or(3) as i32;
 
         // Default title is "Table of Contents" if not specified
-        let title = ctx
-            .format_metadata("toc-title")
+        let title = ast
+            .meta
+            .get("toc-title")
             .and_then(|v| v.as_str())
             .map(String::from)
             .or_else(|| Some("Table of Contents".to_string()));
@@ -130,12 +133,43 @@ mod tests {
     use crate::project::{DocumentInfo, ProjectContext};
     use crate::render::BinaryDependencies;
     use quarto_pandoc_types::block::{Block, Header, Paragraph};
+    use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_pandoc_types::inline::{Inline, Str};
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_source_map::SourceInfo;
     use std::path::PathBuf;
 
     fn dummy_source_info() -> SourceInfo {
         SourceInfo::default()
+    }
+
+    /// Helper to create a ConfigValue map from key-value pairs
+    fn config_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        let map_entries: Vec<ConfigMapEntry> = entries
+            .into_iter()
+            .map(|(k, v)| ConfigMapEntry {
+                key: k.to_string(),
+                key_source: SourceInfo::default(),
+                value: v,
+            })
+            .collect();
+        ConfigValue::new_map(map_entries, SourceInfo::default())
+    }
+
+    /// Helper to create a scalar bool ConfigValue
+    fn config_bool(b: bool) -> ConfigValue {
+        ConfigValue::new_bool(b, SourceInfo::default())
+    }
+
+    /// Helper to create a scalar string ConfigValue
+    fn config_str(s: &str) -> ConfigValue {
+        ConfigValue::new_string(s, SourceInfo::default())
+    }
+
+    /// Helper to create a scalar i64 ConfigValue
+    fn config_int(i: i64) -> ConfigValue {
+        use yaml_rust2::Yaml;
+        ConfigValue::new_scalar(Yaml::Integer(i), SourceInfo::default())
     }
 
     fn make_test_project() -> ProjectContext {
@@ -204,7 +238,7 @@ mod tests {
     #[test]
     fn test_generates_toc_when_enabled() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: config_map(vec![("toc", config_bool(true))]),
             blocks: vec![
                 make_header(2, "intro", "Introduction"),
                 make_para("Content."),
@@ -215,9 +249,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "toc": true
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -237,8 +269,9 @@ mod tests {
 
     #[test]
     fn test_generates_toc_with_string_auto() {
+        // toc: "auto" (string)
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: config_map(vec![("toc", config_str("auto"))]),
             blocks: vec![
                 make_header(2, "intro", "Introduction"),
                 make_para("Content."),
@@ -247,10 +280,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        // toc: "auto" (string)
-        let format = Format::html().with_metadata(serde_json::json!({
-            "toc": "auto"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -263,10 +293,8 @@ mod tests {
 
     #[test]
     fn test_skips_when_navigation_toc_exists() {
-        use quarto_pandoc_types::config_value::ConfigValue;
-
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: config_map(vec![("toc", config_bool(true))]),
             blocks: vec![
                 make_header(2, "intro", "Introduction"),
                 make_para("Content."),
@@ -274,16 +302,12 @@ mod tests {
         };
 
         // Pre-populate navigation.toc with user-provided data
-        ast.meta.insert_path(
-            &["navigation", "toc"],
-            ConfigValue::new_string("user-provided", SourceInfo::default()),
-        );
+        ast.meta
+            .insert_path(&["navigation", "toc"], config_str("user-provided"));
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "toc": true
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -297,8 +321,12 @@ mod tests {
 
     #[test]
     fn test_respects_toc_depth() {
+        // toc-depth: 2 should only include h1 and h2
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: config_map(vec![
+                ("toc", config_bool(true)),
+                ("toc-depth", config_int(2)),
+            ]),
             blocks: vec![
                 make_header(1, "h1", "Level 1"),
                 make_header(2, "h2", "Level 2"),
@@ -309,11 +337,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        // toc-depth: 2 should only include h1 and h2
-        let format = Format::html().with_metadata(serde_json::json!({
-            "toc": true,
-            "toc-depth": 2
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -348,7 +372,10 @@ mod tests {
     #[test]
     fn test_respects_toc_title() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: config_map(vec![
+                ("toc", config_bool(true)),
+                ("toc-title", config_str("Contents")),
+            ]),
             blocks: vec![
                 make_header(2, "intro", "Introduction"),
                 make_para("Content."),
@@ -357,10 +384,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "toc": true,
-            "toc-title": "Contents"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -374,15 +398,13 @@ mod tests {
     #[test]
     fn test_skips_when_no_headings() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: config_map(vec![("toc", config_bool(true))]),
             blocks: vec![make_para("Just a paragraph."), make_para("Another one.")],
         };
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "toc": true
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -400,8 +422,9 @@ mod tests {
 
     #[test]
     fn test_default_toc_title() {
+        // No toc-title specified - should get default
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: config_map(vec![("toc", config_bool(true))]),
             blocks: vec![
                 make_header(2, "intro", "Introduction"),
                 make_para("Content."),
@@ -410,10 +433,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        // No toc-title specified - should get default
-        let format = Format::html().with_metadata(serde_json::json!({
-            "toc": true
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 

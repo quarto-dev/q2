@@ -1,0 +1,13 @@
+---
+title: "Document Title Override"
+format: html
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["<title>Document Title Override</title>", "Project Author"]
+        - ["Project Title"]
+---
+
+This document overrides the title from `_quarto.yml`.
+The author should still be inherited from the project.

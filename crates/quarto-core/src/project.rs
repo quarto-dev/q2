@@ -76,25 +76,33 @@ pub struct ProjectConfig {
     /// Input file patterns (glob patterns)
     pub render_patterns: Vec<String>,
 
-    /// Raw configuration value for format-specific settings
-    pub raw: serde_json::Value,
-
-    /// Format configuration for merging with document metadata.
+    /// Full project metadata as ConfigValue with source tracking.
     ///
-    /// This is used by the render pipeline to merge project-level format settings
-    /// (like `format.html.source-location: full`) with document metadata.
-    /// When present, values in document metadata override values here.
-    pub format_config: Option<ConfigValue>,
+    /// This is the entire `_quarto.yml` parsed with `InterpretationContext::ProjectConfig`,
+    /// meaning strings are kept literal by default (no markdown parsing).
+    ///
+    /// Used by the render pipeline to merge project-level settings with document metadata.
+    /// Format-specific settings (e.g., `format.html.toc`) are extracted using
+    /// `quarto_config::resolve_format_config()` before merging.
+    pub metadata: Option<ConfigValue>,
 }
 
 impl ProjectConfig {
-    /// Create a ProjectConfig with format configuration.
+    /// Create a ProjectConfig with metadata.
     ///
     /// This is useful for programmatically creating a project config
-    /// (e.g., in WASM) with specific format settings.
-    pub fn with_format_config(format_config: ConfigValue) -> Self {
+    /// (e.g., in WASM) with specific settings.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Create project config with format settings
+    /// let metadata = ConfigValue::from_path(&["format", "html", "source-location"], "full");
+    /// let config = ProjectConfig::with_metadata(metadata);
+    /// ```
+    pub fn with_metadata(metadata: ConfigValue) -> Self {
         Self {
-            format_config: Some(format_config),
+            metadata: Some(metadata),
             ..Default::default()
         }
     }
@@ -291,35 +299,45 @@ impl ProjectContext {
 
     /// Parse a `_quarto.yml` file
     fn parse_config(path: &Path, runtime: &dyn SystemRuntime) -> Result<ProjectConfig> {
+        use pampa::pandoc::yaml_to_config_value;
+        use pampa::utils::diagnostic_collector::DiagnosticCollector;
+        use quarto_config::InterpretationContext;
+
         let content = runtime
             .file_read_string(path)
             .map_err(|e| QuartoError::Other(format!("Failed to read config file: {}", e)))?;
 
-        // Parse YAML
-        let value: serde_json::Value = serde_yaml::from_str(&content).map_err(|e| {
+        let filename = path.to_string_lossy().to_string();
+
+        // Parse YAML with source tracking
+        let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
             QuartoError::Other(format!("Failed to parse {}: {}", path.display(), e))
         })?;
 
-        // Extract project configuration
-        let project = value
-            .get("project")
-            .cloned()
-            .unwrap_or(serde_json::Value::Null);
+        // Convert to ConfigValue with ProjectConfig interpretation context
+        // (strings are kept literal, not parsed as markdown)
+        let mut diagnostics = DiagnosticCollector::new();
+        let metadata =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
-        let project_type = project
-            .get("type")
-            .and_then(|v| v.as_str())
+        // Extract project-specific settings from metadata
+        let project_type = metadata
+            .get("project")
+            .and_then(|p| p.get("type"))
+            .and_then(|t| t.as_str())
             .and_then(|s| ProjectType::try_from(s).ok())
             .unwrap_or_default();
 
-        let output_dir = project
-            .get("output-dir")
-            .and_then(|v| v.as_str())
+        let output_dir = metadata
+            .get("project")
+            .and_then(|p| p.get("output-dir"))
+            .and_then(|o| o.as_str())
             .map(PathBuf::from);
 
-        let render_patterns = project
-            .get("render")
-            .and_then(|v| v.as_array())
+        let render_patterns = metadata
+            .get("project")
+            .and_then(|p| p.get("render"))
+            .and_then(|r| r.as_array())
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str().map(String::from))
@@ -331,8 +349,7 @@ impl ProjectContext {
             project_type,
             output_dir,
             render_patterns,
-            raw: value,
-            format_config: None, // TODO: Parse with quarto-config for full source tracking
+            metadata: Some(metadata),
         })
     }
 
@@ -453,21 +470,21 @@ mod tests {
         assert_eq!(config.project_type, ProjectType::Default);
         assert!(config.output_dir.is_none());
         assert!(config.render_patterns.is_empty());
-        assert!(config.format_config.is_none());
+        assert!(config.metadata.is_none());
     }
 
     #[test]
-    fn test_project_config_with_format_config() {
+    fn test_project_config_with_metadata() {
         use quarto_pandoc_types::ConfigValue;
         use quarto_source_map::SourceInfo;
 
-        let format_config = ConfigValue::new_string("test", SourceInfo::default());
-        let config = ProjectConfig::with_format_config(format_config.clone());
+        let metadata = ConfigValue::new_string("test", SourceInfo::default());
+        let config = ProjectConfig::with_metadata(metadata.clone());
 
         assert_eq!(config.project_type, ProjectType::Default);
         assert!(config.output_dir.is_none());
         assert!(config.render_patterns.is_empty());
-        assert!(config.format_config.is_some());
+        assert!(config.metadata.is_some());
     }
 
     // === DocumentInfo tests ===

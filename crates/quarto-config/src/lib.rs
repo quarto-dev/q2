@@ -38,6 +38,7 @@
 //! ```
 
 mod convert;
+mod format;
 mod materialize;
 mod merged;
 mod tag;
@@ -57,6 +58,8 @@ pub use merged::{
 };
 
 pub use materialize::{MaterializeOptions, merge_with_diagnostics};
+
+pub use format::resolve_format_config;
 
 // Re-export for convenience
 pub use quarto_source_map::SourceInfo;
