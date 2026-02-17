@@ -1,0 +1,6 @@
+# Path values in this directory metadata file should be adjusted
+# when used by documents in subdirectories.
+#
+# For a document in chapters/intro/, ../shared/styles.css should
+# become ../../shared/styles.css
+css: !path ../shared/styles.css

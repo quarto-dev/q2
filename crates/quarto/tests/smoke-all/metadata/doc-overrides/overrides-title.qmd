@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      noErrors: true
       ensureFileRegexMatches:
         - ["<title>Document Title Override</title>", "Project Author"]
         - ["Project Title"]

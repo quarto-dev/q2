@@ -1,0 +1,23 @@
+---
+title: Override Test
+author: "Document Author"
+toc: false
+format: html
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["Document Author"]
+        - ["Directory Author"]
+      ensureHtmlElements:
+        - []
+        - ["nav#TOC"]
+---
+
+## Introduction
+
+This document tests that document frontmatter overrides directory metadata.
+
+## Section Two
+
+More content.

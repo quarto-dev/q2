@@ -1,0 +1,5 @@
+# Directory metadata for chapters/
+# Should be inherited by all documents in this directory
+toc: true
+toc-depth: 2
+author: "Chapter Author"

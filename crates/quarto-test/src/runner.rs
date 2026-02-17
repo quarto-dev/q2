@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde_yaml::Value;
 
-use crate::assertions::{LogLevel, LogMessage, VerifyContext};
+use crate::assertions::{Assertion, LogLevel, LogMessage, NoErrorsOrWarnings, VerifyContext};
 use crate::spec::{TestSpec, parse_test_specs};
 
 /// Result of running tests on a single file.
@@ -180,6 +180,21 @@ fn run_format_tests(input_path: &Path, spec: &TestSpec) -> Result<Vec<FailureDet
             failures.push(FailureDetail {
                 format: spec.format.clone(),
                 assertion: assertion.name().to_string(),
+                message: e.to_string(),
+            });
+        }
+    }
+
+    // Default assertion: if no explicit error-checking assertion was specified
+    // (noErrors, noErrorsOrWarnings, shouldError), add noErrorsOrWarnings.
+    // This matches the TS Quarto behavior where tests without explicit error
+    // checks still verify that rendering produced no errors or warnings.
+    if spec.check_warnings {
+        let default_assertion = NoErrorsOrWarnings::new();
+        if let Err(e) = default_assertion.verify(&context) {
+            failures.push(FailureDetail {
+                format: spec.format.clone(),
+                assertion: default_assertion.name().to_string(),
                 message: e.to_string(),
             });
         }

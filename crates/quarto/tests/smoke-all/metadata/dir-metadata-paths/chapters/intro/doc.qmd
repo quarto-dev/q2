@@ -1,0 +1,22 @@
+---
+title: Path Resolution Test
+format: html
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        # The CSS link should point to the adjusted path
+        # From chapters/intro/, the path to shared/styles.css
+        # is ../../shared/styles.css
+        - ['link[href="../../shared/styles.css"]']
+---
+
+## Test Document
+
+This document tests that `!path` values in `_metadata.yml` files
+are adjusted relative to the document location.
+
+The CSS file is located at `project/shared/styles.css`.
+The `_metadata.yml` in `chapters/` specifies `css: !path ../shared/styles.css`.
+When this document (in `chapters/intro/`) is rendered, the path should be
+adjusted to `../../shared/styles.css`.

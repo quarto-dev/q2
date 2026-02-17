@@ -1,0 +1,24 @@
+---
+title: Deep Document
+format: html
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - ["nav#TOC"]
+      ensureFileRegexMatches:
+        - ["Intro Author"]
+        - ["Chapters Author"]
+---
+
+## First Section
+
+This tests hierarchical directory metadata merging.
+
+## Second Section
+
+More content.
+
+### Subsection
+
+Should appear in TOC (toc-depth: 3 from deeper directory metadata).

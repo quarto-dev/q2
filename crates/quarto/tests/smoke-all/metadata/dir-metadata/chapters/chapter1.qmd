@@ -1,0 +1,24 @@
+---
+title: Chapter 1
+format: html
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - ["nav#TOC"]
+      ensureFileRegexMatches:
+        - ["Chapter Author"]
+        - []
+---
+
+## Introduction
+
+This document tests directory metadata inheritance.
+
+## Main Content
+
+More content here.
+
+### Subsection
+
+This should NOT appear in TOC (toc-depth: 2).

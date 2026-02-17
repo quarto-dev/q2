@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      noErrors: true
       ensureFileRegexMatches:
         - ["<pre", "<code", "def hello", "print"]
 ---

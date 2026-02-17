@@ -36,12 +36,12 @@
 //!         children: [...]
 //! ```
 
-use pampa::toc::{generate_toc, TocConfig};
+use pampa::toc::{TocConfig, generate_toc};
 use quarto_pandoc_types::pandoc::Pandoc;
 
+use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
-use crate::Result;
 
 /// Transform that generates TOC from document headings.
 ///
@@ -132,10 +132,10 @@ mod tests {
     use crate::format::Format;
     use crate::project::{DocumentInfo, ProjectContext};
     use crate::render::BinaryDependencies;
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::block::{Block, Header, Paragraph};
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_pandoc_types::inline::{Inline, Str};
-    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_source_map::SourceInfo;
     use std::path::PathBuf;
 

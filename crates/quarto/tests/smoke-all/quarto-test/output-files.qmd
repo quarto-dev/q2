@@ -6,7 +6,8 @@ _quarto:
     html:
       noErrors: true
       # Verify the output HTML file exists (uses the output filename stem)
-      fileExists: "output-files.html"
+      fileExists:
+        outputPath: "output-files.html"
       # Verify the supporting files directory is created
       folderExists: "output-files_files"
 ---

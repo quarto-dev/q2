@@ -13,32 +13,70 @@ use anyhow::bail;
 
 use super::{Assertion, VerifyContext};
 
+/// Where to resolve relative paths for file existence checks.
+#[derive(Debug, Clone, Copy)]
+enum FileExistsBase {
+    /// Relative to the output directory (parent of output file).
+    OutputDir,
+    /// Relative to the support files directory ({stem}_files).
+    SupportDir,
+}
+
 /// Assertion that verifies a file exists.
 ///
-/// The path can be absolute or relative to the output directory.
+/// The path can be absolute, relative to the output directory (`outputPath`),
+/// or relative to the support files directory (`supportPath`).
 #[derive(Debug)]
 pub struct FileExists {
-    /// Path to check (relative to output directory or absolute).
+    /// Path to check.
     path: String,
+    /// Where to resolve relative paths.
+    base: FileExistsBase,
 }
 
 impl FileExists {
+    /// Create a FileExists assertion relative to the output directory.
     pub fn new(path: String) -> Self {
-        Self { path }
+        Self {
+            path,
+            base: FileExistsBase::OutputDir,
+        }
     }
 
-    /// Resolve the path relative to the output directory.
+    /// Create a FileExists assertion relative to the support files directory.
+    pub fn new_support_path(path: String) -> Self {
+        Self {
+            path,
+            base: FileExistsBase::SupportDir,
+        }
+    }
+
+    /// Resolve the path relative to the appropriate base directory.
     fn resolve_path(&self, context: &VerifyContext) -> PathBuf {
         let path = PathBuf::from(&self.path);
         if path.is_absolute() {
             path
         } else {
-            // Relative to output directory
-            context
-                .output_path
-                .parent()
-                .unwrap_or(std::path::Path::new("."))
-                .join(&self.path)
+            match self.base {
+                FileExistsBase::OutputDir => {
+                    // Relative to output directory
+                    context
+                        .output_path
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .join(&self.path)
+                }
+                FileExistsBase::SupportDir => {
+                    // Relative to support files directory ({stem}_files)
+                    let support_dir = context
+                        .output_path
+                        .with_extension("")
+                        .to_string_lossy()
+                        .to_string()
+                        + "_files";
+                    PathBuf::from(support_dir).join(&self.path)
+                }
+            }
         }
     }
 }

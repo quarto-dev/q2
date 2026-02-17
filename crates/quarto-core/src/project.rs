@@ -20,9 +20,194 @@
 use std::path::{Path, PathBuf};
 
 use quarto_pandoc_types::ConfigValue;
+use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
+
+/// Find and parse all `_metadata.yml` files between project root and document directory.
+///
+/// Walks the directory hierarchy from project root to the document's parent directory,
+/// looking for `_metadata.yml` or `_metadata.yaml` files. Each found file is parsed
+/// and returned as a ConfigValue layer.
+///
+/// # Arguments
+///
+/// * `project` - The project context (provides project root directory)
+/// * `document_path` - Path to the document being rendered
+///
+/// # Returns
+///
+/// A vector of `ConfigValue` layers, ordered from project root to document directory.
+/// Each layer contains the parsed metadata from that directory's `_metadata.yml` file.
+/// Directories without `_metadata.yml` are skipped.
+///
+/// # Behavior
+///
+/// - Walks directories between project root and document's parent directory
+/// - Does NOT include the project root directory itself (matches TS Quarto behavior)
+/// - Returns empty vec for single-file projects (no project config)
+/// - Returns empty vec if document is directly in project root
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - A `_metadata.yml` file contains invalid YAML syntax
+/// - File I/O errors occur
+///
+/// # Example
+///
+/// Given project structure:
+/// ```text
+/// project/
+///   _quarto.yml
+///   _metadata.yml          # NOT included (project root)
+///   chapters/
+///     _metadata.yml        # Layer 0: { toc: true }
+///     intro/
+///       _metadata.yml      # Layer 1: { toc-depth: 2 }
+///       chapter1.qmd       # Document being rendered
+/// ```
+///
+/// Returns: [layer0, layer1] - deeper directories later in vec
+pub fn directory_metadata_for_document(
+    project: &ProjectContext,
+    document_path: &Path,
+) -> Result<Vec<ConfigValue>> {
+    use pampa::pandoc::yaml_to_config_value;
+    use pampa::utils::diagnostic_collector::DiagnosticCollector;
+    use quarto_config::InterpretationContext;
+    use std::fs;
+
+    // Single-file projects don't have directory metadata
+    if project.config.is_none() {
+        return Ok(Vec::new());
+    }
+
+    let project_dir = &project.dir;
+    let document_dir = document_path
+        .parent()
+        .ok_or_else(|| QuartoError::Other("Document has no parent directory".into()))?;
+
+    // Get relative path from project root to document directory
+    let relative_path = match document_dir.strip_prefix(project_dir) {
+        Ok(rel) => rel,
+        Err(_) => {
+            // Document is not under project directory
+            return Ok(Vec::new());
+        }
+    };
+
+    // Split into directory components
+    let components: Vec<_> = relative_path.components().collect();
+    if components.is_empty() {
+        // Document is in project root, no directories to walk
+        return Ok(Vec::new());
+    }
+
+    let mut layers = Vec::new();
+    let mut current_dir = project_dir.clone();
+
+    // Walk through each directory from project root toward document
+    // (but not including project root itself - we start from first subdir)
+    for component in components {
+        current_dir = current_dir.join(component);
+
+        // Look for _metadata.yml or _metadata.yaml
+        let metadata_path = find_metadata_file(&current_dir);
+
+        if let Some(path) = metadata_path {
+            // Parse the metadata file
+            let content = fs::read_to_string(&path).map_err(|e| {
+                QuartoError::Other(format!("Failed to read {}: {}", path.display(), e))
+            })?;
+
+            let filename = path.to_string_lossy().to_string();
+            let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
+                QuartoError::Other(format!(
+                    "Directory metadata validation failed for {}: {}",
+                    path.display(),
+                    e
+                ))
+            })?;
+
+            // Convert to ConfigValue with ProjectConfig interpretation context
+            let mut diagnostics = DiagnosticCollector::new();
+            let mut metadata =
+                yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+
+            // Adjust !path values to be relative to document directory
+            adjust_paths_to_document_dir(&mut metadata, &current_dir, document_dir);
+
+            layers.push(metadata);
+        }
+    }
+
+    Ok(layers)
+}
+
+/// Find `_metadata.yml` or `_metadata.yaml` in a directory.
+///
+/// Returns the path to the metadata file if found, preferring `.yml` over `.yaml`.
+fn find_metadata_file(dir: &Path) -> Option<PathBuf> {
+    let yml_path = dir.join("_metadata.yml");
+    if yml_path.exists() {
+        return Some(yml_path);
+    }
+
+    let yaml_path = dir.join("_metadata.yaml");
+    if yaml_path.exists() {
+        return Some(yaml_path);
+    }
+
+    None
+}
+
+/// Adjust `!path` values in metadata to be relative to document directory.
+///
+/// Walks the ConfigValue tree and for each `ConfigValueKind::Path`:
+/// - Computes absolute path relative to metadata_dir
+/// - Recomputes relative path from document_dir
+///
+/// Leaves other values (strings, globs, etc.) unchanged.
+fn adjust_paths_to_document_dir(
+    metadata: &mut ConfigValue,
+    metadata_dir: &Path,
+    document_dir: &Path,
+) {
+    adjust_paths_recursive(metadata, metadata_dir, document_dir);
+}
+
+/// Recursively walk ConfigValue, adjusting Path variants.
+fn adjust_paths_recursive(value: &mut ConfigValue, metadata_dir: &Path, document_dir: &Path) {
+    match &mut value.value {
+        ConfigValueKind::Path(path_str) => {
+            let path = PathBuf::from(&*path_str);
+            // Only adjust relative paths (not absolute, not URLs)
+            if path.is_relative()
+                && !path_str.starts_with("http://")
+                && !path_str.starts_with("https://")
+            {
+                let abs_path = metadata_dir.join(&path);
+                if let Some(adjusted) = pathdiff::diff_paths(&abs_path, document_dir) {
+                    *path_str = adjusted.to_string_lossy().into_owned();
+                }
+            }
+        }
+        ConfigValueKind::Array(items) => {
+            for item in items {
+                adjust_paths_recursive(item, metadata_dir, document_dir);
+            }
+        }
+        ConfigValueKind::Map(entries) => {
+            for entry in entries {
+                adjust_paths_recursive(&mut entry.value, metadata_dir, document_dir);
+            }
+        }
+        // All other kinds (Scalar, PandocInlines, Glob, Expr, etc.) - no adjustment
+        _ => {}
+    }
+}
 
 /// Project type enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -668,5 +853,504 @@ mod tests {
         };
 
         assert!(!context.is_multi_document());
+    }
+
+    // === Directory Metadata tests ===
+
+    mod directory_metadata_tests {
+        use super::*;
+        use std::fs;
+        use tempfile::TempDir;
+
+        /// Helper to create a project context for testing
+        fn test_project_context(dir: &Path) -> ProjectContext {
+            ProjectContext {
+                dir: dir.to_path_buf(),
+                config: Some(ProjectConfig::default()),
+                is_single_file: false,
+                files: vec![],
+                output_dir: dir.to_path_buf(),
+            }
+        }
+
+        #[test]
+        fn test_directory_metadata_empty() {
+            // Project with no _metadata.yml files returns empty vec
+            let temp = TempDir::new().unwrap();
+            let project = test_project_context(temp.path());
+            let doc_path = temp.path().join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn test_directory_metadata_single_file_in_subdir() {
+            // project/
+            //   chapters/
+            //     _metadata.yml  { toc: true }
+            //     doc.qmd
+            // Returns: [{ toc: true }]
+            let temp = TempDir::new().unwrap();
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("_metadata.yml"), "toc: true\n").unwrap();
+            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = chapters.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
+        }
+
+        #[test]
+        fn test_directory_metadata_hierarchy() {
+            // project/
+            //   _metadata.yml     { theme: "cosmo" }
+            //   chapters/
+            //     _metadata.yml   { toc: true }
+            //     intro/
+            //       _metadata.yml { toc-depth: 2 }
+            //       doc.qmd
+            // Returns: [{ theme }, { toc }, { toc-depth }] in order
+            let temp = TempDir::new().unwrap();
+
+            // Root _metadata.yml - NOTE: TS Quarto walks from first subdir, not root
+            // But we should include root if document is in subdir
+            fs::write(temp.path().join("_metadata.yml"), "theme: cosmo\n").unwrap();
+
+            // chapters/_metadata.yml
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("_metadata.yml"), "toc: true\n").unwrap();
+
+            // chapters/intro/_metadata.yml
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            fs::write(intro.join("_metadata.yml"), "toc-depth: 2\n").unwrap();
+            fs::write(intro.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = intro.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            // Should have 3 layers (root is NOT included based on TS behavior)
+            // Actually, re-reading TS code: it walks from projectDir to inputDir
+            // using relativePath.split(SEP_PATTERN), so if doc is in chapters/intro,
+            // relativePath is "chapters/intro", split gives ["chapters", "intro"]
+            // and it joins from projectDir: project/chapters, project/chapters/intro
+            // So root is NOT included. Let me verify this...
+            //
+            // Wait, the TS code starts with currentDir = projectDir, then does:
+            //   currentDir = join(currentDir, dir) for each dir in dirs
+            // So if dirs = ["chapters", "intro"], it processes:
+            //   project/chapters, project/chapters/intro
+            // Root (project/) is NOT processed.
+            //
+            // So our test should expect 2 layers, not 3.
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
+            assert_eq!(result[1].get("toc-depth").unwrap().as_int(), Some(2));
+        }
+
+        #[test]
+        fn test_directory_metadata_skips_missing() {
+            // project/
+            //   _metadata.yml     { theme: "cosmo" } -- not included (root)
+            //   chapters/
+            //     intro/          # No _metadata.yml here
+            //       deep/
+            //         _metadata.yml { toc: true }
+            //         doc.qmd
+            // Returns: [{ toc }] - skips chapters/ and intro/
+            let temp = TempDir::new().unwrap();
+
+            fs::write(temp.path().join("_metadata.yml"), "theme: cosmo\n").unwrap();
+
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            // No _metadata.yml in chapters/
+
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            // No _metadata.yml in intro/
+
+            let deep = intro.join("deep");
+            fs::create_dir(&deep).unwrap();
+            fs::write(deep.join("_metadata.yml"), "toc: true\n").unwrap();
+            fs::write(deep.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = deep.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            // Only the deep/_metadata.yml should be found
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
+        }
+
+        #[test]
+        fn test_directory_metadata_yaml_extension() {
+            // Test that _metadata.yaml (not just .yml) is recognized
+            let temp = TempDir::new().unwrap();
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("_metadata.yaml"), "toc: true\n").unwrap();
+            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = chapters.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
+        }
+
+        #[test]
+        fn test_directory_metadata_invalid_yaml_fails() {
+            // _metadata.yml with YAML syntax error should fail
+            let temp = TempDir::new().unwrap();
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("_metadata.yml"), "invalid: yaml: : syntax\n").unwrap();
+            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = chapters.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path);
+
+            assert!(result.is_err());
+            let err = result.unwrap_err().to_string();
+            assert!(
+                err.contains("metadata") || err.contains("parse") || err.contains("yaml"),
+                "Error should mention metadata/parse/yaml: {}",
+                err
+            );
+        }
+
+        #[test]
+        fn test_directory_metadata_document_at_root() {
+            // Document directly in project root should return empty vec
+            // (no directories to walk)
+            let temp = TempDir::new().unwrap();
+            fs::write(temp.path().join("_metadata.yml"), "toc: true\n").unwrap();
+            fs::write(temp.path().join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = temp.path().join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            // Document at root means relativePath is "", dirs is empty or [""]
+            // TS behavior: no directories to process, returns empty config
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn test_directory_metadata_single_file_project() {
+            // Single-file project (no config) should return empty vec
+            let temp = TempDir::new().unwrap();
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("_metadata.yml"), "toc: true\n").unwrap();
+            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+
+            // Single-file project has config = None
+            let project = ProjectContext {
+                dir: temp.path().to_path_buf(),
+                config: None,
+                is_single_file: true,
+                files: vec![],
+                output_dir: temp.path().to_path_buf(),
+            };
+            let doc_path = chapters.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            // Per TS behavior: directory metadata requires project context
+            assert!(result.is_empty());
+        }
+
+        // === Path adjustment tests ===
+        //
+        // These tests verify that `!path` values in _metadata.yml are adjusted
+        // to be relative to the document directory, not the metadata file directory.
+
+        #[test]
+        fn test_path_adjusted_for_subdirectory() {
+            // project/
+            //   shared/
+            //     styles.css        # The actual file (not required to exist)
+            //   chapters/
+            //     _metadata.yml     # css: !path ../shared/styles.css
+            //     intro/
+            //       doc.qmd
+            //
+            // When rendering doc.qmd, css should become "../../shared/styles.css"
+            let temp = TempDir::new().unwrap();
+
+            // Create shared directory (file doesn't need to exist)
+            let shared = temp.path().join("shared");
+            fs::create_dir(&shared).unwrap();
+
+            // Create chapters/_metadata.yml with a !path value
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(
+                chapters.join("_metadata.yml"),
+                "css: !path ../shared/styles.css\n",
+            )
+            .unwrap();
+
+            // Create chapters/intro/doc.qmd
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            fs::write(intro.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = intro.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let css_value = result[0].get("css").expect("should have css key");
+
+            // The path should be adjusted from ../shared/styles.css to ../../shared/styles.css
+            // because we went one directory deeper (chapters/intro instead of chapters/)
+            assert_eq!(
+                css_value.as_str(),
+                Some("../../shared/styles.css"),
+                "Path should be adjusted relative to document directory"
+            );
+        }
+
+        #[test]
+        fn test_path_same_directory_unchanged() {
+            // project/
+            //   chapters/
+            //     _metadata.yml     # css: !path ./local.css
+            //     doc.qmd           # Same directory
+            //
+            // Path stays "./local.css" (or normalized equivalent)
+            let temp = TempDir::new().unwrap();
+
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("_metadata.yml"), "css: !path ./local.css\n").unwrap();
+            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = chapters.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let css_value = result[0].get("css").expect("should have css key");
+
+            // Path should remain equivalent (pathdiff may normalize ./local.css to local.css)
+            let path_str = css_value.as_str().expect("should be a string path");
+            assert!(
+                path_str == "./local.css" || path_str == "local.css",
+                "Path should stay relative to same directory: got '{}'",
+                path_str
+            );
+        }
+
+        #[test]
+        fn test_plain_string_not_adjusted() {
+            // project/
+            //   chapters/
+            //     _metadata.yml     # theme: cosmo (plain string, not !path)
+            //     intro/
+            //       doc.qmd
+            //
+            // "cosmo" must NOT be changed to "../cosmo" or anything else
+            let temp = TempDir::new().unwrap();
+
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("_metadata.yml"), "theme: cosmo\n").unwrap();
+
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            fs::write(intro.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = intro.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let theme_value = result[0].get("theme").expect("should have theme key");
+
+            // Plain string should NOT be adjusted
+            assert_eq!(
+                theme_value.as_str(),
+                Some("cosmo"),
+                "Plain strings should not be adjusted"
+            );
+        }
+
+        #[test]
+        fn test_absolute_path_unchanged() {
+            // css: !path /usr/share/styles/base.css
+            // Should pass through unchanged
+            let temp = TempDir::new().unwrap();
+
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(
+                chapters.join("_metadata.yml"),
+                "css: !path /usr/share/styles/base.css\n",
+            )
+            .unwrap();
+
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            fs::write(intro.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = intro.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let css_value = result[0].get("css").expect("should have css key");
+
+            // Absolute path should be unchanged
+            assert_eq!(
+                css_value.as_str(),
+                Some("/usr/share/styles/base.css"),
+                "Absolute paths should not be adjusted"
+            );
+        }
+
+        #[test]
+        fn test_array_of_paths_all_adjusted() {
+            // css:
+            //   - !path ../shared/a.css
+            //   - !path ../shared/b.css
+            // Both should be adjusted
+            let temp = TempDir::new().unwrap();
+
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(
+                chapters.join("_metadata.yml"),
+                "css:\n  - !path ../shared/a.css\n  - !path ../shared/b.css\n",
+            )
+            .unwrap();
+
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            fs::write(intro.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = intro.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let css_array = result[0]
+                .get("css")
+                .expect("should have css key")
+                .as_array()
+                .expect("css should be an array");
+
+            assert_eq!(css_array.len(), 2);
+            assert_eq!(
+                css_array[0].as_str(),
+                Some("../../shared/a.css"),
+                "First path should be adjusted"
+            );
+            assert_eq!(
+                css_array[1].as_str(),
+                Some("../../shared/b.css"),
+                "Second path should be adjusted"
+            );
+        }
+
+        #[test]
+        fn test_glob_not_adjusted() {
+            // resources: !glob ../images/*.png
+            // Globs are patterns, not paths - should NOT be adjusted
+            let temp = TempDir::new().unwrap();
+
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(
+                chapters.join("_metadata.yml"),
+                "resources: !glob ../images/*.png\n",
+            )
+            .unwrap();
+
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            fs::write(intro.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = intro.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let resources = result[0]
+                .get("resources")
+                .expect("should have resources key");
+
+            // Glob should NOT be adjusted (globs need separate handling)
+            assert_eq!(
+                resources.as_str(),
+                Some("../images/*.png"),
+                "Globs should not be adjusted"
+            );
+        }
+
+        #[test]
+        fn test_nested_map_path_adjusted() {
+            // Test that paths nested in maps are also adjusted
+            // format:
+            //   html:
+            //     css: !path ../shared/styles.css
+            let temp = TempDir::new().unwrap();
+
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(
+                chapters.join("_metadata.yml"),
+                "format:\n  html:\n    css: !path ../shared/styles.css\n",
+            )
+            .unwrap();
+
+            let intro = chapters.join("intro");
+            fs::create_dir(&intro).unwrap();
+            fs::write(intro.join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = intro.join("doc.qmd");
+
+            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+
+            assert_eq!(result.len(), 1);
+            let css_value = result[0]
+                .get("format")
+                .and_then(|f| f.get("html"))
+                .and_then(|h| h.get("css"))
+                .expect("should have format.html.css");
+
+            assert_eq!(
+                css_value.as_str(),
+                Some("../../shared/styles.css"),
+                "Nested path should be adjusted"
+            );
+        }
     }
 }

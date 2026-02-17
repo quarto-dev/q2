@@ -5,7 +5,8 @@ _quarto:
   tests:
     html:
       noErrors: true
-      fileExists: "no-extra-files.html"
+      fileExists:
+        outputPath: "no-extra-files.html"
       # Verify no PDF was accidentally created when rendering HTML
       pathDoesNotExist: "no-extra-files.pdf"
       # Also test the alternate spelling

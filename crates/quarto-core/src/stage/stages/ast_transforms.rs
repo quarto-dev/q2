@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use quarto_config::{MergedConfig, resolve_format_config};
 
 use crate::pipeline::build_transform_pipeline;
+use crate::project::directory_metadata_for_document;
 use crate::render::{BinaryDependencies, RenderContext};
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -104,38 +105,59 @@ impl PipelineStage for AstTransformsStage {
             ));
         };
 
-        // Merge project config with document metadata.
-        // Both project and document metadata are flattened for the target format
-        // before merging. This extracts format-specific settings (e.g., format.html.*)
-        // and merges them with top-level settings.
+        // Merge project config, directory metadata, and document metadata.
+        // All metadata layers are flattened for the target format before merging.
+        // This extracts format-specific settings (e.g., format.html.*) and merges
+        // them with top-level settings.
         //
         // Precedence (lowest to highest):
         // 1. Project top-level settings
         // 2. Project format-specific settings (format.{target}.*)
-        // 3. Document top-level settings
-        // 4. Document format-specific settings (format.{target}.*)
-        if let Some(project_metadata) = ctx
-            .project
-            .config
-            .as_ref()
-            .and_then(|c| c.metadata.as_ref())
-        {
+        // 3. Directory _metadata.yml layers (root → leaf, deeper wins)
+        // 4. Document top-level settings
+        // 5. Document format-specific settings (format.{target}.*)
+        if ctx.project.config.is_some() {
             let target_format = ctx.format.identifier.as_str();
 
-            // Flatten project metadata for target format
-            let project_for_format = resolve_format_config(project_metadata, target_format);
+            // Layer 1: Project metadata (flattened for format)
+            let project_layer = ctx
+                .project
+                .config
+                .as_ref()
+                .and_then(|c| c.metadata.as_ref())
+                .map(|m| resolve_format_config(m, target_format));
 
-            // Flatten document metadata for target format
-            let doc_for_format = resolve_format_config(&doc.ast.meta, target_format);
+            // Layer 2: Directory metadata layers (each flattened for format)
+            let dir_layers: Vec<_> =
+                directory_metadata_for_document(&ctx.project, &ctx.document.input)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|m| resolve_format_config(&m, target_format))
+                    .collect();
 
-            // MergedConfig: later layers (document) override earlier layers (project)
-            let merged = MergedConfig::new(vec![&project_for_format, &doc_for_format]);
+            // Layer 3: Document metadata (flattened for format)
+            let doc_layer = resolve_format_config(&doc.ast.meta, target_format);
+
+            // Build merge layers: project → dir[0] → dir[1] → ... → document
+            let mut layers: Vec<&quarto_pandoc_types::ConfigValue> = Vec::new();
+            if let Some(ref proj) = project_layer {
+                layers.push(proj);
+            }
+            for dir_meta in &dir_layers {
+                layers.push(dir_meta);
+            }
+            layers.push(&doc_layer);
+
+            // Merge all layers
+            let merged = MergedConfig::new(layers);
             if let Ok(materialized) = merged.materialize() {
                 trace_event!(
                     ctx,
                     EventLevel::Debug,
-                    "merged project config with document metadata for format '{}'",
-                    target_format
+                    "merged {} metadata layers for format '{}' (project + {} dir + doc)",
+                    1 + dir_layers.len() + 1,
+                    target_format,
+                    dir_layers.len()
                 );
                 doc.ast.meta = materialized;
             }

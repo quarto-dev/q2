@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      noErrors: true
       ensureFileRegexMatches:
         - ["<!DOCTYPE html>", "<title>Basic Render Test</title>", "This is a test paragraph"]
         - ["ERROR", "FATAL"]

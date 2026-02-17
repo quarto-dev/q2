@@ -3,6 +3,7 @@ format: html
 _quarto:
   tests:
     html:
+      noErrors: true
       ensureFileRegexMatches:
         - ["<nav[^>]*id=\"TOC\"", "toc-title", "First Section", "Second Section"]
         - ["documentclass"]
