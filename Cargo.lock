@@ -2678,6 +2678,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "walkdir",
 ]
 
 [[package]]
@@ -2970,10 +2971,9 @@ name = "quarto-test"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "pampa",
  "quarto-core",
+ "quarto-error-reporting",
  "quarto-system-runtime",
- "quarto-yaml",
  "regex",
  "serde",
  "serde_yaml",

@@ -43,6 +43,8 @@ pub mod format;
 pub mod pipeline;
 pub mod project;
 pub mod render;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod render_to_file;
 pub mod resources;
 pub mod stage;
 pub mod template;
@@ -64,4 +66,10 @@ pub use transform::{AstTransform, TransformPipeline};
 pub use transforms::{
     CalloutResolveTransform, CalloutTransform, MetadataNormalizeTransform,
     ResourceCollectorTransform, TitleBlockTransform,
+};
+
+// Re-export render-to-file types (native only)
+#[cfg(not(target_arch = "wasm32"))]
+pub use render_to_file::{
+    RenderToFileOptions, RenderToFileResult, render_document_to_file, render_to_file,
 };

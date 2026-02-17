@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use serde_yaml::Value;
 
 use crate::assertions::{LogLevel, LogMessage, VerifyContext};
-use crate::spec::{TestSpec, parse_test_specs};
+use crate::spec::{parse_test_specs, TestSpec};
 
 /// Result of running tests on a single file.
 #[derive(Debug)]
@@ -203,18 +203,25 @@ fn run_format_tests(input_path: &Path, spec: &TestSpec) -> Result<Vec<FailureDet
 
 /// Render a document to the specified format.
 ///
+/// Uses `quarto_core::render_to_file` which runs the full staged pipeline:
+/// - ParseDocumentStage: QMD → Pandoc AST
+/// - EngineExecutionStage: Execute code cells (skipped when execute=false)
+/// - AstTransformsStage: Project metadata merging + all transforms
+/// - RenderHtmlBodyStage: AST → HTML body
+/// - ApplyTemplateStage: Apply HTML template
+///
+/// This also writes resources (CSS) to the `_files` directory.
+///
 /// Returns a RenderOutput with the output path, any error, and captured messages.
 fn render_document(input_path: &Path, format: &str) -> RenderOutput {
-    use quarto_core::{
-        BinaryDependencies, CalloutResolveTransform, CalloutTransform, DocumentInfo,
-        MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
-        ResourceCollectorTransform, TransformPipeline,
-    };
+    use std::sync::Arc;
+
+    use quarto_core::render_to_file::{render_to_file, RenderToFileOptions};
     use quarto_system_runtime::NativeRuntime;
 
     let mut messages = Vec::new();
 
-    // Determine output path
+    // Determine expected output path (for error reporting if render fails early)
     let output_dir = input_path.parent().unwrap_or(Path::new("."));
     let stem = input_path
         .file_stem()
@@ -227,221 +234,54 @@ fn render_document(input_path: &Path, format: &str) -> RenderOutput {
         "docx" => "docx",
         "latex" | "tex" => "tex",
         "typst" => "typ",
-        _ => "html", // Default to HTML
+        _ => "html",
     };
 
-    let output_path = output_dir.join(format!("{}.{}", stem, extension));
+    let fallback_output_path = output_dir.join(format!("{}.{}", stem, extension));
 
     // Create runtime
-    let runtime = NativeRuntime::new();
+    let runtime = Arc::new(NativeRuntime::new());
 
-    // Read input
-    let input_content = match fs::read(input_path) {
-        Ok(content) => content,
-        Err(e) => {
-            let error_msg = format!("failed to read: {}: {}", input_path.display(), e);
-            messages.push(LogMessage {
-                level: LogLevel::Error,
-                message: error_msg.clone(),
-            });
-            return RenderOutput {
-                output_path,
-                error: Some(error_msg),
-                messages,
-            };
-        }
+    // Render using the shared render_to_file function
+    let options = RenderToFileOptions {
+        quiet: true, // Don't log to console during tests
+        ..Default::default()
     };
 
-    // Parse QMD
-    let input_path_str = input_path.to_string_lossy();
-    let mut output_stream = std::io::sink();
-
-    let (mut pandoc, _context, warnings) = match pampa::readers::qmd::read(
-        &input_content,
-        false, // loose mode
-        &input_path_str,
-        &mut output_stream,
-        true, // track source locations
-        None, // file_id
-    ) {
-        Ok(result) => result,
-        Err(diagnostics) => {
-            let error_msg = format!(
-                "parse errors:\n{}",
-                diagnostics
-                    .iter()
-                    .map(|d| d.to_text(None))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
-            messages.push(LogMessage {
-                level: LogLevel::Error,
-                message: error_msg.clone(),
-            });
-            return RenderOutput {
-                output_path,
-                error: Some(error_msg),
-                messages,
-            };
-        }
-    };
-
-    // Capture warnings from parsing
-    for warning in warnings {
-        messages.push(LogMessage {
-            level: LogLevel::Warn,
-            message: warning.title.clone(),
-        });
-    }
-
-    // Set up render context
-    let project = match ProjectContext::discover(input_path, &runtime) {
-        Ok(p) => p,
-        Err(e) => {
-            let error_msg = format!("failed to discover project context: {}", e);
-            messages.push(LogMessage {
-                level: LogLevel::Error,
-                message: error_msg.clone(),
-            });
-            return RenderOutput {
-                output_path,
-                error: Some(error_msg),
-                messages,
-            };
-        }
-    };
-    let doc_info = DocumentInfo::from_path(input_path);
-    let render_format = format_from_name(format);
-    let binaries = BinaryDependencies::new();
-    let options = RenderOptions {
-        verbose: false,
-        execute: false,
-        use_freeze: false,
-        output_path: Some(output_path.clone()),
-    };
-    let mut ctx =
-        RenderContext::new(&project, &doc_info, &render_format, &binaries).with_options(options);
-
-    // Run transform pipeline
-    let mut pipeline = TransformPipeline::new();
-    pipeline.push(Box::new(CalloutTransform::new()));
-    pipeline.push(Box::new(CalloutResolveTransform::new()));
-    pipeline.push(Box::new(MetadataNormalizeTransform::new()));
-    pipeline.push(Box::new(ResourceCollectorTransform::new()));
-    if let Err(e) = pipeline.execute(&mut pandoc, &mut ctx) {
-        let error_msg = format!("transform pipeline failed: {}", e);
-        messages.push(LogMessage {
-            level: LogLevel::Error,
-            message: error_msg.clone(),
-        });
-        return RenderOutput {
-            output_path,
-            error: Some(error_msg),
-            messages,
-        };
-    }
-
-    // Get output directory and stem
-    let output_stem = output_path.file_stem().unwrap().to_str().unwrap();
-
-    // Write resources
-    let resource_paths =
-        match quarto_core::resources::write_html_resources(output_dir, output_stem, &runtime) {
-            Ok(paths) => paths,
-            Err(e) => {
-                let error_msg = format!("failed to write resources: {}", e);
-                messages.push(LogMessage {
-                    level: LogLevel::Error,
-                    message: error_msg.clone(),
-                });
-                return RenderOutput {
-                    output_path,
-                    error: Some(error_msg),
-                    messages,
+    match render_to_file(input_path, format, &options, runtime) {
+        Ok(result) => {
+            // Capture diagnostics as log messages
+            for diag in &result.render_output.diagnostics {
+                let level = match diag.kind {
+                    quarto_error_reporting::DiagnosticKind::Error => LogLevel::Error,
+                    quarto_error_reporting::DiagnosticKind::Warning => LogLevel::Warn,
+                    quarto_error_reporting::DiagnosticKind::Info => LogLevel::Info,
+                    quarto_error_reporting::DiagnosticKind::Note => LogLevel::Debug,
                 };
+                messages.push(LogMessage {
+                    level,
+                    message: diag.title.clone(),
+                });
             }
-        };
 
-    // Render HTML body using pampa's HTML writer
-    let mut body_buf = Vec::new();
-    if let Err(e) = pampa::writers::html::write_blocks_to(&pandoc.blocks, &mut body_buf) {
-        let error_msg = format!("failed to render HTML body: {}", e);
-        messages.push(LogMessage {
-            level: LogLevel::Error,
-            message: error_msg.clone(),
-        });
-        return RenderOutput {
-            output_path,
-            error: Some(error_msg),
-            messages,
-        };
-    }
-    let body = String::from_utf8_lossy(&body_buf).into_owned();
-
-    // Render with template
-    let html = match quarto_core::template::render_with_resources(
-        &body,
-        &pandoc.meta,
-        &resource_paths.css,
-    ) {
-        Ok(h) => h,
+            RenderOutput {
+                output_path: result.output_path,
+                error: None,
+                messages,
+            }
+        }
         Err(e) => {
-            let error_msg = format!("failed to apply template: {}", e);
+            let error_msg = e.to_string();
             messages.push(LogMessage {
                 level: LogLevel::Error,
                 message: error_msg.clone(),
             });
-            return RenderOutput {
-                output_path,
+            RenderOutput {
+                output_path: fallback_output_path,
                 error: Some(error_msg),
                 messages,
-            };
+            }
         }
-    };
-
-    // Write output
-    if let Err(e) = fs::create_dir_all(output_dir) {
-        let error_msg = format!("failed to create output directory: {}", e);
-        messages.push(LogMessage {
-            level: LogLevel::Error,
-            message: error_msg.clone(),
-        });
-        return RenderOutput {
-            output_path,
-            error: Some(error_msg),
-            messages,
-        };
-    }
-    if let Err(e) = fs::write(&output_path, html) {
-        let error_msg = format!("failed to write output: {}", e);
-        messages.push(LogMessage {
-            level: LogLevel::Error,
-            message: error_msg.clone(),
-        });
-        return RenderOutput {
-            output_path,
-            error: Some(error_msg),
-            messages,
-        };
-    }
-
-    // Success!
-    RenderOutput {
-        output_path,
-        error: None,
-        messages,
-    }
-}
-
-/// Convert a format name string to a Format instance.
-fn format_from_name(name: &str) -> quarto_core::Format {
-    use quarto_core::Format;
-    match name {
-        "html" => Format::html(),
-        "pdf" => Format::pdf(),
-        "docx" => Format::docx(),
-        // Default to HTML for unknown formats
-        _ => Format::html(),
     }
 }
 
