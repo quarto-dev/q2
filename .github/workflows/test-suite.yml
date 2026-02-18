@@ -9,6 +9,9 @@ on:
       - main
       - kyoto
 
+env:
+  PANDOC_VERSION: "3.8.3"
+
 jobs:
   test-suite:
     strategy:
@@ -60,18 +63,19 @@ jobs:
         with:
           tool: cargo-insta
 
-      # Pandoc setup
+      # Pandoc setup (pinned to match Quarto 1.9)
       - name: Set up Pandoc (Linux)
         if: runner.os == 'Linux'
-        run: | 
-          curl -LO https://github.com/jgm/pandoc/releases/download/3.7.0.2/pandoc-3.7.0.2-1-amd64.deb
-          sudo dpkg -i pandoc-3.7.0.2-1-amd64.deb
+        run: |
+          curl -LO "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
+          sudo dpkg -i "pandoc-${PANDOC_VERSION}-1-amd64.deb"
         shell: bash
 
       - name: Set up Pandoc (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install pandoc
+          curl -LO "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-arm64-macOS.pkg"
+          sudo installer -pkg "pandoc-${PANDOC_VERSION}-arm64-macOS.pkg" -target /
         shell: bash
 
       # tree-sitter setup
