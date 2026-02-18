@@ -103,9 +103,12 @@ impl LspTestHarness {
         }
     }
 
-    /// Get the quarto binary path, building it once if needed.
-    /// Uses OnceLock to ensure the build only happens once even when
-    /// tests run in parallel, avoiding file lock contention.
+    /// Get the quarto binary path.
+    /// Expects the binary to already be built (e.g. by `cargo build` or
+    /// `cargo nextest run`). Avoids running `cargo build` here because
+    /// nextest runs each test in a separate process, so the OnceLock
+    /// doesn't help — each process would redundantly check all
+    /// dependencies for staleness, adding ~30-60s per test.
     fn get_binary_path() -> &'static PathBuf {
         BINARY_PATH.get_or_init(|| {
             let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -115,18 +118,10 @@ impl LspTestHarness {
                 .parent()
                 .unwrap();
 
-            // Run cargo build first to ensure the binary exists
-            let status = Command::new("cargo")
-                .args(["build", "-p", "quarto"])
-                .current_dir(workspace_root)
-                .status()
-                .expect("Failed to build quarto");
-            assert!(status.success(), "Failed to build quarto binary");
-
             let binary_path = workspace_root.join("target").join("debug").join("q2");
             assert!(
                 binary_path.exists(),
-                "q2 binary not found at {:?}",
+                "q2 binary not found at {:?}. Run `cargo build -p quarto` first.",
                 binary_path
             );
 
