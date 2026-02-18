@@ -7,7 +7,7 @@
  */
 
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, rmSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { platform } from 'os';
@@ -38,6 +38,13 @@ function findLlvmPath() {
 function buildWasm() {
   return new Promise((resolve, reject) => {
     console.log('Building wasm-quarto-hub-client...');
+
+    // Clean pkg/ directory to avoid wasm-pack EEXIST errors
+    const pkgDir = join(wasmCrate, 'pkg');
+    if (existsSync(pkgDir)) {
+      console.log('Cleaning existing pkg/ directory...');
+      rmSync(pkgDir, { recursive: true });
+    }
 
     // Set up environment
     const env = { ...process.env };
