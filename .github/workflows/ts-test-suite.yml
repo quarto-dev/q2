@@ -16,9 +16,7 @@ jobs:
   test-suite:
     strategy:
       matrix:
-        os: 
-        #   - ubuntu-latest-8x
-          - macos-latest
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     
     name: Run test suite
