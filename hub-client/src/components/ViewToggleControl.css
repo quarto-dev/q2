@@ -1,0 +1,76 @@
+.view-toggle-control {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  background: #1a1a2e;
+  border-radius: 20px;
+  padding: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  border: 1px solid #4a7aba;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #3a5a8a;
+  border: none;
+  border-radius: 14px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+
+.view-toggle-btn:hover:not(.disabled) {
+  background: #5a8aca;
+  color: #fff;
+}
+
+.view-toggle-btn:active:not(.disabled) {
+  background: #6a9ada;
+}
+
+.view-toggle-btn.disabled {
+  background: #2a3a4a;
+  color: #6a7a8a;
+  cursor: default;
+}
+
+.view-toggle-btn.active {
+  background: #5a8aca;
+  color: #ffffff;
+}
+
+.view-toggle-btn.view-toggle-center {
+  width: 24px;
+  background: #3a5a8a;
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.view-toggle-btn.view-toggle-center:hover:not(.disabled) {
+  background: #5a8aca;
+  color: #fff;
+}
+
+/* Position the control on the divider between editor and preview */
+.pane-divider {
+  position: relative;
+  width: 1px;
+  background: #1f3460;
+  flex-shrink: 0;
+}
+
+.pane-divider .view-toggle-control {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}

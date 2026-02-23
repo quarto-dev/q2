@@ -31,6 +31,9 @@ import ProjectTab from './tabs/ProjectTab';
 import StatusTab from './tabs/StatusTab';
 import SettingsTab from './tabs/SettingsTab';
 import AboutTab from './tabs/AboutTab';
+import ViewToggleControl from './ViewToggleControl';
+import { useViewMode } from './ViewModeContext';
+import MarkdownSummary from './MarkdownSummary';
 import './Editor.css';
 
 interface Props {
@@ -62,6 +65,9 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
 }
 
 export default function Editor({ project, files, fileContents, onDisconnect, onContentChange, route, onNavigateToFile }: Props) {
+  // View mode for pane sizing
+  const { viewMode } = useViewMode();
+
   // Select initial file based on URL route or default
   const getInitialFile = useCallback((): FileEntry | null => {
     if (route.type === 'file' && route.filePath) {
@@ -151,6 +157,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
+
+  // Preview scroll function for external control (from MarkdownSummary)
+  const previewScrollToLineRef = useRef<((line: number) => void) | null>(null);
 
   // Editor drag-drop state for image insertion
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
@@ -646,7 +655,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         </div>
       )}
 
-      <main className="editor-main">
+      <main className={`editor-main view-mode-${viewMode}`}>
         <SidebarTabs>
           {(activeTab) => {
             switch (activeTab) {
@@ -705,37 +714,59 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           }}
         </SidebarTabs>
         <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
-          <MonacoEditor
-            // Use key to force remount when switching files (resets editor state cleanly)
-            key={currentFile?.path ?? ''}
-            height="100%"
-            language="markdown"
-            theme="vs-dark"
-            // Use defaultValue instead of value to make Monaco uncontrolled.
-            // This prevents the wrapper from calling setValue() on re-renders,
-            // which would reset cursor position. We manage content via executeEdits().
-            defaultValue={content}
-            onChange={handleEditorChange}
-            onMount={handleEditorMount}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              wordWrap: 'on',
-              padding: { top: 16 },
-              scrollBeyondLastLine: false,
-              // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
-              // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
-              pasteAs: { enabled: false },
-              // Move hover/diagnostic widgets to a fixed container outside the editor's
-              // overflow:hidden boundary, preventing them from being clipped by the navbar.
-              fixedOverflowWidgets: true,
-              // Prefer showing hover below the line. This prevents diagnostic popups near
-              // the top of the editor from overlapping the navbar.
-              hover: { above: false },
-            }}
-          />
+          {/* Show MarkdownSummary overlay in preview mode */}
+          {viewMode === 'preview' && (
+            <div className="markdown-summary-overlay">
+              <MarkdownSummary
+                content={content}
+                onLineClick={(lineNumber) => {
+                  if (previewScrollToLineRef.current) {
+                    previewScrollToLineRef.current(lineNumber);
+                  }
+                }}
+              />
+            </div>
+          )}
+          {/* Always render Monaco but hide in preview mode */}
+          <div style={{ display: viewMode === 'preview' ? 'none' : 'block', height: '100%' }}>
+            <MonacoEditor
+              // Use key to force remount when switching files (resets editor state cleanly)
+              key={currentFile?.path ?? ''}
+              height="100%"
+              language="markdown"
+              theme="vs-dark"
+              // Use defaultValue instead of value to make Monaco uncontrolled.
+              // This prevents the wrapper from calling setValue() on re-renders,
+              // which would reset cursor position. We manage content via executeEdits().
+              defaultValue={content}
+              onChange={handleEditorChange}
+              onMount={handleEditorMount}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                wordWrap: 'on',
+                padding: { top: 16 },
+                scrollBeyondLastLine: false,
+                // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
+                // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
+                pasteAs: { enabled: false },
+                // Move hover/diagnostic widgets to a fixed container outside the editor's
+                // overflow:hidden boundary, preventing them from being clipped by the navbar.
+                fixedOverflowWidgets: true,
+                // Prefer showing hover below the line. This prevents diagnostic popups near
+                // the top of the editor from overlapping the navbar.
+                hover: { above: false },
+              }}
+            />
+          </div>
         </div>
+
+        {/* Divider with view toggle control */}
+        <div className="pane-divider">
+          <ViewToggleControl />
+        </div>
+
         <Preview
           content={content}
           currentFile={currentFile}
@@ -748,6 +779,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
           onDiagnosticsChange={handleDiagnosticsChange}
           onWasmStatusChange={handleWasmStatusChange}
+          onRegisterScrollToLine={(fn) => { previewScrollToLineRef.current = fn; }}
         />
       </main>
 

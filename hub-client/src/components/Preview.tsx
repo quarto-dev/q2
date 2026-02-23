@@ -35,6 +35,8 @@ interface PreviewProps {
   onOpenNewFileDialog: (initialFilename: string) => void;
   onDiagnosticsChange: (diagnostics: Diagnostic[]) => void;
   onWasmStatusChange?: (status: 'loading' | 'ready' | 'error', error: string | null) => void;
+  /** Callback to register scrollToLine function for external use */
+  onRegisterScrollToLine?: (fn: (line: number) => void) => void;
 }
 
 // Fallback for when WASM isn't ready yet
@@ -271,6 +273,7 @@ export default function Preview({
   onOpenNewFileDialog,
   onDiagnosticsChange,
   onWasmStatusChange,
+  onRegisterScrollToLine,
 }: PreviewProps) {
   const [wasmStatus, setWasmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [wasmError, setWasmError] = useState<string | null>(null);
@@ -293,6 +296,15 @@ export default function Preview({
 
   // Ref to MorphIframe to access its imperative methods
   const doubleBufferedIframeRef = useRef<MorphIframeHandle>(null);
+
+  // Register scrollToLine function with parent for external control
+  useEffect(() => {
+    if (onRegisterScrollToLine) {
+      onRegisterScrollToLine((line: number) => {
+        doubleBufferedIframeRef.current?.scrollToLine(line);
+      });
+    }
+  }, [onRegisterScrollToLine]);
 
   // Rendered HTML to display in iframe
   const [renderedHtml, setRenderedHtml] = useState<string>('');

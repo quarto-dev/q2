@@ -151,6 +151,45 @@ export function postProcessIframe(
       window.parent.postMessage({ type: 'hub-client-save' }, '*');
     }
   });
+
+  // Inject responsive CSS for hub-client preview
+  // Hides TOC and adjusts layout for narrow containers since media queries
+  // check viewport width (not iframe/container width)
+  injectPreviewStyles(doc);
+}
+
+/**
+ * Inject CSS to make the preview more responsive in narrow containers.
+ * This is needed because Quarto's media queries check viewport width,
+ * not the iframe container width.
+ */
+function injectPreviewStyles(doc: Document): void {
+  const style = doc.createElement('style');
+  style.setAttribute('data-hub-client', 'true');
+  style.textContent = `
+    /* Hub-client preview overrides */
+    /* Hide TOC - it doesn't work well in narrow iframe containers */
+    nav[role="doc-toc"] {
+      display: none !important;
+    }
+
+    /* Ensure body content doesn't overflow */
+    body {
+      overflow-x: hidden;
+    }
+
+    /* Constrain page columns to container width */
+    .page-columns {
+      max-width: 100%;
+    }
+
+    /* Ensure main content doesn't overflow */
+    main {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+  `;
+  doc.head.appendChild(style);
 }
 
 /** Resolve a relative path against the current file's directory */

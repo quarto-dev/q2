@@ -3,6 +3,7 @@ import type { ProjectEntry, FileEntry } from './types/project';
 import ProjectSelector from './components/ProjectSelector';
 import Editor from './components/Editor';
 import Toast from './components/Toast';
+import { ViewModeProvider } from './components/ViewModeContext';
 import {
   connect,
   disconnect,
@@ -395,17 +396,19 @@ function App() {
           onClearPendingShare={handleClearPendingShare}
         />
       ) : (
-        <Editor
-          project={project}
-          files={files}
-          fileContents={fileContents}
-          onDisconnect={handleDisconnect}
-          onContentChange={handleContentChange}
-          route={route}
-          onNavigateToFile={(filePath, options) => {
-            navigateToFile(project.id, filePath, options);
-          }}
-        />
+        <ViewModeProvider>
+          <Editor
+            project={project}
+            files={files}
+            fileContents={fileContents}
+            onDisconnect={handleDisconnect}
+            onContentChange={handleContentChange}
+            route={route}
+            onNavigateToFile={(filePath, options) => {
+              navigateToFile(project.id, filePath, options);
+            }}
+          />
+        </ViewModeProvider>
       )}
       <Toast
         message="Auto-saved"

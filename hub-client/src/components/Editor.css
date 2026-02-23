@@ -183,11 +183,76 @@
 .pane {
   flex: 1;
   min-width: 0;
+  transition: flex 0.3s ease;
+}
+
+/* Pane divider between editor and preview */
+.pane-divider {
+  position: relative;
+  width: 1px;
+  background: #1f3460;
+  flex-shrink: 0;
+}
+
+.pane-divider .view-toggle-control {
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .editor-pane {
-  border-right: 1px solid #1f3460;
   position: relative;
+  overflow: hidden;
+}
+
+/* View Mode: Both (default) - equal split */
+.editor-main.view-mode-both .editor-pane {
+  flex: 1;
+}
+
+.editor-main.view-mode-both .preview-pane {
+  flex: 1;
+}
+
+/* View Mode: Markup - editor expanded, preview as summary strip */
+.editor-main.view-mode-markup .editor-pane {
+  flex: 4;
+}
+
+.editor-main.view-mode-markup .preview-pane {
+  flex: 1;
+  min-width: 120px;
+  max-width: 180px;
+  overflow: hidden;
+}
+
+/* Scale down the preview iframe content for minimap effect */
+.editor-main.view-mode-markup .preview-pane iframe {
+  transform: scale(0.3);
+  transform-origin: top left;
+  width: 333%;
+  height: 333%;
+}
+
+/* View Mode: Preview - preview expanded, editor as summary strip */
+.editor-main.view-mode-preview .editor-pane {
+  flex: 0 0 180px;
+  min-width: 150px;
+  max-width: 220px;
+}
+
+.editor-main.view-mode-preview .preview-pane {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Markdown summary overlay for preview mode */
+.markdown-summary-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
 }
 
 /* Editor drag-over state for image drop */
@@ -214,6 +279,7 @@
 .preview-pane {
   background: #fff;
   position: relative;
+  overflow: hidden;
 }
 
 .preview-pane iframe {

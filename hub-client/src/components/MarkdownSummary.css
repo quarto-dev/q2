@@ -1,0 +1,41 @@
+.markdown-summary {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #1e1e1e;
+  cursor: pointer;
+}
+
+.markdown-summary-content {
+  margin: 0;
+  padding: 8px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 6px;
+  line-height: 1.4;
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Highlight headers */
+.markdown-summary-content::before {
+  content: '';
+}
+
+/* Scrollbar styling */
+.markdown-summary::-webkit-scrollbar {
+  width: 6px;
+}
+
+.markdown-summary::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.markdown-summary::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 3px;
+}
+
+.markdown-summary::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
