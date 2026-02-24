@@ -362,7 +362,7 @@ enum Commands {
 
         /// Google OAuth2 client ID. Presence enables auth.
         /// Requires --behind-tls-proxy (or --allow-insecure-auth for local dev).
-        #[arg(long)]
+        #[arg(long, env = "QUARTO_HUB_GOOGLE_CLIENT_ID")]
         google_client_id: Option<String>,
 
         /// Acknowledge that a TLS-terminating reverse proxy (nginx, Caddy,
@@ -376,11 +376,11 @@ enum Commands {
         allow_insecure_auth: bool,
 
         /// Allowed email addresses (comma-separated).
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, env = "QUARTO_HUB_ALLOWED_EMAILS", value_delimiter = ',')]
         allowed_emails: Option<Vec<String>>,
 
         /// Allowed email domains (comma-separated).
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, env = "QUARTO_HUB_ALLOWED_DOMAINS", value_delimiter = ',')]
         allowed_domains: Option<Vec<String>>,
     },
 }
