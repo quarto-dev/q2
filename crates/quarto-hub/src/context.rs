@@ -10,7 +10,7 @@ use axum::http::StatusCode;
 use axum_jwt_auth::JwtDecoder;
 use samod::Repo;
 use samod::storage::TokioFilesystemStorage;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
 use crate::auth::{self, AuthConfig, AuthState, GoogleClaims};
@@ -24,7 +24,7 @@ use crate::sync::{SyncAllResult, SyncResult, sync_all_documents, sync_file_by_pa
 use crate::sync_state::SyncState;
 
 /// Configuration for the hub.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HubConfig {
     /// Port to listen on
     pub port: u16,
@@ -75,9 +75,6 @@ impl Default for HubConfig {
 pub struct HubContext {
     /// Storage manager (holds lockfile, manages directories)
     storage: StorageManager,
-
-    /// Hub configuration
-    config: RwLock<HubConfig>,
 
     /// Discovered project files
     project_files: ProjectFiles,
@@ -167,13 +164,10 @@ impl HubContext {
             "Initial filesystem sync complete"
         );
 
-        // Extract auth_config from HubConfig — it's immutable after startup
-        // and stored separately to avoid holding the RwLock during auth checks.
         let auth_config = config.auth_config.take();
 
         Ok(Self {
             storage,
-            config: RwLock::new(config),
             project_files,
             repo,
             index,
@@ -186,11 +180,6 @@ impl HubContext {
     /// Get reference to storage manager.
     pub fn storage(&self) -> &StorageManager {
         &self.storage
-    }
-
-    /// Get the current configuration.
-    pub async fn config(&self) -> HubConfig {
-        self.config.read().await.clone()
     }
 
     /// Get discovered project files.
