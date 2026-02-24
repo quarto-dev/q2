@@ -206,7 +206,14 @@ export function isConnected(): boolean {
 export async function createNewProject(options: CreateProjectOptions): Promise<CreateProjectResult> {
   await initWasm();
   vfsClear();
-  return ensureClient().createNewProject(options);
+
+  // Append ID token to WebSocket URL if available (same as connect())
+  const token = getIdToken();
+  const syncServer = token
+    ? `${options.syncServer}${options.syncServer.includes('?') ? '&' : '?'}id_token=${encodeURIComponent(token)}`
+    : options.syncServer;
+
+  return ensureClient().createNewProject({ ...options, syncServer });
 }
 
 /**
