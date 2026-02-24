@@ -267,7 +267,7 @@ impl HubContext {
             })?;
 
         auth::check_allowlists(&token_data.claims, auth_config)?;
-        tracing::info!(email = %token_data.claims.email, "Authenticated");
+        tracing::debug!(email = %token_data.claims.email, "Authenticated");
         Ok(())
     }
 }

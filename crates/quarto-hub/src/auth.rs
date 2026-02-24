@@ -53,6 +53,9 @@ pub fn check_allowlists(claims: &GoogleClaims, config: &AuthConfig) -> Result<()
         return Ok(());
     }
 
+    // Case-sensitive comparison is intentional: Google normalizes emails
+    // to lowercase in ID token claims. If we add non-Google identity
+    // providers in the future, revisit this to normalize both sides.
     let email_ok = config
         .allowed_emails
         .as_ref()
