@@ -132,18 +132,21 @@ pub async fn build_auth_state(
 
 /// Validate that TLS is accounted for when auth is enabled.
 /// Called once at startup before the server accepts requests.
+///
+/// Returns an error if auth is enabled without TLS protection.
+/// Logs a warning if `--allow-insecure-auth` is used (local dev).
 pub fn validate_tls_config(
     google_client_id: Option<&str>,
     behind_tls_proxy: bool,
     allow_insecure_auth: bool,
-) {
+) -> std::result::Result<(), String> {
     if google_client_id.is_some() && !behind_tls_proxy && !allow_insecure_auth {
-        eprintln!(
-            "error: --google-client-id requires TLS to protect tokens in transit.\n\
+        return Err(
+            "--google-client-id requires TLS to protect tokens in transit.\n\
              Use --behind-tls-proxy if a reverse proxy terminates TLS,\n\
              or --allow-insecure-auth for local development (never in production)."
+                .to_string(),
         );
-        std::process::exit(1);
     }
     if allow_insecure_auth && google_client_id.is_some() {
         tracing::warn!(
@@ -151,6 +154,7 @@ pub fn validate_tls_config(
              Tokens will transit in plaintext. Do not use in production."
         );
     }
+    Ok(())
 }
 
 #[cfg(test)]

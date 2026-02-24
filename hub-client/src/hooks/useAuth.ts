@@ -15,14 +15,11 @@ import {
 
 export function useAuth() {
   const [auth, setAuth] = useState<AuthState | null>(getStoredAuth);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const expiryTimer = useRef<ReturnType<typeof setInterval>>(null);
 
   // Start expiry monitor on mount
   useEffect(() => {
-    setIsLoading(false);
-
     expiryTimer.current = setInterval(() => {
       // getStoredAuth() returns null for expired tokens (and clears storage).
       // Sync React state if the stored auth has been cleared.
@@ -48,5 +45,5 @@ export function useAuth() {
     setAuth(null);
   }, []);
 
-  return { auth, isLoading, error, handleCredentialResponse, logout };
+  return { auth, error, handleCredentialResponse, logout };
 }

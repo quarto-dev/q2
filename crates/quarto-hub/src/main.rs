@@ -116,7 +116,8 @@ async fn main() -> anyhow::Result<()> {
         args.google_client_id.as_deref(),
         args.behind_tls_proxy,
         args.allow_insecure_auth,
-    );
+    )
+    .map_err(|e| anyhow::anyhow!(e))?;
 
     // Build auth config if Google client ID is provided
     let auth_config = args.google_client_id.map(|client_id| {

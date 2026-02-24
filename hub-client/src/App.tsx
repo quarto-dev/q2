@@ -21,6 +21,23 @@ import { useAuth } from './hooks/useAuth';
 import type { Route, ShareRoute } from './utils/routing';
 import './App.css';
 
+/**
+ * Connect to a sync server and load all file contents into a Map.
+ * Shared by every code path that opens a project.
+ */
+async function connectAndLoadContents(
+  syncServer: string,
+  indexDocId: string,
+): Promise<{ files: FileEntry[]; contents: Map<string, string> }> {
+  const files = await connect(syncServer, indexDocId);
+  const contents = new Map<string, string>();
+  for (const file of files) {
+    const content = getFileContent(file.path);
+    if (content !== null) contents.set(file.path, content);
+  }
+  return { files, contents };
+}
+
 /** Whether auth is configured (build-time env var). */
 const AUTH_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -37,7 +54,7 @@ export interface PendingShareData {
 }
 
 function App() {
-  const { auth, isLoading: authLoading, error: authError, handleCredentialResponse } = useAuth();
+  const { auth, error: authError, handleCredentialResponse } = useAuth();
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -96,25 +113,15 @@ function App() {
           // Different project - need to load it
           const targetProject = await projectStorage.getProject(route.projectId);
           if (targetProject) {
-            // Connect to the project
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const loadedFiles = await connect(targetProject.syncServer, targetProject.indexDocId);
+              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId);
               setProject(targetProject);
               setFiles(loadedFiles);
-
-              const contents = new Map<string, string>();
-              for (const file of loadedFiles) {
-                const content = getFileContent(file.path);
-                if (content !== null) {
-                  contents.set(file.path, content);
-                }
-              }
               setFileContents(contents);
             } catch (err) {
               setConnectionError(err instanceof Error ? err.message : String(err));
-              // Navigate back to project selector on error
               navigateToProjectSelector({ replace: true });
             } finally {
               setIsConnecting(false);
@@ -154,24 +161,14 @@ function App() {
         const existingProject = await projectStorage.getProjectByIndexDocId(normalizedIndexDocId);
 
         if (existingProject) {
-          // Project exists locally - connect to it
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const loadedFiles = await connect(existingProject.syncServer, existingProject.indexDocId);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId);
             setProject(existingProject);
             setFiles(loadedFiles);
-
-            const contents = new Map<string, string>();
-            for (const file of loadedFiles) {
-              const content = getFileContent(file.path);
-              if (content !== null) {
-                contents.set(file.path, content);
-              }
-            }
             setFileContents(contents);
 
-            // Navigate to the project (and optionally file) using local ID
             if (shareRoute.filePath) {
               navigateToFile(existingProject.id, shareRoute.filePath, { replace: true });
             } else {
@@ -200,21 +197,12 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const loadedFiles = await connect(targetProject.syncServer, targetProject.indexDocId);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId);
             setProject(targetProject);
             setFiles(loadedFiles);
-
-            const contents = new Map<string, string>();
-            for (const file of loadedFiles) {
-              const content = getFileContent(file.path);
-              if (content !== null) {
-                contents.set(file.path, content);
-              }
-            }
             setFileContents(contents);
           } catch (err) {
             setConnectionError(err instanceof Error ? err.message : String(err));
-            // Navigate to project selector on error
             navigateToProjectSelector({ replace: true });
           } finally {
             setIsConnecting(false);
@@ -289,21 +277,11 @@ function App() {
     setConnectionError(null);
 
     try {
-      const loadedFiles = await connect(selectedProject.syncServer, selectedProject.indexDocId);
+      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId);
       setProject(selectedProject);
       setFiles(loadedFiles);
-
-      // Initialize file contents from automerge
-      const contents = new Map<string, string>();
-      for (const file of loadedFiles) {
-        const content = getFileContent(file.path);
-        if (content !== null) {
-          contents.set(file.path, content);
-        }
-      }
       setFileContents(contents);
 
-      // Update URL to reflect the selected project (and optionally a specific file)
       if (filePathOverride) {
         navigateToFile(selectedProject.id, filePathOverride, { replace: true });
       } else {
@@ -399,15 +377,9 @@ function App() {
         <div className="login-card">
           <img src="/quarto-icon.svg" alt="Quarto" className="login-logo" />
           <h2>Quarto Hub</h2>
-          {authLoading ? (
-            <p className="login-loading">Loading...</p>
-          ) : (
-            <>
-              <p className="login-subtitle">Sign in with Google to continue</p>
-              <LoginButton onCredential={handleCredentialResponse} />
-              {authError && <p className="login-error">{authError}</p>}
-            </>
-          )}
+          <p className="login-subtitle">Sign in with Google to continue</p>
+          <LoginButton onCredential={handleCredentialResponse} />
+          {authError && <p className="login-error">{authError}</p>}
         </div>
       </div>
     );

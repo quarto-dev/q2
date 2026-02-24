@@ -21,6 +21,14 @@ import {
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
 import { getIdToken } from './authService';
 
+/** Append the stored ID token to a URL as a query parameter (if available). */
+function appendAuthToken(url: string): string {
+  const token = getIdToken();
+  if (!token) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}id_token=${encodeURIComponent(token)}`;
+}
+
 // Re-export types for use in other components
 export type { Patch, FileEntry, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
 
@@ -109,13 +117,7 @@ export async function connect(syncServerUrl: string, indexDocId: string): Promis
   await initWasm();
   vfsClear();
 
-  // Append ID token to WebSocket URL if available
-  const token = getIdToken();
-  const url = token
-    ? `${syncServerUrl}${syncServerUrl.includes('?') ? '&' : '?'}id_token=${encodeURIComponent(token)}`
-    : syncServerUrl;
-
-  return ensureClient().connect(url, indexDocId);
+  return ensureClient().connect(appendAuthToken(syncServerUrl), indexDocId);
 }
 
 /**
@@ -207,13 +209,10 @@ export async function createNewProject(options: CreateProjectOptions): Promise<C
   await initWasm();
   vfsClear();
 
-  // Append ID token to WebSocket URL if available (same as connect())
-  const token = getIdToken();
-  const syncServer = token
-    ? `${options.syncServer}${options.syncServer.includes('?') ? '&' : '?'}id_token=${encodeURIComponent(token)}`
-    : options.syncServer;
-
-  return ensureClient().createNewProject({ ...options, syncServer });
+  return ensureClient().createNewProject({
+    ...options,
+    syncServer: appendAuthToken(options.syncServer),
+  });
 }
 
 /**
