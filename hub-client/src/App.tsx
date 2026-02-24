@@ -5,6 +5,7 @@ import Editor from './components/Editor';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { LoginButton } from './components/auth/LoginButton';
+import './components/auth/LoginScreen.css';
 import {
   connect,
   disconnect,
@@ -392,16 +393,22 @@ function App() {
   }, []);
 
   // Auth gate: when auth is enabled, require login before showing the app.
-  if (AUTH_ENABLED && !authLoading && !auth) {
+  if (AUTH_ENABLED && !auth) {
     return (
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', height: '100vh', gap: '16px',
-      }}>
-        <h2>Quarto Hub</h2>
-        <p>Sign in with Google to continue</p>
-        <LoginButton onCredential={handleCredentialResponse} />
-        {authError && <p style={{ color: 'var(--error-color, #d32f2f)' }}>{authError}</p>}
+      <div className="login-screen">
+        <div className="login-card">
+          <img src="/quarto-icon.svg" alt="Quarto" className="login-logo" />
+          <h2>Quarto Hub</h2>
+          {authLoading ? (
+            <p className="login-loading">Loading...</p>
+          ) : (
+            <>
+              <p className="login-subtitle">Sign in with Google to continue</p>
+              <LoginButton onCredential={handleCredentialResponse} />
+              {authError && <p className="login-error">{authError}</p>}
+            </>
+          )}
+        </div>
       </div>
     );
   }
