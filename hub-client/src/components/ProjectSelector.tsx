@@ -26,11 +26,11 @@ interface Props {
   onClearPendingShare?: () => void;
 }
 
-// Curated color palette for user selection
+// Curated color palette for user selection (10 colors, single row)
 const COLOR_PALETTE = [
-  '#E91E63', '#9C27B0', '#673AB7', '#3F51B5',
-  '#2196F3', '#00BCD4', '#009688', '#4CAF50',
-  '#8BC34A', '#FF9800', '#FF5722', '#795548',
+  '#E91E63', '#9C27B0', '#3F51B5', '#2196F3',
+  '#00BCD4', '#009688', '#4CAF50', '#FF9800',
+  '#FF5722', '#795548',
 ];
 
 export default function ProjectSelector({
@@ -65,6 +65,23 @@ export default function ProjectSelector({
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
+
+  // Theme state
+  const [lightTheme, setLightTheme] = useState(false);
+
+  // Identity section collapsed state (persisted to localStorage)
+  const [identityCollapsed, setIdentityCollapsed] = useState(() => {
+    const saved = localStorage.getItem('qh-identity-collapsed');
+    return saved === 'true';
+  });
+
+  const toggleIdentityCollapsed = () => {
+    setIdentityCollapsed(prev => {
+      const newValue = !prev;
+      localStorage.setItem('qh-identity-collapsed', String(newValue));
+      return newValue;
+    });
+  };
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -336,9 +353,22 @@ export default function ProjectSelector({
   }
 
   return (
-    <div className="project-selector">
+    <div className={`project-selector ${lightTheme ? 'light-theme' : ''}`}>
       <div className="modal">
-        <h1>Select a Project</h1>
+        <div className="modal-header">
+          <img src="/quarto-icon.svg" alt="Quarto" className="logo" />
+          <div className="header-text">
+            <h1>QuartoHub</h1>
+            <p className="tagline">Collaborative document editing</p>
+          </div>
+          <button
+            className="theme-toggle"
+            onClick={() => setLightTheme(!lightTheme)}
+            title={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
+          >
+            {lightTheme ? '🌙' : '☀️'}
+          </button>
+        </div>
 
         {connectionError && <div className="error">{connectionError}</div>}
         {formError && <div className="error">{formError}</div>}
@@ -385,9 +415,11 @@ export default function ProjectSelector({
               className="action-btn create-btn"
               onClick={() => { setShowCreateForm(true); setShowConnectForm(false); }}
             >
-              <span className="action-btn-icon">+</span>
               <span className="action-btn-text">
-                <span className="action-btn-title">Create New Project</span>
+                <span className="action-btn-title">
+                  <span className="action-btn-icon">+</span>
+                  Create New Project
+                </span>
                 <span className="action-btn-hint">Start a new Quarto project</span>
               </span>
             </button>
@@ -395,10 +427,12 @@ export default function ProjectSelector({
               className="action-btn connect-btn"
               onClick={() => { setShowConnectForm(true); setShowCreateForm(false); }}
             >
-              <span className="action-btn-icon">↗</span>
               <span className="action-btn-text">
-                <span className="action-btn-title">Connect to Project</span>
-                <span className="action-btn-hint">Join an existing Automerge project</span>
+                <span className="action-btn-title">
+                  <span className="action-btn-icon">↗</span>
+                  Connect to Project
+                </span>
+                <span className="action-btn-hint">Join an existing QH project</span>
               </span>
             </button>
           </div>
@@ -510,8 +544,28 @@ export default function ProjectSelector({
         )}
 
         {userSettings && (
-          <div className="user-identity">
-            <h2>Your Identity</h2>
+          <div className={`user-identity ${identityCollapsed ? 'collapsed' : ''}`}>
+            <div className="section-header-row">
+              <h2>Your Identity</h2>
+              {identityCollapsed && (
+                <span
+                  className="collapsed-name"
+                  style={{ color: userSettings.userColor }}
+                >
+                  {userSettings.userName}
+                </span>
+              )}
+              <button
+                className="collapse-toggle"
+                onClick={toggleIdentityCollapsed}
+                title={identityCollapsed ? 'Expand' : 'Collapse'}
+              >
+                {identityCollapsed ? '▸' : '▾'}
+              </button>
+            </div>
+
+            {!identityCollapsed && (
+              <>
             <p className="identity-hint">This is how others see you during collaboration</p>
 
             <div className="identity-preview">
@@ -567,6 +621,8 @@ export default function ProjectSelector({
                 ))}
               </div>
             </div>
+              </>
+            )}
           </div>
         )}
 
