@@ -5,7 +5,6 @@ import Editor from './components/Editor';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { LoginButton } from './components/auth/LoginButton';
-import './components/auth/LoginScreen.css';
 import {
   connect,
   disconnect,
@@ -373,13 +372,15 @@ function App() {
   // Auth gate: when auth is enabled, require login before showing the app.
   if (AUTH_ENABLED && !auth) {
     return (
-      <div className="login-screen">
-        <div className="login-card">
-          <img src="/quarto-icon.svg" alt="Quarto" className="login-logo" />
-          <h2>Quarto Hub</h2>
-          <p className="login-subtitle">Sign in with Google to continue</p>
+      <div className="project-selector" style={{ alignItems: 'center' }}>
+        <div className="modal" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 32px' }}>
+          <img src="/quarto-icon.svg" alt="Quarto" style={{ width: '48px', height: '48px', marginBottom: '8px' }} />
+          <h1 style={{ margin: 0 }}>Quarto Hub</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>
+            Sign in with Google to continue
+          </p>
           <LoginButton onCredential={handleCredentialResponse} />
-          {authError && <p className="login-error">{authError}</p>}
+          {authError && <div className="error" style={{ marginTop: '16px', marginBottom: 0, width: '100%' }}>{authError}</div>}
         </div>
       </div>
     );
