@@ -6,7 +6,7 @@ use clap::Parser;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use quarto_hub::{StorageManager, context::HubConfig, server};
+use quarto_hub::{StorageManager, auth, context::HubConfig, server};
 
 #[derive(Parser, Debug)]
 #[command(name = "hub")]
@@ -45,6 +45,29 @@ struct Args {
     /// Default: 500ms.
     #[arg(long, default_value = "500")]
     watch_debounce: u64,
+
+    /// Google OAuth2 client ID. Presence enables auth.
+    /// Requires --behind-tls-proxy (or --allow-insecure-auth for local dev).
+    #[arg(long)]
+    google_client_id: Option<String>,
+
+    /// Acknowledge that a TLS-terminating reverse proxy (nginx, Caddy,
+    /// cloud LB) sits in front of the hub. Required when auth is enabled.
+    #[arg(long)]
+    behind_tls_proxy: bool,
+
+    /// Allow auth without TLS (local development only). Tokens will
+    /// transit in plaintext — never use this in production.
+    #[arg(long)]
+    allow_insecure_auth: bool,
+
+    /// Allowed email addresses (comma-separated).
+    #[arg(long, value_delimiter = ',')]
+    allowed_emails: Option<Vec<String>>,
+
+    /// Allowed email domains (comma-separated).
+    #[arg(long, value_delimiter = ',')]
+    allowed_domains: Option<Vec<String>>,
 }
 
 #[tokio::main]
@@ -88,6 +111,22 @@ async fn main() -> anyhow::Result<()> {
         stored_peers
     };
 
+    // Validate TLS configuration when auth is enabled
+    auth::validate_tls_config(
+        args.google_client_id.as_deref(),
+        args.behind_tls_proxy,
+        args.allow_insecure_auth,
+    );
+
+    // Build auth config if Google client ID is provided
+    let auth_config = args.google_client_id.map(|client_id| {
+        auth::AuthConfig {
+            client_id,
+            allowed_emails: args.allowed_emails,
+            allowed_domains: args.allowed_domains,
+        }
+    });
+
     // Configure and run server
     let sync_interval_secs = if args.sync_interval == 0 {
         None
@@ -102,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
         sync_interval_secs,
         watch_enabled: !args.no_watch,
         watch_debounce_ms: args.watch_debounce,
+        auth_config,
     };
 
     server::run_server(storage, config).await?;

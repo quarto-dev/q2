@@ -6,6 +6,7 @@
 //! - WebSocket sync protocol for real-time collaboration
 //! - REST API for document operations
 
+pub mod auth;
 pub mod context;
 pub mod discovery;
 pub mod error;

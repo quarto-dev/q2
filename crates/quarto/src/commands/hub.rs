@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use quarto_hub::{StorageManager, context::HubConfig, server};
+use quarto_hub::{StorageManager, auth, context::HubConfig, server};
 use tracing::info;
 
 /// Arguments for the hub command.
@@ -18,6 +18,11 @@ pub struct HubArgs {
     pub sync_interval: u64,
     pub no_watch: bool,
     pub watch_debounce: u64,
+    pub google_client_id: Option<String>,
+    pub behind_tls_proxy: bool,
+    pub allow_insecure_auth: bool,
+    pub allowed_emails: Option<Vec<String>>,
+    pub allowed_domains: Option<Vec<String>>,
 }
 
 /// Execute the hub command.
@@ -66,6 +71,22 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         stored_peers
     };
 
+    // Validate TLS configuration when auth is enabled
+    auth::validate_tls_config(
+        args.google_client_id.as_deref(),
+        args.behind_tls_proxy,
+        args.allow_insecure_auth,
+    );
+
+    // Build auth config if Google client ID is provided
+    let auth_config = args.google_client_id.map(|client_id| {
+        auth::AuthConfig {
+            client_id,
+            allowed_emails: args.allowed_emails,
+            allowed_domains: args.allowed_domains,
+        }
+    });
+
     // Configure and run server
     let sync_interval_secs = if args.sync_interval == 0 {
         None
@@ -80,6 +101,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         sync_interval_secs,
         watch_enabled: !args.no_watch,
         watch_debounce_ms: args.watch_debounce,
+        auth_config,
     };
 
     server::run_server(storage, config).await?;

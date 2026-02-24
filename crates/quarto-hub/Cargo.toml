@@ -24,6 +24,12 @@ tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors"] }
+http = "1"
+
+# OAuth2 / JWT authentication
+axum-jwt-auth = "0.6"
+jsonwebtoken = "10"
+tokio-util = { workspace = true }
 
 # Automerge (via samod for JS compatibility)
 automerge = "0.7"

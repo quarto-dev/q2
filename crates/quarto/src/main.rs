@@ -6,6 +6,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod auth;
 mod commands;
 
 #[derive(Parser)]
@@ -319,6 +320,12 @@ enum Commands {
     /// Start the Quarto Language Server Protocol server
     Lsp,
 
+    /// Manage authentication for hub access
+    Auth {
+        #[command(subcommand)]
+        action: AuthAction,
+    },
+
     /// Start collaborative hub server for real-time editing
     Hub {
         /// Project root directory (defaults to current directory)
@@ -352,7 +359,40 @@ enum Commands {
         /// Debounce duration for filesystem events in milliseconds.
         #[arg(long, default_value = "500")]
         watch_debounce: u64,
+
+        /// Google OAuth2 client ID. Presence enables auth.
+        /// Requires --behind-tls-proxy (or --allow-insecure-auth for local dev).
+        #[arg(long)]
+        google_client_id: Option<String>,
+
+        /// Acknowledge that a TLS-terminating reverse proxy (nginx, Caddy,
+        /// cloud LB) sits in front of the hub. Required when auth is enabled.
+        #[arg(long)]
+        behind_tls_proxy: bool,
+
+        /// Allow auth without TLS (local development only). Tokens will
+        /// transit in plaintext — never use this in production.
+        #[arg(long)]
+        allow_insecure_auth: bool,
+
+        /// Allowed email addresses (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        allowed_emails: Option<Vec<String>>,
+
+        /// Allowed email domains (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        allowed_domains: Option<Vec<String>>,
     },
+}
+
+#[derive(Subcommand)]
+enum AuthAction {
+    /// Authenticate with Google for hub access.
+    Login,
+    /// Clear cached authentication tokens.
+    Logout,
+    /// Show authentication status.
+    Status,
 }
 
 fn main() -> Result<()> {
@@ -403,6 +443,11 @@ fn main() -> Result<()> {
         Commands::Check { .. } => commands::check::execute(),
         Commands::Call { function, args } => commands::call::execute(function, args),
         Commands::Lsp => commands::lsp::execute(),
+        Commands::Auth { action } => match action {
+            AuthAction::Login => commands::auth_cmd::login(),
+            AuthAction::Logout => commands::auth_cmd::logout(),
+            AuthAction::Status => commands::auth_cmd::status(),
+        },
         Commands::Hub {
             project,
             port,
@@ -411,6 +456,11 @@ fn main() -> Result<()> {
             sync_interval,
             no_watch,
             watch_debounce,
+            google_client_id,
+            behind_tls_proxy,
+            allow_insecure_auth,
+            allowed_emails,
+            allowed_domains,
         } => commands::hub::execute(commands::hub::HubArgs {
             project,
             port,
@@ -419,6 +469,11 @@ fn main() -> Result<()> {
             sync_interval,
             no_watch,
             watch_debounce,
+            google_client_id,
+            behind_tls_proxy,
+            allow_insecure_auth,
+            allowed_emails,
+            allowed_domains,
         }),
     }
 }

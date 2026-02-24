@@ -4,6 +4,7 @@
 //! quarto-core for actual implementation.
 
 pub mod add;
+pub mod auth_cmd;
 pub mod call;
 pub mod check;
 pub mod convert;

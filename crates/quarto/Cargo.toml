@@ -30,6 +30,10 @@ quarto-sass.workspace = true
 quarto-test.workspace = true
 serde_yaml.workspace = true
 
+# OAuth2 (CLI authentication for hub)
+yup-oauth2 = "11"
+dirs = "6"
+
 [build-dependencies]
 
 [dev-dependencies]

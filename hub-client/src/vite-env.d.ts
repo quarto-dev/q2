@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
   /** Default Automerge sync server URL (set at build time) */
   readonly VITE_DEFAULT_SYNC_SERVER?: string
+  /** Google OAuth2 client ID. When set, enables authentication. */
+  readonly VITE_GOOGLE_CLIENT_ID?: string
 }
 
 interface ImportMeta {

@@ -12,6 +12,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "dependencies": {
+    "@react-oauth/google": "^0.13.4",
     "@types/katex": "^0.16.8",
     "@types/morphdom": "^2.3.0",
     "html2canvas": "^1.4.1",

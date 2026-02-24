@@ -3,14 +3,17 @@
 //! Contains the automerge repo and storage manager.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use automerge::{Automerge, ObjType, ROOT, transaction::Transactable};
+use axum::http::StatusCode;
+use axum_jwt_auth::JwtDecoder;
 use samod::Repo;
 use samod::storage::TokioFilesystemStorage;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
+use crate::auth::{self, AuthConfig, AuthState, GoogleClaims};
 use crate::discovery::ProjectFiles;
 use crate::error::Result;
 use crate::index::{IndexDocument, load_or_create_index};
@@ -45,6 +48,9 @@ pub struct HubConfig {
     /// Debounce duration for filesystem events in milliseconds.
     /// Default: 500ms.
     pub watch_debounce_ms: u64,
+
+    /// OAuth2 auth configuration. None = auth disabled.
+    pub auth_config: Option<AuthConfig>,
 }
 
 impl Default for HubConfig {
@@ -56,6 +62,7 @@ impl Default for HubConfig {
             sync_interval_secs: Some(30),
             watch_enabled: true,
             watch_debounce_ms: 500,
+            auth_config: None,
         }
     }
 }
@@ -84,6 +91,14 @@ pub struct HubContext {
 
     /// Sync state for filesystem synchronization (protected by Mutex for interior mutability)
     sync_state: Mutex<SyncState>,
+
+    /// OAuth2 auth configuration (immutable after startup). None = auth disabled.
+    auth_config: Option<AuthConfig>,
+
+    /// Auth state: JWT decoder + JWKS refresh handle. Initialized once
+    /// at server startup when auth is configured. Using OnceLock because
+    /// it's set after construction but before the server accepts requests.
+    auth_state: OnceLock<AuthState>,
 }
 
 impl HubContext {
@@ -93,7 +108,7 @@ impl HubContext {
     /// 1. Initializes the samod Repo with filesystem storage at `.quarto/hub/automerge/`
     /// 2. Loads or creates the index document
     /// 3. Reconciles discovered .qmd files with the index
-    pub async fn new(mut storage: StorageManager, config: HubConfig) -> Result<Self> {
+    pub async fn new(mut storage: StorageManager, mut config: HubConfig) -> Result<Self> {
         // Discover project files
         let project_files = ProjectFiles::discover(storage.project_root());
 
@@ -152,6 +167,10 @@ impl HubContext {
             "Initial filesystem sync complete"
         );
 
+        // Extract auth_config from HubConfig — it's immutable after startup
+        // and stored separately to avoid holding the RwLock during auth checks.
+        let auth_config = config.auth_config.take();
+
         Ok(Self {
             storage,
             config: RwLock::new(config),
@@ -159,6 +178,8 @@ impl HubContext {
             repo,
             index,
             sync_state: Mutex::new(sync_state_guard),
+            auth_config,
+            auth_state: OnceLock::new(),
         })
     }
 
@@ -218,6 +239,47 @@ impl HubContext {
             &mut sync_state,
         )
         .await
+    }
+
+    /// Get the auth configuration, if auth is enabled.
+    pub fn auth_config(&self) -> Option<&AuthConfig> {
+        self.auth_config.as_ref()
+    }
+
+    /// Store the auth state (decoder + refresh task handle).
+    /// Called once during server startup in `build_router`.
+    pub fn set_auth_state(&self, state: AuthState) {
+        self.auth_state
+            .set(state)
+            .expect("auth_state already initialized");
+    }
+
+    /// Authenticate a request. If auth is disabled, always succeeds.
+    /// If auth is enabled, token must be present and valid.
+    /// Used by both REST and WebSocket handlers.
+    pub async fn authenticate(&self, token: Option<&str>) -> std::result::Result<(), StatusCode> {
+        let Some(auth_config) = self.auth_config() else {
+            return Ok(()); // Auth disabled — allow all.
+        };
+
+        let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
+        let auth_state = self
+            .auth_state
+            .get()
+            .expect("auth_state is always present when auth is configured");
+
+        // JwtDecoder<T>::decode returns TokenData<T>. The T parameter
+        // lives on the trait, so we use a type annotation (not turbofish)
+        // to select GoogleClaims.
+        let token_data: jsonwebtoken::TokenData<GoogleClaims> =
+            auth_state.decoder.decode(token).await.map_err(|err| {
+                tracing::warn!(%err, "Auth failed");
+                StatusCode::UNAUTHORIZED
+            })?;
+
+        auth::check_allowlists(&token_data.claims, auth_config)?;
+        tracing::info!(email = %token_data.claims.email, "Authenticated");
+        Ok(())
     }
 }
 

@@ -4,6 +4,7 @@ import ProjectSelector from './components/ProjectSelector';
 import Editor from './components/Editor';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
+import { LoginButton } from './components/auth/LoginButton';
 import {
   connect,
   disconnect,
@@ -15,8 +16,12 @@ import {
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
 import { useRouting } from './hooks/useRouting';
+import { useAuth } from './hooks/useAuth';
 import type { Route, ShareRoute } from './utils/routing';
 import './App.css';
+
+/** Whether auth is configured (build-time env var). */
+const AUTH_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 /**
  * Data extracted from a shareable link, used to pre-fill the connect dialog.
@@ -31,6 +36,8 @@ export interface PendingShareData {
 }
 
 function App() {
+  const { auth, isLoading: authLoading, error: authError, handleCredentialResponse } = useAuth();
+
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -383,6 +390,21 @@ function App() {
   const handleClearPendingShare = useCallback(() => {
     setPendingShareData(null);
   }, []);
+
+  // Auth gate: when auth is enabled, require login before showing the app.
+  if (AUTH_ENABLED && !authLoading && !auth) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', height: '100vh', gap: '16px',
+      }}>
+        <h2>Quarto Hub</h2>
+        <p>Sign in with Google to continue</p>
+        <LoginButton onCredential={handleCredentialResponse} />
+        {authError && <p style={{ color: 'var(--error-color, #d32f2f)' }}>{authError}</p>}
+      </div>
+    );
+  }
 
   return (
     <>

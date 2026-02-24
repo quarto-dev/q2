@@ -7,10 +7,10 @@ use std::time::Duration;
 use axum::{
     Json, Router,
     extract::{
-        Path, State,
+        Path, Query, State,
         ws::{WebSocket, WebSocketUpgrade},
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::get,
 };
@@ -21,6 +21,7 @@ use tokio::sync::watch;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info};
 
+use crate::auth;
 use crate::context::{HubConfig, HubContext, SharedContext};
 use crate::error::Result;
 use crate::storage::StorageManager;
@@ -77,6 +78,48 @@ struct UpdateDocumentRequest {
     value: String,
 }
 
+/// WebSocket query parameters.
+#[derive(Deserialize)]
+struct WsParams {
+    id_token: Option<String>,
+}
+
+/// JSON error body for auth failures, so clients can distinguish
+/// 401 auth errors from other HTTP errors programmatically.
+fn unauthorized() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({"error": "unauthorized"})),
+    )
+}
+
+/// Extract Bearer token from Authorization header. Returns None if
+/// no header is present or the header is not a valid Bearer token.
+/// Never fails — the authenticate() method decides whether a missing
+/// token is an error based on whether auth is enabled.
+fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get("authorization")?
+        .to_str()
+        .ok()?
+        .strip_prefix("Bearer ")
+}
+
+/// Log request method and path only — never the query string, which
+/// may contain id_token for WebSocket upgrades.
+#[derive(Clone)]
+struct RedactedMakeSpan;
+
+impl<B> tower_http::trace::MakeSpan<B> for RedactedMakeSpan {
+    fn make_span(&mut self, request: &http::Request<B>) -> tracing::Span {
+        tracing::info_span!(
+            "request",
+            method = %request.method(),
+            path = request.uri().path(),
+        )
+    }
+}
+
 /// Health check endpoint
 async fn health(State(ctx): State<SharedContext>) -> impl IntoResponse {
     let response = HealthResponse {
@@ -89,7 +132,13 @@ async fn health(State(ctx): State<SharedContext>) -> impl IntoResponse {
 }
 
 /// List discovered files (from filesystem)
-async fn list_files(State(ctx): State<SharedContext>) -> impl IntoResponse {
+async fn list_files(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    ctx.authenticate(bearer_token(&headers))
+        .await
+        .map_err(|_| unauthorized())?;
     let response = FilesResponse {
         qmd_files: ctx
             .project_files()
@@ -98,11 +147,17 @@ async fn list_files(State(ctx): State<SharedContext>) -> impl IntoResponse {
             .map(|p| p.display().to_string())
             .collect(),
     };
-    Json(response)
+    Ok(Json(response))
 }
 
 /// List all documents from the index
-async fn list_documents(State(ctx): State<SharedContext>) -> impl IntoResponse {
+async fn list_documents(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    ctx.authenticate(bearer_token(&headers))
+        .await
+        .map_err(|_| unauthorized())?;
     let files = ctx.index().get_all_files();
 
     let documents: Vec<DocumentEntry> = files
@@ -110,14 +165,25 @@ async fn list_documents(State(ctx): State<SharedContext>) -> impl IntoResponse {
         .map(|(path, document_id)| DocumentEntry { path, document_id })
         .collect();
 
-    Json(DocumentsResponse { documents })
+    Ok(Json(DocumentsResponse { documents }))
 }
 
 /// Get a single document by ID
 async fn get_document(
+    headers: HeaderMap,
     State(ctx): State<SharedContext>,
     Path(doc_id_str): Path<String>,
 ) -> impl IntoResponse {
+    if let Err(status) = ctx.authenticate(bearer_token(&headers)).await {
+        return (
+            status,
+            Json(ErrorResponse {
+                error: "unauthorized".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
     // Validate the document ID format
     let doc_id = match DocumentId::from_str(&doc_id_str) {
         Ok(id) => id,
@@ -171,11 +237,22 @@ async fn get_document(
 /// This is a simple endpoint that puts a key-value pair into the document.
 /// In a real implementation, the document schema would be more structured.
 async fn update_document(
+    headers: HeaderMap,
     State(ctx): State<SharedContext>,
     Path(doc_id_str): Path<String>,
     Json(request): Json<UpdateDocumentRequest>,
 ) -> impl IntoResponse {
     use automerge::{ROOT, transaction::Transactable};
+
+    if let Err(status) = ctx.authenticate(bearer_token(&headers)).await {
+        return (
+            status,
+            Json(ErrorResponse {
+                error: "unauthorized".to_string(),
+            }),
+        )
+            .into_response();
+    }
 
     // Validate the document ID format
     let doc_id = match DocumentId::from_str(&doc_id_str) {
@@ -244,8 +321,16 @@ async fn not_found() -> impl IntoResponse {
 /// WebSocket upgrade handler for automerge sync.
 ///
 /// Clients connect here to sync documents in real-time.
-async fn ws_handler(ws: WebSocketUpgrade, State(ctx): State<SharedContext>) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_websocket(socket, ctx))
+/// Auth token is passed via `?id_token=<token>` query parameter
+/// (browsers can't set custom headers on WebSocket upgrade).
+async fn ws_handler(
+    State(ctx): State<SharedContext>,
+    Query(params): Query<WsParams>,
+    ws: WebSocketUpgrade,
+) -> std::result::Result<impl IntoResponse, StatusCode> {
+    ctx.authenticate(params.id_token.as_deref()).await?;
+
+    Ok(ws.on_upgrade(|socket| handle_websocket(socket, ctx)))
 }
 
 /// Handle an upgraded WebSocket connection.
@@ -265,8 +350,16 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext) {
     }
 }
 
-/// Build the axum router
-fn build_router(ctx: SharedContext) -> Router {
+/// Build the axum router. Auth state (decoder + JWKS refresh handle) is
+/// initialized here and owned by HubContext for the server's lifetime.
+async fn build_router(ctx: SharedContext) -> Router {
+    if let Some(config) = ctx.auth_config() {
+        let auth_state = auth::build_auth_state(&config.client_id)
+            .await
+            .expect("Failed to initialize Google JWKS decoder");
+        ctx.set_auth_state(auth_state);
+    }
+
     Router::new()
         .route("/health", get(health))
         .route("/api/files", get(list_files))
@@ -281,7 +374,7 @@ fn build_router(ctx: SharedContext) -> Router {
         .route("/", get(ws_handler))
         .route("/ws", get(ws_handler))
         .fallback(not_found)
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan))
         .with_state(ctx)
 }
 
@@ -306,7 +399,7 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
     let ctx_for_watch = ctx.clone();
     let ctx_for_shutdown = ctx.clone();
 
-    let router = build_router(ctx);
+    let router = build_router(ctx).await;
 
     let listener = TcpListener::bind(&addr).await?;
     info!(%addr, "Hub server listening");
