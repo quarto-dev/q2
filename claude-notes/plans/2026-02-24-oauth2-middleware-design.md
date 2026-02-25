@@ -2,8 +2,7 @@
 
 *2026-02-24*
 
-Google OAuth2 authentication for quarto-hub, enforced at the middleware layer.
-The sync protocol (samod/automerge) is completely unaware of authentication.
+Google OAuth2 authentication for quarto-hub, enforced at the middleware layer. The sync protocol (samod/automerge) is completely unaware of authentication.
 
 ## Design Principles
 
@@ -891,30 +890,45 @@ q2 auth logout   # Clears cached tokens
 
 ---
 
-## Implementation Checklist
+## Implementation Progress
 
 ### Phase 1: Server Auth Module (Rust — `crates/quarto-hub`)
 
-- [ ] Add `axum-jwt-auth` and `jsonwebtoken` dependencies
-- [ ] Create `src/auth.rs`: `AuthConfig`, `GoogleClaims`, `AuthState`, `check_allowlists()`, `build_auth_state()`
-- [ ] Add `auth_config: Option<AuthConfig>` to `HubConfig`, `OnceLock<AuthState>` to `HubContext`
-- [ ] Add `HubContext::authenticate()` helper (JWT decode + allowlist check)
-- [ ] REST handlers: extract Bearer token from header, call `ctx.authenticate()`
-- [ ] WebSocket handler: extract `id_token` from query param, call `ctx.authenticate()`
-- [ ] Integration test: valid token → sync works, invalid/missing token → 401
+- [x] Add `axum-jwt-auth` and `jsonwebtoken` dependencies to Cargo.toml
+- [x] Create `src/auth.rs`: `AuthConfig`, `GoogleClaims`, `AuthState`, `check_allowlists()`, `build_auth_state()`
+- [x] Add `auth_config: Option<AuthConfig>` to `HubConfig`, `OnceLock<AuthState>` to `HubContext`
+- [x] Add `HubContext::authenticate()` and `HubContext::auth_config()` methods
+- [x] Add `HubContext::set_auth_state()` method
+- [x] Update `server.rs`: `build_router` becomes async, initializes auth state
+- [x] REST handlers: extract Bearer token from header, call `ctx.authenticate()`
+- [x] WebSocket handler: extract `id_token` from query param, call `ctx.authenticate()`
+- [x] Add `RedactedMakeSpan` to prevent token logging
+- [x] Add `validate_tls_config()` check at startup
+- [x] Add `unauthorized()` JSON error helper
+- [x] Update `run_server()` to accept auth config and call validation
+- [x] Add unit tests for `check_allowlists()` (9 tests)
 
-### Phase 2: Browser Client (TypeScript — `hub-client`)
+### Phase 2: CLI Flags (Rust — `crates/quarto` + `crates/quarto-hub`)
 
-- [ ] Install `@react-oauth/google`
-- [ ] Auth service (`storeAuth` decodes JWT payload inline, localStorage storage)
-- [ ] `useAuth` hook (returns `AuthState | null`, includes token expiry monitoring)
-- [ ] Login UI using `GoogleLogin` component (returns ID token directly)
-- [ ] Append ID token to WebSocket URL in `automergeSync.connect()`
+- [x] Add `--google-client-id`, `--behind-tls-proxy`, `--allow-insecure-auth` flags to hub binary
+- [x] Add `--allowed-emails`, `--allowed-domains` flags to hub binary
+- [x] Add same flags to `quarto hub` subcommand in CLI
+- [x] Wire flags through to `HubConfig` → `AuthConfig`
 
-### Phase 3: CLI Client (Rust — `crates/quarto`)
+### Phase 3: Browser Client (TypeScript — `hub-client`)
 
-- [ ] Add `yup-oauth2` dependency
-- [ ] CLI auth module (`get_id_token`, `clear_tokens`)
-- [ ] `quarto auth login/logout/status` subcommands
-- [ ] `--google-client-id`, `--allowed-emails`, `--allowed-domains` flags
-- [ ] Append ID token to WebSocket URL when connecting as client
+- [x] Install `@react-oauth/google`
+- [x] Add `VITE_GOOGLE_CLIENT_ID` env var type definition
+- [x] Create `src/services/authService.ts` (store/get/clear auth, JWT decode)
+- [x] Create `src/hooks/useAuth.ts` (auth state, expiry monitoring)
+- [x] Create `src/components/auth/LoginButton.tsx`
+- [x] Wrap app in `GoogleOAuthProvider` (conditional on env var)
+- [x] Add auth gate to `App.tsx`
+- [x] Append ID token to WebSocket URL in `automergeSync.ts` connect()
+
+### Phase 4: CLI Client Auth (Rust — `crates/quarto`)
+
+- [x] Add `yup-oauth2` and `dirs` dependencies
+- [x] Create `crates/quarto/src/auth.rs` (get_id_token, clear_tokens, status)
+- [x] Add `quarto auth login/logout/status` subcommands
+- [ ] Append ID token to WebSocket URL when connecting as client (deferred: no client connect command exists yet)
