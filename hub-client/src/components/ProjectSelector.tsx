@@ -24,6 +24,12 @@ interface Props {
   pendingShareData?: PendingShareData | null;
   /** Called when pending share data should be cleared (e.g., user cancels) */
   onClearPendingShare?: () => void;
+  /** Called when user signs out of Google. Only passed when auth is enabled. */
+  onSignOut?: () => void;
+  /** Authenticated user's email (for display). */
+  authEmail?: string;
+  /** Authenticated user's Google avatar URL. */
+  authPicture?: string | null;
 }
 
 // Curated color palette for user selection (10 colors, single row)
@@ -40,6 +46,9 @@ export default function ProjectSelector({
   onProjectCreated,
   pendingShareData,
   onClearPendingShare,
+  onSignOut,
+  authEmail,
+  authPicture,
 }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -360,13 +369,27 @@ export default function ProjectSelector({
             <h1>Quarto Hub</h1>
             <p className="tagline">Multiplayer editing for your Quarto projects</p>
           </div>
-          <button
-            className="theme-toggle"
-            onClick={() => setLightTheme(!lightTheme)}
-            title={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
-          >
-            {lightTheme ? '🌙' : '☀️'}
-          </button>
+          <div className="header-actions">
+            {onSignOut && (
+              <button
+                className="sign-out-btn"
+                onClick={onSignOut}
+                title={authEmail ? `Signed in as ${authEmail}` : 'Sign out'}
+              >
+                {authPicture && (
+                  <img src={authPicture} alt="" className="auth-avatar" referrerPolicy="no-referrer" />
+                )}
+                <span>Sign out</span>
+              </button>
+            )}
+            <button
+              className="theme-toggle"
+              onClick={() => setLightTheme(!lightTheme)}
+              title={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
+            >
+              {lightTheme ? '🌙' : '☀️'}
+            </button>
+          </div>
         </div>
 
         {connectionError && <div className="error">{connectionError}</div>}

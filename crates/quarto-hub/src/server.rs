@@ -7,12 +7,12 @@ use std::time::Duration;
 use axum::{
     Json, Router,
     extract::{
-        Path, Query, State,
+        Form, Path, Query, State,
         ws::{WebSocket, WebSocketUpgrade},
     },
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
-    routing::get,
+    response::{IntoResponse, Redirect},
+    routing::{get, post},
 };
 use samod::DocumentId;
 use serde::{Deserialize, Serialize};
@@ -313,6 +313,49 @@ async fn update_document(
     }
 }
 
+/// Google OAuth2 redirect callback form data.
+///
+/// When `GoogleLogin` uses `ux_mode="redirect"`, Google POSTs the credential
+/// JWT and a CSRF token to the `login_uri` after the user authenticates.
+#[derive(Deserialize)]
+struct AuthCallbackForm {
+    credential: String,
+    g_csrf_token: String,
+}
+
+/// Handle Google OAuth2 redirect callback.
+///
+/// Receives the credential JWT from Google's POST, validates the CSRF token,
+/// and redirects to the SPA with the credential as a URL search parameter.
+/// The hub-client's `useAuth` hook picks up the credential on mount.
+async fn auth_callback(
+    headers: HeaderMap,
+    Form(form): Form<AuthCallbackForm>,
+) -> impl IntoResponse {
+    // Validate CSRF: g_csrf_token cookie must match the form value.
+    // Google sets this cookie and includes the same value in the POST body.
+    let cookie_csrf = headers
+        .get("cookie")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cookies| {
+            cookies
+                .split(';')
+                .map(|c| c.trim())
+                .find(|c| c.starts_with("g_csrf_token="))
+                .map(|c| &c["g_csrf_token=".len()..])
+        });
+
+    if cookie_csrf != Some(form.g_csrf_token.as_str()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Redirect to the SPA root with the credential as a search parameter.
+    // In a reverse-proxy deployment, this relative redirect resolves to the
+    // proxy origin (where the SPA is served).
+    let redirect_url = format!("/?auth_credential={}", form.credential);
+    Redirect::to(&redirect_url).into_response()
+}
+
 /// 404 handler
 async fn not_found() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, "Not found")
@@ -368,6 +411,9 @@ async fn build_router(ctx: SharedContext) -> Router {
             "/api/documents/{id}",
             get(get_document).put(update_document),
         )
+        // Google OAuth2 redirect callback (production).
+        // In development, the Vite auth-callback plugin handles this instead.
+        .route("/auth/callback", post(auth_callback))
         // WebSocket endpoint for automerge sync
         // Root path "/" is the standard location used by sync.automerge.org
         // "/ws" is kept for backward compatibility

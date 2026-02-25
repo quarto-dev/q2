@@ -123,8 +123,46 @@
   line-height: 1;
 }
 
-.theme-toggle {
+.header-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sign-out-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 4px 12px 4px 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.sign-out-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--posit-blue);
+  background: var(--input-bg-alpha);
+}
+
+.auth-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+/* When there's no avatar, add left padding to balance the pill shape */
+.sign-out-btn:not(:has(.auth-avatar)) {
+  padding-left: 12px;
+}
+
+.theme-toggle {
   background: var(--input-bg-alpha);
   border: 1px solid var(--border-color);
   border-radius: 50%;

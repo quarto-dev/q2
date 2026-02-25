@@ -568,32 +568,34 @@ provider can be conditionally omitted or the login UI hidden.
 
 #### Login Component
 
-Google Identity Services' "Sign In With Google" button returns an ID token
-directly — no separate userinfo API call needed.
+Google Identity Services' "Sign In With Google" button in redirect mode
+(`ux_mode="redirect"`) keeps the login flow in the same browser window
+instead of opening a popup. The credential is returned via a server-side
+callback.
 
 ```tsx
 // hub-client/src/components/auth/LoginButton.tsx
 
 import { GoogleLogin } from '@react-oauth/google';
 
-export function LoginButton({
-  onCredential,
-}: {
-  onCredential: (credential: string) => void;
-}) {
+export function LoginButton() {
   return (
     <GoogleLogin
-      onSuccess={(response) => {
-        if (response.credential) onCredential(response.credential);
-      }}
+      ux_mode="redirect"
+      login_uri={window.location.origin + '/auth/callback'}
+      onSuccess={() => {}}
       onError={() => console.error('Google login failed')}
     />
   );
 }
 ```
 
-The component is now a pure UI element. The parent calls `useAuth()` and
-passes `handleCredentialResponse` as the `onCredential` prop.
+**Redirect flow:**
+1. User clicks button → browser navigates to Google (same tab)
+2. After auth → Google POSTs credential JWT to `/auth/callback`
+3. Server-side handler (Vite middleware in dev, hub server in production)
+   extracts credential, validates CSRF, redirects to `/?auth_credential=<jwt>`
+4. `useAuth()` picks up credential from URL search params on mount
 
 #### WebSocket URL Construction
 
