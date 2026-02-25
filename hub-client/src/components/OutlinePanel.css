@@ -30,6 +30,7 @@
 .outline-item {
   margin: 0;
   padding: 0;
+  cursor: pointer;
 }
 
 .outline-row {
@@ -59,8 +60,9 @@
 }
 
 /* Indent items without chevrons to align with those that have them */
-.outline-item:not(.has-children) > .outline-row {
-  padding-left: 28px; /* 12px base + 16px chevron width */
+.outline-item:not(.has-children)>.outline-row {
+  padding-left: 28px;
+  /* 12px base + 16px chevron width */
 }
 
 .outline-button {
@@ -92,32 +94,36 @@
   padding-left: 24px;
 }
 
-.outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
-  padding-left: 40px; /* 24px + 16px */
+.outline-list .outline-list .outline-item:not(.has-children)>.outline-row {
+  padding-left: 40px;
+  /* 24px + 16px */
 }
 
 .outline-list .outline-list .outline-list .outline-row {
   padding-left: 36px;
 }
 
-.outline-list .outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
-  padding-left: 52px; /* 36px + 16px */
+.outline-list .outline-list .outline-list .outline-item:not(.has-children)>.outline-row {
+  padding-left: 52px;
+  /* 36px + 16px */
 }
 
 .outline-list .outline-list .outline-list .outline-list .outline-row {
   padding-left: 48px;
 }
 
-.outline-list .outline-list .outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
-  padding-left: 64px; /* 48px + 16px */
+.outline-list .outline-list .outline-list .outline-list .outline-item:not(.has-children)>.outline-row {
+  padding-left: 64px;
+  /* 48px + 16px */
 }
 
 .outline-list .outline-list .outline-list .outline-list .outline-list .outline-row {
   padding-left: 60px;
 }
 
-.outline-list .outline-list .outline-list .outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
-  padding-left: 76px; /* 60px + 16px */
+.outline-list .outline-list .outline-list .outline-list .outline-list .outline-item:not(.has-children)>.outline-row {
+  padding-left: 76px;
+  /* 60px + 16px */
 }
 
 .outline-icon {
@@ -155,9 +161,17 @@
 }
 
 @keyframes ellipsis {
-  0% { content: '.'; }
-  33% { content: '..'; }
-  66% { content: '...'; }
+  0% {
+    content: '.';
+  }
+
+  33% {
+    content: '..';
+  }
+
+  66% {
+    content: '...';
+  }
 }
 
 /* Empty state */

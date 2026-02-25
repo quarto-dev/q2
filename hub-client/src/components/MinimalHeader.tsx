@@ -13,6 +13,8 @@ interface MinimalHeaderProps {
   onChooseNewProject: () => void;
   /** Called when user wants to share the project */
   onShare?: () => void;
+  onToggleFullscreenPreview?: () => void;
+  isFullscreenPreview?: boolean;
 }
 
 export default function MinimalHeader({
@@ -20,6 +22,8 @@ export default function MinimalHeader({
   projectName,
   onChooseNewProject,
   onShare,
+  onToggleFullscreenPreview,
+  isFullscreenPreview = false,
 }: MinimalHeaderProps) {
   return (
     <header className="minimal-header">
@@ -35,6 +39,11 @@ export default function MinimalHeader({
         {onShare && (
           <button className="share-btn" onClick={onShare} title="Share this project">
             Share
+          </button>
+        )}
+        {onToggleFullscreenPreview && !isFullscreenPreview && (
+          <button className="preview-btn" onClick={onToggleFullscreenPreview}>
+            Preview
           </button>
         )}
         <button className="choose-project-btn" onClick={onChooseNewProject}>

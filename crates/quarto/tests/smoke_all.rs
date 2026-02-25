@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use quarto_test::{run_test_file, TestResult};
+use quarto_test::{TestResult, run_test_file};
 use walkdir::WalkDir;
 
 /// Run all smoke-all tests by discovering .qmd files in the smoke-all directory.

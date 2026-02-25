@@ -48,6 +48,7 @@ use std::sync::Arc;
 
 use quarto_doctemplate::Template;
 use quarto_error_reporting::DiagnosticMessage;
+use quarto_pandoc_types::Pandoc;
 use quarto_source_map::SourceContext;
 
 use crate::Result;
@@ -106,6 +107,15 @@ pub struct RenderOutput {
     pub html: String,
     /// Diagnostics (warnings, errors, info) collected during rendering.
     pub diagnostics: Vec<DiagnosticMessage>,
+    /// Source context for mapping locations in diagnostics.
+    pub source_context: SourceContext,
+}
+
+pub struct AstOutput {
+    /// The AST serialized as JSON.
+    pub ast: Pandoc,
+    /// Non-fatal warnings collected during rendering.
+    pub warnings: Vec<DiagnosticMessage>,
     /// Source context for mapping locations in diagnostics.
     pub source_context: SourceContext,
 }
@@ -219,6 +229,89 @@ pub fn build_html_pipeline_with_stages(
     Pipeline::new(stages)
 }
 
+pub async fn run_pipeline(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    stages: Vec<Box<dyn PipelineStage>>,
+) -> Result<(PipelineData, Vec<DiagnosticMessage>)> {
+    // Create StageContext from RenderContext data
+    let mut stage_ctx = StageContext::new(
+        runtime,
+        ctx.format.clone(),
+        ctx.project.clone(),
+        ctx.document.clone(),
+    )
+    .map_err(|e| crate::error::QuartoError::Other(e.to_string()))?;
+
+    // Transfer artifacts from RenderContext to StageContext
+    stage_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
+
+    // Create input from content
+    let input = PipelineData::LoadedSource(LoadedSource::new(
+        PathBuf::from(source_name),
+        content.to_vec(),
+    ));
+
+    let pipeline = Pipeline::new(stages).expect("Pipeline stages should be compatible");
+
+    let result = pipeline.run(input, &mut stage_ctx).await;
+
+    // Transfer artifacts back to RenderContext
+    ctx.artifacts = stage_ctx.artifacts;
+
+    result
+        .map_err(|e| match e {
+            crate::stage::PipelineError::StageError { diagnostics, .. }
+                if !diagnostics.is_empty() =>
+            {
+                // Create a SourceContext for the parse error
+                let mut source_context = SourceContext::new();
+                let content_str = String::from_utf8_lossy(content).to_string();
+                source_context.add_file(source_name.to_string(), Some(content_str));
+                crate::error::QuartoError::Parse(crate::error::ParseError::new(
+                    diagnostics,
+                    source_context,
+                ))
+            }
+            other => crate::error::QuartoError::Other(other.to_string()),
+        })
+        .map(|d| (d, stage_ctx.diagnostics))
+}
+
+pub async fn parse_qmd_to_ast(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<AstOutput> {
+    // Build pipeline based on config
+    // If custom CSS or template is specified, use a customized ApplyTemplateStage
+    let stages: Vec<Box<dyn PipelineStage>> = vec![
+        Box::new(ParseDocumentStage::new()),
+        Box::new(EngineExecutionStage::new()),
+        Box::new(AstTransformsStage::new()),
+    ];
+
+    let (output, warnings) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    // Extract the rendered output
+    let ast = output.into_document_ast().ok_or_else(|| {
+        crate::error::QuartoError::Other("Pipeline did not produce ast".to_string())
+    })?;
+
+    // Create source context for the output
+    let mut source_context = SourceContext::new();
+    let content_str = String::from_utf8_lossy(content).to_string();
+    source_context.add_file(source_name.to_string(), Some(content_str));
+
+    Ok(AstOutput {
+        ast: ast.ast,
+        warnings,
+        source_context,
+    })
+}
+
 /// Render QMD content to HTML.
 ///
 /// This is the unified async render pipeline used by both CLI and WASM. It:
@@ -263,27 +356,9 @@ pub async fn render_qmd_to_html(
     config: &HtmlRenderConfig<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> Result<RenderOutput> {
-    // Create StageContext from RenderContext data
-    let mut stage_ctx = StageContext::new(
-        runtime,
-        ctx.format.clone(),
-        ctx.project.clone(),
-        ctx.document.clone(),
-    )
-    .map_err(|e| crate::error::QuartoError::Other(e.to_string()))?;
-
-    // Transfer artifacts from RenderContext to StageContext
-    stage_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
-
-    // Create input from content
-    let input = PipelineData::LoadedSource(LoadedSource::new(
-        PathBuf::from(source_name),
-        content.to_vec(),
-    ));
-
     // Build pipeline based on config
     // If custom CSS or template is specified, use a customized ApplyTemplateStage
-    let pipeline = if config.template.is_some() || !config.css_paths.is_empty() {
+    let stages = if config.template.is_some() || !config.css_paths.is_empty() {
         let apply_config = ApplyTemplateConfig::new().with_css_paths(config.css_paths.to_vec());
         // If custom template is provided, we'd need to pass it too
         // For now, css_paths is the main customization needed
@@ -295,39 +370,16 @@ pub async fn render_qmd_to_html(
             Box::new(RenderHtmlBodyStage::new()),
             Box::new(ApplyTemplateStage::with_config(apply_config)),
         ];
-        Pipeline::new(stages).expect("HTML pipeline stages should be compatible")
+        stages
     } else {
-        build_html_pipeline()
+        build_html_pipeline_stages()
     };
 
-    // Run the async pipeline
-    let result = pipeline.run(input, &mut stage_ctx).await;
-
-    // Transfer artifacts back to RenderContext
-    ctx.artifacts = stage_ctx.artifacts;
-
-    // Handle result
-    let output = result.map_err(|e| match e {
-        crate::stage::PipelineError::StageError { diagnostics, .. } if !diagnostics.is_empty() => {
-            // Create a SourceContext for the parse error
-            let mut source_context = SourceContext::new();
-            let content_str = String::from_utf8_lossy(content).to_string();
-            source_context.add_file(source_name.to_string(), Some(content_str));
-            crate::error::QuartoError::Parse(crate::error::ParseError::new(
-                diagnostics,
-                source_context,
-            ))
-        }
-        other => crate::error::QuartoError::Other(other.to_string()),
-    })?;
-
+    let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     // Extract the rendered output
     let rendered = output.into_rendered_output().ok_or_else(|| {
         crate::error::QuartoError::Other("Pipeline did not produce RenderedOutput".to_string())
     })?;
-
-    // Collect diagnostics from the pipeline
-    let diagnostics = stage_ctx.diagnostics;
 
     // Create source context for the output
     let mut source_context = SourceContext::new();

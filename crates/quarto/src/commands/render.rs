@@ -21,8 +21,8 @@ use anyhow::{Context, Result};
 use tracing::info;
 
 use quarto_core::{
-    render_document_to_file, Format, FormatIdentifier, ProjectContext, QuartoError,
-    RenderToFileOptions,
+    Format, FormatIdentifier, ProjectContext, QuartoError, RenderToFileOptions,
+    render_document_to_file,
 };
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 

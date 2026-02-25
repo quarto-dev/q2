@@ -55,8 +55,38 @@ pub fn qmd_to_pandoc(
 }
 
 pub fn parse_qmd(input: &[u8], include_resolved_locations: bool) -> String {
-    let (pandoc, context) = qmd_to_pandoc(input).unwrap();
-    pandoc_to_json(&pandoc, &context, include_resolved_locations).unwrap()
+    match qmd_to_pandoc(input) {
+        Ok((pandoc, context)) => {
+            match pandoc_to_json(&pandoc, &context, include_resolved_locations) {
+                Ok(json) => {
+                    // Return success response with AST
+                    serde_json::json!({
+                        "success": true,
+                        "ast": json
+                    })
+                    .to_string()
+                }
+                Err(e) => {
+                    // JSON serialization error
+                    serde_json::json!({
+                        "success": false,
+                        "error": e,
+                        "diagnostics": []
+                    })
+                    .to_string()
+                }
+            }
+        }
+        Err(diagnostic_strings) => {
+            // Parse errors with diagnostics
+            serde_json::json!({
+                "success": false,
+                "error": "Failed to parse QMD content",
+                "diagnostics": diagnostic_strings.iter().map(|d| serde_json::json!({"message": d})).collect::<Vec<_>>()
+            })
+            .to_string()
+        }
+    }
 }
 
 /// Render a parsed document using a template bundle.

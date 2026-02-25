@@ -18,9 +18,10 @@ import { processFileForUpload } from '../services/resourceService';
 import { usePresence } from '../hooks/usePresence';
 import { usePreference } from '../hooks/usePreference';
 import { useIntelligence } from '../hooks/useIntelligence';
+import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
+import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
-import Preview from './Preview';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import ShareDialog from './ShareDialog';
@@ -35,6 +36,7 @@ import ViewToggleControl from './ViewToggleControl';
 import { useViewMode } from './ViewModeContext';
 import MarkdownSummary from './MarkdownSummary';
 import './Editor.css';
+import ReactPreview from './ReactPreview';
 
 interface Props {
   project: ProjectEntry;
@@ -149,6 +151,21 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Monaco instance ref for setting markers
   const monacoRef = useRef<typeof Monaco | null>(null);
 
+  // Content version for triggering thumbnail regeneration
+  const [contentVersion, setContentVersion] = useState(0);
+
+  // AST JSON for slide thumbnails
+  const [astJson, setAstJson] = useState<string | null>(null);
+
+  // Generate thumbnails for slides
+  const thumbnails = useSlideThumbnails({
+    astJson,
+    currentFilePath: currentFile?.path ?? '',
+    symbols,
+    previewReady: wasmStatus === 'ready' && editorReady,
+    contentVersion,
+  });
+
   // New file dialog state
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
@@ -164,6 +181,31 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Editor drag-drop state for image insertion
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
+
+  // Fullscreen preview mode
+  const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+
+  // Current slide index (for cursor-driven slide navigation)
+  const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
+
+  // Map cursor position to slide index
+  const getSlideForLine = useCursorToSlide(astJson, symbols);
+
+  // Keep getSlideForLine in a ref so the cursor listener always has the latest version
+  const getSlideForLineRef = useRef(getSlideForLine);
+  useEffect(() => {
+    getSlideForLineRef.current = getSlideForLine;
+  }, [getSlideForLine]);
+
+  // Handle manual slide changes (from arrow keys or buttons in preview)
+  const handleSlideChange = useCallback((slideIndex: number) => {
+    setCurrentSlideIndex(slideIndex);
+  }, []);
+
+  // Toggle fullscreen preview mode
+  const handleToggleFullscreenPreview = useCallback(() => {
+    setIsFullscreenPreview(prev => !prev);
+  }, []);
 
   // Callback for when preview wants to change file (via link click - adds history)
   const handlePreviewFileChange = useCallback((file: FileEntry, anchor?: string) => {
@@ -192,6 +234,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const handleWasmStatusChange = useCallback((status: 'loading' | 'ready' | 'error', error: string | null) => {
     setWasmStatus(status);
     setWasmError(error);
+  }, []);
+
+  // Callback for when preview AST changes
+  const handleAstChange = useCallback((newAstJson: string | null) => {
+    setAstJson(newAstJson);
+    // Increment content version to trigger thumbnail regeneration
+    setContentVersion(prev => prev + 1);
   }, []);
 
   // Update document title based on current file and project
@@ -316,6 +365,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     if (value !== undefined && currentFile) {
       setContent(value);
       onContentChange(currentFile.path, value);
+      // Thumbnail regeneration will be triggered by handleAstChange when preview finishes
     }
   };
 
@@ -335,6 +385,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     });
     editor.onDidBlurEditorText(() => {
       editorHasFocusRef.current = false;
+    });
+
+    // Track cursor position changes for slide navigation
+    editor.onDidChangeCursorPosition((e) => {
+      // Get the cursor line (0-based in Monaco)
+      const line = e.position.lineNumber - 1; // Convert to 0-based for our mapping
+      const slideIndex = getSlideForLineRef.current(line);
+      setCurrentSlideIndex(slideIndex);
     });
 
     // Attach drag-drop handlers to editor container
@@ -636,14 +694,18 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   return (
     <div className="editor-container">
-      <MinimalHeader
-        currentFilePath={currentFile?.path ?? null}
-        projectName={project.description}
-        onChooseNewProject={onDisconnect}
-        onShare={handleShare}
-      />
+      {!isFullscreenPreview && (
+        <MinimalHeader
+          currentFilePath={currentFile?.path ?? null}
+          projectName={project.description}
+          onChooseNewProject={onDisconnect}
+          onShare={handleShare}
+          onToggleFullscreenPreview={handleToggleFullscreenPreview}
+          isFullscreenPreview={isFullscreenPreview}
+        />
+      )}
 
-      {unlocatedErrors.length > 0 && (
+      {!isFullscreenPreview && unlocatedErrors.length > 0 && (
         <div className="diagnostics-banner">
           {unlocatedErrors.map((diag, i) => (
             <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
@@ -656,79 +718,83 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       )}
 
       <main className={`editor-main view-mode-${viewMode}`}>
-        <SidebarTabs>
-          {(activeTab) => {
-            switch (activeTab) {
-              case 'files':
-                return (
-                  <FileSidebar
-                    files={files}
-                    currentFile={currentFile}
-                    onSelectFile={handleSelectFile}
-                    onNewFile={handleNewFile}
-                    onUploadFiles={handleUploadFiles}
-                    onDeleteFile={handleDeleteFile}
-                    onRenameFile={handleRenameFile}
-                    onOpenInNewTab={handleOpenInNewTab}
-                    onCopyLink={handleCopyLink}
-                  />
-                );
-              case 'outline':
-                return (
-                  <OutlinePanel
-                    symbols={symbols}
-                    onSymbolClick={handleSymbolClick}
-                    loading={intelligenceLoading}
-                    error={intelligenceError}
-                  />
-                );
-              case 'project':
-                return (
-                  <ProjectTab
-                    project={project}
-                    onChooseNewProject={onDisconnect}
-                    onExportZip={exportProjectAsZip}
-                  />
-                );
-              case 'status':
-                return (
-                  <StatusTab
-                    wasmStatus={wasmStatus}
-                    wasmError={wasmError}
-                    userCount={userCount}
-                    remoteUsers={remoteUsers}
-                  />
-                );
-              case 'settings':
-                return (
-                  <SettingsTab
-                    scrollSyncEnabled={scrollSyncEnabled}
-                    onScrollSyncChange={setScrollSyncEnabled}
-                  />
-                );
-              case 'about':
-                return <AboutTab wasmStatus={wasmStatus} />;
-              default:
-                return null;
-            }
-          }}
-        </SidebarTabs>
-        <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
-          {/* Show MarkdownSummary overlay in preview mode */}
-          {viewMode === 'preview' && (
-            <div className="markdown-summary-overlay">
-              <MarkdownSummary
-                content={content}
-                onLineClick={(lineNumber) => {
-                  if (previewScrollToLineRef.current) {
-                    previewScrollToLineRef.current(lineNumber);
-                  }
-                }}
-              />
-            </div>
-          )}
-          {/* Always render Monaco but hide in preview mode */}
-          <div style={{ display: viewMode === 'preview' ? 'none' : 'block', height: '100%' }}>
+        {!isFullscreenPreview && (
+          <SidebarTabs>
+            {(activeTab) => {
+              switch (activeTab) {
+                case 'files':
+                  return (
+                    <FileSidebar
+                      files={files}
+                      currentFile={currentFile}
+                      onSelectFile={handleSelectFile}
+                      onNewFile={handleNewFile}
+                      onUploadFiles={handleUploadFiles}
+                      onDeleteFile={handleDeleteFile}
+                      onRenameFile={handleRenameFile}
+                      onOpenInNewTab={handleOpenInNewTab}
+                      onCopyLink={handleCopyLink}
+                    />
+                  );
+                case 'outline':
+                  return (
+                    <OutlinePanel
+                      symbols={symbols}
+                      onSymbolClick={handleSymbolClick}
+                      loading={intelligenceLoading}
+                      error={intelligenceError}
+                      thumbnails={thumbnails}
+                    />
+                  );
+                case 'project':
+                  return (
+                    <ProjectTab
+                      project={project}
+                      onChooseNewProject={onDisconnect}
+                      onExportZip={exportProjectAsZip}
+                    />
+                  );
+                case 'status':
+                  return (
+                    <StatusTab
+                      wasmStatus={wasmStatus}
+                      wasmError={wasmError}
+                      userCount={userCount}
+                      remoteUsers={remoteUsers}
+                    />
+                  );
+                case 'settings':
+                  return (
+                    <SettingsTab
+                      scrollSyncEnabled={scrollSyncEnabled}
+                      onScrollSyncChange={setScrollSyncEnabled}
+                    />
+                  );
+                case 'about':
+                  return <AboutTab wasmStatus={wasmStatus} />;
+                default:
+                  return null;
+              }
+            }}
+          </SidebarTabs>
+        )}
+        {!isFullscreenPreview && (
+          <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
+            {/* Show MarkdownSummary overlay in preview mode */}
+            {viewMode === 'preview' && (
+              <div className="markdown-summary-overlay">
+                <MarkdownSummary
+                  content={content}
+                  onLineClick={(lineNumber) => {
+                    if (previewScrollToLineRef.current) {
+                      previewScrollToLineRef.current(lineNumber);
+                    }
+                  }}
+                />
+              </div>
+            )}
+            {/* Always render Monaco but hide in preview mode */}
+            <div style={{ display: viewMode === 'preview' ? 'none' : 'block', height: '100%' }}>
             <MonacoEditor
               // Use key to force remount when switching files (resets editor state cleanly)
               key={currentFile?.path ?? ''}
@@ -760,27 +826,43 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               }}
             />
           </div>
-        </div>
+          </div>
+        )}
 
         {/* Divider with view toggle control */}
-        <div className="pane-divider">
-          <ViewToggleControl />
-        </div>
+        {!isFullscreenPreview && (
+          <div className="pane-divider">
+            <ViewToggleControl />
+          </div>
+        )}
 
-        <Preview
-          content={content}
-          currentFile={currentFile}
-          files={files}
-          scrollSyncEnabled={scrollSyncEnabled}
-          editorRef={editorRef}
-          editorReady={editorReady}
-          editorHasFocusRef={editorHasFocusRef}
-          onFileChange={handlePreviewFileChange}
-          onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
-          onDiagnosticsChange={handleDiagnosticsChange}
-          onWasmStatusChange={handleWasmStatusChange}
-          onRegisterScrollToLine={(fn) => { previewScrollToLineRef.current = fn; }}
-        />
+        <div className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}>
+          {isFullscreenPreview && (
+            <button
+              className="fullscreen-close-btn"
+              onClick={handleToggleFullscreenPreview}
+              aria-label="Exit fullscreen preview"
+            >
+              ✕
+            </button>
+          )}
+          <ReactPreview
+            content={content}
+            currentFile={currentFile}
+            files={files}
+            scrollSyncEnabled={scrollSyncEnabled}
+            editorRef={editorRef}
+            editorReady={editorReady}
+            editorHasFocusRef={editorHasFocusRef}
+            onFileChange={handlePreviewFileChange}
+            onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
+            onDiagnosticsChange={handleDiagnosticsChange}
+            onWasmStatusChange={handleWasmStatusChange}
+            onAstChange={handleAstChange}
+            currentSlideIndex={currentSlideIndex}
+            onSlideChange={handleSlideChange}
+          />
+        </div>
       </main>
 
       {/* New file dialog */}

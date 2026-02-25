@@ -66,13 +66,13 @@ use tracing::{debug, warn};
 
 use quarto_system_runtime::SystemRuntime;
 
+use crate::Result;
 use crate::error::QuartoError;
-use crate::format::{extract_format_metadata, Format};
-use crate::pipeline::{render_qmd_to_html, HtmlRenderConfig, RenderOutput};
+use crate::format::{Format, extract_format_metadata};
+use crate::pipeline::{HtmlRenderConfig, RenderOutput, render_qmd_to_html};
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext};
 use crate::resources::{self, HtmlResourcePaths};
-use crate::Result;
 
 /// Options for rendering a document to a file.
 #[derive(Debug, Clone, Default)]

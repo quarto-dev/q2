@@ -36,6 +36,9 @@ interface WasmModuleExtended {
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
+  parse_qmd_to_ast: (content: string) => Promise<string>;
+  write_qmd: (astJson: string) => Promise<string>;
+  convert: (document: string, inputFormat: string, outputFormat: string) => Promise<string>;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
   lsp_get_folding_ranges: (path: string) => string;
@@ -316,6 +319,216 @@ export function getBuiltinTemplate(name: string): string {
   return wasm.get_builtin_template(name);
 }
 
+/**
+ * Result of parsing QMD content to AST.
+ */
+export interface ParseResult {
+  success: boolean;
+  ast: string;
+  error?: string;
+  /** Structured error diagnostics with line/column information for Monaco. */
+  diagnostics?: Diagnostic[];
+  /** Structured warning diagnostics with line/column information for Monaco. */
+  warnings?: Diagnostic[];
+}
+
+/**
+ * Result of writing AST to QMD format.
+ */
+export interface WriteQmdResult {
+  success: boolean;
+  qmd: string;
+  error?: string;
+}
+
+/**
+ * Result of converting between formats.
+ */
+export interface ConvertResult {
+  success: boolean;
+  output: string;
+  error?: string;
+}
+
+/**
+ * Parse QMD content to Pandoc AST JSON, handling errors gracefully.
+ *
+ * This function parses QMD markdown into a Pandoc AST representation,
+ * which can be used for programmatic manipulation, analysis, or rendering
+ * with custom React components.
+ *
+ * Returns structured diagnostics with source locations that can be
+ * converted to Monaco editor markers using diagnosticsToMarkers().
+ *
+ * **Example AST Structure:**
+ * ```json
+ * {
+ *   "pandoc-api-version": [1, 23, 1],
+ *   "meta": {},
+ *   "blocks": [
+ *     {
+ *       "t": "Header",
+ *       "c": [1, ["id", ["class"], [["key", "value"]]], [{"t": "Str", "c": "text"}]]
+ *     },
+ *     {
+ *       "t": "Para",
+ *       "c": [{"t": "Str", "c": "Paragraph text."}]
+ *     }
+ *   ]
+ * }
+ * ```
+ *
+ * @param qmdContent - QMD source text to parse
+ * @returns Parse result with AST JSON string or error information
+ */
+export async function parseQmdToAst(
+  qmdContent: string
+): Promise<ParseResult> {
+  try {
+    await initWasm();
+    const wasm = getWasm();
+    const responseJson = await wasm.parse_qmd_to_ast(qmdContent);
+
+    const response: ParseResult = JSON.parse(responseJson);
+
+    if (response.success) {
+      return {
+        ast: response.ast || '{}',
+        success: true,
+        warnings: response.warnings,
+      };
+    } else {
+      // Extract error message
+      const errorMsg = response.error || 'Unknown parse error';
+
+      return {
+        ast: '',
+        success: false,
+        error: errorMsg,
+        diagnostics: response.diagnostics,
+        warnings: response.warnings,
+      };
+    }
+  } catch (err) {
+    console.error('Parse error:', err);
+    return {
+      ast: '',
+      success: false,
+      error: err instanceof Error ? err.message : JSON.stringify(err),
+    };
+  }
+}
+
+/**
+ * Convert Pandoc AST JSON back to QMD format.
+ *
+ * This function takes a Pandoc AST represented as a JSON string and
+ * converts it back to QMD markdown format.
+ *
+ * @param astJson - Pandoc AST as JSON string
+ * @returns Write result with QMD string or error information
+ *
+ * @example
+ * ```typescript
+ * const ast = '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[...]}';
+ * const result = await writeQmd(ast);
+ * if (result.success) {
+ *   console.log("QMD:", result.qmd);
+ * }
+ * ```
+ */
+export async function writeQmd(astJson: string): Promise<WriteQmdResult> {
+  try {
+    await initWasm();
+    const wasm = getWasm();
+    const responseJson = await wasm.write_qmd(astJson);
+
+    // The response reuses AstResponse structure, but with "qmd" in the "ast" field
+    const response: { success: boolean; ast?: string; error?: string } = JSON.parse(responseJson);
+
+    if (response.success) {
+      return {
+        qmd: response.ast || '',
+        success: true,
+      };
+    } else {
+      return {
+        qmd: '',
+        success: false,
+        error: response.error || 'Unknown write error',
+      };
+    }
+  } catch (err) {
+    console.error('Write QMD error:', err);
+    return {
+      qmd: '',
+      success: false,
+      error: err instanceof Error ? err.message : JSON.stringify(err),
+    };
+  }
+}
+
+/**
+ * Convert between document formats (QMD <-> JSON).
+ *
+ * This function provides generic format conversion capabilities,
+ * allowing you to convert between QMD and Pandoc AST JSON.
+ *
+ * @param document - Input document content
+ * @param inputFormat - Input format: "qmd" or "json"
+ * @param outputFormat - Output format: "qmd" or "json"
+ * @returns Convert result with output string or error information
+ *
+ * @example
+ * ```typescript
+ * // Convert QMD to JSON
+ * const jsonResult = await convert(qmdContent, "qmd", "json");
+ * if (jsonResult.success) {
+ *   const ast = JSON.parse(jsonResult.output);
+ * }
+ *
+ * // Convert JSON back to QMD
+ * const qmdResult = await convert(astJson, "json", "qmd");
+ * if (qmdResult.success) {
+ *   console.log("QMD:", qmdResult.output);
+ * }
+ * ```
+ */
+export async function convert(
+  document: string,
+  inputFormat: 'qmd' | 'json',
+  outputFormat: 'qmd' | 'json'
+): Promise<ConvertResult> {
+  try {
+    await initWasm();
+    const wasm = getWasm();
+    const responseJson = await wasm.convert(document, inputFormat, outputFormat);
+
+    // The response reuses AstResponse structure, but with output in the "ast" field
+    const response: { success: boolean; ast?: string; error?: string } = JSON.parse(responseJson);
+
+    if (response.success) {
+      return {
+        output: response.ast || '',
+        success: true,
+      };
+    } else {
+      return {
+        output: '',
+        success: false,
+        error: response.error || 'Unknown conversion error',
+      };
+    }
+  } catch (err) {
+    console.error('Convert error:', err);
+    return {
+      output: '',
+      success: false,
+      error: err instanceof Error ? err.message : JSON.stringify(err),
+    };
+  }
+}
+
 // ============================================================================
 // High-Level API
 // ============================================================================
@@ -443,8 +656,8 @@ export async function renderToHtml(
     // Use the options-aware render function if options are specified
     const result: RenderResponse = options.sourceLocation
       ? await renderQmdContentWithOptions(qmdContent, htmlTemplateBundle || '', {
-          sourceLocation: options.sourceLocation,
-        })
+        sourceLocation: options.sourceLocation,
+      })
       : await renderQmdContent(qmdContent, htmlTemplateBundle || '');
 
     console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));

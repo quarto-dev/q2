@@ -430,6 +430,148 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
     }
 }
 
+/// Parse QMD content to Pandoc AST JSON using the unified pipeline.
+///
+/// This function uses the same pipeline infrastructure as `render_qmd_to_html`,
+/// ensuring feature parity. It runs through:
+/// 1. ParseDocumentStage - Parse QMD to Pandoc AST
+/// 2. EngineExecutionStage - Execute code cells (passes through in WASM)
+/// 3. AstTransformsStage - Apply Quarto transforms (callouts, metadata, etc.)
+///
+/// # Arguments
+/// * `content` - QMD source text
+///
+/// # Returns
+/// JSON string containing:
+/// - `success`: true/false
+/// - `ast`: Serialized Pandoc AST (on success)
+/// - `error`: Error message (on failure)
+/// - `diagnostics`: Structured error diagnostics with line/column info
+/// - `warnings`: Structured warning diagnostics with line/column info
+#[wasm_bindgen]
+pub async fn parse_qmd_to_ast(content: &str) -> String {
+    // Create a virtual path for this content
+    let path = Path::new("/input.qmd");
+
+    // Create project context
+    let project = create_wasm_project_context(path);
+    let doc = DocumentInfo::from_path(path);
+    let binaries = BinaryDependencies::new();
+
+    // Extract format metadata from frontmatter
+    let format_metadata = extract_format_metadata(content, "html").unwrap_or_default();
+    let format = Format::html().with_metadata(format_metadata);
+
+    let options = RenderOptions {
+        verbose: false,
+        execute: false,
+        use_freeze: false,
+        output_path: None,
+    };
+
+    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
+
+    // Create Arc runtime for the async pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+
+    let result = quarto_core::pipeline::parse_qmd_to_ast(
+        content.as_bytes(),
+        "/input.qmd",
+        &mut ctx,
+        runtime_arc,
+    )
+    .await;
+
+    match result {
+        Ok(output) => {
+            // Create an ASTContext from the SourceContext returned by the pipeline
+            // This is needed for pampa's JSON writer which tracks source locations
+            let ast_context = pampa::pandoc::ASTContext {
+                filenames: vec!["/input.qmd".to_string()],
+                example_list_counter: std::cell::Cell::new(1),
+                source_context: output.source_context.clone(),
+                parent_source_info: None,
+            };
+
+            // Serialize the AST to JSON using pampa's writer
+            let mut buf = Vec::new();
+            let json_config = pampa::writers::json::JsonConfig {
+                include_inline_locations: true,
+            };
+
+            let ast_json = match pampa::writers::json::write_with_config(
+                &output.ast,
+                &ast_context,
+                &mut buf,
+                &json_config,
+            ) {
+                Ok(_) => match String::from_utf8(buf) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        return serde_json::to_string(&AstResponse {
+                            success: false,
+                            error: Some(format!("Failed to convert AST JSON to string: {}", e)),
+                            ast: None,
+                            qmd: None,
+                            diagnostics: None,
+                            warnings: None,
+                        })
+                        .unwrap();
+                    }
+                },
+                Err(e) => {
+                    return serde_json::to_string(&AstResponse {
+                        success: false,
+                        error: Some(format!("Failed to serialize AST: {:?}", e)),
+                        ast: None,
+                        qmd: None,
+                        diagnostics: None,
+                        warnings: None,
+                    })
+                    .unwrap();
+                }
+            };
+
+            // Convert warnings to structured JSON with line/column info
+            let warnings = diagnostics_to_json(&output.warnings, &output.source_context);
+            serde_json::to_string(&AstResponse {
+                success: true,
+                error: None,
+                ast: Some(ast_json),
+                qmd: None,
+                diagnostics: None,
+                warnings: if warnings.is_empty() {
+                    None
+                } else {
+                    Some(warnings)
+                },
+            })
+            .unwrap()
+        }
+        Err(e) => {
+            // Extract structured diagnostics from parse errors
+            let (error_msg, diagnostics) = match &e {
+                QuartoError::Parse(parse_error) => {
+                    let diags =
+                        diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
+                    (e.to_string(), Some(diags))
+                }
+                _ => (e.to_string(), None),
+            };
+
+            serde_json::to_string(&AstResponse {
+                success: false,
+                error: Some(error_msg),
+                ast: None,
+                qmd: None,
+                diagnostics,
+                warnings: None,
+            })
+            .unwrap()
+        }
+    }
+}
+
 /// Render a QMD file from the virtual filesystem.
 ///
 /// # Arguments
@@ -2027,8 +2169,12 @@ struct AstResponse {
     qmd: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    /// Structured diagnostics (errors) with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
     diagnostics: Option<Vec<JsonDiagnostic>>,
+    /// Structured warnings with line/column information for Monaco.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warnings: Option<Vec<JsonDiagnostic>>,
 }
 
 /// Parse QMD content and return the Pandoc JSON AST.
@@ -2064,6 +2210,7 @@ pub fn parse_qmd_content(content: &str) -> String {
                         qmd: None,
                         error: None,
                         diagnostics: None,
+                        warnings: None,
                     })
                     .unwrap()
                 }
@@ -2075,6 +2222,7 @@ pub fn parse_qmd_content(content: &str) -> String {
                         qmd: None,
                         error: Some("Failed to serialize AST to JSON".to_string()),
                         diagnostics: Some(diagnostics),
+                        warnings: None,
                     })
                     .unwrap()
                 }
@@ -2089,6 +2237,7 @@ pub fn parse_qmd_content(content: &str) -> String {
                 qmd: None,
                 error: Some(error_msg),
                 diagnostics: None,
+                warnings: None,
             })
             .unwrap()
         }
@@ -2123,6 +2272,7 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
                         qmd: Some(qmd_text),
                         error: None,
                         diagnostics: None,
+                        warnings: None,
                     })
                     .unwrap()
                 }
@@ -2138,6 +2288,7 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
                         qmd: None,
                         error: Some(format!("Failed to write QMD: {}", error_msg)),
                         diagnostics: None,
+                        warnings: None,
                     })
                     .unwrap()
                 }
@@ -2149,6 +2300,7 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
             qmd: None,
             error: Some(format!("Failed to parse JSON AST: {}", e)),
             diagnostics: None,
+            warnings: None,
         })
         .unwrap(),
     }
@@ -2186,6 +2338,7 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
                 qmd: None,
                 error: Some(format!("Failed to parse original QMD: {}", error_msg)),
                 diagnostics: None,
+                warnings: None,
             })
             .unwrap();
         }
@@ -2202,6 +2355,7 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
                 qmd: None,
                 error: Some(format!("Failed to parse new AST JSON: {}", e)),
                 diagnostics: None,
+                warnings: None,
             })
             .unwrap();
         }
@@ -2218,6 +2372,7 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
             qmd: Some(result_qmd),
             error: None,
             diagnostics: None,
+            warnings: None,
         })
         .unwrap(),
         Err(diags) => {
@@ -2232,6 +2387,7 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
                 qmd: None,
                 error: Some(format!("Incremental write failed: {}", error_msg)),
                 diagnostics: None,
+                warnings: None,
             })
             .unwrap()
         }

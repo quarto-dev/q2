@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use serde_yaml::Value;
 
 use crate::assertions::{LogLevel, LogMessage, VerifyContext};
-use crate::spec::{parse_test_specs, TestSpec};
+use crate::spec::{TestSpec, parse_test_specs};
 
 /// Result of running tests on a single file.
 #[derive(Debug)]
@@ -216,7 +216,7 @@ fn run_format_tests(input_path: &Path, spec: &TestSpec) -> Result<Vec<FailureDet
 fn render_document(input_path: &Path, format: &str) -> RenderOutput {
     use std::sync::Arc;
 
-    use quarto_core::render_to_file::{render_to_file, RenderToFileOptions};
+    use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
     use quarto_system_runtime::NativeRuntime;
 
     let mut messages = Vec::new();
