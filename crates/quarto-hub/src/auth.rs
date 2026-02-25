@@ -138,6 +138,11 @@ pub async fn build_auth_state(
 ///
 /// Returns an error if auth is enabled without TLS protection.
 /// Logs a warning if `--allow-insecure-auth` is used (local dev).
+///
+/// **Deployment note**: The reverse proxy that terminates TLS should also
+/// set a `Content-Security-Policy` header on HTML responses to mitigate
+/// XSS (which could steal localStorage auth tokens). A reasonable baseline:
+///   `default-src 'self'; script-src 'self' https://accounts.google.com; ...`
 pub fn validate_tls_config(
     google_client_id: Option<&str>,
     behind_tls_proxy: bool,

@@ -20,7 +20,11 @@ const AUTH_STORAGE_KEY = 'quarto-hub-auth';
 
 /** Decode JWT payload without verification (server validates). */
 function decodeJwtPayload(jwt: string): Record<string, unknown> {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  const parts = jwt.split('.');
+  if (parts.length !== 3) {
+    throw new Error('Invalid JWT: expected 3 segments');
+  }
+  const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
   return JSON.parse(atob(base64));
 }
 

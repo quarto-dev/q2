@@ -5,7 +5,7 @@
 //! includes an `id_token` field which is what the hub server validates.
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use yup_oauth2::{InstalledFlowAuthenticator, InstalledFlowReturnMethod};
 
 /// Request openid scopes so the token response includes an id_token.
@@ -29,6 +29,36 @@ fn client_secret_path() -> PathBuf {
         .join("client_secret.json")
 }
 
+/// Restrict a file's permissions to owner-only read/write (0600).
+/// No-op on non-Unix platforms.
+fn restrict_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if path.exists() {
+            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+}
+
+/// Create the cache directory with restrictive permissions (0700 on Unix).
+fn create_cache_dir(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ =
+                std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        }
+    }
+    Ok(())
+}
+
 /// Get a Google ID token for hub authentication.
 /// Opens browser on first use, uses cached/refreshed tokens subsequently.
 pub async fn get_id_token() -> Result<String> {
@@ -46,9 +76,7 @@ pub async fn get_id_token() -> Result<String> {
         .context("Failed to read client secret")?;
 
     let cache = token_cache_path();
-    if let Some(parent) = cache.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    create_cache_dir(&cache)?;
 
     let auth = InstalledFlowAuthenticator::builder(
         secret,
@@ -58,6 +86,9 @@ pub async fn get_id_token() -> Result<String> {
     .build()
     .await
     .context("Failed to create authenticator")?;
+
+    // Restrict permissions on the token cache file (written by yup-oauth2).
+    restrict_permissions(&cache);
 
     // id_token() returns Result<Option<String>, Error>.
     // Requires "openid" in SCOPES for Google to include the ID token.

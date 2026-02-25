@@ -38,20 +38,31 @@ export function useAuth() {
     }
     return getStoredAuth();
   });
-  const expiryTimer = useRef<ReturnType<typeof setInterval>>(null);
+  const expiryTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Start expiry monitor on mount
+  // Schedule exact expiry based on the token's exp claim.
   useEffect(() => {
-    expiryTimer.current = setInterval(() => {
-      // getStoredAuth() returns null for expired tokens (and clears storage).
-      // Sync React state if the stored auth has been cleared.
-      if (!getStoredAuth()) setAuth(null);
-    }, 60_000);
+    if (expiryTimer.current) clearTimeout(expiryTimer.current);
+
+    if (!auth) return;
+
+    const msUntilExpiry = auth.expiresAt - Date.now();
+    if (msUntilExpiry <= 0) {
+      // Already expired
+      clearAuth();
+      setAuth(null);
+      return;
+    }
+
+    expiryTimer.current = setTimeout(() => {
+      clearAuth();
+      setAuth(null);
+    }, msUntilExpiry);
 
     return () => {
-      if (expiryTimer.current) clearInterval(expiryTimer.current);
+      if (expiryTimer.current) clearTimeout(expiryTimer.current);
     };
-  }, []);
+  }, [auth]);
 
   const logout = useCallback(() => {
     clearAuth();

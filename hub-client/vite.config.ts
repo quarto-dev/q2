@@ -68,6 +68,8 @@ function authCallbackPlugin(): Plugin {
 
           // Redirect to the SPA root with the credential as a search parameter.
           // The useAuth hook picks it up on mount.
+          // No URL-encoding needed: JWTs are base64url + dots, all unreserved
+          // URI characters per RFC 3986.
           res.writeHead(302, { Location: `/?auth_credential=${credential}` });
           res.end();
         });

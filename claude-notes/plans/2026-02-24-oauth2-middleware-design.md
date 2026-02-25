@@ -867,28 +867,48 @@ q2 auth logout   # Clears cached tokens
 
 ---
 
-## Security Considerations
+## Security Review
+
+*Reviewed 2026-02-25.*
+
+### Hardening measures in place
 
 1. **TLS required.** `--google-client-id` requires either `--behind-tls-proxy` (production: reverse proxy terminates TLS) or `--allow-insecure-auth` (local dev only, logged as a warning). The server itself stays HTTP-only; TLS is handled by the proxy layer.
-2. **Local validation.** ID tokens are validated by checking the JWT signature against Google's cached public keys. No outbound network call per connection.
-3. **Token in URL (WebSocket).** Encrypted by TLS in transit. `RedactedMakeSpan` ensures the `TraceLayer` logs only `uri.path()`, never the query string containing the token.
-4. **Short-lived tokens.** Google ID tokens expire in ~1 hour. Limits exposure window.
-5. **Audience check.** The `jsonwebtoken::Validation` config verifies the `aud` claim matches the configured client ID, preventing tokens issued for other applications from being accepted.
-6. **Domain/email allowlists.** Defense in depth beyond Google authentication.
-7. **Minimal client errors.** Invalid/missing tokens return 401; allowlist rejections return 403. Neither includes user-identifying detail. Specific reasons logged server-side only.
-8. **localStorage tokens (browser).** Accessible to XSS. Acceptable for v1; mitigate with Content-Security-Policy headers.
+2. **Stateless local validation.** ID tokens are validated by checking the JWT signature against Google's cached JWKS public keys. No outbound network call per connection. Keys auto-rotate via a background refresh task with cancellation token support for clean shutdown.
+3. **Audience + issuer verification.** `jsonwebtoken::Validation` verifies the `aud` claim matches the configured client ID and that `iss` is `https://accounts.google.com`, preventing tokens issued for other applications from being accepted.
+4. **Email verification check.** Unverified Google emails are rejected before allowlist checks.
+5. **Domain/email allowlists.** Defense in depth beyond Google authentication. OR logic allows combining `--allowed-domains` with `--allowed-emails` for flexibility.
+6. **CSRF validation on OAuth callback.** Both the Vite dev middleware and production `auth_callback` handler validate that the `g_csrf_token` cookie matches the form POST value before issuing a redirect.
+7. **Log redaction.** `RedactedMakeSpan` ensures the `TraceLayer` logs only `uri.path()`, never the query string (which may contain `id_token` for WebSocket upgrades).
+8. **Token in URL (WebSocket).** Encrypted by TLS in transit. Redacted from server logs (see above).
+9. **Short-lived tokens.** Google ID tokens expire in ~1 hour. The browser client schedules an exact `setTimeout` based on the token's `exp` claim to clear auth state precisely at expiry, with no polling gap.
+10. **Minimal client errors.** Invalid/missing tokens return 401; allowlist rejections return 403. Neither includes user-identifying detail. Specific reasons logged server-side only.
+11. **Credential in redirect is URL-safe by construction.** JWTs are base64url-encoded segments separated by `.` — all unreserved URI characters per RFC 3986. Both `auth_callback` handlers document this invariant explicitly.
+12. **Case-insensitive Bearer matching.** The `bearer_token()` extractor matches the `Authorization` header scheme case-insensitively per RFC 7235 §2.1.
+13. **JWT structure validation (browser).** `decodeJwtPayload()` verifies the token has exactly 3 dot-separated segments before attempting base64 decode, preventing cryptic errors from malformed input.
+14. **Restrictive file permissions (CLI).** The token cache directory is created with 0700 and the token cache file is set to 0600 (Unix only), preventing other users on shared machines from reading cached credentials.
+15. **No token leakage in CLI output.** `q2 auth login` prints only "Authenticated successfully." without any token content.
+
+### Deployment recommendations
+
+- **Content-Security-Policy.** The reverse proxy that terminates TLS should set a `Content-Security-Policy` header on HTML responses to mitigate XSS (which could steal localStorage auth tokens). A reasonable baseline: `default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://lh3.googleusercontent.com; connect-src 'self' ws: wss: https://accounts.google.com; frame-src https://accounts.google.com`. This is a deployment concern (not application code) because different deployments have different CSP requirements depending on CDN origins, proxy setups, etc.
+- **Reverse proxy query-string logging.** Configure the reverse proxy to not log query strings, which may contain `id_token` values on WebSocket upgrade requests.
+
+### Residual risks (accepted)
+
+1. **localStorage tokens (browser).** Accessible to XSS. Mitigated by short token lifetime (~1 hour), server-side validation, and the CSP deployment recommendation above.
+2. **Token in WebSocket URL.** Could appear in browser dev tools or reverse proxy logs. Mitigated by TLS, server-side log redaction, and the proxy logging recommendation above. A future iteration could add a short-lived ticket exchange endpoint (`POST /auth/ticket` → one-time ticket for WebSocket URL).
+3. **Credential in redirect URL.** The JWT appears briefly in the browser URL bar during the OAuth callback redirect. The `useAuth` hook clears it via `replaceState` on mount, but it may appear in browser history for a brief window.
 
 ---
 
 ## Known Limitations
 
-1. **No silent token refresh.** Google Identity Services' Sign In button does not provide refresh tokens. When the ID token expires (~1hr), the user must re-authenticate. The auth hook detects this proactively.
+1. **No silent token refresh.** Google Identity Services' Sign In button does not provide refresh tokens. When the ID token expires (~1hr), the user must re-authenticate. The auth hook detects this via an exact-expiry timeout.
 
-2. **Token in WebSocket URL.** Could appear in server access logs. Mitigated by TLS and log configuration. A future iteration could add a short-lived ticket exchange endpoint (`POST /auth/ticket` → one-time ticket for WebSocket URL).
+2. **No user database.** Cannot track users, audit access history, or implement per-user settings. Add if/when needed.
 
-3. **No user database.** Cannot track users, audit access history, or implement per-user settings. Add if/when needed.
-
-4. **CLI ID token availability.** `yup-oauth2`'s `Authenticator::id_token()` method returns the ID token when the `openid` scope is requested. The ID token is stored alongside the access token in the token cache, so refreshed tokens also include it. However, the `id_token()` method is separate from `token()` (which only returns the access token).
+3. **CLI ID token availability.** `yup-oauth2`'s `Authenticator::id_token()` method returns the ID token when the `openid` scope is requested. The ID token is stored alongside the access token in the token cache, so refreshed tokens also include it. However, the `id_token()` method is separate from `token()` (which only returns the access token).
 
 ---
 

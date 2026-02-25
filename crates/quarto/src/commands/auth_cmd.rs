@@ -11,14 +11,8 @@ use crate::auth;
 pub fn login() -> Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
-        let token = auth::get_id_token().await?;
-        // Truncate for display
-        let display = if token.len() > 20 {
-            format!("{}...{}", &token[..10], &token[token.len() - 10..])
-        } else {
-            token.clone()
-        };
-        println!("Authenticated successfully. ID token: {display}");
+        let _token = auth::get_id_token().await?;
+        println!("Authenticated successfully.");
         Ok(())
     })
 }

@@ -97,12 +97,16 @@ fn unauthorized() -> (StatusCode, Json<serde_json::Value>) {
 /// no header is present or the header is not a valid Bearer token.
 /// Never fails — the authenticate() method decides whether a missing
 /// token is an error based on whether auth is enabled.
+///
+/// The auth-scheme match is case-insensitive per RFC 7235 §2.1.
 fn bearer_token(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get("authorization")?
-        .to_str()
-        .ok()?
-        .strip_prefix("Bearer ")
+    let value = headers.get("authorization")?.to_str().ok()?;
+    // "Bearer " is 7 bytes; check prefix case-insensitively, return the rest as-is.
+    if value.len() > 7 && value[..7].eq_ignore_ascii_case("bearer ") {
+        Some(&value[7..])
+    } else {
+        None
+    }
 }
 
 /// Log request method and path only — never the query string, which
@@ -352,6 +356,9 @@ async fn auth_callback(
     // Redirect to the SPA root with the credential as a search parameter.
     // In a reverse-proxy deployment, this relative redirect resolves to the
     // proxy origin (where the SPA is served).
+    //
+    // No URL-encoding needed: JWTs are base64url + dots, all unreserved
+    // URI characters per RFC 3986.
     let redirect_url = format!("/?auth_credential={}", form.credential);
     Redirect::to(&redirect_url).into_response()
 }
