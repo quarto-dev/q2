@@ -38,7 +38,6 @@ export function useAuth() {
     }
     return getStoredAuth();
   });
-  const [error, setError] = useState<string | null>(null);
   const expiryTimer = useRef<ReturnType<typeof setInterval>>(null);
 
   // Start expiry monitor on mount
@@ -59,5 +58,5 @@ export function useAuth() {
     setAuth(null);
   }, []);
 
-  return { auth, error, logout };
+  return { auth, logout };
 }

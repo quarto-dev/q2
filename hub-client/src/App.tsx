@@ -53,7 +53,7 @@ export interface PendingShareData {
 }
 
 function App() {
-  const { auth, error: authError, logout } = useAuth();
+  const { auth, logout } = useAuth();
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -380,7 +380,6 @@ function App() {
             Sign in with Google to continue
           </p>
           <LoginButton />
-          {authError && <div className="error" style={{ marginTop: '16px', marginBottom: 0, width: '100%' }}>{authError}</div>}
         </div>
       </div>
     );
