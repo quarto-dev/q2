@@ -314,11 +314,13 @@ fn validate_tls_config(args: &HubArgs) {
 
 /// Build the router. Auth state (decoder + JWKS refresh handle) is
 /// initialized here and owned by HubContext for the server's lifetime.
-async fn build_router(ctx: SharedContext) -> Router {
+async fn build_router(ctx: SharedContext) -> Result<Router> {
     if let Some(config) = ctx.auth_config() {
         let auth_state = auth::build_auth_state(&config.client_id)
             .await
-            .expect("Failed to initialize Google JWKS decoder");
+            .map_err(|e| Error::Server(format!(
+                "Failed to initialize Google JWKS decoder: {e}"
+            )))?;
         ctx.set_auth_state(auth_state);
     }
 
@@ -326,12 +328,13 @@ async fn build_router(ctx: SharedContext) -> Router {
         .route("/api/files", get(list_files))
         .route("/api/documents", get(list_documents));
 
-    Router::new()
+    Ok(Router::new()
         .route("/health", get(health))
+        .route("/auth/callback", post(auth_callback))
         .route("/ws", get(ws_handler))
         .merge(api_routes)
         .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan))
-        .with_state(ctx)
+        .with_state(ctx))
 }
 ```
 
@@ -486,12 +489,14 @@ export function getIdToken(): string | null {
 
 #### Auth Hook
 
-Token expiry monitoring is built in — no separate hook needed.
+Handles credential ingestion from the OAuth redirect, token expiry, and
+silent refresh via Google One Tap.
 
 ```typescript
 // hub-client/src/hooks/useAuth.ts
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useGoogleOneTapLogin } from '@react-oauth/google';
 import {
   type AuthState,
   getStoredAuth,
@@ -499,42 +504,67 @@ import {
   clearAuth,
 } from '../services/authService';
 
+const REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
+
 export function useAuth() {
-  const [auth, setAuth] = useState<AuthState | null>(getStoredAuth);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const expiryTimer = useRef<ReturnType<typeof setInterval>>(null);
+  const [auth, setAuth] = useState<AuthState | null>(() => {
+    // Check URL search params first (OAuth redirect callback), then localStorage.
+    const params = new URLSearchParams(window.location.search);
+    const credential = params.get('auth_credential');
+    if (credential) {
+      try {
+        const authState = storeAuth(credential);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('auth_credential');
+        window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+        return authState;
+      } catch { /* fall through */ }
+    }
+    return getStoredAuth();
+  });
 
-  // Start expiry monitor on mount
+  const [refreshEnabled, setRefreshEnabled] = useState(false);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const expiryTimer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  // Silent refresh via Google One Tap. Enabled ~5 min before expiry.
+  useGoogleOneTapLogin({
+    onSuccess: (response) => {
+      if (response.credential) {
+        try { setAuth(storeAuth(response.credential)); } catch { /* noop */ }
+      }
+      setRefreshEnabled(false);
+    },
+    onError: () => setRefreshEnabled(false),
+    auto_select: true,
+    disabled: !refreshEnabled,
+  });
+
+  // Schedule silent refresh and hard expiry.
   useEffect(() => {
-    setIsLoading(false);
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    if (expiryTimer.current) clearTimeout(expiryTimer.current);
+    if (!auth) return;
 
-    expiryTimer.current = setInterval(() => {
-      // getStoredAuth() returns null for expired tokens (and clears storage).
-      // Sync React state if the stored auth has been cleared.
-      if (!getStoredAuth()) setAuth(null);
-    }, 60_000);
+    const msUntilExpiry = auth.expiresAt - Date.now();
+    if (msUntilExpiry <= 0) { clearAuth(); setAuth(null); return; }
+
+    const msUntilRefresh = msUntilExpiry - REFRESH_BUFFER_MS;
+    if (msUntilRefresh > 0) {
+      refreshTimer.current = setTimeout(() => setRefreshEnabled(true), msUntilRefresh);
+    }
+
+    expiryTimer.current = setTimeout(() => { clearAuth(); setAuth(null); }, msUntilExpiry);
 
     return () => {
-      if (expiryTimer.current) clearInterval(expiryTimer.current);
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      if (expiryTimer.current) clearTimeout(expiryTimer.current);
     };
-  }, []);
+  }, [auth]);
 
-  const handleCredentialResponse = useCallback((credential: string) => {
-    try {
-      setAuth(storeAuth(credential));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
-    }
-  }, []);
+  const logout = useCallback(() => { clearAuth(); setAuth(null); }, []);
 
-  const logout = useCallback(() => {
-    clearAuth();
-    setAuth(null);
-  }, []);
-
-  return { auth, isLoading, error, handleCredentialResponse, logout };
+  return { auth, logout };
 }
 ```
 
@@ -879,15 +909,18 @@ q2 auth logout   # Clears cached tokens
 4. **Email verification check.** Unverified Google emails are rejected before allowlist checks.
 5. **Domain/email allowlists.** Defense in depth beyond Google authentication. OR logic allows combining `--allowed-domains` with `--allowed-emails` for flexibility.
 6. **CSRF validation on OAuth callback.** Both the Vite dev middleware and production `auth_callback` handler validate that the `g_csrf_token` cookie matches the form POST value before issuing a redirect.
-7. **Log redaction.** `RedactedMakeSpan` ensures the `TraceLayer` logs only `uri.path()`, never the query string (which may contain `id_token` for WebSocket upgrades).
-8. **Token in URL (WebSocket).** Encrypted by TLS in transit. Redacted from server logs (see above).
-9. **Short-lived tokens.** Google ID tokens expire in ~1 hour. The browser client schedules an exact `setTimeout` based on the token's `exp` claim to clear auth state precisely at expiry, with no polling gap.
-10. **Minimal client errors.** Invalid/missing tokens return 401; allowlist rejections return 403. Neither includes user-identifying detail. Specific reasons logged server-side only.
-11. **Credential in redirect is URL-safe by construction.** JWTs are base64url-encoded segments separated by `.` — all unreserved URI characters per RFC 3986. Both `auth_callback` handlers document this invariant explicitly.
-12. **Case-insensitive Bearer matching.** The `bearer_token()` extractor matches the `Authorization` header scheme case-insensitively per RFC 7235 §2.1.
-13. **JWT structure validation (browser).** `decodeJwtPayload()` verifies the token has exactly 3 dot-separated segments before attempting base64 decode, preventing cryptic errors from malformed input.
-14. **Restrictive file permissions (CLI).** The token cache directory is created with 0700 and the token cache file is set to 0600 (Unix only), preventing other users on shared machines from reading cached credentials.
-15. **No token leakage in CLI output.** `q2 auth login` prints only "Authenticated successfully." without any token content.
+7. **JWT validation on OAuth callback.** The production `auth_callback` handler validates the JWT (via `ctx.authenticate()`) before redirecting to the SPA. This prevents the redirect from injecting arbitrary data into the `?auth_credential=` URL parameter. (Defense-in-depth: subsequent WebSocket/REST calls validate again.)
+8. **Log redaction.** `RedactedMakeSpan` ensures the `TraceLayer` logs only `uri.path()`, never the query string (which may contain `id_token` for WebSocket upgrades).
+9. **Token in URL (WebSocket).** Encrypted by TLS in transit. Redacted from server logs (see above).
+10. **Short-lived tokens.** Google ID tokens expire in ~1 hour. The browser client schedules an exact `setTimeout` based on the token's `exp` claim to clear auth state precisely at expiry, with no polling gap.
+11. **Minimal client errors.** Invalid/missing tokens return 401; allowlist rejections return 403. Neither includes user-identifying detail. Specific reasons logged server-side only.
+12. **Credential in redirect is URL-safe by construction.** JWTs are base64url-encoded segments separated by `.` — all unreserved URI characters per RFC 3986. Both `auth_callback` handlers document this invariant explicitly.
+13. **Case-insensitive Bearer matching.** The `bearer_token()` extractor matches the `Authorization` header scheme case-insensitively per RFC 7235 §2.1.
+14. **JWT structure validation (browser).** `decodeJwtPayload()` verifies the token has exactly 3 dot-separated segments before attempting base64 decode, preventing cryptic errors from malformed input.
+15. **Restrictive file permissions (CLI).** The token cache directory is created with 0700 and the token cache file is set to 0600 (Unix only), preventing other users on shared machines from reading cached credentials.
+16. **No token leakage in CLI output.** `q2 auth login` prints only "Authenticated successfully." without any token content.
+17. **Graceful JWKS initialization failure.** `build_router` propagates JWKS decoder initialization errors via `Result` rather than panicking, so operators get a clean error message if Google's JWKS endpoint is unreachable at startup.
+18. **Silent token refresh.** ~5 minutes before the ID token expires, the `useAuth` hook enables Google One Tap with `auto_select` via `useGoogleOneTapLogin` from `@react-oauth/google`. If the user has an active Google session (and the browser supports FedCM or third-party cookies), a fresh credential is returned silently — no UI, no redirect. If silent refresh fails, the hard expiry timer clears auth and the user sees the login screen. This keeps collaborative editing sessions alive across token boundaries in most environments.
 
 ### Deployment recommendations
 
@@ -898,17 +931,18 @@ q2 auth logout   # Clears cached tokens
 
 1. **localStorage tokens (browser).** Accessible to XSS. Mitigated by short token lifetime (~1 hour), server-side validation, and the CSP deployment recommendation above.
 2. **Token in WebSocket URL.** Could appear in browser dev tools or reverse proxy logs. Mitigated by TLS, server-side log redaction, and the proxy logging recommendation above. A future iteration could add a short-lived ticket exchange endpoint (`POST /auth/ticket` → one-time ticket for WebSocket URL).
-3. **Credential in redirect URL.** The JWT appears briefly in the browser URL bar during the OAuth callback redirect. The `useAuth` hook clears it via `replaceState` on mount, but it may appear in browser history for a brief window.
+3. **Credential in redirect URL.** The JWT appears briefly in the browser URL bar during the OAuth callback redirect. The `useAuth` hook clears it via `replaceState` on mount, but it may appear in browser history for a brief window. (Mitigated: the production `auth_callback` handler now validates the JWT before redirecting, so only valid Google-issued tokens reach the URL.)
+4. **WebSocket validated once at upgrade.** After the initial `authenticate()` call, the WebSocket connection lives until the client disconnects. If a user is removed from the allowlist or their token expires, already-established connections are not terminated. Clients naturally reconnect (and re-authenticate) when the frontend detects token expiry.
 
 ---
 
 ## Known Limitations
 
-1. **No silent token refresh.** Google Identity Services' Sign In button does not provide refresh tokens. When the ID token expires (~1hr), the user must re-authenticate. The auth hook detects this via an exact-expiry timeout.
+1. **No user database.** Cannot track users, audit access history, or implement per-user settings. Add if/when needed.
 
-2. **No user database.** Cannot track users, audit access history, or implement per-user settings. Add if/when needed.
+2. **CLI ID token expiry.** The CLI obtains a Google ID token via the `yup-oauth2` installed-app flow (`quarto auth login`). Like the browser flow, the ID token expires in ~1 hour. Unlike the browser, there is no silent refresh — `yup-oauth2` can refresh the *access* token automatically, but the refreshed response does not always include a new ID token. If a long-running CLI session needs to re-authenticate, the user must run `quarto auth login` again. This is not an issue today because no long-lived CLI-to-hub connection exists yet.
 
-3. **CLI ID token availability.** `yup-oauth2`'s `Authenticator::id_token()` method returns the ID token when the `openid` scope is requested. The ID token is stored alongside the access token in the token cache, so refreshed tokens also include it. However, the `id_token()` method is separate from `token()` (which only returns the access token).
+3. **Silent refresh browser support.** The silent token refresh (hardening measure 18) depends on the browser supporting FedCM or third-party cookies. Browsers with strict tracking protection (e.g. Safari, Firefox with ETP) may block One Tap, in which case the user must manually re-authenticate when the token expires (~1 hour). This is a graceful degradation, not a failure.
 
 ---
 
@@ -921,9 +955,11 @@ q2 auth logout   # Clears cached tokens
 - [x] Add `auth_config: Option<AuthConfig>` to `HubConfig`, `OnceLock<AuthState>` to `HubContext`
 - [x] Add `HubContext::authenticate()` and `HubContext::auth_config()` methods
 - [x] Add `HubContext::set_auth_state()` method
-- [x] Update `server.rs`: `build_router` becomes async, initializes auth state
+- [x] Update `server.rs`: `build_router` becomes async, initializes auth state, returns `Result<Router>`
 - [x] REST handlers: extract Bearer token from header, call `ctx.authenticate()`
-- [x] WebSocket handler: extract `id_token` from query param, call `ctx.authenticate()`
+- [x] WebSocket handler: extract `id_token` from query param, call `ctx.authenticate()`; document single-validation-at-upgrade security property
+- [x] `auth_callback`: validate JWT server-side before redirecting (defense-in-depth)
+- [x] `build_router`: propagate JWKS initialization errors via `Result` (no panic)
 - [x] Add `RedactedMakeSpan` to prevent token logging
 - [x] Add `validate_tls_config()` check at startup
 - [x] Add `unauthorized()` JSON error helper
@@ -942,7 +978,7 @@ q2 auth logout   # Clears cached tokens
 - [x] Install `@react-oauth/google`
 - [x] Add `VITE_GOOGLE_CLIENT_ID` env var type definition
 - [x] Create `src/services/authService.ts` (store/get/clear auth, JWT decode)
-- [x] Create `src/hooks/useAuth.ts` (auth state, expiry monitoring)
+- [x] Create `src/hooks/useAuth.ts` (auth state, expiry monitoring, silent refresh via `useGoogleOneTapLogin`)
 - [x] Create `src/components/auth/LoginButton.tsx`
 - [x] Wrap app in `GoogleOAuthProvider` (conditional on env var)
 - [x] Add auth gate to `App.tsx`

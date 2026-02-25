@@ -329,10 +329,15 @@ struct AuthCallbackForm {
 
 /// Handle Google OAuth2 redirect callback.
 ///
-/// Receives the credential JWT from Google's POST, validates the CSRF token,
-/// and redirects to the SPA with the credential as a URL search parameter.
-/// The hub-client's `useAuth` hook picks up the credential on mount.
+/// Receives the credential JWT from Google's POST, validates the CSRF token
+/// and the JWT itself, then redirects to the SPA with the credential as a
+/// URL search parameter. The hub-client's `useAuth` hook picks up the
+/// credential on mount.
+///
+/// Validating the JWT here (not just in subsequent API calls) prevents the
+/// redirect from injecting arbitrary data into the SPA's URL.
 async fn auth_callback(
+    State(ctx): State<SharedContext>,
     headers: HeaderMap,
     Form(form): Form<AuthCallbackForm>,
 ) -> impl IntoResponse {
@@ -351,6 +356,13 @@ async fn auth_callback(
 
     if cookie_csrf != Some(form.g_csrf_token.as_str()) {
         return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Validate the JWT before redirecting. This is defense-in-depth:
+    // subsequent API/WebSocket calls validate too, but checking here
+    // ensures we never redirect with a bogus credential in the URL.
+    if let Err(status) = ctx.authenticate(Some(&form.credential)).await {
+        return status.into_response();
     }
 
     // Redirect to the SPA root with the credential as a search parameter.
@@ -373,6 +385,14 @@ async fn not_found() -> impl IntoResponse {
 /// Clients connect here to sync documents in real-time.
 /// Auth token is passed via `?id_token=<token>` query parameter
 /// (browsers can't set custom headers on WebSocket upgrade).
+///
+/// **Security note**: the token is validated once at upgrade time. After
+/// that, the connection lives until the client disconnects. If a user is
+/// removed from the allowlist or their token expires, already-established
+/// connections are **not** terminated. This is a deliberate trade-off:
+/// re-validating on every message would add latency to every sync
+/// operation. Clients naturally reconnect (and re-authenticate) when the
+/// frontend detects token expiry.
 async fn ws_handler(
     State(ctx): State<SharedContext>,
     Query(params): Query<WsParams>,
@@ -402,15 +422,19 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext) {
 
 /// Build the axum router. Auth state (decoder + JWKS refresh handle) is
 /// initialized here and owned by HubContext for the server's lifetime.
-async fn build_router(ctx: SharedContext) -> Router {
+async fn build_router(ctx: SharedContext) -> Result<Router> {
     if let Some(config) = ctx.auth_config() {
         let auth_state = auth::build_auth_state(&config.client_id)
             .await
-            .expect("Failed to initialize Google JWKS decoder");
+            .map_err(|e| {
+                crate::error::Error::Server(format!(
+                    "Failed to initialize Google JWKS decoder: {e}"
+                ))
+            })?;
         ctx.set_auth_state(auth_state);
     }
 
-    Router::new()
+    Ok(Router::new()
         .route("/health", get(health))
         .route("/api/files", get(list_files))
         .route("/api/documents", get(list_documents))
@@ -428,7 +452,7 @@ async fn build_router(ctx: SharedContext) -> Router {
         .route("/ws", get(ws_handler))
         .fallback(not_found)
         .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan))
-        .with_state(ctx)
+        .with_state(ctx))
 }
 
 /// Run the hub server.
@@ -452,7 +476,7 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
     let ctx_for_watch = ctx.clone();
     let ctx_for_shutdown = ctx.clone();
 
-    let router = build_router(ctx).await;
+    let router = build_router(ctx).await?;
 
     let listener = TcpListener::bind(&addr).await?;
     info!(%addr, "Hub server listening");
