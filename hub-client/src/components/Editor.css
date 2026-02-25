@@ -279,7 +279,6 @@
 .preview-pane {
   background: #fff;
   position: relative;
-  overflow: scroll;
 }
 
 .preview-pane.fullscreen {
@@ -424,7 +423,8 @@
 
 .preview-error-content {
   padding: 12px;
-  max-height: calc(20 * 1.4em); /* ~20 lines */
+  max-height: calc(20 * 1.4em);
+  /* ~20 lines */
   overflow-y: auto;
 }
 

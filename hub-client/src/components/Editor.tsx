@@ -36,7 +36,7 @@ import ViewToggleControl from './ViewToggleControl';
 import { useViewMode } from './ViewModeContext';
 import MarkdownSummary from './MarkdownSummary';
 import './Editor.css';
-import ReactPreview from './ReactPreview';
+import PreviewRouter from './PreviewRouter';
 
 interface Props {
   project: ProjectEntry;
@@ -241,6 +241,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setAstJson(newAstJson);
     // Increment content version to trigger thumbnail regeneration
     setContentVersion(prev => prev + 1);
+  }, []);
+
+  // Callback for preview to register scroll-to-line function
+  const handleRegisterScrollToLine = useCallback((fn: (line: number) => void) => {
+    previewScrollToLineRef.current = fn;
   }, []);
 
   // Update document title based on current file and project
@@ -846,7 +851,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               ✕
             </button>
           )}
-          <ReactPreview
+          <PreviewRouter
             content={content}
             currentFile={currentFile}
             files={files}
@@ -858,6 +863,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
             onDiagnosticsChange={handleDiagnosticsChange}
             onWasmStatusChange={handleWasmStatusChange}
+            onRegisterScrollToLine={handleRegisterScrollToLine}
             onAstChange={handleAstChange}
             currentSlideIndex={currentSlideIndex}
             onSlideChange={handleSlideChange}

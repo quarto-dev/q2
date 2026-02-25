@@ -450,28 +450,26 @@ export default function Preview({
   }, [currentFile?.path]);
 
   return (
-    <>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       {wasmError && (
         <div className="wasm-error-banner">
           Failed to load WASM: {wasmError}
         </div>
       )}
-      <div className="pane preview-pane">
-        <MorphIframe
-          ref={doubleBufferedIframeRef}
-          html={renderedHtml}
-          currentFilePath={currentFile?.path ?? ''}
-          onNavigateToDocument={handleNavigateToDocument}
-          onScroll={handlePreviewScroll}
-          onClick={handlePreviewClick}
-          onSelectionChange={handlePreviewSelection}
-        />
-        {/* Error overlay shown when error occurs after successful render */}
-        <PreviewErrorOverlay
-          error={currentError}
-          visible={previewState === 'ERROR_FROM_GOOD'}
-        />
-      </div>
-    </>
+      <MorphIframe
+        ref={doubleBufferedIframeRef}
+        html={renderedHtml}
+        currentFilePath={currentFile?.path ?? ''}
+        onNavigateToDocument={handleNavigateToDocument}
+        onScroll={handlePreviewScroll}
+        onClick={handlePreviewClick}
+        onSelectionChange={handlePreviewSelection}
+      />
+      {/* Error overlay shown when error occurs after successful render */}
+      <PreviewErrorOverlay
+        error={currentError}
+        visible={previewState === 'ERROR_FROM_GOOD'}
+      />
+    </div>
   );
 }

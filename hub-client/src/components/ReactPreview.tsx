@@ -246,37 +246,39 @@ export default function ReactPreview({
   }, [currentFile?.path]);
 
   return (
-    <>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {wasmError && (
         <div className="wasm-error-banner">
           Failed to load WASM: {wasmError}
         </div>
       )}
-      {ast && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
-        <ReactRenderer
-          astJson={ast}
-          currentFilePath={currentFile?.path ?? ''}
-          onNavigateToDocument={handleNavigateToDocument}
-          currentSlideIndex={currentSlideIndex}
-          onSlideChange={onSlideChange}
-        />
-      ) : previewState === 'ERROR_AT_START' && currentError ? (
-        <div style={{ padding: '20px', color: 'red' }}>
-          <strong>Render Error</strong>
-          <pre style={{ marginTop: '10px', whiteSpace: 'pre-wrap' }}>
-            {stripAnsi(currentError.message)}
-          </pre>
-        </div>
-      ) : (
-        <div style={{ padding: '20px', color: '#666' }}>
-          Loading preview...
-        </div>
-      )}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {ast && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
+          <ReactRenderer
+            astJson={ast}
+            currentFilePath={currentFile?.path ?? ''}
+            onNavigateToDocument={handleNavigateToDocument}
+            currentSlideIndex={currentSlideIndex}
+            onSlideChange={onSlideChange}
+          />
+        ) : previewState === 'ERROR_AT_START' && currentError ? (
+          <div style={{ padding: '20px', color: 'red' }}>
+            <strong>Render Error</strong>
+            <pre style={{ marginTop: '10px', whiteSpace: 'pre-wrap' }}>
+              {stripAnsi(currentError.message)}
+            </pre>
+          </div>
+        ) : (
+          <div style={{ padding: '20px', color: '#666' }}>
+            Loading preview...
+          </div>
+        )}
+      </div>
       {/* Error overlay shown when error occurs after successful render */}
       <PreviewErrorOverlay
         error={currentError}
         visible={previewState === 'ERROR_FROM_GOOD'}
       />
-    </>
+    </div>
   );
 }
