@@ -262,4 +262,33 @@ mod tests {
             Err(StatusCode::FORBIDDEN)
         );
     }
+
+    // ── validate_tls_config ──────────────────────────────────────
+
+    #[test]
+    fn tls_required_when_auth_enabled() {
+        let result = validate_tls_config(Some("client-id"), false, false);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("--behind-tls-proxy"));
+    }
+
+    #[test]
+    fn tls_satisfied_by_proxy() {
+        assert!(validate_tls_config(Some("client-id"), true, false).is_ok());
+    }
+
+    #[test]
+    fn tls_satisfied_by_insecure_flag() {
+        assert!(validate_tls_config(Some("client-id"), false, true).is_ok());
+    }
+
+    #[test]
+    fn tls_both_flags_ok() {
+        assert!(validate_tls_config(Some("client-id"), true, true).is_ok());
+    }
+
+    #[test]
+    fn tls_not_required_when_auth_disabled() {
+        assert!(validate_tls_config(None, false, false).is_ok());
+    }
 }
