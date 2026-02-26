@@ -125,14 +125,20 @@ impl<B> tower_http::trace::MakeSpan<B> for RedactedMakeSpan {
 }
 
 /// Health check endpoint
-async fn health(State(ctx): State<SharedContext>) -> impl IntoResponse {
+async fn health(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    ctx.authenticate(bearer_token(&headers))
+        .await
+        .map_err(|_| unauthorized())?;
     let response = HealthResponse {
         status: "ok",
         project_root: ctx.storage().project_root().display().to_string(),
         qmd_file_count: ctx.project_files().qmd_files.len(),
         index_document_id: ctx.index().document_id(),
     };
-    Json(response)
+    Ok(Json(response))
 }
 
 /// List discovered files (from filesystem)
