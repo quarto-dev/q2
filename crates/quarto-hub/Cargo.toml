@@ -31,6 +31,10 @@ axum-jwt-auth = "0.6"
 jsonwebtoken = "10"
 tokio-util = { workspace = true }
 
+# Cookie building (already transitive via axum-jwt-auth)
+cookie = "0.18"
+time = "0.3"
+
 # Automerge (via samod for JS compatibility)
 automerge = "0.7"
 samod = { version = "0.7", features = ["tokio", "axum", "tungstenite"] }

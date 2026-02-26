@@ -20,6 +20,7 @@ use tokio::net::TcpListener;
 use tokio::sync::watch;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
+use cookie::SameSite;
 use tracing::{debug, info};
 
 use crate::auth;
@@ -130,19 +131,30 @@ fn cookie_token(headers: &HeaderMap) -> Option<&str> {
 /// same-site requests and top-level navigations), scoped to `Path=/`,
 /// and expires after `AUTH_COOKIE_MAX_AGE` seconds. The `Secure` flag
 /// is included unless `allow_insecure` is true (HTTP dev mode).
+///
+/// Uses the `cookie` crate for correct value encoding, preventing
+/// injection of extra attributes via malformed token values.
 fn build_auth_cookie(token: &str, secure: bool) -> String {
-    let mut cookie = format!(
-        "{AUTH_COOKIE_NAME}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={AUTH_COOKIE_MAX_AGE}"
-    );
+    let mut builder = cookie::Cookie::build((AUTH_COOKIE_NAME, token))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .path("/")
+        .max_age(time::Duration::seconds(AUTH_COOKIE_MAX_AGE as i64));
     if secure {
-        cookie.push_str("; Secure");
+        builder = builder.secure(true);
     }
-    cookie
+    builder.build().to_string()
 }
 
 /// Build a `Set-Cookie` header value that clears the auth cookie.
 fn build_clear_cookie() -> String {
-    format!("{AUTH_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0")
+    cookie::Cookie::build((AUTH_COOKIE_NAME, ""))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .path("/")
+        .max_age(time::Duration::ZERO)
+        .build()
+        .to_string()
 }
 
 /// Verify that a state-mutating request includes the CSRF protection header.
