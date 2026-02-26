@@ -54,6 +54,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "rust-test-suite"
 
       # Cache cargo-nextest and insta separately to avoid reinstalling
       - name: Install nextest
