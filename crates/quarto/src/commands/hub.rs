@@ -103,6 +103,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         watch_enabled: !args.no_watch,
         watch_debounce_ms: args.watch_debounce,
         auth_config,
+        allow_insecure_auth: args.allow_insecure_auth,
     };
 
     server::run_server(storage, config).await?;
