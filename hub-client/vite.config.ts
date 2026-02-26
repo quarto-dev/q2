@@ -18,53 +18,8 @@ function getGitInfo() {
 
 const gitInfo = getGitInfo()
 
-const AUTH_COOKIE_NAME = 'quarto_hub_token';
-
-/** Build a Set-Cookie value for the auth token (no Secure flag — HTTP in dev). */
-function buildAuthCookie(token: string): string {
-  return `${AUTH_COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600`;
-}
-
-/** Build a Set-Cookie value that clears the auth cookie. */
-function buildClearCookie(): string {
-  return `${AUTH_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
-}
-
-/** Extract the auth token from the Cookie header. */
-function getCookieToken(req: IncomingMessage): string | null {
-  const cookieHeader = req.headers.cookie ?? '';
-  const match = cookieHeader
-    .split(';')
-    .map(c => c.trim())
-    .find(c => c.startsWith(`${AUTH_COOKIE_NAME}=`));
-  if (!match) return null;
-  const value = match.slice(AUTH_COOKIE_NAME.length + 1);
-  return value || null;
-}
-
-/** Decode a JWT payload without verification (dev mode only — server validates in production). */
-function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
-  try {
-    const parts = jwt.split('.');
-    if (parts.length !== 3) return null;
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(Buffer.from(base64, 'base64').toString('utf-8'));
-  } catch {
-    return null;
-  }
-}
-
-/** Read a JSON request body. */
-function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown> | null> {
-  return new Promise((resolve) => {
-    let body = '';
-    req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-    req.on('end', () => {
-      try { resolve(JSON.parse(body)); }
-      catch { resolve(null); }
-    });
-  });
-}
+/** Hub server URL. Override with VITE_HUB_SERVER env var. */
+const hubTarget = new URL(process.env.VITE_HUB_SERVER || 'http://localhost:3000');
 
 /**
  * Forward WebSocket upgrades from the Vite dev server to the hub server.
@@ -83,8 +38,6 @@ function hubWebSocketPlugin(): Plugin {
   return {
     name: 'hub-websocket',
     configureServer(server) {
-      const hubTarget = new URL(process.env.VITE_HUB_SERVER || 'http://localhost:3000');
-
       server.httpServer?.on('upgrade', (req: IncomingMessage, socket: Socket, head: Buffer) => {
         // Don't intercept Vite HMR WebSocket
         if (req.headers['sec-websocket-protocol']?.includes('vite-hmr')) return;
@@ -145,127 +98,43 @@ function hubWebSocketPlugin(): Plugin {
 }
 
 /**
- * Vite dev server middleware for handling auth endpoints.
+ * Proxy /auth/* requests from the Vite dev server to the hub server.
  *
- * In production, auth endpoints live on the hub server (server.rs).
- * In dev mode, Vite handles them directly with lightweight JWT decoding
- * (no signature verification — that's the hub server's job).
+ * In production, auth endpoints live on the hub server directly.
+ * In dev mode, the browser talks to the Vite origin (:5173), so auth
+ * cookies must be set on that origin. This proxy forwards requests to
+ * the hub (which does full JWT signature validation via Google JWKS,
+ * CSRF checks, and allowlist enforcement) and relays responses —
+ * including Set-Cookie and redirect headers — back to the browser.
  *
- * Endpoints:
- * - POST /auth/callback — Google OAuth redirect (sets cookie, redirects to /)
- * - GET /auth/me — Returns user info from cookie
- * - POST /auth/logout — Clears the cookie
- * - POST /auth/refresh — Sets a new cookie from request body
- *
- * NOTE: `Secure` flag is deliberately omitted because Vite serves over HTTP.
+ * This ensures dev mode has identical security behavior to production:
+ * the hub is the single source of truth for authentication.
  */
 function authPlugin(): Plugin {
   return {
     name: 'auth',
     configureServer(server) {
-      // POST /auth/callback — Google OAuth redirect
-      server.middlewares.use('/auth/callback', (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-        if (req.method !== 'POST') { next(); return; }
+      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (!req.url?.startsWith('/auth/')) { next(); return; }
 
-        let body = '';
-        req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-        req.on('end', () => {
-          const params = new URLSearchParams(body);
-          const credential = params.get('credential');
-
-          if (!credential) {
-            res.writeHead(400, { 'Content-Type': 'text/plain' });
-            res.end('Missing credential');
-            return;
-          }
-
-          // Validate CSRF: g_csrf_token cookie must match the form value.
-          const formCsrf = params.get('g_csrf_token');
-          const cookieHeader = req.headers.cookie ?? '';
-          const cookieCsrf = cookieHeader
-            .split(';')
-            .map(c => c.trim())
-            .find(c => c.startsWith('g_csrf_token='))
-            ?.slice('g_csrf_token='.length);
-
-          if (!formCsrf || formCsrf !== cookieCsrf) {
-            res.writeHead(403, { 'Content-Type': 'text/plain' });
-            res.end('CSRF validation failed');
-            return;
-          }
-
-          res.writeHead(302, {
-            Location: '/',
-            'Set-Cookie': buildAuthCookie(credential),
-          });
-          res.end();
+        const proxyReq = http.request({
+          hostname: hubTarget.hostname,
+          port: hubTarget.port,
+          path: req.url,
+          method: req.method,
+          headers: { ...req.headers, host: hubTarget.host },
+        }, (proxyRes) => {
+          res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+          proxyRes.pipe(res);
         });
-      });
 
-      // GET /auth/me — Return user info from cookie
-      server.middlewares.use('/auth/me', (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-        if (req.method !== 'GET') { next(); return; }
-
-        const token = getCookieToken(req);
-        if (!token) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'unauthorized' }));
-          return;
-        }
-
-        const payload = decodeJwtPayload(token);
-        if (!payload || typeof payload.email !== 'string') {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'unauthorized' }));
-          return;
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          email: payload.email,
-          name: typeof payload.name === 'string' ? payload.name : null,
-          picture: typeof payload.picture === 'string' ? payload.picture : null,
-        }));
-      });
-
-      // POST /auth/logout — Clear the cookie
-      server.middlewares.use('/auth/logout', (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-        if (req.method !== 'POST') { next(); return; }
-
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Set-Cookie': buildClearCookie(),
+        proxyReq.on('error', (err) => {
+          console.error('Auth proxy error:', err.message);
+          res.writeHead(502, { 'Content-Type': 'text/plain' });
+          res.end('Hub server unavailable');
         });
-        res.end(JSON.stringify({ status: 'ok' }));
-      });
 
-      // POST /auth/refresh — Validate new JWT, set fresh cookie
-      server.middlewares.use('/auth/refresh', (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-        if (req.method !== 'POST') { next(); return; }
-
-        readJsonBody(req).then((body) => {
-          const credential = typeof body?.credential === 'string' ? body.credential : null;
-          if (!credential) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'missing credential' }));
-            return;
-          }
-
-          // In dev mode, we don't verify the JWT signature — just set the cookie.
-          // The hub server does full validation in production.
-          const payload = decodeJwtPayload(credential);
-          if (!payload || typeof payload.email !== 'string') {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'invalid credential' }));
-            return;
-          }
-
-          res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Set-Cookie': buildAuthCookie(credential),
-          });
-          res.end(JSON.stringify({ status: 'ok' }));
-        });
+        req.pipe(proxyReq);
       });
     },
   };
