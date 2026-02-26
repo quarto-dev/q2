@@ -101,12 +101,13 @@ fn unauthorized() -> (StatusCode, Json<serde_json::Value>) {
 /// The auth-scheme match is case-insensitive per RFC 7235 §2.1.
 fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get("authorization")?.to_str().ok()?;
-    // "Bearer " is 7 bytes; check prefix case-insensitively, return the rest as-is.
-    if value.len() > 7 && value[..7].eq_ignore_ascii_case("bearer ") {
-        Some(&value[7..])
-    } else {
-        None
-    }
+    // Case-insensitive prefix match per RFC 7235 §2.1.
+    let token = value.get(..7).and_then(|prefix| {
+        prefix
+            .eq_ignore_ascii_case("bearer ")
+            .then(|| &value[7..])
+    })?;
+    (!token.is_empty()).then_some(token)
 }
 
 /// Log request method and path only — never the query string, which
@@ -360,7 +361,7 @@ async fn auth_callback(
                 .map(|c| &c["g_csrf_token=".len()..])
         });
 
-    if cookie_csrf != Some(form.g_csrf_token.as_str()) {
+    if form.g_csrf_token.is_empty() || cookie_csrf != Some(form.g_csrf_token.as_str()) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
@@ -437,7 +438,8 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
                     "Failed to initialize Google JWKS decoder: {e}"
                 ))
             })?;
-        ctx.set_auth_state(auth_state);
+        ctx.set_auth_state(auth_state)
+            .map_err(|e| crate::error::Error::Server(e.to_string()))?;
     }
 
     Ok(Router::new()

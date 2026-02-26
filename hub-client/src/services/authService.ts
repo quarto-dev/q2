@@ -44,16 +44,26 @@ export function getStoredAuth(): AuthState | null {
   }
 }
 
-/** Store an ID token received from Google Sign-In. */
+/** Store an ID token received from Google Sign-In.
+ *  Throws if the JWT payload is missing required fields or has wrong types. */
 export function storeAuth(idToken: string): AuthState {
   const payload = decodeJwtPayload(idToken);
 
+  if (typeof payload.email !== 'string' || !payload.email) {
+    throw new Error('Invalid JWT: missing or invalid email claim');
+  }
+  if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp <= 0) {
+    throw new Error('Invalid JWT: missing or invalid exp claim');
+  }
+
   const state: AuthState = {
     idToken,
-    email: payload.email as string,
-    name: (payload.name as string) ?? null,
-    picture: (payload.picture as string) ?? null,
-    expiresAt: (payload.exp as number) * 1000, // JWT exp is seconds
+    email: payload.email,
+    name: typeof payload.name === 'string' ? payload.name : null,
+    picture: typeof payload.picture === 'string' && payload.picture.startsWith('https://')
+      ? payload.picture
+      : null,
+    expiresAt: payload.exp * 1000, // JWT exp is seconds
   };
 
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state));

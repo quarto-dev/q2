@@ -237,10 +237,10 @@ impl HubContext {
 
     /// Store the auth state (decoder + refresh task handle).
     /// Called once during server startup in `build_router`.
-    pub fn set_auth_state(&self, state: AuthState) {
+    pub fn set_auth_state(&self, state: AuthState) -> std::result::Result<(), &'static str> {
         self.auth_state
             .set(state)
-            .expect("auth_state already initialized");
+            .map_err(|_| "auth_state already initialized")
     }
 
     /// Authenticate a request. If auth is disabled, always succeeds.
