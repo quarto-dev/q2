@@ -27,7 +27,7 @@ Google OAuth2 authentication for quarto-hub, enforced at the middleware layer. T
 │  │                                                                  │   │
 │  │  REST:      Authorization: Bearer <id_token> → authenticate() → 401│  │
 │  │  WebSocket: ?id_token=<token> → authenticate() → 401             │  │
-│  │  /health:   no auth required                                     │   │
+│  │  /health:   authenticated (same as REST)                         │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │       │                                                                 │
 │       ▼ (authenticated)                                                 │
@@ -64,9 +64,8 @@ Google OAuth2 authentication for quarto-hub, enforced at the middleware layer. T
 
 | Endpoint | Token location | Rationale |
 |----------|---------------|-----------|
-| REST (`/api/*`) | `Authorization: Bearer <id_token>` | Standard HTTP auth header; extracted and decoded via `HubContext::authenticate()` |
+| REST (`/api/*`, `/health`) | `Authorization: Bearer <id_token>` | Standard HTTP auth header; extracted and decoded via `HubContext::authenticate()` |
 | WebSocket (`/ws`) | `?id_token=<token>` query param | Browsers can't set custom headers on WebSocket upgrade |
-| Health (`/health`) | None | Always open for monitoring |
 
 The ID token in the WebSocket URL is encrypted in transit by a TLS-terminating reverse proxy (`--behind-tls-proxy`). The `RedactedMakeSpan` trace layer ensures tokens are never logged server-side.
 
@@ -659,172 +658,6 @@ the standard `BrowserWebSocketClientAdapter` passes through unchanged.
 
 ---
 
-### CLI Client (Rust)
-
-The CLI uses `yup-oauth2` for the installed application flow (opens browser,
-receives callback). By requesting `openid` scopes, the token response includes
-an `id_token` field which is what the server validates.
-
-#### Dependencies
-
-Add to `crates/quarto/Cargo.toml`:
-
-```toml
-[dependencies]
-yup-oauth2 = "11"
-dirs = "6"
-```
-
-#### CLI Auth Module
-
-```rust
-// crates/quarto/src/auth.rs
-
-use anyhow::{Context, Result};
-use std::path::PathBuf;
-use yup_oauth2::{InstalledFlowAuthenticator, InstalledFlowReturnMethod};
-
-/// Request openid scopes so the token response includes an id_token.
-const SCOPES: &[&str] = &[
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-];
-
-fn token_cache_path() -> PathBuf {
-    dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("quarto")
-        .join("oauth2_tokens.json")
-}
-
-fn client_secret_path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("quarto")
-        .join("client_secret.json")
-}
-
-/// Get a Google ID token for hub authentication.
-/// Opens browser on first use, uses cached/refreshed tokens subsequently.
-pub async fn get_id_token() -> Result<String> {
-    let secret_path = client_secret_path();
-    if !secret_path.exists() {
-        anyhow::bail!(
-            "OAuth2 client secret not found at: {}\n\
-             Download client_secret.json from Google Cloud Console.",
-            secret_path.display()
-        );
-    }
-
-    let secret = yup_oauth2::read_application_secret(&secret_path)
-        .await
-        .context("Failed to read client secret")?;
-
-    let cache = token_cache_path();
-    if let Some(parent) = cache.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    let auth = InstalledFlowAuthenticator::builder(
-        secret,
-        InstalledFlowReturnMethod::HTTPRedirect,
-    )
-    .persist_tokens_to_disk(&cache)
-    .build()
-    .await
-    .context("Failed to create authenticator")?;
-
-    // id_token() is a method on Authenticator (not on Token).
-    // It returns Result<Option<String>, Error>.
-    // Requires "openid" in SCOPES for Google to include the ID token.
-    auth.id_token(SCOPES)
-        .await
-        .context("Failed to get ID token")?
-        .ok_or_else(|| anyhow::anyhow!(
-            "No ID token in response. Ensure 'openid' scope is granted."
-        ))
-}
-
-pub fn clear_tokens() -> Result<()> {
-    let path = token_cache_path();
-    if path.exists() { std::fs::remove_file(&path)?; }
-    Ok(())
-}
-
-pub fn has_cached_tokens() -> bool {
-    token_cache_path().exists()
-}
-```
-
-#### CLI Commands and Hub Server Flags
-
-```rust
-// crates/quarto/src/commands/auth.rs
-
-#[derive(Subcommand)]
-pub enum AuthCommands {
-    /// Authenticate with Google for hub access.
-    Login,
-    /// Clear cached tokens.
-    Logout,
-    /// Show authentication status.
-    Status,
-}
-```
-
-```rust
-// crates/quarto/src/commands/hub.rs (additions)
-
-#[derive(Parser)]
-pub struct HubArgs {
-    // ... existing fields ...
-
-    /// Google OAuth2 client ID. Presence enables auth.
-    /// Requires --behind-tls-proxy (or --allow-insecure-auth for local dev).
-    #[arg(long)]
-    pub google_client_id: Option<String>,
-
-    /// Acknowledge that a TLS-terminating reverse proxy (nginx, Caddy,
-    /// cloud LB) sits in front of the hub. Required when auth is enabled.
-    #[arg(long)]
-    pub behind_tls_proxy: bool,
-
-    /// Allow auth without TLS (local development only). Tokens will
-    /// transit in plaintext — never use this in production.
-    #[arg(long)]
-    pub allow_insecure_auth: bool,
-
-    /// Allowed email addresses (comma-separated).
-    #[arg(long, value_delimiter = ',')]
-    pub allowed_emails: Option<Vec<String>>,
-
-    /// Allowed email domains (comma-separated).
-    #[arg(long, value_delimiter = ',')]
-    pub allowed_domains: Option<Vec<String>>,
-}
-```
-
-#### CLI Client Connection
-
-```rust
-// crates/quarto/src/commands/hub.rs (client connection)
-
-pub async fn connect_to_hub(url: &str, require_auth: bool) -> Result<()> {
-    let ws_url = if require_auth {
-        let token = crate::auth::get_id_token().await?;
-        format!("{}?id_token={}", url, urlencoding::encode(&token))
-    } else {
-        url.to_string()
-    };
-
-    // Connect to hub with ws_url — samod sees a normal WebSocket
-    // ...
-
-    Ok(())
-}
-```
-
 ---
 
 ## Configuration
@@ -852,18 +685,13 @@ QUARTO_HUB_ALLOWED_EMAILS=admin@example.com
    - Add test users if the app is in "Testing" publish status
 
 3. Navigate to **APIs & Services > Credentials > Create Credentials > OAuth client ID**.
-   Create **two** credentials:
 
    **Web application** (for hub-client browser + server validation):
    - Authorized JavaScript origins: `http://localhost:5173` (dev), plus your production URL
    - Copy the **client ID** — this is `VITE_GOOGLE_CLIENT_ID` and `--google-client-id`
    - The client ID looks like `123456789-abcdef.apps.googleusercontent.com`
 
-   **Desktop application** (for CLI `q2 auth login`):
-   - Download the JSON credentials file
-   - Save as `~/.config/quarto/client_secret.json`
-
-Both the server `--google-client-id` flag and the browser `VITE_GOOGLE_CLIENT_ID` use the **web application** client ID. The server validates that the JWT `aud` claim matches this ID. The CLI uses the desktop credential to obtain tokens through the browser redirect flow.
+Both the server `--google-client-id` flag and the browser `VITE_GOOGLE_CLIENT_ID` use this client ID. The server validates that the JWT `aud` claim matches this ID.
 
 ### Usage
 
@@ -888,13 +716,6 @@ VITE_GOOGLE_CLIENT_ID=YOUR_ID.apps.googleusercontent.com npm run dev
 
 When `VITE_GOOGLE_CLIENT_ID` is not set, auth is completely disabled — no login screen, no token on WebSocket URLs.
 
-**CLI client:**
-```bash
-q2 auth login    # Opens browser, gets Google ID token
-q2 auth status   # Shows token cache and client secret paths
-q2 auth logout   # Clears cached tokens
-```
-
 ---
 
 ## Security Review
@@ -917,9 +738,7 @@ q2 auth logout   # Clears cached tokens
 12. **Credential in redirect is URL-safe by construction.** JWTs are base64url-encoded segments separated by `.` — all unreserved URI characters per RFC 3986. Both `auth_callback` handlers document this invariant explicitly.
 13. **Case-insensitive Bearer matching.** The `bearer_token()` extractor matches the `Authorization` header scheme case-insensitively per RFC 7235 §2.1.
 14. **JWT structure validation (browser).** `decodeJwtPayload()` verifies the token has exactly 3 dot-separated segments before attempting base64 decode, preventing cryptic errors from malformed input.
-15. **Restrictive file permissions (CLI).** The token cache directory is created with 0700 and the token cache file is set to 0600 (Unix only), preventing other users on shared machines from reading cached credentials.
-16. **No token leakage in CLI output.** `q2 auth login` prints only "Authenticated successfully." without any token content.
-17. **Graceful JWKS initialization failure.** `build_router` propagates JWKS decoder initialization errors via `Result` rather than panicking, so operators get a clean error message if Google's JWKS endpoint is unreachable at startup.
+15. **Graceful JWKS initialization failure.** `build_router` propagates JWKS decoder initialization errors via `Result` rather than panicking, so operators get a clean error message if Google's JWKS endpoint is unreachable at startup.
 18. **Silent token refresh.** ~5 minutes before the ID token expires, the `useAuth` hook enables Google One Tap with `auto_select` via `useGoogleOneTapLogin` from `@react-oauth/google`. If the user has an active Google session (and the browser supports FedCM or third-party cookies), a fresh credential is returned silently — no UI, no redirect. If silent refresh fails, the hard expiry timer clears auth and the user sees the login screen. This keeps collaborative editing sessions alive across token boundaries in most environments.
 
 ### Deployment recommendations
@@ -940,9 +759,7 @@ q2 auth logout   # Clears cached tokens
 
 1. **No user database.** Cannot track users, audit access history, or implement per-user settings. Add if/when needed.
 
-2. **CLI ID token expiry.** The CLI obtains a Google ID token via the `yup-oauth2` installed-app flow (`quarto auth login`). Like the browser flow, the ID token expires in ~1 hour. Unlike the browser, there is no silent refresh — `yup-oauth2` can refresh the *access* token automatically, but the refreshed response does not always include a new ID token. If a long-running CLI session needs to re-authenticate, the user must run `quarto auth login` again. This is not an issue today because no long-lived CLI-to-hub connection exists yet.
-
-3. **Silent refresh browser support.** The silent token refresh (hardening measure 18) depends on the browser supporting FedCM or third-party cookies. Browsers with strict tracking protection (e.g. Safari, Firefox with ETP) may block One Tap, in which case the user must manually re-authenticate when the token expires (~1 hour). This is a graceful degradation, not a failure.
+2. **Silent refresh browser support.** The silent token refresh (hardening measure 18) depends on the browser supporting FedCM or third-party cookies. Browsers with strict tracking protection (e.g. Safari, Firefox with ETP) may block One Tap, in which case the user must manually re-authenticate when the token expires (~1 hour). This is a graceful degradation, not a failure.
 
 ---
 
@@ -984,9 +801,6 @@ q2 auth logout   # Clears cached tokens
 - [x] Add auth gate to `App.tsx`
 - [x] Append ID token to WebSocket URL in `automergeSync.ts` connect()
 
-### Phase 4: CLI Client Auth (Rust — `crates/quarto`)
+### Phase 4: CLI Client Auth (Rust — `crates/quarto`) — REMOVED
 
-- [x] Add `yup-oauth2` and `dirs` dependencies
-- [x] Create `crates/quarto/src/auth.rs` (get_id_token, clear_tokens, status)
-- [x] Add `quarto auth login/logout/status` subcommands
-- [ ] Append ID token to WebSocket URL when connecting as client (deferred: no client connect command exists yet)
+CLI auth module (`auth.rs`, `auth_cmd.rs`, `yup-oauth2`, `dirs`) was removed as dead code — nothing consumed the tokens. The hub server only receives tokens from the browser-based Google Sign-In flow. CLI-to-hub auth can be re-implemented if/when a CLI client connect command is added.

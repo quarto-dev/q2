@@ -6,7 +6,6 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod auth;
 mod commands;
 
 #[derive(Parser)]
@@ -320,12 +319,6 @@ enum Commands {
     /// Start the Quarto Language Server Protocol server
     Lsp,
 
-    /// Manage authentication for hub access
-    Auth {
-        #[command(subcommand)]
-        action: AuthAction,
-    },
-
     /// Start collaborative hub server for real-time editing
     Hub {
         /// Project root directory (defaults to current directory)
@@ -385,16 +378,6 @@ enum Commands {
     },
 }
 
-#[derive(Subcommand)]
-enum AuthAction {
-    /// Authenticate with Google for hub access.
-    Login,
-    /// Clear cached authentication tokens.
-    Logout,
-    /// Show authentication status.
-    Status,
-}
-
 fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::registry()
@@ -443,11 +426,6 @@ fn main() -> Result<()> {
         Commands::Check { .. } => commands::check::execute(),
         Commands::Call { function, args } => commands::call::execute(function, args),
         Commands::Lsp => commands::lsp::execute(),
-        Commands::Auth { action } => match action {
-            AuthAction::Login => commands::auth_cmd::login(),
-            AuthAction::Logout => commands::auth_cmd::logout(),
-            AuthAction::Status => commands::auth_cmd::status(),
-        },
         Commands::Hub {
             project,
             port,
