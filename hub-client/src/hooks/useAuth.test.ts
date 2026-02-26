@@ -192,9 +192,19 @@ describe('useAuth', () => {
         expect(result.current.auth).toEqual(user),
       );
 
-      // Advance past cookie max-age (1 hour)
+      // Advance past the refresh point (55 min). The refresh timer sets
+      // isRefreshing=true and enables One Tap. Simulate One Tap failing
+      // (no active Google session), which resets isRefreshing=false.
       await act(async () => {
-        vi.advanceTimersByTime(3600 * 1000 + 100);
+        vi.advanceTimersByTime(55 * 60 * 1000 + 100);
+      });
+      await act(async () => {
+        oneTapCallbacks.onError?.();
+      });
+
+      // Advance past cookie max-age (remaining ~5 min)
+      await act(async () => {
+        vi.advanceTimersByTime(5 * 60 * 1000 + 100);
       });
 
       await vi.waitFor(() =>

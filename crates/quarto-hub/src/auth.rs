@@ -53,17 +53,18 @@ pub fn check_allowlists(claims: &GoogleClaims, config: &AuthConfig) -> Result<()
         return Ok(());
     }
 
-    // Case-sensitive comparison is intentional: Google normalizes emails
-    // to lowercase in ID token claims. If we add non-Google identity
-    // providers in the future, revisit this to normalize both sides.
+    // Case-insensitive comparison: Google normalizes emails to lowercase
+    // in ID token claims, but the allowlist may have mixed case. Using
+    // eq_ignore_ascii_case is also forward-compatible with non-Google
+    // identity providers that may not normalize.
     let email_ok = config
         .allowed_emails
         .as_ref()
-        .is_some_and(|list| list.contains(&claims.email));
+        .is_some_and(|list| list.iter().any(|e| e.eq_ignore_ascii_case(&claims.email)));
 
     let domain_ok = config.allowed_domains.as_ref().is_some_and(|list| {
         let domain = claims.email.split('@').last().unwrap_or("");
-        list.iter().any(|d| d == domain)
+        list.iter().any(|d| d.eq_ignore_ascii_case(domain))
     });
 
     if email_ok || domain_ok {
@@ -261,6 +262,20 @@ mod tests {
             check_allowlists(&claims, &config),
             Err(StatusCode::FORBIDDEN)
         );
+    }
+
+    #[test]
+    fn email_allowlist_case_insensitive() {
+        let claims = make_claims("Admin@Example.COM", true);
+        let config = make_config(Some(vec!["admin@example.com"]), None);
+        assert_eq!(check_allowlists(&claims, &config), Ok(()));
+    }
+
+    #[test]
+    fn domain_allowlist_case_insensitive() {
+        let claims = make_claims("user@Company.COM", true);
+        let config = make_config(None, Some(vec!["company.com"]));
+        assert_eq!(check_allowlists(&claims, &config), Ok(()));
     }
 
     // ── validate_tls_config ──────────────────────────────────────

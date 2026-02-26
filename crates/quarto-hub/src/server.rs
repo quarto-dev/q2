@@ -7,10 +7,10 @@ use std::time::Duration;
 use axum::{
     Json, Router,
     extract::{
-        Form, Path, State,
+        Form, FromRef, FromRequestParts, Path, State,
         ws::{WebSocket, WebSocketUpgrade},
     },
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, request::Parts},
     response::{IntoResponse, Redirect},
     routing::{get, post},
 };
@@ -110,18 +110,16 @@ fn unauthorized() -> (StatusCode, Json<serde_json::Value>) {
 
 /// Extract the auth token from the `Cookie` header.
 ///
-/// Parses the `quarto_hub_token` cookie value from a standard
-/// `Cookie: name=value; name2=value2` header. Returns `None` if the
-/// cookie is absent or the header is not valid UTF-8.
-fn cookie_token(headers: &HeaderMap) -> Option<&str> {
+/// Uses the `cookie` crate parser for RFC 6265 compliance (handles
+/// quoted values and other edge cases). Returns `None` if the cookie
+/// is absent, the header is not valid UTF-8, or the value is empty.
+fn cookie_token(headers: &HeaderMap) -> Option<String> {
     let cookies = headers.get("cookie")?.to_str().ok()?;
     cookies
         .split(';')
-        .map(|c| c.trim())
-        .find_map(|c| {
-            c.strip_prefix(AUTH_COOKIE_NAME)
-                .and_then(|rest| rest.strip_prefix('='))
-        })
+        .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
+        .find(|c| c.name() == AUTH_COOKIE_NAME)
+        .map(|c| c.value().to_owned())
         .filter(|v| !v.is_empty())
 }
 
@@ -220,50 +218,63 @@ impl<B> tower_http::trace::MakeSpan<B> for RedactedMakeSpan {
     }
 }
 
+/// Axum extractor that validates the auth cookie before the handler runs.
+///
+/// If auth is disabled, extraction always succeeds. If auth is enabled,
+/// the `quarto_hub_token` cookie must be present and contain a valid JWT.
+/// Returns 401 with a JSON body on failure.
+struct Authenticated;
+
+impl<S> FromRequestParts<S> for Authenticated
+where
+    SharedContext: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> std::result::Result<Self, Self::Rejection> {
+        let ctx = SharedContext::from_ref(state);
+        let token = cookie_token(&parts.headers);
+        ctx.authenticate(token.as_deref())
+            .await
+            .map_err(|_| unauthorized())?;
+        Ok(Authenticated)
+    }
+}
+
 /// Health check endpoint
 async fn health(
-    headers: HeaderMap,
+    _auth: Authenticated,
     State(ctx): State<SharedContext>,
-) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    ctx.authenticate(cookie_token(&headers))
-        .await
-        .map_err(|_| unauthorized())?;
-    let response = HealthResponse {
+) -> Json<HealthResponse> {
+    Json(HealthResponse {
         status: "ok",
         project_root: ctx.storage().project_root().display().to_string(),
         qmd_file_count: ctx.project_files().qmd_files.len(),
         index_document_id: ctx.index().document_id(),
-    };
-    Ok(Json(response))
+    })
 }
 
 /// List discovered files (from filesystem)
 async fn list_files(
-    headers: HeaderMap,
+    _auth: Authenticated,
     State(ctx): State<SharedContext>,
-) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    ctx.authenticate(cookie_token(&headers))
-        .await
-        .map_err(|_| unauthorized())?;
-    let response = FilesResponse {
+) -> Json<FilesResponse> {
+    Json(FilesResponse {
         qmd_files: ctx
             .project_files()
             .qmd_files
             .iter()
             .map(|p| p.display().to_string())
             .collect(),
-    };
-    Ok(Json(response))
+    })
 }
 
 /// List all documents from the index
 async fn list_documents(
-    headers: HeaderMap,
+    _auth: Authenticated,
     State(ctx): State<SharedContext>,
-) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    ctx.authenticate(cookie_token(&headers))
-        .await
-        .map_err(|_| unauthorized())?;
+) -> Json<DocumentsResponse> {
     let files = ctx.index().get_all_files();
 
     let documents: Vec<DocumentEntry> = files
@@ -271,25 +282,15 @@ async fn list_documents(
         .map(|(path, document_id)| DocumentEntry { path, document_id })
         .collect();
 
-    Ok(Json(DocumentsResponse { documents }))
+    Json(DocumentsResponse { documents })
 }
 
 /// Get a single document by ID
 async fn get_document(
-    headers: HeaderMap,
+    _auth: Authenticated,
     State(ctx): State<SharedContext>,
     Path(doc_id_str): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(status) = ctx.authenticate(cookie_token(&headers)).await {
-        return (
-            status,
-            Json(ErrorResponse {
-                error: "unauthorized".to_string(),
-            }),
-        )
-            .into_response();
-    }
-
     // Validate the document ID format
     let doc_id = match DocumentId::from_str(&doc_id_str) {
         Ok(id) => id,
@@ -343,6 +344,7 @@ async fn get_document(
 /// This is a simple endpoint that puts a key-value pair into the document.
 /// In a real implementation, the document schema would be more structured.
 async fn update_document(
+    _auth: Authenticated,
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
     Path(doc_id_str): Path<String>,
@@ -355,16 +357,6 @@ async fn update_document(
             status,
             Json(ErrorResponse {
                 error: "csrf check failed".to_string(),
-            }),
-        )
-            .into_response();
-    }
-
-    if let Err(status) = ctx.authenticate(cookie_token(&headers)).await {
-        return (
-            status,
-            Json(ErrorResponse {
-                error: "unauthorized".to_string(),
             }),
         )
             .into_response();
@@ -463,12 +455,12 @@ async fn auth_callback(
         .and_then(|cookies| {
             cookies
                 .split(';')
-                .map(|c| c.trim())
-                .find(|c| c.starts_with("g_csrf_token="))
-                .map(|c| &c["g_csrf_token=".len()..])
+                .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
+                .find(|c| c.name() == "g_csrf_token")
+                .map(|c| c.value().to_owned())
         });
 
-    if form.g_csrf_token.is_empty() || cookie_csrf != Some(form.g_csrf_token.as_str()) {
+    if form.g_csrf_token.is_empty() || cookie_csrf.as_deref() != Some(form.g_csrf_token.as_str()) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
@@ -509,8 +501,9 @@ async fn auth_me(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let token = cookie_token(&headers);
     let claims = ctx
-        .authenticate_claims(cookie_token(&headers))
+        .authenticate_claims(token.as_deref())
         .await
         .map_err(|_| unauthorized())?;
     Ok(Json(AuthMeResponse {
@@ -525,16 +518,11 @@ async fn auth_me(
 /// Sets `Max-Age=0` so the browser deletes the cookie immediately.
 /// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
 async fn auth_logout(
+    _auth: Authenticated,
     headers: HeaderMap,
-    State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     check_csrf(&headers)
         .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
-
-    // Must be currently authenticated.
-    ctx.authenticate(cookie_token(&headers))
-        .await
-        .map_err(|_| unauthorized())?;
 
     let cookie = build_clear_cookie();
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
@@ -605,7 +593,7 @@ async fn ws_handler(
         if !ctx.allow_insecure_auth() {
             check_ws_origin(&headers)?;
         }
-        ctx.authenticate(cookie_token(&headers)).await?;
+        ctx.authenticate(cookie_token(&headers).as_deref()).await?;
     }
 
     Ok(ws.on_upgrade(|socket| handle_websocket(socket, ctx)))
@@ -925,7 +913,7 @@ mod tests {
     #[test]
     fn cookie_token_extracts_value() {
         let h = headers_with(&[("cookie", "quarto_hub_token=abc123")]);
-        assert_eq!(cookie_token(&h), Some("abc123"));
+        assert_eq!(cookie_token(&h).as_deref(), Some("abc123"));
     }
 
     #[test]
@@ -934,7 +922,7 @@ mod tests {
             "cookie",
             "other=x; quarto_hub_token=jwt.value.here; third=y",
         )]);
-        assert_eq!(cookie_token(&h), Some("jwt.value.here"));
+        assert_eq!(cookie_token(&h).as_deref(), Some("jwt.value.here"));
     }
 
     #[test]

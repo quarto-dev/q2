@@ -62,7 +62,6 @@ export function useAuth() {
   useGoogleOneTapLogin({
     onSuccess: (response) => {
       if (response.credential) {
-        isRefreshing.current = true;
         refreshToken(response.credential)
           .then((me) => {
             if (me) {
@@ -76,10 +75,15 @@ export function useAuth() {
           .finally(() => {
             isRefreshing.current = false;
           });
+      } else {
+        isRefreshing.current = false;
       }
       setRefreshEnabled(false);
     },
-    onError: () => setRefreshEnabled(false),
+    onError: () => {
+      isRefreshing.current = false;
+      setRefreshEnabled(false);
+    },
     auto_select: true,
     disabled: !refreshEnabled,
   });
@@ -102,6 +106,7 @@ export function useAuth() {
     const msUntilRefresh = msUntilExpiry - REFRESH_BUFFER_MS;
     if (msUntilRefresh > 0) {
       refreshTimer.current = setTimeout(() => {
+        isRefreshing.current = true;
         setRefreshEnabled(true);
       }, msUntilRefresh);
     }
