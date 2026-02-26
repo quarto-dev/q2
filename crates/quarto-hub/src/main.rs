@@ -120,12 +120,10 @@ async fn main() -> anyhow::Result<()> {
     .map_err(|e| anyhow::anyhow!(e))?;
 
     // Build auth config if Google client ID is provided
-    let auth_config = args.google_client_id.map(|client_id| {
-        auth::AuthConfig {
-            client_id,
-            allowed_emails: args.allowed_emails,
-            allowed_domains: args.allowed_domains,
-        }
+    let auth_config = args.google_client_id.map(|client_id| auth::AuthConfig {
+        client_id,
+        allowed_emails: args.allowed_emails,
+        allowed_domains: args.allowed_domains,
     });
 
     // Configure and run server
@@ -143,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
         watch_enabled: !args.no_watch,
         watch_debounce_ms: args.watch_debounce,
         auth_config,
+        allow_insecure_auth: args.allow_insecure_auth,
     };
 
     server::run_server(storage, config).await?;

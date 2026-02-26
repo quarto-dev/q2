@@ -23,7 +23,7 @@ tokio = { version = "1", features = ["full"] }
 # Web framework (version 0.8 to match samod)
 axum = { version = "0.8", features = ["ws"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "cors"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "set-header"] }
 http = "1"
 
 # OAuth2 / JWT authentication

@@ -51,6 +51,10 @@ pub struct HubConfig {
 
     /// OAuth2 auth configuration. None = auth disabled.
     pub auth_config: Option<AuthConfig>,
+
+    /// Allow auth without TLS (local dev). When true, the `Secure` flag is
+    /// omitted from auth cookies so browsers send them over plain HTTP.
+    pub allow_insecure_auth: bool,
 }
 
 impl Default for HubConfig {
@@ -63,6 +67,7 @@ impl Default for HubConfig {
             watch_enabled: true,
             watch_debounce_ms: 500,
             auth_config: None,
+            allow_insecure_auth: false,
         }
     }
 }
@@ -96,6 +101,10 @@ pub struct HubContext {
     /// at server startup when auth is configured. Using OnceLock because
     /// it's set after construction but before the server accepts requests.
     auth_state: OnceLock<AuthState>,
+
+    /// Whether insecure (HTTP) auth is allowed. When true, `Secure` flag
+    /// is omitted from auth cookies.
+    allow_insecure_auth: bool,
 }
 
 impl HubContext {
@@ -165,6 +174,7 @@ impl HubContext {
         );
 
         let auth_config = config.auth_config.take();
+        let allow_insecure_auth = config.allow_insecure_auth;
 
         Ok(Self {
             storage,
@@ -174,6 +184,7 @@ impl HubContext {
             sync_state: Mutex::new(sync_state_guard),
             auth_config,
             auth_state: OnceLock::new(),
+            allow_insecure_auth,
         })
     }
 
@@ -243,13 +254,29 @@ impl HubContext {
             .map_err(|_| "auth_state already initialized")
     }
 
+    /// Whether auth cookies should omit the `Secure` flag (HTTP dev mode).
+    pub fn allow_insecure_auth(&self) -> bool {
+        self.allow_insecure_auth
+    }
+
     /// Authenticate a request. If auth is disabled, always succeeds.
     /// If auth is enabled, token must be present and valid.
     /// Used by both REST and WebSocket handlers.
     pub async fn authenticate(&self, token: Option<&str>) -> std::result::Result<(), StatusCode> {
-        let Some(auth_config) = self.auth_config() else {
+        if self.auth_config().is_none() {
             return Ok(()); // Auth disabled — allow all.
-        };
+        }
+        self.authenticate_claims(token).await.map(|_| ())
+    }
+
+    /// Authenticate a request and return the decoded claims.
+    /// Unlike `authenticate()`, this returns `Err` when auth is disabled
+    /// (because there are no claims to return). Used by `/auth/me`.
+    pub async fn authenticate_claims(
+        &self,
+        token: Option<&str>,
+    ) -> std::result::Result<GoogleClaims, StatusCode> {
+        let auth_config = self.auth_config().ok_or(StatusCode::UNAUTHORIZED)?;
 
         let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
         let auth_state = self
@@ -268,7 +295,7 @@ impl HubContext {
 
         auth::check_allowlists(&token_data.claims, auth_config)?;
         tracing::debug!(email = %token_data.claims.email, "Authenticated");
-        Ok(())
+        Ok(token_data.claims)
     }
 }
 

@@ -61,13 +61,10 @@ pub fn check_allowlists(claims: &GoogleClaims, config: &AuthConfig) -> Result<()
         .as_ref()
         .is_some_and(|list| list.contains(&claims.email));
 
-    let domain_ok = config
-        .allowed_domains
-        .as_ref()
-        .is_some_and(|list| {
-            let domain = claims.email.split('@').last().unwrap_or("");
-            list.iter().any(|d| d == domain)
-        });
+    let domain_ok = config.allowed_domains.as_ref().is_some_and(|list| {
+        let domain = claims.email.split('@').last().unwrap_or("");
+        list.iter().any(|d| d == domain)
+    });
 
     if email_ok || domain_ok {
         Ok(())
@@ -138,11 +135,6 @@ pub async fn build_auth_state(
 ///
 /// Returns an error if auth is enabled without TLS protection.
 /// Logs a warning if `--allow-insecure-auth` is used (local dev).
-///
-/// **Deployment note**: The reverse proxy that terminates TLS should also
-/// set a `Content-Security-Policy` header on HTML responses to mitigate
-/// XSS (which could steal localStorage auth tokens). A reasonable baseline:
-///   `default-src 'self'; script-src 'self' https://accounts.google.com; ...`
 pub fn validate_tls_config(
     google_client_id: Option<&str>,
     behind_tls_proxy: bool,
@@ -179,10 +171,7 @@ mod tests {
         }
     }
 
-    fn make_config(
-        emails: Option<Vec<&str>>,
-        domains: Option<Vec<&str>>,
-    ) -> AuthConfig {
+    fn make_config(emails: Option<Vec<&str>>, domains: Option<Vec<&str>>) -> AuthConfig {
         AuthConfig {
             client_id: "test-client-id".to_string(),
             allowed_emails: emails.map(|v| v.into_iter().map(String::from).collect()),
@@ -194,7 +183,10 @@ mod tests {
     fn unverified_email_returns_unauthorized() {
         let claims = make_claims("user@example.com", false);
         let config = make_config(None, None);
-        assert_eq!(check_allowlists(&claims, &config), Err(StatusCode::UNAUTHORIZED));
+        assert_eq!(
+            check_allowlists(&claims, &config),
+            Err(StatusCode::UNAUTHORIZED)
+        );
     }
 
     #[test]
@@ -215,7 +207,10 @@ mod tests {
     fn email_allowlist_no_match() {
         let claims = make_claims("other@example.com", true);
         let config = make_config(Some(vec!["admin@example.com"]), None);
-        assert_eq!(check_allowlists(&claims, &config), Err(StatusCode::FORBIDDEN));
+        assert_eq!(
+            check_allowlists(&claims, &config),
+            Err(StatusCode::FORBIDDEN)
+        );
     }
 
     #[test]
@@ -229,7 +224,10 @@ mod tests {
     fn domain_allowlist_no_match() {
         let claims = make_claims("user@other.com", true);
         let config = make_config(None, Some(vec!["company.com"]));
-        assert_eq!(check_allowlists(&claims, &config), Err(StatusCode::FORBIDDEN));
+        assert_eq!(
+            check_allowlists(&claims, &config),
+            Err(StatusCode::FORBIDDEN)
+        );
     }
 
     #[test]
@@ -259,6 +257,9 @@ mod tests {
             Some(vec!["contractor@gmail.com"]),
             Some(vec!["company.com"]),
         );
-        assert_eq!(check_allowlists(&claims, &config), Err(StatusCode::FORBIDDEN));
+        assert_eq!(
+            check_allowlists(&claims, &config),
+            Err(StatusCode::FORBIDDEN)
+        );
     }
 }

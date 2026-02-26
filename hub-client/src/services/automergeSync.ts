@@ -19,15 +19,6 @@ import {
 } from '@quarto/quarto-sync-client';
 
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
-import { getIdToken } from './authService';
-
-/** Append the stored ID token to a URL as a query parameter (if available). */
-function appendAuthToken(url: string): string {
-  const token = getIdToken();
-  if (!token) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}id_token=${encodeURIComponent(token)}`;
-}
 
 // Re-export types for use in other components
 export type { Patch, FileEntry, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
@@ -109,15 +100,14 @@ function ensureClient(): SyncClient {
 /**
  * Connect to a sync server and load a project.
  *
- * When auth is enabled, appends the ID token to the WebSocket URL
- * as a query parameter. The sync client and samod are completely
- * unaware of authentication.
+ * Auth is handled via HttpOnly cookies, sent automatically by the
+ * browser on same-origin WebSocket upgrades.
  */
 export async function connect(syncServerUrl: string, indexDocId: string): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(appendAuthToken(syncServerUrl), indexDocId);
+  return ensureClient().connect(syncServerUrl, indexDocId);
 }
 
 /**
@@ -209,10 +199,7 @@ export async function createNewProject(options: CreateProjectOptions): Promise<C
   await initWasm();
   vfsClear();
 
-  return ensureClient().createNewProject({
-    ...options,
-    syncServer: appendAuthToken(options.syncServer),
-  });
+  return ensureClient().createNewProject(options);
 }
 
 /**

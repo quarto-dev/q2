@@ -53,7 +53,7 @@ export interface PendingShareData {
 }
 
 function App() {
-  const { auth, logout } = useAuth();
+  const { auth, loading: authLoading, logout } = useAuth();
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -370,6 +370,15 @@ function App() {
   }, []);
 
   // Auth gate: when auth is enabled, require login before showing the app.
+  // Show a loading spinner while checking auth status to avoid login flash.
+  if (AUTH_ENABLED && authLoading) {
+    return (
+      <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading...</div>
+      </div>
+    );
+  }
+
   if (AUTH_ENABLED && !auth) {
     return (
       <div className="project-selector" style={{ alignItems: 'center' }}>

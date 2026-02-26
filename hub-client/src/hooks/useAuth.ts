@@ -1,57 +1,60 @@
 /**
  * useAuth Hook
  *
- * Manages authentication state for the hub client. Handles Google
- * credential responses (from OAuth redirect callback), token expiry
- * monitoring, silent token refresh, and logout.
+ * Manages authentication state for the hub client using HttpOnly cookies.
  *
- * Credential ingestion: after Google redirects through the auth callback
- * endpoint, the SPA loads with ?auth_credential=<jwt> in the URL. This
- * hook detects the parameter on mount, stores the credential, and cleans
- * the URL.
+ * On mount, calls GET /auth/me to check if the user has a valid cookie.
+ * If 200, stores the display info in React state. If 401, shows login.
  *
  * Token refresh: ~5 minutes before the token expires, the hook enables
  * Google One Tap with `auto_select` to silently obtain a fresh credential.
- * If the user has an active Google session, the token is renewed without
- * any UI. If silent refresh fails, auth is cleared at expiry.
+ * The new credential is sent to POST /auth/refresh which validates it and
+ * sets a fresh cookie. If silent refresh fails, auth is cleared at expiry.
+ *
+ * During refresh, a 401 from /auth/me is handled gracefully: the hook
+ * shows a loading state (not the login screen) while the refresh is
+ * in progress.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGoogleOneTapLogin } from '@react-oauth/google';
-import {
-  type AuthState,
-  getStoredAuth,
-  storeAuth,
-  clearAuth,
-} from '../services/authService';
+import type { AuthState } from '../services/authService';
+import { fetchAuthMe, logout as serverLogout, refreshToken } from '../services/authService';
 
 /** Buffer before expiry at which we attempt silent refresh (5 minutes). */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
-export function useAuth() {
-  const [auth, setAuth] = useState<AuthState | null>(() => {
-    // Check URL search params first (OAuth redirect callback), then localStorage.
-    const params = new URLSearchParams(window.location.search);
-    const credential = params.get('auth_credential');
-    if (credential) {
-      try {
-        const authState = storeAuth(credential);
-        // Clean the URL — remove the credential parameter without triggering navigation.
-        const url = new URL(window.location.href);
-        url.searchParams.delete('auth_credential');
-        window.history.replaceState(null, '', url.pathname + url.search + url.hash);
-        return authState;
-      } catch {
-        // Fall through to localStorage check
-      }
-    }
-    return getStoredAuth();
-  });
+/** Cookie max-age matches server (1 hour). */
+const COOKIE_MAX_AGE_MS = 3600 * 1000;
 
-  // Enable One Tap silent refresh when approaching token expiry.
+export function useAuth() {
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const [loading, setLoading] = useState(true);
   const [refreshEnabled, setRefreshEnabled] = useState(false);
+  const isRefreshing = useRef(false);
   const refreshTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const expiryTimer = useRef<ReturnType<typeof setTimeout>>(null);
+
+  // Track when the current cookie was set (for scheduling refresh/expiry).
+  const cookieSetAt = useRef<number>(0);
+
+  // Check auth status on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetchAuthMe()
+      .then((me) => {
+        if (cancelled) return;
+        setAuth(me);
+        if (me) cookieSetAt.current = Date.now();
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAuth(null);
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // One Tap: disabled until refreshEnabled is set. When enabled with
   // auto_select, it silently returns a credential if the user has an
@@ -59,11 +62,20 @@ export function useAuth() {
   useGoogleOneTapLogin({
     onSuccess: (response) => {
       if (response.credential) {
-        try {
-          setAuth(storeAuth(response.credential));
-        } catch {
-          // Invalid credential — let hard expiry handle it.
-        }
+        isRefreshing.current = true;
+        refreshToken(response.credential)
+          .then((me) => {
+            if (me) {
+              setAuth(me);
+              cookieSetAt.current = Date.now();
+            }
+          })
+          .catch(() => {
+            // Refresh failed — let hard expiry handle it.
+          })
+          .finally(() => {
+            isRefreshing.current = false;
+          });
       }
       setRefreshEnabled(false);
     },
@@ -72,16 +84,16 @@ export function useAuth() {
     disabled: !refreshEnabled,
   });
 
-  // Schedule silent refresh and hard expiry based on the token's exp claim.
+  // Schedule silent refresh and hard expiry based on cookie lifetime.
   useEffect(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
     if (expiryTimer.current) clearTimeout(expiryTimer.current);
 
-    if (!auth) return;
+    if (!auth || !cookieSetAt.current) return;
 
-    const msUntilExpiry = auth.expiresAt - Date.now();
+    const expiresAt = cookieSetAt.current + COOKIE_MAX_AGE_MS;
+    const msUntilExpiry = expiresAt - Date.now();
     if (msUntilExpiry <= 0) {
-      clearAuth();
       setAuth(null);
       return;
     }
@@ -94,10 +106,20 @@ export function useAuth() {
       }, msUntilRefresh);
     }
 
-    // Hard expiry: clear auth when the token actually expires.
+    // Hard expiry: re-check auth when the cookie should have expired.
+    // If a refresh succeeded in the meantime, /auth/me will return 200.
     expiryTimer.current = setTimeout(() => {
-      clearAuth();
-      setAuth(null);
+      fetchAuthMe().then((me) => {
+        if (me) {
+          setAuth(me);
+          cookieSetAt.current = Date.now();
+        } else if (!isRefreshing.current) {
+          setAuth(null);
+        }
+        // If isRefreshing, the refresh handler will update state.
+      }).catch(() => {
+        if (!isRefreshing.current) setAuth(null);
+      });
     }, msUntilExpiry);
 
     return () => {
@@ -107,9 +129,11 @@ export function useAuth() {
   }, [auth]);
 
   const logout = useCallback(() => {
-    clearAuth();
+    serverLogout().catch(() => {
+      // Best-effort server logout; clear client state regardless.
+    });
     setAuth(null);
   }, []);
 
-  return { auth, logout };
+  return { auth, loading, logout };
 }

@@ -7,7 +7,7 @@ use std::time::Duration;
 use axum::{
     Json, Router,
     extract::{
-        Form, Path, Query, State,
+        Form, Path, State,
         ws::{WebSocket, WebSocketUpgrade},
     },
     http::{HeaderMap, StatusCode},
@@ -18,6 +18,7 @@ use samod::DocumentId;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::watch;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info};
 
@@ -78,11 +79,24 @@ struct UpdateDocumentRequest {
     value: String,
 }
 
-/// WebSocket query parameters.
-#[derive(Deserialize)]
-struct WsParams {
-    id_token: Option<String>,
-}
+/// Content-Security-Policy for defense-in-depth against XSS.
+/// Even with HttpOnly cookies eliminating credential theft, XSS can still
+/// make authenticated requests from the victim's browser. CSP limits what
+/// injected scripts can do.
+const CSP_WITH_AUTH: &str = "\
+    default-src 'self'; \
+    script-src 'self' https://accounts.google.com; \
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+    font-src 'self' https://fonts.gstatic.com; \
+    img-src 'self' data: https://lh3.googleusercontent.com; \
+    connect-src 'self' https://accounts.google.com; \
+    frame-src https://accounts.google.com";
+
+/// Cookie name for the hub authentication token.
+const AUTH_COOKIE_NAME: &str = "quarto_hub_token";
+
+/// Cookie Max-Age in seconds (matches Google ID token lifetime).
+const AUTH_COOKIE_MAX_AGE: u32 = 3600;
 
 /// JSON error body for auth failures, so clients can distinguish
 /// 401 auth errors from other HTTP errors programmatically.
@@ -93,25 +107,94 @@ fn unauthorized() -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
-/// Extract Bearer token from Authorization header. Returns None if
-/// no header is present or the header is not a valid Bearer token.
-/// Never fails — the authenticate() method decides whether a missing
-/// token is an error based on whether auth is enabled.
+/// Extract the auth token from the `Cookie` header.
 ///
-/// The auth-scheme match is case-insensitive per RFC 7235 §2.1.
-fn bearer_token(headers: &HeaderMap) -> Option<&str> {
-    let value = headers.get("authorization")?.to_str().ok()?;
-    // Case-insensitive prefix match per RFC 7235 §2.1.
-    let token = value.get(..7).and_then(|prefix| {
-        prefix
-            .eq_ignore_ascii_case("bearer ")
-            .then(|| &value[7..])
-    })?;
-    (!token.is_empty()).then_some(token)
+/// Parses the `quarto_hub_token` cookie value from a standard
+/// `Cookie: name=value; name2=value2` header. Returns `None` if the
+/// cookie is absent or the header is not valid UTF-8.
+fn cookie_token(headers: &HeaderMap) -> Option<&str> {
+    let cookies = headers.get("cookie")?.to_str().ok()?;
+    cookies
+        .split(';')
+        .map(|c| c.trim())
+        .find_map(|c| {
+            c.strip_prefix(AUTH_COOKIE_NAME)
+                .and_then(|rest| rest.strip_prefix('='))
+        })
+        .filter(|v| !v.is_empty())
 }
 
-/// Log request method and path only — never the query string, which
-/// may contain id_token for WebSocket upgrades.
+/// Build a `Set-Cookie` header value for the auth token.
+///
+/// The cookie is `HttpOnly` (no JS access), `SameSite=Lax` (sent on
+/// same-site requests and top-level navigations), scoped to `Path=/`,
+/// and expires after `AUTH_COOKIE_MAX_AGE` seconds. The `Secure` flag
+/// is included unless `allow_insecure` is true (HTTP dev mode).
+fn build_auth_cookie(token: &str, secure: bool) -> String {
+    let mut cookie = format!(
+        "{AUTH_COOKIE_NAME}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={AUTH_COOKIE_MAX_AGE}"
+    );
+    if secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
+}
+
+/// Build a `Set-Cookie` header value that clears the auth cookie.
+fn build_clear_cookie() -> String {
+    format!("{AUTH_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0")
+}
+
+/// Verify that a state-mutating request includes the CSRF protection header.
+///
+/// Requires `X-Requested-With: XMLHttpRequest`. Browsers don't allow
+/// cross-origin custom headers without a CORS preflight, so this blocks
+/// cross-site form POSTs that auto-attach cookies. Same mechanism as
+/// Django and Rails.
+fn check_csrf(headers: &HeaderMap) -> std::result::Result<(), StatusCode> {
+    let ok = headers
+        .get("x-requested-with")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("xmlhttprequest"));
+    if ok {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
+}
+
+/// Verify that the WebSocket upgrade `Origin` matches the request `Host`.
+///
+/// Browsers send cookies on WebSocket upgrades but don't enforce CORS
+/// preflight, so a cross-origin page could open an authenticated
+/// WebSocket. Comparing `Origin` against `Host` blocks this.
+fn check_ws_origin(headers: &HeaderMap) -> std::result::Result<(), StatusCode> {
+    let origin = headers
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::FORBIDDEN)?;
+
+    let host = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(StatusCode::FORBIDDEN)?;
+
+    // Strip scheme from Origin to get host:port (e.g. "https://example.com:3000" → "example.com:3000")
+    let origin_host = origin
+        .strip_prefix("https://")
+        .or_else(|| origin.strip_prefix("http://"))
+        .unwrap_or(origin);
+
+    if origin_host == host {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
+}
+
+/// Log request method and path only — never the query string.
+/// Auth tokens are now in HttpOnly cookies (not query strings), but
+/// redacting query strings is still good practice for defense-in-depth.
 #[derive(Clone)]
 struct RedactedMakeSpan;
 
@@ -130,7 +213,7 @@ async fn health(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    ctx.authenticate(bearer_token(&headers))
+    ctx.authenticate(cookie_token(&headers))
         .await
         .map_err(|_| unauthorized())?;
     let response = HealthResponse {
@@ -147,7 +230,7 @@ async fn list_files(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    ctx.authenticate(bearer_token(&headers))
+    ctx.authenticate(cookie_token(&headers))
         .await
         .map_err(|_| unauthorized())?;
     let response = FilesResponse {
@@ -166,7 +249,7 @@ async fn list_documents(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    ctx.authenticate(bearer_token(&headers))
+    ctx.authenticate(cookie_token(&headers))
         .await
         .map_err(|_| unauthorized())?;
     let files = ctx.index().get_all_files();
@@ -185,7 +268,7 @@ async fn get_document(
     State(ctx): State<SharedContext>,
     Path(doc_id_str): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(status) = ctx.authenticate(bearer_token(&headers)).await {
+    if let Err(status) = ctx.authenticate(cookie_token(&headers)).await {
         return (
             status,
             Json(ErrorResponse {
@@ -255,7 +338,17 @@ async fn update_document(
 ) -> impl IntoResponse {
     use automerge::{ROOT, transaction::Transactable};
 
-    if let Err(status) = ctx.authenticate(bearer_token(&headers)).await {
+    if let Err(status) = check_csrf(&headers) {
+        return (
+            status,
+            Json(ErrorResponse {
+                error: "csrf check failed".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
+    if let Err(status) = ctx.authenticate(cookie_token(&headers)).await {
         return (
             status,
             Json(ErrorResponse {
@@ -337,12 +430,14 @@ struct AuthCallbackForm {
 /// Handle Google OAuth2 redirect callback.
 ///
 /// Receives the credential JWT from Google's POST, validates the CSRF token
-/// and the JWT itself, then redirects to the SPA with the credential as a
-/// URL search parameter. The hub-client's `useAuth` hook picks up the
-/// credential on mount.
+/// and the JWT itself, then sets an HttpOnly cookie and redirects to `/`.
 ///
-/// Validating the JWT here (not just in subsequent API calls) prevents the
-/// redirect from injecting arbitrary data into the SPA's URL.
+/// Validating the JWT here (not just in subsequent API calls) prevents
+/// setting a cookie with a bogus credential.
+///
+/// **CSRF**: This endpoint is excluded from the `X-Requested-With` CSRF
+/// check because it receives a cross-origin POST from Google's servers.
+/// Google's own `g_csrf_token` cookie provides CSRF protection instead.
 async fn auth_callback(
     State(ctx): State<SharedContext>,
     headers: HeaderMap,
@@ -365,21 +460,105 @@ async fn auth_callback(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    // Validate the JWT before redirecting. This is defense-in-depth:
-    // subsequent API/WebSocket calls validate too, but checking here
-    // ensures we never redirect with a bogus credential in the URL.
+    // Validate the JWT before setting the cookie.
     if let Err(status) = ctx.authenticate(Some(&form.credential)).await {
         return status.into_response();
     }
 
-    // Redirect to the SPA root with the credential as a search parameter.
-    // In a reverse-proxy deployment, this relative redirect resolves to the
-    // proxy origin (where the SPA is served).
-    //
-    // No URL-encoding needed: JWTs are base64url + dots, all unreserved
-    // URI characters per RFC 3986.
-    let redirect_url = format!("/?auth_credential={}", form.credential);
-    Redirect::to(&redirect_url).into_response()
+    // Set HttpOnly cookie and redirect to clean `/`.
+    let secure = !ctx.allow_insecure_auth();
+    let cookie = build_auth_cookie(&form.credential, secure);
+    let mut response = Redirect::to("/").into_response();
+    response
+        .headers_mut()
+        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    response
+}
+
+/// Response for GET /auth/me.
+#[derive(Serialize)]
+struct AuthMeResponse {
+    email: String,
+    name: Option<String>,
+    picture: Option<String>,
+}
+
+/// Request body for POST /auth/refresh.
+#[derive(Deserialize)]
+struct RefreshRequest {
+    credential: String,
+}
+
+/// Return user info from a valid cookie. 401 if missing/expired.
+///
+/// The client calls this on mount to check if the user is authenticated
+/// without needing to decode the JWT client-side.
+async fn auth_me(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let claims = ctx
+        .authenticate_claims(cookie_token(&headers))
+        .await
+        .map_err(|_| unauthorized())?;
+    Ok(Json(AuthMeResponse {
+        email: claims.email,
+        name: claims.name,
+        picture: claims.picture,
+    }))
+}
+
+/// Clear the auth cookie.
+///
+/// Sets `Max-Age=0` so the browser deletes the cookie immediately.
+/// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
+async fn auth_logout(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    check_csrf(&headers)
+        .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
+
+    // Must be currently authenticated.
+    ctx.authenticate(cookie_token(&headers))
+        .await
+        .map_err(|_| unauthorized())?;
+
+    let cookie = build_clear_cookie();
+    let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
+    response
+        .headers_mut()
+        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    Ok(response)
+}
+
+/// Validate a fresh Google JWT and set a new cookie.
+///
+/// Called by the client when Google One Tap silently produces a new
+/// credential. The new JWT goes through the full `authenticate()` path
+/// (signature, audience, issuer, email allowlist) before setting the cookie.
+///
+/// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
+async fn auth_refresh(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+    Json(body): Json<RefreshRequest>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    check_csrf(&headers)
+        .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
+
+    // Validate the NEW credential (not the existing cookie — it may be expired).
+    ctx.authenticate(Some(&body.credential))
+        .await
+        .map_err(|_| unauthorized())?;
+
+    let secure = !ctx.allow_insecure_auth();
+    let cookie = build_auth_cookie(&body.credential, secure);
+    let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
+    response
+        .headers_mut()
+        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    Ok(response)
 }
 
 /// 404 handler
@@ -389,9 +568,9 @@ async fn not_found() -> impl IntoResponse {
 
 /// WebSocket upgrade handler for automerge sync.
 ///
-/// Clients connect here to sync documents in real-time.
-/// Auth token is passed via `?id_token=<token>` query parameter
-/// (browsers can't set custom headers on WebSocket upgrade).
+/// Clients connect here to sync documents in real-time. Auth is via the
+/// `quarto_hub_token` HttpOnly cookie (sent automatically by the browser).
+/// The `Origin` header is checked to prevent cross-origin WebSocket hijacking.
 ///
 /// **Security note**: the token is validated once at upgrade time. After
 /// that, the connection lives until the client disconnects. If a user is
@@ -402,10 +581,20 @@ async fn not_found() -> impl IntoResponse {
 /// frontend detects token expiry.
 async fn ws_handler(
     State(ctx): State<SharedContext>,
-    Query(params): Query<WsParams>,
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> std::result::Result<impl IntoResponse, StatusCode> {
-    ctx.authenticate(params.id_token.as_deref()).await?;
+    if ctx.auth_config().is_some() {
+        // In dev mode (allow_insecure_auth), the SPA runs on a different
+        // port (Vite :5173) than the hub (:3000). The Vite dev server
+        // proxies /ws to the hub so cookies are forwarded, but the Origin
+        // header still shows the Vite origin. Skip only the Origin check;
+        // cookie auth is still enforced.
+        if !ctx.allow_insecure_auth() {
+            check_ws_origin(&headers)?;
+        }
+        ctx.authenticate(cookie_token(&headers)).await?;
+    }
 
     Ok(ws.on_upgrade(|socket| handle_websocket(socket, ctx)))
 }
@@ -442,7 +631,7 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
             .map_err(|e| crate::error::Error::Server(e.to_string()))?;
     }
 
-    Ok(Router::new()
+    let mut router = Router::new()
         .route("/health", get(health))
         .route("/api/files", get(list_files))
         .route("/api/documents", get(list_documents))
@@ -450,17 +639,29 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
             "/api/documents/{id}",
             get(get_document).put(update_document),
         )
-        // Google OAuth2 redirect callback (production).
-        // In development, the Vite auth-callback plugin handles this instead.
+        // Auth endpoints
         .route("/auth/callback", post(auth_callback))
+        .route("/auth/me", get(auth_me))
+        .route("/auth/logout", post(auth_logout))
+        .route("/auth/refresh", post(auth_refresh))
         // WebSocket endpoint for automerge sync
         // Root path "/" is the standard location used by sync.automerge.org
         // "/ws" is kept for backward compatibility
         .route("/", get(ws_handler))
         .route("/ws", get(ws_handler))
         .fallback(not_found)
-        .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan))
-        .with_state(ctx))
+        .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan));
+
+    // Add Content-Security-Policy header when auth is enabled.
+    // Without auth there are no Google OAuth scripts to allow.
+    if ctx.auth_config().is_some() {
+        router = router.layer(SetResponseHeaderLayer::if_not_present(
+            http::header::HeaderName::from_static("content-security-policy"),
+            http::header::HeaderValue::from_static(CSP_WITH_AUTH),
+        ));
+    }
+
+    Ok(router.with_state(ctx))
 }
 
 /// Run the hub server.
@@ -688,5 +889,196 @@ async fn wait_for_shutdown_signal() {
         _ = terminate => {
             info!("Received SIGTERM, initiating graceful shutdown...");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn headers_with(pairs: &[(&str, &str)]) -> HeaderMap {
+        let mut map = HeaderMap::new();
+        for (k, v) in pairs {
+            map.insert(
+                http::header::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+                HeaderValue::from_str(v).unwrap(),
+            );
+        }
+        map
+    }
+
+    // ── cookie_token ──────────────────────────────────────────────
+
+    #[test]
+    fn cookie_token_extracts_value() {
+        let h = headers_with(&[("cookie", "quarto_hub_token=abc123")]);
+        assert_eq!(cookie_token(&h), Some("abc123"));
+    }
+
+    #[test]
+    fn cookie_token_among_multiple_cookies() {
+        let h = headers_with(&[(
+            "cookie",
+            "other=x; quarto_hub_token=jwt.value.here; third=y",
+        )]);
+        assert_eq!(cookie_token(&h), Some("jwt.value.here"));
+    }
+
+    #[test]
+    fn cookie_token_missing() {
+        let h = headers_with(&[("cookie", "other=x; another=y")]);
+        assert_eq!(cookie_token(&h), None);
+    }
+
+    #[test]
+    fn cookie_token_no_cookie_header() {
+        let h = HeaderMap::new();
+        assert_eq!(cookie_token(&h), None);
+    }
+
+    #[test]
+    fn cookie_token_empty_value() {
+        let h = headers_with(&[("cookie", "quarto_hub_token=")]);
+        assert_eq!(cookie_token(&h), None);
+    }
+
+    #[test]
+    fn cookie_token_prefix_mismatch() {
+        // "quarto_hub_token_v2" should NOT match "quarto_hub_token"
+        let h = headers_with(&[("cookie", "quarto_hub_token_v2=abc")]);
+        assert_eq!(cookie_token(&h), None);
+    }
+
+    // ── build_auth_cookie ─────────────────────────────────────────
+
+    #[test]
+    fn build_auth_cookie_secure() {
+        let cookie = build_auth_cookie("mytoken", true);
+        assert!(cookie.starts_with("quarto_hub_token=mytoken;"));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("Secure"));
+        assert!(cookie.contains("SameSite=Lax"));
+        assert!(cookie.contains("Path=/"));
+        assert!(cookie.contains("Max-Age=3600"));
+    }
+
+    #[test]
+    fn build_auth_cookie_insecure() {
+        let cookie = build_auth_cookie("mytoken", false);
+        assert!(cookie.starts_with("quarto_hub_token=mytoken;"));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(!cookie.contains("Secure"));
+        assert!(cookie.contains("SameSite=Lax"));
+    }
+
+    #[test]
+    fn build_clear_cookie_has_zero_max_age() {
+        let cookie = build_clear_cookie();
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.starts_with("quarto_hub_token=;"));
+    }
+
+    // ── check_csrf ────────────────────────────────────────────────
+
+    #[test]
+    fn csrf_accepts_xmlhttprequest() {
+        let h = headers_with(&[("x-requested-with", "XMLHttpRequest")]);
+        assert!(check_csrf(&h).is_ok());
+    }
+
+    #[test]
+    fn csrf_accepts_case_insensitive() {
+        let h = headers_with(&[("x-requested-with", "xmlhttprequest")]);
+        assert!(check_csrf(&h).is_ok());
+    }
+
+    #[test]
+    fn csrf_rejects_missing_header() {
+        let h = HeaderMap::new();
+        assert_eq!(check_csrf(&h), Err(StatusCode::FORBIDDEN));
+    }
+
+    #[test]
+    fn csrf_rejects_wrong_value() {
+        let h = headers_with(&[("x-requested-with", "fetch")]);
+        assert_eq!(check_csrf(&h), Err(StatusCode::FORBIDDEN));
+    }
+
+    // ── check_ws_origin ───────────────────────────────────────────
+
+    #[test]
+    fn ws_origin_accepts_matching_https() {
+        let h = headers_with(&[
+            ("origin", "https://hub.example.com"),
+            ("host", "hub.example.com"),
+        ]);
+        assert!(check_ws_origin(&h).is_ok());
+    }
+
+    #[test]
+    fn ws_origin_accepts_matching_http() {
+        let h = headers_with(&[
+            ("origin", "http://localhost:3000"),
+            ("host", "localhost:3000"),
+        ]);
+        assert!(check_ws_origin(&h).is_ok());
+    }
+
+    #[test]
+    fn ws_origin_rejects_mismatch() {
+        let h = headers_with(&[("origin", "https://evil.com"), ("host", "hub.example.com")]);
+        assert_eq!(check_ws_origin(&h), Err(StatusCode::FORBIDDEN));
+    }
+
+    #[test]
+    fn ws_origin_rejects_missing_origin() {
+        let h = headers_with(&[("host", "hub.example.com")]);
+        assert_eq!(check_ws_origin(&h), Err(StatusCode::FORBIDDEN));
+    }
+
+    #[test]
+    fn ws_origin_rejects_missing_host() {
+        let h = headers_with(&[("origin", "https://hub.example.com")]);
+        assert_eq!(check_ws_origin(&h), Err(StatusCode::FORBIDDEN));
+    }
+
+    // ── CSP ───────────────────────────────────────────────────────
+
+    #[test]
+    fn csp_allows_google_oauth() {
+        assert!(CSP_WITH_AUTH.contains("https://accounts.google.com"));
+    }
+
+    #[test]
+    fn csp_disallows_arbitrary_websocket() {
+        // CSP should NOT contain bare ws:/wss: scheme sources, which would
+        // allow XSS to exfiltrate data to any WebSocket host. Same-origin
+        // WebSocket is covered by 'self' in modern browsers (CSP Level 3).
+        let connect_src = CSP_WITH_AUTH
+            .split(';')
+            .find(|d| d.contains("connect-src"))
+            .unwrap();
+        // Bare "ws:" or "wss:" as scheme sources (space-delimited tokens)
+        let has_bare_ws = connect_src
+            .split_whitespace()
+            .any(|tok| tok == "ws:" || tok == "wss:");
+        assert!(!has_bare_ws, "connect-src must not allow arbitrary WebSocket hosts");
+    }
+
+    #[test]
+    fn csp_blocks_inline_scripts() {
+        // script-src should NOT contain 'unsafe-inline'
+        let script_src = CSP_WITH_AUTH
+            .split(';')
+            .find(|d| d.contains("script-src"))
+            .unwrap();
+        assert!(!script_src.contains("unsafe-inline"));
+    }
+
+    #[test]
+    fn csp_has_default_self() {
+        assert!(CSP_WITH_AUTH.contains("default-src 'self'"));
     }
 }
