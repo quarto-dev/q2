@@ -4,7 +4,7 @@ import ProjectSelector from './components/ProjectSelector';
 import Editor from './components/Editor';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
-import { LoginButton } from './components/auth/LoginButton';
+import { LoginScreen } from './components/auth/LoginScreen';
 import {
   connect,
   disconnect,
@@ -400,24 +400,7 @@ function App() {
   }
 
   if (AUTH_ENABLED && !auth) {
-    return (
-      <div className="project-selector" style={{ alignItems: 'center' }}>
-        <div className="modal" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 32px' }}>
-          <img src="/quarto-icon.svg" alt="Quarto" style={{ width: '48px', height: '48px', marginBottom: '8px' }} />
-          <h1 style={{ margin: 0 }}>Quarto Hub</h1>
-          {authError ? (
-            <p style={{ color: 'var(--posit-red)', fontSize: '14px', margin: '0 0 16px' }}>
-              Sign-in failed. Your account is not authorized to access this hub.
-            </p>
-          ) : (
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>
-              Sign in with Google to continue
-            </p>
-          )}
-          <LoginButton />
-        </div>
-      </div>
-    );
+    return <LoginScreen error={authError} />;
   }
 
   return (
