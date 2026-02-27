@@ -19,7 +19,7 @@ export interface AuthState {
 /** Fetch user info from the server. Returns null on 401 (not authenticated). */
 export async function fetchAuthMe(): Promise<AuthState | null> {
   const res = await fetch('/auth/me', { credentials: 'same-origin' });
-  if (res.status === 401) return null;
+  if (res.status === 401 || res.status === 403) return null;
   if (!res.ok) throw new Error(`/auth/me failed: ${res.status}`);
   return res.json() as Promise<AuthState>;
 }
