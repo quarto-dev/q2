@@ -218,6 +218,19 @@ function App() {
     loadFromUrl();
   }, [route, navigateToProjectSelector, navigateToProject, navigateToFile]);
 
+  // Disconnect sync when auth is lost (token expired or user logged out).
+  // Without this, the WebSocket adapter keeps retrying with an expired cookie
+  // and the user sees "Connection lost" instead of the login screen.
+  useEffect(() => {
+    if (AUTH_ENABLED && !auth && !authLoading && project) {
+      disconnect();
+      setProject(null);
+      setFiles([]);
+      setFileContents(new Map());
+      setConnectionError(null);
+    }
+  }, [auth, authLoading, project]);
+
   // Intercept Ctrl+S / Cmd+S to prevent browser save dialog
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

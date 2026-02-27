@@ -88,6 +88,37 @@ export function useAuth() {
     disabled: !refreshEnabled,
   });
 
+  // When the tab becomes visible again, check if the cookie is still valid.
+  // Browsers throttle/suspend setTimeout in background tabs, so the refresh
+  // and expiry timers may not fire before the cookie actually expires.
+  useEffect(() => {
+    if (!auth) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (isRefreshing.current) return;
+
+      fetchAuthMe()
+        .then((me) => {
+          if (me) {
+            // Cookie still valid — update timestamp so timers reschedule.
+            cookieSetAt.current = Date.now();
+            setAuth(me);
+          } else {
+            setAuth(null);
+          }
+        })
+        .catch(() => {
+          setAuth(null);
+        });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [auth]);
+
   // Schedule silent refresh and hard expiry based on cookie lifetime.
   useEffect(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
