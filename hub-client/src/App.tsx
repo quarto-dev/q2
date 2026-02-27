@@ -62,6 +62,13 @@ function App() {
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
 
+  // Capture auth error from redirect query param (once, before URL is cleaned).
+  const [authError] = useState(() => {
+    const has = new URLSearchParams(window.location.search).has('auth_error');
+    if (has) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    return has;
+  });
+
   // Pending share link data (when user visits a shareable URL for a project they don't have)
   const [pendingShareData, setPendingShareData] = useState<PendingShareData | null>(null);
 
@@ -398,9 +405,15 @@ function App() {
         <div className="modal" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 32px' }}>
           <img src="/quarto-icon.svg" alt="Quarto" style={{ width: '48px', height: '48px', marginBottom: '8px' }} />
           <h1 style={{ margin: 0 }}>Quarto Hub</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>
-            Sign in with Google to continue
-          </p>
+          {authError ? (
+            <p style={{ color: 'var(--posit-red)', fontSize: '14px', margin: '0 0 16px' }}>
+              Sign-in failed. Your account is not authorized to access this hub.
+            </p>
+          ) : (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>
+              Sign in with Google to continue
+            </p>
+          )}
           <LoginButton />
         </div>
       </div>

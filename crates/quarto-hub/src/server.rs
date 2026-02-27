@@ -461,12 +461,12 @@ async fn auth_callback(
         });
 
     if form.g_csrf_token.is_empty() || cookie_csrf.as_deref() != Some(form.g_csrf_token.as_str()) {
-        return StatusCode::FORBIDDEN.into_response();
+        return Redirect::to("/?auth_error").into_response();
     }
 
     // Validate the JWT before setting the cookie.
-    if let Err(status) = ctx.authenticate(Some(&form.credential)).await {
-        return status.into_response();
+    if let Err(_status) = ctx.authenticate(Some(&form.credential)).await {
+        return Redirect::to("/?auth_error").into_response();
     }
 
     // Set HttpOnly cookie and redirect to clean `/`.

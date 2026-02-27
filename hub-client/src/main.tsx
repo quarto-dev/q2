@@ -13,7 +13,7 @@ const root = (
 );
 
 createRoot(document.getElementById('root')!).render(
-  GOOGLE_CLIENT_ID
-    ? <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{root}</GoogleOAuthProvider>
-    : root,
+  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || 'disabled'}>
+    {root}
+  </GoogleOAuthProvider>,
 )
