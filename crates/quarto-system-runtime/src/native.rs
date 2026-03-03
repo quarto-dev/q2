@@ -173,7 +173,7 @@ impl SystemRuntime for NativeRuntime {
             .prefix(&format!("{}_", template))
             .tempdir()
             .map_err(RuntimeError::from)?;
-        let path = dir.into_path(); // take ownership of the path, we manage cleanup via TempDir
+        let path = dir.keep(); // take ownership of the path, we manage cleanup via our TempDir
         Ok(TempDir::new(path))
     }
 
