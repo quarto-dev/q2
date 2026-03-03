@@ -17,6 +17,8 @@ serde_json.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # For binary lookup on PATH
 which = "8.0"
+# Safe temp directory creation (random names, no collisions under parallel execution)
+tempfile = "3.24"
 # SASS compilation (pure Rust, ~2x faster than dart-sass)
 grass.workspace = true
 
