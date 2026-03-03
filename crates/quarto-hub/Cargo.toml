@@ -65,6 +65,7 @@ clap = { workspace = true }
 
 # Utilities
 walkdir = "2"
+dirs = "6"
 
 # Filesystem watching for continuous sync
 notify = "8"

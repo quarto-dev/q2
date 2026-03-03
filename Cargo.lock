@@ -3311,6 +3311,7 @@ dependencies = [
  "axum-jwt-auth",
  "clap",
  "cookie",
+ "dirs",
  "fs2",
  "futures",
  "hex",

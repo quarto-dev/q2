@@ -77,12 +77,16 @@ impl Default for HubConfig {
 /// This is wrapped in `Arc` and shared across all request handlers.
 /// The struct is Clone-friendly: samod::Repo wraps Arc internally,
 /// and StorageManager is wrapped in Arc at the SharedContext level.
+///
+/// Supports two modes:
+/// - **Project mode**: Discovers files, syncs with filesystem, watches for changes.
+/// - **Standalone mode**: Pure sync server with no local project files.
 pub struct HubContext {
     /// Storage manager (holds lockfile, manages directories)
     storage: StorageManager,
 
-    /// Discovered project files
-    project_files: ProjectFiles,
+    /// Discovered project files (None in standalone mode)
+    project_files: Option<ProjectFiles>,
 
     /// samod Repo - handles document storage, sync, and concurrency internally.
     /// Clone is cheap: Repo wraps Arc<Mutex<Inner>>.
@@ -91,8 +95,9 @@ pub struct HubContext {
     /// The project index document (maps file paths to document IDs)
     index: IndexDocument,
 
-    /// Sync state for filesystem synchronization (protected by Mutex for interior mutability)
-    sync_state: Mutex<SyncState>,
+    /// Sync state for filesystem synchronization (protected by Mutex for interior mutability).
+    /// None in standalone mode (no filesystem to sync with).
+    sync_state: Option<Mutex<SyncState>>,
 
     /// OAuth2 auth configuration (immutable after startup). None = auth disabled.
     auth_config: Option<AuthConfig>,
@@ -108,22 +113,36 @@ pub struct HubContext {
 }
 
 impl HubContext {
-    /// Create a new hub context for the given project.
+    /// Create a new hub context.
     ///
-    /// This:
-    /// 1. Initializes the samod Repo with filesystem storage at `.quarto/hub/automerge/`
+    /// In project mode (when `StorageManager` has a project root):
+    /// 1. Discovers project files on the filesystem
+    /// 2. Initializes the samod Repo with filesystem storage
+    /// 3. Loads or creates the index document
+    /// 4. Reconciles discovered files with the index
+    /// 5. Performs initial filesystem sync
+    ///
+    /// In standalone mode (no project root):
+    /// 1. Initializes the samod Repo with filesystem storage
     /// 2. Loads or creates the index document
-    /// 3. Reconciles discovered .qmd files with the index
+    /// 3. Spawns peer connections
     pub async fn new(mut storage: StorageManager, mut config: HubConfig) -> Result<Self> {
-        // Discover project files
-        let project_files = ProjectFiles::discover(storage.project_root());
+        let project_root = storage.project_root().map(|p| p.to_path_buf());
 
-        info!(
-            qmd_count = project_files.qmd_files.len(),
-            config_count = project_files.config_files.len(),
-            binary_count = project_files.binary_files.len(),
-            "Discovered project files"
-        );
+        // Discover project files (only in project mode)
+        let project_files = if let Some(ref project_root) = project_root {
+            let files = ProjectFiles::discover(project_root);
+            info!(
+                qmd_count = files.qmd_files.len(),
+                config_count = files.config_files.len(),
+                binary_count = files.binary_files.len(),
+                "Discovered project files"
+            );
+            Some(files)
+        } else {
+            info!("Standalone mode: skipping file discovery");
+            None
+        };
 
         // Initialize samod repo with filesystem storage
         let automerge_dir = storage.automerge_dir();
@@ -148,34 +167,40 @@ impl HubContext {
             info!(index_doc_id = %new_id, "Created and persisted new index document");
         }
 
-        // Reconcile discovered files with the index
-        let project_root = storage.project_root();
-        let reconciled =
-            reconcile_files_with_index(&repo, &index, &project_files, project_root).await?;
-        if reconciled > 0 {
-            info!(count = reconciled, "Reconciled new files with index");
-        }
+        // Reconcile discovered files with the index and perform initial sync
+        // (only in project mode)
+        let sync_state =
+            if let (Some(project_root), Some(project_files)) = (&project_root, &project_files) {
+                let reconciled =
+                    reconcile_files_with_index(&repo, &index, project_files, project_root).await?;
+                if reconciled > 0 {
+                    info!(count = reconciled, "Reconciled new files with index");
+                }
+
+                // Initialize sync state from hub directory
+                let mut sync_state = SyncState::load(storage.hub_dir())?;
+
+                // Perform initial sync on startup
+                let sync_result =
+                    sync_all_documents(&repo, &index, project_root, &mut sync_state).await;
+
+                info!(
+                    synced = sync_result.total_synced(),
+                    errors = sync_result.errors.len(),
+                    "Initial filesystem sync complete"
+                );
+
+                Some(Mutex::new(sync_state))
+            } else {
+                info!("Standalone mode: skipping file reconciliation and initial sync");
+                None
+            };
 
         // Spawn background tasks to connect to configured peers
         for peer_url in &config.peers {
             info!(url = %peer_url, "Starting peer connection");
             spawn_peer_connection(repo.clone(), peer_url.clone());
         }
-
-        // Initialize sync state from hub directory
-        let sync_state = SyncState::load(storage.hub_dir())?;
-
-        // Perform initial sync on startup
-        let project_root = storage.project_root().to_path_buf();
-        let mut sync_state_guard = sync_state;
-        let sync_result =
-            sync_all_documents(&repo, &index, &project_root, &mut sync_state_guard).await;
-
-        info!(
-            synced = sync_result.total_synced(),
-            errors = sync_result.errors.len(),
-            "Initial filesystem sync complete"
-        );
 
         let auth_config = config.auth_config.take();
         let allow_insecure_auth = config.allow_insecure_auth;
@@ -185,11 +210,16 @@ impl HubContext {
             project_files,
             repo,
             index,
-            sync_state: Mutex::new(sync_state_guard),
+            sync_state,
             auth_config,
             auth_state: OnceLock::new(),
             allow_insecure_auth,
         })
+    }
+
+    /// Returns whether this hub is running in project mode (has a local project).
+    pub fn has_project(&self) -> bool {
+        self.storage.project_root().is_some()
     }
 
     /// Get reference to storage manager.
@@ -197,9 +227,9 @@ impl HubContext {
         &self.storage
     }
 
-    /// Get discovered project files.
-    pub fn project_files(&self) -> &ProjectFiles {
-        &self.project_files
+    /// Get discovered project files (None in standalone mode).
+    pub fn project_files(&self) -> Option<&ProjectFiles> {
+        self.project_files.as_ref()
     }
 
     /// Get reference to the samod repo.
@@ -214,27 +244,39 @@ impl HubContext {
 
     /// Perform a full sync of all documents with the filesystem.
     ///
-    /// This is called on shutdown to ensure all changes are persisted.
+    /// In standalone mode, this is a no-op (returns a default result with no synced documents).
+    /// In project mode, syncs all documents to disk.
     pub async fn sync_all(&self) -> SyncAllResult {
-        let project_root = self.storage.project_root().to_path_buf();
-        let mut sync_state = self.sync_state.lock().await;
-        sync_all_documents(&self.repo, &self.index, &project_root, &mut sync_state).await
+        let Some(ref project_root) = self.storage.project_root().map(|p| p.to_path_buf()) else {
+            return SyncAllResult::default();
+        };
+        let Some(ref sync_state_mutex) = self.sync_state else {
+            return SyncAllResult::default();
+        };
+        let mut sync_state = sync_state_mutex.lock().await;
+        sync_all_documents(&self.repo, &self.index, project_root, &mut sync_state).await
     }
 
     /// Sync a single file by its path.
     ///
     /// This is called when the filesystem watcher detects a file change.
+    /// In standalone mode, this is a no-op (returns Ok(None)).
     ///
     /// # Arguments
     /// * `file_path` - Absolute path to the changed file
     ///
     /// # Returns
     /// * `Ok(Some(SyncResult))` - Sync succeeded
-    /// * `Ok(None)` - File is not tracked (not in index)
+    /// * `Ok(None)` - File is not tracked (not in index), or standalone mode
     /// * `Err(Error)` - Sync failed
     pub async fn sync_file(&self, file_path: &std::path::Path) -> Result<Option<SyncResult>> {
-        let project_root = self.storage.project_root().to_path_buf();
-        let mut sync_state = self.sync_state.lock().await;
+        let Some(project_root) = self.storage.project_root().map(|p| p.to_path_buf()) else {
+            return Ok(None);
+        };
+        let Some(ref sync_state_mutex) = self.sync_state else {
+            return Ok(None);
+        };
+        let mut sync_state = sync_state_mutex.lock().await;
         sync_file_by_path(
             &self.repo,
             &self.index,
@@ -422,4 +464,57 @@ async fn reconcile_files_with_index(
     }
 
     Ok(added)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_hub_context_standalone_mode() {
+        let temp = TempDir::new().unwrap();
+        let data_dir = temp.path().join("hub-data");
+
+        let storage = StorageManager::new_standalone(&data_dir).unwrap();
+        let config = HubConfig::default();
+
+        let ctx = HubContext::new(storage, config).await.unwrap();
+
+        // Should be in standalone mode
+        assert!(!ctx.has_project());
+        assert!(ctx.project_files().is_none());
+
+        // Repo and index should still be initialized
+        let files = ctx.index().get_all_files();
+        assert!(files.is_empty()); // No files discovered in standalone mode
+
+        // sync_all should be a no-op
+        let result = ctx.sync_all().await;
+        assert_eq!(result.total_synced(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_hub_context_project_mode() {
+        let temp = TempDir::new().unwrap();
+
+        // Create a qmd file
+        std::fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+
+        let storage = StorageManager::new(temp.path()).unwrap();
+        let config = HubConfig::default();
+
+        let ctx = HubContext::new(storage, config).await.unwrap();
+
+        // Should be in project mode
+        assert!(ctx.has_project());
+        assert!(ctx.project_files().is_some());
+
+        let pf = ctx.project_files().unwrap();
+        assert_eq!(pf.qmd_files.len(), 1);
+
+        // File should be in the index
+        let files = ctx.index().get_all_files();
+        assert_eq!(files.len(), 1);
+    }
 }

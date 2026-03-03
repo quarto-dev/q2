@@ -26,4 +26,6 @@ mod automerge_api_tests;
 pub use context::HubContext;
 pub use error::{Error, Result};
 pub use index::IndexDocument;
-pub use storage::{CURRENT_HUB_VERSION, HubStorageConfig, StorageManager};
+pub use storage::{
+    CURRENT_HUB_VERSION, HubStorageConfig, StorageManager, default_standalone_data_dir,
+};

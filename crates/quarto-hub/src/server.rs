@@ -14,13 +14,13 @@ use axum::{
     response::{IntoResponse, Redirect},
     routing::{get, post},
 };
+use cookie::SameSite;
 use samod::DocumentId;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
-use cookie::SameSite;
 use tracing::{debug, info};
 
 use crate::auth;
@@ -33,7 +33,8 @@ use crate::watch::{FileWatcher, WatchConfig, WatchEvent};
 #[derive(Serialize)]
 struct HealthResponse {
     status: &'static str,
-    project_root: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project_root: Option<String>,
     qmd_file_count: usize,
     index_document_id: String,
 }
@@ -232,7 +233,10 @@ where
 {
     type Rejection = (StatusCode, Json<serde_json::Value>);
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> std::result::Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &S,
+    ) -> std::result::Result<Self, Self::Rejection> {
         let ctx = SharedContext::from_ref(state);
         let token = cookie_token(&parts.headers);
         ctx.authenticate(token.as_deref())
@@ -243,30 +247,30 @@ where
 }
 
 /// Health check endpoint
-async fn health(
-    _auth: Authenticated,
-    State(ctx): State<SharedContext>,
-) -> Json<HealthResponse> {
+async fn health(_auth: Authenticated, State(ctx): State<SharedContext>) -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
-        project_root: ctx.storage().project_root().display().to_string(),
-        qmd_file_count: ctx.project_files().qmd_files.len(),
+        project_root: ctx
+            .storage()
+            .project_root()
+            .map(|p| p.display().to_string()),
+        qmd_file_count: ctx.project_files().map_or(0, |pf| pf.qmd_files.len()),
         index_document_id: ctx.index().document_id(),
     })
 }
 
 /// List discovered files (from filesystem)
-async fn list_files(
-    _auth: Authenticated,
-    State(ctx): State<SharedContext>,
-) -> Json<FilesResponse> {
+async fn list_files(_auth: Authenticated, State(ctx): State<SharedContext>) -> Json<FilesResponse> {
     Json(FilesResponse {
         qmd_files: ctx
             .project_files()
-            .qmd_files
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect(),
+            .map(|pf| {
+                pf.qmd_files
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 
@@ -677,7 +681,8 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
     let sync_interval = config.sync_interval_secs;
     let watch_enabled = config.watch_enabled;
     let watch_debounce_ms = config.watch_debounce_ms;
-    let project_root = storage.project_root().to_path_buf();
+    let project_root = storage.project_root().map(|p| p.to_path_buf());
+    let has_project = project_root.is_some();
 
     // HubContext::new is now async (initializes samod repo and performs initial sync)
     let ctx = Arc::new(HubContext::new(storage, config).await?);
@@ -688,7 +693,11 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
     let router = build_router(ctx).await?;
 
     let listener = TcpListener::bind(&addr).await?;
-    info!(%addr, "Hub server listening");
+    if has_project {
+        info!(%addr, "Hub server listening (project mode)");
+    } else {
+        info!(%addr, "Hub server listening (standalone sync mode)");
+    }
 
     // Create shutdown signal channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -699,20 +708,26 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
         let _ = shutdown_tx.send(true);
     });
 
-    // Spawn periodic sync task if interval is configured
-    let periodic_sync_handle = if let Some(interval_secs) = sync_interval {
-        let shutdown_rx = shutdown_rx.clone();
-        info!(interval_secs = interval_secs, "Starting periodic sync task");
-        Some(tokio::spawn(async move {
-            run_periodic_sync(ctx_for_sync, interval_secs, shutdown_rx).await;
-        }))
+    // Spawn periodic sync task if interval is configured and we have a project
+    let periodic_sync_handle = if has_project {
+        if let Some(interval_secs) = sync_interval {
+            let shutdown_rx = shutdown_rx.clone();
+            info!(interval_secs = interval_secs, "Starting periodic sync task");
+            Some(tokio::spawn(async move {
+                run_periodic_sync(ctx_for_sync, interval_secs, shutdown_rx).await;
+            }))
+        } else {
+            debug!("Periodic sync disabled");
+            None
+        }
     } else {
-        debug!("Periodic sync disabled");
+        debug!("Standalone mode: periodic sync not needed");
         None
     };
 
-    // Spawn file watcher task if enabled
-    let watcher_handle = if watch_enabled {
+    // Spawn file watcher task if enabled and we have a project
+    let watcher_handle = if has_project && watch_enabled {
+        let project_root = project_root.expect("has_project is true");
         let shutdown_rx = shutdown_rx.clone();
         let watch_config = WatchConfig {
             debounce_ms: watch_debounce_ms,
@@ -729,8 +744,11 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
                 None
             }
         }
-    } else {
+    } else if has_project {
         debug!("Filesystem watcher disabled");
+        None
+    } else {
+        debug!("Standalone mode: filesystem watcher not needed");
         None
     };
 
@@ -755,14 +773,16 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
         let _ = handle.await;
     }
 
-    // Perform final sync on shutdown
-    info!("Performing final filesystem sync before shutdown...");
-    let sync_result = ctx_for_shutdown.sync_all().await;
-    info!(
-        synced = sync_result.total_synced(),
-        errors = sync_result.errors.len(),
-        "Final filesystem sync complete"
-    );
+    // Perform final sync on shutdown (no-op in standalone mode)
+    if has_project {
+        info!("Performing final filesystem sync before shutdown...");
+        let sync_result = ctx_for_shutdown.sync_all().await;
+        info!(
+            synced = sync_result.total_synced(),
+            errors = sync_result.errors.len(),
+            "Final filesystem sync complete"
+        );
+    }
 
     Ok(())
 }
@@ -1064,7 +1084,10 @@ mod tests {
         let has_bare_ws = connect_src
             .split_whitespace()
             .any(|tok| tok == "ws:" || tok == "wss:");
-        assert!(!has_bare_ws, "connect-src must not allow arbitrary WebSocket hosts");
+        assert!(
+            !has_bare_ws,
+            "connect-src must not allow arbitrary WebSocket hosts"
+        );
     }
 
     #[test]

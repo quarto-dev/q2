@@ -319,11 +319,24 @@ enum Commands {
     /// Start the Quarto Language Server Protocol server
     Lsp,
 
-    /// Start collaborative hub server for real-time editing
+    /// Start collaborative hub server for real-time editing.
+    /// By default, watches the current directory (or --project path).
+    /// Use --no-project to run as a standalone sync server.
     Hub {
-        /// Project root directory (defaults to current directory)
+        /// Project root directory (defaults to current directory).
+        /// Mutually exclusive with --no-project.
         #[arg(short, long)]
         project: Option<PathBuf>,
+
+        /// Run as a standalone sync server without watching a local project.
+        /// Mutually exclusive with --project.
+        #[arg(long)]
+        no_project: bool,
+
+        /// Data directory for standalone mode (where automerge documents are stored).
+        /// Only used with --no-project.
+        #[arg(long, env = "QUARTO_HUB_DATA_DIR")]
+        data_dir: Option<PathBuf>,
 
         /// Port to listen on
         #[arg(short = 'P', long, default_value = "3000")]
@@ -428,6 +441,8 @@ fn main() -> Result<()> {
         Commands::Lsp => commands::lsp::execute(),
         Commands::Hub {
             project,
+            no_project,
+            data_dir,
             port,
             host,
             peers,
@@ -441,6 +456,8 @@ fn main() -> Result<()> {
             allowed_domains,
         } => commands::hub::execute(commands::hub::HubArgs {
             project,
+            no_project,
+            data_dir,
             port,
             host,
             peers,

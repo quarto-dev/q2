@@ -1,6 +1,12 @@
 //! Storage management for the hub
 //!
-//! Manages the `.quarto/hub/` directory structure and lockfile.
+//! Manages the hub data directory and lockfile.
+//!
+//! Two modes are supported:
+//! - **Project mode**: Storage lives in `<project_root>/.quarto/hub/`. The hub
+//!   discovers and syncs files from the project directory.
+//! - **Standalone mode**: Storage lives in a user-specified data directory. The
+//!   hub acts as a pure sync server with no local project.
 
 use std::fs::{self, File};
 use std::io::Write;
@@ -18,7 +24,7 @@ use crate::error::{Error, Result};
 /// The hub will check this version on startup and can perform migrations.
 pub const CURRENT_HUB_VERSION: u32 = 1;
 
-/// Hub configuration stored in `.quarto/hub/hub.json`.
+/// Hub configuration stored in `hub.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HubStorageConfig {
     /// Storage format version (for migrations)
@@ -103,6 +109,24 @@ impl HubStorageConfig {
     }
 }
 
+/// Default data directory for standalone mode.
+///
+/// Uses the platform-appropriate data directory:
+/// - Linux: `$XDG_DATA_HOME/quarto-hub` or `~/.local/share/quarto-hub`
+/// - macOS: `~/Library/Application Support/quarto-hub`
+/// - Windows: `{FOLDERID_RoamingAppData}/quarto-hub`
+pub fn default_standalone_data_dir() -> PathBuf {
+    if let Some(data_dir) = dirs::data_dir() {
+        data_dir.join("quarto-hub")
+    } else {
+        dirs::home_dir()
+            .expect("Could not determine home directory")
+            .join(".local")
+            .join("share")
+            .join("quarto-hub")
+    }
+}
+
 /// Get current time as ISO 8601 string (without external crate).
 fn chrono_now() -> String {
     use std::time::SystemTime;
@@ -114,15 +138,17 @@ fn chrono_now() -> String {
     format!("{}", now.as_secs())
 }
 
-/// Manages the `.quarto/hub/` directory and holds the lockfile.
+/// Manages the hub data directory and holds the lockfile.
 ///
 /// The lockfile is held for the lifetime of this struct, preventing
-/// multiple hub instances from running on the same project.
+/// multiple hub instances from running on the same data directory.
 pub struct StorageManager {
-    /// Root of the Quarto project
-    project_root: PathBuf,
+    /// Root of the Quarto project (None in standalone mode)
+    project_root: Option<PathBuf>,
 
-    /// Path to `.quarto/hub/`
+    /// Path to the hub data directory.
+    /// In project mode: `<project_root>/.quarto/hub/`
+    /// In standalone mode: the user-specified data directory.
     hub_dir: PathBuf,
 
     /// Open lockfile (lock released on drop)
@@ -135,6 +161,9 @@ pub struct StorageManager {
 
 impl StorageManager {
     /// Create a new StorageManager for the given project root.
+    ///
+    /// Storage is placed in `<project_root>/.quarto/hub/`. This is the
+    /// default mode for `quarto hub`, where the hub watches a local project.
     ///
     /// This will:
     /// 1. Create `.quarto/hub/` if it doesn't exist
@@ -151,6 +180,24 @@ impl StorageManager {
         }
 
         let hub_dir = project_root.join(".quarto").join("hub");
+
+        Self::init(Some(project_root), hub_dir)
+    }
+
+    /// Create a StorageManager for standalone mode (no local project).
+    ///
+    /// Storage is placed directly in `data_dir`. This mode is used when
+    /// the hub acts as a pure sync server without watching any local files.
+    ///
+    /// The directory will be created if it doesn't exist.
+    pub fn new_standalone(data_dir: impl AsRef<Path>) -> Result<Self> {
+        let hub_dir = data_dir.as_ref().to_path_buf();
+
+        Self::init(None, hub_dir)
+    }
+
+    /// Shared initialization logic for both project and standalone modes.
+    fn init(project_root: Option<PathBuf>, hub_dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&hub_dir).map_err(Error::CreateHubDir)?;
 
         let lock_path = hub_dir.join("hub.lock");
@@ -173,12 +220,20 @@ impl StorageManager {
         // Load or create hub config
         let config = HubStorageConfig::load_or_create(&hub_dir)?;
 
-        info!(
-            project_root = %project_root.display(),
-            hub_dir = %hub_dir.display(),
-            version = config.version,
-            "Storage manager initialized"
-        );
+        if let Some(ref project_root) = project_root {
+            info!(
+                project_root = %project_root.display(),
+                hub_dir = %hub_dir.display(),
+                version = config.version,
+                "Storage manager initialized (project mode)"
+            );
+        } else {
+            info!(
+                hub_dir = %hub_dir.display(),
+                version = config.version,
+                "Storage manager initialized (standalone mode)"
+            );
+        }
 
         Ok(Self {
             project_root,
@@ -198,12 +253,17 @@ impl StorageManager {
         &self.config
     }
 
-    /// Returns the project root directory.
-    pub fn project_root(&self) -> &Path {
-        &self.project_root
+    /// Returns the project root directory, if running in project mode.
+    ///
+    /// Returns `None` in standalone mode (no local project).
+    pub fn project_root(&self) -> Option<&Path> {
+        self.project_root.as_deref()
     }
 
-    /// Returns the hub directory (`.quarto/hub/`).
+    /// Returns the hub data directory.
+    ///
+    /// In project mode: `<project_root>/.quarto/hub/`
+    /// In standalone mode: the user-specified data directory.
     pub fn hub_dir(&self) -> &Path {
         &self.hub_dir
     }
@@ -316,5 +376,48 @@ mod tests {
     fn test_storage_manager_nonexistent_project() {
         let result = StorageManager::new("/nonexistent/path/that/does/not/exist");
         assert!(matches!(result, Err(Error::ProjectNotFound(_))));
+    }
+
+    #[test]
+    fn test_storage_manager_project_mode_has_project_root() {
+        let temp = TempDir::new().unwrap();
+        let manager = StorageManager::new(temp.path()).unwrap();
+
+        assert!(manager.project_root().is_some());
+        assert_eq!(manager.project_root().unwrap(), temp.path());
+    }
+
+    #[test]
+    fn test_storage_manager_standalone_creates_data_dir() {
+        let temp = TempDir::new().unwrap();
+        let data_dir = temp.path().join("hub-data");
+
+        let manager = StorageManager::new_standalone(&data_dir).unwrap();
+
+        assert!(manager.hub_dir().exists());
+        assert!(manager.hub_dir().join("hub.lock").exists());
+        assert!(manager.hub_dir().join("hub.json").exists());
+        assert_eq!(manager.hub_dir(), data_dir);
+    }
+
+    #[test]
+    fn test_storage_manager_standalone_has_no_project_root() {
+        let temp = TempDir::new().unwrap();
+        let data_dir = temp.path().join("hub-data");
+
+        let manager = StorageManager::new_standalone(&data_dir).unwrap();
+
+        assert!(manager.project_root().is_none());
+    }
+
+    #[test]
+    fn test_storage_manager_standalone_prevents_double_lock() {
+        let temp = TempDir::new().unwrap();
+        let data_dir = temp.path().join("hub-data");
+
+        let _manager1 = StorageManager::new_standalone(&data_dir).unwrap();
+
+        let result = StorageManager::new_standalone(&data_dir);
+        assert!(matches!(result, Err(Error::HubAlreadyRunning)));
     }
 }

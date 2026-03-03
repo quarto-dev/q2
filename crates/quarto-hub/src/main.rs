@@ -1,4 +1,7 @@
-//! Hub binary - collaborative editing server for Quarto projects
+//! Hub binary - standalone collaborative sync server for Quarto projects
+//!
+//! By default, runs as a standalone sync server (no local project).
+//! Use `--project <path>` to watch a local Quarto project directory.
 
 use std::path::PathBuf;
 
@@ -6,15 +9,23 @@ use clap::Parser;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use quarto_hub::{StorageManager, auth, context::HubConfig, server};
+use quarto_hub::{StorageManager, auth, context::HubConfig, default_standalone_data_dir, server};
 
 #[derive(Parser, Debug)]
 #[command(name = "hub")]
-#[command(about = "Collaborative editing server for Quarto projects")]
+#[command(about = "Collaborative sync server for Quarto projects")]
 struct Args {
-    /// Project root directory (defaults to current directory)
+    /// Watch a local Quarto project directory.
+    /// When provided, the hub discovers and syncs files from this directory.
+    /// When omitted, the hub runs as a standalone sync server.
     #[arg(short, long)]
     project: Option<PathBuf>,
+
+    /// Data directory for standalone mode (where automerge documents are stored).
+    /// Defaults to `.quarto/hub/` inside the project when --project is used.
+    /// Required when running without --project unless the default location is acceptable.
+    #[arg(long, env = "QUARTO_HUB_DATA_DIR")]
+    data_dir: Option<PathBuf>,
 
     /// Port to listen on
     #[arg(short = 'P', long, default_value = "3000")]
@@ -32,17 +43,18 @@ struct Args {
 
     /// Periodic filesystem sync interval in seconds.
     /// Set to 0 to disable periodic sync.
-    /// Default: 30 seconds.
+    /// Default: 30 seconds. Only relevant in project mode.
     #[arg(long, default_value = "30")]
     sync_interval: u64,
 
     /// Disable filesystem watching.
     /// When disabled, file changes won't be detected until periodic sync runs.
+    /// Only relevant in project mode.
     #[arg(long)]
     no_watch: bool,
 
     /// Debounce duration for filesystem events in milliseconds.
-    /// Default: 500ms.
+    /// Default: 500ms. Only relevant in project mode.
     #[arg(long, default_value = "500")]
     watch_debounce: u64,
 
@@ -83,18 +95,32 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    // Determine project root (canonicalize to ensure consistent paths for file watching)
-    let project_root = args
-        .project
-        .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
-    let project_root = project_root
-        .canonicalize()
-        .expect("Failed to canonicalize project root");
+    // Initialize storage based on mode
+    let mut storage = if let Some(project) = &args.project {
+        // Project mode: watch a local Quarto project
+        let project_root = project
+            .canonicalize()
+            .expect("Failed to canonicalize project root");
 
-    info!(project_root = %project_root.display(), "Starting hub");
+        if args.data_dir.is_some() {
+            anyhow::bail!(
+                "--data-dir and --project are mutually exclusive. \
+                 In project mode, data is stored in <project>/.quarto/hub/"
+            );
+        }
 
-    // Initialize storage (acquires lockfile)
-    let mut storage = StorageManager::new(&project_root)?;
+        info!(project_root = %project_root.display(), "Starting hub (project mode)");
+        StorageManager::new(&project_root)?
+    } else {
+        // Standalone mode: pure sync server
+        let data_dir = args
+            .data_dir
+            .clone()
+            .unwrap_or_else(default_standalone_data_dir);
+
+        info!(data_dir = %data_dir.display(), "Starting hub (standalone sync mode)");
+        StorageManager::new_standalone(&data_dir)?
+    };
 
     // Determine peers: CLI peers override stored peers
     let peers = if !args.peers.is_empty() {
