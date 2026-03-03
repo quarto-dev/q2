@@ -584,7 +584,7 @@ async fn ws_handler(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> std::result::Result<impl IntoResponse, StatusCode> {
-    if ctx.auth_config().is_some() {
+    let email = if ctx.auth_config().is_some() {
         // In dev mode (allow_insecure_auth), the SPA runs on a different
         // port (Vite :5173) than the hub (:3000). The Vite dev server
         // proxies /ws to the hub so cookies are forwarded, but the Origin
@@ -593,22 +593,50 @@ async fn ws_handler(
         if !ctx.allow_insecure_auth() {
             check_ws_origin(&headers)?;
         }
-        ctx.authenticate(cookie_token(&headers).as_deref()).await?;
-    }
+        let claims = ctx
+            .authenticate_claims(cookie_token(&headers).as_deref())
+            .await?;
+        Some(claims.email)
+    } else {
+        None
+    };
 
-    Ok(ws.on_upgrade(|socket| handle_websocket(socket, ctx)))
+    Ok(ws.on_upgrade(move |socket| handle_websocket(socket, ctx, email)))
 }
 
 /// Handle an upgraded WebSocket connection.
-async fn handle_websocket(socket: WebSocket, ctx: SharedContext) {
+async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<String>) {
     // accept_axum returns immediately; the connection runs in the background
     match ctx.repo().accept_axum(socket) {
         Ok(connection) => {
-            info!(peer_info = ?connection.info(), "WebSocket client connected");
+            let conn_id = connection.id();
+
+            // Store connection→email mapping for document_served callback
+            if let Some(ref email) = email {
+                ctx.connection_emails()
+                    .lock()
+                    .unwrap()
+                    .insert(conn_id, email.clone());
+            }
+
+            info!(
+                peer_info = ?connection.info(),
+                email = email.as_deref().unwrap_or("-"),
+                "WebSocket client connected"
+            );
+
             // The connection is managed by samod and stays alive until the WebSocket closes.
-            // We can optionally wait for it to finish if we want to log disconnection:
             let reason = connection.finished().await;
-            info!(peer_info = ?connection.info(), reason = ?reason, "WebSocket client disconnected");
+
+            // Clean up mapping
+            ctx.connection_emails().lock().unwrap().remove(&conn_id);
+
+            info!(
+                peer_info = ?connection.info(),
+                email = email.as_deref().unwrap_or("-"),
+                reason = ?reason,
+                "WebSocket client disconnected"
+            );
         }
         Err(samod::Stopped) => {
             tracing::warn!("WebSocket rejected: repo is stopped");

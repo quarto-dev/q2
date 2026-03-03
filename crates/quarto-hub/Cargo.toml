@@ -37,7 +37,7 @@ time = "0.3"
 
 # Automerge (via samod for JS compatibility)
 automerge = "0.7"
-samod = { version = "0.7", features = ["tokio", "axum", "tungstenite"] }
+samod = { git = "https://github.com/shikokuchuo/samod.git", branch = "quarto", features = ["tokio", "axum", "tungstenite"] }
 
 # WebSocket client for connecting to sync servers
 tokio-tungstenite = { version = "0.27", features = ["native-tls"] }

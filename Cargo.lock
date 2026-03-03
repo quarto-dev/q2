@@ -4001,8 +4001,7 @@ dependencies = [
 [[package]]
 name = "samod"
 version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "971b5800aa3321de2a3133913a092451bc800022427b241f76c2af7269bcc3b6"
+source = "git+https://github.com/shikokuchuo/samod.git?branch=quarto#d477bbd93e123b5d1a5867d4488f4e0580fcf5a1"
 dependencies = [
  "async-channel",
  "automerge",
@@ -4022,8 +4021,7 @@ dependencies = [
 [[package]]
 name = "samod-core"
 version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bab909f3bd4ecf787b3221fd4a8b480f385b3e358e84f7ddb379c0d503aa921"
+source = "git+https://github.com/shikokuchuo/samod.git?branch=quarto#d477bbd93e123b5d1a5867d4488f4e0580fcf5a1"
 dependencies = [
  "automerge",
  "base64 0.21.7",
