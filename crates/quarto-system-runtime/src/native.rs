@@ -166,18 +166,14 @@ impl SystemRuntime for NativeRuntime {
     }
 
     fn temp_dir(&self, template: &str) -> RuntimeResult<TempDir> {
-        // Create a unique temp directory in the system temp directory
-        let base = std::env::temp_dir();
-        let unique_name = format!(
-            "{}_{}",
-            template,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        );
-        let path = base.join(unique_name);
-        fs::create_dir_all(&path)?;
+        // Use tempfile::Builder for unique directory names that are safe
+        // under parallel execution (e.g. cargo nextest). The previous
+        // timestamp-based naming could collide across concurrent processes.
+        let dir = tempfile::Builder::new()
+            .prefix(&format!("{}_", template))
+            .tempdir()
+            .map_err(RuntimeError::from)?;
+        let path = dir.keep(); // take ownership of the path, we manage cleanup via our TempDir
         Ok(TempDir::new(path))
     }
 
