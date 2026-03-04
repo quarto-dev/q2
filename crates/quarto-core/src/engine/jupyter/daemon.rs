@@ -153,13 +153,21 @@ impl JupyterDaemon {
         // 6. Create ZeroMQ socket connections
         let session_id = Uuid::new_v4().to_string();
 
-        let shell_socket =
-            runtimelib::create_client_shell_connection(&connection_info, &session_id)
-                .await
-                .map_err(|e| JupyterError::SocketError {
-                    socket_type: "shell".to_string(),
-                    message: e.to_string(),
-                })?;
+        let peer_identity = runtimelib::peer_identity_for_session(&session_id)
+            .map_err(|e| JupyterError::SocketError {
+                socket_type: "shell".to_string(),
+                message: e.to_string(),
+            })?;
+        let shell_socket = runtimelib::create_client_shell_connection_with_identity(
+            &connection_info,
+            &session_id,
+            peer_identity,
+        )
+        .await
+        .map_err(|e| JupyterError::SocketError {
+            socket_type: "shell".to_string(),
+            message: e.to_string(),
+        })?;
 
         let iopub_socket =
             runtimelib::create_client_iopub_connection(&connection_info, "", &session_id)
