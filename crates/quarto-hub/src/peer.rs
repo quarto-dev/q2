@@ -10,6 +10,8 @@ use samod::{ConnDirection, Repo};
 use tokio_tungstenite::connect_async;
 use tracing::{debug, info, warn};
 
+use crate::server::format_peer_info;
+
 /// Minimum backoff duration between reconnection attempts.
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 
@@ -98,7 +100,9 @@ async fn connect_to_peer(repo: &Repo, url: &str) -> PeerConnectionResult {
         }
     };
 
-    info!(url = %url, peer_info = ?connection.info(), "Connected to peer");
+    let (peer_id, storage_id) = format_peer_info(&connection.info());
+
+    info!(url = %url, peer_id, storage_id, "Connected to peer");
 
     // Wait for the connection to finish (disconnect or error)
     let reason = connection.finished().await;

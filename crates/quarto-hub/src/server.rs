@@ -29,6 +29,19 @@ use crate::error::Result;
 use crate::storage::StorageManager;
 use crate::watch::{FileWatcher, WatchConfig, WatchEvent};
 
+/// Extract peer_id and storage_id as clean display strings from a `PeerInfo`.
+pub(crate) fn format_peer_info(info: &Option<samod::PeerInfo>) -> (String, String) {
+    match info {
+        Some(info) => (
+            info.peer_id.to_string(),
+            info.storage_id
+                .as_ref()
+                .map_or_else(|| "-".to_string(), |s| s.to_string()),
+        ),
+        None => ("-".to_string(), "-".to_string()),
+    }
+}
+
 /// Health check response
 #[derive(Serialize)]
 struct HealthResponse {
@@ -623,8 +636,15 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
                     .insert(conn_id, email.clone());
             }
 
+            // Peer info becomes available once the handshake completes.
+            let (peer_id, storage_id) = match connection.handshake_complete().await {
+                Ok(info) => format_peer_info(&Some(info)),
+                Err(_) => format_peer_info(&None),
+            };
+
             info!(
-                peer_info = ?connection.info(),
+                peer_id,
+                storage_id,
                 email = email.as_deref().unwrap_or("-"),
                 "WebSocket client connected"
             );
@@ -636,7 +656,8 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
             ctx.connection_emails().lock().unwrap().remove(&conn_id);
 
             info!(
-                peer_info = ?connection.info(),
+                peer_id,
+                storage_id,
                 email = email.as_deref().unwrap_or("-"),
                 reason = ?reason,
                 "WebSocket client disconnected"
@@ -1131,5 +1152,39 @@ mod tests {
     #[test]
     fn csp_has_default_self() {
         assert!(CSP_WITH_AUTH.contains("default-src 'self'"));
+    }
+
+    // ── format_peer_info ──────────────────────────────────────────
+
+    #[test]
+    fn format_peer_info_with_both_ids() {
+        let info = Some(samod::PeerInfo {
+            peer_id: samod::PeerId::from("peer-abc123"),
+            storage_id: Some(samod::StorageId::from("store-xyz")),
+        });
+        assert_eq!(
+            format_peer_info(&info),
+            ("peer-abc123".to_string(), "store-xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn format_peer_info_without_storage_id() {
+        let info = Some(samod::PeerInfo {
+            peer_id: samod::PeerId::from("peer-abc123"),
+            storage_id: None,
+        });
+        assert_eq!(
+            format_peer_info(&info),
+            ("peer-abc123".to_string(), "-".to_string())
+        );
+    }
+
+    #[test]
+    fn format_peer_info_none() {
+        assert_eq!(
+            format_peer_info(&None),
+            ("-".to_string(), "-".to_string())
+        );
     }
 }
