@@ -32,15 +32,23 @@ use quarto_system_runtime::{SystemRuntime, WasmRuntime};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-// Global runtime instance for VFS operations
-static RUNTIME: OnceLock<WasmRuntime> = OnceLock::new();
+// Global runtime instance for VFS operations.
+// Stored as Arc so it can be shared with the rendering pipeline.
+static RUNTIME: OnceLock<Arc<WasmRuntime>> = OnceLock::new();
 
+/// Get a reference to the global VFS runtime for direct method calls.
 fn get_runtime() -> &'static WasmRuntime {
+    get_runtime_arc()
+}
+
+/// Get a clone of the global VFS runtime as `Arc<dyn SystemRuntime>`
+/// for passing into the rendering pipeline.
+fn get_runtime_arc() -> &'static Arc<WasmRuntime> {
     RUNTIME.get_or_init(|| {
         let runtime = WasmRuntime::new();
         // Populate VFS with embedded Bootstrap SCSS resources
         populate_vfs_with_embedded_resources(&runtime);
-        runtime
+        Arc::new(runtime)
     })
 }
 
@@ -471,8 +479,9 @@ pub async fn parse_qmd_to_ast(content: &str) -> String {
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
 
-    // Create Arc runtime for the async pipeline
-    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+    // Share the global VFS runtime with the pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
     let result = quarto_core::pipeline::parse_qmd_to_ast(
         content.as_bytes(),
@@ -599,8 +608,20 @@ pub async fn render_qmd(path: &str) -> String {
         }
     };
 
-    // Create minimal project context for WASM
-    let project = create_wasm_project_context(path);
+    // Discover project context from VFS (finds _quarto.yml in parent directories)
+    let project = match ProjectContext::discover(path, runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            return serde_json::to_string(&RenderResponse {
+                success: false,
+                error: Some(format!("Failed to discover project context: {}", e)),
+                html: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap();
+        }
+    };
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
@@ -635,8 +656,9 @@ pub async fn render_qmd(path: &str) -> String {
     let config = HtmlRenderConfig::default();
     let source_name = path.to_string_lossy();
 
-    // Create Arc runtime for the async pipeline
-    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+    // Share the global VFS runtime with the pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
     match render_qmd_to_html(&content, &source_name, &mut ctx, &config, runtime_arc).await {
         Ok(output) => {
@@ -722,8 +744,9 @@ pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String
     // TODO: Support custom templates via template_bundle parameter
     let config = HtmlRenderConfig::default();
 
-    // Create Arc runtime for the async pipeline
-    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+    // Share the global VFS runtime with the pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
     let result = render_qmd_to_html(
         content.as_bytes(),
@@ -857,8 +880,9 @@ pub async fn render_qmd_content_with_options(
     // Use the unified async pipeline (same as CLI)
     let config = HtmlRenderConfig::default();
 
-    // Create Arc runtime for the async pipeline
-    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+    // Share the global VFS runtime with the pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
     let result = render_qmd_to_html(
         content.as_bytes(),

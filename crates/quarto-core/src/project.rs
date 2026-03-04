@@ -73,11 +73,11 @@ use crate::error::{QuartoError, Result};
 pub fn directory_metadata_for_document(
     project: &ProjectContext,
     document_path: &Path,
+    runtime: &dyn SystemRuntime,
 ) -> Result<Vec<ConfigValue>> {
     use pampa::pandoc::yaml_to_config_value;
     use pampa::utils::diagnostic_collector::DiagnosticCollector;
     use quarto_config::InterpretationContext;
-    use std::fs;
 
     // Single-file projects don't have directory metadata
     if project.config.is_none() {
@@ -114,11 +114,11 @@ pub fn directory_metadata_for_document(
         current_dir = current_dir.join(component);
 
         // Look for _metadata.yml or _metadata.yaml
-        let metadata_path = find_metadata_file(&current_dir);
+        let metadata_path = find_metadata_file(&current_dir, runtime);
 
         if let Some(path) = metadata_path {
             // Parse the metadata file
-            let content = fs::read_to_string(&path).map_err(|e| {
+            let content = runtime.file_read_string(&path).map_err(|e| {
                 QuartoError::Other(format!("Failed to read {}: {}", path.display(), e))
             })?;
 
@@ -149,14 +149,14 @@ pub fn directory_metadata_for_document(
 /// Find `_metadata.yml` or `_metadata.yaml` in a directory.
 ///
 /// Returns the path to the metadata file if found, preferring `.yml` over `.yaml`.
-fn find_metadata_file(dir: &Path) -> Option<PathBuf> {
+fn find_metadata_file(dir: &Path, runtime: &dyn SystemRuntime) -> Option<PathBuf> {
     let yml_path = dir.join("_metadata.yml");
-    if yml_path.exists() {
+    if runtime.is_file(&yml_path).unwrap_or(false) {
         return Some(yml_path);
     }
 
     let yaml_path = dir.join("_metadata.yaml");
-    if yaml_path.exists() {
+    if runtime.is_file(&yaml_path).unwrap_or(false) {
         return Some(yaml_path);
     }
 
@@ -859,6 +859,7 @@ mod tests {
 
     mod directory_metadata_tests {
         use super::*;
+        use quarto_system_runtime::NativeRuntime;
         use std::fs;
         use tempfile::TempDir;
 
@@ -873,6 +874,10 @@ mod tests {
             }
         }
 
+        fn native_runtime() -> NativeRuntime {
+            NativeRuntime::new()
+        }
+
         #[test]
         fn test_directory_metadata_empty() {
             // Project with no _metadata.yml files returns empty vec
@@ -880,7 +885,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = temp.path().join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert!(result.is_empty());
         }
@@ -901,7 +907,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = chapters.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
@@ -937,7 +944,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = intro.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             // Should have 3 layers (root is NOT included based on TS behavior)
             // Actually, re-reading TS code: it walks from projectDir to inputDir
@@ -988,7 +996,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = deep.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             // Only the deep/_metadata.yml should be found
             assert_eq!(result.len(), 1);
@@ -1007,7 +1016,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = chapters.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].get("toc").unwrap().as_bool(), Some(true));
@@ -1025,7 +1035,7 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = chapters.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path);
+            let result = directory_metadata_for_document(&project, &doc_path, &native_runtime());
 
             assert!(result.is_err());
             let err = result.unwrap_err().to_string();
@@ -1047,7 +1057,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = temp.path().join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             // Document at root means relativePath is "", dirs is empty or [""]
             // TS behavior: no directories to process, returns empty config
@@ -1073,7 +1084,8 @@ mod tests {
             };
             let doc_path = chapters.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             // Per TS behavior: directory metadata requires project context
             assert!(result.is_empty());
@@ -1118,7 +1130,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = intro.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             let css_value = result[0].get("css").expect("should have css key");
@@ -1150,7 +1163,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = chapters.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             let css_value = result[0].get("css").expect("should have css key");
@@ -1186,7 +1200,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = intro.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             let theme_value = result[0].get("theme").expect("should have theme key");
@@ -1220,7 +1235,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = intro.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             let css_value = result[0].get("css").expect("should have css key");
@@ -1256,7 +1272,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = intro.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             let css_array = result[0]
@@ -1299,7 +1316,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = intro.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             let resources = result[0]
@@ -1337,7 +1355,8 @@ mod tests {
             let project = test_project_context(temp.path());
             let doc_path = intro.join("doc.qmd");
 
-            let result = directory_metadata_for_document(&project, &doc_path).unwrap();
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
             assert_eq!(result.len(), 1);
             let css_value = result[0]

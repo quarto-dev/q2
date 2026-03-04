@@ -128,12 +128,15 @@ impl PipelineStage for AstTransformsStage {
                 .map(|m| resolve_format_config(m, target_format));
 
             // Layer 2: Directory metadata layers (each flattened for format)
-            let dir_layers: Vec<_> =
-                directory_metadata_for_document(&ctx.project, &ctx.document.input)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|m| resolve_format_config(&m, target_format))
-                    .collect();
+            let dir_layers: Vec<_> = directory_metadata_for_document(
+                &ctx.project,
+                &ctx.document.input,
+                ctx.runtime.as_ref(),
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| resolve_format_config(&m, target_format))
+            .collect();
 
             // Layer 3: Document metadata (flattened for format)
             let doc_layer = resolve_format_config(&doc.ast.meta, target_format);
