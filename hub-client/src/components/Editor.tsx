@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
-import { isBinaryExtension } from '../types/project';
+import { isBinaryExtension, isTextExtension } from '../types/project';
 import type { Route } from '../utils/routing';
 import { buildFullUrl, buildShareableUrl } from '../utils/routing';
 import {
@@ -638,9 +638,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
   }, []);
 
-  // Handle uploading a binary file (with optional markdown insertion for images)
+  // Handle uploading a file (text files go through text creation, binary through binary)
   const handleUploadBinaryFile = useCallback(async (file: File, targetName: string) => {
     try {
+      // Text files must be created as text documents so the editor can display them
+      if (isTextExtension(targetName)) {
+        const textContent = await file.text();
+        handleCreateTextFile(targetName, textContent);
+        return;
+      }
+
       const { content: binaryContent, mimeType } = await processFileForUpload(file);
       const result = await createBinaryFile(targetName, binaryContent, mimeType);
 
@@ -675,7 +682,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       // Clear pending position on error too
       pendingDropPositionRef.current = null;
     }
-  }, [currentFile, onContentChange]);
+  }, [handleCreateTextFile, currentFile, onContentChange]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
