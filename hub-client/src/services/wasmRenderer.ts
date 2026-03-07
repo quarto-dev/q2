@@ -30,6 +30,8 @@ interface WasmModuleExtended {
   vfs_clear: () => string;
   vfs_read_file: (path: string) => string;
   vfs_read_binary_file: (path: string) => string;
+  vfs_set_runtime_metadata: (yaml: string) => string;
+  vfs_get_runtime_metadata: () => string;
   render_qmd: (path: string) => Promise<string>;
   render_qmd_content: (content: string, templateBundle: string) => Promise<string>;
   render_qmd_content_with_options: (content: string, templateBundle: string, options: string) => Promise<string>;
@@ -62,6 +64,10 @@ interface WasmModuleExtended {
 let wasmModule: WasmModuleExtended | null = null;
 let initPromise: Promise<void> | null = null;
 let htmlTemplateBundle: string | null = null;
+
+// Runtime settings managed by TypeScript, serialized to WASM as a single YAML blob.
+// Multiple settings can coexist without clobbering each other.
+let runtimeSettings: Record<string, unknown> = {};
 
 /**
  * Initialize the WASM module. Safe to call multiple times - will only
@@ -265,6 +271,77 @@ export function vfsReadBinaryFile(path: string): VfsResponse {
 }
 
 // ============================================================================
+// Runtime Metadata Operations
+// ============================================================================
+
+/**
+ * Set runtime metadata on the WASM module.
+ *
+ * Runtime metadata is merged at the highest precedence in the config pipeline,
+ * above project, directory, and document metadata.
+ *
+ * @param yaml - YAML string of metadata to set, or empty string to clear
+ */
+export function setRuntimeMetadata(yaml: string): VfsResponse {
+  const wasm = getWasm();
+  return JSON.parse(wasm.vfs_set_runtime_metadata(yaml));
+}
+
+/**
+ * Get the current runtime metadata from the WASM module.
+ */
+export function getRuntimeMetadata(): VfsResponse {
+  const wasm = getWasm();
+  return JSON.parse(wasm.vfs_get_runtime_metadata());
+}
+
+/**
+ * Serialize an object to minimal YAML.
+ *
+ * Handles the subset of values used by runtime settings: strings, numbers,
+ * booleans, and nested plain objects. Does not handle arrays or complex types.
+ *
+ * @internal Exported for testing only.
+ */
+export function toSimpleYaml(obj: Record<string, unknown>, indent: number = 0): string {
+  const prefix = '  '.repeat(indent);
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      lines.push(`${prefix}${key}:`);
+      lines.push(toSimpleYaml(value as Record<string, unknown>, indent + 1));
+    } else {
+      lines.push(`${prefix}${key}: ${value}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Enable or disable scroll sync via runtime metadata.
+ *
+ * When enabled, sets `format.html.source-location: full` in runtime metadata,
+ * which causes `data-loc` attributes in rendered HTML for scroll sync.
+ *
+ * Manages a TypeScript-side settings object so multiple runtime settings can
+ * coexist without clobbering each other.
+ */
+export function setScrollSyncEnabled(enabled: boolean): void {
+  if (enabled) {
+    runtimeSettings.format = { html: { 'source-location': 'full' } };
+  } else {
+    delete runtimeSettings.format;
+  }
+
+  // Serialize and flush to WASM
+  if (Object.keys(runtimeSettings).length === 0) {
+    setRuntimeMetadata('');
+  } else {
+    setRuntimeMetadata(toSimpleYaml(runtimeSettings) + '\n');
+  }
+}
+
+// ============================================================================
 // Rendering Operations
 // ============================================================================
 
@@ -284,32 +361,6 @@ export async function renderQmdContent(content: string, templateBundle: string =
   return JSON.parse(await wasm.render_qmd_content(content, templateBundle));
 }
 
-/**
- * Options for rendering QMD content.
- */
-export interface WasmRenderOptions {
-  /**
-   * Enable source location tracking in HTML output.
-   *
-   * When true, adds `data-loc` attributes to HTML elements for scroll sync.
-   */
-  sourceLocation?: boolean;
-}
-
-/**
- * Render QMD content with options (without VFS)
- */
-export async function renderQmdContentWithOptions(
-  content: string,
-  templateBundle: string = '',
-  options: WasmRenderOptions = {}
-): Promise<RenderResponse> {
-  const wasm = getWasm();
-  const optionsJson = JSON.stringify({
-    source_location: options.sourceLocation ?? false,
-  });
-  return JSON.parse(await wasm.render_qmd_content_with_options(content, templateBundle, optionsJson));
-}
 
 /**
  * Get a built-in template bundle
@@ -548,26 +599,20 @@ export interface RenderResult {
 
 /**
  * Options for the high-level renderToHtml function.
+ *
+ * Renders a document from the VFS using `render_qmd`. The document content
+ * must already be in the VFS (e.g., via Automerge sync). Source location
+ * tracking for scroll sync is controlled via runtime metadata, not per-render
+ * options — use `setScrollSyncEnabled()` instead.
  */
 export interface RenderToHtmlOptions {
   /**
-   * Enable source location tracking in HTML output.
-   *
-   * When true, adds `data-loc` attributes to HTML elements for scroll sync.
-   * Default: false
-   */
-  sourceLocation?: boolean;
-
-  /**
    * Path to the document being rendered in the VFS.
    *
-   * Used to resolve relative paths in theme specifications. For example,
-   * if a document at `docs/index.qmd` references `editorial_marks.scss`,
-   * the theme file will be looked up at `/project/docs/editorial_marks.scss`.
-   *
-   * Default: "input.qmd" (VFS normalizes to "/project/input.qmd")
+   * This is the Automerge path (e.g., "index.qmd" or "docs/chapter.qmd").
+   * The VFS normalizes relative paths to `/project/` prefix internally.
    */
-  documentPath?: string;
+  documentPath: string;
 }
 
 // ============================================================================
@@ -636,47 +681,45 @@ export async function createProject(choiceId: string, title: string): Promise<Cr
 }
 
 /**
- * Render QMD content to HTML, handling errors gracefully.
+ * Render a VFS document to HTML, handling errors gracefully.
+ *
+ * The document must already be in the VFS (via Automerge sync or manual add).
+ * Uses `render_qmd` which discovers project context (_quarto.yml, _metadata.yml)
+ * and merges all metadata layers including runtime metadata.
  *
  * Returns structured diagnostics with source locations that can be
  * converted to Monaco editor markers using diagnosticsToMarkers().
  *
- * @param qmdContent - The QMD source content to render
- * @param options - Optional render options (e.g., enable source location tracking)
+ * @param options - Render options with required documentPath
  */
 export async function renderToHtml(
-  qmdContent: string,
-  options: RenderToHtmlOptions = {}
+  options: RenderToHtmlOptions
 ): Promise<RenderResult> {
   try {
     await initWasm();
 
-    console.log('[renderToHtml] sourceLocation option:', options.sourceLocation);
+    const { documentPath } = options;
 
-    // Use the options-aware render function if options are specified
-    const result: RenderResponse = options.sourceLocation
-      ? await renderQmdContentWithOptions(qmdContent, htmlTemplateBundle || '', {
-        sourceLocation: options.sourceLocation,
-      })
-      : await renderQmdContent(qmdContent, htmlTemplateBundle || '');
-
-    console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
+    // Render from VFS with full project context
+    const result: RenderResponse = await renderQmd(documentPath);
 
     if (result.success) {
       // Compile theme CSS and update VFS
       // The cssVersion changes when CSS content changes, ensuring HTML differs
       // even when document structure is the same (e.g., only theme name changed)
       let cssVersion = 'default';
-      // Use relative path as default so VFS normalizes it correctly (e.g., "input.qmd" -> "/project/input.qmd")
-      const documentPath = options.documentPath ?? 'input.qmd';
       try {
-        cssVersion = await compileAndInjectThemeCss(qmdContent, documentPath);
+        // Read content from VFS to feed the JS-side theme CSS compiler
+        const fileResult = vfsReadFile(documentPath);
+        if (fileResult.success && fileResult.content) {
+          cssVersion = await compileAndInjectThemeCss(fileResult.content, documentPath);
+        }
       } catch (cssErr) {
         console.warn('[renderToHtml] Theme CSS compilation failed, using default CSS:', cssErr);
       }
 
       // Append CSS version as HTML comment to ensure HTML changes when CSS changes
-      // This forces DoubleBufferedIframe to swap and re-apply CSS even when
+      // This forces MorphIframe to re-apply CSS even when
       // only the theme changed (document structure unchanged)
       const htmlWithCssVersion = (result.html || '') + `<!-- css-version: ${cssVersion} -->`;
 
@@ -693,6 +736,48 @@ export async function renderToHtml(
         html: '',
         success: false,
         error: errorMsg,
+        diagnostics: result.diagnostics,
+        warnings: result.warnings,
+      };
+    }
+  } catch (err) {
+    console.error('Render error:', err);
+    return {
+      html: '',
+      success: false,
+      error: err instanceof Error ? err.message : JSON.stringify(err),
+    };
+  }
+}
+
+/**
+ * Render standalone QMD content to HTML (no VFS or project context).
+ *
+ * Use this for rendering content that doesn't live in the VFS, such as
+ * changelog markdown or static documentation. For VFS-based rendering
+ * with project context, use `renderToHtml()` instead.
+ *
+ * @param qmdContent - The QMD source content to render
+ */
+export async function renderContentToHtml(
+  qmdContent: string
+): Promise<RenderResult> {
+  try {
+    await initWasm();
+
+    const result: RenderResponse = await renderQmdContent(qmdContent, htmlTemplateBundle || '');
+
+    if (result.success) {
+      return {
+        html: result.html || '',
+        success: true,
+        warnings: result.warnings,
+      };
+    } else {
+      return {
+        html: '',
+        success: false,
+        error: result.error || 'Unknown render error',
         diagnostics: result.diagnostics,
         warnings: result.warnings,
       };

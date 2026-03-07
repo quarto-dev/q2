@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { renderToHtml, isWasmReady } from '../../services/wasmRenderer';
+import { renderContentToHtml, isWasmReady } from '../../services/wasmRenderer';
 import changelogMd from '../../../changelog.md?raw';
 import moreInfoMd from '../../../resources/more-info.md?raw';
 import './AboutTab.css';
@@ -85,7 +85,7 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
       try {
         const rendered: Record<string, string> = {};
         for (const [key, doc] of Object.entries(documents)) {
-          const result = await renderToHtml(doc.markdown);
+          const result = await renderContentToHtml(doc.markdown);
           if (result.success) {
             // Inject minimal styles into the rendered HTML
             rendered[key] = result.html.replace(

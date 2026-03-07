@@ -210,3 +210,51 @@ describe('runtime metadata in render pipeline', () => {
     expect(result.html).toContain('Runtime Author');
   });
 });
+
+describe('render_qmd with directory metadata', () => {
+  it('picks up _metadata.yml from parent directory', async () => {
+    // Set up project with directory metadata
+    wasm.vfs_add_file('/project/_quarto.yml', 'title: "Test Project"\n');
+    wasm.vfs_add_file(
+      '/project/chapters/_metadata.yml',
+      'author: "Dir Author"\n'
+    );
+    wasm.vfs_add_file('/project/chapters/doc.qmd', '# Hello\n\nContent.\n');
+
+    const result: RenderResponse = JSON.parse(
+      await wasm.render_qmd('/project/chapters/doc.qmd')
+    );
+    expect(result.success).toBe(true);
+    expect(result.html).toContain('Dir Author');
+  });
+
+  it('document frontmatter overrides directory metadata', async () => {
+    wasm.vfs_add_file('/project/_quarto.yml', 'title: "Test Project"\n');
+    wasm.vfs_add_file(
+      '/project/chapters/_metadata.yml',
+      'author: "Dir Author"\n'
+    );
+    wasm.vfs_add_file(
+      '/project/chapters/doc.qmd',
+      '---\nauthor: "Doc Author"\n---\n\n# Hello\n\nContent.\n'
+    );
+
+    const result: RenderResponse = JSON.parse(
+      await wasm.render_qmd('/project/chapters/doc.qmd')
+    );
+    expect(result.success).toBe(true);
+    expect(result.html).toContain('Doc Author');
+    expect(result.html).not.toContain('Dir Author');
+  });
+
+  it('render_qmd works with relative paths', async () => {
+    // Verify VFS path normalization: relative paths resolve to /project/
+    wasm.vfs_add_file('doc.qmd', '# Hello\n\nContent.\n');
+
+    const result: RenderResponse = JSON.parse(
+      await wasm.render_qmd('doc.qmd')
+    );
+    expect(result.success).toBe(true);
+    expect(result.html).toContain('Hello');
+  });
+});

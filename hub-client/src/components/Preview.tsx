@@ -3,7 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../types/project';
 import { isQmdFile } from '../types/project';
 import type { Diagnostic } from '../types/diagnostic';
-import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
+import { initWasm, renderToHtml, isWasmReady, setScrollSyncEnabled } from '../services/wasmRenderer';
 import { useScrollSync } from '../hooks/useScrollSync';
 import { useSelectionSync } from '../hooks/useSelectionSync';
 import { stripAnsi } from '../utils/stripAnsi';
@@ -203,11 +203,12 @@ type RenderResult = {
   error: string;
   diagnostics: Diagnostic[];
 }
-// Render QMD content to HTML using WASM
-// Returns diagnostics and HTML string or error message
+// Render a VFS document to HTML using WASM
+// The document content must already be in the VFS via Automerge sync.
+// Scroll sync (source-location) is controlled via runtime metadata, not per-render.
 async function doRender(
   qmdContent: string,
-  options: { scrollSyncEnabled: boolean; documentPath?: string }
+  options: { documentPath: string }
 ): Promise<RenderResult> {
   if (!isWasmReady()) {
     return {
@@ -218,10 +219,7 @@ async function doRender(
   }
 
   try {
-    // Enable source location tracking when scroll sync is enabled
-    // Pass document path for resolving relative theme file paths
-    const result = await renderToHtml(qmdContent, {
-      sourceLocation: options.scrollSyncEnabled,
+    const result = await renderToHtml({
       documentPath: options.documentPath,
     });
 
@@ -377,15 +375,22 @@ export default function Preview({
     enabled: scrollSyncEnabled && editorReady,
   });
 
+  // Set scroll sync via runtime metadata when the prop changes
+  useEffect(() => {
+    if (isWasmReady()) {
+      setScrollSyncEnabled(scrollSyncEnabled);
+    }
+  }, [scrollSyncEnabled, wasmStatus]);
+
   // Render function that uses WASM when available
   // Implements state machine transitions for error handling:
   // - On success: always transition to GOOD, swap to new content
   // - On error from START/ERROR_AT_START: show full error page
   // - On error from GOOD/ERROR_FROM_GOOD: keep last good HTML, show overlay
-  const doRenderWithStateManagement = useCallback(async (qmdContent: string, documentPath?: string) => {
+  const doRenderWithStateManagement = useCallback(async (qmdContent: string, documentPath: string) => {
     lastContentRef.current = qmdContent;
 
-    const result = await doRender(qmdContent, { scrollSyncEnabled, documentPath });
+    const result = await doRender(qmdContent, { documentPath });
     if (qmdContent !== lastContentRef.current) return;
 
     // Update diagnostics
@@ -413,10 +418,10 @@ export default function Preview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [scrollSyncEnabled, onDiagnosticsChange]);
+  }, [onDiagnosticsChange]);
 
   // Debounced render update
-  const updatePreview = useCallback((newContent: string, documentPath?: string) => {
+  const updatePreview = useCallback((newContent: string, documentPath: string) => {
     if (renderTimeoutRef.current) {
       clearTimeout(renderTimeoutRef.current);
     }
@@ -425,7 +430,7 @@ export default function Preview({
     }, 20);
   }, [doRenderWithStateManagement]);
 
-  // Re-render when content changes, WASM becomes ready, or scroll sync is toggled
+  // Re-render when content changes or WASM becomes ready
   useEffect(() => {
     const filePath = currentFile?.path;
 
@@ -440,8 +445,9 @@ export default function Preview({
 
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
     // The WASM layer will use VFS path normalization to resolve relative paths correctly.
-    updatePreview(content, filePath);
-  }, [content, updatePreview, wasmStatus, scrollSyncEnabled, currentFile?.path, onDiagnosticsChange]);
+    // filePath is guaranteed non-null here because isQmdFile(undefined) returns false.
+    updatePreview(content, filePath!);
+  }, [content, updatePreview, wasmStatus, currentFile?.path, onDiagnosticsChange]);
 
   // Reset preview state when file changes
   useEffect(() => {
