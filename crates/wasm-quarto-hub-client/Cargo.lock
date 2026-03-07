@@ -1750,6 +1750,7 @@ dependencies = [
  "tracing",
  "uuid",
  "which 8.0.0",
+ "yaml-rust2",
 ]
 
 [[package]]

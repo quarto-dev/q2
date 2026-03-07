@@ -205,6 +205,63 @@ pub fn vfs_clear() -> String {
     VfsResponse::ok()
 }
 
+/// Set runtime metadata for the configuration merge pipeline.
+///
+/// Runtime metadata is merged as the highest-precedence layer, above project,
+/// directory, and document metadata. This allows the host environment to inject
+/// settings like `format.html.source-location: full` for scroll sync.
+///
+/// # Arguments
+/// * `yaml` - YAML string with metadata to inject, or empty string to clear
+///
+/// # Returns
+/// JSON: `{ "success": true }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+///
+/// ```javascript
+/// vfs_set_runtime_metadata("format:\n  html:\n    source-location: full\n");
+/// ```
+#[wasm_bindgen]
+pub fn vfs_set_runtime_metadata(yaml: &str) -> String {
+    if yaml.is_empty() {
+        get_runtime().set_runtime_metadata(None);
+        return VfsResponse::ok();
+    }
+
+    match serde_yaml::from_str::<serde_json::Value>(yaml) {
+        Ok(value) => {
+            if value.is_object() {
+                get_runtime().set_runtime_metadata(Some(value));
+                VfsResponse::ok()
+            } else {
+                VfsResponse::error("Runtime metadata must be a YAML mapping")
+            }
+        }
+        Err(e) => VfsResponse::error(&format!("Failed to parse YAML: {}", e)),
+    }
+}
+
+/// Get the current runtime metadata.
+///
+/// # Returns
+/// JSON: `{ "success": true, "content": "..." }` with YAML string,
+/// or `{ "success": true, "content": null }` if no metadata is set
+#[wasm_bindgen]
+pub fn vfs_get_runtime_metadata() -> String {
+    match get_runtime().get_runtime_metadata() {
+        Some(value) => match serde_yaml::to_string(&value) {
+            Ok(yaml) => VfsResponse::with_content(yaml),
+            Err(e) => VfsResponse::error(&format!("Failed to serialize metadata: {}", e)),
+        },
+        None => serde_json::to_string(&serde_json::json!({
+            "success": true,
+            "content": null
+        }))
+        .unwrap(),
+    }
+}
+
 /// Read a text file from the virtual filesystem.
 ///
 /// # Arguments

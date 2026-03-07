@@ -295,6 +295,10 @@ impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
         self.inner.stderr_write(data)
     }
 
+    fn runtime_metadata(&self) -> Option<serde_json::Value> {
+        self.inner.runtime_metadata()
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // JAVASCRIPT EXECUTION (delegated to inner runtime)
     // ═══════════════════════════════════════════════════════════════════════

@@ -377,6 +377,32 @@ pub trait SystemRuntime: Send + Sync {
     fn env_all(&self) -> RuntimeResult<HashMap<String, String>>;
 
     // ═══════════════════════════════════════════════════════════════════════
+    // RUNTIME METADATA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Get runtime-injected metadata for the configuration merge pipeline.
+    ///
+    /// Returns metadata that the runtime environment wants to inject into
+    /// the document rendering pipeline. This metadata is merged as the
+    /// highest-precedence layer, above project, directory, and document
+    /// metadata — matching how quarto-cli handles `--metadata` flags.
+    ///
+    /// The returned `serde_json::Value` should be a JSON object representing
+    /// YAML-like configuration. It will be converted to `ConfigValue` and
+    /// merged by `AstTransformsStage`.
+    ///
+    /// # Examples
+    ///
+    /// - WASM preview: `{ "format": { "html": { "source-location": "full" } } }`
+    ///   to enable scroll sync markers
+    /// - Native CLI: metadata from `--metadata` / `--metadata-file` flags
+    ///
+    /// Default: returns `None` (no runtime metadata injected).
+    fn runtime_metadata(&self) -> Option<serde_json::Value> {
+        None
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // NETWORK
     // ═══════════════════════════════════════════════════════════════════════
 

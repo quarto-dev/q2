@@ -420,6 +420,13 @@ pub struct WasmRuntime {
     /// Virtual filesystem for file operations.
     /// Uses RwLock to satisfy Send + Sync trait bounds.
     vfs: RwLock<VirtualFileSystem>,
+
+    /// Runtime-injected metadata for the configuration merge pipeline.
+    ///
+    /// This metadata is merged as the highest-precedence layer, above project,
+    /// directory, and document metadata. Set by the host environment (e.g., the
+    /// hub-client sets `format.html.source-location: full` for scroll sync).
+    runtime_metadata: RwLock<Option<serde_json::Value>>,
 }
 
 impl WasmRuntime {
@@ -427,6 +434,7 @@ impl WasmRuntime {
     pub fn new() -> Self {
         Self {
             vfs: RwLock::new(VirtualFileSystem::new()),
+            runtime_metadata: RwLock::new(None),
         }
     }
 
@@ -434,6 +442,7 @@ impl WasmRuntime {
     pub fn with_vfs(vfs: VirtualFileSystem) -> Self {
         Self {
             vfs: RwLock::new(vfs),
+            runtime_metadata: RwLock::new(None),
         }
     }
 
@@ -473,6 +482,21 @@ impl WasmRuntime {
             .write()
             .unwrap()
             .clear_preserving_prefix(preserved_prefix);
+    }
+
+    /// Set runtime metadata for the configuration merge pipeline.
+    ///
+    /// The metadata is a JSON object representing YAML-like configuration that
+    /// will be merged as the highest-precedence layer during rendering.
+    ///
+    /// Pass `None` to clear runtime metadata.
+    pub fn set_runtime_metadata(&self, metadata: Option<serde_json::Value>) {
+        *self.runtime_metadata.write().unwrap() = metadata;
+    }
+
+    /// Get the current runtime metadata.
+    pub fn get_runtime_metadata(&self) -> Option<serde_json::Value> {
+        self.runtime_metadata.read().unwrap().clone()
     }
 }
 
@@ -649,6 +673,10 @@ impl SystemRuntime for WasmRuntime {
     fn stderr_write(&self, _data: &[u8]) -> RuntimeResult<()> {
         // TODO: Could log to console.error via wasm-bindgen
         Ok(())
+    }
+
+    fn runtime_metadata(&self) -> Option<serde_json::Value> {
+        self.runtime_metadata.read().unwrap().clone()
     }
 
     // =========================================================================

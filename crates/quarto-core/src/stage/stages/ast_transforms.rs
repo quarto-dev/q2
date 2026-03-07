@@ -12,6 +12,8 @@
 
 use async_trait::async_trait;
 use quarto_config::{MergedConfig, resolve_format_config};
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
+use quarto_source_map::SourceInfo;
 
 use crate::pipeline::build_transform_pipeline;
 use crate::project::directory_metadata_for_document;
@@ -21,6 +23,51 @@ use crate::stage::{
 };
 use crate::trace_event;
 use crate::transform::TransformPipeline;
+
+/// Convert a `serde_json::Value` to a `ConfigValue`.
+///
+/// Used for converting runtime metadata (which uses `serde_json::Value` to avoid
+/// coupling `quarto-system-runtime` to `quarto-pandoc-types`) into the `ConfigValue`
+/// type needed by the merge pipeline.
+fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
+    use yaml_rust2::Yaml;
+
+    let source_info = SourceInfo::default();
+    let kind = match value {
+        serde_json::Value::Null => ConfigValueKind::Scalar(Yaml::Null),
+        serde_json::Value::Bool(b) => ConfigValueKind::Scalar(Yaml::Boolean(*b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                ConfigValueKind::Scalar(Yaml::Integer(i))
+            } else if let Some(f) = n.as_f64() {
+                ConfigValueKind::Scalar(Yaml::Real(f.to_string()))
+            } else {
+                ConfigValueKind::Scalar(Yaml::String(n.to_string()))
+            }
+        }
+        serde_json::Value::String(s) => ConfigValueKind::Scalar(Yaml::String(s.clone())),
+        serde_json::Value::Array(arr) => {
+            let items: Vec<ConfigValue> = arr.iter().map(json_to_config_value).collect();
+            ConfigValueKind::Array(items)
+        }
+        serde_json::Value::Object(obj) => {
+            let entries: Vec<ConfigMapEntry> = obj
+                .iter()
+                .map(|(k, v)| ConfigMapEntry {
+                    key: k.clone(),
+                    key_source: SourceInfo::default(),
+                    value: json_to_config_value(v),
+                })
+                .collect();
+            ConfigValueKind::Map(entries)
+        }
+    };
+    ConfigValue {
+        value: kind,
+        source_info,
+        merge_op: MergeOp::default(),
+    }
+}
 
 /// Apply AST transforms to the document.
 ///
@@ -105,10 +152,10 @@ impl PipelineStage for AstTransformsStage {
             ));
         };
 
-        // Merge project config, directory metadata, and document metadata.
-        // All metadata layers are flattened for the target format before merging.
-        // This extracts format-specific settings (e.g., format.html.*) and merges
-        // them with top-level settings.
+        // Merge project config, directory metadata, document metadata, and
+        // runtime metadata. All metadata layers are flattened for the target
+        // format before merging. This extracts format-specific settings
+        // (e.g., format.html.*) and merges them with top-level settings.
         //
         // Precedence (lowest to highest):
         // 1. Project top-level settings
@@ -116,7 +163,11 @@ impl PipelineStage for AstTransformsStage {
         // 3. Directory _metadata.yml layers (root → leaf, deeper wins)
         // 4. Document top-level settings
         // 5. Document format-specific settings (format.{target}.*)
-        if ctx.project.config.is_some() {
+        // 6. Runtime metadata (e.g., --metadata flags, WASM preview settings)
+        let runtime_meta_json = ctx.runtime.runtime_metadata();
+        let has_project_config = ctx.project.config.is_some();
+
+        if has_project_config || runtime_meta_json.is_some() {
             let target_format = ctx.format.identifier.as_str();
 
             // Layer 1: Project metadata (flattened for format)
@@ -128,21 +179,30 @@ impl PipelineStage for AstTransformsStage {
                 .map(|m| resolve_format_config(m, target_format));
 
             // Layer 2: Directory metadata layers (each flattened for format)
-            let dir_layers: Vec<_> = directory_metadata_for_document(
-                &ctx.project,
-                &ctx.document.input,
-                ctx.runtime.as_ref(),
-            )
-            .unwrap_or_default()
-            .into_iter()
-            .map(|m| resolve_format_config(&m, target_format))
-            .collect();
+            let dir_layers: Vec<_> = if has_project_config {
+                directory_metadata_for_document(
+                    &ctx.project,
+                    &ctx.document.input,
+                    ctx.runtime.as_ref(),
+                )
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| resolve_format_config(&m, target_format))
+                .collect()
+            } else {
+                vec![]
+            };
 
             // Layer 3: Document metadata (flattened for format)
             let doc_layer = resolve_format_config(&doc.ast.meta, target_format);
 
-            // Build merge layers: project → dir[0] → dir[1] → ... → document
-            let mut layers: Vec<&quarto_pandoc_types::ConfigValue> = Vec::new();
+            // Layer 4: Runtime metadata (flattened for format)
+            let runtime_layer = runtime_meta_json
+                .as_ref()
+                .map(|json| resolve_format_config(&json_to_config_value(json), target_format));
+
+            // Build merge layers: project → dir[0] → dir[1] → ... → document → runtime
+            let mut layers: Vec<&ConfigValue> = Vec::new();
             if let Some(ref proj) = project_layer {
                 layers.push(proj);
             }
@@ -150,17 +210,27 @@ impl PipelineStage for AstTransformsStage {
                 layers.push(dir_meta);
             }
             layers.push(&doc_layer);
+            if let Some(ref rt) = runtime_layer {
+                layers.push(rt);
+            }
 
             // Merge all layers
+            let layer_count = layers.len();
             let merged = MergedConfig::new(layers);
             if let Ok(materialized) = merged.materialize() {
+                let has_runtime = if runtime_layer.is_some() {
+                    " + runtime"
+                } else {
+                    ""
+                };
                 trace_event!(
                     ctx,
                     EventLevel::Debug,
-                    "merged {} metadata layers for format '{}' (project + {} dir + doc)",
-                    1 + dir_layers.len() + 1,
+                    "merged {} metadata layers for format '{}' (project + {} dir + doc{})",
+                    layer_count,
                     target_format,
-                    dir_layers.len()
+                    dir_layers.len(),
+                    has_runtime
                 );
                 doc.ast.meta = materialized;
             }
@@ -706,5 +776,415 @@ mod tests {
 
         // format.html.toc: false should override top-level toc: true
         assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(false));
+    }
+
+    // ============================================================================
+    // Runtime Metadata Tests
+    // ============================================================================
+
+    /// Mock runtime that returns configurable runtime metadata
+    struct MockRuntimeWithMetadata {
+        metadata: Option<serde_json::Value>,
+    }
+
+    impl MockRuntimeWithMetadata {
+        fn new(metadata: serde_json::Value) -> Self {
+            Self {
+                metadata: Some(metadata),
+            }
+        }
+    }
+
+    impl quarto_system_runtime::SystemRuntime for MockRuntimeWithMetadata {
+        fn file_read(
+            &self,
+            _path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+            Ok(vec![])
+        }
+        fn file_write(
+            &self,
+            _path: &std::path::Path,
+            _contents: &[u8],
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn path_exists(
+            &self,
+            _path: &std::path::Path,
+            _kind: Option<quarto_system_runtime::PathKind>,
+        ) -> quarto_system_runtime::RuntimeResult<bool> {
+            Ok(true)
+        }
+        fn canonicalize(
+            &self,
+            path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            Ok(path.to_path_buf())
+        }
+        fn path_metadata(
+            &self,
+            _path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::PathMetadata> {
+            unimplemented!()
+        }
+        fn file_copy(
+            &self,
+            _src: &std::path::Path,
+            _dst: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn path_rename(
+            &self,
+            _old: &std::path::Path,
+            _new: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn file_remove(&self, _path: &std::path::Path) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn dir_create(
+            &self,
+            _path: &std::path::Path,
+            _recursive: bool,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn dir_remove(
+            &self,
+            _path: &std::path::Path,
+            _recursive: bool,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn dir_list(
+            &self,
+            _path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<Vec<PathBuf>> {
+            Ok(vec![])
+        }
+        fn cwd(&self) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            Ok(PathBuf::from("/"))
+        }
+        fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
+            Ok(TempDir::new(PathBuf::from("/tmp/test")))
+        }
+        fn exec_pipe(
+            &self,
+            _command: &str,
+            _args: &[&str],
+            _stdin: &[u8],
+        ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+            Ok(vec![])
+        }
+        fn exec_command(
+            &self,
+            _command: &str,
+            _args: &[&str],
+            _stdin: Option<&[u8]>,
+        ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::CommandOutput> {
+            Ok(quarto_system_runtime::CommandOutput {
+                code: 0,
+                stdout: vec![],
+                stderr: vec![],
+            })
+        }
+        fn env_get(&self, _name: &str) -> quarto_system_runtime::RuntimeResult<Option<String>> {
+            Ok(None)
+        }
+        fn env_all(
+            &self,
+        ) -> quarto_system_runtime::RuntimeResult<std::collections::HashMap<String, String>>
+        {
+            Ok(std::collections::HashMap::new())
+        }
+        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+            Err(quarto_system_runtime::RuntimeError::NotSupported(
+                "mock".to_string(),
+            ))
+        }
+        fn os_name(&self) -> &'static str {
+            "mock"
+        }
+        fn arch(&self) -> &'static str {
+            "mock"
+        }
+        fn cpu_time(&self) -> quarto_system_runtime::RuntimeResult<u64> {
+            Ok(0)
+        }
+        fn xdg_dir(
+            &self,
+            _kind: quarto_system_runtime::XdgDirKind,
+            _subpath: Option<&std::path::Path>,
+        ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            Ok(PathBuf::from("/xdg"))
+        }
+        fn stdout_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn stderr_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+            Ok(())
+        }
+        fn runtime_metadata(&self) -> Option<serde_json::Value> {
+            self.metadata.clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_runtime_metadata_applied() {
+        // Runtime provides source-location, document has title
+        // Both should appear in merged result
+        let runtime = Arc::new(MockRuntimeWithMetadata::new(serde_json::json!({
+            "source-location": "full"
+        })));
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_metadata = config_map(vec![("title", config_str("Hello"))]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result.ast.meta.get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+        assert_eq!(
+            result.ast.meta.get("source-location").unwrap().as_str(),
+            Some("full")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runtime_metadata_overrides_document() {
+        // Runtime sets toc: false, document sets toc: true
+        // Runtime should win (highest precedence)
+        let runtime = Arc::new(MockRuntimeWithMetadata::new(serde_json::json!({
+            "toc": false
+        })));
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_metadata = config_map(vec![("toc", config_bool(true))]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_runtime_metadata_overrides_project() {
+        // Project sets toc: true, runtime sets toc: false
+        // Runtime should win
+        let runtime = Arc::new(MockRuntimeWithMetadata::new(serde_json::json!({
+            "toc": false
+        })));
+
+        let project_metadata = config_map(vec![("toc", config_bool(true))]);
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_runtime_metadata_format_specific() {
+        // Runtime provides format.html.source-location: full
+        // Should be flattened to source-location: full in merged result
+        let runtime = Arc::new(MockRuntimeWithMetadata::new(serde_json::json!({
+            "format": {
+                "html": {
+                    "source-location": "full"
+                }
+            }
+        })));
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result.ast.meta.get("source-location").unwrap().as_str(),
+            Some("full")
+        );
+        // format key should be removed (flattened)
+        assert!(result.ast.meta.get("format").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_runtime_metadata_none_no_change() {
+        // Runtime returns None — should behave exactly like existing tests
+        let runtime = Arc::new(MockRuntime); // MockRuntime has default None
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_metadata = config_map(vec![("title", config_str("Hello"))]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result.ast.meta.get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runtime_metadata_without_project_config() {
+        // No project config (config: None), but runtime provides metadata
+        // Runtime metadata should still be merged into document metadata
+        let runtime = Arc::new(MockRuntimeWithMetadata::new(serde_json::json!({
+            "source-location": "full"
+        })));
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: None, // No project config
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = AstTransformsStage::with_pipeline(TransformPipeline::new());
+
+        let doc_metadata = config_map(vec![("title", config_str("Hello"))]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result.ast.meta.get("title").unwrap().as_str(),
+            Some("Hello")
+        );
+        assert_eq!(
+            result.ast.meta.get("source-location").unwrap().as_str(),
+            Some("full")
+        );
     }
 }

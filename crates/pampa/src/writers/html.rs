@@ -24,19 +24,18 @@ pub struct HtmlConfig {
 
 /// Extract HTML configuration from document metadata.
 ///
-/// Looks for the following structure in YAML frontmatter:
+/// Looks for a top-level `source-location` key:
 /// ```yaml
-/// format:
-///   html:
-///     source-location: full
+/// source-location: full
 /// ```
 ///
-/// If `format.html.source-location` is set to "full", enables source location tracking.
+/// When used through the quarto-core pipeline, format-specific keys like
+/// `format.html.source-location` are flattened to top-level by
+/// `resolve_format_config` before the writer sees them — consistent with
+/// how Quarto CLI flattens format metadata before calling Pandoc.
 pub fn extract_config_from_metadata(meta: &ConfigValue) -> HtmlConfig {
     let include_source_locations = meta
-        .get("format")
-        .and_then(|f| f.get("html"))
-        .and_then(|h| h.get("source-location"))
+        .get("source-location")
         .is_some_and(|sl| sl.is_string_value("full"));
 
     HtmlConfig {
@@ -1392,39 +1391,19 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_config_format_without_html() {
-        let meta = make_config_map(vec![make_config_entry(
-            "format",
-            make_config_map(vec![make_config_entry("pdf", make_config_map(vec![]))]),
-        )]);
-        let config = extract_config_from_metadata(&meta);
-        assert!(!config.include_source_locations);
-    }
-
-    #[test]
-    fn test_extract_config_html_without_source_location() {
-        let meta = make_config_map(vec![make_config_entry(
-            "format",
-            make_config_map(vec![make_config_entry(
-                "html",
-                make_config_map(vec![make_config_entry("toc", make_config_bool(true))]),
-            )]),
-        )]);
+    fn test_extract_config_no_source_location_key() {
+        // Other keys present but no source-location
+        let meta = make_config_map(vec![make_config_entry("toc", make_config_bool(true))]);
         let config = extract_config_from_metadata(&meta);
         assert!(!config.include_source_locations);
     }
 
     #[test]
     fn test_extract_config_source_location_full() {
+        // Top-level source-location: full (as delivered by resolve_format_config)
         let meta = make_config_map(vec![make_config_entry(
-            "format",
-            make_config_map(vec![make_config_entry(
-                "html",
-                make_config_map(vec![make_config_entry(
-                    "source-location",
-                    make_config_string("full"),
-                )]),
-            )]),
+            "source-location",
+            make_config_string("full"),
         )]);
         let config = extract_config_from_metadata(&meta);
         assert!(config.include_source_locations);
@@ -1433,14 +1412,8 @@ mod tests {
     #[test]
     fn test_extract_config_source_location_other_value() {
         let meta = make_config_map(vec![make_config_entry(
-            "format",
-            make_config_map(vec![make_config_entry(
-                "html",
-                make_config_map(vec![make_config_entry(
-                    "source-location",
-                    make_config_string("none"),
-                )]),
-            )]),
+            "source-location",
+            make_config_string("none"),
         )]);
         let config = extract_config_from_metadata(&meta);
         assert!(!config.include_source_locations);
@@ -1504,17 +1477,11 @@ mod tests {
             source_info: source,
         });
 
-        // Create metadata with format.html.source-location: full
+        // Create metadata with top-level source-location: full
         let pandoc = Pandoc {
             meta: make_config_map(vec![make_config_entry(
-                "format",
-                make_config_map(vec![make_config_entry(
-                    "html",
-                    make_config_map(vec![make_config_entry(
-                        "source-location",
-                        make_config_string("full"),
-                    )]),
-                )]),
+                "source-location",
+                make_config_string("full"),
             )]),
             blocks: vec![para],
         };
