@@ -84,6 +84,13 @@ pub fn directory_metadata_for_document(
         return Ok(Vec::new());
     }
 
+    // Canonicalize the document path so strip_prefix works reliably.
+    // project.dir is always canonical (from ProjectContext::discover), but
+    // callers may pass relative paths (e.g., WASM render_qmd with VFS paths).
+    let document_path = runtime
+        .canonicalize(document_path)
+        .unwrap_or_else(|_| document_path.to_path_buf());
+
     let project_dir = &project.dir;
     let document_dir = document_path
         .parent()
@@ -863,14 +870,18 @@ mod tests {
         use std::fs;
         use tempfile::TempDir;
 
-        /// Helper to create a project context for testing
+        /// Helper to create a project context for testing.
+        /// Canonicalizes the dir to match what ProjectContext::discover does,
+        /// ensuring strip_prefix works correctly (e.g., on macOS where
+        /// /tmp symlinks to /private/tmp).
         fn test_project_context(dir: &Path) -> ProjectContext {
+            let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
             ProjectContext {
-                dir: dir.to_path_buf(),
+                dir: canonical.clone(),
                 config: Some(ProjectConfig::default()),
                 is_single_file: false,
                 files: vec![],
-                output_dir: dir.to_path_buf(),
+                output_dir: canonical,
             }
         }
 
