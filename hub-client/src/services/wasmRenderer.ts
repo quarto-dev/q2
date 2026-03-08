@@ -34,7 +34,6 @@ interface WasmModuleExtended {
   vfs_get_runtime_metadata: () => string;
   render_qmd: (path: string) => Promise<string>;
   render_qmd_content: (content: string, templateBundle: string) => Promise<string>;
-  render_qmd_content_with_options: (content: string, templateBundle: string, options: string) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;

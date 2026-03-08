@@ -43,7 +43,7 @@ Another paragraph here.
 // Test 1: Basic render (without source location)
 // =============================================================================
 console.log('=== Test 1: Basic render (no source location) ===');
-const result1 = JSON.parse(wasm.render_qmd_content(testContent, ''));
+const result1 = JSON.parse(await wasm.render_qmd_content(testContent, ''));
 console.log('Success:', result1.success);
 if (result1.success) {
   const hasDataLoc = result1.html.includes('data-loc');
@@ -57,20 +57,14 @@ if (result1.success) {
 console.log('');
 
 // =============================================================================
-// Test 2: Render with source location enabled
+// Test 2: Render with source location via runtime metadata
 // =============================================================================
-console.log('=== Test 2: Render with source location enabled ===');
-const options = JSON.stringify({ source_location: true });
-console.log('Options:', options);
+console.log('=== Test 2: Render with source location via runtime metadata ===');
 
-// Check if the function exists
-if (typeof wasm.render_qmd_content_with_options !== 'function') {
-  console.error('FAIL: render_qmd_content_with_options is not exported from WASM');
-  console.log('Available exports:', Object.keys(wasm).filter(k => typeof wasm[k] === 'function'));
-  process.exit(1);
-}
+// Set runtime metadata to enable source location tracking
+wasm.vfs_set_runtime_metadata('format:\n  html:\n    source-location: full\n');
 
-const result2 = JSON.parse(wasm.render_qmd_content_with_options(testContent, '', options));
+const result2 = JSON.parse(await wasm.render_qmd_content(testContent, ''));
 console.log('Success:', result2.success);
 
 if (result2.success) {
@@ -93,5 +87,8 @@ if (result2.success) {
   console.log('Diagnostics:', result2.diagnostics);
   process.exit(1);
 }
+
+// Clear runtime metadata for clean state
+wasm.vfs_set_runtime_metadata('');
 
 console.log('\n=== All tests passed ===');

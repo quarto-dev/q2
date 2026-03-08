@@ -67,7 +67,7 @@ When making changes to the WASM module (`crates/wasm-quarto-hub-client/`):
    await wasm.default(wasmBytes);
 
    // Test your functionality here
-   const result = wasm.render_qmd_content_with_options(content, '', '{"source_location": true}');
+   const result = await wasm.render_qmd_content(content, '');
    console.log(JSON.parse(result));
    ```
 

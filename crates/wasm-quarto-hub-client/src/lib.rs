@@ -18,8 +18,8 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use quarto_core::{
-    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
-    QuartoError, RenderContext, RenderOptions, extract_format_metadata, render_qmd_to_html,
+    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectContext, QuartoError,
+    RenderContext, RenderOptions, extract_format_metadata, render_qmd_to_html,
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
@@ -818,141 +818,6 @@ pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String
         Ok(output) => {
             // Populate VFS with artifacts so post-processor can resolve them.
             // This includes CSS at /.quarto/project-artifacts/styles.css.
-            let runtime = get_runtime();
-            for (_key, artifact) in ctx.artifacts.iter() {
-                if let Some(path) = &artifact.path {
-                    runtime.add_file(path, artifact.content.clone());
-                }
-            }
-
-            // Convert warnings to structured JSON with line/column info
-            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
-            serde_json::to_string(&RenderResponse {
-                success: true,
-                error: None,
-                html: Some(output.html),
-                diagnostics: None,
-                warnings: if warnings.is_empty() {
-                    None
-                } else {
-                    Some(warnings)
-                },
-            })
-            .unwrap()
-        }
-        Err(e) => {
-            // Extract structured diagnostics from parse errors
-            let (error_msg, diagnostics) = match &e {
-                QuartoError::Parse(parse_error) => {
-                    let diags =
-                        diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
-                    (e.to_string(), Some(diags))
-                }
-                _ => (e.to_string(), None),
-            };
-
-            serde_json::to_string(&RenderResponse {
-                success: false,
-                error: Some(error_msg),
-                html: None,
-                diagnostics,
-                warnings: None,
-            })
-            .unwrap()
-        }
-    }
-}
-
-// ============================================================================
-// RENDER OPTIONS API
-// ============================================================================
-
-/// Options for rendering QMD content.
-///
-/// These are parsed from JSON and used to configure the render pipeline.
-#[derive(Deserialize, Default)]
-struct WasmRenderOptions {
-    /// Enable source location tracking in HTML output.
-    ///
-    /// When true, injects `format.html.source-location: full` into the config,
-    /// which adds `data-loc` attributes to HTML elements for scroll sync.
-    #[serde(default)]
-    source_location: bool,
-}
-
-/// Render QMD content with options.
-///
-/// # Arguments
-/// * `content` - QMD source text
-/// * `template_bundle` - Template bundle JSON (currently unused, reserved for future use)
-/// * `options_json` - Options JSON: `{"source_location": true}`
-///
-/// # Returns
-/// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
-#[wasm_bindgen]
-pub async fn render_qmd_content_with_options(
-    content: &str,
-    _template_bundle: &str,
-    options_json: &str,
-) -> String {
-    // Parse options, defaulting to empty if invalid
-    let wasm_options: WasmRenderOptions = serde_json::from_str(options_json).unwrap_or_default();
-
-    // Create a virtual path for this content
-    let path = Path::new("/input.qmd");
-
-    // Create project context, optionally with metadata for source location tracking
-    let project = if wasm_options.source_location {
-        let metadata = ConfigValue::from_path(&["format", "html", "source-location"], "full");
-        let project_config = ProjectConfig::with_metadata(metadata);
-        let dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
-        ProjectContext {
-            dir: dir.clone(),
-            config: Some(project_config),
-            is_single_file: true,
-            files: vec![DocumentInfo::from_path(path)],
-            output_dir: dir,
-        }
-    } else {
-        create_wasm_project_context(path)
-    };
-
-    let doc = DocumentInfo::from_path(path);
-    let binaries = BinaryDependencies::new();
-
-    // Extract format metadata from frontmatter (e.g., toc, toc-depth)
-    // This matches the native CLI behavior for feature parity.
-    let format_metadata = extract_format_metadata(content, "html").unwrap_or_default();
-    let format = Format::html().with_metadata(format_metadata);
-
-    let options = RenderOptions {
-        verbose: false,
-        execute: false,
-        use_freeze: false,
-        output_path: None,
-    };
-
-    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
-
-    // Use the unified async pipeline (same as CLI)
-    let config = HtmlRenderConfig::default();
-
-    // Share the global VFS runtime with the pipeline
-    let runtime_arc: Arc<dyn SystemRuntime> =
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
-
-    let result = render_qmd_to_html(
-        content.as_bytes(),
-        "/input.qmd",
-        &mut ctx,
-        &config,
-        runtime_arc,
-    )
-    .await;
-
-    match result {
-        Ok(output) => {
-            // Populate VFS with artifacts so post-processor can resolve them.
             let runtime = get_runtime();
             for (_key, artifact) in ctx.artifacts.iter() {
                 if let Some(path) = &artifact.path {

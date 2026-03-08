@@ -24,23 +24,19 @@ function getWasm() {
   return wasm;
 }
 
-async function renderQmdContentWithOptions(content, templateBundle = '', options = {}) {
-  const wasmModule = getWasm();
-  const optionsJson = JSON.stringify({
-    source_location: options.sourceLocation ?? false,
-  });
-  console.log('optionsJson:', optionsJson);
-  // WASM render functions are now async (return Promise)
-  return JSON.parse(await wasmModule.render_qmd_content_with_options(content, templateBundle, optionsJson));
-}
-
 async function renderToHtml(qmdContent, options = {}) {
   console.log('[renderToHtml] sourceLocation option:', options.sourceLocation);
 
-  // WASM render functions are now async (return Promise)
-  const result = options.sourceLocation
-    ? await renderQmdContentWithOptions(qmdContent, '', { sourceLocation: options.sourceLocation })
-    : JSON.parse(await getWasm().render_qmd_content(qmdContent, ''));
+  const wasmModule = getWasm();
+
+  // Set runtime metadata for source location if requested
+  if (options.sourceLocation) {
+    wasmModule.vfs_set_runtime_metadata('format:\n  html:\n    source-location: full\n');
+  } else {
+    wasmModule.vfs_set_runtime_metadata('');
+  }
+
+  const result = JSON.parse(await wasmModule.render_qmd_content(qmdContent, ''));
 
   console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
   return result;
@@ -76,3 +72,6 @@ if (result2.html?.includes('data-loc')) {
   console.log('HTML sample:', result2.html?.substring(0, 500));
   process.exit(1);
 }
+
+// Clean up runtime metadata
+getWasm().vfs_set_runtime_metadata('');

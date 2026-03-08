@@ -14,11 +14,6 @@ declare module 'wasm-quarto-hub-client' {
   export function vfs_read_binary_file(path: string): string;
   export function render_qmd(path: string): Promise<string>;
   export function render_qmd_content(content: string, template_bundle: string): Promise<string>;
-  export function render_qmd_content_with_options(
-    content: string,
-    template_bundle: string,
-    options_json: string
-  ): Promise<string>;
   export function get_builtin_template(name: string): string;
 
   // JavaScript execution test functions (interstitial validation)
