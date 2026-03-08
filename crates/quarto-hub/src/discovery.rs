@@ -43,7 +43,10 @@ impl ProjectFiles {
             if path.is_file() {
                 // Check for config files first (by name)
                 if let Some(file_name) = path.file_name()
-                    && (file_name == "_quarto.yml" || file_name == "_quarto.yaml")
+                    && (file_name == "_quarto.yml"
+                        || file_name == "_quarto.yaml"
+                        || file_name == "_metadata.yml"
+                        || file_name == "_metadata.yaml")
                 {
                     if let Ok(relative) = path.strip_prefix(project_root) {
                         debug!(?relative, "Discovered config file");
@@ -208,6 +211,50 @@ mod tests {
         );
         assert_eq!(files.qmd_files.len(), 1);
         assert_eq!(files.total_count(), 3);
+    }
+
+    #[test]
+    fn test_discover_metadata_files() {
+        let temp = TempDir::new().unwrap();
+
+        // Create project structure with _metadata.yml in a subdirectory
+        fs::write(temp.path().join("_quarto.yml"), "project:\n  type: website").unwrap();
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::create_dir(temp.path().join("chapters")).unwrap();
+        fs::write(
+            temp.path().join("chapters/_metadata.yml"),
+            "author: Directory Author",
+        )
+        .unwrap();
+        fs::write(temp.path().join("chapters/chapter1.qmd"), "# Chapter 1").unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        assert_eq!(files.config_files.len(), 2);
+        assert!(files.config_files.contains(&PathBuf::from("_quarto.yml")));
+        assert!(
+            files
+                .config_files
+                .contains(&PathBuf::from("chapters/_metadata.yml"))
+        );
+        assert_eq!(files.qmd_files.len(), 2);
+    }
+
+    #[test]
+    fn test_discover_metadata_yaml_extension() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("_quarto.yml"), "project:\n  type: website").unwrap();
+        fs::create_dir(temp.path().join("docs")).unwrap();
+        fs::write(temp.path().join("docs/_metadata.yaml"), "toc: true").unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        assert!(
+            files
+                .config_files
+                .contains(&PathBuf::from("docs/_metadata.yaml"))
+        );
     }
 
     #[test]
