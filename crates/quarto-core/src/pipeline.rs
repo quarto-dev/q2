@@ -55,8 +55,8 @@ use crate::Result;
 use crate::render::RenderContext;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, EngineExecutionStage, LoadedSource, ParseDocumentStage,
-    Pipeline, PipelineData, PipelineStage, RenderHtmlBodyStage, StageContext,
+    ApplyTemplateStage, AstTransformsStage, EngineExecutionStage, LoadedSource, MetadataMergeStage,
+    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, RenderHtmlBodyStage, StageContext,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -128,13 +128,15 @@ pub struct AstOutput {
 /// This creates stages for:
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
-/// 3. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 4. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 5. `ApplyTemplateStage` - Apply HTML template
+/// 3. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
+/// 4. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 5. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 6. `ApplyTemplateStage` - Apply HTML template
 pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
     vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(EngineExecutionStage::new()),
+        Box::new(MetadataMergeStage::new()),
         Box::new(AstTransformsStage::new()),
         Box::new(RenderHtmlBodyStage::new()),
         Box::new(ApplyTemplateStage::new()),
@@ -146,9 +148,10 @@ pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
 /// This creates a pipeline with the following stages:
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
-/// 3. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 4. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 5. `ApplyTemplateStage` - Apply HTML template
+/// 3. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
+/// 4. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 5. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 6. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -171,9 +174,10 @@ pub fn build_html_pipeline() -> Pipeline {
 ///
 /// Stages:
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
-/// 2. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
-/// 3. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 4. `ApplyTemplateStage` - Apply HTML template
+/// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
+/// 3. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
+/// 4. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 5. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -187,6 +191,7 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         // No EngineExecutionStage - code cells pass through as-is
+        Box::new(MetadataMergeStage::new()),
         Box::new(AstTransformsStage::new()),
         Box::new(RenderHtmlBodyStage::new()),
         Box::new(ApplyTemplateStage::new()),
@@ -291,6 +296,7 @@ pub async fn parse_qmd_to_ast(
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(EngineExecutionStage::new()),
+        Box::new(MetadataMergeStage::new()),
         Box::new(AstTransformsStage::new()),
     ];
 
@@ -366,6 +372,7 @@ pub async fn render_qmd_to_html(
         let stages: Vec<Box<dyn PipelineStage>> = vec![
             Box::new(ParseDocumentStage::new()),
             Box::new(EngineExecutionStage::new()),
+            Box::new(MetadataMergeStage::new()),
             Box::new(AstTransformsStage::new()),
             Box::new(RenderHtmlBodyStage::new()),
             Box::new(ApplyTemplateStage::with_config(apply_config)),
@@ -665,25 +672,26 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 5);
+        assert_eq!(stages.len(), 6);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "engine-execution");
-        assert_eq!(stages[2].name(), "ast-transforms");
-        assert_eq!(stages[3].name(), "render-html-body");
-        assert_eq!(stages[4].name(), "apply-template");
+        assert_eq!(stages[2].name(), "metadata-merge");
+        assert_eq!(stages[3].name(), "ast-transforms");
+        assert_eq!(stages[4].name(), "render-html-body");
+        assert_eq!(stages[5].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 5);
+        assert_eq!(pipeline.len(), 6);
     }
 
     #[test]
     fn test_build_wasm_html_pipeline() {
         let pipeline = build_wasm_html_pipeline();
-        // WASM pipeline has 4 stages (no engine execution)
-        assert_eq!(pipeline.len(), 4);
+        // WASM pipeline has 5 stages (no engine execution)
+        assert_eq!(pipeline.len(), 5);
     }
 
     #[test]
