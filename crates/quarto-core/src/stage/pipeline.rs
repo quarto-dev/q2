@@ -206,7 +206,8 @@ mod tests {
         output: PipelineDataKind,
     }
 
-    #[async_trait]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
     impl PipelineStage for TestStage {
         fn name(&self) -> &str {
             self.name
@@ -235,7 +236,8 @@ mod tests {
         name: &'static str,
     }
 
-    #[async_trait]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
     impl PipelineStage for FailingStage {
         fn name(&self) -> &str {
             self.name

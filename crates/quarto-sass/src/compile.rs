@@ -31,7 +31,7 @@
 //! let css = compile_theme_css(&theme_config, &context)?;
 //! ```
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use quarto_pandoc_types::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
@@ -53,6 +53,44 @@ use std::sync::OnceLock;
 /// This is compiled once and reused for all documents that don't specify a theme.
 #[cfg(not(target_arch = "wasm32"))]
 static DEFAULT_CSS_CACHE: OnceLock<String> = OnceLock::new();
+
+/// Assemble the SCSS bundle for a themed configuration.
+///
+/// This extracts the assembly step from `compile_theme_css`: processing theme
+/// specs into layers, loading the title block layer, and assembling the final
+/// SCSS string. It also computes the load paths needed for compilation.
+///
+/// Only call this when `config.has_themes()` is true. For the default (no theme)
+/// case, use `DEFAULT_CSS` directly instead of compiling.
+///
+/// # Returns
+///
+/// A tuple of `(scss_string, load_paths)` ready for compilation.
+pub fn assemble_theme_scss(
+    config: &ThemeConfig,
+    context: &ThemeContext<'_>,
+) -> Result<(String, Vec<PathBuf>), SassError> {
+    use crate::bundle::load_title_block_layer;
+
+    // Process theme specs into layers
+    let result = process_theme_specs(&config.themes, context)?;
+
+    // Build user layers: title block layer comes first (like TS Quarto),
+    // then any theme layers
+    let title_block_layer = load_title_block_layer()?;
+    let mut user_layers = vec![title_block_layer];
+    user_layers.extend(result.layers);
+
+    // Assemble SCSS
+    let scss = assemble_with_user_layers(&user_layers)?;
+
+    // Build load paths: default paths + custom theme directories
+    let mut load_paths = default_load_paths();
+    load_paths.extend(result.load_paths);
+    load_paths.extend(context.load_paths().iter().cloned());
+
+    Ok((scss, load_paths))
+}
 
 /// Compile CSS from theme configuration.
 ///
@@ -90,7 +128,6 @@ pub fn compile_theme_css(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<String, SassError> {
-    use crate::bundle::load_title_block_layer;
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     if !config.has_themes() {
@@ -98,22 +135,7 @@ pub fn compile_theme_css(
         return compile_default_css(context.runtime(), config.minified);
     }
 
-    // Process theme specs into layers
-    let result = process_theme_specs(&config.themes, context)?;
-
-    // Build user layers: title block layer comes first (like TS Quarto),
-    // then any theme layers
-    let title_block_layer = load_title_block_layer()?;
-    let mut user_layers = vec![title_block_layer];
-    user_layers.extend(result.layers);
-
-    // Assemble SCSS
-    let scss = assemble_with_user_layers(&user_layers)?;
-
-    // Build load paths: default paths + custom theme directories
-    let mut load_paths = default_load_paths();
-    load_paths.extend(result.load_paths);
-    load_paths.extend(context.load_paths().iter().cloned());
+    let (scss, load_paths) = assemble_theme_scss(config, context)?;
 
     // Create a combined resource provider from all embedded resources
     let resources = all_resources();
@@ -134,11 +156,12 @@ pub fn compile_theme_css(
 /// Compile CSS from ConfigValue directly.
 ///
 /// This is a convenience function that combines config extraction and compilation.
-/// Use this when you have a merged `ConfigValue` and want to get CSS in one step.
+/// Use this when you have a format-flattened `ConfigValue` (as produced by
+/// MetadataMergeStage) and want to get CSS in one step.
 ///
 /// # Arguments
 ///
-/// * `config` - The merged configuration (project + document)
+/// * `config` - The format-flattened merged configuration (theme at top level)
 /// * `document_dir` - Directory containing the input document (for relative path resolution)
 /// * `runtime` - The system runtime for file access
 ///
@@ -288,29 +311,12 @@ pub async fn compile_theme_css(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<String, SassError> {
-    use crate::bundle::load_title_block_layer;
-
     if !config.has_themes() {
         // No custom themes - use default Bootstrap
         return compile_default_css(context.runtime(), config.minified).await;
     }
 
-    // Process theme specs into layers
-    let result = process_theme_specs(&config.themes, context)?;
-
-    // Build user layers: title block layer comes first (like TS Quarto),
-    // then any theme layers
-    let title_block_layer = load_title_block_layer()?;
-    let mut user_layers = vec![title_block_layer];
-    user_layers.extend(result.layers);
-
-    // Assemble SCSS
-    let scss = assemble_with_user_layers(&user_layers)?;
-
-    // Build load paths: default paths + custom theme directories
-    let mut load_paths = default_load_paths();
-    load_paths.extend(result.load_paths);
-    load_paths.extend(context.load_paths().iter().cloned());
+    let (scss, load_paths) = assemble_theme_scss(config, context)?;
 
     // Compile via JS bridge
     context
@@ -325,7 +331,8 @@ pub async fn compile_theme_css(
 /// Compile CSS from ConfigValue directly (WASM version).
 ///
 /// This is a convenience function that combines config extraction and compilation.
-/// Use this when you have a merged `ConfigValue` and want to get CSS in one step.
+/// Use this when you have a format-flattened `ConfigValue` (as produced by
+/// MetadataMergeStage) and want to get CSS in one step.
 #[cfg(target_arch = "wasm32")]
 pub async fn compile_css_from_config(
     config: &ConfigValue,
@@ -503,41 +510,17 @@ mod tests {
 
         let runtime = NativeRuntime::new();
 
-        // Build config: { format: { html: { theme: "cosmo" } } }
+        // Build flattened config: { theme: "cosmo" }
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
             source_info: SourceInfo::default(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
-        let html_entry = ConfigMapEntry {
+        let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
             key_source: SourceInfo::default(),
             value: theme_value,
-        };
-
-        let html_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![html_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let format_entry = ConfigMapEntry {
-            key: "html".to_string(),
-            key_source: SourceInfo::default(),
-            value: html_value,
-        };
-
-        let format_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![format_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let root_entry = ConfigMapEntry {
-            key: "format".to_string(),
-            key_source: SourceInfo::default(),
-            value: format_value,
         };
 
         let config = ConfigValue {

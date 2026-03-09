@@ -1797,10 +1797,14 @@ pub fn compute_theme_content_hash(content: &str, document_path: &str) -> String 
     let runtime = get_runtime();
 
     // Extract YAML frontmatter and parse it
-    let config = match extract_frontmatter_config(content) {
+    let raw_config = match extract_frontmatter_config(content) {
         Ok(config) => config,
         Err(e) => return ThemeHashResponse::error(&e),
     };
+
+    // Flatten format-specific config (theme lives under format.html.theme
+    // in raw frontmatter, but ThemeConfig expects top-level theme)
+    let config = quarto_config::resolve_format_config(&raw_config, "html");
 
     // Extract theme configuration
     let theme_config = match ThemeConfig::from_config_value(&config) {

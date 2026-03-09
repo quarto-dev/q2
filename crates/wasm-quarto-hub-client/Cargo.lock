@@ -2946,6 +2946,7 @@ dependencies = [
  "console_error_panic_hook",
  "pampa",
  "quarto-ast-reconcile",
+ "quarto-config",
  "quarto-core",
  "quarto-error-reporting",
  "quarto-lsp-core",

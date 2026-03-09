@@ -101,7 +101,8 @@ impl Default for ApplyTemplateStage {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl PipelineStage for ApplyTemplateStage {
     fn name(&self) -> &str {
         "apply-template"
@@ -135,12 +136,15 @@ impl PipelineStage for ApplyTemplateStage {
             rendered.content.len()
         );
 
-        // Store CSS artifact for WASM consumption
-        ctx.artifacts.store(
-            "css:default",
-            Artifact::from_string(DEFAULT_CSS, "text/css")
-                .with_path(PathBuf::from(DEFAULT_CSS_ARTIFACT_PATH)),
-        );
+        // Store CSS artifact for WASM consumption (only if not already set
+        // by CompileThemeCssStage, which produces themed CSS)
+        if ctx.artifacts.get("css:default").is_none() {
+            ctx.artifacts.store(
+                "css:default",
+                Artifact::from_string(DEFAULT_CSS, "text/css")
+                    .with_path(PathBuf::from(DEFAULT_CSS_ARTIFACT_PATH)),
+            );
+        }
 
         // Get metadata from the rendered output
         let metadata = rendered.metadata.clone();

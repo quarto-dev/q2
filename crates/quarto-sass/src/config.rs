@@ -4,28 +4,26 @@
 //!
 //! This module provides types and functions for extracting theme configuration
 //! from Quarto's configuration system (`ConfigValue`). It handles the mapping
-//! from `format.html.theme` to `ThemeSpec` arrays for compilation.
+//! from a format-flattened `theme` key to `ThemeSpec` arrays for compilation.
+//!
+//! After MetadataMergeStage, the merged config is format-flattened so `theme`
+//! sits at the top level (not nested under `format.html`).
 //!
 //! # Configuration Formats
 //!
-//! The theme configuration in YAML can take several forms:
+//! The theme configuration after flattening:
 //!
 //! ```yaml
 //! # Single theme (string)
-//! format:
-//!   html:
-//!     theme: cosmo
+//! theme: cosmo
 //!
 //! # Multiple themes (array)
-//! format:
-//!   html:
-//!     theme:
-//!       - cosmo
-//!       - custom.scss
+//! theme:
+//!   - cosmo
+//!   - custom.scss
 //!
 //! # No theme (absent) - uses default Bootstrap
-//! format:
-//!   html: {}
+//! {}
 //! ```
 
 use quarto_pandoc_types::ConfigValue;
@@ -80,16 +78,17 @@ impl ThemeConfig {
         }
     }
 
-    /// Extract theme config from merged ConfigValue.
+    /// Extract theme config from a format-flattened ConfigValue.
     ///
-    /// Looks for `format.html.theme` in the config. Supports:
+    /// Expects `theme` at top level (as produced by MetadataMergeStage).
+    /// Supports:
     /// - String: single theme name or path (e.g., `"cosmo"`, `"custom.scss"`)
     /// - Array: multiple themes to layer (e.g., `["cosmo", "custom.scss"]`)
     /// - Null/absent: use default Bootstrap theme
     ///
     /// # Arguments
     ///
-    /// * `config` - The merged configuration (project + document)
+    /// * `config` - The format-flattened merged configuration (project + document)
     ///
     /// # Returns
     ///
@@ -110,11 +109,8 @@ impl ThemeConfig {
     /// println!("Minified: {}", config.minified);
     /// ```
     pub fn from_config_value(config: &ConfigValue) -> Result<Self, SassError> {
-        // Navigate to format.html.theme
-        let theme_value = config
-            .get("format")
-            .and_then(|format| format.get("html"))
-            .and_then(|html| html.get("theme"));
+        // Look for top-level `theme` (format-flattened by MetadataMergeStage)
+        let theme_value = config.get("theme");
 
         match theme_value {
             None => {
@@ -190,142 +186,10 @@ mod tests {
     use quarto_source_map::SourceInfo;
     use yaml_rust2::Yaml;
 
-    /// Helper to create a config with format.html.theme set to a string
-    fn config_with_theme_string(theme: &str) -> ConfigValue {
-        let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let html_entry = ConfigMapEntry {
-            key: "theme".to_string(),
-            key_source: SourceInfo::default(),
-            value: theme_value,
-        };
-
-        let html_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![html_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let format_entry = ConfigMapEntry {
-            key: "html".to_string(),
-            key_source: SourceInfo::default(),
-            value: html_value,
-        };
-
-        let format_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![format_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let root_entry = ConfigMapEntry {
-            key: "format".to_string(),
-            key_source: SourceInfo::default(),
-            value: format_value,
-        };
-
-        ConfigValue {
-            value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        }
-    }
-
-    /// Helper to create a config with format.html.theme set to an array
-    fn config_with_theme_array(themes: &[&str]) -> ConfigValue {
-        let items: Vec<ConfigValue> = themes
-            .iter()
-            .map(|s| ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
-                source_info: SourceInfo::default(),
-                merge_op: quarto_pandoc_types::MergeOp::Concat,
-            })
-            .collect();
-
-        let theme_value = ConfigValue {
-            value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let html_entry = ConfigMapEntry {
-            key: "theme".to_string(),
-            key_source: SourceInfo::default(),
-            value: theme_value,
-        };
-
-        let html_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![html_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let format_entry = ConfigMapEntry {
-            key: "html".to_string(),
-            key_source: SourceInfo::default(),
-            value: html_value,
-        };
-
-        let format_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![format_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let root_entry = ConfigMapEntry {
-            key: "format".to_string(),
-            key_source: SourceInfo::default(),
-            value: format_value,
-        };
-
-        ConfigValue {
-            value: ConfigValueKind::Map(vec![root_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        }
-    }
-
     /// Helper to create an empty config (no theme)
     fn empty_config() -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        }
-    }
-
-    /// Helper to create config with format.html but no theme
-    fn config_without_theme() -> ConfigValue {
-        let html_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let format_entry = ConfigMapEntry {
-            key: "html".to_string(),
-            key_source: SourceInfo::default(),
-            value: html_value,
-        };
-
-        let format_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![format_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let root_entry = ConfigMapEntry {
-            key: "format".to_string(),
-            key_source: SourceInfo::default(),
-            value: format_value,
-        };
-
-        ConfigValue {
-            value: ConfigValueKind::Map(vec![root_entry]),
             source_info: SourceInfo::default(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }
@@ -358,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_from_config_value_string_builtin() {
-        let config = config_with_theme_string("cosmo");
+        let config = flattened_config_with_theme_string("cosmo");
         let theme_config = ThemeConfig::from_config_value(&config).unwrap();
 
         assert_eq!(theme_config.themes.len(), 1);
@@ -372,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_from_config_value_string_custom() {
-        let config = config_with_theme_string("custom.scss");
+        let config = flattened_config_with_theme_string("custom.scss");
         let theme_config = ThemeConfig::from_config_value(&config).unwrap();
 
         assert_eq!(theme_config.themes.len(), 1);
@@ -385,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_from_config_value_array_single() {
-        let config = config_with_theme_array(&["darkly"]);
+        let config = flattened_config_with_theme_array(&["darkly"]);
         let theme_config = ThemeConfig::from_config_value(&config).unwrap();
 
         assert_eq!(theme_config.themes.len(), 1);
@@ -394,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_from_config_value_array_multiple() {
-        let config = config_with_theme_array(&["cosmo", "custom.scss"]);
+        let config = flattened_config_with_theme_array(&["cosmo", "custom.scss"]);
         let theme_config = ThemeConfig::from_config_value(&config).unwrap();
 
         assert_eq!(theme_config.themes.len(), 2);
@@ -412,50 +276,17 @@ mod tests {
     }
 
     #[test]
-    fn test_from_config_value_no_theme() {
-        let config = config_without_theme();
-        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
-
-        assert!(theme_config.themes.is_empty());
-    }
-
-    #[test]
     fn test_from_config_value_null_theme() {
-        // Create config with theme: null
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Null),
             source_info: SourceInfo::default(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
-        let html_entry = ConfigMapEntry {
+        let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
             key_source: SourceInfo::default(),
             value: theme_value,
-        };
-
-        let html_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![html_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let format_entry = ConfigMapEntry {
-            key: "html".to_string(),
-            key_source: SourceInfo::default(),
-            value: html_value,
-        };
-
-        let format_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![format_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let root_entry = ConfigMapEntry {
-            key: "format".to_string(),
-            key_source: SourceInfo::default(),
-            value: format_value,
         };
 
         let config = ConfigValue {
@@ -470,7 +301,7 @@ mod tests {
 
     #[test]
     fn test_from_config_value_unknown_theme() {
-        let config = config_with_theme_string("nonexistent");
+        let config = flattened_config_with_theme_string("nonexistent");
         let result = ThemeConfig::from_config_value(&config);
 
         assert!(result.is_err());
@@ -489,34 +320,10 @@ mod tests {
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
-        let html_entry = ConfigMapEntry {
+        let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
             key_source: SourceInfo::default(),
             value: theme_value,
-        };
-
-        let html_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![html_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let format_entry = ConfigMapEntry {
-            key: "html".to_string(),
-            key_source: SourceInfo::default(),
-            value: html_value,
-        };
-
-        let format_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![format_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let root_entry = ConfigMapEntry {
-            key: "format".to_string(),
-            key_source: SourceInfo::default(),
-            value: format_value,
         };
 
         let config = ConfigValue {
@@ -537,7 +344,6 @@ mod tests {
 
     #[test]
     fn test_from_config_value_array_with_non_string() {
-        // Create config with theme array containing a non-string
         let items = vec![
             ConfigValue {
                 value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
@@ -557,34 +363,10 @@ mod tests {
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
 
-        let html_entry = ConfigMapEntry {
+        let root_entry = ConfigMapEntry {
             key: "theme".to_string(),
             key_source: SourceInfo::default(),
             value: theme_value,
-        };
-
-        let html_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![html_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let format_entry = ConfigMapEntry {
-            key: "html".to_string(),
-            key_source: SourceInfo::default(),
-            value: html_value,
-        };
-
-        let format_value = ConfigValue {
-            value: ConfigValueKind::Map(vec![format_entry]),
-            source_info: SourceInfo::default(),
-            merge_op: quarto_pandoc_types::MergeOp::Concat,
-        };
-
-        let root_entry = ConfigMapEntry {
-            key: "format".to_string(),
-            key_source: SourceInfo::default(),
-            value: format_value,
         };
 
         let config = ConfigValue {
@@ -607,12 +389,131 @@ mod tests {
 
     #[test]
     fn test_theme_specs() {
-        let config = config_with_theme_array(&["cosmo", "flatly"]);
+        let config = flattened_config_with_theme_array(&["cosmo", "flatly"]);
         let theme_config = ThemeConfig::from_config_value(&config).unwrap();
 
         let specs = theme_config.theme_specs();
         assert_eq!(specs.len(), 2);
         assert!(specs[0].is_builtin());
         assert!(specs[1].is_builtin());
+    }
+
+    // === Flattened config helpers (post-MetadataMergeStage format) ===
+
+    /// Helper to create a flattened config with theme at top level (string).
+    /// This is the format produced by MetadataMergeStage: `{ theme: "darkly" }`
+    fn flattened_config_with_theme_string(theme: &str) -> ConfigValue {
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+
+        let root_entry = ConfigMapEntry {
+            key: "theme".to_string(),
+            key_source: SourceInfo::default(),
+            value: theme_value,
+        };
+
+        ConfigValue {
+            value: ConfigValueKind::Map(vec![root_entry]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        }
+    }
+
+    /// Helper to create a flattened config with theme at top level (array).
+    /// This is the format produced by MetadataMergeStage: `{ theme: ["cosmo", "custom.scss"] }`
+    fn flattened_config_with_theme_array(themes: &[&str]) -> ConfigValue {
+        let items: Vec<ConfigValue> = themes
+            .iter()
+            .map(|s| ConfigValue {
+                value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+                source_info: SourceInfo::default(),
+                merge_op: quarto_pandoc_types::MergeOp::Concat,
+            })
+            .collect();
+
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Array(items),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+
+        let root_entry = ConfigMapEntry {
+            key: "theme".to_string(),
+            key_source: SourceInfo::default(),
+            value: theme_value,
+        };
+
+        ConfigValue {
+            value: ConfigValueKind::Map(vec![root_entry]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        }
+    }
+
+    // === Flattened config tests (post-MetadataMergeStage) ===
+
+    #[test]
+    fn test_from_flattened_config_single_theme() {
+        let config = flattened_config_with_theme_string("darkly");
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+
+        assert_eq!(theme_config.themes.len(), 1);
+        assert!(theme_config.themes[0].is_builtin());
+        assert_eq!(
+            theme_config.themes[0].as_builtin(),
+            Some(crate::themes::BuiltInTheme::Darkly)
+        );
+        assert!(theme_config.minified);
+    }
+
+    #[test]
+    fn test_from_flattened_config_array_theme() {
+        let config = flattened_config_with_theme_array(&["cosmo", "custom.scss"]);
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+
+        assert_eq!(theme_config.themes.len(), 2);
+        assert!(theme_config.themes[0].is_builtin());
+        assert_eq!(
+            theme_config.themes[0].as_builtin(),
+            Some(crate::themes::BuiltInTheme::Cosmo)
+        );
+        assert!(theme_config.themes[1].is_custom());
+    }
+
+    #[test]
+    fn test_from_flattened_config_no_theme() {
+        let config = empty_config();
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+
+        assert!(theme_config.themes.is_empty());
+        assert!(!theme_config.has_themes());
+    }
+
+    #[test]
+    fn test_from_flattened_config_null_theme() {
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::Null),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+
+        let root_entry = ConfigMapEntry {
+            key: "theme".to_string(),
+            key_source: SourceInfo::default(),
+            value: theme_value,
+        };
+
+        let config = ConfigValue {
+            value: ConfigValueKind::Map(vec![root_entry]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+        assert!(theme_config.themes.is_empty());
+        assert!(!theme_config.has_themes());
     }
 }

@@ -19,6 +19,7 @@
 
 mod apply_template;
 mod ast_transforms;
+mod compile_theme_css;
 mod engine_execution;
 mod metadata_merge;
 mod parse_document;
@@ -26,6 +27,7 @@ mod render_html;
 
 pub use apply_template::{ApplyTemplateConfig, ApplyTemplateStage};
 pub use ast_transforms::AstTransformsStage;
+pub use compile_theme_css::CompileThemeCssStage;
 pub use engine_execution::EngineExecutionStage;
 pub use metadata_merge::MetadataMergeStage;
 pub use parse_document::ParseDocumentStage;

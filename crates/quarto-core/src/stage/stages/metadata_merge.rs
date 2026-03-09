@@ -103,7 +103,8 @@ impl Default for MetadataMergeStage {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl PipelineStage for MetadataMergeStage {
     fn name(&self) -> &str {
         "metadata-merge"

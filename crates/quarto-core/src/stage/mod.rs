@@ -103,8 +103,8 @@ pub use traits::PipelineStage;
 
 // Re-export concrete stages for convenience
 pub use stages::{
-    ApplyTemplateStage, AstTransformsStage, EngineExecutionStage, MetadataMergeStage,
-    ParseDocumentStage, RenderHtmlBodyStage,
+    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, EngineExecutionStage,
+    MetadataMergeStage, ParseDocumentStage, RenderHtmlBodyStage,
 };
 
 // Re-export the trace_event macro
@@ -289,7 +289,8 @@ mod tests {
         kind: PipelineDataKind,
     }
 
-    #[async_trait]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
     impl PipelineStage for IdentityStage {
         fn name(&self) -> &str {
             self.name
@@ -317,7 +318,8 @@ mod tests {
         transform: Box<dyn Fn(PipelineData) -> PipelineData + Send + Sync>,
     }
 
-    #[async_trait]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
     impl PipelineStage for TransformStage {
         fn name(&self) -> &str {
             self.name

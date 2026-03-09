@@ -31,6 +31,7 @@ quarto-config.workspace = true
 quarto-yaml.workspace = true
 quarto-ast-reconcile.workspace = true
 quarto-analysis.workspace = true
+quarto-sass.workspace = true
 pampa.workspace = true
 
 # Native-only dependencies (for execution engines and resource extraction)
@@ -39,7 +40,6 @@ tempfile = "3"
 include_dir = "0.7"
 which = "8"
 regex = "1.12"
-quarto-sass.workspace = true
 
 # Jupyter engine dependencies (native only)
 runtimelib = { version = "1.4", features = ["tokio-runtime"] }

@@ -25,7 +25,9 @@ pub use bundle::{
     assemble_with_user_layers, load_bootstrap_framework, load_quarto_layer, load_theme,
     load_title_block_layer,
 };
-pub use compile::{compile_css_from_config, compile_default_css, compile_theme_css};
+pub use compile::{
+    assemble_theme_scss, compile_css_from_config, compile_default_css, compile_theme_css,
+};
 pub use config::ThemeConfig;
 pub use error::SassError;
 pub use layer::{merge_layers, parse_layer, parse_layer_from_parts};
