@@ -42,7 +42,7 @@ mod wasm;
 // Re-export core types (API surface)
 pub use traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
-    XdgDirKind,
+    XdgDirKind, validate_cache_key, validate_cache_namespace,
 };
 
 // Re-export runtime implementations based on target

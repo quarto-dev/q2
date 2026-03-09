@@ -47,6 +47,9 @@ pub enum RuntimeError {
 
     /// SASS compilation failed
     SassError(String),
+
+    /// Cache operation failed
+    CacheError(String),
 }
 
 impl std::fmt::Display for RuntimeError {
@@ -63,6 +66,7 @@ impl std::fmt::Display for RuntimeError {
                 write!(f, "Process execution failed (exit {}): {}", code, message)
             }
             RuntimeError::SassError(msg) => write!(f, "SASS compilation error: {}", msg),
+            RuntimeError::CacheError(msg) => write!(f, "Cache error: {}", msg),
         }
     }
 }
@@ -649,6 +653,94 @@ pub trait SystemRuntime: Send + Sync {
             "SASS compilation is not available on this runtime".to_string(),
         ))
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CACHING
+    //
+    // Platform-abstracted key-value cache for expensive computed results.
+    // - Native: Filesystem-backed at {project_dir}/.quarto/cache/
+    // - WASM: IndexedDB via JS bridge (future)
+    //
+    // Default implementations are no-ops (caching disabled), which is the
+    // correct behavior for runtimes that don't support caching or when no
+    // cache directory is configured.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Get a cached value by namespace and key.
+    ///
+    /// Returns `Ok(None)` if the key is not found or caching is not available.
+    /// Errors are reserved for I/O failures, not cache misses.
+    async fn cache_get(&self, namespace: &str, key: &str) -> RuntimeResult<Option<Vec<u8>>> {
+        let _ = (namespace, key);
+        Ok(None)
+    }
+
+    /// Store a value in the cache.
+    ///
+    /// Overwrites any existing entry with the same namespace+key.
+    /// No-op if caching is not available.
+    async fn cache_set(&self, namespace: &str, key: &str, value: &[u8]) -> RuntimeResult<()> {
+        let _ = (namespace, key, value);
+        Ok(())
+    }
+
+    /// Remove a cached value by namespace and key.
+    ///
+    /// Returns `Ok(())` whether or not the key existed.
+    async fn cache_delete(&self, namespace: &str, key: &str) -> RuntimeResult<()> {
+        let _ = (namespace, key);
+        Ok(())
+    }
+
+    /// Remove all cached values in a namespace.
+    ///
+    /// Used for cache invalidation (e.g., when SCSS resources change version).
+    async fn cache_clear_namespace(&self, namespace: &str) -> RuntimeResult<()> {
+        let _ = namespace;
+        Ok(())
+    }
+}
+
+/// Maximum length for cache namespace and key strings.
+const CACHE_NAME_MAX_LEN: usize = 128;
+
+/// Validate a cache key for safe use as a filename.
+///
+/// Keys must be non-empty, at most 128 characters, and contain only
+/// ASCII alphanumeric characters, hyphens, or underscores. This prevents
+/// path traversal and ensures cross-platform filename safety.
+pub fn validate_cache_key(key: &str) -> Result<(), RuntimeError> {
+    validate_cache_name(key, "key")
+}
+
+/// Validate a cache namespace for safe use as a directory name.
+///
+/// Same rules as [`validate_cache_key`]: non-empty, at most 128 characters,
+/// ASCII alphanumeric + hyphen + underscore only.
+pub fn validate_cache_namespace(namespace: &str) -> Result<(), RuntimeError> {
+    validate_cache_name(namespace, "namespace")
+}
+
+fn validate_cache_name(name: &str, label: &str) -> Result<(), RuntimeError> {
+    if name.is_empty() {
+        return Err(RuntimeError::CacheError(format!(
+            "cache {label} must not be empty"
+        )));
+    }
+    if name.len() > CACHE_NAME_MAX_LEN {
+        return Err(RuntimeError::CacheError(format!(
+            "cache {label} exceeds maximum length of {CACHE_NAME_MAX_LEN} characters"
+        )));
+    }
+    if !name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(RuntimeError::CacheError(format!(
+            "cache {label} contains invalid characters (allowed: alphanumeric, hyphen, underscore)"
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -720,5 +812,69 @@ mod tests {
         assert!(path.exists());
         // Clean up manually
         std::fs::remove_dir_all(&path).unwrap();
+    }
+
+    #[test]
+    fn test_cache_error_display() {
+        let err = RuntimeError::CacheError("something went wrong".to_string());
+        assert!(err.to_string().contains("Cache error"));
+        assert!(err.to_string().contains("something went wrong"));
+    }
+
+    // ── validate_cache_key tests ─────────────────────────────────────────
+
+    #[test]
+    fn test_validate_cache_key_valid() {
+        assert!(validate_cache_key("abc123").is_ok());
+        assert!(validate_cache_key("my-key").is_ok());
+        assert!(validate_cache_key("my_key").is_ok());
+        assert!(validate_cache_key("ABC-123_def").is_ok());
+        assert!(validate_cache_key("a").is_ok());
+    }
+
+    #[test]
+    fn test_validate_cache_key_empty() {
+        assert!(validate_cache_key("").is_err());
+    }
+
+    #[test]
+    fn test_validate_cache_key_too_long() {
+        let long_key = "a".repeat(129);
+        assert!(validate_cache_key(&long_key).is_err());
+        // Exactly 128 is ok
+        let max_key = "a".repeat(128);
+        assert!(validate_cache_key(&max_key).is_ok());
+    }
+
+    #[test]
+    fn test_validate_cache_key_special_chars() {
+        assert!(validate_cache_key("has/slash").is_err());
+        assert!(validate_cache_key("has..dots").is_err());
+        assert!(validate_cache_key("..").is_err());
+        assert!(validate_cache_key(".").is_err());
+        assert!(validate_cache_key("has space").is_err());
+        assert!(validate_cache_key("has\0null").is_err());
+    }
+
+    // ── validate_cache_namespace tests ───────────────────────────────────
+
+    #[test]
+    fn test_validate_cache_namespace_valid() {
+        assert!(validate_cache_namespace("sass").is_ok());
+        assert!(validate_cache_namespace("metadata").is_ok());
+        assert!(validate_cache_namespace("my-ns").is_ok());
+        assert!(validate_cache_namespace("ns_v2").is_ok());
+    }
+
+    #[test]
+    fn test_validate_cache_namespace_empty() {
+        assert!(validate_cache_namespace("").is_err());
+    }
+
+    #[test]
+    fn test_validate_cache_namespace_special_chars() {
+        assert!(validate_cache_namespace("ns/bad").is_err());
+        assert!(validate_cache_namespace("..").is_err());
+        assert!(validate_cache_namespace("ns.v2").is_err());
     }
 }

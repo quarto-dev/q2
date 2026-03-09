@@ -42,12 +42,29 @@ use crate::traits::{
 pub struct NativeRuntime {
     // Note: JsEngine is NOT stored here because V8's JsRuntime is not Send+Sync.
     // Each JS operation creates a fresh engine. This is less efficient but correct.
+    /// Optional cache directory for persistent caching.
+    /// When `None`, all cache operations are silent no-ops.
+    cache_dir: Option<PathBuf>,
 }
 
 impl NativeRuntime {
-    /// Create a new NativeRuntime with default settings.
+    /// Create a new NativeRuntime with default settings (no caching).
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a NativeRuntime with a cache directory for persistent caching.
+    ///
+    /// Typically set to `{project_dir}/.quarto/cache/`.
+    pub fn with_cache_dir(cache_dir: PathBuf) -> Self {
+        Self {
+            cache_dir: Some(cache_dir),
+        }
+    }
+
+    /// Returns the configured cache directory, if any.
+    pub fn cache_dir(&self) -> Option<&Path> {
+        self.cache_dir.as_deref()
     }
 }
 
@@ -430,6 +447,91 @@ impl SystemRuntime for NativeRuntime {
         minified: bool,
     ) -> RuntimeResult<String> {
         sass_native::compile_scss(self, scss, load_paths, minified)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CACHING (filesystem-backed)
+    //
+    // Layout: {cache_dir}/{namespace}/{key}
+    // Atomic writes via tempfile + rename.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    async fn cache_get(&self, namespace: &str, key: &str) -> RuntimeResult<Option<Vec<u8>>> {
+        let Some(cache_dir) = &self.cache_dir else {
+            return Ok(None);
+        };
+        crate::traits::validate_cache_namespace(namespace)?;
+        crate::traits::validate_cache_key(key)?;
+        let path = cache_dir.join(namespace).join(key);
+        match fs::read(&path) {
+            Ok(data) => Ok(Some(data)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(RuntimeError::CacheError(format!(
+                "failed to read cache entry {namespace}/{key}: {e}"
+            ))),
+        }
+    }
+
+    async fn cache_set(&self, namespace: &str, key: &str, value: &[u8]) -> RuntimeResult<()> {
+        let Some(cache_dir) = &self.cache_dir else {
+            return Ok(());
+        };
+        crate::traits::validate_cache_namespace(namespace)?;
+        crate::traits::validate_cache_key(key)?;
+        let ns_dir = cache_dir.join(namespace);
+        fs::create_dir_all(&ns_dir).map_err(|e| {
+            RuntimeError::CacheError(format!(
+                "failed to create cache directory {}: {e}",
+                ns_dir.display()
+            ))
+        })?;
+        // Atomic write: temp file in same directory, then persist (rename)
+        let temp = tempfile::NamedTempFile::new_in(&ns_dir).map_err(|e| {
+            RuntimeError::CacheError(format!("failed to create temp file for cache write: {e}"))
+        })?;
+        fs::write(temp.path(), value).map_err(|e| {
+            RuntimeError::CacheError(format!(
+                "failed to write cache entry {namespace}/{key}: {e}"
+            ))
+        })?;
+        let target = ns_dir.join(key);
+        temp.persist(&target).map_err(|e| {
+            RuntimeError::CacheError(format!(
+                "failed to persist cache entry {namespace}/{key}: {e}"
+            ))
+        })?;
+        Ok(())
+    }
+
+    async fn cache_delete(&self, namespace: &str, key: &str) -> RuntimeResult<()> {
+        let Some(cache_dir) = &self.cache_dir else {
+            return Ok(());
+        };
+        crate::traits::validate_cache_namespace(namespace)?;
+        crate::traits::validate_cache_key(key)?;
+        let path = cache_dir.join(namespace).join(key);
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(RuntimeError::CacheError(format!(
+                "failed to delete cache entry {namespace}/{key}: {e}"
+            ))),
+        }
+    }
+
+    async fn cache_clear_namespace(&self, namespace: &str) -> RuntimeResult<()> {
+        let Some(cache_dir) = &self.cache_dir else {
+            return Ok(());
+        };
+        crate::traits::validate_cache_namespace(namespace)?;
+        let ns_dir = cache_dir.join(namespace);
+        match fs::remove_dir_all(&ns_dir) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(RuntimeError::CacheError(format!(
+                "failed to clear cache namespace {namespace}: {e}"
+            ))),
+        }
     }
 }
 
@@ -953,5 +1055,212 @@ mod tests {
         let css = result.unwrap();
         // Minified output should not have newlines between selectors and braces
         assert!(css.contains(".container{") || css.contains(".container {"));
+    }
+
+    // ── Cache: NativeRuntime construction ────────────────────────────────
+
+    #[test]
+    fn test_native_runtime_new_has_no_cache_dir() {
+        let rt = NativeRuntime::new();
+        assert!(rt.cache_dir().is_none());
+    }
+
+    #[test]
+    fn test_native_runtime_with_cache_dir() {
+        let dir = PathBuf::from("/tmp/test-cache");
+        let rt = NativeRuntime::with_cache_dir(dir.clone());
+        assert_eq!(rt.cache_dir(), Some(dir.as_path()));
+    }
+
+    // ── Cache: default trait impls via SandboxedRuntime ──────────────────
+
+    #[test]
+    fn test_cache_defaults_get_returns_none() {
+        use crate::sandbox::{SandboxedRuntime, SecurityPolicy};
+        let inner = NativeRuntime::new();
+        let rt = SandboxedRuntime::new(inner, SecurityPolicy::trusted());
+        let result = pollster::block_on(rt.cache_get("sass", "abc123"));
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_cache_defaults_set_is_noop() {
+        use crate::sandbox::{SandboxedRuntime, SecurityPolicy};
+        let inner = NativeRuntime::new();
+        let rt = SandboxedRuntime::new(inner, SecurityPolicy::trusted());
+        let result = pollster::block_on(rt.cache_set("sass", "abc123", b"data"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cache_defaults_delete_is_noop() {
+        use crate::sandbox::{SandboxedRuntime, SecurityPolicy};
+        let inner = NativeRuntime::new();
+        let rt = SandboxedRuntime::new(inner, SecurityPolicy::trusted());
+        let result = pollster::block_on(rt.cache_delete("sass", "abc123"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cache_defaults_clear_namespace_is_noop() {
+        use crate::sandbox::{SandboxedRuntime, SecurityPolicy};
+        let inner = NativeRuntime::new();
+        let rt = SandboxedRuntime::new(inner, SecurityPolicy::trusted());
+        let result = pollster::block_on(rt.cache_clear_namespace("sass"));
+        assert!(result.is_ok());
+    }
+
+    // ── Cache: NativeRuntime filesystem implementation ───────────────────
+
+    fn cache_runtime() -> (NativeRuntime, TempFileTempDir) {
+        let temp = TempFileTempDir::new().unwrap();
+        let rt = NativeRuntime::with_cache_dir(temp.path().to_path_buf());
+        (rt, temp)
+    }
+
+    #[test]
+    fn test_cache_roundtrip() {
+        let (rt, _tmp) = cache_runtime();
+        pollster::block_on(rt.cache_set("sass", "abc123", b"css-content")).unwrap();
+        let result = pollster::block_on(rt.cache_get("sass", "abc123")).unwrap();
+        assert_eq!(result, Some(b"css-content".to_vec()));
+    }
+
+    #[test]
+    fn test_cache_get_missing() {
+        let (rt, _tmp) = cache_runtime();
+        let result = pollster::block_on(rt.cache_get("sass", "nonexistent")).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_cache_get_no_cache_dir() {
+        let rt = NativeRuntime::new();
+        let result = pollster::block_on(rt.cache_get("sass", "abc123")).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_cache_set_no_cache_dir() {
+        let rt = NativeRuntime::new();
+        let result = pollster::block_on(rt.cache_set("sass", "abc123", b"data"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cache_overwrite() {
+        let (rt, _tmp) = cache_runtime();
+        pollster::block_on(rt.cache_set("sass", "key1", b"first")).unwrap();
+        pollster::block_on(rt.cache_set("sass", "key1", b"second")).unwrap();
+        let result = pollster::block_on(rt.cache_get("sass", "key1")).unwrap();
+        assert_eq!(result, Some(b"second".to_vec()));
+    }
+
+    #[test]
+    fn test_cache_delete() {
+        let (rt, _tmp) = cache_runtime();
+        pollster::block_on(rt.cache_set("sass", "key1", b"data")).unwrap();
+        pollster::block_on(rt.cache_delete("sass", "key1")).unwrap();
+        let result = pollster::block_on(rt.cache_get("sass", "key1")).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_cache_delete_nonexistent() {
+        let (rt, _tmp) = cache_runtime();
+        let result = pollster::block_on(rt.cache_delete("sass", "nonexistent"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cache_clear_namespace() {
+        let (rt, _tmp) = cache_runtime();
+        pollster::block_on(rt.cache_set("sass", "key1", b"a")).unwrap();
+        pollster::block_on(rt.cache_set("sass", "key2", b"b")).unwrap();
+        pollster::block_on(rt.cache_clear_namespace("sass")).unwrap();
+        assert!(
+            pollster::block_on(rt.cache_get("sass", "key1"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            pollster::block_on(rt.cache_get("sass", "key2"))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_cache_clear_nonexistent_namespace() {
+        let (rt, _tmp) = cache_runtime();
+        let result = pollster::block_on(rt.cache_clear_namespace("nonexistent"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cache_namespaces_isolated() {
+        let (rt, _tmp) = cache_runtime();
+        pollster::block_on(rt.cache_set("ns1", "key1", b"value-a")).unwrap();
+        pollster::block_on(rt.cache_set("ns2", "key1", b"value-b")).unwrap();
+        assert_eq!(
+            pollster::block_on(rt.cache_get("ns1", "key1")).unwrap(),
+            Some(b"value-a".to_vec())
+        );
+        assert_eq!(
+            pollster::block_on(rt.cache_get("ns2", "key1")).unwrap(),
+            Some(b"value-b".to_vec())
+        );
+    }
+
+    #[test]
+    fn test_cache_invalid_key_rejected() {
+        let (rt, _tmp) = cache_runtime();
+        assert!(pollster::block_on(rt.cache_get("sass", "bad/key")).is_err());
+        assert!(pollster::block_on(rt.cache_get("sass", "..")).is_err());
+        assert!(pollster::block_on(rt.cache_set("sass", "bad/key", b"x")).is_err());
+    }
+
+    #[test]
+    fn test_cache_invalid_namespace_rejected() {
+        let (rt, _tmp) = cache_runtime();
+        assert!(pollster::block_on(rt.cache_get("bad/ns", "key1")).is_err());
+        assert!(pollster::block_on(rt.cache_get("..", "key1")).is_err());
+        assert!(pollster::block_on(rt.cache_set("bad/ns", "key1", b"x")).is_err());
+    }
+
+    #[test]
+    fn test_cache_empty_value() {
+        let (rt, _tmp) = cache_runtime();
+        pollster::block_on(rt.cache_set("sass", "empty", b"")).unwrap();
+        let result = pollster::block_on(rt.cache_get("sass", "empty")).unwrap();
+        assert_eq!(result, Some(vec![]));
+    }
+
+    #[test]
+    fn test_cache_large_value() {
+        let (rt, _tmp) = cache_runtime();
+        let large = vec![0xABu8; 1_000_000];
+        pollster::block_on(rt.cache_set("sass", "large", &large)).unwrap();
+        let result = pollster::block_on(rt.cache_get("sass", "large")).unwrap();
+        assert_eq!(result, Some(large));
+    }
+
+    #[test]
+    fn test_cache_binary_value() {
+        let (rt, _tmp) = cache_runtime();
+        let binary: Vec<u8> = (0..=255).collect();
+        pollster::block_on(rt.cache_set("bin", "all-bytes", &binary)).unwrap();
+        let result = pollster::block_on(rt.cache_get("bin", "all-bytes")).unwrap();
+        assert_eq!(result, Some(binary));
+    }
+
+    #[test]
+    fn test_cache_creates_directories() {
+        let (rt, tmp) = cache_runtime();
+        pollster::block_on(rt.cache_set("sass", "key1", b"data")).unwrap();
+        // The namespace directory should have been created
+        assert!(tmp.path().join("sass").is_dir());
+        assert!(tmp.path().join("sass").join("key1").is_file());
     }
 }
