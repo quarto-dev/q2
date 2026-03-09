@@ -23,6 +23,7 @@ interface WasmModule {
   vfs_add_file: (path: string, content: string) => string;
   vfs_clear: () => string;
   vfs_list_files: () => string;
+  vfs_read_file: (path: string) => string;
   render_qmd: (path: string) => Promise<string>;
 }
 
@@ -190,6 +191,11 @@ function parseFormatSpec(format: string, value: Record<string, unknown>, options
         case 'ensureHtmlElements': {
           const { matches, noMatches } = parseTwoArraySpec(assertionValue);
           assertions.push(makeEnsureHtmlElements(matches, noMatches));
+          break;
+        }
+        case 'ensureCssRegexMatches': {
+          const { matches, noMatches } = parseTwoArraySpec(assertionValue);
+          assertions.push(makeEnsureCssRegexMatches(matches, noMatches));
           break;
         }
         case 'noErrors':
@@ -391,6 +397,56 @@ function makeEnsureHtmlElements(
         doc.querySelector(selector),
         `ensureHtmlElements: expected selector "${selector}" NOT to match`,
       ).toBeNull();
+    }
+  };
+}
+
+function makeEnsureCssRegexMatches(
+  matches: string[],
+  noMatches: string[],
+): AssertionFn {
+  return (result: WasmRenderResult) => {
+    expect(result.success, `Render failed: ${result.error}`).toBe(true);
+    expect(result.html, 'No HTML in render result').toBeTruthy();
+
+    // Parse HTML for <link rel="stylesheet"> hrefs
+    const dom = new JSDOM(result.html!);
+    const links = dom.window.document.querySelectorAll('link[rel="stylesheet"]');
+    let combinedCss = '';
+
+    for (const link of links) {
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('http://') || href.startsWith('https://') || href.startsWith('//')) {
+        continue;
+      }
+      // Resolve href relative to /project/ (VFS root)
+      const vfsPath = href.startsWith('/') ? href : `/project/${href}`;
+      try {
+        const readResult = JSON.parse(wasm.vfs_read_file(vfsPath)) as { success: boolean; content?: string; error?: string };
+        if (readResult.success && readResult.content) {
+          combinedCss += readResult.content + '\n';
+        }
+      } catch {
+        // CSS file not readable — will be caught by pattern assertions below
+      }
+    }
+
+    expect(
+      combinedCss.length,
+      'ensureCssRegexMatches: no CSS content found (no local stylesheets readable from VFS)',
+    ).toBeGreaterThan(0);
+
+    for (const pattern of matches) {
+      expect(
+        new RegExp(pattern, 'm').test(combinedCss),
+        `ensureCssRegexMatches: expected CSS pattern "${pattern}" to match`,
+      ).toBe(true);
+    }
+    for (const pattern of noMatches) {
+      expect(
+        new RegExp(pattern, 'm').test(combinedCss),
+        `ensureCssRegexMatches: expected CSS pattern "${pattern}" NOT to match`,
+      ).toBe(false);
     }
   };
 }

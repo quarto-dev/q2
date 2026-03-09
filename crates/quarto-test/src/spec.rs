@@ -13,8 +13,8 @@ use anyhow::{Context, Result};
 use serde_yaml::Value;
 
 use crate::assertions::{
-    Assertion, EnsureFileRegexMatches, FileExists, FolderExists, NoErrors, NoErrorsOrWarnings,
-    PathDoesNotExist, PrintsMessage, ShouldError,
+    Assertion, EnsureCssRegexMatches, EnsureFileRegexMatches, FileExists, FolderExists, NoErrors,
+    NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
 };
 
 /// Configuration for when/whether to run tests.
@@ -170,6 +170,10 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
                     let assertion = parse_ensure_file_regex_matches(assertion_value)?;
                     assertions.push(Box::new(assertion));
                 }
+                "ensureCssRegexMatches" => {
+                    let assertion = parse_ensure_css_regex_matches(assertion_value)?;
+                    assertions.push(Box::new(assertion));
+                }
                 "noErrors" => {
                     check_warnings = false;
                     assertions.push(Box::new(NoErrors::new()));
@@ -267,6 +271,30 @@ fn parse_file_exists(value: &Value, assertions: &mut Vec<Box<dyn Assertion>>) ->
     }
 
     Ok(())
+}
+
+/// Parse `ensureCssRegexMatches` assertion.
+///
+/// Same format as `ensureFileRegexMatches` but checks linked CSS files
+/// instead of the output HTML.
+fn parse_ensure_css_regex_matches(value: &Value) -> Result<EnsureCssRegexMatches> {
+    let arr = value
+        .as_sequence()
+        .context("ensureCssRegexMatches must be an array")?;
+
+    let matches = if !arr.is_empty() {
+        parse_pattern_array(&arr[0])?
+    } else {
+        vec![]
+    };
+
+    let no_matches = if arr.len() > 1 {
+        parse_pattern_array(&arr[1])?
+    } else {
+        vec![]
+    };
+
+    EnsureCssRegexMatches::new(matches, no_matches)
 }
 
 /// Parse `ensureFileRegexMatches` assertion.
