@@ -1,0 +1,16 @@
+---
+title: Custom Document
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["Neucha"]
+        - ["#375a7f"]
+---
+
+## Custom Document
+
+This document is in `appendix/custom/` where `_metadata.yml` sets
+`theme: sketchy`. The Neucha font family is unique to sketchy.

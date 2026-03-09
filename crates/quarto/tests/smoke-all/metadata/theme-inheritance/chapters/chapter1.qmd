@@ -1,0 +1,16 @@
+---
+title: Chapter 1
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["--bs-primary:.*#2c3e50"]
+        - ["#375a7f"]
+---
+
+## Chapter 1
+
+This document should inherit flatly from `chapters/_metadata.yml`,
+overriding the project-level darkly theme.

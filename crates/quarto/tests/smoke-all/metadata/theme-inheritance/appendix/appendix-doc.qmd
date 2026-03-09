@@ -1,0 +1,16 @@
+---
+title: Appendix Document
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["--bs-primary:.*#375a7f"]
+        - ["#2c3e50"]
+---
+
+## Appendix Document
+
+This document is in `appendix/` which has no `_metadata.yml`. It should
+fall through to the project-level darkly theme from `_quarto.yml`.

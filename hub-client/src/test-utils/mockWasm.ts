@@ -85,8 +85,6 @@ export interface MockWasmRenderer {
   // SASS operations
   sassAvailable(): Promise<boolean>;
   compileScss(scss: string, options?: { minified?: boolean }): Promise<string>;
-  compileDocumentCss(content: string, options?: { minified?: boolean; documentPath?: string }): Promise<string>;
-  computeThemeContentHash(content: string, documentPath?: string): string;
 
   // Test helpers
   _getVfs(): Map<string, string | Uint8Array>;
@@ -312,31 +310,6 @@ export function createMockWasmRenderer(options: MockWasmOptions = {}): MockWasmR
         throw new Error('SASS compilation is not available');
       }
       return compiledCss;
-    },
-
-    async compileDocumentCss(
-      _content: string,
-      _options?: { minified?: boolean; documentPath?: string },
-    ): Promise<string> {
-      if (sassError) {
-        throw sassError;
-      }
-      if (!isSassAvailable) {
-        throw new Error('SASS compilation is not available');
-      }
-      return compiledCss;
-    },
-
-    computeThemeContentHash(
-      _content: string,
-      _documentPath?: string,
-    ): string {
-      // Return a mock hash for testing
-      // In real usage, this would compute a content-based merkle hash
-      return JSON.stringify({
-        success: true,
-        hash: 'mock-content-hash-' + Date.now().toString(16),
-      });
     },
 
     // Test helpers

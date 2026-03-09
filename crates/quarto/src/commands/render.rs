@@ -103,8 +103,14 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         quiet: args.quiet,
     };
 
-    // Create Arc runtime for the render function
-    let runtime_arc: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(NativeRuntime::new());
+    // Create Arc runtime for the render function, with cache dir for SASS caching
+    let runtime_arc: Arc<dyn quarto_system_runtime::SystemRuntime> = if project.is_single_file {
+        Arc::new(NativeRuntime::new())
+    } else {
+        Arc::new(NativeRuntime::with_cache_dir(
+            project.dir.join(".quarto/cache"),
+        ))
+    };
 
     // Render each file in the project
     for doc_info in &project.files {

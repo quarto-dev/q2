@@ -141,56 +141,24 @@ pub fn resource_dir_name(stem: &str) -> String {
     format!("{}_files", stem)
 }
 
-// ============================================================================
-// SASS Compilation Integration (Native Only)
-// ============================================================================
-
-/// Write HTML resources with compiled SASS.
+/// Prepare the HTML resource directory without writing CSS.
 ///
-/// This is the SASS-enabled version of [`write_html_resources`]. It compiles
-/// SCSS to CSS based on the theme configuration, or uses default Bootstrap
-/// when no theme is specified.
+/// Creates the `{stem}_files/` directory and returns the resource paths,
+/// but does not write any CSS file. The caller is responsible for writing
+/// CSS content after the render pipeline produces it.
 ///
 /// # Arguments
-///
 /// * `output_dir` - Directory containing the output HTML file
-/// * `stem` - The stem of the output filename
-/// * `theme_config` - Theme configuration (themes, minification settings)
-/// * `context` - Theme context for path resolution
+/// * `stem` - The stem of the output filename (e.g., "document" for "document.html")
 /// * `runtime` - The system runtime for file operations
 ///
 /// # Returns
-///
-/// Paths to the written resources, relative to the output HTML file.
-///
-/// # Example
-///
-/// ```ignore
-/// use quarto_core::resources::write_html_resources_with_sass;
-/// use quarto_sass::{ThemeConfig, ThemeContext};
-///
-/// // Extract theme config from merged document/project config
-/// let theme_config = ThemeConfig::from_config_value(&merged_config)?;
-/// let context = ThemeContext::new(document_dir, &runtime);
-///
-/// let paths = write_html_resources_with_sass(
-///     &output_dir,
-///     "document",
-///     &theme_config,
-///     &context,
-///     &runtime,
-/// )?;
-/// ```
-#[cfg(not(target_arch = "wasm32"))]
-pub fn write_html_resources_with_sass(
+/// Paths to the resource locations, relative to the output HTML file.
+pub fn prepare_html_resources(
     output_dir: &Path,
     stem: &str,
-    theme_config: &quarto_sass::ThemeConfig,
-    context: &quarto_sass::ThemeContext,
     runtime: &dyn SystemRuntime,
 ) -> Result<HtmlResourcePaths> {
-    use quarto_sass::compile_theme_css;
-
     // Create resource directory: {stem}_files/
     let resource_dir_name = format!("{}_files", stem);
     let resource_dir = output_dir.join(&resource_dir_name);
@@ -203,22 +171,8 @@ pub fn write_html_resources_with_sass(
         ))
     })?;
 
-    // Compile CSS from theme config
-    let css = compile_theme_css(theme_config, context)
-        .map_err(|e| crate::error::QuartoError::other(format!("SASS compilation failed: {}", e)))?;
-
-    // Write compiled CSS
+    // Build relative paths for template (CSS file will be written later)
     let css_filename = "styles.css";
-    let css_path = resource_dir.join(css_filename);
-    runtime.file_write(&css_path, css.as_bytes()).map_err(|e| {
-        crate::error::QuartoError::other(format!(
-            "Failed to write CSS to {}: {}",
-            css_path.display(),
-            e
-        ))
-    })?;
-
-    // Build relative paths for template
     let css_relative = format!("{}/{}", resource_dir_name, css_filename);
 
     Ok(HtmlResourcePaths {
@@ -288,83 +242,34 @@ mod tests {
         assert!(paths.js.is_empty());
     }
 
-    // === SASS Integration Tests ===
-
     #[test]
-    fn test_write_html_resources_with_sass_default_theme() {
-        use quarto_sass::{ThemeConfig, ThemeContext};
-
+    fn test_prepare_html_resources_creates_directory() {
         let runtime = NativeRuntime::new();
         let temp = TempDir::new().unwrap();
+        let paths = prepare_html_resources(temp.path(), "document", &runtime).unwrap();
 
-        // Default config (no theme specified)
-        let theme_config = ThemeConfig::default_bootstrap();
-        let context = ThemeContext::new(temp.path().to_path_buf(), &runtime);
-
-        let paths = write_html_resources_with_sass(
-            temp.path(),
-            "document",
-            &theme_config,
-            &context,
-            &runtime,
-        )
-        .unwrap();
-
-        // Should create resource directory
         assert!(paths.resource_dir.exists());
         assert!(paths.resource_dir.ends_with("document_files"));
-
-        // Should write CSS
-        let css_path = temp.path().join("document_files/styles.css");
-        assert!(css_path.exists());
-
-        // Should contain Bootstrap classes
-        let content = fs::read_to_string(&css_path).unwrap();
-        assert!(
-            content.contains(".btn"),
-            "Should contain Bootstrap .btn class"
-        );
-        assert!(
-            content.contains(".container"),
-            "Should contain Bootstrap .container class"
-        );
-
-        // Should be minified (default)
-        let newlines = content.matches('\n').count();
-        assert!(
-            newlines < 100,
-            "Minified CSS should have few newlines, got {}",
-            newlines
-        );
     }
 
     #[test]
-    fn test_write_html_resources_with_sass_builtin_theme() {
-        use quarto_sass::{ThemeConfig, ThemeContext, ThemeSpec};
-
+    fn test_prepare_html_resources_does_not_write_css() {
         let runtime = NativeRuntime::new();
         let temp = TempDir::new().unwrap();
+        let _paths = prepare_html_resources(temp.path(), "mydoc", &runtime).unwrap();
 
-        // Cosmo theme
-        let theme_config = ThemeConfig::new(vec![ThemeSpec::parse("cosmo").unwrap()], true);
-        let context = ThemeContext::new(temp.path().to_path_buf(), &runtime);
-
-        let paths =
-            write_html_resources_with_sass(temp.path(), "mydoc", &theme_config, &context, &runtime)
-                .unwrap();
-
-        // Should write CSS
         let css_path = temp.path().join("mydoc_files/styles.css");
-        assert!(css_path.exists());
+        assert!(!css_path.exists(), "CSS file should not be written yet");
+    }
 
-        // Should contain Bootstrap classes
-        let content = fs::read_to_string(&css_path).unwrap();
-        assert!(content.contains(".btn"));
-        assert!(content.contains(".navbar"));
+    #[test]
+    fn test_prepare_html_resources_returns_correct_paths() {
+        let runtime = NativeRuntime::new();
+        let temp = TempDir::new().unwrap();
+        let paths = prepare_html_resources(temp.path(), "test", &runtime).unwrap();
 
-        // Should return correct relative path
         assert_eq!(paths.css.len(), 1);
-        assert_eq!(paths.css[0], "mydoc_files/styles.css");
+        assert_eq!(paths.css[0], "test_files/styles.css");
     }
 }
 

@@ -51,12 +51,8 @@ interface WasmModuleExtended {
   get_scss_resources_version: () => string;
   compile_scss: (scss: string, minified: boolean, loadPathsJson: string) => Promise<string>;
   compile_scss_with_bootstrap: (scss: string, minified: boolean) => Promise<string>;
-  // Theme-aware CSS compilation (extracts theme from frontmatter)
-  compile_document_css: (content: string, documentPath: string) => Promise<string>;
   compile_theme_css_by_name: (themeName: string, minified: boolean) => Promise<string>;
   compile_default_bootstrap_css: (minified: boolean) => Promise<string>;
-  // Content-based hash for cache keys
-  compute_theme_content_hash: (content: string, documentPath: string) => string;
 }
 
 // WASM module state
@@ -703,18 +699,18 @@ export async function renderToHtml(
     const result: RenderResponse = await renderQmd(documentPath);
 
     if (result.success) {
-      // Compile theme CSS and update VFS
+      // Compute CSS version from the pipeline's CSS artifact in VFS.
+      // CompileThemeCssStage writes correct theme CSS to the VFS artifact.
       // The cssVersion changes when CSS content changes, ensuring HTML differs
-      // even when document structure is the same (e.g., only theme name changed)
+      // even when document structure is the same (e.g., only theme name changed).
       let cssVersion = 'default';
       try {
-        // Read content from VFS to feed the JS-side theme CSS compiler
-        const fileResult = vfsReadFile(documentPath);
-        if (fileResult.success && fileResult.content) {
-          cssVersion = await compileAndInjectThemeCss(fileResult.content, documentPath);
+        const cssResult = vfsReadFile('/.quarto/project-artifacts/styles.css');
+        if (cssResult.success && cssResult.content) {
+          cssVersion = await computeHash(cssResult.content);
         }
       } catch (cssErr) {
-        console.warn('[renderToHtml] Theme CSS compilation failed, using default CSS:', cssErr);
+        console.warn('[renderToHtml] Failed to read CSS artifact for versioning:', cssErr);
       }
 
       // Append CSS version as HTML comment to ensure HTML changes when CSS changes
@@ -789,42 +785,6 @@ export async function renderContentToHtml(
       error: err instanceof Error ? err.message : JSON.stringify(err),
     };
   }
-}
-
-/**
- * Compile theme CSS from document content and inject into VFS.
- *
- * This replaces the default static CSS at /.quarto/project-artifacts/styles.css
- * with compiled theme CSS based on the document's frontmatter.
- *
- * @param qmdContent - The QMD document content
- * @param documentPath - Path to the document in VFS (e.g., "/docs/index.qmd")
- * @returns A version string that changes when CSS content changes (for cache busting)
- * @internal
- */
-async function compileAndInjectThemeCss(qmdContent: string, documentPath: string): Promise<string> {
-  const wasm = getWasm();
-
-  // Check if SASS is available
-  if (!wasm.sass_available()) {
-    console.log('[compileAndInjectThemeCss] SASS not available, keeping default CSS');
-    return 'no-sass';
-  }
-
-  // Extract theme config for versioning - this determines the CSS output
-  const themeConfig = extractThemeConfigForCacheKey(qmdContent);
-
-  // Compile CSS with caching, passing the document path for relative theme resolution
-  console.log('[compileAndInjectThemeCss] documentPath:', documentPath);
-  const css = await compileDocumentCss(qmdContent, { minified: true, documentPath });
-
-  // Update VFS with compiled CSS
-  const cssPath = '/.quarto/project-artifacts/styles.css';
-  vfsAddFile(cssPath, css);
-  console.log('[compileAndInjectThemeCss] Updated VFS with compiled theme CSS, theme:', themeConfig);
-
-  // Return the theme config as the version - this changes exactly when the theme changes
-  return themeConfig;
 }
 
 // ============================================================================
@@ -995,153 +955,6 @@ interface ThemeCssResponse {
   success: boolean;
   css?: string;
   error?: string;
-}
-
-/**
- * Response from theme content hash computation.
- */
-interface ThemeHashResponse {
-  success: boolean;
-  hash?: string;
-  error?: string;
-}
-
-/**
- * Extract theme configuration string from QMD frontmatter for cache key computation.
- *
- * Returns a normalized string representation of the theme config that can be
- * used as part of a cache key. Returns 'default' if no theme is specified.
- *
- * @param content - QMD document content with YAML frontmatter
- * @returns Normalized theme config string for cache key
- */
-export function extractThemeConfigForCacheKey(content: string): string {
-  // Find YAML frontmatter
-  const trimmed = content.trimStart();
-  if (!trimmed.startsWith('---')) {
-    return 'default';
-  }
-
-  // Find closing ---
-  const afterFirst = trimmed.slice(3);
-  const endPos = afterFirst.indexOf('\n---');
-  if (endPos === -1) {
-    return 'default';
-  }
-
-  const yaml = afterFirst.slice(0, endPos);
-
-  // Simple regex to extract theme value from format.html.theme
-  // This handles:
-  // - theme: cosmo
-  // - theme: [cosmo, custom.scss]
-  // - theme:
-  //     - cosmo
-  //     - custom.scss
-  const themeMatch = yaml.match(/^\s*theme:\s*(.+?)(?:\n(?=\s*\w+:)|\n(?=---)|\n*$)/ms);
-  if (!themeMatch) {
-    // Check if there's a format.html section
-    const formatMatch = yaml.match(/format:\s*\n\s+html:\s*\n([\s\S]*?)(?:\n(?=\s*\w+:)|\n(?=---)|\n*$)/m);
-    if (formatMatch) {
-      const htmlSection = formatMatch[1];
-      const innerThemeMatch = htmlSection.match(/^\s*theme:\s*(.+?)(?:\n(?=\s{2,}\w+:)|\n(?=---)|\n*$)/ms);
-      if (innerThemeMatch) {
-        return innerThemeMatch[1].trim();
-      }
-    }
-    return 'default';
-  }
-
-  return themeMatch[1].trim();
-}
-
-/**
- * Compile CSS for a QMD document's theme configuration with caching.
- *
- * Extracts the theme from the document's YAML frontmatter and compiles
- * the appropriate Bootstrap/Bootswatch CSS. Results are cached in IndexedDB
- * based on the theme configuration and minification setting.
- *
- * @param content - The QMD document content (must include YAML frontmatter)
- * @param options - Compilation options
- * @returns The compiled CSS
- * @throws Error if compilation fails
- *
- * @example
- * ```typescript
- * const qmd = `---
- * title: My Document
- * format:
- *   html:
- *     theme: cosmo
- * ---
- *
- * # Hello World
- * `;
- * const css = await compileDocumentCss(qmd, { documentPath: '/index.qmd' });
- * ```
- */
-export async function compileDocumentCss(
-  content: string,
-  options: { minified?: boolean; skipCache?: boolean; documentPath?: string } = {}
-): Promise<string> {
-  await initWasm();
-  const wasm = getWasm();
-
-  // Check if SASS is available
-  if (!wasm.sass_available()) {
-    throw new Error('SASS compilation is not available');
-  }
-
-  const minified = options.minified ?? true;
-  const skipCache = options.skipCache ?? false;
-  // Use relative path as default so VFS normalizes it correctly (e.g., "input.qmd" -> "/project/input.qmd")
-  const documentPath = options.documentPath ?? 'input.qmd';
-
-  // Compute content-based hash for cache key
-  // This hash changes when any source file (built-in or custom SCSS) changes
-  const hashResult: ThemeHashResponse = JSON.parse(
-    wasm.compute_theme_content_hash(content, documentPath)
-  );
-
-  if (!hashResult.success) {
-    throw new Error(hashResult.error || 'Failed to compute theme content hash');
-  }
-
-  const contentHash = hashResult.hash!;
-  // Use "theme-v2" prefix to avoid conflicts with old filename-based cache entries
-  const cacheKey = `theme-v2:${contentHash}:minified=${minified}`;
-
-  // Check cache first (unless explicitly skipped)
-  const cache = getSassCache();
-
-  if (!skipCache) {
-    const cached = await cache.get(cacheKey);
-    if (cached !== null) {
-      console.log('[compileDocumentCss] Cache hit for hash:', contentHash.slice(0, 8));
-      return cached;
-    }
-    console.log('[compileDocumentCss] Cache miss for hash:', contentHash.slice(0, 8));
-  }
-
-  // Compile via WASM (extracts theme from frontmatter and compiles)
-  // Pass document path for resolving relative theme file paths
-  const result: ThemeCssResponse = JSON.parse(
-    await wasm.compile_document_css(content, documentPath)
-  );
-
-  if (!result.success) {
-    throw new Error(result.error || 'Theme CSS compilation failed');
-  }
-
-  const css = result.css || '';
-
-  // Cache the result using the content hash as source identifier
-  if (!skipCache) {
-    await cache.set(cacheKey, css, contentHash, minified);
-  }
-
-  return css;
 }
 
 /**

@@ -147,13 +147,26 @@ impl ThemeConfig {
     }
 }
 
+/// Extract the text content from a ConfigValue, handling both Scalar strings
+/// and PandocInlines (which occur when document frontmatter values are parsed
+/// as markdown by pampa).
+fn config_value_as_text(value: &ConfigValue) -> Option<String> {
+    value
+        .as_str()
+        .map(|s| s.to_string())
+        .or_else(|| value.as_plain_text())
+}
+
 /// Extract theme specifications from a ConfigValue.
 ///
-/// Handles both string and array formats.
+/// Handles both string and array formats. Theme values from document
+/// frontmatter may arrive as PandocInlines (parsed as markdown by pampa),
+/// while values from `_quarto.yml` / `_metadata.yml` arrive as Scalar strings.
+/// Both are handled transparently.
 fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<ThemeSpec>, SassError> {
-    // Handle string value (single theme)
-    if let Some(s) = value.as_str() {
-        let spec = ThemeSpec::parse(s)?;
+    // Handle string value (single theme) — covers both Scalar and PandocInlines
+    if let Some(s) = config_value_as_text(value) {
+        let spec = ThemeSpec::parse(&s)?;
         return Ok(vec![spec]);
     }
 
@@ -161,10 +174,9 @@ fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<ThemeSpec>, SassError>
     if let Some(items) = value.as_array() {
         let mut specs = Vec::with_capacity(items.len());
         for item in items {
-            if let Some(s) = item.as_str() {
-                specs.push(ThemeSpec::parse(s)?);
+            if let Some(s) = config_value_as_text(item) {
+                specs.push(ThemeSpec::parse(&s)?);
             } else {
-                // Array item is not a string
                 return Err(SassError::InvalidThemeConfig {
                     message: "theme array must contain only strings".to_string(),
                 });
@@ -396,6 +408,40 @@ mod tests {
         assert_eq!(specs.len(), 2);
         assert!(specs[0].is_builtin());
         assert!(specs[1].is_builtin());
+    }
+
+    // === PandocInlines tests (document frontmatter parsed by pampa) ===
+
+    #[test]
+    fn test_from_config_value_pandoc_inlines_theme() {
+        use quarto_pandoc_types::inline::{Inline, Str};
+
+        // Simulate pampa parsing `theme: cosmo` as PandocInlines
+        let str_node = Inline::Str(Str {
+            text: "cosmo".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let theme_value = ConfigValue::new_inlines(vec![str_node], SourceInfo::default());
+
+        let root_entry = ConfigMapEntry {
+            key: "theme".to_string(),
+            key_source: SourceInfo::default(),
+            value: theme_value,
+        };
+
+        let config = ConfigValue {
+            value: ConfigValueKind::Map(vec![root_entry]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+        assert_eq!(theme_config.themes.len(), 1);
+        assert!(theme_config.themes[0].is_builtin());
+        assert_eq!(
+            theme_config.themes[0].as_builtin(),
+            Some(crate::themes::BuiltInTheme::Cosmo)
+        );
     }
 
     // === Flattened config helpers (post-MetadataMergeStage format) ===

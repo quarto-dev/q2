@@ -86,6 +86,28 @@ beforeAll(async () => {
 
   wasm = (await import('wasm-quarto-hub-client')) as unknown as WasmModule;
   await wasm.default(wasmBytes);
+
+  // Set up VFS callbacks for the SASS importer so that dart-sass can resolve
+  // @use/@import directives against the VFS (Bootstrap SCSS files, etc.)
+  const sassModule = await import('../wasm-js-bridge/sass.js');
+  sassModule.setVfsCallbacks(
+    (path: string): string | null => {
+      try {
+        const result = JSON.parse(wasm.vfs_read_file(path)) as { success: boolean; content?: string };
+        return result.success && result.content !== undefined ? result.content : null;
+      } catch {
+        return null;
+      }
+    },
+    (path: string): boolean => {
+      try {
+        const result = JSON.parse(wasm.vfs_read_file(path)) as { success: boolean; content?: string };
+        return result.success && result.content !== undefined;
+      } catch {
+        return false;
+      }
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

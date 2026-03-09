@@ -1,0 +1,15 @@
+---
+title: Root Document
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["--bs-primary:.*#375a7f"]
+        - ["#2c3e50", "Base Styles"]
+---
+
+## Root Document
+
+This document has no theme override and should inherit darkly from `_quarto.yml`.

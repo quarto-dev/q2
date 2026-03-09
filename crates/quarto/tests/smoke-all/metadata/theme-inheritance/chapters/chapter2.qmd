@@ -1,0 +1,17 @@
+---
+title: Chapter 2
+format: html
+theme: cosmo
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["--bs-primary:.*#2780e3"]
+        - ["#2c3e50", "#375a7f"]
+---
+
+## Chapter 2
+
+This document sets `theme: cosmo` in frontmatter, overriding both the
+directory-level flatly and the project-level darkly.
