@@ -83,6 +83,8 @@ Rust calls via `wasm_bindgen(raw_module = ...)`:
 - `sass.js` — SCSS compilation via dart-sass (lazy-loaded)
 - `sass.d.ts` — TypeScript declarations for sass.js
 
+Each `.js` bridge file has a corresponding `.d.ts` for TypeScript consumers.
+
 The `raw_module` path uses `/src/...` (absolute from project root in Vite's
 dev server). This is resolved by Vite at build time.
 
@@ -101,16 +103,8 @@ cd hub-client && npm run test        # Interactive watch mode
 cd hub-client && npm run test:ci     # CI mode (no watch, exits)
 ```
 
-For IndexedDB testing, you'll need `fake-indexeddb`. Check if it's already
-a dev dependency:
-```bash
-cat hub-client/package.json | jq '.devDependencies["fake-indexeddb"]'
-```
-If not, install it:
-```bash
-cd /path/to/repo && npm install --save-dev fake-indexeddb
-```
-(Always `npm install` from repo root — this project uses npm workspaces.)
+For IndexedDB testing, use `fake-indexeddb` (already a dev dependency at
+`^6.0.0`).
 
 In the test file, set up fake-indexeddb before tests:
 ```typescript
@@ -140,7 +134,7 @@ The WASM runtime delegates to JavaScript for persistent caching.
 
 **JS bridge functions** (in `hub-client/src/wasm-js-bridge/`):
 
-- [ ] Create `hub-client/src/wasm-js-bridge/cache.js`:
+- [x] Create `hub-client/src/wasm-js-bridge/cache.js`:
   ```javascript
   // Called from Rust via wasm-bindgen
   export async function jsCacheGet(namespace, key) { ... }
@@ -150,13 +144,15 @@ The WASM runtime delegates to JavaScript for persistent caching.
   ```
   Follow the style of `sass.js`: JSDoc annotations, clean error messages,
   module-level lazy initialization of IndexedDB.
-- [ ] Storage: Use IndexedDB with a `quarto-cache` database and a `cache`
+- [x] Create `hub-client/src/wasm-js-bridge/cache.d.ts` with TypeScript
+  declarations for the bridge functions (matching the pattern of `sass.d.ts`).
+- [x] Storage: Use IndexedDB with a `quarto-cache` database and a `cache`
   object store. Key format: `"<namespace>:<key>"`. Value stored as
   `{ namespace, key, value: Uint8Array, timestamp }`.
   This is simpler than the existing `SassCacheManager` — no LRU needed for v1.
   Lazy-open the database on first access (similar to how `sass.js` lazy-loads
   the sass module).
-- [ ] Wire up in `crates/quarto-system-runtime/src/wasm.rs`:
+- [x] Wire up in `crates/quarto-system-runtime/src/wasm.rs`:
   - Add `#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/cache.js")]`
     extern declarations for the JS functions (matching the existing pattern
     for `sass.js` and `template.js`)
@@ -168,6 +164,9 @@ The WASM runtime delegates to JavaScript for persistent caching.
   - For `jsCacheDelete` and `jsCacheClearNamespace`: similar patterns
   - Implement `cache_get`/`cache_set`/`cache_delete`/`cache_clear_namespace`
     on `WasmRuntime` by calling the JS bridge
+  - Validate namespace and key at the top of each method using
+    `crate::traits::validate_cache_namespace`/`validate_cache_key` before
+    calling into JS (matching NativeRuntime, which also validates early)
   - Convert between `Vec<u8>` and JS `Uint8Array` (see orientation above)
   - Handle JS promise results via `JsFuture::from(js_sys::Promise::from(...))`
   - On JS errors, return `Err(RuntimeError::CacheError(...))`
@@ -177,7 +176,7 @@ The WASM runtime delegates to JavaScript for persistent caching.
 **Tests (JS unit tests only — true Rust→JS→IndexedDB integration testing
 deferred to the first consumer plan):**
 
-- [ ] JS unit tests for the bridge functions in vitest
+- [x] JS unit tests for the bridge functions in vitest
   (`hub-client/src/wasm-js-bridge/cache.test.ts`):
   - Import `fake-indexeddb/auto` at top for IndexedDB polyfill
   - Import the bridge functions directly from `./cache.js`
@@ -187,17 +186,17 @@ deferred to the first consumer plan):**
   - `test_cache_namespaces_isolated` — different namespaces don't collide
   - `test_cache_clear_namespace` — only clears targeted namespace
   - `test_cache_delete` — removes single entry
-  - Clean up IndexedDB between tests (delete the database or clear the store)
+  - Clean up IndexedDB between tests: delete the database in `beforeEach`
+    for full isolation (using `indexedDB.deleteDatabase("quarto-cache")`
+    and resetting the module-level db handle)
 
 ## Verification
 
-- [ ] `cargo build --workspace` — compiles (Rust workspace, excludes WASM)
-- [ ] `cargo nextest run --workspace` — all Rust tests pass
-- [ ] `cargo xtask verify` — Full verification: WASM builds and hub-client
-  tests pass. This is the critical check — it verifies that `wasm.rs`
-  compiles for the `wasm32-unknown-unknown` target and that the JS bridge
-  files are correctly wired up.
-- [ ] No callers yet — this is infrastructure only
+- [x] `cargo build --workspace` — compiles (Rust workspace, excludes WASM)
+- [x] `cargo nextest run --workspace` — 6582 tests pass
+- [x] `cargo xtask verify` — Full verification passes (WASM builds, 50
+  hub-client tests pass including 5 new cache bridge tests)
+- [x] No callers yet — this is infrastructure only
 
 ## Reference
 

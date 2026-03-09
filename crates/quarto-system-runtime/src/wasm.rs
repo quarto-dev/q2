@@ -119,6 +119,47 @@ extern "C" {
     ) -> Result<JsValue, JsValue>;
 }
 
+// =============================================================================
+// JavaScript Interop for Cache Operations
+// =============================================================================
+//
+// These extern declarations define the JavaScript functions for cache operations
+// backed by IndexedDB. Used for persistent caching of expensive computed results.
+//
+// The functions are expected to be provided via a module at the path specified.
+// In hub-client, this is at: /src/wasm-js-bridge/cache.js
+
+#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/cache.js")]
+extern "C" {
+    /// Get a cached value by namespace and key.
+    ///
+    /// Returns a Promise resolving to Uint8Array (hit) or null (miss).
+    #[wasm_bindgen(js_name = "jsCacheGet", catch)]
+    fn js_cache_get_impl(namespace: &str, key: &str) -> Result<JsValue, JsValue>;
+
+    /// Store a value in the cache.
+    ///
+    /// Returns a Promise resolving to undefined.
+    #[wasm_bindgen(js_name = "jsCacheSet", catch)]
+    fn js_cache_set_impl(
+        namespace: &str,
+        key: &str,
+        value: &js_sys::Uint8Array,
+    ) -> Result<JsValue, JsValue>;
+
+    /// Delete a cached value by namespace and key.
+    ///
+    /// Returns a Promise resolving to undefined.
+    #[wasm_bindgen(js_name = "jsCacheDelete", catch)]
+    fn js_cache_delete_impl(namespace: &str, key: &str) -> Result<JsValue, JsValue>;
+
+    /// Clear all cached values in a namespace.
+    ///
+    /// Returns a Promise resolving to undefined.
+    #[wasm_bindgen(js_name = "jsCacheClearNamespace", catch)]
+    fn js_cache_clear_namespace_impl(namespace: &str) -> Result<JsValue, JsValue>;
+}
+
 /// Counter for generating unique temp directory names in WASM.
 /// SystemTime::now() is not available in WASM, so we use a simple counter.
 static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -795,6 +836,82 @@ impl SystemRuntime for WasmRuntime {
         result
             .as_string()
             .ok_or_else(|| RuntimeError::SassError("Result was not a string".to_string()))
+    }
+
+    // =========================================================================
+    // CACHING
+    // =========================================================================
+    //
+    // These methods delegate to JavaScript IndexedDB via wasm-bindgen.
+    // The JavaScript implementation is provided by hub-client at:
+    // /src/wasm-js-bridge/cache.js
+
+    async fn cache_get(&self, namespace: &str, key: &str) -> RuntimeResult<Option<Vec<u8>>> {
+        crate::traits::validate_cache_namespace(namespace)?;
+        crate::traits::validate_cache_key(key)?;
+
+        let promise = js_cache_get_impl(namespace, key)
+            .map_err(|e| RuntimeError::CacheError(format!("Failed to call jsCacheGet: {:?}", e)))?;
+
+        let result = JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| RuntimeError::CacheError(format!("Cache get failed: {:?}", e)))?;
+
+        if result.is_null() || result.is_undefined() {
+            return Ok(None);
+        }
+
+        let uint8_array = js_sys::Uint8Array::new(&result);
+        let mut bytes = vec![0u8; uint8_array.length() as usize];
+        uint8_array.copy_to(&mut bytes);
+        Ok(Some(bytes))
+    }
+
+    async fn cache_set(&self, namespace: &str, key: &str, value: &[u8]) -> RuntimeResult<()> {
+        crate::traits::validate_cache_namespace(namespace)?;
+        crate::traits::validate_cache_key(key)?;
+
+        let js_array = js_sys::Uint8Array::from(value);
+
+        let promise = js_cache_set_impl(namespace, key, &js_array)
+            .map_err(|e| RuntimeError::CacheError(format!("Failed to call jsCacheSet: {:?}", e)))?;
+
+        JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| RuntimeError::CacheError(format!("Cache set failed: {:?}", e)))?;
+
+        Ok(())
+    }
+
+    async fn cache_delete(&self, namespace: &str, key: &str) -> RuntimeResult<()> {
+        crate::traits::validate_cache_namespace(namespace)?;
+        crate::traits::validate_cache_key(key)?;
+
+        let promise = js_cache_delete_impl(namespace, key).map_err(|e| {
+            RuntimeError::CacheError(format!("Failed to call jsCacheDelete: {:?}", e))
+        })?;
+
+        JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| RuntimeError::CacheError(format!("Cache delete failed: {:?}", e)))?;
+
+        Ok(())
+    }
+
+    async fn cache_clear_namespace(&self, namespace: &str) -> RuntimeResult<()> {
+        crate::traits::validate_cache_namespace(namespace)?;
+
+        let promise = js_cache_clear_namespace_impl(namespace).map_err(|e| {
+            RuntimeError::CacheError(format!("Failed to call jsCacheClearNamespace: {:?}", e))
+        })?;
+
+        JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| {
+                RuntimeError::CacheError(format!("Cache clear namespace failed: {:?}", e))
+            })?;
+
+        Ok(())
     }
 }
 
