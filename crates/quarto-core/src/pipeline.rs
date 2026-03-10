@@ -733,4 +733,120 @@ mod tests {
         let result = build_html_pipeline_with_stages(stages);
         assert!(result.is_err());
     }
+
+    // === Theme CSS integration tests ===
+
+    use crate::project::ProjectConfig;
+    use crate::resources::DEFAULT_CSS;
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
+    use quarto_source_map::SourceInfo;
+    use yaml_rust2::Yaml;
+
+    fn project_with_theme(theme: &str) -> ProjectContext {
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        let entry = ConfigMapEntry {
+            key: "theme".to_string(),
+            key_source: SourceInfo::default(),
+            value: theme_value,
+        };
+        let metadata = ConfigValue {
+            value: ConfigValueKind::Map(vec![entry]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig::with_metadata(metadata)),
+            is_single_file: false,
+            files: vec![DocumentInfo::from_path("/project/test.qmd")],
+            output_dir: PathBuf::from("/project"),
+        }
+    }
+
+    fn get_css_artifact(ctx: &crate::render::RenderContext) -> String {
+        let artifact = ctx
+            .artifacts
+            .get("css:default")
+            .expect("css:default artifact missing");
+        String::from_utf8(artifact.content.clone()).expect("CSS should be valid UTF-8")
+    }
+
+    #[test]
+    fn test_render_pipeline_theme_from_project() {
+        let content = b"---\ntitle: Test\n---\n\nContent.";
+
+        let project = project_with_theme("darkly");
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let _output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        let css = get_css_artifact(&ctx);
+        assert_ne!(css, DEFAULT_CSS, "should not be default CSS");
+        assert!(
+            css.contains("#375a7f"),
+            "darkly theme should contain primary color #375a7f"
+        );
+    }
+
+    #[test]
+    fn test_render_pipeline_theme_from_document_overrides_project() {
+        // Project has darkly, document has flatly — document should win
+        let content = b"---\ntitle: Test\ntheme: flatly\n---\n\nContent.";
+
+        let project = project_with_theme("darkly");
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let _output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        let css = get_css_artifact(&ctx);
+        assert!(
+            css.contains("#2c3e50"),
+            "flatly theme should contain primary color #2c3e50"
+        );
+        assert!(
+            !css.contains("#375a7f"),
+            "darkly primary color should not be present"
+        );
+    }
+
+    #[test]
+    fn test_render_pipeline_no_theme_uses_default() {
+        let content = b"---\ntitle: Test\n---\n\nContent.";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let _output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        let css = get_css_artifact(&ctx);
+        assert_eq!(css, DEFAULT_CSS, "no theme should produce DEFAULT_CSS");
+    }
 }

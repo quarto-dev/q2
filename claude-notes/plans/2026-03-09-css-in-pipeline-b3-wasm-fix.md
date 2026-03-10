@@ -268,4 +268,4 @@ correctly (~240KB). Only the final compilation step failed silently
 - [x] Run hub-client tests — 39 passed (5 test files)
 - [x] Run `cargo xtask verify` — full green
 - [x] Update B1 plan Phase 4 checklist
-- [ ] Commit all Phase 4 + B3 changes together
+- [x] Commit all Phase 4 + B3 changes together (`60750e13`)
