@@ -2,8 +2,17 @@
  * Type declarations for the cache bridge module.
  */
 
+/** Maximum number of entries before eviction triggers. */
+export const MAX_ENTRIES: number;
+
+/** Maximum total size in bytes before eviction triggers (50MB). */
+export const MAX_TOTAL_SIZE: number;
+
 /**
  * Get a cached value by namespace and key.
+ *
+ * On a cache hit, the entry's timestamp is updated (touch-on-read)
+ * so that actively-used entries survive LRU eviction.
  *
  * @param namespace - Cache namespace (e.g. "sass", "metadata")
  * @param key - Cache key (typically a hex-encoded hash)
@@ -15,7 +24,7 @@ export function jsCacheGet(
 ): Promise<Uint8Array | null>;
 
 /**
- * Store a value in the cache.
+ * Store a value in the cache. Evicts oldest entries if limits are exceeded.
  *
  * @param namespace - Cache namespace
  * @param key - Cache key

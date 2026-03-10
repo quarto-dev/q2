@@ -1730,6 +1730,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -1848,6 +1849,7 @@ dependencies = [
  "quarto-system-runtime",
  "regex",
  "serde",
+ "sha2",
  "thiserror 2.0.18",
 ]
 
@@ -2957,7 +2959,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "sha2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

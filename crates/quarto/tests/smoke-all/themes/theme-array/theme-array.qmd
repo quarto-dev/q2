@@ -1,0 +1,20 @@
+---
+title: Theme Array Test
+format:
+  html:
+    theme:
+      - vapor
+      - custom.scss
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "smoke-test-custom-rule", "#abc123"]
+---
+
+## Theme Array
+
+This tests that a theme array with a built-in theme (vapor) plus a
+custom SCSS file produces CSS containing both the built-in theme
+variables and the custom rule.

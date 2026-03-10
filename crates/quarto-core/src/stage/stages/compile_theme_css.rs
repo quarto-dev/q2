@@ -58,13 +58,52 @@ impl Default for CompileThemeCssStage {
     }
 }
 
-/// Compute a cache key from the assembled SCSS and minification flag.
-fn cache_key(scss: &str, minified: bool) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    scss.hash(&mut hasher);
-    minified.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+/// Compute a cache key from theme specifications, the SCSS resources hash,
+/// and custom file contents.
+///
+/// The key is `SHA256(SCSS_RESOURCES_HASH + theme_identities + custom_file_contents + minified)`.
+/// Built-in themes contribute only their name (content is already covered by
+/// `SCSS_RESOURCES_HASH`). Custom themes contribute their resolved path and file contents.
+fn cache_key(
+    theme_config: &ThemeConfig,
+    theme_context: &ThemeContext<'_>,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+) -> Result<String, String> {
+    use quarto_sass::{SCSS_RESOURCES_HASH, ThemeSpec};
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+
+    // Include the build-time hash of all built-in SCSS resources
+    hasher.update(SCSS_RESOURCES_HASH.as_bytes());
+
+    // Include each theme's identity and (for custom themes) content
+    for spec in &theme_config.themes {
+        match spec {
+            ThemeSpec::BuiltIn(theme) => {
+                hasher.update(b"builtin:");
+                hasher.update(theme.name().as_bytes());
+            }
+            ThemeSpec::Custom(path) => {
+                let resolved = theme_context.resolve_path(path);
+                hasher.update(b"custom:");
+                hasher.update(resolved.to_string_lossy().as_bytes());
+                hasher.update(b"\n");
+                // Read custom file contents for the key
+                let contents = runtime.file_read(&resolved).map_err(|e| {
+                    format!("failed to read custom theme {}: {}", resolved.display(), e)
+                })?;
+                hasher.update(&contents);
+            }
+        }
+        hasher.update(b"\n");
+    }
+
+    // Include minification flag
+    hasher.update(if theme_config.minified { b"1" } else { b"0" });
+
+    let hash = hasher.finalize();
+    Ok(format!("{:x}", hash))
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
@@ -121,7 +160,7 @@ impl PipelineStage for CompileThemeCssStage {
             return Ok(PipelineData::DocumentAst(doc));
         }
 
-        // Assemble SCSS from theme config
+        // Create ThemeContext (needed for both cache key and assembly)
         let document_dir = doc
             .path
             .parent()
@@ -129,6 +168,38 @@ impl PipelineStage for CompileThemeCssStage {
             .unwrap_or_else(|| PathBuf::from("."));
         let theme_context = ThemeContext::new(document_dir, ctx.runtime.as_ref());
 
+        // Compute cache key BEFORE assembly (reads custom files, but skips SCSS assembly)
+        let key = match cache_key(&theme_config, &theme_context, ctx.runtime.as_ref()) {
+            Ok(k) => k,
+            Err(e) => {
+                trace_event!(
+                    ctx,
+                    EventLevel::Warn,
+                    "failed to compute cache key: {}, compiling without cache",
+                    e
+                );
+                // Fall through with no cache key — will compile without caching
+                String::new()
+            }
+        };
+
+        // Check cache (best-effort — errors are non-fatal)
+        if !key.is_empty() {
+            if let Ok(Some(cached)) = ctx.runtime.cache_get("sass", &key).await {
+                if let Ok(css) = String::from_utf8(cached) {
+                    trace_event!(
+                        ctx,
+                        EventLevel::Debug,
+                        "cache hit for theme CSS (key={})",
+                        key
+                    );
+                    store_css(ctx, css);
+                    return Ok(PipelineData::DocumentAst(doc));
+                }
+            }
+        }
+
+        // Cache miss — assemble and compile
         let (scss, load_paths) = match assemble_theme_scss(&theme_config, &theme_context) {
             Ok(result) => result,
             Err(e) => {
@@ -143,23 +214,6 @@ impl PipelineStage for CompileThemeCssStage {
             }
         };
 
-        let key = cache_key(&scss, theme_config.minified);
-
-        // Check cache (best-effort — errors are non-fatal)
-        if let Ok(Some(cached)) = ctx.runtime.cache_get("sass", &key).await {
-            if let Ok(css) = String::from_utf8(cached) {
-                trace_event!(
-                    ctx,
-                    EventLevel::Debug,
-                    "cache hit for theme CSS (key={})",
-                    key
-                );
-                store_css(ctx, css);
-                return Ok(PipelineData::DocumentAst(doc));
-            }
-        }
-
-        // Cache miss — compile
         trace_event!(
             ctx,
             EventLevel::Debug,
@@ -172,8 +226,10 @@ impl PipelineStage for CompileThemeCssStage {
 
         match css {
             Ok(css) => {
-                // Store in cache (best-effort)
-                let _ = ctx.runtime.cache_set("sass", &key, css.as_bytes()).await;
+                // Store in cache (best-effort, skip if no key)
+                if !key.is_empty() {
+                    let _ = ctx.runtime.cache_set("sass", &key, css.as_bytes()).await;
+                }
                 store_css(ctx, css);
             }
             Err(e) => {
@@ -254,6 +310,7 @@ mod tests {
     use crate::stage::DocumentAst;
     use quarto_pandoc_types::pandoc::Pandoc;
     use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
+    use quarto_sass::ThemeSpec;
     use quarto_source_map::{SourceContext, SourceInfo};
     use quarto_system_runtime::TempDir;
     use std::sync::Arc;
@@ -576,24 +633,333 @@ mod tests {
         assert_eq!(css, DEFAULT_CSS);
     }
 
+    /// Helper to create a theme array metadata (e.g., `theme: [cosmo, custom.scss]`)
+    fn meta_with_theme_array(themes: &[&str]) -> ConfigValue {
+        let items: Vec<ConfigValue> = themes
+            .iter()
+            .map(|s| ConfigValue {
+                value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+                source_info: SourceInfo::default(),
+                merge_op: quarto_pandoc_types::MergeOp::Concat,
+            })
+            .collect();
+
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Array(items),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+
+        let root_entry = ConfigMapEntry {
+            key: "theme".to_string(),
+            key_source: SourceInfo::default(),
+            value: theme_value,
+        };
+
+        ConfigValue {
+            value: ConfigValueKind::Map(vec![root_entry]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        }
+    }
+
+    /// Helper to create a doc_ast with a custom document path (for custom theme resolution)
+    fn make_doc_ast_at(path: &str, meta: ConfigValue) -> PipelineData {
+        PipelineData::DocumentAst(DocumentAst {
+            path: PathBuf::from(path),
+            ast: Pandoc {
+                meta,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        })
+    }
+
+    /// Helper to create a stage context with a custom project dir
+    fn make_stage_context_at(
+        runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+        project_dir: &str,
+    ) -> StageContext {
+        let project = ProjectContext {
+            dir: PathBuf::from(project_dir),
+            config: None,
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from(project_dir),
+        };
+        let doc_path = format!("{}/test.qmd", project_dir);
+        let doc = DocumentInfo::from_path(&doc_path);
+        let format = Format::html();
+        StageContext::new(runtime, format, project, doc).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_builtin_plus_custom_theme_array() {
+        // Use the quarto-sass test fixture directory as the "document dir"
+        let fixture_dir =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../quarto-sass/test-fixtures/custom");
+        let fixture_dir = fixture_dir.canonicalize().unwrap();
+        let doc_path = fixture_dir.join("test.qmd");
+
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context_at(runtime, fixture_dir.to_str().unwrap());
+        let stage = CompileThemeCssStage::new();
+
+        // theme: [cosmo, override.scss]
+        let meta = meta_with_theme_array(&["cosmo", "override.scss"]);
+        let input = make_doc_ast_at(doc_path.to_str().unwrap(), meta);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+
+        assert!(output.into_document_ast().is_some());
+
+        let css = get_css_artifact(&ctx);
+        // Should NOT be the static default
+        assert_ne!(
+            css, DEFAULT_CSS,
+            "should compile themed CSS, not fall back to default"
+        );
+        // Should have Bootstrap classes (from cosmo)
+        assert!(css.contains(".btn"), "compiled CSS should contain .btn");
+        // Should have the custom rule from override.scss
+        assert!(
+            css.contains(".custom-rule"),
+            "compiled CSS should contain .custom-rule from override.scss"
+        );
+    }
+
+    fn make_builtin_config(theme: &str, minified: bool) -> ThemeConfig {
+        let spec = ThemeSpec::parse(theme).unwrap();
+        ThemeConfig {
+            themes: vec![spec],
+            minified,
+        }
+    }
+
+    fn make_custom_config(path: &str, minified: bool) -> ThemeConfig {
+        ThemeConfig {
+            themes: vec![ThemeSpec::Custom(PathBuf::from(path))],
+            minified,
+        }
+    }
+
     #[test]
     fn test_cache_key_deterministic() {
-        let key1 = cache_key("scss content", true);
-        let key2 = cache_key("scss content", true);
+        let runtime = MockRuntime;
+        let config = make_builtin_config("cosmo", true);
+        let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
+        let key1 = cache_key(&config, &ctx, &runtime).unwrap();
+        let key2 = cache_key(&config, &ctx, &runtime).unwrap();
         assert_eq!(key1, key2);
+        // SHA-256 hex should be 64 chars
+        assert_eq!(key1.len(), 64);
     }
 
     #[test]
     fn test_cache_key_differs_for_minified() {
-        let key_min = cache_key("scss content", true);
-        let key_nomin = cache_key("scss content", false);
+        let runtime = MockRuntime;
+        let config_min = make_builtin_config("cosmo", true);
+        let config_nomin = make_builtin_config("cosmo", false);
+        let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
+        let key_min = cache_key(&config_min, &ctx, &runtime).unwrap();
+        let key_nomin = cache_key(&config_nomin, &ctx, &runtime).unwrap();
         assert_ne!(key_min, key_nomin);
     }
 
     #[test]
-    fn test_cache_key_differs_for_content() {
-        let key1 = cache_key("content A", true);
-        let key2 = cache_key("content B", true);
+    fn test_cache_key_differs_for_different_themes() {
+        let runtime = MockRuntime;
+        let config_cosmo = make_builtin_config("cosmo", true);
+        let config_darkly = make_builtin_config("darkly", true);
+        let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
+        let key1 = cache_key(&config_cosmo, &ctx, &runtime).unwrap();
+        let key2 = cache_key(&config_darkly, &ctx, &runtime).unwrap();
         assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_cache_key_custom_file_reads_content() {
+        // MockRuntime returns empty bytes for file_read, so two different
+        // custom paths with the same (empty) content but different paths
+        // should still differ.
+        let runtime = MockRuntime;
+        let config_a = make_custom_config("theme_a.scss", true);
+        let config_b = make_custom_config("theme_b.scss", true);
+        let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
+        let key_a = cache_key(&config_a, &ctx, &runtime).unwrap();
+        let key_b = cache_key(&config_b, &ctx, &runtime).unwrap();
+        assert_ne!(key_a, key_b);
+    }
+
+    #[test]
+    fn test_cache_key_custom_file_different_content() {
+        // Create a runtime that returns different content for different files
+        struct ContentRuntime;
+        impl quarto_system_runtime::SystemRuntime for ContentRuntime {
+            fn file_read(
+                &self,
+                path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+                // Return content based on filename
+                Ok(path.to_string_lossy().as_bytes().to_vec())
+            }
+            fn file_write(
+                &self,
+                _path: &std::path::Path,
+                _contents: &[u8],
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn path_exists(
+                &self,
+                _path: &std::path::Path,
+                _kind: Option<quarto_system_runtime::PathKind>,
+            ) -> quarto_system_runtime::RuntimeResult<bool> {
+                Ok(true)
+            }
+            fn canonicalize(
+                &self,
+                path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(path.to_path_buf())
+            }
+            fn path_metadata(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::PathMetadata>
+            {
+                unimplemented!()
+            }
+            fn file_copy(
+                &self,
+                _src: &std::path::Path,
+                _dst: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn path_rename(
+                &self,
+                _old: &std::path::Path,
+                _new: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn file_remove(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_create(
+                &self,
+                _path: &std::path::Path,
+                _recursive: bool,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_remove(
+                &self,
+                _path: &std::path::Path,
+                _recursive: bool,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_list(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<Vec<PathBuf>> {
+                Ok(vec![])
+            }
+            fn cwd(&self) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(PathBuf::from("/"))
+            }
+            fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
+                Ok(TempDir::new(PathBuf::from("/tmp/test")))
+            }
+            fn exec_pipe(
+                &self,
+                _command: &str,
+                _args: &[&str],
+                _stdin: &[u8],
+            ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+                Ok(vec![])
+            }
+            fn exec_command(
+                &self,
+                _command: &str,
+                _args: &[&str],
+                _stdin: Option<&[u8]>,
+            ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::CommandOutput>
+            {
+                Ok(quarto_system_runtime::CommandOutput {
+                    code: 0,
+                    stdout: vec![],
+                    stderr: vec![],
+                })
+            }
+            fn env_get(&self, _name: &str) -> quarto_system_runtime::RuntimeResult<Option<String>> {
+                Ok(None)
+            }
+            fn env_all(
+                &self,
+            ) -> quarto_system_runtime::RuntimeResult<std::collections::HashMap<String, String>>
+            {
+                Ok(std::collections::HashMap::new())
+            }
+            fn fetch_url(
+                &self,
+                _url: &str,
+            ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+                Err(quarto_system_runtime::RuntimeError::NotSupported(
+                    "mock".to_string(),
+                ))
+            }
+            fn os_name(&self) -> &'static str {
+                "mock"
+            }
+            fn arch(&self) -> &'static str {
+                "mock"
+            }
+            fn cpu_time(&self) -> quarto_system_runtime::RuntimeResult<u64> {
+                Ok(0)
+            }
+            fn xdg_dir(
+                &self,
+                _kind: quarto_system_runtime::XdgDirKind,
+                _subpath: Option<&std::path::Path>,
+            ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(PathBuf::from("/xdg"))
+            }
+            fn stdout_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn stderr_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+        }
+
+        // Same file path but runtime returns path-based content
+        let runtime = ContentRuntime;
+        let config = make_custom_config("theme.scss", true);
+        let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
+        let key1 = cache_key(&config, &ctx, &runtime).unwrap();
+
+        // Same config, same runtime → same key (deterministic)
+        let key2 = cache_key(&config, &ctx, &runtime).unwrap();
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_cache_key_builtin_no_file_reads() {
+        // Built-in themes should not cause file reads. MockRuntime returns
+        // Ok(vec![]) for file_read, but we verify the key is valid and
+        // doesn't depend on file content.
+        let runtime = MockRuntime;
+        let config = make_builtin_config("cosmo", true);
+        let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
+        let key = cache_key(&config, &ctx, &runtime).unwrap();
+        assert_eq!(key.len(), 64); // SHA-256 hex
     }
 }

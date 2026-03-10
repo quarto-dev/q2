@@ -1,8 +1,9 @@
-//! Build script for wasm-quarto-hub-client.
+//! Build script for quarto-sass.
 //!
-//! Computes a hash of all embedded SCSS resources at build time.
-//! This hash is used to invalidate the SASS cache in hub-client when
-//! the embedded SCSS files change.
+//! Computes a SHA-256 hash of all embedded SCSS resources at build time.
+//! This hash is used as part of the CSS cache key so that changes to
+//! built-in SCSS files (Bootstrap, themes, Quarto customizations) invalidate
+//! the cache without needing to read every file at runtime.
 
 use sha2::{Digest, Sha256};
 use std::env;
@@ -14,15 +15,11 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let scss_hash = compute_scss_resources_hash();
 
-    // Write hash to file for include_str!
     let hash_path = Path::new(&out_dir).join("scss_resources_hash.txt");
     let mut file = File::create(&hash_path).expect("Failed to create hash file");
     write!(file, "{}", scss_hash).expect("Failed to write hash");
 
-    // Tell Cargo to rerun if any SCSS file changes
     println!("cargo:rerun-if-changed=../../resources/scss");
-
-    // Also rerun if build.rs changes
     println!("cargo:rerun-if-changed=build.rs");
 }
 
@@ -34,10 +31,9 @@ fn compute_scss_resources_hash() -> String {
 
     let mut hasher = Sha256::new();
     let mut files: Vec<_> = collect_scss_files(scss_dir);
-    files.sort(); // Deterministic ordering
+    files.sort();
 
     for file_path in files {
-        // Hash the relative path (for determinism across machines)
         let rel_path = file_path
             .strip_prefix(scss_dir)
             .unwrap_or(&file_path)
@@ -45,7 +41,6 @@ fn compute_scss_resources_hash() -> String {
         hasher.update(rel_path.as_bytes());
         hasher.update(b"\n");
 
-        // Hash the file contents
         if let Ok(contents) = fs::read(&file_path) {
             hasher.update(&contents);
         }

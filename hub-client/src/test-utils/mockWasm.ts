@@ -84,7 +84,6 @@ export interface MockWasmRenderer {
 
   // SASS operations
   sassAvailable(): Promise<boolean>;
-  compileScss(scss: string, options?: { minified?: boolean }): Promise<string>;
 
   // Test helpers
   _getVfs(): Map<string, string | Uint8Array>;
@@ -300,16 +299,6 @@ export function createMockWasmRenderer(options: MockWasmOptions = {}): MockWasmR
     // SASS operations
     async sassAvailable(): Promise<boolean> {
       return isSassAvailable;
-    },
-
-    async compileScss(_scss: string, _options?: { minified?: boolean }): Promise<string> {
-      if (sassError) {
-        throw sassError;
-      }
-      if (!isSassAvailable) {
-        throw new Error('SASS compilation is not available');
-      }
-      return compiledCss;
     },
 
     // Test helpers

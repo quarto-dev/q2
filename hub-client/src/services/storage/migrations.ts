@@ -87,22 +87,12 @@ export const migrations: Migration[] = [
       }
     },
   },
-  // Migration 2→3: Add SASS compilation cache
+  // Migration 2→3: Previously created sassCache store. SASS caching has moved
+  // to the quarto-cache IndexedDB (via wasm-js-bridge/cache.js). This migration
+  // is kept as a no-op so existing v3 databases don't trigger version mismatches.
   {
     version: 3,
-    description: 'Add SASS compilation cache for faster subsequent renders',
-    structural: (db) => {
-      // Create sassCache store for caching compiled CSS
-      // Uses LRU eviction based on lastUsed timestamp
-      if (!db.objectStoreNames.contains(STORES.SASS_CACHE)) {
-        const store = db.createObjectStore(STORES.SASS_CACHE, { keyPath: 'key' });
-        // Index for LRU eviction (oldest entries first)
-        store.createIndex('lastUsed', 'lastUsed');
-        // Index for size-based queries during eviction
-        store.createIndex('size', 'size');
-      }
-    },
-    // No transform needed - cache starts empty
+    description: 'No-op (sassCache store is now inert — caching moved to quarto-cache DB)',
   },
 ];
 

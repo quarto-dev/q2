@@ -18,6 +18,9 @@ quarto-system-runtime.workspace = true
 # ConfigValue for theme config extraction
 quarto-pandoc-types.workspace = true
 
+[build-dependencies]
+sha2 = "0.10"
+
 [dev-dependencies]
 insta.workspace = true
 serde_json.workspace = true

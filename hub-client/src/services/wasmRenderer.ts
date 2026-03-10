@@ -6,7 +6,6 @@
  */
 
 import type { Diagnostic, RenderResponse } from '../types/diagnostic';
-import { getSassCache, computeHash } from './sassCache';
 
 // Response types from WASM module
 interface VfsResponse {
@@ -44,15 +43,9 @@ interface WasmModuleExtended {
   lsp_get_symbols: (path: string) => string;
   lsp_get_folding_ranges: (path: string) => string;
   lsp_get_diagnostics: (path: string) => string;
-  // SASS compilation functions (new)
+  // SASS compilation functions
   sass_available: () => boolean;
   sass_compiler_name: () => string | undefined;
-  // Hash of embedded SCSS resources (for cache invalidation)
-  get_scss_resources_version: () => string;
-  compile_scss: (scss: string, minified: boolean, loadPathsJson: string) => Promise<string>;
-  compile_scss_with_bootstrap: (scss: string, minified: boolean) => Promise<string>;
-  compile_theme_css_by_name: (themeName: string, minified: boolean) => Promise<string>;
-  compile_default_bootstrap_css: (minified: boolean) => Promise<string>;
 }
 
 // WASM module state
@@ -90,9 +83,6 @@ export async function initWasm(): Promise<void> {
         // This allows dart-sass to read Bootstrap SCSS files from the VFS
         await setupSassVfsCallbacks();
 
-        // Check if embedded SCSS resources changed and invalidate cache if needed
-        await checkAndInvalidateSassCache();
-
         console.log('WASM module initialized successfully, template loaded');
       } catch (err) {
         initPromise = null;
@@ -102,47 +92,6 @@ export async function initWasm(): Promise<void> {
   }
 
   return initPromise;
-}
-
-// Key for storing SCSS resources version in localStorage
-const SCSS_VERSION_STORAGE_KEY = 'quarto-scss-resources-version';
-
-/**
- * Check if the embedded SCSS resources have changed and invalidate cache if needed.
- *
- * This compares the current SCSS resources hash (computed at WASM build time)
- * against the stored version. If they differ, the SASS cache is cleared.
- * This ensures that when hub-client is updated with new SCSS files, users
- * don't see stale cached CSS.
- */
-async function checkAndInvalidateSassCache(): Promise<void> {
-  const wasm = getWasm();
-
-  try {
-    const currentVersion = wasm.get_scss_resources_version();
-    const storedVersion = localStorage.getItem(SCSS_VERSION_STORAGE_KEY);
-
-    if (storedVersion !== currentVersion) {
-      console.log(
-        '[SASS Cache] SCSS resources version changed:',
-        storedVersion,
-        '->',
-        currentVersion
-      );
-
-      // Clear the SASS cache
-      const cache = getSassCache();
-      await cache.clear();
-      console.log('[SASS Cache] Cache cleared due to SCSS resources update');
-
-      // Store the new version
-      localStorage.setItem(SCSS_VERSION_STORAGE_KEY, currentVersion);
-    } else {
-      console.log('[SASS Cache] SCSS resources version unchanged:', currentVersion);
-    }
-  } catch (err) {
-    console.warn('[SASS Cache] Failed to check SCSS resources version:', err);
-  }
 }
 
 /**
@@ -676,6 +625,18 @@ export async function createProject(choiceId: string, title: string): Promise<Cr
 }
 
 /**
+ * Compute a SHA-256 hash of the given string, returned as hex.
+ * Used for CSS version fingerprinting.
+ */
+async function computeHash(input: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Render a VFS document to HTML, handling errors gracefully.
  *
  * The document must already be in the VFS (via Automerge sync or manual add).
@@ -788,29 +749,8 @@ export async function renderContentToHtml(
 }
 
 // ============================================================================
-// SASS Compilation Operations
+// SASS Compilation Status
 // ============================================================================
-
-/**
- * Response from SASS compilation.
- */
-interface SassCompileResponse {
-  success: boolean;
-  css?: string;
-  error?: string;
-}
-
-/**
- * Options for SASS compilation.
- */
-export interface SassCompileOptions {
-  /** Whether to produce minified output */
-  minified?: boolean;
-  /** Additional load paths for @use/@import resolution */
-  loadPaths?: string[];
-  /** Whether to skip caching (for debugging) */
-  skipCache?: boolean;
-}
 
 /**
  * Check if SASS compilation is available.
@@ -828,244 +768,4 @@ export async function sassCompilerName(): Promise<string | null> {
   await initWasm();
   const wasm = getWasm();
   return wasm.sass_compiler_name() ?? null;
-}
-
-/**
- * Compile SCSS to CSS with caching.
- *
- * Uses IndexedDB cache to avoid recompilation of unchanged SCSS.
- * The cache key is based on the SCSS content and compilation options.
- *
- * @param scss - The SCSS source code to compile
- * @param options - Compilation options (minified, loadPaths, etc.)
- * @returns The compiled CSS
- * @throws Error if compilation fails
- *
- * @example
- * ```typescript
- * const css = await compileScss('$primary: blue; .btn { color: $primary; }');
- * console.log(css);
- * // .btn { color: blue; }
- * ```
- */
-export async function compileScss(
-  scss: string,
-  options: SassCompileOptions = {}
-): Promise<string> {
-  await initWasm();
-  const wasm = getWasm();
-
-  const minified = options.minified ?? false;
-  const loadPaths = options.loadPaths ?? [];
-  const skipCache = options.skipCache ?? false;
-
-  // Compute cache key
-  const cache = getSassCache();
-  const cacheKey = await cache.computeKey(scss, minified);
-
-  // Check cache first (unless explicitly skipped)
-  if (!skipCache) {
-    const cached = await cache.get(cacheKey);
-    if (cached !== null) {
-      console.log('[compileScss] Cache hit');
-      return cached;
-    }
-    console.log('[compileScss] Cache miss');
-  }
-
-  // Compile via WASM
-  const loadPathsJson = JSON.stringify(loadPaths);
-  const result: SassCompileResponse = JSON.parse(
-    await wasm.compile_scss(scss, minified, loadPathsJson)
-  );
-
-  if (!result.success) {
-    throw new Error(result.error || 'SASS compilation failed');
-  }
-
-  const css = result.css || '';
-
-  // Cache the result
-  if (!skipCache) {
-    const sourceHash = await computeHash(scss);
-    await cache.set(cacheKey, css, sourceHash, minified);
-  }
-
-  return css;
-}
-
-/**
- * Compile SCSS with Bootstrap included in load paths.
- *
- * Convenience function that automatically includes the embedded Bootstrap SCSS
- * files in the load paths. Use this when compiling SCSS that depends on Bootstrap.
- *
- * @param scss - The SCSS source code to compile
- * @param options - Additional compilation options
- * @returns The compiled CSS
- *
- * @example
- * ```typescript
- * // Compile SCSS that uses Bootstrap variables
- * const css = await compileScssWithBootstrap(`
- *   @import "bootstrap";
- *   .custom-btn { color: $primary; }
- * `);
- * ```
- */
-export async function compileScssWithBootstrap(
-  scss: string,
-  options: Omit<SassCompileOptions, 'loadPaths'> = {}
-): Promise<string> {
-  // Include embedded Bootstrap SCSS in load paths
-  const bootstrapLoadPath = '/__quarto_resources__/bootstrap/scss';
-  return compileScss(scss, {
-    ...options,
-    loadPaths: [bootstrapLoadPath],
-  });
-}
-
-/**
- * Clear the SASS compilation cache.
- *
- * Use this to force recompilation of all SCSS files.
- */
-export async function clearSassCache(): Promise<void> {
-  const cache = getSassCache();
-  await cache.clear();
-  console.log('[clearSassCache] Cache cleared');
-}
-
-/**
- * Get statistics about the SASS cache.
- */
-export async function getSassCacheStats() {
-  const cache = getSassCache();
-  return cache.getStats();
-}
-
-// ============================================================================
-// Theme CSS Compilation
-// ============================================================================
-
-/**
- * Response from theme CSS compilation.
- */
-interface ThemeCssResponse {
-  success: boolean;
-  css?: string;
-  error?: string;
-}
-
-/**
- * Compile CSS for a specific Bootswatch theme by name with caching.
- *
- * @param themeName - The theme name (e.g., "cosmo", "darkly", "flatly")
- * @param options - Compilation options
- * @returns The compiled CSS
- * @throws Error if compilation fails
- *
- * @example
- * ```typescript
- * const css = await compileThemeCssByName('cosmo');
- * ```
- */
-export async function compileThemeCssByName(
-  themeName: string,
-  options: { minified?: boolean; skipCache?: boolean } = {}
-): Promise<string> {
-  await initWasm();
-  const wasm = getWasm();
-
-  if (!wasm.sass_available()) {
-    throw new Error('SASS compilation is not available');
-  }
-
-  const minified = options.minified ?? true;
-  const skipCache = options.skipCache ?? false;
-
-  // Cache key based on theme name and minification
-  const cacheInput = `theme:${themeName}:minified=${minified}`;
-  const cache = getSassCache();
-  const cacheKey = await cache.computeKey(cacheInput, minified);
-
-  if (!skipCache) {
-    const cached = await cache.get(cacheKey);
-    if (cached !== null) {
-      console.log('[compileThemeCssByName] Cache hit for:', themeName);
-      return cached;
-    }
-    console.log('[compileThemeCssByName] Cache miss for:', themeName);
-  }
-
-  // Compile via WASM
-  const result: ThemeCssResponse = JSON.parse(
-    await wasm.compile_theme_css_by_name(themeName, minified)
-  );
-
-  if (!result.success) {
-    throw new Error(result.error || `Failed to compile theme: ${themeName}`);
-  }
-
-  const css = result.css || '';
-
-  if (!skipCache) {
-    const sourceHash = await computeHash(cacheInput);
-    await cache.set(cacheKey, css, sourceHash, minified);
-  }
-
-  return css;
-}
-
-/**
- * Compile default Bootstrap CSS (no theme customization) with caching.
- *
- * @param options - Compilation options
- * @returns The compiled CSS
- * @throws Error if compilation fails
- */
-export async function compileDefaultBootstrapCss(
-  options: { minified?: boolean; skipCache?: boolean } = {}
-): Promise<string> {
-  await initWasm();
-  const wasm = getWasm();
-
-  if (!wasm.sass_available()) {
-    throw new Error('SASS compilation is not available');
-  }
-
-  const minified = options.minified ?? true;
-  const skipCache = options.skipCache ?? false;
-
-  // Cache key for default Bootstrap
-  const cacheInput = `theme:default-bootstrap:minified=${minified}`;
-  const cache = getSassCache();
-  const cacheKey = await cache.computeKey(cacheInput, minified);
-
-  if (!skipCache) {
-    const cached = await cache.get(cacheKey);
-    if (cached !== null) {
-      console.log('[compileDefaultBootstrapCss] Cache hit');
-      return cached;
-    }
-    console.log('[compileDefaultBootstrapCss] Cache miss');
-  }
-
-  // Compile via WASM
-  const result: ThemeCssResponse = JSON.parse(
-    await wasm.compile_default_bootstrap_css(minified)
-  );
-
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to compile default Bootstrap CSS');
-  }
-
-  const css = result.css || '';
-
-  if (!skipCache) {
-    const sourceHash = await computeHash(cacheInput);
-    await cache.set(cacheKey, css, sourceHash, minified);
-  }
-
-  return css;
 }

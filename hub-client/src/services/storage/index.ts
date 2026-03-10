@@ -14,7 +14,6 @@ export type {
   ExportData,
   ProjectEntryV2,
   HubDatabase,
-  SassCacheEntry,
 } from './types';
 
 export { DB_NAME, STORES } from './types';

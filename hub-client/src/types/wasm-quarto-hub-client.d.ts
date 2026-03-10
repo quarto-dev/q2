@@ -64,7 +64,6 @@ declare module 'wasm-quarto-hub-client' {
   // SASS compilation functions
   export function sass_available(): boolean;
   export function sass_compiler_name(): string | undefined;
-  export function get_scss_resources_version(): string;
   export function compile_scss(scss: string, minified: boolean, load_paths_json: string): Promise<string>;
   export function compile_scss_with_bootstrap(scss: string, minified: boolean): Promise<string>;
   export function compile_theme_css_by_name(theme_name: string, minified: boolean): Promise<string>;

@@ -20,6 +20,14 @@ pub mod resources;
 pub mod themes;
 mod types;
 
+/// SHA-256 hash (first 16 hex chars) of all `.scss` files under `resources/scss/`.
+///
+/// Computed at build time. Changes to any built-in SCSS resource (Bootstrap,
+/// Quarto customizations, built-in themes) will produce a different hash,
+/// invalidating cached CSS without runtime file reads.
+pub const SCSS_RESOURCES_HASH: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/scss_resources_hash.txt"));
+
 pub use bundle::{
     assemble_bootstrap, assemble_scss, assemble_themes, assemble_with_theme,
     assemble_with_user_layers, load_bootstrap_framework, load_quarto_layer, load_theme,
