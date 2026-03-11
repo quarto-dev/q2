@@ -16,14 +16,76 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+/// Default image domain for Google profile pictures.
+const DEFAULT_IMAGE_DOMAIN: &str = "lh3.googleusercontent.com";
+
 /// Authentication configuration.
+///
+/// Construct via [`AuthConfig::new()`] which validates the issuer URL
+/// and image domains at creation time.
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
     pub client_id: String,
+    /// OIDC issuer URL, guaranteed to be a valid HTTPS URL.
     pub issuer: String,
     pub image_domains: Vec<String>,
     pub allowed_emails: Option<Vec<String>>,
     pub allowed_domains: Option<Vec<String>>,
+}
+
+impl AuthConfig {
+    /// Create a new `AuthConfig`, validating the issuer URL and image domains.
+    ///
+    /// - `issuer` must be a well-formed HTTPS URL.
+    /// - Each image domain must be a bare hostname (no scheme, no path).
+    /// - If `image_domains` is empty, defaults to Google's profile picture CDN.
+    pub fn new(
+        client_id: String,
+        issuer: String,
+        image_domains: Vec<String>,
+        allowed_emails: Option<Vec<String>>,
+        allowed_domains: Option<Vec<String>>,
+    ) -> Result<Self, String> {
+        // Validate issuer is a well-formed HTTPS URL.
+        let parsed = url::Url::parse(&issuer)
+            .map_err(|e| format!("Malformed OIDC issuer URL '{issuer}': {e}"))?;
+        if parsed.scheme() != "https" {
+            return Err(format!(
+                "OIDC issuer must use HTTPS, got '{}'",
+                parsed.scheme()
+            ));
+        }
+
+        // Apply default and validate image domains.
+        let image_domains = if image_domains.is_empty() {
+            vec![DEFAULT_IMAGE_DOMAIN.to_string()]
+        } else {
+            for domain in &image_domains {
+                validate_image_domain(domain).map_err(|e| format!("Image domain: {e}"))?;
+            }
+            image_domains
+        };
+
+        Ok(Self {
+            client_id,
+            issuer,
+            image_domains,
+            allowed_emails,
+            allowed_domains,
+        })
+    }
+
+    /// Extract the CSP origin (`scheme://host[:port]`) from the validated issuer URL.
+    ///
+    /// Panics if the issuer is not a valid URL, which cannot happen if
+    /// the config was constructed via [`AuthConfig::new()`].
+    pub fn issuer_origin(&self) -> String {
+        let url = url::Url::parse(&self.issuer).expect("issuer validated at construction");
+        match url.port() {
+            Some(port) => format!("https://{}:{}", url.host_str().unwrap_or(""), port),
+            None => format!("https://{}", url.host_str().unwrap_or("")),
+        }
+    }
 }
 
 /// OIDC ID token claims.
@@ -114,8 +176,9 @@ struct OidcDiscoveryDocument {
 
 /// Discover the JWKS URL from the issuer's `/.well-known/openid-configuration`.
 ///
+/// The `issuer` must be a validated HTTPS URL (guaranteed by [`AuthConfig::new()`]).
+///
 /// Validates:
-/// - The issuer is a well-formed HTTPS URL
 /// - The discovery document's `issuer` field matches the configured issuer
 /// - The `jwks_uri` is an HTTPS URL
 ///
@@ -124,13 +187,6 @@ pub async fn discover_jwks_url(
     client: &reqwest::Client,
     issuer: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    // Validate issuer is a well-formed HTTPS URL before making any request.
-    let issuer_url = url::Url::parse(issuer)
-        .map_err(|e| format!("Malformed OIDC issuer URL '{issuer}': {e}"))?;
-    if issuer_url.scheme() != "https" {
-        return Err(format!("OIDC issuer must use HTTPS, got '{}'", issuer_url.scheme()).into());
-    }
-
     let discovery_url = format!(
         "{}/.well-known/openid-configuration",
         issuer.trim_end_matches('/')
@@ -177,6 +233,26 @@ pub async fn discover_jwks_url(
     Ok(doc.jwks_uri)
 }
 
+/// Convert a JWK key algorithm to a JWT signing algorithm.
+///
+/// Returns `None` for key encryption algorithms (RSA1_5, RSA-OAEP, etc.)
+/// and unknown algorithms, which are not used for OIDC token signing.
+fn signing_algorithm(ka: &jsonwebtoken::jwk::KeyAlgorithm) -> Option<Algorithm> {
+    use jsonwebtoken::jwk::KeyAlgorithm;
+    match ka {
+        KeyAlgorithm::RS256 => Some(Algorithm::RS256),
+        KeyAlgorithm::RS384 => Some(Algorithm::RS384),
+        KeyAlgorithm::RS512 => Some(Algorithm::RS512),
+        KeyAlgorithm::ES256 => Some(Algorithm::ES256),
+        KeyAlgorithm::ES384 => Some(Algorithm::ES384),
+        KeyAlgorithm::PS256 => Some(Algorithm::PS256),
+        KeyAlgorithm::PS384 => Some(Algorithm::PS384),
+        KeyAlgorithm::PS512 => Some(Algorithm::PS512),
+        KeyAlgorithm::EdDSA => Some(Algorithm::EdDSA),
+        _ => None,
+    }
+}
+
 /// Discover allowed JWT signing algorithms from a JWKS endpoint.
 ///
 /// Fetches the JWKS and extracts the `alg` field from each key.
@@ -197,13 +273,11 @@ async fn discover_algorithms(
 
     let mut algorithms = Vec::new();
     for jwk in &jwks.keys {
-        if let Some(ref alg) = jwk.common.key_algorithm {
-            // Convert JWK key_algorithm to jsonwebtoken Algorithm
-            let algo_str = format!("{alg:?}");
-            if let Ok(algo) = algo_str.parse::<AlgorithmWrapper>()
-                && !algorithms.contains(&algo.0)
-            {
-                algorithms.push(algo.0);
+        if let Some(ref ka) = jwk.common.key_algorithm {
+            if let Some(algo) = signing_algorithm(ka) {
+                if !algorithms.contains(&algo) {
+                    algorithms.push(algo);
+                }
             }
         }
     }
@@ -219,28 +293,6 @@ async fn discover_algorithms(
     }
 
     Ok(algorithms)
-}
-
-/// Wrapper for parsing Algorithm from JWK key_algorithm string representation.
-struct AlgorithmWrapper(Algorithm);
-
-impl std::str::FromStr for AlgorithmWrapper {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "RS256" => Ok(AlgorithmWrapper(Algorithm::RS256)),
-            "RS384" => Ok(AlgorithmWrapper(Algorithm::RS384)),
-            "RS512" => Ok(AlgorithmWrapper(Algorithm::RS512)),
-            "ES256" => Ok(AlgorithmWrapper(Algorithm::ES256)),
-            "ES384" => Ok(AlgorithmWrapper(Algorithm::ES384)),
-            "PS256" => Ok(AlgorithmWrapper(Algorithm::PS256)),
-            "PS384" => Ok(AlgorithmWrapper(Algorithm::PS384)),
-            "PS512" => Ok(AlgorithmWrapper(Algorithm::PS512)),
-            "EdDSA" => Ok(AlgorithmWrapper(Algorithm::EdDSA)),
-            other => Err(format!("Unsupported JWK algorithm: {other}")),
-        }
-    }
 }
 
 /// Build the JWKS decoder for OIDC ID token validation.
@@ -360,13 +412,14 @@ mod tests {
     }
 
     fn make_config(emails: Option<Vec<&str>>, domains: Option<Vec<&str>>) -> AuthConfig {
-        AuthConfig {
-            client_id: "test-client-id".to_string(),
-            issuer: "https://accounts.google.com".to_string(),
-            image_domains: vec!["lh3.googleusercontent.com".to_string()],
-            allowed_emails: emails.map(|v| v.into_iter().map(String::from).collect()),
-            allowed_domains: domains.map(|v| v.into_iter().map(String::from).collect()),
-        }
+        AuthConfig::new(
+            "test-client-id".to_string(),
+            "https://accounts.google.com".to_string(),
+            vec!["lh3.googleusercontent.com".to_string()],
+            emails.map(|v| v.into_iter().map(String::from).collect()),
+            domains.map(|v| v.into_iter().map(String::from).collect()),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -578,28 +631,69 @@ mod tests {
         assert!(validate_image_domain("").is_err());
     }
 
-    // ── discover_jwks_url (unit tests with mock data) ──────────
+    // ── AuthConfig::new() validation ───────────────────────────
 
     #[test]
-    fn discover_jwks_url_rejects_http_issuer() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let client = reqwest::Client::new();
-        let result = rt.block_on(discover_jwks_url(&client, "http://accounts.google.com"));
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("OIDC issuer must use HTTPS")
+    fn auth_config_rejects_http_issuer() {
+        let result = AuthConfig::new(
+            "client-id".to_string(),
+            "http://accounts.google.com".to_string(),
+            vec![],
+            None,
+            None,
         );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("OIDC issuer must use HTTPS"));
     }
 
     #[test]
-    fn discover_jwks_url_rejects_malformed_url() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let client = reqwest::Client::new();
-        let result = rt.block_on(discover_jwks_url(&client, "not a url at all"));
+    fn auth_config_rejects_malformed_issuer() {
+        let result = AuthConfig::new(
+            "client-id".to_string(),
+            "not a url at all".to_string(),
+            vec![],
+            None,
+            None,
+        );
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Malformed"));
+        assert!(result.unwrap_err().contains("Malformed"));
+    }
+
+    #[test]
+    fn auth_config_defaults_image_domain_when_empty() {
+        let config = AuthConfig::new(
+            "client-id".to_string(),
+            "https://accounts.google.com".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(config.image_domains, vec!["lh3.googleusercontent.com"]);
+    }
+
+    #[test]
+    fn auth_config_rejects_invalid_image_domain() {
+        let result = AuthConfig::new(
+            "client-id".to_string(),
+            "https://accounts.google.com".to_string(),
+            vec!["evil.com; script-src 'unsafe-inline'".to_string()],
+            None,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn auth_config_issuer_origin() {
+        let config = AuthConfig::new(
+            "client-id".to_string(),
+            "https://login.microsoftonline.com/tenant/v2.0".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(config.issuer_origin(), "https://login.microsoftonline.com");
     }
 }

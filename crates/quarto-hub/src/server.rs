@@ -102,37 +102,20 @@ struct UpdateDocumentRequest {
 ///
 /// The CSP is constructed dynamically from the OIDC issuer origin and
 /// configured image domains (for profile pictures).
-fn build_csp(config: &auth::AuthConfig) -> std::result::Result<String, String> {
-    let issuer_url = url::Url::parse(&config.issuer)
-        .map_err(|e| format!("Invalid OIDC issuer URL for CSP: {e}"))?;
-    if issuer_url.scheme() != "https" {
-        return Err(format!(
-            "OIDC issuer must use HTTPS for CSP, got '{}'",
-            issuer_url.scheme()
-        ));
-    }
-    let issuer_origin = match issuer_url.port() {
-        Some(port) => format!("https://{}:{}", issuer_url.host_str().unwrap_or(""), port),
-        None => format!("https://{}", issuer_url.host_str().unwrap_or("")),
-    };
+///
+/// The issuer URL and image domains are validated at [`auth::AuthConfig`]
+/// construction time, so this function cannot fail from invalid config.
+fn build_csp(config: &auth::AuthConfig) -> String {
+    let issuer_origin = config.issuer_origin();
 
-    // Validate image domains.
-    let image_domains: Vec<&str> = if config.image_domains.is_empty() {
-        vec!["lh3.googleusercontent.com"]
-    } else {
-        for domain in &config.image_domains {
-            auth::validate_image_domain(domain).map_err(|e| format!("CSP image domain: {e}"))?;
-        }
-        config.image_domains.iter().map(|s| s.as_str()).collect()
-    };
-
-    let img_src = image_domains
+    let img_src = config
+        .image_domains
         .iter()
         .map(|d| format!("https://{d}"))
         .collect::<Vec<_>>()
         .join(" ");
 
-    Ok(format!(
+    format!(
         "default-src 'self'; \
          script-src 'self' {issuer_origin}; \
          style-src 'self' 'unsafe-inline'; \
@@ -140,7 +123,7 @@ fn build_csp(config: &auth::AuthConfig) -> std::result::Result<String, String> {
          img-src 'self' data: {img_src}; \
          connect-src 'self' {issuer_origin}; \
          frame-src {issuer_origin}"
-    ))
+    )
 }
 
 /// Cookie name for the hub authentication token.
@@ -761,8 +744,7 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
     // Add Content-Security-Policy header when auth is enabled.
     // Without auth there are no OIDC provider scripts to allow.
     if let Some(config) = ctx.auth_config() {
-        let csp = build_csp(config)
-            .map_err(|e| crate::error::Error::Server(format!("Failed to build CSP: {e}")))?;
+        let csp = build_csp(config);
         router = router.layer(SetResponseHeaderLayer::if_not_present(
             http::header::HeaderName::from_static("content-security-policy"),
             http::header::HeaderValue::from_str(&csp)
@@ -1172,33 +1154,35 @@ mod tests {
     // ── CSP ───────────────────────────────────────────────────────
 
     fn google_auth_config() -> auth::AuthConfig {
-        auth::AuthConfig {
-            client_id: "test-client-id".to_string(),
-            issuer: "https://accounts.google.com".to_string(),
-            image_domains: vec!["lh3.googleusercontent.com".to_string()],
-            allowed_emails: None,
-            allowed_domains: None,
-        }
+        auth::AuthConfig::new(
+            "test-client-id".to_string(),
+            "https://accounts.google.com".to_string(),
+            vec!["lh3.googleusercontent.com".to_string()],
+            None,
+            None,
+        )
+        .unwrap()
     }
 
     #[test]
     fn csp_google_issuer() {
         let config = google_auth_config();
-        let csp = build_csp(&config).unwrap();
+        let csp = build_csp(&config);
         assert!(csp.contains("https://accounts.google.com"));
         assert!(csp.contains("https://lh3.googleusercontent.com"));
     }
 
     #[test]
     fn csp_custom_issuer() {
-        let config = auth::AuthConfig {
-            client_id: "test".to_string(),
-            issuer: "https://login.microsoftonline.com/tenant-id/v2.0".to_string(),
-            image_domains: vec!["graph.microsoft.com".to_string()],
-            allowed_emails: None,
-            allowed_domains: None,
-        };
-        let csp = build_csp(&config).unwrap();
+        let config = auth::AuthConfig::new(
+            "test".to_string(),
+            "https://login.microsoftonline.com/tenant-id/v2.0".to_string(),
+            vec!["graph.microsoft.com".to_string()],
+            None,
+            None,
+        )
+        .unwrap();
+        let csp = build_csp(&config);
         assert!(csp.contains("https://login.microsoftonline.com"));
         assert!(csp.contains("https://graph.microsoft.com"));
         assert!(!csp.contains("accounts.google.com"));
@@ -1206,38 +1190,40 @@ mod tests {
 
     #[test]
     fn csp_custom_image_domains() {
-        let config = auth::AuthConfig {
-            client_id: "test".to_string(),
-            issuer: "https://accounts.google.com".to_string(),
-            image_domains: vec![
+        let config = auth::AuthConfig::new(
+            "test".to_string(),
+            "https://accounts.google.com".to_string(),
+            vec![
                 "avatars.example.com".to_string(),
                 "cdn.example.com".to_string(),
             ],
-            allowed_emails: None,
-            allowed_domains: None,
-        };
-        let csp = build_csp(&config).unwrap();
+            None,
+            None,
+        )
+        .unwrap();
+        let csp = build_csp(&config);
         assert!(csp.contains("https://avatars.example.com"));
         assert!(csp.contains("https://cdn.example.com"));
     }
 
     #[test]
     fn csp_default_image_domain_when_empty() {
-        let config = auth::AuthConfig {
-            client_id: "test".to_string(),
-            issuer: "https://accounts.google.com".to_string(),
-            image_domains: vec![],
-            allowed_emails: None,
-            allowed_domains: None,
-        };
-        let csp = build_csp(&config).unwrap();
+        let config = auth::AuthConfig::new(
+            "test".to_string(),
+            "https://accounts.google.com".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        let csp = build_csp(&config);
         assert!(csp.contains("https://lh3.googleusercontent.com"));
     }
 
     #[test]
     fn csp_disallows_arbitrary_websocket() {
         let config = google_auth_config();
-        let csp = build_csp(&config).unwrap();
+        let csp = build_csp(&config);
         let connect_src = csp.split(';').find(|d| d.contains("connect-src")).unwrap();
         let has_bare_ws = connect_src
             .split_whitespace()
@@ -1251,7 +1237,7 @@ mod tests {
     #[test]
     fn csp_blocks_inline_scripts() {
         let config = google_auth_config();
-        let csp = build_csp(&config).unwrap();
+        let csp = build_csp(&config);
         let script_src = csp.split(';').find(|d| d.contains("script-src")).unwrap();
         assert!(!script_src.contains("unsafe-inline"));
     }
@@ -1259,32 +1245,8 @@ mod tests {
     #[test]
     fn csp_has_default_self() {
         let config = google_auth_config();
-        let csp = build_csp(&config).unwrap();
+        let csp = build_csp(&config);
         assert!(csp.contains("default-src 'self'"));
-    }
-
-    #[test]
-    fn csp_rejects_non_https_issuer() {
-        let config = auth::AuthConfig {
-            client_id: "test".to_string(),
-            issuer: "http://insecure.example.com".to_string(),
-            image_domains: vec![],
-            allowed_emails: None,
-            allowed_domains: None,
-        };
-        assert!(build_csp(&config).is_err());
-    }
-
-    #[test]
-    fn csp_rejects_malformed_issuer() {
-        let config = auth::AuthConfig {
-            client_id: "test".to_string(),
-            issuer: "not a url".to_string(),
-            image_domains: vec![],
-            allowed_emails: None,
-            allowed_domains: None,
-        };
-        assert!(build_csp(&config).is_err());
     }
 
     // ── AuthCallbackForm ──────────────────────────────────────────

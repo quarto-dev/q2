@@ -105,13 +105,19 @@ async fn run_hub(args: HubArgs) -> Result<()> {
     .map_err(|e| anyhow::anyhow!(e))?;
 
     // Build auth config if OIDC client ID is provided
-    let auth_config = args.oidc_client_id.map(|client_id| auth::AuthConfig {
-        client_id,
-        issuer: args.oidc_issuer,
-        image_domains: args.oidc_image_domains,
-        allowed_emails: args.allowed_emails,
-        allowed_domains: args.allowed_domains,
-    });
+    let auth_config = args
+        .oidc_client_id
+        .map(|client_id| {
+            auth::AuthConfig::new(
+                client_id,
+                args.oidc_issuer,
+                args.oidc_image_domains,
+                args.allowed_emails,
+                args.allowed_domains,
+            )
+        })
+        .transpose()
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     // Configure and run server
     let sync_interval_secs = if args.sync_interval == 0 {
