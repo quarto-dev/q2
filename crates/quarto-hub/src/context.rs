@@ -14,7 +14,7 @@ use samod::{ConnectionId, Repo};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
-use crate::auth::{self, AuthConfig, AuthState, GoogleClaims};
+use crate::auth::{self, AuthConfig, AuthState, OidcClaims};
 use crate::discovery::ProjectFiles;
 use crate::error::Result;
 use crate::index::{IndexDocument, load_or_create_index};
@@ -348,7 +348,7 @@ impl HubContext {
     pub async fn authenticate_claims(
         &self,
         token: Option<&str>,
-    ) -> std::result::Result<GoogleClaims, StatusCode> {
+    ) -> std::result::Result<OidcClaims, StatusCode> {
         let auth_config = self.auth_config().ok_or(StatusCode::UNAUTHORIZED)?;
 
         let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
@@ -359,8 +359,8 @@ impl HubContext {
 
         // JwtDecoder<T>::decode returns TokenData<T>. The T parameter
         // lives on the trait, so we use a type annotation (not turbofish)
-        // to select GoogleClaims.
-        let token_data: jsonwebtoken::TokenData<GoogleClaims> =
+        // to select OidcClaims.
+        let token_data: jsonwebtoken::TokenData<OidcClaims> =
             auth_state.decoder.decode(token).await.map_err(|err| {
                 tracing::warn!(%err, "Auth failed");
                 StatusCode::UNAUTHORIZED

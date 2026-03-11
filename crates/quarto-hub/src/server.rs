@@ -94,23 +94,59 @@ struct UpdateDocumentRequest {
     value: String,
 }
 
-/// Content-Security-Policy for defense-in-depth against XSS.
-/// Even with HttpOnly cookies eliminating credential theft, XSS can still
-/// make authenticated requests from the victim's browser. CSP limits what
-/// injected scripts can do.
-const CSP_WITH_AUTH: &str = "\
-    default-src 'self'; \
-    script-src 'self' https://accounts.google.com; \
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
-    font-src 'self' https://fonts.gstatic.com; \
-    img-src 'self' data: https://lh3.googleusercontent.com; \
-    connect-src 'self' https://accounts.google.com; \
-    frame-src https://accounts.google.com";
+/// Build a Content-Security-Policy header value from the auth configuration.
+///
+/// Defense-in-depth against XSS: even with HttpOnly cookies eliminating
+/// credential theft, XSS can still make authenticated requests from the
+/// victim's browser. CSP limits what injected scripts can do.
+///
+/// The CSP is constructed dynamically from the OIDC issuer origin and
+/// configured image domains (for profile pictures).
+fn build_csp(config: &auth::AuthConfig) -> std::result::Result<String, String> {
+    let issuer_url = url::Url::parse(&config.issuer)
+        .map_err(|e| format!("Invalid OIDC issuer URL for CSP: {e}"))?;
+    if issuer_url.scheme() != "https" {
+        return Err(format!(
+            "OIDC issuer must use HTTPS for CSP, got '{}'",
+            issuer_url.scheme()
+        ));
+    }
+    let issuer_origin = match issuer_url.port() {
+        Some(port) => format!("https://{}:{}", issuer_url.host_str().unwrap_or(""), port),
+        None => format!("https://{}", issuer_url.host_str().unwrap_or("")),
+    };
+
+    // Validate image domains.
+    let image_domains: Vec<&str> = if config.image_domains.is_empty() {
+        vec!["lh3.googleusercontent.com"]
+    } else {
+        for domain in &config.image_domains {
+            auth::validate_image_domain(domain).map_err(|e| format!("CSP image domain: {e}"))?;
+        }
+        config.image_domains.iter().map(|s| s.as_str()).collect()
+    };
+
+    let img_src = image_domains
+        .iter()
+        .map(|d| format!("https://{d}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    Ok(format!(
+        "default-src 'self'; \
+         script-src 'self' {issuer_origin}; \
+         style-src 'self' 'unsafe-inline'; \
+         font-src 'self'; \
+         img-src 'self' data: {img_src}; \
+         connect-src 'self' {issuer_origin}; \
+         frame-src {issuer_origin}"
+    ))
+}
 
 /// Cookie name for the hub authentication token.
 const AUTH_COOKIE_NAME: &str = "quarto_hub_token";
 
-/// Cookie Max-Age in seconds (matches Google ID token lifetime).
+/// Cookie Max-Age in seconds (1 hour, matches typical OIDC ID token lifetime).
 const AUTH_COOKIE_MAX_AGE: u32 = 3600;
 
 /// JSON error body for auth failures, so clients can distinguish
@@ -147,6 +183,14 @@ fn cookie_token(headers: &HeaderMap) -> Option<String> {
 /// Uses the `cookie` crate for correct value encoding, preventing
 /// injection of extra attributes via malformed token values.
 fn build_auth_cookie(token: &str, secure: bool) -> String {
+    if token.len() > 3800 {
+        tracing::warn!(
+            token_len = token.len(),
+            "JWT token exceeds 3800 bytes; browsers may silently drop the cookie \
+             (4096 byte limit including cookie metadata). Consider server-side sessions \
+             if your OIDC provider issues large tokens."
+        );
+    }
     let mut builder = cookie::Cookie::build((AUTH_COOKIE_NAME, token))
         .http_only(true)
         .same_site(SameSite::Lax)
@@ -438,23 +482,32 @@ async fn update_document(
     }
 }
 
-/// Google OAuth2 redirect callback form data.
+/// Google-frontend-specific OAuth2 redirect callback form data.
 ///
 /// When `GoogleLogin` uses `ux_mode="redirect"`, Google POSTs the credential
 /// JWT and a CSRF token to the `login_uri` after the user authenticates.
+///
+/// This form structure is specific to Google's Sign-In library. Non-Google
+/// OIDC frontends should use `POST /auth/refresh` instead.
 #[derive(Deserialize)]
 struct AuthCallbackForm {
     credential: String,
     g_csrf_token: String,
 }
 
-/// Handle Google OAuth2 redirect callback.
+/// Handle Google-frontend-specific OAuth2 redirect callback.
 ///
 /// Receives the credential JWT from Google's POST, validates the CSRF token
 /// and the JWT itself, then sets an HttpOnly cookie and redirects to `/`.
 ///
 /// Validating the JWT here (not just in subsequent API calls) prevents
 /// setting a cookie with a bogus credential.
+///
+/// **Google-specific**: This endpoint is tightly coupled to Google's Sign-In
+/// library (which controls the POST body and `g_csrf_token` cookie). Non-Google
+/// OIDC frontends should use `POST /auth/refresh` instead — it accepts a JWT
+/// via JSON POST, validates through the full JWKS/issuer/allowlist pipeline,
+/// and is protected by the standard `X-Requested-With` CSRF check.
 ///
 /// **CSRF**: This endpoint is excluded from the `X-Requested-With` CSRF
 /// check because it receives a cross-origin POST from Google's servers.
@@ -549,11 +602,15 @@ async fn auth_logout(
     Ok(response)
 }
 
-/// Validate a fresh Google JWT and set a new cookie.
+/// Validate a fresh OIDC JWT and set a new cookie.
 ///
-/// Called by the client when Google One Tap silently produces a new
-/// credential. The new JWT goes through the full `authenticate()` path
-/// (signature, audience, issuer, email allowlist) before setting the cookie.
+/// Called by the client after obtaining a new credential from the OIDC provider
+/// (e.g. Google One Tap silent refresh). The new JWT goes through the full
+/// `authenticate()` path (signature, audience, issuer, email allowlist)
+/// before setting the cookie.
+///
+/// This is also the recommended credential submission endpoint for non-Google
+/// OIDC frontends (instead of the Google-specific `/auth/callback`).
 ///
 /// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
 async fn auth_refresh(
@@ -673,13 +730,9 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
 /// initialized here and owned by HubContext for the server's lifetime.
 async fn build_router(ctx: SharedContext) -> Result<Router> {
     if let Some(config) = ctx.auth_config() {
-        let auth_state = auth::build_auth_state(&config.client_id)
-            .await
-            .map_err(|e| {
-                crate::error::Error::Server(format!(
-                    "Failed to initialize Google JWKS decoder: {e}"
-                ))
-            })?;
+        let auth_state = auth::build_auth_state(config).await.map_err(|e| {
+            crate::error::Error::Server(format!("Failed to initialize OIDC JWKS decoder: {e}"))
+        })?;
         ctx.set_auth_state(auth_state)
             .map_err(|e| crate::error::Error::Server(e.to_string()))?;
     }
@@ -706,11 +759,14 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan));
 
     // Add Content-Security-Policy header when auth is enabled.
-    // Without auth there are no Google OAuth scripts to allow.
-    if ctx.auth_config().is_some() {
+    // Without auth there are no OIDC provider scripts to allow.
+    if let Some(config) = ctx.auth_config() {
+        let csp = build_csp(config)
+            .map_err(|e| crate::error::Error::Server(format!("Failed to build CSP: {e}")))?;
         router = router.layer(SetResponseHeaderLayer::if_not_present(
             http::header::HeaderName::from_static("content-security-policy"),
-            http::header::HeaderValue::from_static(CSP_WITH_AUTH),
+            http::header::HeaderValue::from_str(&csp)
+                .map_err(|e| crate::error::Error::Server(format!("Invalid CSP header: {e}")))?,
         ));
     }
 
@@ -1115,21 +1171,74 @@ mod tests {
 
     // ── CSP ───────────────────────────────────────────────────────
 
+    fn google_auth_config() -> auth::AuthConfig {
+        auth::AuthConfig {
+            client_id: "test-client-id".to_string(),
+            issuer: "https://accounts.google.com".to_string(),
+            image_domains: vec!["lh3.googleusercontent.com".to_string()],
+            allowed_emails: None,
+            allowed_domains: None,
+        }
+    }
+
     #[test]
-    fn csp_allows_google_oauth() {
-        assert!(CSP_WITH_AUTH.contains("https://accounts.google.com"));
+    fn csp_google_issuer() {
+        let config = google_auth_config();
+        let csp = build_csp(&config).unwrap();
+        assert!(csp.contains("https://accounts.google.com"));
+        assert!(csp.contains("https://lh3.googleusercontent.com"));
+    }
+
+    #[test]
+    fn csp_custom_issuer() {
+        let config = auth::AuthConfig {
+            client_id: "test".to_string(),
+            issuer: "https://login.microsoftonline.com/tenant-id/v2.0".to_string(),
+            image_domains: vec!["graph.microsoft.com".to_string()],
+            allowed_emails: None,
+            allowed_domains: None,
+        };
+        let csp = build_csp(&config).unwrap();
+        assert!(csp.contains("https://login.microsoftonline.com"));
+        assert!(csp.contains("https://graph.microsoft.com"));
+        assert!(!csp.contains("accounts.google.com"));
+    }
+
+    #[test]
+    fn csp_custom_image_domains() {
+        let config = auth::AuthConfig {
+            client_id: "test".to_string(),
+            issuer: "https://accounts.google.com".to_string(),
+            image_domains: vec![
+                "avatars.example.com".to_string(),
+                "cdn.example.com".to_string(),
+            ],
+            allowed_emails: None,
+            allowed_domains: None,
+        };
+        let csp = build_csp(&config).unwrap();
+        assert!(csp.contains("https://avatars.example.com"));
+        assert!(csp.contains("https://cdn.example.com"));
+    }
+
+    #[test]
+    fn csp_default_image_domain_when_empty() {
+        let config = auth::AuthConfig {
+            client_id: "test".to_string(),
+            issuer: "https://accounts.google.com".to_string(),
+            image_domains: vec![],
+            allowed_emails: None,
+            allowed_domains: None,
+        };
+        let csp = build_csp(&config).unwrap();
+        assert!(csp.contains("https://lh3.googleusercontent.com"));
     }
 
     #[test]
     fn csp_disallows_arbitrary_websocket() {
-        // CSP should NOT contain bare ws:/wss: scheme sources, which would
-        // allow XSS to exfiltrate data to any WebSocket host. Same-origin
-        // WebSocket is covered by 'self' in modern browsers (CSP Level 3).
-        let connect_src = CSP_WITH_AUTH
-            .split(';')
-            .find(|d| d.contains("connect-src"))
-            .unwrap();
-        // Bare "ws:" or "wss:" as scheme sources (space-delimited tokens)
+        let config = google_auth_config();
+        let csp = build_csp(&config).unwrap();
+        let connect_src = csp.split(';').find(|d| d.contains("connect-src")).unwrap();
         let has_bare_ws = connect_src
             .split_whitespace()
             .any(|tok| tok == "ws:" || tok == "wss:");
@@ -1141,17 +1250,57 @@ mod tests {
 
     #[test]
     fn csp_blocks_inline_scripts() {
-        // script-src should NOT contain 'unsafe-inline'
-        let script_src = CSP_WITH_AUTH
-            .split(';')
-            .find(|d| d.contains("script-src"))
-            .unwrap();
+        let config = google_auth_config();
+        let csp = build_csp(&config).unwrap();
+        let script_src = csp.split(';').find(|d| d.contains("script-src")).unwrap();
         assert!(!script_src.contains("unsafe-inline"));
     }
 
     #[test]
     fn csp_has_default_self() {
-        assert!(CSP_WITH_AUTH.contains("default-src 'self'"));
+        let config = google_auth_config();
+        let csp = build_csp(&config).unwrap();
+        assert!(csp.contains("default-src 'self'"));
+    }
+
+    #[test]
+    fn csp_rejects_non_https_issuer() {
+        let config = auth::AuthConfig {
+            client_id: "test".to_string(),
+            issuer: "http://insecure.example.com".to_string(),
+            image_domains: vec![],
+            allowed_emails: None,
+            allowed_domains: None,
+        };
+        assert!(build_csp(&config).is_err());
+    }
+
+    #[test]
+    fn csp_rejects_malformed_issuer() {
+        let config = auth::AuthConfig {
+            client_id: "test".to_string(),
+            issuer: "not a url".to_string(),
+            image_domains: vec![],
+            allowed_emails: None,
+            allowed_domains: None,
+        };
+        assert!(build_csp(&config).is_err());
+    }
+
+    // ── AuthCallbackForm ──────────────────────────────────────────
+
+    #[test]
+    fn auth_callback_form_deserializes() {
+        // AuthCallbackForm is used by axum's Form extractor which parses
+        // URL-encoded POST bodies. Verify it has the expected fields by
+        // deserializing from JSON (same serde derive).
+        let form: AuthCallbackForm = serde_json::from_value(serde_json::json!({
+            "credential": "eyJhbGciOiJSUzI1NiJ9.test",
+            "g_csrf_token": "abc123"
+        }))
+        .unwrap();
+        assert_eq!(form.credential, "eyJhbGciOiJSUzI1NiJ9.test");
+        assert_eq!(form.g_csrf_token, "abc123");
     }
 
     // ── format_peer_info ──────────────────────────────────────────

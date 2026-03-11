@@ -1,10 +1,13 @@
-//! Google OAuth2 authentication for quarto-hub.
+//! OIDC authentication for quarto-hub.
 //!
 //! All auth code lives in this module. Authentication is optional — disabled
-//! by default and enabled with `--google-client-id <ID>`.
+//! by default and enabled with `--oidc-client-id <ID>`.
 //!
-//! Uses Google ID tokens (JWTs) validated locally against Google's cached
-//! public keys via `axum-jwt-auth`. No per-connection HTTP call to Google.
+//! Uses OIDC ID tokens (JWTs) validated locally against the provider's cached
+//! public keys via `axum-jwt-auth`. No per-connection HTTP call to the provider.
+//!
+//! The JWKS URL is discovered automatically from the issuer's
+//! `/.well-known/openid-configuration` endpoint at startup.
 
 use axum::http::StatusCode;
 use axum_jwt_auth::RemoteJwksDecoder;
@@ -17,13 +20,20 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
     pub client_id: String,
+    pub issuer: String,
+    pub image_domains: Vec<String>,
     pub allowed_emails: Option<Vec<String>>,
     pub allowed_domains: Option<Vec<String>>,
 }
 
-/// Google ID token claims.
+/// OIDC ID token claims.
+///
+/// Uses standard OIDC claim names defined in the
+/// [OIDC Core spec](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims).
+/// `email_verified` defaults to `false` via `#[serde(default)]` so providers
+/// that omit the claim (e.g. Azure AD) deserialize safely rather than failing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GoogleClaims {
+pub struct OidcClaims {
     pub sub: String,
     pub email: String,
     #[serde(default)]
@@ -40,7 +50,7 @@ pub struct GoogleClaims {
 /// user passes if they match ANY list (OR, not AND). This allows
 /// combining `--allowed-domains=company.com` with
 /// `--allowed-emails=contractor@gmail.com`.
-pub fn check_allowlists(claims: &GoogleClaims, config: &AuthConfig) -> Result<(), StatusCode> {
+pub fn check_allowlists(claims: &OidcClaims, config: &AuthConfig) -> Result<(), StatusCode> {
     if !claims.email_verified {
         return Err(StatusCode::UNAUTHORIZED);
     }
@@ -53,17 +63,16 @@ pub fn check_allowlists(claims: &GoogleClaims, config: &AuthConfig) -> Result<()
         return Ok(());
     }
 
-    // Case-insensitive comparison: Google normalizes emails to lowercase
-    // in ID token claims, but the allowlist may have mixed case. Using
-    // eq_ignore_ascii_case is also forward-compatible with non-Google
-    // identity providers that may not normalize.
+    // Case-insensitive comparison: most OIDC providers normalize emails to
+    // lowercase in ID token claims, but the allowlist may have mixed case.
+    // Using eq_ignore_ascii_case handles providers that don't normalize.
     let email_ok = config
         .allowed_emails
         .as_ref()
         .is_some_and(|list| list.iter().any(|e| e.eq_ignore_ascii_case(&claims.email)));
 
     let domain_ok = config.allowed_domains.as_ref().is_some_and(|list| {
-        let domain = claims.email.split('@').last().unwrap_or("");
+        let domain = claims.email.split('@').next_back().unwrap_or("");
         list.iter().any(|d| d.eq_ignore_ascii_case(domain))
     });
 
@@ -96,22 +105,176 @@ impl std::fmt::Debug for AuthState {
     }
 }
 
-/// Build the JWKS decoder for Google ID token validation.
+/// OIDC Discovery document (subset of fields we need).
+#[derive(Deserialize)]
+struct OidcDiscoveryDocument {
+    issuer: String,
+    jwks_uri: String,
+}
+
+/// Discover the JWKS URL from the issuer's `/.well-known/openid-configuration`.
+///
+/// Validates:
+/// - The issuer is a well-formed HTTPS URL
+/// - The discovery document's `issuer` field matches the configured issuer
+/// - The `jwks_uri` is an HTTPS URL
+///
+/// Returns the `jwks_uri` from the discovery document.
+pub async fn discover_jwks_url(issuer: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // Validate issuer is a well-formed HTTPS URL before making any request.
+    let issuer_url = url::Url::parse(issuer)
+        .map_err(|e| format!("Malformed OIDC issuer URL '{issuer}': {e}"))?;
+    if issuer_url.scheme() != "https" {
+        return Err(format!("OIDC issuer must use HTTPS, got '{}'", issuer_url.scheme()).into());
+    }
+
+    let discovery_url = format!(
+        "{}/.well-known/openid-configuration",
+        issuer.trim_end_matches('/')
+    );
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let response = client.get(&discovery_url).send().await.map_err(|e| {
+        format!("Failed to fetch OIDC discovery document from {discovery_url}: {e}")
+    })?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "OIDC discovery endpoint returned HTTP {}: {discovery_url}",
+            response.status()
+        )
+        .into());
+    }
+
+    let doc: OidcDiscoveryDocument = response.json().await.map_err(|e| {
+        format!("Failed to parse OIDC discovery document from {discovery_url}: {e}")
+    })?;
+
+    // Validate that the discovery document's issuer matches what we configured
+    // (prevents issuer spoofing).
+    if doc.issuer.trim_end_matches('/') != issuer.trim_end_matches('/') {
+        return Err(format!(
+            "OIDC issuer mismatch: configured '{}' but discovery document reports '{}'",
+            issuer, doc.issuer
+        )
+        .into());
+    }
+
+    // Validate jwks_uri is HTTPS.
+    let jwks_url = url::Url::parse(&doc.jwks_uri)
+        .map_err(|e| format!("Malformed JWKS URI '{}': {e}", doc.jwks_uri))?;
+    if jwks_url.scheme() != "https" {
+        return Err(format!(
+            "JWKS URI must use HTTPS, got '{}' from {}",
+            jwks_url.scheme(),
+            discovery_url
+        )
+        .into());
+    }
+
+    Ok(doc.jwks_uri)
+}
+
+/// Discover allowed JWT signing algorithms from a JWKS endpoint.
+///
+/// Fetches the JWKS and extracts the `alg` field from each key.
+/// If the resulting set is empty (all keys omit `alg`), falls back to
+/// `[RS256]` — the most common OIDC signing algorithm.
+async fn discover_algorithms(jwks_url: &str) -> Result<Vec<Algorithm>, Box<dyn std::error::Error>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let jwks: jsonwebtoken::jwk::JwkSet = client
+        .get(jwks_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch JWKS from {jwks_url}: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse JWKS from {jwks_url}: {e}"))?;
+
+    let mut algorithms = Vec::new();
+    for jwk in &jwks.keys {
+        if let Some(ref alg) = jwk.common.key_algorithm {
+            // Convert JWK key_algorithm to jsonwebtoken Algorithm
+            let algo_str = format!("{alg:?}");
+            if let Ok(algo) = algo_str.parse::<AlgorithmWrapper>()
+                && !algorithms.contains(&algo.0)
+            {
+                algorithms.push(algo.0);
+            }
+        }
+    }
+
+    if algorithms.is_empty() {
+        tracing::warn!("No 'alg' field found in any JWK from {jwks_url}; falling back to RS256");
+        algorithms.push(Algorithm::RS256);
+    } else {
+        tracing::info!(
+            algorithms = ?algorithms,
+            "Discovered JWT signing algorithms from JWKS"
+        );
+    }
+
+    Ok(algorithms)
+}
+
+/// Wrapper for parsing Algorithm from JWK key_algorithm string representation.
+struct AlgorithmWrapper(Algorithm);
+
+impl std::str::FromStr for AlgorithmWrapper {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "RS256" => Ok(AlgorithmWrapper(Algorithm::RS256)),
+            "RS384" => Ok(AlgorithmWrapper(Algorithm::RS384)),
+            "RS512" => Ok(AlgorithmWrapper(Algorithm::RS512)),
+            "ES256" => Ok(AlgorithmWrapper(Algorithm::ES256)),
+            "ES384" => Ok(AlgorithmWrapper(Algorithm::ES384)),
+            "PS256" => Ok(AlgorithmWrapper(Algorithm::PS256)),
+            "PS384" => Ok(AlgorithmWrapper(Algorithm::PS384)),
+            "PS512" => Ok(AlgorithmWrapper(Algorithm::PS512)),
+            "EdDSA" => Ok(AlgorithmWrapper(Algorithm::EdDSA)),
+            other => Err(format!("Unsupported JWK algorithm: {other}")),
+        }
+    }
+}
+
+/// Build the JWKS decoder for OIDC ID token validation.
 /// Returns an `AuthState` that owns both the decoder and the
 /// background JWKS refresh task handle.
+///
+/// Discovers the JWKS URL and signing algorithms from the provider's
+/// OIDC discovery endpoint, then initializes the decoder with provider-specific
+/// validation settings.
 pub async fn build_auth_state(
-    client_id: &str,
+    config: &AuthConfig,
 ) -> std::result::Result<AuthState, Box<dyn std::error::Error>> {
-    let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_audience(&[client_id]);
-    validation.set_issuer(&["https://accounts.google.com"]);
+    // Discover JWKS URL and fetch initial keys.
+    let jwks_url = discover_jwks_url(&config.issuer).await?;
+    tracing::info!(jwks_url = %jwks_url, "Discovered JWKS URL from OIDC issuer");
+
+    // Discover algorithms from the JWKS endpoint.
+    let algorithms = discover_algorithms(&jwks_url).await?;
+
+    let mut validation = Validation::default();
+    validation.algorithms = algorithms;
+    validation.set_audience(&[&config.client_id]);
+    validation.set_issuer(&[&config.issuer]);
+    validation.validate_nbf = true;
+    // leeway defaults to 60 seconds in jsonwebtoken, which is fine
 
     let decoder = RemoteJwksDecoder::builder()
-        .jwks_url("https://www.googleapis.com/oauth2/v3/certs".to_string())
+        .jwks_url(jwks_url)
         .validation(validation)
         .build()?;
 
-    // Fetch the initial JWKS keys from Google before accepting requests.
+    // Fetch the initial JWKS keys before accepting requests.
     decoder.initialize().await?;
 
     // Spawn the periodic JWKS key refresh as a background task.
@@ -137,19 +300,19 @@ pub async fn build_auth_state(
 /// Returns an error if auth is enabled without TLS protection.
 /// Logs a warning if `--allow-insecure-auth` is used (local dev).
 pub fn validate_tls_config(
-    google_client_id: Option<&str>,
+    oidc_client_id: Option<&str>,
     behind_tls_proxy: bool,
     allow_insecure_auth: bool,
 ) -> std::result::Result<(), String> {
-    if google_client_id.is_some() && !behind_tls_proxy && !allow_insecure_auth {
+    if oidc_client_id.is_some() && !behind_tls_proxy && !allow_insecure_auth {
         return Err(
-            "--google-client-id requires TLS to protect tokens in transit.\n\
+            "--oidc-client-id requires TLS to protect tokens in transit.\n\
              Use --behind-tls-proxy if a reverse proxy terminates TLS,\n\
              or --allow-insecure-auth for local development (never in production)."
                 .to_string(),
         );
     }
-    if allow_insecure_auth && google_client_id.is_some() {
+    if allow_insecure_auth && oidc_client_id.is_some() {
         tracing::warn!(
             "Auth enabled WITHOUT TLS (--allow-insecure-auth). \
              Tokens will transit in plaintext. Do not use in production."
@@ -158,12 +321,33 @@ pub fn validate_tls_config(
     Ok(())
 }
 
+/// Validate that an image domain is safe for CSP inclusion.
+///
+/// Accepts bare hostnames only (e.g. `lh3.googleusercontent.com`).
+/// Rejects domains containing characters that could allow CSP injection.
+pub fn validate_image_domain(domain: &str) -> Result<(), String> {
+    if domain.is_empty() {
+        return Err("Image domain must not be empty".to_string());
+    }
+    // Must be a bare hostname: alphanumeric, dots, hyphens only.
+    // No scheme, no path, no whitespace, no semicolons.
+    let valid = domain
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    if !valid {
+        return Err(format!(
+            "Invalid image domain '{domain}': must contain only alphanumeric characters, dots, and hyphens"
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn make_claims(email: &str, verified: bool) -> GoogleClaims {
-        GoogleClaims {
+    fn make_claims(email: &str, verified: bool) -> OidcClaims {
+        OidcClaims {
             sub: "123".to_string(),
             email: email.to_string(),
             email_verified: verified,
@@ -175,6 +359,8 @@ mod tests {
     fn make_config(emails: Option<Vec<&str>>, domains: Option<Vec<&str>>) -> AuthConfig {
         AuthConfig {
             client_id: "test-client-id".to_string(),
+            issuer: "https://accounts.google.com".to_string(),
+            image_domains: vec!["lh3.googleusercontent.com".to_string()],
             allowed_emails: emails.map(|v| v.into_iter().map(String::from).collect()),
             allowed_domains: domains.map(|v| v.into_iter().map(String::from).collect()),
         }
@@ -305,5 +491,110 @@ mod tests {
     #[test]
     fn tls_not_required_when_auth_disabled() {
         assert!(validate_tls_config(None, false, false).is_ok());
+    }
+
+    // ── OidcClaims deserialization ─────────────────────────────
+
+    #[test]
+    fn oidc_claims_google_style() {
+        let json = r#"{
+            "sub": "1234567890",
+            "email": "user@gmail.com",
+            "email_verified": true,
+            "name": "Test User",
+            "picture": "https://lh3.googleusercontent.com/photo.jpg"
+        }"#;
+        let claims: OidcClaims = serde_json::from_str(json).unwrap();
+        assert_eq!(claims.sub, "1234567890");
+        assert_eq!(claims.email, "user@gmail.com");
+        assert!(claims.email_verified);
+        assert_eq!(claims.name.as_deref(), Some("Test User"));
+        assert!(claims.picture.is_some());
+    }
+
+    #[test]
+    fn oidc_claims_azure_style_no_picture_no_email_verified() {
+        let json = r#"{
+            "sub": "AAAAABBBBBcccccc",
+            "email": "user@contoso.com",
+            "name": "Contoso User"
+        }"#;
+        let claims: OidcClaims = serde_json::from_str(json).unwrap();
+        assert_eq!(claims.sub, "AAAAABBBBBcccccc");
+        assert_eq!(claims.email, "user@contoso.com");
+        // email_verified defaults to false when absent
+        assert!(!claims.email_verified);
+        assert_eq!(claims.name.as_deref(), Some("Contoso User"));
+        assert!(claims.picture.is_none());
+    }
+
+    #[test]
+    fn oidc_claims_missing_email_verified_defaults_false_and_rejected() {
+        let json = r#"{
+            "sub": "xyz",
+            "email": "user@example.com",
+            "name": "User"
+        }"#;
+        let claims: OidcClaims = serde_json::from_str(json).unwrap();
+        assert!(!claims.email_verified);
+
+        // Should be rejected by check_allowlists
+        let config = make_config(None, None);
+        assert_eq!(
+            check_allowlists(&claims, &config),
+            Err(StatusCode::UNAUTHORIZED)
+        );
+    }
+
+    // ── validate_image_domain ──────────────────────────────────
+
+    #[test]
+    fn image_domain_valid() {
+        assert!(validate_image_domain("lh3.googleusercontent.com").is_ok());
+        assert!(validate_image_domain("cdn.example.co.uk").is_ok());
+        assert!(validate_image_domain("avatars.githubusercontent.com").is_ok());
+    }
+
+    #[test]
+    fn image_domain_rejects_csp_injection() {
+        assert!(validate_image_domain("evil.com; script-src 'unsafe-inline'").is_err());
+    }
+
+    #[test]
+    fn image_domain_rejects_whitespace() {
+        assert!(validate_image_domain("evil.com evil2.com").is_err());
+    }
+
+    #[test]
+    fn image_domain_rejects_scheme_prefix() {
+        assert!(validate_image_domain("https://example.com").is_err());
+    }
+
+    #[test]
+    fn image_domain_rejects_empty() {
+        assert!(validate_image_domain("").is_err());
+    }
+
+    // ── discover_jwks_url (unit tests with mock data) ──────────
+
+    #[test]
+    fn discover_jwks_url_rejects_http_issuer() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(discover_jwks_url("http://accounts.google.com"));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("OIDC issuer must use HTTPS")
+        );
+    }
+
+    #[test]
+    fn discover_jwks_url_rejects_malformed_url() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(discover_jwks_url("not a url at all"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Malformed"));
     }
 }

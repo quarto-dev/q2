@@ -3360,6 +3360,7 @@ dependencies = [
  "jsonwebtoken",
  "notify",
  "notify-debouncer-mini",
+ "reqwest",
  "samod",
  "serde",
  "serde_json",
@@ -3374,6 +3375,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
  "walkdir",
 ]
 

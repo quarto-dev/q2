@@ -23,7 +23,9 @@ pub struct HubArgs {
     pub sync_interval: u64,
     pub no_watch: bool,
     pub watch_debounce: u64,
-    pub google_client_id: Option<String>,
+    pub oidc_client_id: Option<String>,
+    pub oidc_issuer: String,
+    pub oidc_image_domains: Vec<String>,
     pub behind_tls_proxy: bool,
     pub allow_insecure_auth: bool,
     pub allowed_emails: Option<Vec<String>>,
@@ -96,15 +98,17 @@ async fn run_hub(args: HubArgs) -> Result<()> {
 
     // Validate TLS configuration when auth is enabled
     auth::validate_tls_config(
-        args.google_client_id.as_deref(),
+        args.oidc_client_id.as_deref(),
         args.behind_tls_proxy,
         args.allow_insecure_auth,
     )
     .map_err(|e| anyhow::anyhow!(e))?;
 
-    // Build auth config if Google client ID is provided
-    let auth_config = args.google_client_id.map(|client_id| auth::AuthConfig {
+    // Build auth config if OIDC client ID is provided
+    let auth_config = args.oidc_client_id.map(|client_id| auth::AuthConfig {
         client_id,
+        issuer: args.oidc_issuer,
+        image_domains: args.oidc_image_domains,
         allowed_emails: args.allowed_emails,
         allowed_domains: args.allowed_domains,
     });

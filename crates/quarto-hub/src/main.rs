@@ -58,10 +58,28 @@ struct Args {
     #[arg(long, default_value = "500")]
     watch_debounce: u64,
 
-    /// Google OAuth2 client ID. Presence enables auth.
+    /// OIDC client ID. Presence enables auth.
     /// Requires --behind-tls-proxy (or --allow-insecure-auth for local dev).
-    #[arg(long, env = "QUARTO_HUB_GOOGLE_CLIENT_ID")]
-    google_client_id: Option<String>,
+    #[arg(long, env = "OIDC_CLIENT_ID")]
+    oidc_client_id: Option<String>,
+
+    /// OIDC issuer URL for JWT validation.
+    /// The JWKS URL is discovered automatically from {issuer}/.well-known/openid-configuration.
+    #[arg(
+        long,
+        env = "OIDC_ISSUER",
+        default_value = "https://accounts.google.com"
+    )]
+    oidc_issuer: String,
+
+    /// Comma-separated domains allowed in CSP img-src for profile pictures.
+    #[arg(
+        long,
+        env = "OIDC_IMAGE_DOMAINS",
+        value_delimiter = ',',
+        default_value = "lh3.googleusercontent.com"
+    )]
+    oidc_image_domains: Vec<String>,
 
     /// Acknowledge that a TLS-terminating reverse proxy (nginx, Caddy,
     /// cloud LB) sits in front of the hub. Required when auth is enabled.
@@ -139,15 +157,17 @@ async fn main() -> anyhow::Result<()> {
 
     // Validate TLS configuration when auth is enabled
     auth::validate_tls_config(
-        args.google_client_id.as_deref(),
+        args.oidc_client_id.as_deref(),
         args.behind_tls_proxy,
         args.allow_insecure_auth,
     )
     .map_err(|e| anyhow::anyhow!(e))?;
 
-    // Build auth config if Google client ID is provided
-    let auth_config = args.google_client_id.map(|client_id| auth::AuthConfig {
+    // Build auth config if OIDC client ID is provided
+    let auth_config = args.oidc_client_id.map(|client_id| auth::AuthConfig {
         client_id,
+        issuer: args.oidc_issuer,
+        image_domains: args.oidc_image_domains,
         allowed_emails: args.allowed_emails,
         allowed_domains: args.allowed_domains,
     });

@@ -31,6 +31,12 @@ axum-jwt-auth = "0.6"
 jsonwebtoken = "10"
 tokio-util = { workspace = true }
 
+# HTTP client for OIDC discovery
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# URL parsing for OIDC issuer validation
+url = "2.5"
+
 # Cookie building (already transitive via axum-jwt-auth)
 cookie = "0.18"
 time = "0.3"

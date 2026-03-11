@@ -366,10 +366,28 @@ enum Commands {
         #[arg(long, default_value = "500")]
         watch_debounce: u64,
 
-        /// Google OAuth2 client ID. Presence enables auth.
+        /// OIDC client ID. Presence enables auth.
         /// Requires --behind-tls-proxy (or --allow-insecure-auth for local dev).
-        #[arg(long, env = "QUARTO_HUB_GOOGLE_CLIENT_ID")]
-        google_client_id: Option<String>,
+        #[arg(long, env = "OIDC_CLIENT_ID")]
+        oidc_client_id: Option<String>,
+
+        /// OIDC issuer URL for JWT validation.
+        /// The JWKS URL is discovered automatically from {issuer}/.well-known/openid-configuration.
+        #[arg(
+            long,
+            env = "OIDC_ISSUER",
+            default_value = "https://accounts.google.com"
+        )]
+        oidc_issuer: String,
+
+        /// Comma-separated domains allowed in CSP img-src for profile pictures.
+        #[arg(
+            long,
+            env = "OIDC_IMAGE_DOMAINS",
+            value_delimiter = ',',
+            default_value = "lh3.googleusercontent.com"
+        )]
+        oidc_image_domains: Vec<String>,
 
         /// Acknowledge that a TLS-terminating reverse proxy (nginx, Caddy,
         /// cloud LB) sits in front of the hub. Required when auth is enabled.
@@ -449,7 +467,9 @@ fn main() -> Result<()> {
             sync_interval,
             no_watch,
             watch_debounce,
-            google_client_id,
+            oidc_client_id,
+            oidc_issuer,
+            oidc_image_domains,
             behind_tls_proxy,
             allow_insecure_auth,
             allowed_emails,
@@ -464,7 +484,9 @@ fn main() -> Result<()> {
             sync_interval,
             no_watch,
             watch_debounce,
-            google_client_id,
+            oidc_client_id,
+            oidc_issuer,
+            oidc_image_domains,
             behind_tls_proxy,
             allow_insecure_auth,
             allowed_emails,
