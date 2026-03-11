@@ -10,7 +10,7 @@ use automerge::{Automerge, ObjType, ROOT, transaction::Transactable};
 use axum::http::StatusCode;
 use axum_jwt_auth::JwtDecoder;
 use samod::storage::TokioFilesystemStorage;
-use samod::{ConnectionId, Repo};
+use samod::{AcceptorHandle, ConnectionId, Repo};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
@@ -93,6 +93,9 @@ pub struct HubContext {
     /// Clone is cheap: Repo wraps Arc<Mutex<Inner>>.
     repo: Repo,
 
+    /// Acceptor handle for inbound WebSocket connections.
+    acceptor: AcceptorHandle,
+
     /// The project index document (maps file paths to document IDs)
     index: IndexDocument,
 
@@ -157,24 +160,19 @@ impl HubContext {
         let samod_storage = TokioFilesystemStorage::new(&automerge_dir);
         let connection_emails = Arc::new(StdMutex::new(HashMap::new()));
 
-        let mut builder = Repo::build_tokio()
+        let builder = Repo::build_tokio()
             .with_storage(samod_storage)
             .with_announce_policy(|_doc_id, _peer_id| false);
 
-        if config.auth_config.is_some() {
-            let emails = connection_emails.clone();
-            builder = builder.with_on_document_served(move |served| {
-                if let Some(email) = emails.lock().unwrap().get(&served.connection_id) {
-                    tracing::info!(
-                        email = %email,
-                        document_id = %served.document_id,
-                        "Document served"
-                    );
-                }
-            });
-        }
-
         let repo = builder.load().await;
+
+        // Create an acceptor for inbound WebSocket connections
+        let acceptor_url: url::Url = format!("ws://{}:{}", config.host, config.port)
+            .parse()
+            .expect("valid acceptor URL");
+        let acceptor = repo
+            .make_acceptor(acceptor_url)
+            .map_err(|_| crate::error::Error::Server("repo is stopped".to_string()))?;
 
         info!("samod repo initialized");
 
@@ -230,6 +228,7 @@ impl HubContext {
             storage,
             project_files,
             repo,
+            acceptor,
             index,
             sync_state,
             auth_config,
@@ -257,6 +256,11 @@ impl HubContext {
     /// Get reference to the samod repo.
     pub fn repo(&self) -> &Repo {
         &self.repo
+    }
+
+    /// Get reference to the acceptor handle for inbound connections.
+    pub fn acceptor(&self) -> &AcceptorHandle {
+        &self.acceptor
     }
 
     /// Get reference to the index document.

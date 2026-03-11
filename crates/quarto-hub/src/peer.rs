@@ -2,113 +2,51 @@
 //!
 //! This module handles outgoing WebSocket connections to sync servers like
 //! sync.automerge.org. Connections are maintained with automatic reconnection
-//! using exponential backoff.
+//! via samod's built-in dialer with exponential backoff.
 
-use std::time::Duration;
+use samod::{BackoffConfig, Repo};
+use tracing::{info, warn};
 
-use samod::{ConnDirection, Repo};
-use tokio_tungstenite::connect_async;
-use tracing::{debug, info, warn};
-
-use crate::server::format_peer_info;
-
-/// Minimum backoff duration between reconnection attempts.
-const MIN_BACKOFF: Duration = Duration::from_secs(1);
-
-/// Maximum backoff duration between reconnection attempts.
-const MAX_BACKOFF: Duration = Duration::from_secs(60);
-
-/// Spawn a background task that maintains a connection to a peer.
+/// Spawn a peer dialer that maintains a connection to a remote sync server.
 ///
-/// The task will:
-/// 1. Attempt to connect to the peer via WebSocket
-/// 2. If successful, sync documents until the connection closes
-/// 3. Reconnect with exponential backoff on disconnection or error
+/// Uses samod's built-in `dial_websocket` which handles:
+/// - Initial connection via tungstenite
+/// - Automatic reconnection with exponential backoff
+/// - Document sync over the WebSocket transport
 ///
-/// The task runs until the repo is stopped.
+/// The dialer runs until the repo is stopped.
 pub fn spawn_peer_connection(repo: Repo, url: String) {
-    tokio::spawn(async move {
-        peer_connection_loop(repo, url).await;
-    });
-}
-
-/// Main loop for maintaining a peer connection.
-async fn peer_connection_loop(repo: Repo, url: String) {
-    let mut backoff = MIN_BACKOFF;
-
-    loop {
-        info!(url = %url, "Connecting to peer");
-
-        match connect_to_peer(&repo, &url).await {
-            PeerConnectionResult::Connected => {
-                // Connection succeeded and then closed normally
-                info!(url = %url, "Peer connection closed");
-                // Reset backoff on successful connection
-                backoff = MIN_BACKOFF;
-            }
-            PeerConnectionResult::ConnectionFailed(err) => {
-                warn!(url = %url, error = %err, "Failed to connect to peer");
-            }
-            PeerConnectionResult::RepoStopped => {
-                info!(url = %url, "Repo stopped, exiting peer connection loop");
-                return;
-            }
-        }
-
-        // Wait before reconnecting
-        debug!(url = %url, backoff_secs = backoff.as_secs(), "Waiting before reconnect");
-        tokio::time::sleep(backoff).await;
-
-        // Exponential backoff with cap
-        backoff = (backoff * 2).min(MAX_BACKOFF);
-    }
-}
-
-/// Result of a peer connection attempt.
-enum PeerConnectionResult {
-    /// Connected successfully, connection later closed
-    Connected,
-    /// Failed to establish connection
-    ConnectionFailed(String),
-    /// Repo was stopped
-    RepoStopped,
-}
-
-/// Attempt to connect to a peer and sync until disconnection.
-async fn connect_to_peer(repo: &Repo, url: &str) -> PeerConnectionResult {
-    // Establish WebSocket connection
-    let ws_stream = match connect_async(url).await {
-        Ok((stream, response)) => {
-            debug!(
-                url = %url,
-                status = %response.status(),
-                "WebSocket connection established"
-            );
-            stream
-        }
+    let ws_url: url::Url = match url.parse() {
+        Ok(u) => u,
         Err(e) => {
-            return PeerConnectionResult::ConnectionFailed(e.to_string());
+            warn!(url = %url, error = %e, "Invalid peer URL, skipping");
+            return;
         }
     };
 
-    // Connect the WebSocket to the repo
-    // Note: connect_tungstenite expects a stream that implements both Sink and Stream
-    let connection = match repo.connect_tungstenite(ws_stream, ConnDirection::Outgoing) {
-        Ok(conn) => conn,
+    match repo.dial_websocket(ws_url.clone(), BackoffConfig::default()) {
+        Ok(handle) => {
+            info!(url = %ws_url, "Peer dialer started");
+            // Spawn a task to log when the first connection is established
+            tokio::spawn(async move {
+                match handle.established().await {
+                    Ok(peer_info) => {
+                        info!(
+                            url = %ws_url,
+                            peer_id = %peer_info.peer_id,
+                            "Peer connection established"
+                        );
+                    }
+                    Err(_) => {
+                        warn!(url = %ws_url, "Peer dialer failed permanently");
+                    }
+                }
+            });
+        }
         Err(samod::Stopped) => {
-            return PeerConnectionResult::RepoStopped;
+            warn!(url = %url, "Cannot dial peer: repo is stopped");
         }
-    };
-
-    let (peer_id, storage_id) = format_peer_info(&connection.info());
-
-    info!(url = %url, peer_id, storage_id, "Connected to peer");
-
-    // Wait for the connection to finish (disconnect or error)
-    let reason = connection.finished().await;
-    debug!(url = %url, reason = ?reason, "Peer connection finished");
-
-    PeerConnectionResult::Connected
+    }
 }
 
 #[cfg(test)]

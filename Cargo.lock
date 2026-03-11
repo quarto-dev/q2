@@ -1587,6 +1587,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "037711b3d59c33004d3856fbdc83b99d4ff37a24768fa1be9ce3538a1cde4393"
 
 [[package]]
+name = "futures-timer"
+version = "3.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f288b0a4f20f9a56b5d1da57e2227c661b7b16168e2f72365f57b63326e29b24"
+
+[[package]]
 name = "futures-util"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3526,7 +3532,6 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "tokio",
- "tokio-tungstenite 0.27.0",
  "tokio-util",
  "tower 0.5.3",
  "tower-http",
@@ -4214,8 +4219,8 @@ dependencies = [
 
 [[package]]
 name = "samod"
-version = "0.7.1"
-source = "git+https://github.com/quarto-dev/samod.git?branch=quarto#e53c7ce23e20a3cdee31ad509b992b00229afcde"
+version = "0.8.0"
+source = "git+https://github.com/shikokuchuo/samod.git?branch=q2#2da9d3d840a6788fcefd6e174945148e37b78ecf"
 dependencies = [
  "async-channel",
  "automerge",
@@ -4223,19 +4228,22 @@ dependencies = [
  "bytes",
  "chrono",
  "futures",
+ "futures-timer",
  "rand 0.9.2",
  "samod-core",
  "tokio",
  "tokio-tungstenite 0.27.0",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "tungstenite 0.27.0",
+ "url",
 ]
 
 [[package]]
 name = "samod-core"
-version = "0.7.1"
-source = "git+https://github.com/quarto-dev/samod.git?branch=quarto#e53c7ce23e20a3cdee31ad509b992b00229afcde"
+version = "0.8.0"
+source = "git+https://github.com/shikokuchuo/samod.git?branch=q2#2da9d3d840a6788fcefd6e174945148e37b78ecf"
 dependencies = [
  "automerge",
  "base64 0.21.7",
@@ -4247,6 +4255,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "tracing",
+ "url",
  "uuid",
 ]
 
