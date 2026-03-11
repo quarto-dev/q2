@@ -120,7 +120,10 @@ struct OidcDiscoveryDocument {
 /// - The `jwks_uri` is an HTTPS URL
 ///
 /// Returns the `jwks_uri` from the discovery document.
-pub async fn discover_jwks_url(issuer: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn discover_jwks_url(
+    client: &reqwest::Client,
+    issuer: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     // Validate issuer is a well-formed HTTPS URL before making any request.
     let issuer_url = url::Url::parse(issuer)
         .map_err(|e| format!("Malformed OIDC issuer URL '{issuer}': {e}"))?;
@@ -132,10 +135,6 @@ pub async fn discover_jwks_url(issuer: &str) -> Result<String, Box<dyn std::erro
         "{}/.well-known/openid-configuration",
         issuer.trim_end_matches('/')
     );
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
 
     let response = client.get(&discovery_url).send().await.map_err(|e| {
         format!("Failed to fetch OIDC discovery document from {discovery_url}: {e}")
@@ -183,11 +182,10 @@ pub async fn discover_jwks_url(issuer: &str) -> Result<String, Box<dyn std::erro
 /// Fetches the JWKS and extracts the `alg` field from each key.
 /// If the resulting set is empty (all keys omit `alg`), falls back to
 /// `[RS256]` — the most common OIDC signing algorithm.
-async fn discover_algorithms(jwks_url: &str) -> Result<Vec<Algorithm>, Box<dyn std::error::Error>> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
-
+async fn discover_algorithms(
+    client: &reqwest::Client,
+    jwks_url: &str,
+) -> Result<Vec<Algorithm>, Box<dyn std::error::Error>> {
     let jwks: jsonwebtoken::jwk::JwkSet = client
         .get(jwks_url)
         .send()
@@ -255,12 +253,17 @@ impl std::str::FromStr for AlgorithmWrapper {
 pub async fn build_auth_state(
     config: &AuthConfig,
 ) -> std::result::Result<AuthState, Box<dyn std::error::Error>> {
+    // Shared HTTP client for OIDC discovery requests.
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
     // Discover JWKS URL and fetch initial keys.
-    let jwks_url = discover_jwks_url(&config.issuer).await?;
+    let jwks_url = discover_jwks_url(&client, &config.issuer).await?;
     tracing::info!(jwks_url = %jwks_url, "Discovered JWKS URL from OIDC issuer");
 
     // Discover algorithms from the JWKS endpoint.
-    let algorithms = discover_algorithms(&jwks_url).await?;
+    let algorithms = discover_algorithms(&client, &jwks_url).await?;
 
     let mut validation = Validation::default();
     validation.algorithms = algorithms;
@@ -580,7 +583,8 @@ mod tests {
     #[test]
     fn discover_jwks_url_rejects_http_issuer() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(discover_jwks_url("http://accounts.google.com"));
+        let client = reqwest::Client::new();
+        let result = rt.block_on(discover_jwks_url(&client, "http://accounts.google.com"));
         assert!(result.is_err());
         assert!(
             result
@@ -593,7 +597,8 @@ mod tests {
     #[test]
     fn discover_jwks_url_rejects_malformed_url() {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let result = rt.block_on(discover_jwks_url("not a url at all"));
+        let client = reqwest::Client::new();
+        let result = rt.block_on(discover_jwks_url(&client, "not a url at all"));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Malformed"));
     }
