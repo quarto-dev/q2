@@ -42,6 +42,7 @@ async-trait = "0.1"
 tokio-util = "0.7"
 pollster = "0.4"
 regex = "1.12"
+scraper = "0.22"
 grass = "0.13.4"
 include_dir = "0.7"
 uuid = { version = "1", features = ["v4"] }

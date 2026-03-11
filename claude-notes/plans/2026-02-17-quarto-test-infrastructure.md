@@ -149,7 +149,7 @@ Implement smoke-all style document testing for q2, enabling tests to be embedded
 
 ### 5.1 HTML-specific assertions
 
-- [ ] `ensureHtmlElements(selectors, noMatchSelectors)` - CSS selector presence
+- [x] `ensureHtmlElements(selectors, noMatchSelectors)` - CSS selector presence (scraper crate)
 - [ ] `ensureHtmlElementContents(selector, matches, noMatches)` - element text content
 - [ ] `ensureHtmlElementCount(selector, count)` - element counting
 

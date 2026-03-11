@@ -13,8 +13,8 @@ use anyhow::{Context, Result};
 use serde_yaml::Value;
 
 use crate::assertions::{
-    Assertion, EnsureCssRegexMatches, EnsureFileRegexMatches, FileExists, FolderExists, NoErrors,
-    NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
+    Assertion, EnsureCssRegexMatches, EnsureFileRegexMatches, EnsureHtmlElements, FileExists,
+    FolderExists, NoErrors, NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
 };
 
 /// Configuration for when/whether to run tests.
@@ -163,9 +163,10 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
             let key_str = key.as_str().context("assertion key must be a string")?;
 
             match key_str {
-                // Recognized but not yet implemented — silently skip.
-                // TODO: implement ensureHtmlElements with an HTML parser.
-                "ensureHtmlElements" => {}
+                "ensureHtmlElements" => {
+                    let assertion = parse_ensure_html_elements(assertion_value)?;
+                    assertions.push(Box::new(assertion));
+                }
                 "ensureFileRegexMatches" => {
                     let assertion = parse_ensure_file_regex_matches(assertion_value)?;
                     assertions.push(Box::new(assertion));
@@ -323,6 +324,34 @@ fn parse_ensure_file_regex_matches(value: &Value) -> Result<EnsureFileRegexMatch
     };
 
     EnsureFileRegexMatches::new(matches, no_matches)
+}
+
+/// Parse `ensureHtmlElements` assertion.
+///
+/// Format (same two-array structure as ensureFileRegexMatches):
+/// ```yaml
+/// ensureHtmlElements:
+///   - ["nav#TOC", "div.cell"]          # selectors that must match
+///   - ["div.do-not-be-here"]           # selectors that must NOT match (optional)
+/// ```
+fn parse_ensure_html_elements(value: &Value) -> Result<EnsureHtmlElements> {
+    let arr = value
+        .as_sequence()
+        .context("ensureHtmlElements must be an array")?;
+
+    let selectors = if !arr.is_empty() {
+        parse_pattern_array(&arr[0])?
+    } else {
+        vec![]
+    };
+
+    let no_match_selectors = if arr.len() > 1 {
+        parse_pattern_array(&arr[1])?
+    } else {
+        vec![]
+    };
+
+    EnsureHtmlElements::new(selectors, no_match_selectors)
 }
 
 /// Parse `printsMessage` assertion.
@@ -600,7 +629,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ensure_html_elements_recognized_but_skipped() {
+    fn test_ensure_html_elements_parsed() {
         let yaml: Value = serde_yaml::from_str(
             r#"
             _quarto:
@@ -613,11 +642,11 @@ mod tests {
         )
         .unwrap();
 
-        // Should parse without error (recognized key, just not implemented)
         let (_, specs) = parse_test_specs(&yaml, std::path::Path::new("test.qmd")).unwrap();
         assert_eq!(specs.len(), 1);
-        // Only noErrors — ensureHtmlElements is skipped
-        assert_eq!(specs[0].assertions.len(), 1);
+        // noErrors + ensureHtmlElements
+        assert_eq!(specs[0].assertions.len(), 2);
+        assert_eq!(specs[0].assertions[1].name(), "ensureHtmlElements");
     }
 
     #[test]
