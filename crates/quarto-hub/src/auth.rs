@@ -75,6 +75,13 @@ impl AuthConfig {
         })
     }
 
+    /// Whether the configured issuer is Google (`https://accounts.google.com`).
+    ///
+    /// Used to gate Google-specific endpoints like `/auth/callback`.
+    pub fn is_google_issuer(&self) -> bool {
+        self.issuer.trim_end_matches('/') == "https://accounts.google.com"
+    }
+
     /// Extract the CSP origin (`scheme://host[:port]`) from the validated issuer URL.
     ///
     /// Panics if the issuer is not a valid URL, which cannot happen if
@@ -112,6 +119,11 @@ pub struct OidcClaims {
 /// user passes if they match ANY list (OR, not AND). This allows
 /// combining `--allowed-domains=company.com` with
 /// `--allowed-emails=contractor@gmail.com`.
+///
+/// **Important**: the `email_verified` claim is trusted as reported by the
+/// OIDC provider. Some providers set it to `true` without rigorous
+/// verification. When using `--allowed-domains`, ensure your provider
+/// actually verifies email ownership before issuing tokens.
 pub fn check_allowlists(claims: &OidcClaims, config: &AuthConfig) -> Result<(), StatusCode> {
     if !claims.email_verified {
         return Err(StatusCode::UNAUTHORIZED);

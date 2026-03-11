@@ -404,6 +404,8 @@ enum Commands {
         allowed_emails: Option<Vec<String>>,
 
         /// Allowed email domains (comma-separated).
+        /// Note: relies on the OIDC provider's `email_verified` claim.
+        /// Ensure your provider verifies email ownership before trusting domain-based access.
         #[arg(long, env = "QUARTO_HUB_ALLOWED_DOMAINS", value_delimiter = ',')]
         allowed_domains: Option<Vec<String>>,
     },

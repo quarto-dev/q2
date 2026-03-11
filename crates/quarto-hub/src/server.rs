@@ -729,7 +729,6 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
             get(get_document).put(update_document),
         )
         // Auth endpoints
-        .route("/auth/callback", post(auth_callback))
         .route("/auth/me", get(auth_me))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/refresh", post(auth_refresh))
@@ -740,6 +739,12 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         .route("/ws", get(ws_handler))
         .fallback(not_found)
         .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan));
+
+    // Google-specific redirect callback: only registered when the issuer is Google.
+    // Non-Google OIDC frontends should use POST /auth/refresh instead.
+    if ctx.auth_config().is_some_and(|c| c.is_google_issuer()) {
+        router = router.route("/auth/callback", post(auth_callback));
+    }
 
     // Add Content-Security-Policy header when auth is enabled.
     // Without auth there are no OIDC provider scripts to allow.
