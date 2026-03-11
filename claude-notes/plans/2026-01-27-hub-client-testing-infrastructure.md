@@ -128,8 +128,8 @@ This plan outlines a comprehensive testing infrastructure for hub-client, addres
 - [x] Set up jsdom/happy-dom environment for component tests
 - [x] Create test utilities directory structure
 - [x] Set up Playwright for E2E tests
-- [ ] Add `@automerge/automerge-repo-storage-nodefs` dependency for fixture management
-- [ ] Add `@automerge/automerge-repo-sync-server` dependency for local E2E sync server
+- [x] ~~Add `@automerge/automerge-repo-storage-nodefs` dependency for fixture management~~ — not needed; E2E tests create projects dynamically via `@quarto/quarto-sync-client` (see `2026-03-10-smoke-all-playwright-e2e.md`)
+- [x] ~~Add `@automerge/automerge-repo-sync-server` dependency for local E2E sync server~~ — replaced by using the real hub server (`cargo run --bin hub`); no new dependency needed (0f5ee7f8)
 - [x] Update `.github/workflows/test-suite.yml` to run hub-client unit tests
 - [x] Create `.github/workflows/hub-client-e2e.yml` for E2E tests (manual trigger initially)
 
@@ -173,12 +173,12 @@ This plan outlines a comprehensive testing infrastructure for hub-client, addres
 
 ### Phase 6: E2E Tests with Playwright
 
-- [ ] Set up Playwright configuration with fixture lifecycle hooks
-- [ ] Add tests for project loading (using fixture with known docId)
+- [x] Set up Playwright configuration with fixture lifecycle hooks — globalSetup/Teardown starts real hub server, file-based IPC for server URL (0f5ee7f8)
+- [x] Add tests for project loading (using fixture with known docId) — `e2e/project-loading.spec.ts` creates Automerge project dynamically, seeds IndexedDB, navigates via URL hash (0f5ee7f8)
 - [ ] Add tests for project creation flow (fresh documents)
 - [ ] Add tests for file editing flow
-- [ ] Add tests for SCSS compilation and caching behavior
-- [ ] Add tests for preview rendering
+- [x] Add tests for SCSS compilation and caching behavior — `e2e/theme-subdir-e2e.spec.ts` (7 tests) + smoke-all theme fixtures verify SCSS compilation through full pipeline (0f5ee7f8)
+- [x] Add tests for preview rendering — `e2e/preview-extraction.spec.ts` + `e2e/smoke-all.spec.ts` (23 smoke-all fixtures) test HTML/CSS/diagnostics extraction from live preview (0f5ee7f8)
 
 ---
 
