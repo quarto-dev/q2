@@ -220,17 +220,28 @@ pub async fn discover_jwks_url(
         format!("Failed to parse OIDC discovery document from {discovery_url}: {e}")
     })?;
 
-    // Validate that the discovery document's issuer matches what we configured
-    // (prevents issuer spoofing).
-    if doc.issuer.trim_end_matches('/') != issuer.trim_end_matches('/') {
+    validate_discovery_document(&doc, issuer, &discovery_url)
+}
+
+/// Validate an OIDC discovery document against the configured issuer.
+///
+/// - The document's `issuer` field must match the configured issuer (prevents spoofing).
+/// - The `jwks_uri` must be a well-formed HTTPS URL.
+///
+/// Returns the `jwks_uri` on success.
+fn validate_discovery_document(
+    doc: &OidcDiscoveryDocument,
+    configured_issuer: &str,
+    discovery_url: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if doc.issuer.trim_end_matches('/') != configured_issuer.trim_end_matches('/') {
         return Err(format!(
             "OIDC issuer mismatch: configured '{}' but discovery document reports '{}'",
-            issuer, doc.issuer
+            configured_issuer, doc.issuer
         )
         .into());
     }
 
-    // Validate jwks_uri is HTTPS.
     let jwks_url = url::Url::parse(&doc.jwks_uri)
         .map_err(|e| format!("Malformed JWKS URI '{}': {e}", doc.jwks_uri))?;
     if jwks_url.scheme() != "https" {
@@ -242,7 +253,7 @@ pub async fn discover_jwks_url(
         .into());
     }
 
-    Ok(doc.jwks_uri)
+    Ok(doc.jwks_uri.clone())
 }
 
 /// Convert a JWK key algorithm to a JWT signing algorithm.
@@ -283,6 +294,18 @@ async fn discover_algorithms(
         .await
         .map_err(|e| format!("Failed to parse JWKS from {jwks_url}: {e}"))?;
 
+    let algorithms = extract_algorithms_from_jwks(&jwks, jwks_url);
+    Ok(algorithms)
+}
+
+/// Extract signing algorithms from a JWKS key set.
+///
+/// Returns a deduplicated list of signing algorithms found in the keys' `alg` fields.
+/// Falls back to `[RS256]` if no keys declare a signing algorithm.
+fn extract_algorithms_from_jwks(
+    jwks: &jsonwebtoken::jwk::JwkSet,
+    jwks_url: &str,
+) -> Vec<Algorithm> {
     let mut algorithms = Vec::new();
     for jwk in &jwks.keys {
         if let Some(ref ka) = jwk.common.key_algorithm {
@@ -304,7 +327,7 @@ async fn discover_algorithms(
         );
     }
 
-    Ok(algorithms)
+    algorithms
 }
 
 /// Build the JWKS decoder for OIDC ID token validation.
@@ -707,5 +730,241 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.issuer_origin(), "https://login.microsoftonline.com");
+    }
+
+    #[test]
+    fn auth_config_issuer_origin_with_port() {
+        let config = AuthConfig::new(
+            "client-id".to_string(),
+            "https://auth.example.com:8443/realm".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(config.issuer_origin(), "https://auth.example.com:8443");
+    }
+
+    // ── is_google_issuer ──────────────────────────────────────────
+
+    #[test]
+    fn is_google_issuer_true() {
+        let config = make_config(None, None);
+        assert!(config.is_google_issuer());
+    }
+
+    #[test]
+    fn is_google_issuer_with_trailing_slash() {
+        let config = AuthConfig::new(
+            "client-id".to_string(),
+            "https://accounts.google.com/".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(config.is_google_issuer());
+    }
+
+    #[test]
+    fn is_google_issuer_false_for_azure() {
+        let config = AuthConfig::new(
+            "client-id".to_string(),
+            "https://login.microsoftonline.com/tenant/v2.0".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(!config.is_google_issuer());
+    }
+
+    // ── signing_algorithm ─────────────────────────────────────────
+
+    #[test]
+    fn signing_algorithm_maps_common_algorithms() {
+        use jsonwebtoken::jwk::KeyAlgorithm;
+        assert_eq!(
+            signing_algorithm(&KeyAlgorithm::RS256),
+            Some(Algorithm::RS256)
+        );
+        assert_eq!(
+            signing_algorithm(&KeyAlgorithm::ES256),
+            Some(Algorithm::ES256)
+        );
+        assert_eq!(
+            signing_algorithm(&KeyAlgorithm::EdDSA),
+            Some(Algorithm::EdDSA)
+        );
+    }
+
+    #[test]
+    fn signing_algorithm_rejects_encryption_algorithms() {
+        use jsonwebtoken::jwk::KeyAlgorithm;
+        // RSA1_5 and RSA-OAEP are key encryption algorithms, not signing.
+        assert_eq!(signing_algorithm(&KeyAlgorithm::RSA1_5), None);
+        assert_eq!(signing_algorithm(&KeyAlgorithm::RSA_OAEP), None);
+    }
+
+    // ── validate_discovery_document ───────────────────────────────
+
+    fn make_discovery_doc(issuer: &str, jwks_uri: &str) -> OidcDiscoveryDocument {
+        OidcDiscoveryDocument {
+            issuer: issuer.to_string(),
+            jwks_uri: jwks_uri.to_string(),
+        }
+    }
+
+    #[test]
+    fn discovery_doc_valid() {
+        let doc = make_discovery_doc(
+            "https://accounts.google.com",
+            "https://www.googleapis.com/oauth2/v3/certs",
+        );
+        let result =
+            validate_discovery_document(&doc, "https://accounts.google.com", "https://ignored");
+        assert_eq!(
+            result.unwrap(),
+            "https://www.googleapis.com/oauth2/v3/certs"
+        );
+    }
+
+    #[test]
+    fn discovery_doc_issuer_mismatch() {
+        let doc = make_discovery_doc("https://evil.com", "https://evil.com/.well-known/jwks.json");
+        let result =
+            validate_discovery_document(&doc, "https://accounts.google.com", "https://ignored");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("issuer mismatch"), "got: {err}");
+        assert!(err.contains("evil.com"));
+    }
+
+    #[test]
+    fn discovery_doc_issuer_trailing_slash_normalization() {
+        let doc = make_discovery_doc(
+            "https://accounts.google.com/",
+            "https://www.googleapis.com/oauth2/v3/certs",
+        );
+        // Configured without trailing slash, doc has trailing slash — should still match.
+        let result =
+            validate_discovery_document(&doc, "https://accounts.google.com", "https://ignored");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn discovery_doc_rejects_http_jwks_uri() {
+        let doc = make_discovery_doc(
+            "https://accounts.google.com",
+            "http://www.googleapis.com/oauth2/v3/certs",
+        );
+        let result =
+            validate_discovery_document(&doc, "https://accounts.google.com", "https://ignored");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("JWKS URI must use HTTPS"), "got: {err}");
+    }
+
+    #[test]
+    fn discovery_doc_rejects_malformed_jwks_uri() {
+        let doc = make_discovery_doc("https://accounts.google.com", "not a url");
+        let result =
+            validate_discovery_document(&doc, "https://accounts.google.com", "https://ignored");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Malformed JWKS URI"), "got: {err}");
+    }
+
+    // ── extract_algorithms_from_jwks ──────────────────────────────
+
+    #[test]
+    fn extract_algorithms_finds_rs256() {
+        let jwks: jsonwebtoken::jwk::JwkSet = serde_json::from_value(serde_json::json!({
+            "keys": [{
+                "kty": "RSA",
+                "alg": "RS256",
+                "n": "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
+                "e": "AQAB",
+                "use": "sig"
+            }]
+        }))
+        .unwrap();
+        let algos = extract_algorithms_from_jwks(&jwks, "https://example.com/jwks");
+        assert_eq!(algos, vec![Algorithm::RS256]);
+    }
+
+    #[test]
+    fn extract_algorithms_deduplicates() {
+        let jwks: jsonwebtoken::jwk::JwkSet = serde_json::from_value(serde_json::json!({
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "alg": "RS256",
+                    "n": "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
+                    "e": "AQAB",
+                    "use": "sig",
+                    "kid": "key1"
+                },
+                {
+                    "kty": "RSA",
+                    "alg": "RS256",
+                    "n": "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
+                    "e": "AQAB",
+                    "use": "sig",
+                    "kid": "key2"
+                }
+            ]
+        }))
+        .unwrap();
+        let algos = extract_algorithms_from_jwks(&jwks, "https://example.com/jwks");
+        assert_eq!(algos, vec![Algorithm::RS256]);
+    }
+
+    #[test]
+    fn extract_algorithms_multiple_different() {
+        let jwks: jsonwebtoken::jwk::JwkSet = serde_json::from_value(serde_json::json!({
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "alg": "RS256",
+                    "n": "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
+                    "e": "AQAB",
+                    "use": "sig",
+                    "kid": "rsa-key"
+                },
+                {
+                    "kty": "EC",
+                    "alg": "ES256",
+                    "crv": "P-256",
+                    "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                    "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0",
+                    "use": "sig",
+                    "kid": "ec-key"
+                }
+            ]
+        }))
+        .unwrap();
+        let algos = extract_algorithms_from_jwks(&jwks, "https://example.com/jwks");
+        assert_eq!(algos, vec![Algorithm::RS256, Algorithm::ES256]);
+    }
+
+    #[test]
+    fn extract_algorithms_falls_back_to_rs256_when_no_alg() {
+        let jwks: jsonwebtoken::jwk::JwkSet = serde_json::from_value(serde_json::json!({
+            "keys": [{
+                "kty": "RSA",
+                "n": "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
+                "e": "AQAB",
+                "use": "sig"
+            }]
+        }))
+        .unwrap();
+        let algos = extract_algorithms_from_jwks(&jwks, "https://example.com/jwks");
+        assert_eq!(algos, vec![Algorithm::RS256]);
+    }
+
+    #[test]
+    fn extract_algorithms_empty_keyset_falls_back_to_rs256() {
+        let jwks: jsonwebtoken::jwk::JwkSet =
+            serde_json::from_value(serde_json::json!({ "keys": [] })).unwrap();
+        let algos = extract_algorithms_from_jwks(&jwks, "https://example.com/jwks");
+        assert_eq!(algos, vec![Algorithm::RS256]);
     }
 }
