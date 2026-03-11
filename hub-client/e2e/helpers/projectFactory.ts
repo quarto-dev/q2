@@ -58,12 +58,49 @@ export async function createProjectOnServer(
     files,
   });
 
-  // Wait for server to persist the project
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  // Wait for the server to acknowledge all documents (index + every file).
+  // This replaces a fixed 2s sleep with an active readiness check.
+  const httpUrl = serverUrl.replace(/^ws/, 'http');
+  const allDocIds = [result.indexDocId, ...result.files.map((f) => f.docId)];
+  await waitForServerDocuments(httpUrl, allDocIds);
 
   await client.disconnect();
 
   return result.indexDocId;
+}
+
+/**
+ * Poll the hub server's HTTP API until it can find all given documents.
+ * Replaces a fixed 2s sleep — typically resolves in <200ms.
+ */
+async function waitForServerDocuments(
+  httpUrl: string,
+  docIds: string[],
+  timeoutMs: number = 10000,
+  intervalMs: number = 50,
+): Promise<void> {
+  const pending = new Set(docIds);
+  const deadline = Date.now() + timeoutMs;
+  while (pending.size > 0 && Date.now() < deadline) {
+    // Check all pending docs in parallel
+    const checks = [...pending].map(async (docId) => {
+      try {
+        const res = await fetch(`${httpUrl}/api/documents/${docId}`);
+        if (res.ok) pending.delete(docId);
+      } catch {
+        // Server not ready yet — keep trying
+      }
+    });
+    await Promise.all(checks);
+    if (pending.size > 0) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  if (pending.size > 0) {
+    throw new Error(
+      `Timed out waiting for server to acknowledge ${pending.size} document(s) after ${timeoutMs}ms`,
+    );
+  }
 }
 
 /**
