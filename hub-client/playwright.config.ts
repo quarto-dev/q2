@@ -4,10 +4,10 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright configuration for hub-client E2E tests
  *
  * Test architecture:
- * - Uses checked-in Automerge fixtures for reproducible tests
- * - Single sync server serves all tests (started in globalSetup)
- * - Tests run in parallel against the same server (different documents)
- * - Fixtures are copied to temp directory to avoid mutations
+ * - globalSetup starts the Rust hub server (cargo run --bin hub)
+ * - Tests create Automerge projects dynamically via quarto-sync-client
+ * - Tests run in parallel against the same hub server (different documents)
+ * - globalTeardown stops the hub server and cleans up
  */
 export default defineConfig({
   testDir: './e2e',

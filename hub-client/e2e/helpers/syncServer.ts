@@ -1,98 +1,130 @@
 /**
- * E2E Test Sync Server Helpers
+ * Hub server lifecycle for E2E tests.
  *
- * Manages the lifecycle of a local Automerge sync server for E2E tests.
- *
- * Note: The actual sync server implementation depends on having
- * @automerge/automerge-repo-sync-server available. This file provides
- * the interface and placeholder implementation.
- *
- * TODO: Implement actual sync server integration in Phase 3
+ * Starts the Rust hub binary as a child process with a temp data directory.
+ * Adapted from ts-packages/sync-test-harness/src/server-manager.ts.
  */
 
-import { ChildProcess, spawn } from 'child_process';
-import { join } from 'path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
-export interface SyncServerOptions {
-  port: number;
-  storageDir: string;
-}
-
-export interface SyncServer {
+export interface HubServerHandle {
+  /** WebSocket URL for sync clients */
   url: string;
+  /** Port the server is listening on */
   port: number;
-  close: () => Promise<void>;
+  /** Path to the server's data directory */
+  dataDir: string;
+  /** Stop the server and clean up */
+  stop(): Promise<void>;
 }
 
-// Track the sync server process
-let serverProcess: ChildProcess | null = null;
+/** Root of the monorepo (hub-client/e2e/helpers/ → repo root) */
+const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 
 /**
- * Start a local Automerge sync server.
- *
- * For now, this is a placeholder that expects an external sync server.
- * In Phase 3, this will spawn the actual sync server process.
- *
- * @param options Server configuration
- * @returns Server handle with close() method
+ * Wait for a line matching `pattern` in the process's combined stdout/stderr.
+ * Rejects after `timeoutMs`.
  */
-export async function startSyncServer(options: SyncServerOptions): Promise<SyncServer> {
-  const { port, storageDir } = options;
+function waitForOutput(
+  proc: ChildProcess,
+  pattern: RegExp,
+  timeoutMs: number,
+  label: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let output = '';
 
-  // For now, check if there's an environment variable pointing to an existing server
-  const existingServerUrl = process.env.E2E_SYNC_SERVER_URL;
-  if (existingServerUrl) {
-    console.log(`Using existing sync server at ${existingServerUrl}`);
-    return {
-      url: existingServerUrl,
-      port,
-      close: async () => {
-        // External server - don't close it
-      },
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(
+        new Error(
+          `Timeout (${timeoutMs}ms) waiting for ${label} to be ready.\nCaptured output:\n${output}`,
+        ),
+      );
+    }, timeoutMs);
+
+    const onData = (chunk: Buffer) => {
+      const text = chunk.toString();
+      output += text;
+      for (const line of text.split('\n')) {
+        if (line.trim()) {
+          console.log(`  [${label}] ${line}`);
+        }
+      }
+      if (pattern.test(output)) {
+        cleanup();
+        resolve();
+      }
     };
-  }
 
-  // TODO: Phase 3 - Implement actual sync server spawning
-  // For now, we'll use a mock implementation that doesn't require the sync server
-  console.log(`Note: Sync server not implemented yet. Tests will run in offline mode.`);
-  console.log(`Storage directory: ${storageDir}`);
+    const onExit = (code: number | null) => {
+      cleanup();
+      reject(
+        new Error(
+          `${label} exited with code ${code} before becoming ready.\nOutput:\n${output}`,
+        ),
+      );
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      proc.stdout?.off('data', onData);
+      proc.stderr?.off('data', onData);
+      proc.off('exit', onExit);
+    };
+
+    proc.stdout?.on('data', onData);
+    proc.stderr?.on('data', onData);
+    proc.on('exit', onExit);
+  });
+}
+
+/**
+ * Start the Rust hub server for E2E tests.
+ *
+ * Uses `cargo run --bin hub` from the repo root.
+ * Timeout is generous (120s) because the first run may need to compile.
+ */
+export async function startHubServer(port: number): Promise<HubServerHandle> {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'hub-e2e-'));
+
+  const proc = spawn(
+    'cargo',
+    ['run', '--bin', 'hub', '--', '--data-dir', dataDir, '--port', String(port)],
+    {
+      cwd: REPO_ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        RUST_LOG: process.env.RUST_LOG ?? 'info',
+      },
+    },
+  );
+
+  await waitForOutput(proc, /Hub server listening/, 120_000, 'hub');
 
   return {
-    url: `ws://localhost:${port}`,
+    url: `ws://127.0.0.1:${port}`,
     port,
-    close: async () => {
-      if (serverProcess) {
-        serverProcess.kill();
-        serverProcess = null;
+    dataDir,
+    async stop() {
+      if (!proc.killed) {
+        proc.kill('SIGTERM');
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            proc.kill('SIGKILL');
+            resolve();
+          }, 5000);
+          proc.on('exit', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
       }
+      await rm(dataDir, { recursive: true, force: true }).catch(() => {});
     },
   };
-}
-
-/**
- * Wait for the sync server to be ready.
- *
- * @param url Server URL to check
- * @param timeoutMs Maximum time to wait
- */
-export async function waitForServer(url: string, timeoutMs: number = 10000): Promise<void> {
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < timeoutMs) {
-    try {
-      // Try to establish a WebSocket connection
-      const ws = await new Promise<boolean>((resolve, reject) => {
-        // In Node.js, we'd use the 'ws' package here
-        // For now, just assume the server is ready
-        resolve(true);
-      });
-
-      if (ws) return;
-    } catch {
-      // Server not ready yet, wait and retry
-      await new Promise((r) => setTimeout(r, 100));
-    }
-  }
-
-  throw new Error(`Sync server at ${url} did not become ready within ${timeoutMs}ms`);
 }

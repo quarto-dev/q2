@@ -2,35 +2,31 @@
  * Playwright Global Teardown
  *
  * Runs once after all E2E tests:
- * 1. Stops the sync server
- * 2. Cleans up the temp fixtures directory
+ * 1. Stops the hub server
+ * 2. Cleans up the server info file
  */
 
-import { cleanupTestFixtures } from './fixtureSetup';
-
-interface SyncServer {
-  close: () => Promise<void>;
-}
+import { rmSync } from 'node:fs';
+import { SERVER_INFO_PATH } from './globalSetup';
+import type { HubServerHandle } from './syncServer';
 
 export default async function globalTeardown() {
   console.log('\n--- E2E Global Teardown ---');
 
-  // Stop sync server
-  const server = (globalThis as Record<string, unknown>).__E2E_SYNC_SERVER__ as
-    | SyncServer
+  // Stop hub server (handle stored by globalSetup in same process)
+  const server = (globalThis as Record<string, unknown>).__E2E_HUB_SERVER__ as
+    | HubServerHandle
     | undefined;
   if (server) {
-    await server.close();
-    console.log('Sync server stopped');
+    await server.stop();
+    console.log('Hub server stopped');
   }
 
-  // Clean up temp fixtures
-  const tempDir = (globalThis as Record<string, unknown>).__E2E_FIXTURE_DIR__ as
-    | string
-    | undefined;
-  if (tempDir) {
-    cleanupTestFixtures(tempDir);
-    console.log(`Temp fixtures cleaned up: ${tempDir}`);
+  // Clean up server info file
+  try {
+    rmSync(SERVER_INFO_PATH);
+  } catch {
+    // Ignore if already cleaned up
   }
 
   console.log('--- E2E Global Teardown Complete ---\n');

@@ -1,37 +1,30 @@
 /**
- * Smoke tests for hub-client
+ * Smoke tests for hub-client E2E infrastructure.
  *
- * These tests verify the basic E2E infrastructure is working.
- * They should be the first tests to run and fail quickly if
- * the setup is broken.
+ * Verifies the basic setup: app loads, hub server is running.
  */
 
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { SERVER_INFO_PATH } from './helpers/globalSetup';
+import type { ServerInfo } from './helpers/globalSetup';
+
+function readServerInfo(): ServerInfo {
+  return JSON.parse(readFileSync(SERVER_INFO_PATH, 'utf-8'));
+}
 
 test.describe('Smoke Tests', () => {
   test('should load the application', async ({ page }) => {
     await page.goto('/');
-
-    // The app should load without errors
-    // Check for the main app container or a known element
     await expect(page.locator('body')).toBeVisible();
-
-    // The page title should be set
     const title = await page.title();
     expect(title).toBeTruthy();
   });
 
-  test('should have sync server URL in environment', async () => {
-    // This test verifies the global setup ran correctly
-    const syncServerUrl = process.env.E2E_SYNC_SERVER_URL;
-    expect(syncServerUrl).toBeTruthy();
-    expect(syncServerUrl).toMatch(/^ws:\/\/localhost:\d+$/);
-  });
-
-  test('should have fixture directory in environment', async () => {
-    // This test verifies the fixture setup ran correctly
-    const fixtureDir = process.env.E2E_FIXTURE_DIR;
-    expect(fixtureDir).toBeTruthy();
-    expect(fixtureDir).toContain('hub-client-e2e-');
+  test('should have hub server running', () => {
+    const info = readServerInfo();
+    expect(info.url).toBeTruthy();
+    expect(info.url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/);
+    expect(info.port).toBe(3030);
   });
 });

@@ -2,43 +2,46 @@
  * Playwright Global Setup
  *
  * Runs once before all E2E tests:
- * 1. Copies fixtures to a temp directory
- * 2. Starts the local sync server
- * 3. Stores references for tests and teardown
+ * 1. Starts the Rust hub server
+ * 2. Writes server info to a well-known file for test workers to read
+ *
+ * Note: globalSetup runs in a separate process from test workers.
+ * env vars and globalThis are NOT shared. We use a file to communicate.
  */
 
-import { setupTestFixtures, fixturesExist } from './fixtureSetup';
-import { startSyncServer } from './syncServer';
+import { writeFileSync } from 'node:fs';
+import { startHubServer } from './syncServer';
+
+/** Well-known path where server info is written for test workers */
+export const SERVER_INFO_PATH = '/tmp/hub-e2e-server.json';
+
+export interface ServerInfo {
+  url: string;
+  port: number;
+  dataDir: string;
+  pid: number;
+}
+
+const HUB_PORT = 3030;
 
 export default async function globalSetup() {
   console.log('\n--- E2E Global Setup ---');
 
-  // Copy fixtures to temp directory
-  const tempDir = setupTestFixtures();
-  console.log(`Fixtures copied to: ${tempDir}`);
+  const server = await startHubServer(HUB_PORT);
+  console.log(`Hub server started: ${server.url}`);
 
-  if (!fixturesExist()) {
-    console.log(
-      'Note: No pre-generated fixtures found. Tests will create fresh documents.',
-    );
-  }
+  // Write server info to file for test workers and teardown
+  const info: ServerInfo = {
+    url: server.url,
+    port: server.port,
+    dataDir: server.dataDir,
+    pid: 0, // We don't expose pid from the handle, but stop() handles cleanup
+  };
+  writeFileSync(SERVER_INFO_PATH, JSON.stringify(info));
 
-  // Store temp dir for tests and teardown
-  process.env.E2E_FIXTURE_DIR = tempDir;
-
-  // Start single sync server for all tests
-  const server = await startSyncServer({
-    port: 3030,
-    storageDir: `${tempDir}/automerge-data`,
-  });
-  console.log(`Sync server URL: ${server.url}`);
-
-  // Store server URL for tests
-  process.env.E2E_SYNC_SERVER_URL = server.url;
-
-  // Store server reference for teardown (using globalThis for cross-module access)
-  (globalThis as Record<string, unknown>).__E2E_SYNC_SERVER__ = server;
-  (globalThis as Record<string, unknown>).__E2E_FIXTURE_DIR__ = tempDir;
+  // Store server handle for teardown (globalThis IS shared with globalTeardown
+  // since they run in the same process)
+  (globalThis as Record<string, unknown>).__E2E_HUB_SERVER__ = server;
 
   console.log('--- E2E Global Setup Complete ---\n');
 }
