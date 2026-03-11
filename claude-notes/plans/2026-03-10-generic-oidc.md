@@ -124,7 +124,7 @@ Two independent mechanisms, needed for different reasons:
   - Extract allowed algorithms from JWKS key `alg` fields; set `validation.algorithms` to that discovered set; if empty, fall back to `RS256` with a warning
   - Set `validation.set_audience(&[config.client_id])` to enforce `aud` claim validation (prevents confused deputy attacks)
   - Ensure `exp` validation is enabled (on by default) and explicitly set `validation.validate_nbf = true` (`nbf` defaults to `false` in `jsonwebtoken`). Leeway of 60 seconds (`validation.leeway = 60`, already the library default)
-  - **Deferred**: On token validation failure due to unknown `kid`, refetch JWKS at most once per 30 seconds. Would require wrapping the `axum-jwt-auth` decoder's `decode()` call in `context.rs::authenticate_claims()`. The library's existing periodic refresh (1 hour default) handles normal key rotation; this optimization is for faster rotation response.
+  - **Not needed**: On-demand JWKS refetch on unknown `kid` was evaluated and rejected. OIDC providers overlap old and new keys during rotation by design, so the library's 1-hour periodic refresh is always sufficient. Emergency rotation (key compromise) is extremely rare, and in that scenario the compromised key's tokens should be rejected anyway — users must re-authenticate regardless. Adding retry logic would be over-engineering for a near-zero probability case.
 
 - [x] Verify `check_allowlists()` always enforces `email_verified` (no opt-out flag)
 
