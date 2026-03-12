@@ -15,7 +15,18 @@ be in reverse chronological order (latest first).
 
 ### 2026-03-11
 
+- [`ba8b95da`](https://github.com/quarto-dev/q2/commits/ba8b95da): Replace fixed 2s sleep with document readiness poll in E2E tests (38% faster)
+- [`a02e91db`](https://github.com/quarto-dev/q2/commits/a02e91db): Add smoke-all Playwright E2E tests through full Automerge pipeline (34 tests)
 - [`239aa927`](https://github.com/quarto-dev/q2/commits/239aa927): Disable Monaco editor autocomplete suggestions by default
+
+### 2026-03-10
+
+- [`87a69845`](https://github.com/quarto-dev/q2/commits/87a69845): Restore SASS cache quality (SHA-256, LRU eviction, hash-before-assemble); remove dead SassCacheManager code
+
+### 2026-03-09
+
+- [`60577f2e`](https://github.com/quarto-dev/q2/commits/60577f2e): Add WASM test for runtime metadata theme override (themeCss.wasm.test.ts)
+- [`9c41011a`](https://github.com/quarto-dev/q2/commits/9c41011a): Remove pre-pipeline CSS compilation; theme CSS now produced by CompileThemeCssStage in render pipeline
 
 ### 2026-02-27
 
