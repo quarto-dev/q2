@@ -1,0 +1,14 @@
+---
+title: Project Appendix Plain
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["div#quarto-appendix.plain", "section#quarto-reuse"]
+        - ["div#quarto-appendix.default"]
+---
+
+This document inherits `appendix-style: plain` and `license` from `_quarto.yml`.
+The appendix container should have class "plain", not "default".

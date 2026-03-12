@@ -1,0 +1,16 @@
+---
+title: Doc Override Default
+appendix-style: default
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["div#quarto-appendix.default", "section#quarto-reuse"]
+        - ["div#quarto-appendix.plain"]
+---
+
+This document overrides the project-level `appendix-style: plain` with
+`appendix-style: default` in its frontmatter.
+The appendix container should have class "default", not "plain".

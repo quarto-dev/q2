@@ -1,0 +1,15 @@
+---
+title: Dir Appendix None
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - []
+        - ["div#quarto-appendix"]
+---
+
+This document inherits `appendix-style: none` from directory `_metadata.yml`,
+which overrides the project-level `appendix-style: plain`.
+No appendix container should be created despite the project-level license.
