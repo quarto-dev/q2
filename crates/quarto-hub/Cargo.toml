@@ -43,7 +43,7 @@ time = "0.3"
 
 # Automerge (via samod for JS compatibility)
 automerge = "0.7"
-samod = { git = "https://github.com/shikokuchuo/samod.git", branch = "q2", features = ["tokio", "axum", "tungstenite"] }
+samod = { git = "https://github.com/quarto-dev/samod.git", branch = "q2", features = ["tokio", "axum", "tungstenite"] }
 
 # Async streams (for samod event handling)
 futures = "0.3"
