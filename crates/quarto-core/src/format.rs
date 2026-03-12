@@ -108,9 +108,6 @@ pub struct Format {
 
     /// Whether this format uses the native Rust pipeline
     pub native_pipeline: bool,
-
-    /// Format-specific metadata (merged from config and document)
-    pub metadata: serde_json::Value,
 }
 
 impl Format {
@@ -120,7 +117,6 @@ impl Format {
             identifier: FormatIdentifier::Html,
             output_extension: "html".to_string(),
             native_pipeline: true,
-            metadata: serde_json::Value::Null,
         }
     }
 
@@ -130,7 +126,6 @@ impl Format {
             identifier: FormatIdentifier::Pdf,
             output_extension: "pdf".to_string(),
             native_pipeline: false,
-            metadata: serde_json::Value::Null,
         }
     }
 
@@ -140,14 +135,7 @@ impl Format {
             identifier: FormatIdentifier::Docx,
             output_extension: "docx".to_string(),
             native_pipeline: false,
-            metadata: serde_json::Value::Null,
         }
-    }
-
-    /// Set format metadata
-    pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
-        self.metadata = metadata;
-        self
     }
 
     /// Check if this format is HTML-based
@@ -158,49 +146,6 @@ impl Format {
     /// Check if this format produces multiple files
     pub fn is_multi_file(&self) -> bool {
         self.identifier.is_multi_file()
-    }
-
-    /// Get a metadata value from the format configuration.
-    pub fn get_metadata(&self, key: &str) -> Option<&serde_json::Value> {
-        if self.metadata.is_null() {
-            return None;
-        }
-        self.metadata.get(key)
-    }
-
-    /// Get a string metadata value.
-    pub fn get_metadata_string(&self, key: &str) -> Option<&str> {
-        self.get_metadata(key).and_then(|v| v.as_str())
-    }
-
-    /// Get a boolean metadata value.
-    pub fn get_metadata_bool(&self, key: &str) -> Option<bool> {
-        self.get_metadata(key).and_then(|v| v.as_bool())
-    }
-
-    /// Check if this format should use minimal HTML output.
-    ///
-    /// Minimal HTML is used when:
-    /// - `minimal: true` is set
-    /// - `theme: none` is set
-    /// - `theme: pandoc` is set
-    ///
-    /// This matches TypeScript Quarto's behavior where minimal mode produces
-    /// plain HTML without Bootstrap structure (`<main>`, `<div id="quarto-content">`, etc.)
-    pub fn use_minimal_html(&self) -> bool {
-        // Check explicit minimal flag
-        if self.get_metadata_bool("minimal").unwrap_or(false) {
-            return true;
-        }
-
-        // Check theme - "none" or "pandoc" implies minimal structure
-        if let Some(theme) = self.get_metadata_string("theme") {
-            if theme == "none" || theme == "pandoc" {
-                return true;
-            }
-        }
-
-        false
     }
 
     /// Get the output file path for an input file
@@ -241,79 +186,6 @@ pub fn is_minimal_html(meta: &ConfigValue) -> bool {
     }
 
     false
-}
-
-// ============================================================================
-// Format Metadata Extraction
-// ============================================================================
-//
-// TODO(ConfigValue): DELETE THIS FUNCTION. Replace with merged ConfigValue
-// from RenderContext. When the pipeline adopts ConfigValue-based configuration,
-// format metadata will be extracted during config merging, not separately.
-
-/// Extract format-specific metadata from QMD frontmatter.
-///
-/// Parses the YAML frontmatter and extracts the `format.<format_name>` section.
-/// Returns `Ok(Null)` if no format metadata is specified.
-///
-/// This function is used by both the native CLI and WASM client to ensure
-/// consistent format metadata handling.
-///
-/// # Arguments
-/// * `content` - The QMD source content as a string
-/// * `format_name` - The format to extract (e.g., "html", "pdf")
-///
-/// # Example
-/// ```
-/// use quarto_core::extract_format_metadata;
-///
-/// let qmd = r#"---
-/// title: My Document
-/// format:
-///   html:
-///     toc: true
-///     toc-depth: 2
-/// ---
-///
-/// # Hello
-/// "#;
-///
-/// let metadata = extract_format_metadata(qmd, "html").unwrap();
-/// assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
-/// assert_eq!(metadata.get("toc-depth"), Some(&serde_json::json!(2)));
-/// ```
-pub fn extract_format_metadata(
-    content: &str,
-    format_name: &str,
-) -> Result<serde_json::Value, String> {
-    // Find YAML frontmatter
-    let trimmed = content.trim_start();
-    if !trimmed.starts_with("---") {
-        return Ok(serde_json::Value::Null);
-    }
-
-    // Find closing ---
-    let after_first = &trimmed[3..];
-    let end_pos = match after_first.find("\n---") {
-        Some(pos) => pos,
-        None => return Ok(serde_json::Value::Null), // Unclosed frontmatter
-    };
-
-    // Parse YAML
-    let yaml_str = &after_first[..end_pos].trim();
-    let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str)
-        .map_err(|e| format!("Failed to parse YAML frontmatter: {}", e))?;
-
-    // Navigate to format.<format_name>
-    let format_value = yaml_value.get("format").and_then(|f| f.get(format_name));
-
-    match format_value {
-        Some(v) => {
-            // Convert serde_yaml::Value to serde_json::Value via Serialize trait
-            serde_json::to_value(v).map_err(|e| format!("Failed to convert YAML to JSON: {}", e))
-        }
-        None => Ok(serde_json::Value::Null),
-    }
 }
 
 #[cfg(test)]
@@ -533,7 +405,6 @@ mod tests {
         assert_eq!(format.identifier, FormatIdentifier::Html);
         assert_eq!(format.output_extension, "html");
         assert!(format.native_pipeline);
-        assert_eq!(format.metadata, serde_json::Value::Null);
     }
 
     #[test]
@@ -543,7 +414,6 @@ mod tests {
         assert_eq!(format.identifier, FormatIdentifier::Pdf);
         assert_eq!(format.output_extension, "pdf");
         assert!(!format.native_pipeline);
-        assert_eq!(format.metadata, serde_json::Value::Null);
     }
 
     #[test]
@@ -553,20 +423,6 @@ mod tests {
         assert_eq!(format.identifier, FormatIdentifier::Docx);
         assert_eq!(format.output_extension, "docx");
         assert!(!format.native_pipeline);
-        assert_eq!(format.metadata, serde_json::Value::Null);
-    }
-
-    #[test]
-    fn test_format_with_metadata() {
-        let metadata = serde_json::json!({
-            "toc": true,
-            "number-sections": true
-        });
-
-        let format = Format::html().with_metadata(metadata.clone());
-
-        assert_eq!(format.identifier, FormatIdentifier::Html);
-        assert_eq!(format.metadata, metadata);
     }
 
     #[test]
@@ -626,250 +482,12 @@ mod tests {
 
     #[test]
     fn test_format_clone() {
-        let original = Format::html().with_metadata(serde_json::json!({"key": "value"}));
+        let original = Format::html();
         let cloned = original.clone();
 
         assert_eq!(original.identifier, cloned.identifier);
         assert_eq!(original.output_extension, cloned.output_extension);
         assert_eq!(original.native_pipeline, cloned.native_pipeline);
-        assert_eq!(original.metadata, cloned.metadata);
-    }
-
-    // === Format metadata helper tests ===
-
-    #[test]
-    fn test_format_get_metadata() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "minimal": true,
-            "theme": "cosmo"
-        }));
-
-        assert_eq!(
-            format.get_metadata("minimal"),
-            Some(&serde_json::json!(true))
-        );
-        assert_eq!(
-            format.get_metadata("theme"),
-            Some(&serde_json::json!("cosmo"))
-        );
-        assert_eq!(format.get_metadata("nonexistent"), None);
-    }
-
-    #[test]
-    fn test_format_get_metadata_null() {
-        let format = Format::html(); // metadata is Null by default
-        assert_eq!(format.get_metadata("anything"), None);
-    }
-
-    #[test]
-    fn test_format_get_metadata_string() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "theme": "cosmo",
-            "number": 42
-        }));
-
-        assert_eq!(format.get_metadata_string("theme"), Some("cosmo"));
-        assert_eq!(format.get_metadata_string("number"), None); // not a string
-        assert_eq!(format.get_metadata_string("nonexistent"), None);
-    }
-
-    #[test]
-    fn test_format_get_metadata_bool() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "minimal": true,
-            "toc": false,
-            "theme": "cosmo"
-        }));
-
-        assert_eq!(format.get_metadata_bool("minimal"), Some(true));
-        assert_eq!(format.get_metadata_bool("toc"), Some(false));
-        assert_eq!(format.get_metadata_bool("theme"), None); // not a bool
-        assert_eq!(format.get_metadata_bool("nonexistent"), None);
-    }
-
-    // === use_minimal_html tests ===
-
-    #[test]
-    fn test_use_minimal_html_default() {
-        let format = Format::html();
-        assert!(!format.use_minimal_html());
-    }
-
-    #[test]
-    fn test_use_minimal_html_explicit_true() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "minimal": true
-        }));
-        assert!(format.use_minimal_html());
-    }
-
-    #[test]
-    fn test_use_minimal_html_explicit_false() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "minimal": false
-        }));
-        assert!(!format.use_minimal_html());
-    }
-
-    #[test]
-    fn test_use_minimal_html_theme_none() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "theme": "none"
-        }));
-        assert!(format.use_minimal_html());
-    }
-
-    #[test]
-    fn test_use_minimal_html_theme_pandoc() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "theme": "pandoc"
-        }));
-        assert!(format.use_minimal_html());
-    }
-
-    #[test]
-    fn test_use_minimal_html_theme_bootstrap() {
-        let format = Format::html().with_metadata(serde_json::json!({
-            "theme": "cosmo"
-        }));
-        assert!(!format.use_minimal_html());
-    }
-
-    #[test]
-    fn test_use_minimal_html_theme_default() {
-        // theme: default should use full HTML
-        let format = Format::html().with_metadata(serde_json::json!({
-            "theme": "default"
-        }));
-        assert!(!format.use_minimal_html());
-    }
-
-    #[test]
-    fn test_use_minimal_html_minimal_overrides_theme() {
-        // minimal: true should override any theme setting
-        let format = Format::html().with_metadata(serde_json::json!({
-            "minimal": true,
-            "theme": "cosmo"
-        }));
-        assert!(format.use_minimal_html());
-    }
-
-    // === extract_format_metadata tests ===
-
-    #[test]
-    fn test_extract_format_metadata_basic() {
-        let content = r#"---
-title: Test
-format:
-  html:
-    toc: true
-    toc-depth: 2
----
-
-# Hello
-"#;
-        let metadata = extract_format_metadata(content, "html").unwrap();
-        assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
-        assert_eq!(metadata.get("toc-depth"), Some(&serde_json::json!(2)));
-    }
-
-    #[test]
-    fn test_extract_format_metadata_no_frontmatter() {
-        let content = "# Hello World\n\nSome content.";
-        let metadata = extract_format_metadata(content, "html").unwrap();
-        assert_eq!(metadata, serde_json::Value::Null);
-    }
-
-    #[test]
-    fn test_extract_format_metadata_no_format_section() {
-        let content = r#"---
-title: Test
-author: John
----
-
-# Hello
-"#;
-        let metadata = extract_format_metadata(content, "html").unwrap();
-        assert_eq!(metadata, serde_json::Value::Null);
-    }
-
-    #[test]
-    fn test_extract_format_metadata_different_format() {
-        let content = r#"---
-format:
-  pdf:
-    toc: true
----
-
-# Hello
-"#;
-        // Asking for html should return Null when only pdf is specified
-        let html_metadata = extract_format_metadata(content, "html").unwrap();
-        assert_eq!(html_metadata, serde_json::Value::Null);
-
-        // Asking for pdf should return the metadata
-        let pdf_metadata = extract_format_metadata(content, "pdf").unwrap();
-        assert_eq!(pdf_metadata.get("toc"), Some(&serde_json::json!(true)));
-    }
-
-    #[test]
-    fn test_extract_format_metadata_unclosed_frontmatter() {
-        let content = r#"---
-title: Test
-format:
-  html:
-    toc: true
-"#;
-        // Unclosed frontmatter should return Null (not an error)
-        let metadata = extract_format_metadata(content, "html").unwrap();
-        assert_eq!(metadata, serde_json::Value::Null);
-    }
-
-    #[test]
-    fn test_extract_format_metadata_all_toc_options() {
-        let content = r#"---
-format:
-  html:
-    toc: true
-    toc-depth: 3
-    toc-title: "Contents"
-    toc-location: left
----
-"#;
-        let metadata = extract_format_metadata(content, "html").unwrap();
-        assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
-        assert_eq!(metadata.get("toc-depth"), Some(&serde_json::json!(3)));
-        assert_eq!(
-            metadata.get("toc-title"),
-            Some(&serde_json::json!("Contents"))
-        );
-        assert_eq!(
-            metadata.get("toc-location"),
-            Some(&serde_json::json!("left"))
-        );
-    }
-
-    #[test]
-    fn test_extract_format_metadata_leading_whitespace() {
-        // Content with leading whitespace before frontmatter
-        let content = "   \n\n---\nformat:\n  html:\n    toc: true\n---\n";
-        let metadata = extract_format_metadata(content, "html").unwrap();
-        assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
-    }
-
-    #[test]
-    fn test_extract_format_metadata_empty_format_section() {
-        let content = r#"---
-title: Test
-format:
-  html:
----
-
-# Hello
-"#;
-        let metadata = extract_format_metadata(content, "html").unwrap();
-        // An empty format.html section should return Null (the YAML null value)
-        assert_eq!(metadata, serde_json::Value::Null);
     }
 
     // === is_minimal_html tests ===

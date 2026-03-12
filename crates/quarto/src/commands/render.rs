@@ -171,7 +171,6 @@ fn resolve_format(format_str: &str) -> Result<Format> {
         }
         .to_string(),
         native_pipeline: identifier.is_native(),
-        metadata: serde_json::Value::Null,
     })
 }
 

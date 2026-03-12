@@ -62,13 +62,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use tracing::{debug, warn};
+use tracing::debug;
 
 use quarto_system_runtime::SystemRuntime;
 
 use crate::Result;
 use crate::error::QuartoError;
-use crate::format::{Format, extract_format_metadata};
+use crate::format::Format;
 use crate::pipeline::{HtmlRenderConfig, RenderOutput, render_qmd_to_html};
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext};
@@ -169,9 +169,6 @@ pub fn render_document_to_file(
         ))
     })?;
 
-    let input_str = std::str::from_utf8(&input_bytes)
-        .map_err(|e| QuartoError::other(format!("Input file contains invalid UTF-8: {}", e)))?;
-
     // Use provided project or discover
     let discovered_project;
     let project = match project {
@@ -181,12 +178,6 @@ pub fn render_document_to_file(
             &discovered_project
         }
     };
-
-    // Extract format-specific metadata from frontmatter (toc, theme, etc.)
-    let format_metadata = extract_format_metadata(input_str, format).unwrap_or_else(|e| {
-        warn!("Failed to extract format metadata: {}. Using defaults.", e);
-        serde_json::Value::Null
-    });
 
     // Determine output paths
     let (output_path, output_dir, output_stem) =
@@ -205,9 +196,9 @@ pub fn render_document_to_file(
     let resource_paths =
         resources::prepare_html_resources(&output_dir, &output_stem, runtime.as_ref())?;
 
-    // Set up render context with format that includes extracted metadata
+    // Set up render context
     let doc_info = DocumentInfo::from_path(input_path);
-    let render_format = format_from_name(format).with_metadata(format_metadata);
+    let render_format = format_from_name(format);
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, &doc_info, &render_format, &binaries);
 

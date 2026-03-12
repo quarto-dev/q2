@@ -19,7 +19,7 @@ use std::sync::{Arc, OnceLock};
 
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
-    QuartoError, RenderContext, RenderOptions, extract_format_metadata, render_qmd_to_html,
+    QuartoError, RenderContext, RenderOptions, render_qmd_to_html,
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
@@ -522,9 +522,7 @@ pub async fn parse_qmd_to_ast(content: &str) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
-    // Extract format metadata from frontmatter
-    let format_metadata = extract_format_metadata(content, "html").unwrap_or_default();
-    let format = Format::html().with_metadata(format_metadata);
+    let format = Format::html();
 
     let options = RenderOptions {
         verbose: false,
@@ -696,8 +694,7 @@ pub async fn render_qmd(path: &str) -> String {
             .unwrap();
         }
     };
-    let format_metadata = extract_format_metadata(content_str, "html").unwrap_or_default();
-    let format = Format::html().with_metadata(format_metadata);
+    let format = Format::html();
 
     let options = RenderOptions {
         verbose: false,
@@ -782,10 +779,7 @@ pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
-    // Extract format metadata from frontmatter (e.g., toc, toc-depth)
-    // This matches the native CLI behavior for feature parity.
-    let format_metadata = extract_format_metadata(content, "html").unwrap_or_default();
-    let format = Format::html().with_metadata(format_metadata);
+    let format = Format::html();
 
     let options = RenderOptions {
         verbose: false,

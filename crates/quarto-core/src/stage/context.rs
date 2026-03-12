@@ -172,14 +172,6 @@ impl StageContext {
         output
     }
 
-    /// Get a metadata value from the format configuration.
-    pub fn format_metadata(&self, key: &str) -> Option<&serde_json::Value> {
-        if self.format.metadata.is_null() {
-            return None;
-        }
-        self.format.metadata.get(key)
-    }
-
     /// Check if this is a native Rust pipeline render.
     pub fn is_native(&self) -> bool {
         self.format.native_pipeline
