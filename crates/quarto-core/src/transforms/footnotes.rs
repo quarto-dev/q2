@@ -52,6 +52,8 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, Inlines, ListNumberDelim, ListNumberStyle};
 use quarto_source_map::SourceInfo;
 
+use quarto_pandoc_types::ConfigValue;
+
 use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
@@ -70,12 +72,9 @@ impl FootnotesTransform {
         Self
     }
 
-    /// Get the reference-location configuration.
-    ///
-    /// Note: Assumes format normalization has lifted document-root options
-    /// into format metadata.
-    fn get_reference_location(&self, ctx: &RenderContext) -> ReferenceLocation {
-        ctx.format_metadata("reference-location")
+    /// Get the reference-location configuration from merged metadata.
+    fn get_reference_location(meta: &ConfigValue) -> ReferenceLocation {
+        meta.get("reference-location")
             .and_then(|v| v.as_str())
             .map(ReferenceLocation::from_str)
             .unwrap_or_default()
@@ -93,8 +92,8 @@ impl AstTransform for FootnotesTransform {
         "footnotes"
     }
 
-    fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        let reference_location = self.get_reference_location(ctx);
+    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+        let reference_location = Self::get_reference_location(&ast.meta);
 
         // For block/section placement, Pandoc handles this - no-op
         if matches!(
@@ -602,6 +601,7 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::NoteDefinitionPara;
     use quarto_pandoc_types::block::Plain;
     use quarto_pandoc_types::inline::Note;
@@ -644,6 +644,18 @@ mod tests {
             text: text.to_string(),
             source_info: dummy_source_info(),
         })
+    }
+
+    fn make_meta(entries: Vec<ConfigMapEntry>) -> ConfigValue {
+        ConfigValue::new_map(entries, dummy_source_info())
+    }
+
+    fn meta_entry(key: &str, value: ConfigValue) -> ConfigMapEntry {
+        ConfigMapEntry {
+            key: key.to_string(),
+            key_source: dummy_source_info(),
+            value,
+        }
     }
 
     #[test]
@@ -905,7 +917,10 @@ mod tests {
     #[test]
     fn test_margin_mode_no_section() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: make_meta(vec![meta_entry(
+                "reference-location",
+                ConfigValue::new_string("margin", dummy_source_info()),
+            )]),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![
                     make_str("Text with"),
@@ -923,10 +938,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        // Set reference-location: margin in format metadata
-        let format = Format::html().with_metadata(serde_json::json!({
-            "reference-location": "margin"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -967,7 +979,10 @@ mod tests {
 
         for mode in ["block", "section"] {
             let mut ast = Pandoc {
-                meta: quarto_pandoc_types::ConfigValue::default(),
+                meta: make_meta(vec![meta_entry(
+                    "reference-location",
+                    ConfigValue::new_string(mode, dummy_source_info()),
+                )]),
                 blocks: vec![Block::Paragraph(Paragraph {
                     content: vec![make_str("Text"), note.clone()],
                     source_info: dummy_source_info(),
@@ -976,9 +991,7 @@ mod tests {
 
             let project = make_test_project();
             let doc = DocumentInfo::from_path("/project/doc.qmd");
-            let format = Format::html().with_metadata(serde_json::json!({
-                "reference-location": mode
-            }));
+            let format = Format::html();
             let binaries = BinaryDependencies::new();
             let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -1000,7 +1013,10 @@ mod tests {
     #[test]
     fn test_document_mode_creates_section() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: make_meta(vec![meta_entry(
+                "reference-location",
+                ConfigValue::new_string("document", dummy_source_info()),
+            )]),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![
                     make_str("Text"),
@@ -1018,10 +1034,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        // Explicitly set document mode (default)
-        let format = Format::html().with_metadata(serde_json::json!({
-            "reference-location": "document"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 

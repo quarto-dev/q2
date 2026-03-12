@@ -51,6 +51,8 @@ use quarto_pandoc_types::inline::{Inline, Link, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
+use quarto_pandoc_types::ConfigValue;
+
 use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
@@ -70,8 +72,8 @@ impl AppendixStructureTransform {
     }
 
     /// Get the appendix-style configuration.
-    fn get_appendix_style(&self, ctx: &RenderContext) -> AppendixStyle {
-        ctx.format_metadata("appendix-style")
+    fn get_appendix_style(meta: &ConfigValue) -> AppendixStyle {
+        meta.get("appendix-style")
             .map(|v| {
                 if let Some(b) = v.as_bool() {
                     AppendixStyle::from_bool(b)
@@ -85,18 +87,16 @@ impl AppendixStructureTransform {
     }
 
     /// Get the reference-location configuration.
-    fn get_reference_location(&self, ctx: &RenderContext) -> ReferenceLocation {
-        ctx.format_metadata("reference-location")
+    fn get_reference_location(meta: &ConfigValue) -> ReferenceLocation {
+        meta.get("reference-location")
             .and_then(|v| v.as_str())
             .map(ReferenceLocation::from_str)
             .unwrap_or_default()
     }
 
     /// Check if this is a book format (appendix processing is skipped for books).
-    fn is_book_format(&self, ctx: &RenderContext) -> bool {
-        ctx.format_metadata("book")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
+    fn is_book_format(meta: &ConfigValue) -> bool {
+        meta.get("book").and_then(|v| v.as_bool()).unwrap_or(false)
     }
 }
 
@@ -111,12 +111,13 @@ impl AstTransform for AppendixStructureTransform {
         "appendix-structure"
     }
 
-    fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        let appendix_style = self.get_appendix_style(ctx);
-        let reference_location = self.get_reference_location(ctx);
+    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+        let meta = &ast.meta;
+        let appendix_style = Self::get_appendix_style(meta);
+        let reference_location = Self::get_reference_location(meta);
 
         // Skip appendix processing if disabled or book format
-        if !appendix_style.is_enabled() || self.is_book_format(ctx) {
+        if !appendix_style.is_enabled() || Self::is_book_format(meta) {
             return Ok(());
         }
 
@@ -143,18 +144,20 @@ impl AstTransform for AppendixStructureTransform {
         }
 
         // 4. Create metadata-driven sections
+        let meta = &ast.meta;
+
         // License section
-        if let Some(license_section) = create_license_section(ctx) {
+        if let Some(license_section) = create_license_section(meta) {
             appendix_sections.push(license_section);
         }
 
         // Copyright section
-        if let Some(copyright_section) = create_copyright_section(ctx) {
+        if let Some(copyright_section) = create_copyright_section(meta) {
             appendix_sections.push(copyright_section);
         }
 
         // Citation section
-        if let Some(citation_section) = create_citation_section(ctx) {
+        if let Some(citation_section) = create_citation_section(meta) {
             appendix_sections.push(citation_section);
         }
 
@@ -264,20 +267,19 @@ fn create_appendix_container(sections: Blocks, style_class: &str) -> Block {
 }
 
 /// Create license section from metadata.
-fn create_license_section(ctx: &RenderContext) -> Option<Block> {
-    let license = ctx.format_metadata("license")?;
+fn create_license_section(meta: &ConfigValue) -> Option<Block> {
+    let license = meta.get("license")?;
 
     // License can be a string (e.g., "CC BY") or an object with more details
     let license_text = if let Some(s) = license.as_str() {
         s.to_string()
-    } else if let Some(obj) = license.as_object() {
+    } else {
         // Try to get "text" or "type" field
-        obj.get("text")
-            .or_else(|| obj.get("type"))
+        license
+            .get("text")
+            .or_else(|| license.get("type"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())?
-    } else {
-        return None;
     };
 
     let source_info = SourceInfo::default();
@@ -314,20 +316,19 @@ fn create_license_section(ctx: &RenderContext) -> Option<Block> {
 }
 
 /// Create copyright section from metadata.
-fn create_copyright_section(ctx: &RenderContext) -> Option<Block> {
-    let copyright = ctx.format_metadata("copyright")?;
+fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
+    let copyright = meta.get("copyright")?;
 
     // Copyright can be a string or an object
     let copyright_text = if let Some(s) = copyright.as_str() {
         s.to_string()
-    } else if let Some(obj) = copyright.as_object() {
+    } else {
         // Try to get "holder" or "statement" field
-        obj.get("statement")
-            .or_else(|| obj.get("holder"))
+        copyright
+            .get("statement")
+            .or_else(|| copyright.get("holder"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())?
-    } else {
-        return None;
     };
 
     let source_info = SourceInfo::default();
@@ -364,15 +365,12 @@ fn create_copyright_section(ctx: &RenderContext) -> Option<Block> {
 }
 
 /// Create citation section from metadata.
-fn create_citation_section(ctx: &RenderContext) -> Option<Block> {
-    let citation = ctx.format_metadata("citation")?;
+fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
+    let citation = meta.get("citation")?;
 
     // Citation metadata typically includes how to cite this document
     // It can have various formats - for now, look for a "url" or create a simple reference
-    let citation_url = citation
-        .as_object()
-        .and_then(|obj| obj.get("url"))
-        .and_then(|v| v.as_str());
+    let citation_url = citation.get("url").and_then(|v| v.as_str());
 
     let source_info = SourceInfo::default();
 
@@ -434,6 +432,7 @@ fn create_citation_section(ctx: &RenderContext) -> Option<Block> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::block::Plain;
     use quarto_source_map::{FileId, Location, Range};
 
@@ -506,6 +505,18 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         })
+    }
+
+    fn meta_entry(key: &str, value: ConfigValue) -> ConfigMapEntry {
+        ConfigMapEntry {
+            key: key.to_string(),
+            key_source: dummy_source_info(),
+            value,
+        }
+    }
+
+    fn make_meta(entries: Vec<ConfigMapEntry>) -> ConfigValue {
+        ConfigValue::new_map(entries, dummy_source_info())
     }
 
     fn make_bibliography() -> Block {
@@ -729,7 +740,10 @@ mod tests {
     #[test]
     fn test_appendix_style_none_skips_processing() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: make_meta(vec![meta_entry(
+                "appendix-style",
+                ConfigValue::new_string("none", dummy_source_info()),
+            )]),
             blocks: vec![
                 Block::Paragraph(Paragraph {
                     content: vec![make_str("Main content")],
@@ -741,9 +755,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "appendix-style": "none"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -762,7 +774,10 @@ mod tests {
     #[test]
     fn test_margin_mode_footnotes_not_moved() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: make_meta(vec![meta_entry(
+                "reference-location",
+                ConfigValue::new_string("margin", dummy_source_info()),
+            )]),
             blocks: vec![
                 Block::Paragraph(Paragraph {
                     content: vec![make_str("Main content")],
@@ -774,9 +789,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "reference-location": "margin"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -795,7 +808,10 @@ mod tests {
     #[test]
     fn test_license_metadata_creates_section() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: make_meta(vec![meta_entry(
+                "license",
+                ConfigValue::new_string("CC BY 4.0", dummy_source_info()),
+            )]),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("Main content")],
                 source_info: dummy_source_info(),
@@ -804,9 +820,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "license": "CC BY 4.0"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -833,7 +847,10 @@ mod tests {
     #[test]
     fn test_appendix_style_plain() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
+            meta: make_meta(vec![meta_entry(
+                "appendix-style",
+                ConfigValue::new_string("plain", dummy_source_info()),
+            )]),
             blocks: vec![
                 Block::Paragraph(Paragraph {
                     content: vec![make_str("Main content")],
@@ -845,9 +862,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html().with_metadata(serde_json::json!({
-            "appendix-style": "plain"
-        }));
+        let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 

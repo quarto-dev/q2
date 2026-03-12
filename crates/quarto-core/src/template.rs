@@ -24,7 +24,7 @@ use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 
 use crate::Result;
-use crate::format::Format;
+use crate::format::{Format, is_minimal_html};
 
 // =============================================================================
 // Template Definitions
@@ -187,16 +187,12 @@ pub fn default_html_template() -> Result<Template> {
     minimal_html_template()
 }
 
-/// Select and compile the appropriate template based on format configuration.
+/// Select and compile the appropriate template based on whether minimal mode is active.
 ///
-/// Returns the minimal template when:
-/// - `minimal: true` is set in format metadata
-/// - `theme: none` is set
-/// - `theme: pandoc` is set
-///
-/// Otherwise returns the full template with Bootstrap-compatible structure.
-pub fn select_template(format: &Format) -> Result<Template> {
-    if format.use_minimal_html() {
+/// Returns the minimal template when `minimal` is true, otherwise returns the
+/// full template with Bootstrap-compatible structure.
+pub fn select_template(minimal: bool) -> Result<Template> {
+    if minimal {
         minimal_html_template()
     } else {
         full_html_template()
@@ -312,11 +308,12 @@ pub fn render_with_resources(
 pub fn render_with_format(
     body: &str,
     meta: &ConfigValue,
-    format: &Format,
+    _format: &Format,
     css_paths: &[String],
 ) -> Result<String> {
-    let template = select_template(format)?;
-    let use_full_template = !format.use_minimal_html();
+    let minimal = is_minimal_html(meta);
+    let template = select_template(minimal)?;
+    let use_full_template = !minimal;
 
     let mut ctx = TemplateContext::new();
     ctx.insert("body", TemplateValue::String(body.to_string()));
@@ -1329,9 +1326,7 @@ mod tests {
 
     #[test]
     fn test_select_template_default_is_full() {
-        use crate::format::Format;
-        let format = Format::html();
-        let template = select_template(&format).unwrap();
+        let template = select_template(false).unwrap();
 
         // Render with minimal context to verify it's the full template
         let mut ctx = TemplateContext::new();
@@ -1347,9 +1342,7 @@ mod tests {
 
     #[test]
     fn test_select_template_minimal_true() {
-        use crate::format::Format;
-        let format = Format::html().with_metadata(serde_json::json!({"minimal": true}));
-        let template = select_template(&format).unwrap();
+        let template = select_template(true).unwrap();
 
         let mut ctx = TemplateContext::new();
         ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
@@ -1364,38 +1357,8 @@ mod tests {
     }
 
     #[test]
-    fn test_select_template_theme_none() {
-        use crate::format::Format;
-        let format = Format::html().with_metadata(serde_json::json!({"theme": "none"}));
-        let template = select_template(&format).unwrap();
-
-        let mut ctx = TemplateContext::new();
-        ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
-        let html = template.render(&ctx).unwrap();
-
-        // theme: none uses minimal template
-        assert!(!html.contains("quarto-content"));
-    }
-
-    #[test]
-    fn test_select_template_theme_pandoc() {
-        use crate::format::Format;
-        let format = Format::html().with_metadata(serde_json::json!({"theme": "pandoc"}));
-        let template = select_template(&format).unwrap();
-
-        let mut ctx = TemplateContext::new();
-        ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
-        let html = template.render(&ctx).unwrap();
-
-        // theme: pandoc uses minimal template
-        assert!(!html.contains("quarto-content"));
-    }
-
-    #[test]
-    fn test_select_template_bootstrap_theme() {
-        use crate::format::Format;
-        let format = Format::html().with_metadata(serde_json::json!({"theme": "cosmo"}));
-        let template = select_template(&format).unwrap();
+    fn test_select_template_not_minimal_uses_full() {
+        let template = select_template(false).unwrap();
 
         let mut ctx = TemplateContext::new();
         ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
@@ -1403,7 +1366,7 @@ mod tests {
         ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
         let html = template.render(&ctx).unwrap();
 
-        // Bootstrap theme uses full template
+        // Full template
         assert!(html.contains("quarto-content"));
     }
 
@@ -1523,9 +1486,17 @@ mod tests {
     #[test]
     fn test_render_with_format_minimal() {
         use crate::format::Format;
+        use quarto_pandoc_types::ConfigMapEntry;
 
-        let format = Format::html().with_metadata(serde_json::json!({"minimal": true}));
-        let meta = ConfigValue::null(dummy_source_info());
+        let format = Format::html();
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "minimal".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_bool(true, dummy_source_info()),
+            }],
+            dummy_source_info(),
+        );
         let css_paths = vec!["styles.css".to_string()];
 
         let html = render_with_format("<p>Hello</p>", &meta, &format, &css_paths).unwrap();

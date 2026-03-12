@@ -14,6 +14,8 @@
 
 use std::path::PathBuf;
 
+use quarto_pandoc_types::ConfigValue;
+
 /// Format identifier enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FormatIdentifier {
@@ -213,6 +215,32 @@ impl Default for Format {
     fn default() -> Self {
         Self::html()
     }
+}
+
+/// Check if minimal HTML mode should be used, based on merged metadata.
+///
+/// This is the `ConfigValue`-based equivalent of `Format::use_minimal_html()`.
+/// It reads `minimal` and `theme` from the fully merged document metadata
+/// (`doc.ast.meta`) instead of from `Format.metadata`.
+///
+/// Returns true when:
+/// - `minimal: true` is set
+/// - `theme: none` is set
+/// - `theme: pandoc` is set
+///
+/// When `minimal: true` is set, it takes precedence regardless of theme.
+pub fn is_minimal_html(meta: &ConfigValue) -> bool {
+    if let Some(true) = meta.get("minimal").and_then(|v| v.as_bool()) {
+        return true;
+    }
+
+    if let Some(theme) = meta.get("theme").and_then(|v| v.as_str()) {
+        if theme == "none" || theme == "pandoc" {
+            return true;
+        }
+    }
+
+    false
 }
 
 // ============================================================================
@@ -842,5 +870,74 @@ format:
         let metadata = extract_format_metadata(content, "html").unwrap();
         // An empty format.html section should return Null (the YAML null value)
         assert_eq!(metadata, serde_json::Value::Null);
+    }
+
+    // === is_minimal_html tests ===
+
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+    use quarto_source_map::SourceInfo;
+
+    fn si() -> SourceInfo {
+        SourceInfo::default()
+    }
+
+    fn meta_with(entries: Vec<ConfigMapEntry>) -> ConfigValue {
+        ConfigValue::new_map(entries, si())
+    }
+
+    fn entry(key: &str, value: ConfigValue) -> ConfigMapEntry {
+        ConfigMapEntry {
+            key: key.to_string(),
+            key_source: si(),
+            value,
+        }
+    }
+
+    #[test]
+    fn test_is_minimal_html_default() {
+        let meta = meta_with(vec![]);
+        assert!(!is_minimal_html(&meta));
+    }
+
+    #[test]
+    fn test_is_minimal_html_minimal_true() {
+        let meta = meta_with(vec![entry("minimal", ConfigValue::new_bool(true, si()))]);
+        assert!(is_minimal_html(&meta));
+    }
+
+    #[test]
+    fn test_is_minimal_html_minimal_false() {
+        let meta = meta_with(vec![entry("minimal", ConfigValue::new_bool(false, si()))]);
+        assert!(!is_minimal_html(&meta));
+    }
+
+    #[test]
+    fn test_is_minimal_html_theme_none() {
+        let meta = meta_with(vec![entry("theme", ConfigValue::new_string("none", si()))]);
+        assert!(is_minimal_html(&meta));
+    }
+
+    #[test]
+    fn test_is_minimal_html_theme_pandoc() {
+        let meta = meta_with(vec![entry(
+            "theme",
+            ConfigValue::new_string("pandoc", si()),
+        )]);
+        assert!(is_minimal_html(&meta));
+    }
+
+    #[test]
+    fn test_is_minimal_html_theme_bootstrap() {
+        let meta = meta_with(vec![entry("theme", ConfigValue::new_string("cosmo", si()))]);
+        assert!(!is_minimal_html(&meta));
+    }
+
+    #[test]
+    fn test_is_minimal_html_minimal_overrides_theme() {
+        let meta = meta_with(vec![
+            entry("minimal", ConfigValue::new_bool(true, si())),
+            entry("theme", ConfigValue::new_string("cosmo", si())),
+        ]);
+        assert!(is_minimal_html(&meta));
     }
 }
