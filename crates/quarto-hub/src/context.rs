@@ -10,7 +10,7 @@ use automerge::{Automerge, ObjType, ROOT, transaction::Transactable};
 use axum::http::StatusCode;
 use axum_jwt_auth::JwtDecoder;
 use samod::storage::TokioFilesystemStorage;
-use samod::{AcceptorHandle, ConnectionId, Repo};
+use samod::{AcceptorHandle, ConnectionId, NeverAnnounce, Repo};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
@@ -162,7 +162,7 @@ impl HubContext {
 
         let builder = Repo::build_tokio()
             .with_storage(samod_storage)
-            .with_announce_policy(|_doc_id, _peer_id| false);
+            .with_announce_policy(NeverAnnounce);
 
         let repo = builder.load().await;
 
