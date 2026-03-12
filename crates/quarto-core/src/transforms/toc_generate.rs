@@ -130,7 +130,7 @@ impl AstTransform for TocGenerateTransform {
 mod tests {
     use super::*;
     use crate::format::Format;
-    use crate::project::{DocumentInfo, ProjectContext};
+    use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::block::{Block, Header, Paragraph};
@@ -175,7 +175,7 @@ mod tests {
     fn make_test_project() -> ProjectContext {
         ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: PathBuf::from("/project"),

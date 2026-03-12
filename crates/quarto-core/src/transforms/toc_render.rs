@@ -154,7 +154,7 @@ fn html_escape(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::format::Format;
-    use crate::project::{DocumentInfo, ProjectContext};
+    use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
     use quarto_pandoc_types::config_value::ConfigValue;
     use std::path::PathBuf;
@@ -166,7 +166,7 @@ mod tests {
     fn make_test_project() -> ProjectContext {
         ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: PathBuf::from("/project"),

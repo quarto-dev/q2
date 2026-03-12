@@ -439,16 +439,10 @@ Themed content.
         let css_path = result.resources_dir.join("styles.css");
         assert!(css_path.exists());
 
-        // NOTE: Single-file renders without a _quarto.yml get config: None,
-        // which causes MetadataMergeStage to skip format flattening. The theme
-        // stays nested at format.html.theme instead of being flattened to
-        // top-level theme, so CompileThemeCssStage doesn't see it.
-        // This will be fixed by the default-project-single-file plan.
-        // For now, verify CSS is written (DEFAULT_CSS fallback).
         let css = fs::read_to_string(&css_path).unwrap();
         assert!(
-            !css.is_empty(),
-            "CSS file should be non-empty (at least DEFAULT_CSS)"
+            css.contains(".btn"),
+            "CSS should contain compiled Bootstrap from cosmo theme"
         );
     }
 

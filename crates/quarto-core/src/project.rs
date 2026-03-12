@@ -80,7 +80,7 @@ pub fn directory_metadata_for_document(
     use quarto_config::InterpretationContext;
 
     // Single-file projects don't have directory metadata
-    if project.config.is_none() {
+    if project.is_single_file {
         return Ok(Vec::new());
     }
 
@@ -345,8 +345,11 @@ pub struct ProjectContext {
     /// Project root directory (directory containing `_quarto.yml`, or input file directory)
     pub dir: PathBuf,
 
-    /// Parsed project configuration (if `_quarto.yml` exists)
-    pub config: Option<ProjectConfig>,
+    /// Parsed project configuration.
+    ///
+    /// Always present: real projects get their parsed `_quarto.yml`,
+    /// single-file renders get `ProjectConfig::default()`.
+    pub config: ProjectConfig,
 
     /// Is this a single-file pseudo-project?
     pub is_single_file: bool,
@@ -422,7 +425,7 @@ impl ProjectContext {
 
         Ok(Self {
             dir,
-            config,
+            config: config.unwrap_or_default(),
             is_single_file,
             files,
             output_dir,
@@ -444,7 +447,7 @@ impl ProjectContext {
 
         Ok(Self {
             dir: dir.clone(),
-            config: None,
+            config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![DocumentInfo::from_path(input)],
             output_dir: dir,
@@ -547,10 +550,7 @@ impl ProjectContext {
 
     /// Get the project type
     pub fn project_type(&self) -> ProjectType {
-        self.config
-            .as_ref()
-            .map(|c| c.project_type)
-            .unwrap_or_default()
+        self.config.project_type
     }
 
     /// Check if this is a multi-document project
@@ -741,10 +741,10 @@ mod tests {
     fn test_project_context_project_type_with_config() {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig {
+            config: ProjectConfig {
                 project_type: ProjectType::Website,
                 ..Default::default()
-            }),
+            },
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_site"),
@@ -757,7 +757,7 @@ mod tests {
     fn test_project_context_project_type_without_config() {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -770,10 +770,10 @@ mod tests {
     fn test_project_context_is_multi_document_website() {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig {
+            config: ProjectConfig {
                 project_type: ProjectType::Website,
                 ..Default::default()
-            }),
+            },
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_site"),
@@ -786,10 +786,10 @@ mod tests {
     fn test_project_context_is_multi_document_book() {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig {
+            config: ProjectConfig {
                 project_type: ProjectType::Book,
                 ..Default::default()
-            }),
+            },
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_book"),
@@ -802,10 +802,10 @@ mod tests {
     fn test_project_context_is_multi_document_manuscript() {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig {
+            config: ProjectConfig {
                 project_type: ProjectType::Manuscript,
                 ..Default::default()
-            }),
+            },
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_manuscript"),
@@ -819,10 +819,10 @@ mod tests {
         // Default project type is NOT multi-document
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig {
+            config: ProjectConfig {
                 project_type: ProjectType::Default,
                 ..Default::default()
-            }),
+            },
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -836,10 +836,10 @@ mod tests {
         // Single file projects are never multi-document, even if type is Website
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig {
+            config: ProjectConfig {
                 project_type: ProjectType::Website,
                 ..Default::default()
-            }),
+            },
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/index.qmd")],
             output_dir: PathBuf::from("/project"),
@@ -853,13 +853,53 @@ mod tests {
         // No config means single-file pseudo-project, not multi-document
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
         };
 
         assert!(!context.is_multi_document());
+    }
+
+    // === ProjectContext::discover and ::single_file tests ===
+
+    mod discover_tests {
+        use super::*;
+        use quarto_system_runtime::NativeRuntime;
+        use std::fs;
+        use tempfile::TempDir;
+
+        #[test]
+        fn test_discover_without_quarto_yml_has_default_config() {
+            // A path with no _quarto.yml should get a default config, not None
+            let temp = TempDir::new().unwrap();
+            let qmd_path = temp.path().join("doc.qmd");
+            fs::write(&qmd_path, "# Hello\n").unwrap();
+
+            let runtime = NativeRuntime::new();
+            let ctx = ProjectContext::discover(&qmd_path, &runtime).unwrap();
+
+            assert!(ctx.is_single_file);
+            // Config should be default with no metadata
+            assert_eq!(ctx.config.project_type, ProjectType::Default);
+            assert!(ctx.config.metadata.is_none());
+        }
+
+        #[test]
+        fn test_single_file_has_default_config() {
+            let temp = TempDir::new().unwrap();
+            let qmd_path = temp.path().join("doc.qmd");
+            fs::write(&qmd_path, "# Hello\n").unwrap();
+
+            let runtime = NativeRuntime::new();
+            let ctx = ProjectContext::single_file(&qmd_path, &runtime).unwrap();
+
+            assert!(ctx.is_single_file);
+            // Config should be default with no metadata
+            assert_eq!(ctx.config.project_type, ProjectType::Default);
+            assert!(ctx.config.metadata.is_none());
+        }
     }
 
     // === Directory Metadata tests ===
@@ -878,7 +918,7 @@ mod tests {
             let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
             ProjectContext {
                 dir: canonical.clone(),
-                config: Some(ProjectConfig::default()),
+                config: ProjectConfig::default(),
                 is_single_file: false,
                 files: vec![],
                 output_dir: canonical,
@@ -1078,17 +1118,17 @@ mod tests {
 
         #[test]
         fn test_directory_metadata_single_file_project() {
-            // Single-file project (no config) should return empty vec
+            // Single-file project (default config) should return empty vec
             let temp = TempDir::new().unwrap();
             let chapters = temp.path().join("chapters");
             fs::create_dir(&chapters).unwrap();
             fs::write(chapters.join("_metadata.yml"), "toc: true\n").unwrap();
             fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
 
-            // Single-file project has config = None
+            // Single-file project has default config
             let project = ProjectContext {
                 dir: temp.path().to_path_buf(),
-                config: None,
+                config: ProjectConfig::default(),
                 is_single_file: true,
                 files: vec![],
                 output_dir: temp.path().to_path_buf(),

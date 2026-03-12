@@ -203,7 +203,7 @@ async fn test_kernel_execute_error() {
 
 use quarto_core::engine::jupyter::JupyterTransform;
 use quarto_core::format::Format;
-use quarto_core::project::{DocumentInfo, ProjectContext};
+use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
 use quarto_core::transform::AstTransform;
 use quarto_pandoc_types::ConfigValue;
@@ -216,7 +216,7 @@ use quarto_source_map::SourceInfo;
 fn make_test_project() -> ProjectContext {
     ProjectContext {
         dir: PathBuf::from(std::env::current_dir().unwrap()),
-        config: None,
+        config: ProjectConfig::default(),
         is_single_file: true,
         files: vec![DocumentInfo::from_path(
             std::env::current_dir().unwrap().join("test.qmd"),

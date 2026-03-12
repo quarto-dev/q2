@@ -340,7 +340,7 @@ mod tests {
         let runtime = Arc::new(MockRuntime);
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: crate::project::ProjectConfig::default(),
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),

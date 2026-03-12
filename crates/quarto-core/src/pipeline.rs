@@ -462,7 +462,7 @@ mod tests {
     fn make_test_project() -> ProjectContext {
         ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: crate::project::ProjectConfig::default(),
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/test.qmd")],
             output_dir: PathBuf::from("/project"),
@@ -760,7 +760,7 @@ mod tests {
         };
         ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(metadata)),
+            config: ProjectConfig::with_metadata(metadata),
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/test.qmd")],
             output_dir: PathBuf::from("/project"),

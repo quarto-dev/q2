@@ -321,7 +321,7 @@ mod tests {
     fn make_stage_context(runtime: Arc<dyn quarto_system_runtime::SystemRuntime>) -> StageContext {
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: crate::project::ProjectConfig::default(),
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -684,7 +684,7 @@ mod tests {
     ) -> StageContext {
         let project = ProjectContext {
             dir: PathBuf::from(project_dir),
-            config: None,
+            config: crate::project::ProjectConfig::default(),
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from(project_dir),

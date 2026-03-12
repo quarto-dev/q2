@@ -342,12 +342,12 @@ mod tests {
 
     fn make_test_context() -> StageContext {
         use crate::format::Format;
-        use crate::project::{DocumentInfo, ProjectContext};
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
 
         let runtime = Arc::new(MockRuntime);
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None,
+            config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),

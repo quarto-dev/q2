@@ -438,7 +438,7 @@ mod tests {
     use quarto_source_map::{FileId, Location, Range};
 
     use crate::format::Format;
-    use crate::project::{DocumentInfo, ProjectContext};
+    use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
 
     fn dummy_source_info() -> SourceInfo {
@@ -462,7 +462,7 @@ mod tests {
     fn make_test_project() -> ProjectContext {
         ProjectContext {
             dir: std::path::PathBuf::from("/project"),
-            config: None,
+            config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: std::path::PathBuf::from("/project"),

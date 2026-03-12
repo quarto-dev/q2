@@ -144,89 +144,76 @@ impl PipelineStage for MetadataMergeStage {
         // 5. Document format-specific settings (format.{target}.*)
         // 6. Runtime metadata (e.g., --metadata flags, WASM preview settings)
         let runtime_meta_json = ctx.runtime.runtime_metadata();
-        let has_project_config = ctx.project.config.is_some();
+        let target_format = ctx.format.identifier.as_str();
 
-        if has_project_config || runtime_meta_json.is_some() {
-            let target_format = ctx.format.identifier.as_str();
+        // Layer 1: Project metadata (flattened for format)
+        // Adjust !path values to be relative to document directory
+        // (project config paths are relative to project root)
+        let document_dir = doc
+            .path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| ctx.project.dir.clone());
+        let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
+            let mut flattened = resolve_format_config(m, target_format);
+            adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
+            flattened
+        });
 
-            // Layer 1: Project metadata (flattened for format)
-            // Adjust !path values to be relative to document directory
-            // (project config paths are relative to project root)
-            let document_dir = doc
-                .path
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| ctx.project.dir.clone());
-            let project_layer = ctx
-                .project
-                .config
-                .as_ref()
-                .and_then(|c| c.metadata.as_ref())
-                .map(|m| {
-                    let mut flattened = resolve_format_config(m, target_format);
-                    adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
-                    flattened
-                });
-
-            // Layer 2: Directory metadata layers (each flattened for format)
-            let dir_layers: Vec<_> = if has_project_config {
-                directory_metadata_for_document(
-                    &ctx.project,
-                    &ctx.document.input,
-                    ctx.runtime.as_ref(),
-                )
+        // Layer 2: Directory metadata layers (each flattened for format)
+        let dir_layers: Vec<_> = if !ctx.project.is_single_file {
+            directory_metadata_for_document(&ctx.project, &ctx.document.input, ctx.runtime.as_ref())
                 .unwrap_or_default()
                 .into_iter()
                 .map(|m| resolve_format_config(&m, target_format))
                 .collect()
-            } else {
-                vec![]
-            };
+        } else {
+            vec![]
+        };
 
-            // Layer 3: Document metadata (flattened for format)
-            let doc_layer = resolve_format_config(&doc.ast.meta, target_format);
+        // Layer 3: Document metadata (flattened for format)
+        let doc_layer = resolve_format_config(&doc.ast.meta, target_format);
 
-            // Layer 4: Runtime metadata (flattened for format)
-            let runtime_layer = runtime_meta_json
-                .as_ref()
-                .map(|json| resolve_format_config(&json_to_config_value(json), target_format));
+        // Layer 4: Runtime metadata (flattened for format)
+        let runtime_layer = runtime_meta_json
+            .as_ref()
+            .map(|json| resolve_format_config(&json_to_config_value(json), target_format));
 
-            // Build merge layers: project → dir[0] → dir[1] → ... → document → runtime
-            let mut layers: Vec<&ConfigValue> = Vec::new();
-            if let Some(ref proj) = project_layer {
-                layers.push(proj);
-            }
-            for dir_meta in &dir_layers {
-                layers.push(dir_meta);
-            }
-            layers.push(&doc_layer);
-            if let Some(ref rt) = runtime_layer {
-                layers.push(rt);
-            }
-
-            // Merge all layers
-            let layer_count = layers.len();
-            let merged = MergedConfig::new(layers);
-            if let Ok(materialized) = merged.materialize() {
-                let has_runtime = if runtime_layer.is_some() {
-                    " + runtime"
-                } else {
-                    ""
-                };
-                trace_event!(
-                    ctx,
-                    EventLevel::Debug,
-                    "merged {} metadata layers for format '{}' (project + {} dir + doc{})",
-                    layer_count,
-                    target_format,
-                    dir_layers.len(),
-                    has_runtime
-                );
-                doc.ast.meta = materialized;
-            }
-            // Note: If materialization fails (shouldn't happen with well-formed configs),
-            // we silently continue with the original document metadata.
+        // Build merge layers: project → dir[0] → dir[1] → ... → document → runtime
+        let mut layers: Vec<&ConfigValue> = Vec::new();
+        if let Some(ref proj) = project_layer {
+            layers.push(proj);
         }
+        for dir_meta in &dir_layers {
+            layers.push(dir_meta);
+        }
+        layers.push(&doc_layer);
+        if let Some(ref rt) = runtime_layer {
+            layers.push(rt);
+        }
+
+        // Merge all layers
+        let layer_count = layers.len();
+        let merged = MergedConfig::new(layers);
+        if let Ok(materialized) = merged.materialize() {
+            let has_runtime = if runtime_layer.is_some() {
+                " + runtime"
+            } else {
+                ""
+            };
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "merged {} metadata layers for format '{}' (project + {} dir + doc{})",
+                layer_count,
+                target_format,
+                dir_layers.len(),
+                has_runtime
+            );
+            doc.ast.meta = materialized;
+        }
+        // Note: If materialization fails (shouldn't happen with well-formed configs),
+        // we silently continue with the original document metadata.
 
         Ok(PipelineData::DocumentAst(doc))
     }
@@ -419,7 +406,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            config: ProjectConfig::with_metadata(project_metadata),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -470,7 +457,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            config: ProjectConfig::with_metadata(project_metadata),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -518,7 +505,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            config: ProjectConfig::with_metadata(project_metadata),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -562,7 +549,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            config: ProjectConfig::with_metadata(project_metadata),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -619,7 +606,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            config: ProjectConfig::with_metadata(project_metadata),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -672,7 +659,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            config: ProjectConfig::with_metadata(project_metadata),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -863,7 +850,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            config: ProjectConfig::with_metadata(config_map(vec![])),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -910,7 +897,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            config: ProjectConfig::with_metadata(config_map(vec![])),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -951,7 +938,7 @@ mod tests {
         let project_metadata = config_map(vec![("toc", config_bool(true))]);
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(project_metadata)),
+            config: ProjectConfig::with_metadata(project_metadata),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -991,7 +978,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            config: ProjectConfig::with_metadata(config_map(vec![])),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -1029,7 +1016,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: Some(ProjectConfig::with_metadata(config_map(vec![]))),
+            config: ProjectConfig::with_metadata(config_map(vec![])),
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -1072,7 +1059,7 @@ mod tests {
 
         let project = ProjectContext {
             dir: PathBuf::from("/project"),
-            config: None, // No project config
+            config: ProjectConfig::default(), // No project config
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
@@ -1106,6 +1093,63 @@ mod tests {
         assert_eq!(
             result.ast.meta.get("source-location").unwrap().as_str(),
             Some("full")
+        );
+    }
+
+    // ============================================================================
+    // Single-file format flattening bug
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_single_file_format_flattening() {
+        // BUG: Single-file renders (config: None, no runtime metadata) skip
+        // the merge gate entirely, so format.html.toc stays nested instead
+        // of being flattened to top-level toc.
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(), // Single-file render, no project config
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = MetadataMergeStage::new();
+
+        // Document has format.html.toc: true in frontmatter
+        let doc_metadata = config_map(vec![(
+            "format",
+            config_map(vec![("html", config_map(vec![("toc", config_bool(true))]))]),
+        )]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // After merge, toc should be flattened to top level
+        assert_eq!(
+            result.ast.meta.get("toc").unwrap().as_bool(),
+            Some(true),
+            "format.html.toc should be flattened to top-level toc for single-file renders"
+        );
+        // format key should be removed
+        assert!(
+            result.ast.meta.get("format").is_none(),
+            "format key should be removed after flattening"
         );
     }
 }

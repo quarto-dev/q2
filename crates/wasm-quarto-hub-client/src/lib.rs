@@ -18,8 +18,8 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use quarto_core::{
-    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectContext, QuartoError,
-    RenderContext, RenderOptions, extract_format_metadata, render_qmd_to_html,
+    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
+    QuartoError, RenderContext, RenderOptions, extract_format_metadata, render_qmd_to_html,
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
@@ -487,7 +487,7 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
     let dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
     ProjectContext {
         dir: dir.clone(),
-        config: None,
+        config: ProjectConfig::default(),
         is_single_file: true,
         files: vec![DocumentInfo::from_path(path)],
         output_dir: dir,
