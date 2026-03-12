@@ -1,0 +1,16 @@
+---
+title: Metadata Theme with Custom SCSS (Deeper Subdir)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "metadata-scss-marker", "#d4e5f6"]
+---
+
+## Deeper Subdirectory
+
+This document is in `chapters/deep/` but inherits the theme from
+`chapters/_metadata.yml` which sets `theme: [vapor, custom-chapters.scss]`.
+The custom SCSS path is relative to the `_metadata.yml` location and
+must be resolved correctly for documents in subdirectories.

@@ -1,0 +1,13 @@
+---
+title: Project Theme with Custom SCSS (Root)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "project-scss-marker", "#a1b2c3"]
+---
+
+## Root Document
+
+Control test: same project theme applied at the root level.

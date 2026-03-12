@@ -1,0 +1,15 @@
+---
+title: Project Theme with Custom SCSS (Subdirectory)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "project-scss-marker", "#a1b2c3"]
+---
+
+## Project Theme Inheritance
+
+This document is in `chapters/` but the project `_quarto.yml` at the
+root defines `theme: [vapor, custom-root.scss]`. The document should
+inherit both the vapor theme and the custom SCSS from the project root.

@@ -177,7 +177,7 @@ fn find_metadata_file(dir: &Path, runtime: &dyn SystemRuntime) -> Option<PathBuf
 /// - Recomputes relative path from document_dir
 ///
 /// Leaves other values (strings, globs, etc.) unchanged.
-fn adjust_paths_to_document_dir(
+pub(crate) fn adjust_paths_to_document_dir(
     metadata: &mut ConfigValue,
     metadata_dir: &Path,
     document_dir: &Path,

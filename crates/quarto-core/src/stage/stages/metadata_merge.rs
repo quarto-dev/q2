@@ -25,7 +25,7 @@ use quarto_config::{MergedConfig, resolve_format_config};
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
 use quarto_source_map::SourceInfo;
 
-use crate::project::directory_metadata_for_document;
+use crate::project::{adjust_paths_to_document_dir, directory_metadata_for_document};
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -150,12 +150,23 @@ impl PipelineStage for MetadataMergeStage {
             let target_format = ctx.format.identifier.as_str();
 
             // Layer 1: Project metadata (flattened for format)
+            // Adjust !path values to be relative to document directory
+            // (project config paths are relative to project root)
+            let document_dir = doc
+                .path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| ctx.project.dir.clone());
             let project_layer = ctx
                 .project
                 .config
                 .as_ref()
                 .and_then(|c| c.metadata.as_ref())
-                .map(|m| resolve_format_config(m, target_format));
+                .map(|m| {
+                    let mut flattened = resolve_format_config(m, target_format);
+                    adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
+                    flattened
+                });
 
             // Layer 2: Directory metadata layers (each flattened for format)
             let dir_layers: Vec<_> = if has_project_config {

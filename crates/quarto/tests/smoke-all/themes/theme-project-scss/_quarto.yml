@@ -1,0 +1,7 @@
+project:
+  type: default
+format:
+  html:
+    theme:
+      - vapor
+      - !path custom-root.scss

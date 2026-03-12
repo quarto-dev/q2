@@ -1,0 +1,3 @@
+theme:
+  - vapor
+  - !path custom-chapters.scss

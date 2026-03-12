@@ -1,0 +1,7 @@
+project:
+  type: default
+format:
+  html:
+    theme:
+      - vapor
+      - !path ./styles/custom-in-styles.scss

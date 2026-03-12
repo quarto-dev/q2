@@ -1,0 +1,14 @@
+---
+title: Metadata Relative SCSS Path (Same Dir)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "metadata-relpath-marker", "#cc5501"]
+---
+
+## Same-Directory Document
+
+`chapters/_metadata.yml` uses `./styles/chapter-styles.scss`. This doc
+in `chapters/` should pick up both vapor and the custom SCSS.

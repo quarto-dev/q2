@@ -1,0 +1,15 @@
+---
+title: Metadata Theme with Custom SCSS (Same Dir)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "metadata-scss-marker", "#d4e5f6"]
+---
+
+## Same-Directory Metadata Theme
+
+This document is in `chapters/` alongside `_metadata.yml` which sets
+`theme: [vapor, custom-chapters.scss]`. Both vapor and the custom SCSS
+should be present in the output CSS.

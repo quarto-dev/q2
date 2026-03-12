@@ -1,0 +1,20 @@
+---
+title: Cross-Directory Custom SCSS Reference
+format:
+  html:
+    theme:
+      - vapor
+      - ../styles/shared.scss
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "crossdir-scss-marker", "#789abc"]
+---
+
+## Cross-Directory SCSS
+
+This document is in `chapters/` and references custom SCSS via a
+relative path `../styles/shared.scss` that goes up and over to the
+`styles/` directory. Both vapor theme and the custom SCSS should appear.

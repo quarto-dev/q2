@@ -1,0 +1,14 @@
+---
+title: Project Relative SCSS Path (Root)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "project-relpath-marker", "#aabb12"]
+---
+
+## Root Document
+
+Control: project `_quarto.yml` uses `./styles/custom-in-styles.scss`,
+this root doc should pick up both vapor and the custom SCSS.

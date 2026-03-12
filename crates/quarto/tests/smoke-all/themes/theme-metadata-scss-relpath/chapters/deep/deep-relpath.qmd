@@ -1,0 +1,15 @@
+---
+title: Metadata Relative SCSS Path (Deeper Subdir)
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureCssRegexMatches:
+        - ["#170229", "metadata-relpath-marker", "#cc5501"]
+---
+
+## Deeper Subdirectory
+
+`chapters/_metadata.yml` uses `./styles/chapter-styles.scss`. This doc
+in `chapters/deep/` should inherit the theme, with the SCSS path
+resolved relative to the `_metadata.yml` directory.
