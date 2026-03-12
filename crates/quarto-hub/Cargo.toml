@@ -84,6 +84,7 @@ hex = "0.4"
 infer = "0.19"
 
 [dev-dependencies]
+rand = "0.9"
 tempfile = "3"
 
 [lints]

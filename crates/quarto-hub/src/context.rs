@@ -10,10 +10,11 @@ use automerge::{Automerge, ObjType, ROOT, transaction::Transactable};
 use axum::http::StatusCode;
 use axum_jwt_auth::JwtDecoder;
 use samod::storage::TokioFilesystemStorage;
-use samod::{AcceptorHandle, ConnectionId, NeverAnnounce, Repo};
+use samod::{AcceptorHandle, NeverAnnounce, PeerId, Repo};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
+use crate::access_policy::AuditAccessPolicy;
 use crate::auth::{self, AuthConfig, AuthState, OidcClaims};
 use crate::discovery::ProjectFiles;
 use crate::error::Result;
@@ -115,10 +116,10 @@ pub struct HubContext {
     /// is omitted from auth cookies.
     allow_insecure_auth: bool,
 
-    /// Maps connection IDs to authenticated user emails.
+    /// Maps peer IDs to authenticated user emails.
     /// Populated by handle_websocket when auth is enabled; read by the
-    /// on_document_served callback for audit logging.
-    connection_emails: Arc<StdMutex<HashMap<ConnectionId, String>>>,
+    /// AuditAccessPolicy for audit logging.
+    peer_emails: Arc<StdMutex<HashMap<PeerId, String>>>,
 }
 
 impl HubContext {
@@ -158,11 +159,13 @@ impl HubContext {
         info!(automerge_dir = %automerge_dir.display(), "Initializing samod repo");
 
         let samod_storage = TokioFilesystemStorage::new(&automerge_dir);
-        let connection_emails = Arc::new(StdMutex::new(HashMap::new()));
+        let peer_emails = Arc::new(StdMutex::new(HashMap::new()));
+        let audit_policy = AuditAccessPolicy::new(peer_emails.clone());
 
         let builder = Repo::build_tokio()
             .with_storage(samod_storage)
-            .with_announce_policy(NeverAnnounce);
+            .with_announce_policy(NeverAnnounce)
+            .with_access_policy(audit_policy);
 
         let repo = builder.load().await;
 
@@ -234,7 +237,7 @@ impl HubContext {
             auth_config,
             auth_state: OnceLock::new(),
             allow_insecure_auth,
-            connection_emails,
+            peer_emails,
         })
     }
 
@@ -331,9 +334,9 @@ impl HubContext {
         self.allow_insecure_auth
     }
 
-    /// Connection→email map for document-served audit logging.
-    pub fn connection_emails(&self) -> &Arc<StdMutex<HashMap<ConnectionId, String>>> {
-        &self.connection_emails
+    /// Peer→email map for document access audit logging.
+    pub fn peer_emails(&self) -> &Arc<StdMutex<HashMap<PeerId, String>>> {
+        &self.peer_emails
     }
 
     /// Authenticate a request. If auth is disabled, always succeeds.
