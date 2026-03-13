@@ -344,6 +344,53 @@ export function routesEqual(a: Route, b: Route): boolean {
   }
 }
 
+// ============================================================================
+// Pre-Auth Hash Preservation
+// ============================================================================
+
+/** sessionStorage key used to preserve the hash across auth redirects. */
+const PRE_AUTH_HASH_KEY = 'quarto-hub-pre-auth-hash';
+
+/**
+ * Save the current hash fragment to sessionStorage.
+ *
+ * Call this when the login screen is shown so that the hash (e.g., a
+ * `#/share/...` link) survives the Google OAuth redirect roundtrip.
+ * The server redirects back to `/` after auth, which loses the hash.
+ */
+export function savePreAuthHash(): void {
+  const hash = window.location.hash;
+  if (hash && hash !== '#' && hash !== '#/') {
+    sessionStorage.setItem(PRE_AUTH_HASH_KEY, hash);
+  }
+}
+
+/**
+ * Restore a previously saved hash fragment after auth redirect.
+ *
+ * Call this early at startup (before React mounts). If a hash was saved
+ * and the current URL has no meaningful hash, it is restored.
+ *
+ * @returns The restored hash, or null if nothing was restored.
+ */
+export function restorePreAuthHash(): string | null {
+  const saved = sessionStorage.getItem(PRE_AUTH_HASH_KEY);
+  if (!saved) return null;
+
+  sessionStorage.removeItem(PRE_AUTH_HASH_KEY);
+
+  if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
+    window.location.hash = saved;
+    return saved;
+  }
+
+  return null;
+}
+
+// ============================================================================
+// Route Comparison
+// ============================================================================
+
 /**
  * Check if two routes point to the same file (ignoring anchor).
  *

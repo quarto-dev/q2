@@ -1,13 +1,15 @@
 /**
  * Tests for URL routing utilities.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import {
   parseHashRoute,
   buildHashRoute,
   buildShareableUrl,
   routesEqual,
   sameFile,
+  savePreAuthHash,
+  restorePreAuthHash,
   DEFAULT_SYNC_SERVER,
   type Route,
   type ShareRoute,
@@ -481,5 +483,130 @@ describe('sameFile', () => {
         { type: 'file', projectId: 'abc', filePath: 'index.qmd' }
       )
     ).toBe(false);
+  });
+});
+
+// ── Pre-Auth Hash Preservation ──────────────────────────────────
+
+describe('savePreAuthHash / restorePreAuthHash', () => {
+  const originalWindow = globalThis.window;
+  let mockHash: string;
+  let mockStorage: Map<string, string>;
+
+  beforeEach(() => {
+    mockHash = '';
+    mockStorage = new Map();
+
+    // @ts-expect-error - mocking window in node environment
+    globalThis.window = {
+      location: {
+        get hash() { return mockHash; },
+        set hash(v: string) { mockHash = v; },
+      },
+    };
+
+    // @ts-expect-error - mocking sessionStorage in node environment
+    globalThis.sessionStorage = {
+      getItem: (key: string) => mockStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => { mockStorage.set(key, value); },
+      removeItem: (key: string) => { mockStorage.delete(key); },
+      clear: () => { mockStorage.clear(); },
+    };
+  });
+
+  afterEach(() => {
+    // @ts-expect-error - restoring window
+    globalThis.window = originalWindow;
+  });
+
+  it('saves a share link hash and restores it on empty hash', () => {
+    mockHash = '#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org';
+    savePreAuthHash();
+
+    // Simulate post-auth redirect to "/"
+    mockHash = '';
+    const restored = restorePreAuthHash();
+
+    expect(restored).toBe('#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org');
+    expect(mockHash).toBe('#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org');
+  });
+
+  it('restores when current hash is #/', () => {
+    mockHash = '#/share/abc123';
+    savePreAuthHash();
+
+    mockHash = '#/';
+    const restored = restorePreAuthHash();
+
+    expect(restored).toBe('#/share/abc123');
+  });
+
+  it('does not save empty hash', () => {
+    mockHash = '';
+    savePreAuthHash();
+
+    expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(false);
+  });
+
+  it('does not save #/ hash', () => {
+    mockHash = '#/';
+    savePreAuthHash();
+
+    expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(false);
+  });
+
+  it('does not restore if current hash is already meaningful', () => {
+    mockHash = '#/share/original';
+    savePreAuthHash();
+
+    mockHash = '#/project/some-id';
+    const restored = restorePreAuthHash();
+
+    expect(restored).toBeNull();
+    expect(mockHash).toBe('#/project/some-id');
+  });
+
+  it('clears sessionStorage after restore', () => {
+    mockHash = '#/share/abc123';
+    savePreAuthHash();
+    expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(true);
+
+    mockHash = '';
+    restorePreAuthHash();
+
+    expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(false);
+  });
+
+  it('clears sessionStorage even when not restored (hash already set)', () => {
+    mockHash = '#/share/abc123';
+    savePreAuthHash();
+
+    mockHash = '#/project/other';
+    restorePreAuthHash();
+
+    expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(false);
+  });
+
+  it('returns null when nothing was saved', () => {
+    mockHash = '';
+    const restored = restorePreAuthHash();
+    expect(restored).toBeNull();
+  });
+
+  it('matches main.tsx usage: restore-or-save short-circuit', () => {
+    // Phase 1: first visit with share link — restore returns null, save captures hash
+    mockHash = '#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org';
+    restorePreAuthHash() || savePreAuthHash();
+
+    expect(mockStorage.get('quarto-hub-pre-auth-hash'))
+      .toBe('#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org');
+
+    // Phase 2: return from auth redirect — restore succeeds, save is skipped
+    mockHash = '';
+    restorePreAuthHash() || savePreAuthHash();
+
+    expect(mockHash).toBe('#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org');
+    // sessionStorage should be clean and not re-saved
+    expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(false);
   });
 });
