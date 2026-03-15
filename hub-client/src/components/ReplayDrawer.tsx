@@ -9,7 +9,7 @@ interface Props {
 
 function formatTimestamp(ts: number | null): string {
   if (ts === null) return '';
-  const date = new Date(ts);
+  const date = new Date(ts * 1000);
   return date.toLocaleString();
 }
 

@@ -67,7 +67,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 42,
       currentContent: 'hello',
-      timestamp: 1710000000000,
+      timestamp: 1710000000,
     });
 
     it('renders transport controls when active', () => {
