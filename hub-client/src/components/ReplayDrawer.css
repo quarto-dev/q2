@@ -146,6 +146,14 @@
   font-size: 13px;
 }
 
+.replay-drawer__btn--speed {
+  width: auto;
+  padding: 0 6px;
+  font-size: 10px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  margin-left: 3px;
+}
+
 .replay-drawer__btn--apply {
   width: auto;
   height: 24px;

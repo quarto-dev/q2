@@ -176,7 +176,7 @@ describe('useReplayMode', () => {
       act(() => { result.current.controls.play(); });
       expect(result.current.state.isPlaying).toBe(true);
 
-      // Advance one tick (adaptive interval: 15000/4 = 3750, clamped to 200ms)
+      // Advance one tick (base interval 200ms at 1x speed)
       act(() => { vi.advanceTimersByTime(200); });
       expect(result.current.state.currentIndex).toBe(1);
 
@@ -220,6 +220,80 @@ describe('useReplayMode', () => {
 
       expect(result.current.state.currentIndex).toBe(2);
       expect(result.current.state.isPlaying).toBe(false);
+    });
+  });
+
+  describe('cycleSpeed()', () => {
+    it('cycles through 1x, 2x, 4x speeds', () => {
+      const handle = createMockHandle(['a', 'b', 'c']);
+      mockGetFileHandle.mockReturnValue(handle as never);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+
+      expect(result.current.state.playbackSpeed).toBe(1);
+
+      act(() => { result.current.controls.cycleSpeed(); });
+      expect(result.current.state.playbackSpeed).toBe(2);
+
+      act(() => { result.current.controls.cycleSpeed(); });
+      expect(result.current.state.playbackSpeed).toBe(4);
+
+      act(() => { result.current.controls.cycleSpeed(); });
+      expect(result.current.state.playbackSpeed).toBe(1);
+    });
+
+    it('advances faster at 2x speed', () => {
+      const handle = createMockHandle(['a', 'b', 'c', 'd', 'e']);
+      mockGetFileHandle.mockReturnValue(handle as never);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      act(() => { result.current.controls.seekTo(0); });
+      act(() => { result.current.controls.cycleSpeed(); }); // 2x
+      act(() => { result.current.controls.play(); });
+
+      // At 2x, interval is 100ms
+      act(() => { vi.advanceTimersByTime(100); });
+      expect(result.current.state.currentIndex).toBe(1);
+
+      act(() => { vi.advanceTimersByTime(100); });
+      expect(result.current.state.currentIndex).toBe(2);
+    });
+
+    it('restarts interval at new speed when changed during playback', () => {
+      const handle = createMockHandle(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+      mockGetFileHandle.mockReturnValue(handle as never);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      act(() => { result.current.controls.seekTo(0); });
+      act(() => { result.current.controls.play(); });
+
+      // Advance one step at 1x (200ms)
+      act(() => { vi.advanceTimersByTime(200); });
+      expect(result.current.state.currentIndex).toBe(1);
+
+      // Switch to 4x while playing
+      act(() => { result.current.controls.cycleSpeed(); }); // 2x
+      act(() => { result.current.controls.cycleSpeed(); }); // 4x
+
+      // At 4x, interval is 50ms
+      act(() => { vi.advanceTimersByTime(50); });
+      expect(result.current.state.currentIndex).toBe(2);
+    });
+
+    it('resets speed on exit', () => {
+      const handle = createMockHandle(['a', 'b', 'c']);
+      mockGetFileHandle.mockReturnValue(handle as never);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      act(() => { result.current.controls.cycleSpeed(); });
+      expect(result.current.state.playbackSpeed).toBe(2);
+
+      act(() => { result.current.controls.exit(); });
+      expect(result.current.state.playbackSpeed).toBe(1);
     });
   });
 

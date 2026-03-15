@@ -4,11 +4,15 @@ import {
   updateFileContent,
 } from '../services/automergeSync';
 
+export const PLAYBACK_SPEEDS = [1, 2, 4] as const;
+export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
+
 export interface ReplayState {
   isActive: boolean;
   historyLength: number;
   currentIndex: number;
   isPlaying: boolean;
+  playbackSpeed: PlaybackSpeed;
   currentContent: string;
   timestamp: number | null;
 }
@@ -24,6 +28,7 @@ export interface ReplayControls {
   pause: () => void;
   stepForward: () => void;
   stepBackward: () => void;
+  cycleSpeed: () => void;
   getTimestampAtIndex: (index: number) => number | null;
 }
 
@@ -32,14 +37,13 @@ const INITIAL_STATE: ReplayState = {
   historyLength: 0,
   currentIndex: 0,
   isPlaying: false,
+  playbackSpeed: 1,
   currentContent: '',
   timestamp: null,
 };
 
-// Target ~15 seconds for a full playback, clamped to [16ms, 200ms] per step
-const PLAY_TARGET_DURATION_MS = 15000;
-const PLAY_MIN_INTERVAL_MS = 16;
-const PLAY_MAX_INTERVAL_MS = 200;
+// Base interval at 1x speed; divided by playback speed multiplier
+const PLAY_BASE_INTERVAL_MS = 200;
 
 // Type helpers for DocHandle methods we use (avoids importing Automerge types)
 interface ViewableHandle {
@@ -61,8 +65,9 @@ export function useReplayMode(
   const historyRef = useRef<unknown[]>([]);
   const handleRef = useRef<unknown>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Keep current index in a ref for the interval callback
+  // Keep current index and speed in refs for the interval callback
   const indexRef = useRef(0);
+  const speedRef = useRef<PlaybackSpeed>(1);
 
   const clearPlayInterval = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -125,6 +130,7 @@ export function useReplayMode(
         historyLength: history.length,
         currentIndex: lastIndex,
         isPlaying: false,
+        playbackSpeed: 1,
         currentContent: content,
         timestamp,
       });
@@ -155,21 +161,10 @@ export function useReplayMode(
     setState(prev => ({ ...prev, isPlaying: false }));
   }, [clearPlayInterval]);
 
-  const play = useCallback(() => {
+  const startPlayInterval = useCallback(() => {
+    clearPlayInterval();
     const history = historyRef.current;
-    if (history.length === 0) return;
-
-    // If at the end, restart from the beginning
-    if (indexRef.current >= history.length - 1) {
-      seekTo(0);
-    }
-
-    setState(prev => ({ ...prev, isPlaying: true }));
-
-    const interval = Math.max(
-      PLAY_MIN_INTERVAL_MS,
-      Math.min(PLAY_MAX_INTERVAL_MS, Math.round(PLAY_TARGET_DURATION_MS / history.length)),
-    );
+    const interval = Math.round(PLAY_BASE_INTERVAL_MS / speedRef.current);
 
     intervalRef.current = setInterval(() => {
       const nextIndex = indexRef.current + 1;
@@ -188,7 +183,20 @@ export function useReplayMode(
         timestamp,
       }));
     }, interval);
-  }, [clearPlayInterval, getContentAtIndex, getTimestampAtIndex, seekTo]);
+  }, [clearPlayInterval, getContentAtIndex, getTimestampAtIndex]);
+
+  const play = useCallback(() => {
+    const history = historyRef.current;
+    if (history.length === 0) return;
+
+    // If at the end, restart from the beginning
+    if (indexRef.current >= history.length - 1) {
+      seekTo(0);
+    }
+
+    setState(prev => ({ ...prev, isPlaying: true }));
+    startPlayInterval();
+  }, [seekTo, startPlayInterval]);
 
   const pause = useCallback(() => {
     stopPlaying();
@@ -209,6 +217,17 @@ export function useReplayMode(
     }
   }, [seekTo]);
 
+  const cycleSpeed = useCallback(() => {
+    const currentIdx = PLAYBACK_SPEEDS.indexOf(speedRef.current);
+    const nextSpeed = PLAYBACK_SPEEDS[(currentIdx + 1) % PLAYBACK_SPEEDS.length];
+    speedRef.current = nextSpeed;
+    setState(prev => ({ ...prev, playbackSpeed: nextSpeed }));
+    // If currently playing, restart the interval at the new speed
+    if (intervalRef.current !== null) {
+      startPlayInterval();
+    }
+  }, [startPlayInterval]);
+
   const seekToStart = useCallback(() => {
     if (historyRef.current.length > 0) {
       seekTo(0);
@@ -227,6 +246,7 @@ export function useReplayMode(
     handleRef.current = null;
     historyRef.current = [];
     indexRef.current = 0;
+    speedRef.current = 1;
     setState(INITIAL_STATE);
   }, [clearPlayInterval]);
 
@@ -255,6 +275,7 @@ export function useReplayMode(
       pause,
       stepForward,
       stepBackward,
+      cycleSpeed,
       getTimestampAtIndex,
     },
   };

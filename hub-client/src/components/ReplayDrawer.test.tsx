@@ -15,6 +15,7 @@ function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
     historyLength: 0,
     currentIndex: 0,
     isPlaying: false,
+    playbackSpeed: 1,
     currentContent: '',
     timestamp: null,
     ...overrides,
@@ -33,6 +34,7 @@ function makeControls(overrides: Partial<ReplayControls> = {}): ReplayControls {
     pause: vi.fn(),
     stepForward: vi.fn(),
     stepBackward: vi.fn(),
+    cycleSpeed: vi.fn(),
     ...overrides,
   };
 }
@@ -128,6 +130,20 @@ describe('ReplayDrawer', () => {
       const scrubber = screen.getByRole('slider');
       fireEvent.change(scrubber, { target: { value: '10' } });
       expect(controls.seekTo).toHaveBeenCalledWith(10);
+    });
+
+    it('speed button shows current speed and calls cycleSpeed', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      const speedBtn = screen.getByLabelText('Playback speed');
+      expect(speedBtn.textContent).toBe('1x');
+      fireEvent.click(speedBtn);
+      expect(controls.cycleSpeed).toHaveBeenCalled();
+    });
+
+    it('speed button reflects 4x speed', () => {
+      const fastState = makeState({ ...activeState, playbackSpeed: 4 });
+      render(<ReplayDrawer state={fastState} controls={controls} />);
+      expect(screen.getByLabelText('Playback speed').textContent).toBe('4x');
     });
   });
 

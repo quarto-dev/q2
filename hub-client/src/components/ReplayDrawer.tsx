@@ -93,7 +93,7 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
     const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const index = Math.round(fraction * (state.historyLength - 1));
     const ts = controls.getTimestampAtIndex(index);
-    const text = ts !== null ? formatTimestamp(ts) : `Change ${index + 1}`;
+    const text = ts !== null ? formatFullTimestamp(ts) : `Change ${index + 1}`;
     // Position relative to the scrubber container
     const left = e.clientX - (scrubberRef.current?.getBoundingClientRect().left ?? rect.left);
     setScrubberTooltip({ left, text });
@@ -202,6 +202,13 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
             aria-label="Skip to end"
           >
             &#x23ED;
+          </button>
+          <button
+            className="replay-drawer__btn replay-drawer__btn--speed"
+            onClick={controls.cycleSpeed}
+            aria-label="Playback speed"
+          >
+            {state.playbackSpeed}x
           </button>
         </div>
 
