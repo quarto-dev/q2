@@ -49,14 +49,14 @@ describe('ReplayDrawer', () => {
   });
 
   describe('collapsed state', () => {
-    it('renders clock icon and "History" label', () => {
+    it('renders chevron and "History" label', () => {
       render(<ReplayDrawer state={makeState()} controls={controls} />);
-      expect(screen.getByText('History')).toBeDefined();
+      expect(screen.getByText('Replay')).toBeDefined();
     });
 
     it('clicking the bar calls controls.enter()', () => {
       render(<ReplayDrawer state={makeState()} controls={controls} />);
-      fireEvent.click(screen.getByText('History'));
+      fireEvent.click(screen.getByText('Replay'));
       expect(controls.enter).toHaveBeenCalled();
     });
   });
@@ -91,10 +91,10 @@ describe('ReplayDrawer', () => {
       expect(controls.seekToEnd).toHaveBeenCalled();
     });
 
-    it('renders Apply and Close buttons', () => {
+    it('renders Apply button and collapse toggle in header', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
-      expect(screen.getByText('Apply')).toBeDefined();
-      expect(screen.getByText('Close')).toBeDefined();
+      expect(screen.getByText('Restore')).toBeDefined();
+      expect(screen.getByLabelText('Collapse history')).toBeDefined();
     });
 
     it('renders position indicator', () => {
@@ -104,13 +104,13 @@ describe('ReplayDrawer', () => {
 
     it('Apply button calls controls.apply()', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
-      fireEvent.click(screen.getByText('Apply'));
+      fireEvent.click(screen.getByText('Restore'));
       expect(controls.apply).toHaveBeenCalled();
     });
 
-    it('Close button calls controls.exit()', () => {
+    it('header toggle calls controls.exit()', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
-      fireEvent.click(screen.getByText('Close'));
+      fireEvent.click(screen.getByLabelText('Collapse history'));
       expect(controls.exit).toHaveBeenCalled();
     });
 

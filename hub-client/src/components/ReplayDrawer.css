@@ -4,52 +4,101 @@
   background: #1a1a2e;
   border-top: 1px solid #1f3460;
   flex-shrink: 0;
+  transition: height 0.2s ease;
 }
 
 .replay-drawer--collapsed {
-  height: 32px;
+  height: 28px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .replay-drawer--expanded {
-  height: 80px;
+  height: 72px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   outline: none;
+  display: flex;
+  flex-direction: column;
 }
 
+/* Toggle button — matches .section-header style from SidebarTabs */
 .replay-drawer__toggle {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  height: 100%;
-  padding: 0 12px;
+  padding: 0;
   background: none;
   border: none;
-  color: #888;
-  font-size: 13px;
+  color: #ccc;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: color 0.2s;
+  text-align: left;
+  transition: color 0.15s;
+  user-select: none;
 }
 
 .replay-drawer__toggle:hover {
-  color: #ccc;
+  color: #fff;
 }
 
-.replay-drawer__icon {
-  font-size: 14px;
+/* Collapsed: toggle fills the bar */
+.replay-drawer--collapsed .replay-drawer__toggle {
+  width: 100%;
+  height: 100%;
+  padding: 0 10px;
 }
 
+.replay-drawer__chevron {
+  font-size: 8px;
+  color: #888;
+  width: 12px;
+  flex-shrink: 0;
+}
+
+/* Header row (expanded): chevron+History | info | Apply */
+.replay-drawer__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  padding: 4px 10px 0;
+  flex-shrink: 0;
+}
+
+.replay-drawer__info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.replay-drawer__position {
+  font-size: 12px;
+  color: #aaa;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+}
+
+.replay-drawer__timestamp {
+  font-size: 11px;
+  color: #666;
+}
+
+/* Controls row: transport + scrubber */
 .replay-drawer__controls {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 100%;
-  padding: 0 16px;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 10px 10px;
 }
 
 .replay-drawer__transport {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -57,16 +106,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   background: #0f3460;
   border: 1px solid #1f4460;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #ccc;
-  font-size: 14px;
+  font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .replay-drawer__btn:hover {
@@ -75,19 +124,21 @@
 }
 
 .replay-drawer__btn--play {
-  width: 36px;
-  height: 36px;
-  font-size: 16px;
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
 }
 
 .replay-drawer__btn--apply {
   width: auto;
-  padding: 0 12px;
+  height: 22px;
+  padding: 0 10px;
   background: #0a4f0a;
   border-color: #166616;
   color: #4ade80;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  border-radius: 3px;
 }
 
 .replay-drawer__btn--apply:hover {
@@ -95,60 +146,65 @@
   color: #6ee7a0;
 }
 
-.replay-drawer__btn--close {
-  width: auto;
-  padding: 0 12px;
-  background: none;
-  border-color: #333;
-  color: #888;
-  font-size: 13px;
-}
-
-.replay-drawer__btn--close:hover {
-  border-color: #666;
-  color: #ccc;
-}
-
 .replay-drawer__scrubber {
   flex: 1;
-  min-width: 100px;
+  min-width: 80px;
+  display: flex;
+  align-items: center;
 }
 
 .replay-drawer__slider {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  height: 4px;
-  accent-color: #4ade80;
+  height: 3px;
+  margin: 0;
+  padding: 0;
+  background: #1f3460;
+  border-radius: 2px;
+  outline: none;
   cursor: pointer;
 }
 
-.replay-drawer__info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  flex-shrink: 0;
-  min-width: 100px;
+.replay-drawer__slider::-webkit-slider-runnable-track {
+  height: 3px;
+  background: #1f3460;
+  border-radius: 2px;
 }
 
-.replay-drawer__position {
-  font-size: 13px;
-  color: #ccc;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+.replay-drawer__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #8899aa;
+  border: none;
+  border-radius: 50%;
+  margin-top: -5.5px;
+  transition: background 0.15s, transform 0.15s;
 }
 
-.replay-drawer__timestamp {
-  font-size: 11px;
-  color: #888;
+.replay-drawer__slider:hover::-webkit-slider-thumb {
+  background: #ccc;
+  transform: scale(1.2);
 }
 
-.replay-drawer__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+.replay-drawer__slider::-moz-range-track {
+  height: 3px;
+  background: #1f3460;
+  border-radius: 2px;
+  border: none;
 }
 
-/* Transition for expand/collapse */
-.replay-drawer {
-  transition: height 0.2s ease;
+.replay-drawer__slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #8899aa;
+  border: none;
+  border-radius: 50%;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.replay-drawer__slider:hover::-moz-range-thumb {
+  background: #ccc;
+  transform: scale(1.2);
 }

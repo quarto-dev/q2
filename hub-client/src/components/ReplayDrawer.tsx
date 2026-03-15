@@ -57,8 +57,8 @@ export default function ReplayDrawer({ state, controls }: Props) {
     return (
       <div className="replay-drawer replay-drawer--collapsed">
         <button className="replay-drawer__toggle" onClick={controls.enter}>
-          <span className="replay-drawer__icon">&#128339;</span>
-          <span>History</span>
+          <span className="replay-drawer__chevron">&#x25B6;</span>
+          <span>Replay</span>
         </button>
       </div>
     );
@@ -70,6 +70,35 @@ export default function ReplayDrawer({ state, controls }: Props) {
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
+      <div className="replay-drawer__header">
+        <button
+          className="replay-drawer__toggle"
+          onClick={controls.exit}
+          aria-label="Collapse history"
+        >
+          <span className="replay-drawer__chevron">&#x25BC;</span>
+          <span>Replay</span>
+        </button>
+
+        <div className="replay-drawer__info">
+          <span className="replay-drawer__position">
+            {state.currentIndex + 1} of {state.historyLength}
+          </span>
+          {state.timestamp && (
+            <span className="replay-drawer__timestamp">
+              {formatTimestamp(state.timestamp)}
+            </span>
+          )}
+        </div>
+
+        <button
+          className="replay-drawer__btn replay-drawer__btn--apply"
+          onClick={controls.apply}
+        >
+          Restore
+        </button>
+      </div>
+
       <div className="replay-drawer__controls">
         <div className="replay-drawer__transport">
           <button
@@ -129,32 +158,6 @@ export default function ReplayDrawer({ state, controls }: Props) {
             className="replay-drawer__slider"
             role="slider"
           />
-        </div>
-
-        <div className="replay-drawer__info">
-          <span className="replay-drawer__position">
-            {state.currentIndex + 1} of {state.historyLength}
-          </span>
-          {state.timestamp && (
-            <span className="replay-drawer__timestamp">
-              {formatTimestamp(state.timestamp)}
-            </span>
-          )}
-        </div>
-
-        <div className="replay-drawer__actions">
-          <button
-            className="replay-drawer__btn replay-drawer__btn--apply"
-            onClick={controls.apply}
-          >
-            Apply
-          </button>
-          <button
-            className="replay-drawer__btn replay-drawer__btn--close"
-            onClick={controls.exit}
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>

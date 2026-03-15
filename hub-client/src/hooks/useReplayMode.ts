@@ -35,7 +35,7 @@ const INITIAL_STATE: ReplayState = {
   timestamp: null,
 };
 
-const PLAY_INTERVAL_MS = 200;
+const PLAY_INTERVAL_MS = 80;
 
 // Type helpers for DocHandle methods we use (avoids importing Automerge types)
 interface ViewableHandle {
