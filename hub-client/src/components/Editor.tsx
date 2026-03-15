@@ -12,6 +12,7 @@ import {
   renameFile,
   exportProjectAsZip,
 } from '../services/automergeSync';
+import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
 import type { Diagnostic } from '../types/diagnostic';
 import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
 import { processFileForUpload } from '../services/resourceService';
@@ -280,13 +281,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     editorRef.current.updateOptions({ readOnly, domReadOnly: readOnly });
   }, [replayState.isActive]);
 
-  // When replay content changes, update Monaco directly for display.
-  // We intentionally do NOT call setContent() here — keeping `content` state
-  // at its pre-replay value ensures that when replay exits, the Automerge sync
-  // effect's setContent(automergeContent) produces a state change, triggering
-  // a preview re-render. Without this, apply() would write the same historical
-  // text that `content` already holds, causing React to skip the re-render and
-  // leaving the preview stale.
+  // Content for preview and MarkdownSummary: show replay content when active,
+  // otherwise the normal Automerge-synced content. We keep `content` state
+  // untouched during replay so that when replay exits, the Automerge sync
+  // effect's setContent(automergeContent) always produces a state change.
+  const displayContent = replayState.isActive ? replayState.currentContent : content;
+
+  // When replay content changes, update Monaco and VFS for display.
+  // Writing to VFS ensures the preview renderer sees historical content.
   useEffect(() => {
     if (!replayState.isActive) return;
 
@@ -296,7 +298,27 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       model.setValue(replayState.currentContent);
       applyingRemoteRef.current = false;
     }
-  }, [replayState.isActive, replayState.currentContent]);
+
+    // Update VFS so the WASM renderer sees the historical content
+    if (currentFile && isWasmReady()) {
+      vfsAddFile(currentFile.path, replayState.currentContent);
+    }
+  }, [replayState.isActive, replayState.currentContent, currentFile]);
+
+  // Restore VFS when replay exits — the Automerge sync effect restores Monaco
+  // and React state, but doesn't re-write VFS unless fileContents changed.
+  const prevReplayActiveRef = useRef(false);
+  useEffect(() => {
+    const wasActive = prevReplayActiveRef.current;
+    prevReplayActiveRef.current = replayState.isActive;
+
+    if (wasActive && !replayState.isActive && currentFile && isWasmReady()) {
+      const liveContent = fileContents.get(currentFile.path);
+      if (liveContent !== undefined) {
+        vfsAddFile(currentFile.path, liveContent);
+      }
+    }
+  }, [replayState.isActive, currentFile, fileContents]);
 
   // Refresh intelligence (outline) when content changes
   // VFS is updated via Automerge callbacks, so we trigger refresh after content changes
@@ -846,7 +868,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             {viewMode === 'preview' && (
               <div className="markdown-summary-overlay">
                 <MarkdownSummary
-                  content={content}
+                  content={displayContent}
                   onLineClick={(lineNumber) => {
                     if (previewScrollToLineRef.current) {
                       previewScrollToLineRef.current(lineNumber);
@@ -917,7 +939,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             </button>
           )}
           <PreviewRouter
-            content={content}
+            content={displayContent}
             currentFile={currentFile}
             files={files}
             scrollSyncEnabled={scrollSyncEnabled}
