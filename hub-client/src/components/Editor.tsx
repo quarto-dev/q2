@@ -20,6 +20,7 @@ import { usePreference } from '../hooks/usePreference';
 import { useIntelligence } from '../hooks/useIntelligence';
 import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
 import { useCursorToSlide } from '../hooks/useCursorToSlide';
+import { useReplayMode } from '../hooks/useReplayMode';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import FileSidebar from './FileSidebar';
@@ -35,6 +36,7 @@ import AboutTab from './tabs/AboutTab';
 import ViewToggleControl from './ViewToggleControl';
 import { useViewMode } from './ViewModeContext';
 import MarkdownSummary from './MarkdownSummary';
+import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './PreviewRouter';
 
@@ -119,6 +121,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     path: currentFile?.path ?? null,
     enableSymbols: true,
   });
+
+  // Replay mode for document history
+  const { state: replayState, controls: replayControls } = useReplayMode(currentFile?.path ?? null);
 
   // Get content from fileContents map, or use default for new files
   const getContent = useCallback((file: FileEntry | null): string => {
@@ -268,6 +273,27 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
   }, [currentFile, project.description]);
 
+  // Toggle Monaco read-only mode during replay
+  useEffect(() => {
+    if (!editorRef.current) return;
+    const readOnly = replayState.isActive;
+    editorRef.current.updateOptions({ readOnly, domReadOnly: readOnly });
+  }, [replayState.isActive]);
+
+  // When replay content changes, update Monaco and local state
+  useEffect(() => {
+    if (!replayState.isActive) return;
+    setContent(replayState.currentContent);
+
+    // Also update Monaco directly for display
+    const model = editorRef.current?.getModel();
+    if (model && editorRef.current) {
+      applyingRemoteRef.current = true;
+      model.setValue(replayState.currentContent);
+      applyingRemoteRef.current = false;
+    }
+  }, [replayState.isActive, replayState.currentContent]);
+
   // Refresh intelligence (outline) when content changes
   // VFS is updated via Automerge callbacks, so we trigger refresh after content changes
   useEffect(() => {
@@ -307,6 +333,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   useEffect(() => {
     if (!currentFile) return;
 
+    // During replay mode, the replay hook controls content — skip Automerge sync
+    if (replayState.isActive) return;
+
     const automergeContent = fileContents.get(currentFile.path);
     if (automergeContent === undefined) return;
 
@@ -335,7 +364,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     // Always update React state to keep preview in sync.
     // Since Monaco is uncontrolled, this won't affect editor content or cursor.
     setContent(automergeContent);
-  }, [currentFile, fileContents]);
+  }, [currentFile, fileContents, replayState.isActive]);
 
   // Update currentFile when files list changes (e.g., on initial load)
   // Note: setState in effect is intentional - syncing with external file list
@@ -373,6 +402,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   }, [route, files, fileContents, currentFile]);
 
   const handleEditorChange = (value: string | undefined) => {
+    // Skip changes during replay mode (editor is read-only, but belt-and-suspenders)
+    if (replayState.isActive) return;
     // Skip echo when applying remote changes
     if (applyingRemoteRef.current) return;
 
@@ -437,6 +468,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   // Handle file selection from sidebar (uses replaceState - no history entry)
   const handleSelectFile = useCallback((file: FileEntry) => {
+    // Block file switching during replay mode
+    if (replayState.isActive) return;
     // Don't switch to binary files in the editor
     if (isBinaryExtension(file.path)) {
       // For now, just ignore binary file selection
@@ -452,7 +485,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setUnlocatedErrors([]);
     // Update URL without adding history entry (sidebar navigation)
     onNavigateToFile(file.path, { replace: true });
-  }, [fileContents, onNavigateToFile]);
+  }, [fileContents, onNavigateToFile, replayState.isActive]);
 
   // Handle opening a file in a new browser tab
   const handleOpenInNewTab = useCallback((file: FileEntry) => {
@@ -726,6 +759,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         />
       )}
 
+      {!isFullscreenPreview && replayState.isActive && (
+        <div className="replay-mode-banner">REPLAY MODE</div>
+      )}
+
       {!isFullscreenPreview && unlocatedErrors.length > 0 && (
         <div className="diagnostics-banner">
           {unlocatedErrors.map((diag, i) => (
@@ -895,6 +932,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           />
         </div>
       </main>
+
+      {/* Replay mode drawer */}
+      {!isFullscreenPreview && (
+        <ReplayDrawer state={replayState} controls={replayControls} />
+      )}
 
       {/* New file dialog */}
       <NewFileDialog

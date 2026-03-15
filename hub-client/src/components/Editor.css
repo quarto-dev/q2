@@ -343,6 +343,18 @@
   z-index: 0;
 }
 
+/* Replay mode banner */
+.replay-mode-banner {
+  background: #0a4f0a;
+  color: #4ade80;
+  text-align: center;
+  padding: 4px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  border-bottom: 1px solid #166616;
+}
+
 /* Monaco editor overrides */
 .monaco-editor {
   padding-top: 0 !important;

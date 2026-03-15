@@ -1,0 +1,150 @@
+/**
+ * Tests for ReplayDrawer component
+ *
+ * @vitest-environment jsdom
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import ReplayDrawer from './ReplayDrawer';
+import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
+
+function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
+  return {
+    isActive: false,
+    historyLength: 0,
+    currentIndex: 0,
+    isPlaying: false,
+    currentContent: '',
+    timestamp: null,
+    ...overrides,
+  };
+}
+
+function makeControls(overrides: Partial<ReplayControls> = {}): ReplayControls {
+  return {
+    enter: vi.fn(),
+    exit: vi.fn(),
+    apply: vi.fn(),
+    seekTo: vi.fn(),
+    play: vi.fn(),
+    pause: vi.fn(),
+    stepForward: vi.fn(),
+    stepBackward: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe('ReplayDrawer', () => {
+  let controls: ReplayControls;
+
+  beforeEach(() => {
+    controls = makeControls();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  describe('collapsed state', () => {
+    it('renders clock icon and "History" label', () => {
+      render(<ReplayDrawer state={makeState()} controls={controls} />);
+      expect(screen.getByText('History')).toBeDefined();
+    });
+
+    it('clicking the bar calls controls.enter()', () => {
+      render(<ReplayDrawer state={makeState()} controls={controls} />);
+      fireEvent.click(screen.getByText('History'));
+      expect(controls.enter).toHaveBeenCalled();
+    });
+  });
+
+  describe('expanded state', () => {
+    const activeState = makeState({
+      isActive: true,
+      historyLength: 100,
+      currentIndex: 42,
+      currentContent: 'hello',
+      timestamp: 1710000000000,
+    });
+
+    it('renders transport controls when active', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      expect(screen.getByLabelText('Step backward')).toBeDefined();
+      expect(screen.getByLabelText('Play')).toBeDefined();
+      expect(screen.getByLabelText('Step forward')).toBeDefined();
+    });
+
+    it('renders Apply and Close buttons', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      expect(screen.getByText('Apply')).toBeDefined();
+      expect(screen.getByText('Close')).toBeDefined();
+    });
+
+    it('renders position indicator', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      expect(screen.getByText(/43 of 100/)).toBeDefined();
+    });
+
+    it('Apply button calls controls.apply()', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.click(screen.getByText('Apply'));
+      expect(controls.apply).toHaveBeenCalled();
+    });
+
+    it('Close button calls controls.exit()', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.click(screen.getByText('Close'));
+      expect(controls.exit).toHaveBeenCalled();
+    });
+
+    it('shows Pause button when playing', () => {
+      const playingState = makeState({
+        ...activeState,
+        isPlaying: true,
+      });
+      render(<ReplayDrawer state={playingState} controls={controls} />);
+      expect(screen.getByLabelText('Pause')).toBeDefined();
+    });
+
+    it('scrubber onChange calls controls.seekTo()', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      const scrubber = screen.getByRole('slider');
+      fireEvent.change(scrubber, { target: { value: '10' } });
+      expect(controls.seekTo).toHaveBeenCalledWith(10);
+    });
+  });
+
+  describe('keyboard shortcuts', () => {
+    const activeState = makeState({
+      isActive: true,
+      historyLength: 100,
+      currentIndex: 50,
+      currentContent: 'test',
+    });
+
+    it('Space toggles play/pause', () => {
+      const { container } = render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.keyDown(container.firstChild!, { key: ' ' });
+      expect(controls.play).toHaveBeenCalled();
+    });
+
+    it('ArrowLeft calls stepBackward', () => {
+      const { container } = render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.keyDown(container.firstChild!, { key: 'ArrowLeft' });
+      expect(controls.stepBackward).toHaveBeenCalled();
+    });
+
+    it('ArrowRight calls stepForward', () => {
+      const { container } = render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.keyDown(container.firstChild!, { key: 'ArrowRight' });
+      expect(controls.stepForward).toHaveBeenCalled();
+    });
+
+    it('Escape calls exit', () => {
+      const { container } = render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.keyDown(container.firstChild!, { key: 'Escape' });
+      expect(controls.exit).toHaveBeenCalled();
+    });
+  });
+});

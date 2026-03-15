@@ -211,6 +211,21 @@ export function getFileHandle(path: string) {
 }
 
 /**
+ * Pause all network sync without destroying the connection.
+ * Document handles and local state are preserved.
+ */
+export function pauseSync(): void {
+  ensureClient().pauseSync();
+}
+
+/**
+ * Resume network sync after a pause.
+ */
+export function resumeSync(): void {
+  ensureClient().resumeSync();
+}
+
+/**
  * Get all current file paths that have handles.
  */
 export function getFilePaths(): string[] {

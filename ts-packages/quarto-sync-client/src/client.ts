@@ -563,6 +563,21 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Pause all network sync without destroying the connection.
+   * Document handles and local state are preserved.
+   */
+  function pauseSync(): void {
+    state.repo?.networkSubsystem.disconnect();
+  }
+
+  /**
+   * Resume network sync after a pause.
+   */
+  function resumeSync(): void {
+    state.repo?.networkSubsystem.reconnect();
+  }
+
+  /**
    * Create a new project with the given files.
    */
   async function createNewProject(options: CreateProjectOptions): Promise<CreateProjectResult> {
@@ -697,6 +712,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     isConnected,
     getFileHandle,
     getFilePaths,
+    pauseSync,
+    resumeSync,
     createNewProject,
   };
 }

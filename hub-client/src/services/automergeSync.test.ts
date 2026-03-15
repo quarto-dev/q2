@@ -13,6 +13,8 @@ import {
   isConnected,
   getFileContent,
   isFileBinary,
+  pauseSync,
+  resumeSync,
   _resetForTesting,
   _setClientForTesting,
 } from './automergeSync';
@@ -211,6 +213,51 @@ describe('automergeSync', () => {
       await expect(mockClient.connect('ws://test', 'automerge:test')).rejects.toThrow(
         'Server unavailable',
       );
+    });
+  });
+
+  describe('pauseSync / resumeSync', () => {
+    beforeEach(async () => {
+      mockClient = createMockSyncClient(
+        {
+          onFileAdded: vi.fn(),
+          onFileChanged: vi.fn(),
+          onBinaryChanged: vi.fn(),
+          onFileRemoved: vi.fn(),
+          onConnectionChange: vi.fn(),
+        },
+        {
+          initialFiles: new Map([
+            ['index.qmd', { type: 'text' as const, text: '# Hello' }],
+          ]),
+        },
+      );
+      _setClientForTesting(mockClient);
+      await mockClient.connect('ws://test', 'automerge:test');
+    });
+
+    it('should call pauseSync without triggering onConnectionChange', () => {
+      const spy = vi.spyOn(mockClient, 'pauseSync');
+      pauseSync();
+      expect(spy).toHaveBeenCalled();
+      // onConnectionChange should NOT have been called after the initial connect
+      expect(onConnectionChange).toHaveBeenCalledTimes(0);
+    });
+
+    it('should call resumeSync without triggering onConnectionChange', () => {
+      const spy = vi.spyOn(mockClient, 'resumeSync');
+      pauseSync();
+      resumeSync();
+      expect(spy).toHaveBeenCalled();
+      expect(onConnectionChange).toHaveBeenCalledTimes(0);
+    });
+
+    it('should preserve document state across pause/resume cycle', () => {
+      expect(getFileContent('index.qmd')).toBe('# Hello');
+      pauseSync();
+      expect(getFileContent('index.qmd')).toBe('# Hello');
+      resumeSync();
+      expect(getFileContent('index.qmd')).toBe('# Hello');
     });
   });
 
