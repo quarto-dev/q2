@@ -10,31 +10,33 @@ import { renderHook, act } from '@testing-library/react';
 vi.mock('../services/automergeSync', () => ({
   getFileHandle: vi.fn(),
   updateFileContent: vi.fn(),
+  freeDoc: vi.fn(),
+  cloneHandleDoc: vi.fn(),
+  viewText: vi.fn(),
 }));
 
 import { useReplayMode } from './useReplayMode';
 import {
   getFileHandle,
   updateFileContent,
+  cloneHandleDoc,
+  viewText,
 } from '../services/automergeSync';
 
 const mockGetFileHandle = vi.mocked(getFileHandle);
 const mockUpdateFileContent = vi.mocked(updateFileContent);
+const mockCloneHandleDoc = vi.mocked(cloneHandleDoc);
+const mockViewText = vi.mocked(viewText);
 
-// Helper to create a mock handle with history and view support.
+// Helper to create a mock handle with history support.
 // history() returns UrlHeads[] where each UrlHeads is string[].
 // metadata() receives a single change hash string (first element of UrlHeads).
+// Also configures mockCloneHandleDoc and mockViewText for the given texts.
 function createMockHandle(texts: string[], timestamps?: number[]) {
   const historyHeads = texts.map((_, i) => [`head-${i}`]);
 
   const handle = {
     history: vi.fn(() => historyHeads),
-    view: vi.fn((heads: string[]) => {
-      const index = historyHeads.findIndex(h => h[0] === heads[0]);
-      return {
-        doc: () => ({ text: texts[index] ?? '' }),
-      };
-    }),
     metadata: vi.fn((changeHash?: string) => {
       if (!changeHash) return undefined;
       const index = historyHeads.findIndex(h => h[0] === changeHash);
@@ -44,6 +46,17 @@ function createMockHandle(texts: string[], timestamps?: number[]) {
     }),
     doc: vi.fn(() => ({ text: texts[texts.length - 1] })),
   };
+
+  // cloneHandleDoc returns a sentinel object representing the clone
+  const cloneObj = { __clone: true };
+  mockCloneHandleDoc.mockReturnValue(cloneObj);
+
+  // viewText extracts text from the clone given heads
+  mockViewText.mockImplementation((_clone: unknown, heads: unknown) => {
+    const headArr = heads as string[];
+    const index = historyHeads.findIndex(h => h[0] === headArr[0]);
+    return texts[index] ?? '';
+  });
 
   return handle;
 }

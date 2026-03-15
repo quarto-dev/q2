@@ -2,6 +2,9 @@ import { useState, useCallback, useRef } from 'react';
 import {
   getFileHandle,
   updateFileContent,
+  freeDoc,
+  cloneHandleDoc,
+  viewText,
 } from '../services/automergeSync';
 
 export const PLAYBACK_SPEEDS = [1, 2, 4] as const;
@@ -48,7 +51,6 @@ const PLAY_BASE_INTERVAL_MS = 200;
 // Type helpers for DocHandle methods we use (avoids importing Automerge types)
 interface ViewableHandle {
   history(): unknown[] | undefined;
-  view(heads: unknown): { doc(): { text?: string } | undefined | null };
   metadata(change?: string): { time?: number } | undefined;
 }
 
@@ -58,16 +60,27 @@ function asViewable(handle: unknown): ViewableHandle {
 
 export function useReplayMode(
   filePath: string | null,
-): { state: ReplayState; controls: ReplayControls } {
+): { state: ReplayState; controls: ReplayControls; isActiveRef: React.RefObject<boolean> } {
   const [state, setState] = useState<ReplayState>(INITIAL_STATE);
 
   // Store history array and handle in refs (stable across renders, not reactive)
   const historyRef = useRef<unknown[]>([]);
   const handleRef = useRef<unknown>(null);
+  // Independent clone of the doc used for all view() operations during replay.
+  // Views of this clone borrow from the clone's WASM state — not the original
+  // handle's — so handle.history() on re-entry is never blocked.
+  const cloneRef = useRef<unknown>(null);
+  // Cache of extracted text content keyed by history index.
+  // Avoids repeated WASM view() calls for the same index.
+  const textCacheRef = useRef<Map<number, string>>(new Map());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Keep current index and speed in refs for the interval callback
   const indexRef = useRef(0);
   const speedRef = useRef<PlaybackSpeed>(1);
+  // Synchronous replay-active flag: updated immediately in enter()/reset(),
+  // before React re-renders.  Consumers can read this ref to guard against
+  // stale closures that still see isActive === false.
+  const isActiveRef = useRef(false);
 
   const clearPlayInterval = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -77,13 +90,18 @@ export function useReplayMode(
   }, []);
 
   const getContentAtIndex = useCallback((index: number): string => {
-    const handle = handleRef.current;
+    const clone = cloneRef.current;
     const history = historyRef.current;
-    if (!handle || index < 0 || index >= history.length) return '';
+    if (!clone || index < 0 || index >= history.length) return '';
+
+    // Return cached text if available
+    const cached = textCacheRef.current.get(index);
+    if (cached !== undefined) return cached;
+
     try {
-      const viewedHandle = asViewable(handle).view(history[index]);
-      const doc = viewedHandle.doc();
-      return doc?.text ?? '';
+      const text = viewText(clone, history[index]);
+      textCacheRef.current.set(index, text);
+      return text;
     } catch (e) {
       console.warn('[useReplayMode] Failed to get content at index', index, e);
       return '';
@@ -108,17 +126,35 @@ export function useReplayMode(
   }, []);
 
   const enter = useCallback(() => {
-    if (!filePath) return;
+    if (!filePath) {
+      console.warn('[useReplayMode] enter(): no filePath');
+      return;
+    }
 
     try {
       const handle = getFileHandle(filePath);
-      if (!handle) return;
+      if (!handle) {
+        console.warn('[useReplayMode] enter(): no handle for', filePath);
+        return;
+      }
 
       const history = asViewable(handle).history();
-      if (!history || history.length === 0) return;
+      if (!history || history.length === 0) {
+        console.warn('[useReplayMode] enter(): no history (got', history, ')');
+        return;
+      }
+
+      const clone = cloneHandleDoc(handle);
+      if (!clone) {
+        console.warn('[useReplayMode] enter(): failed to clone doc for', filePath);
+        return;
+      }
 
       handleRef.current = handle;
       historyRef.current = history;
+      cloneRef.current = clone;
+      textCacheRef.current = new Map();
+      isActiveRef.current = true;
 
       const lastIndex = history.length - 1;
       indexRef.current = lastIndex;
@@ -135,6 +171,15 @@ export function useReplayMode(
         timestamp,
       });
     } catch (e) {
+      // Roll back the synchronous ref so the guard stays consistent
+      isActiveRef.current = false;
+      if (cloneRef.current) {
+        freeDoc(cloneRef.current);
+        cloneRef.current = null;
+      }
+      handleRef.current = null;
+      historyRef.current = [];
+      textCacheRef.current = new Map();
       console.error('[useReplayMode] Failed to enter replay mode:', e);
     }
   }, [filePath, getContentAtIndex, getTimestampAtIndex]);
@@ -167,21 +212,27 @@ export function useReplayMode(
     const interval = Math.round(PLAY_BASE_INTERVAL_MS / speedRef.current);
 
     intervalRef.current = setInterval(() => {
-      const nextIndex = indexRef.current + 1;
-      if (nextIndex >= history.length) {
+      try {
+        const nextIndex = indexRef.current + 1;
+        if (nextIndex >= history.length) {
+          clearPlayInterval();
+          setState(prev => ({ ...prev, isPlaying: false }));
+          return;
+        }
+        indexRef.current = nextIndex;
+        const content = getContentAtIndex(nextIndex);
+        const timestamp = getTimestampAtIndex(nextIndex);
+        setState(prev => ({
+          ...prev,
+          currentIndex: nextIndex,
+          currentContent: content,
+          timestamp,
+        }));
+      } catch (e) {
+        console.error('[useReplayMode] Playback error, stopping:', e);
         clearPlayInterval();
         setState(prev => ({ ...prev, isPlaying: false }));
-        return;
       }
-      indexRef.current = nextIndex;
-      const content = getContentAtIndex(nextIndex);
-      const timestamp = getTimestampAtIndex(nextIndex);
-      setState(prev => ({
-        ...prev,
-        currentIndex: nextIndex,
-        currentContent: content,
-        timestamp,
-      }));
     }, interval);
   }, [clearPlayInterval, getContentAtIndex, getTimestampAtIndex]);
 
@@ -243,8 +294,15 @@ export function useReplayMode(
 
   const reset = useCallback(() => {
     clearPlayInterval();
+    isActiveRef.current = false;
+    // Free the clone's WASM state immediately so borrows don't linger.
+    if (cloneRef.current) {
+      freeDoc(cloneRef.current);
+      cloneRef.current = null;
+    }
     handleRef.current = null;
     historyRef.current = [];
+    textCacheRef.current = new Map();
     indexRef.current = 0;
     speedRef.current = 1;
     setState(INITIAL_STATE);
@@ -278,5 +336,6 @@ export function useReplayMode(
       cycleSpeed,
       getTimestampAtIndex,
     },
+    isActiveRef,
   };
 }

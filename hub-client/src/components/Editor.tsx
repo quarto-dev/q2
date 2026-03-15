@@ -123,8 +123,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     enableSymbols: true,
   });
 
-  // Replay mode for document history
-  const { state: replayState, controls: replayControls } = useReplayMode(currentFile?.path ?? null);
+  // Replay mode for document history.
+  // isActiveRef is updated synchronously in enter()/exit() — before React
+  // re-renders — so it can guard handleEditorChange against stale closures.
+  const { state: replayState, controls: replayControls, isActiveRef: replayActiveRef } = useReplayMode(currentFile?.path ?? null);
 
   // Get content from fileContents map, or use default for new files
   const getContent = useCallback((file: FileEntry | null): string => {
@@ -428,8 +430,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   }, [route, files, fileContents, currentFile]);
 
   const handleEditorChange = (value: string | undefined) => {
-    // Skip changes during replay mode (editor is read-only, but belt-and-suspenders)
-    if (replayState.isActive) return;
+    // Skip changes during replay mode. Use the ref (always current) rather than
+    // the closure value (can be stale between setState and re-render).
+    if (replayActiveRef.current) return;
     // Skip echo when applying remote changes
     if (applyingRemoteRef.current) return;
 
