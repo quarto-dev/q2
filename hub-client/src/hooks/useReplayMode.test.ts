@@ -272,6 +272,36 @@ describe('useReplayMode', () => {
     });
   });
 
+  describe('seekToStart() / seekToEnd()', () => {
+    it('seekToStart jumps to index 0', () => {
+      const handle = createMockHandle(['a', 'b', 'c']);
+      mockGetFileHandle.mockReturnValue(handle as never);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      // Starts at index 2 (last)
+      expect(result.current.state.currentIndex).toBe(2);
+
+      act(() => { result.current.controls.seekToStart(); });
+      expect(result.current.state.currentIndex).toBe(0);
+      expect(result.current.state.currentContent).toBe('a');
+    });
+
+    it('seekToEnd jumps to last index', () => {
+      const handle = createMockHandle(['a', 'b', 'c']);
+      mockGetFileHandle.mockReturnValue(handle as never);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      act(() => { result.current.controls.seekTo(0); });
+      expect(result.current.state.currentIndex).toBe(0);
+
+      act(() => { result.current.controls.seekToEnd(); });
+      expect(result.current.state.currentIndex).toBe(2);
+      expect(result.current.state.currentContent).toBe('c');
+    });
+  });
+
   describe('exit()', () => {
     it('resets state', () => {
       const handle = createMockHandle(['a', 'b', 'c']);

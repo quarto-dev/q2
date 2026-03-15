@@ -18,6 +18,8 @@ export interface ReplayControls {
   exit: () => void;
   apply: () => void;
   seekTo: (index: number) => void;
+  seekToStart: () => void;
+  seekToEnd: () => void;
   play: () => void;
   pause: () => void;
   stepForward: () => void;
@@ -193,6 +195,19 @@ export function useReplayMode(
     }
   }, [seekTo]);
 
+  const seekToStart = useCallback(() => {
+    if (historyRef.current.length > 0) {
+      seekTo(0);
+    }
+  }, [seekTo]);
+
+  const seekToEnd = useCallback(() => {
+    const history = historyRef.current;
+    if (history.length > 0) {
+      seekTo(history.length - 1);
+    }
+  }, [seekTo]);
+
   const reset = useCallback(() => {
     clearPlayInterval();
     handleRef.current = null;
@@ -220,6 +235,8 @@ export function useReplayMode(
       exit,
       apply,
       seekTo,
+      seekToStart,
+      seekToEnd,
       play,
       pause,
       stepForward,

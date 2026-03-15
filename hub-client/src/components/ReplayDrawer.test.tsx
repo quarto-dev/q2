@@ -27,6 +27,8 @@ function makeControls(overrides: Partial<ReplayControls> = {}): ReplayControls {
     exit: vi.fn(),
     apply: vi.fn(),
     seekTo: vi.fn(),
+    seekToStart: vi.fn(),
+    seekToEnd: vi.fn(),
     play: vi.fn(),
     pause: vi.fn(),
     stepForward: vi.fn(),
@@ -70,9 +72,23 @@ describe('ReplayDrawer', () => {
 
     it('renders transport controls when active', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
+      expect(screen.getByLabelText('Skip to start')).toBeDefined();
       expect(screen.getByLabelText('Step backward')).toBeDefined();
       expect(screen.getByLabelText('Play')).toBeDefined();
       expect(screen.getByLabelText('Step forward')).toBeDefined();
+      expect(screen.getByLabelText('Skip to end')).toBeDefined();
+    });
+
+    it('Skip to start button calls controls.seekToStart()', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.click(screen.getByLabelText('Skip to start'));
+      expect(controls.seekToStart).toHaveBeenCalled();
+    });
+
+    it('Skip to end button calls controls.seekToEnd()', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.click(screen.getByLabelText('Skip to end'));
+      expect(controls.seekToEnd).toHaveBeenCalled();
     });
 
     it('renders Apply and Close buttons', () => {
@@ -139,6 +155,18 @@ describe('ReplayDrawer', () => {
       const { container } = render(<ReplayDrawer state={activeState} controls={controls} />);
       fireEvent.keyDown(container.firstChild!, { key: 'ArrowRight' });
       expect(controls.stepForward).toHaveBeenCalled();
+    });
+
+    it('Home calls seekToStart', () => {
+      const { container } = render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.keyDown(container.firstChild!, { key: 'Home' });
+      expect(controls.seekToStart).toHaveBeenCalled();
+    });
+
+    it('End calls seekToEnd', () => {
+      const { container } = render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.keyDown(container.firstChild!, { key: 'End' });
+      expect(controls.seekToEnd).toHaveBeenCalled();
     });
 
     it('Escape calls exit', () => {

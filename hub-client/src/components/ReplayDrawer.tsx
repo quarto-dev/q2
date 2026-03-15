@@ -34,6 +34,14 @@ export default function ReplayDrawer({ state, controls }: Props) {
         e.preventDefault();
         controls.stepForward();
         break;
+      case 'Home':
+        e.preventDefault();
+        controls.seekToStart();
+        break;
+      case 'End':
+        e.preventDefault();
+        controls.seekToEnd();
+        break;
       case 'Escape':
         e.preventDefault();
         controls.exit();
@@ -66,10 +74,17 @@ export default function ReplayDrawer({ state, controls }: Props) {
         <div className="replay-drawer__transport">
           <button
             className="replay-drawer__btn"
+            onClick={controls.seekToStart}
+            aria-label="Skip to start"
+          >
+            &#x23EE;
+          </button>
+          <button
+            className="replay-drawer__btn"
             onClick={controls.stepBackward}
             aria-label="Step backward"
           >
-            &#x23EE;
+            &#x25C1;
           </button>
           {state.isPlaying ? (
             <button
@@ -92,6 +107,13 @@ export default function ReplayDrawer({ state, controls }: Props) {
             className="replay-drawer__btn"
             onClick={controls.stepForward}
             aria-label="Step forward"
+          >
+            &#x25B7;
+          </button>
+          <button
+            className="replay-drawer__btn"
+            onClick={controls.seekToEnd}
+            aria-label="Skip to end"
           >
             &#x23ED;
           </button>
