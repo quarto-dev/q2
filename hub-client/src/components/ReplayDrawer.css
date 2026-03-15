@@ -106,16 +106,16 @@
 .replay-drawer__controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
-  padding: 0 10px 10px;
+  padding: 0 10px 6px;
 }
 
 .replay-drawer__transport {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   flex-shrink: 0;
 }
 
@@ -123,14 +123,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   background: #0f3460;
   border: 1px solid #1f4460;
   border-radius: 4px;
   color: #ccc;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -141,21 +141,21 @@
 }
 
 .replay-drawer__btn--play {
-  width: 30px;
-  height: 30px;
-  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
 }
 
 .replay-drawer__btn--apply {
   width: auto;
-  height: 22px;
+  height: 24px;
   padding: 0 10px;
   background: #0a4f0a;
   border-color: #166616;
   color: #4ade80;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .replay-drawer__btn--apply:hover {
@@ -190,7 +190,7 @@
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 6px;
+  height: 4px;
   margin: 0;
   padding: 8px 0;
   background: transparent;
@@ -200,37 +200,37 @@
 }
 
 .replay-drawer__slider::-webkit-slider-runnable-track {
-  height: 6px;
+  height: 4px;
   background: var(--slider-track, #1f3460);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .replay-drawer__slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   background: #8899aa;
   border: none;
   border-radius: 50%;
-  margin-top: -5px;
+  margin-top: -4px;
   transition: background 0.15s, transform 0.15s;
 }
 
 .replay-drawer__slider:hover::-webkit-slider-thumb {
   background: #ccc;
-  transform: scale(1.15);
+  transform: scale(1.2);
 }
 
 .replay-drawer__slider::-moz-range-track {
-  height: 6px;
+  height: 4px;
   background: var(--slider-track, #1f3460);
-  border-radius: 3px;
+  border-radius: 2px;
   border: none;
 }
 
 .replay-drawer__slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   background: #8899aa;
   border: none;
   border-radius: 50%;
@@ -239,5 +239,5 @@
 
 .replay-drawer__slider:hover::-moz-range-thumb {
   background: #ccc;
-  transform: scale(1.15);
+  transform: scale(1.2);
 }
