@@ -57,7 +57,7 @@
   flex-shrink: 0;
 }
 
-/* Header row (expanded): chevron+History | info | Apply */
+/* Header row (expanded): clickable full-width to collapse */
 .replay-drawer__header {
   display: flex;
   align-items: center;
@@ -65,6 +65,11 @@
   height: 28px;
   padding: 4px 10px 0;
   flex-shrink: 0;
+  cursor: pointer;
+}
+
+.replay-drawer__header:hover .replay-drawer__toggle {
+  color: #fff;
 }
 
 .replay-drawer__info {

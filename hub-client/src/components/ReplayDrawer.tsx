@@ -70,15 +70,11 @@ export default function ReplayDrawer({ state, controls }: Props) {
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      <div className="replay-drawer__header">
-        <button
-          className="replay-drawer__toggle"
-          onClick={controls.exit}
-          aria-label="Collapse history"
-        >
+      <div className="replay-drawer__header" onClick={controls.exit} role="button" aria-label="Collapse history">
+        <span className="replay-drawer__toggle">
           <span className="replay-drawer__chevron">&#x25BC;</span>
           <span>Replay</span>
-        </button>
+        </span>
 
         <div className="replay-drawer__info">
           <span className="replay-drawer__position">
@@ -93,7 +89,7 @@ export default function ReplayDrawer({ state, controls }: Props) {
 
         <button
           className="replay-drawer__btn replay-drawer__btn--apply"
-          onClick={controls.apply}
+          onClick={(e) => { e.stopPropagation(); controls.apply(); }}
         >
           Restore
         </button>
