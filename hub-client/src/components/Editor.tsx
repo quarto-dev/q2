@@ -280,12 +280,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     editorRef.current.updateOptions({ readOnly, domReadOnly: readOnly });
   }, [replayState.isActive]);
 
-  // When replay content changes, update Monaco and local state
+  // When replay content changes, update Monaco directly for display.
+  // We intentionally do NOT call setContent() here — keeping `content` state
+  // at its pre-replay value ensures that when replay exits, the Automerge sync
+  // effect's setContent(automergeContent) produces a state change, triggering
+  // a preview re-render. Without this, apply() would write the same historical
+  // text that `content` already holds, causing React to skip the re-render and
+  // leaving the preview stale.
   useEffect(() => {
     if (!replayState.isActive) return;
-    setContent(replayState.currentContent);
 
-    // Also update Monaco directly for display
     const model = editorRef.current?.getModel();
     if (model && editorRef.current) {
       applyingRemoteRef.current = true;
