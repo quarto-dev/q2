@@ -94,18 +94,12 @@ export function useReplayMode(
     const history = historyRef.current;
     if (!clone || index < 0 || index >= history.length) return '';
 
-    // Return cached text if available
     const cached = textCacheRef.current.get(index);
     if (cached !== undefined) return cached;
 
-    try {
-      const text = viewText(clone, history[index]);
-      textCacheRef.current.set(index, text);
-      return text;
-    } catch (e) {
-      console.warn('[useReplayMode] Failed to get content at index', index, e);
-      return '';
-    }
+    const text = viewText(clone, history[index]);
+    textCacheRef.current.set(index, text);
+    return text;
   }, []);
 
   const getTimestampAtIndex = useCallback((index: number): number | null => {
@@ -126,62 +120,43 @@ export function useReplayMode(
   }, []);
 
   const enter = useCallback(() => {
-    if (!filePath) {
-      console.warn('[useReplayMode] enter(): no filePath');
+    if (!filePath) return;
+
+    // These calls can throw (WASM errors). If any fail, no refs have been
+    // set yet so there is nothing to roll back.
+    let handle, history: unknown[], clone;
+    try {
+      handle = getFileHandle(filePath);
+      if (!handle) return;
+
+      history = asViewable(handle).history() ?? [];
+      if (history.length === 0) return;
+
+      clone = cloneHandleDoc(handle);
+    } catch (e) {
+      console.error('[useReplayMode] Failed to enter replay mode:', e);
       return;
     }
 
-    try {
-      const handle = getFileHandle(filePath);
-      if (!handle) {
-        console.warn('[useReplayMode] enter(): no handle for', filePath);
-        return;
-      }
+    // Past this point everything is safe (assignments + cached accessors).
+    handleRef.current = handle;
+    historyRef.current = history;
+    cloneRef.current = clone;
+    textCacheRef.current = new Map();
+    isActiveRef.current = true;
 
-      const history = asViewable(handle).history();
-      if (!history || history.length === 0) {
-        console.warn('[useReplayMode] enter(): no history (got', history, ')');
-        return;
-      }
+    const lastIndex = history.length - 1;
+    indexRef.current = lastIndex;
 
-      const clone = cloneHandleDoc(handle);
-      if (!clone) {
-        console.warn('[useReplayMode] enter(): failed to clone doc for', filePath);
-        return;
-      }
-
-      handleRef.current = handle;
-      historyRef.current = history;
-      cloneRef.current = clone;
-      textCacheRef.current = new Map();
-      isActiveRef.current = true;
-
-      const lastIndex = history.length - 1;
-      indexRef.current = lastIndex;
-      const content = getContentAtIndex(lastIndex);
-      const timestamp = getTimestampAtIndex(lastIndex);
-
-      setState({
-        isActive: true,
-        historyLength: history.length,
-        currentIndex: lastIndex,
-        isPlaying: false,
-        playbackSpeed: 1,
-        currentContent: content,
-        timestamp,
-      });
-    } catch (e) {
-      // Roll back the synchronous ref so the guard stays consistent
-      isActiveRef.current = false;
-      if (cloneRef.current) {
-        freeDoc(cloneRef.current);
-        cloneRef.current = null;
-      }
-      handleRef.current = null;
-      historyRef.current = [];
-      textCacheRef.current = new Map();
-      console.error('[useReplayMode] Failed to enter replay mode:', e);
-    }
+    setState({
+      isActive: true,
+      historyLength: history.length,
+      currentIndex: lastIndex,
+      isPlaying: false,
+      playbackSpeed: 1,
+      currentContent: getContentAtIndex(lastIndex),
+      timestamp: getTimestampAtIndex(lastIndex),
+    });
   }, [filePath, getContentAtIndex, getTimestampAtIndex]);
 
   const seekTo = useCallback((index: number) => {

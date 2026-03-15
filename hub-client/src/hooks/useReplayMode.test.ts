@@ -108,7 +108,6 @@ describe('useReplayMode', () => {
     it('is a no-op when handle.history() returns undefined', () => {
       const handle = {
         history: vi.fn(() => undefined),
-        view: vi.fn(),
         metadata: vi.fn(),
         doc: vi.fn(),
       };

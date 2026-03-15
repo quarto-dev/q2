@@ -219,15 +219,13 @@ export function getFileHandle(path: string) {
 
 /**
  * Free an Automerge Doc's WASM resources immediately, rather than waiting
- * for JS garbage collection.  Use this to release WASM borrows created by
- * DocHandle.view()/doc() so that subsequent handle.history() calls don't
- * hit Rust's aliasing guard.
+ * for JS garbage collection.
  */
 export function freeDoc(doc: unknown): void {
   try {
     automergeFreeFn(doc as Parameters<typeof automergeFreeFn>[0]);
   } catch {
-    // Silently ignore — doc may already be freed or not a WASM-backed object
+    // doc may already be freed or not a WASM-backed object
   }
 }
 
@@ -236,37 +234,23 @@ export function freeDoc(doc: unknown): void {
  * Returns an independent Automerge doc with its own WASM state, so views
  * created from this clone do NOT hold borrows on the original handle's doc.
  */
-export function cloneHandleDoc(handle: unknown): unknown | null {
-  try {
-    const doc = (handle as { doc(): unknown }).doc();
-    if (!doc) return null;
-    return automergeCloneFn(doc as Parameters<typeof automergeCloneFn>[0]);
-  } catch {
-    return null;
-  }
+export function cloneHandleDoc(handle: unknown): unknown {
+  const doc = (handle as { doc(): unknown }).doc();
+  return automergeCloneFn(doc as Parameters<typeof automergeCloneFn>[0]);
 }
 
 /**
  * Create a read-only view of a cloned doc at given heads and extract the
- * text field.  The view shares the clone's WASM handle (not the original
- * handle's), so it will not block future handle.history() calls.
- *
- * @param clonedDoc - An Automerge doc (typically from cloneHandleDoc)
- * @param heads - UrlHeads (base58check-encoded string[]) from handle.history()
+ * text field.  Heads are UrlHeads (base58check-encoded string[]) as returned
+ * by handle.history().
  */
 export function viewText(clonedDoc: unknown, heads: unknown): string {
-  try {
-    // history() returns UrlHeads (base58check-encoded).  Automerge.view()
-    // expects decoded hex-string heads.
-    const decoded = decodeHeads(heads as Parameters<typeof decodeHeads>[0]);
-    const viewed = automergeViewFn(
-      clonedDoc as Parameters<typeof automergeViewFn>[0],
-      decoded as unknown as Parameters<typeof automergeViewFn>[1],
-    );
-    return (viewed as { text?: string })?.text ?? '';
-  } catch {
-    return '';
-  }
+  const decoded = decodeHeads(heads as Parameters<typeof decodeHeads>[0]);
+  const viewed = automergeViewFn(
+    clonedDoc as Parameters<typeof automergeViewFn>[0],
+    decoded as unknown as Parameters<typeof automergeViewFn>[1],
+  );
+  return (viewed as { text?: string })?.text ?? '';
 }
 
 /**
