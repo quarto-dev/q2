@@ -176,12 +176,12 @@ describe('useReplayMode', () => {
       act(() => { result.current.controls.play(); });
       expect(result.current.state.isPlaying).toBe(true);
 
-      // Advance one tick (PLAY_INTERVAL_MS = 80ms)
-      act(() => { vi.advanceTimersByTime(80); });
+      // Advance one tick (adaptive interval: 15000/4 = 3750, clamped to 200ms)
+      act(() => { vi.advanceTimersByTime(200); });
       expect(result.current.state.currentIndex).toBe(1);
 
       // Advance another tick
-      act(() => { vi.advanceTimersByTime(80); });
+      act(() => { vi.advanceTimersByTime(200); });
       expect(result.current.state.currentIndex).toBe(2);
     });
 
@@ -193,13 +193,13 @@ describe('useReplayMode', () => {
       act(() => { result.current.controls.enter(); });
       act(() => { result.current.controls.seekTo(0); });
       act(() => { result.current.controls.play(); });
-      act(() => { vi.advanceTimersByTime(80); });
+      act(() => { vi.advanceTimersByTime(200); });
       expect(result.current.state.currentIndex).toBe(1);
 
       act(() => { result.current.controls.pause(); });
       expect(result.current.state.isPlaying).toBe(false);
 
-      act(() => { vi.advanceTimersByTime(80); });
+      act(() => { vi.advanceTimersByTime(200); });
       // Should not advance further
       expect(result.current.state.currentIndex).toBe(1);
     });

@@ -39,8 +39,13 @@
   user-select: none;
 }
 
-.replay-drawer__toggle:hover {
+.replay-drawer__toggle:hover:not(:disabled) {
   color: #fff;
+}
+
+.replay-drawer__toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* Collapsed: toggle fills the bar */
@@ -156,6 +161,22 @@
   min-width: 80px;
   display: flex;
   align-items: center;
+  position: relative;
+}
+
+.replay-drawer__tooltip {
+  position: absolute;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  padding: 3px 8px;
+  background: #0f0f1e;
+  border: 1px solid #1f3460;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .replay-drawer__slider {
@@ -173,7 +194,7 @@
 
 .replay-drawer__slider::-webkit-slider-runnable-track {
   height: 6px;
-  background: #1f3460;
+  background: var(--slider-track, #1f3460);
   border-radius: 3px;
 }
 
@@ -195,7 +216,7 @@
 
 .replay-drawer__slider::-moz-range-track {
   height: 6px;
-  background: #1f3460;
+  background: var(--slider-track, #1f3460);
   border-radius: 3px;
   border: none;
 }

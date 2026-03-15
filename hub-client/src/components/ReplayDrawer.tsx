@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import './ReplayDrawer.css';
 
 interface Props {
   state: ReplayState;
   controls: ReplayControls;
+  disabled?: boolean;
 }
 
 function formatTimestamp(ts: number | null): string {
@@ -13,7 +14,16 @@ function formatTimestamp(ts: number | null): string {
   return date.toLocaleString();
 }
 
-export default function ReplayDrawer({ state, controls }: Props) {
+export default function ReplayDrawer({ state, controls, disabled }: Props) {
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus the drawer when replay mode activates so keyboard shortcuts work immediately
+  useEffect(() => {
+    if (state.isActive) {
+      drawerRef.current?.focus();
+    }
+  }, [state.isActive]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!state.isActive) return;
 
@@ -53,10 +63,34 @@ export default function ReplayDrawer({ state, controls }: Props) {
     controls.seekTo(parseInt(e.target.value, 10));
   }, [controls]);
 
+  // Tooltip state for scrubber hover
+  const [scrubberTooltip, setScrubberTooltip] = useState<{ left: number; text: string } | null>(null);
+  const scrubberRef = useRef<HTMLDivElement>(null);
+
+  const handleScrubberMouseMove = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const index = Math.round(fraction * (state.historyLength - 1));
+    const ts = controls.getTimestampAtIndex(index);
+    const text = ts !== null ? formatTimestamp(ts) : `Change ${index + 1}`;
+    // Position relative to the scrubber container
+    const left = e.clientX - (scrubberRef.current?.getBoundingClientRect().left ?? rect.left);
+    setScrubberTooltip({ left, text });
+  }, [state.historyLength, controls]);
+
+  const handleScrubberMouseLeave = useCallback(() => {
+    setScrubberTooltip(null);
+  }, []);
+
   if (!state.isActive) {
     return (
       <div className="replay-drawer replay-drawer--collapsed">
-        <button className="replay-drawer__toggle" onClick={controls.enter}>
+        <button
+          className="replay-drawer__toggle"
+          onClick={disabled ? undefined : controls.enter}
+          disabled={disabled}
+          title={disabled ? 'Replay is not available for binary files' : undefined}
+        >
           <span className="replay-drawer__chevron">&#x25B6;</span>
           <span>Replay</span>
         </button>
@@ -64,8 +98,13 @@ export default function ReplayDrawer({ state, controls }: Props) {
     );
   }
 
+  const progressPercent = state.historyLength > 1
+    ? (state.currentIndex / (state.historyLength - 1)) * 100
+    : 0;
+
   return (
     <div
+      ref={drawerRef}
       className="replay-drawer replay-drawer--expanded"
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -144,16 +183,27 @@ export default function ReplayDrawer({ state, controls }: Props) {
           </button>
         </div>
 
-        <div className="replay-drawer__scrubber">
+        <div className="replay-drawer__scrubber" ref={scrubberRef}>
           <input
             type="range"
             min={0}
             max={state.historyLength - 1}
             value={state.currentIndex}
             onChange={handleScrubberChange}
+            onMouseMove={handleScrubberMouseMove}
+            onMouseLeave={handleScrubberMouseLeave}
             className="replay-drawer__slider"
             role="slider"
+            style={{ '--slider-track': `linear-gradient(to right, #4a80cc ${progressPercent}%, #1f3460 ${progressPercent}%)` } as React.CSSProperties}
           />
+          {scrubberTooltip && (
+            <div
+              className="replay-drawer__tooltip"
+              style={{ left: scrubberTooltip.left }}
+            >
+              {scrubberTooltip.text}
+            </div>
+          )}
         </div>
       </div>
     </div>

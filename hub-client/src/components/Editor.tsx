@@ -781,7 +781,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
       <main className={`editor-main view-mode-${viewMode}`}>
         {!isFullscreenPreview && (
-          <SidebarTabs>
+          <SidebarTabs disabled={replayState.isActive}>
             {(activeTab) => {
               switch (activeTab) {
                 case 'files':
@@ -939,7 +939,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
       {/* Replay mode drawer */}
       {!isFullscreenPreview && (
-        <ReplayDrawer state={replayState} controls={replayControls} />
+        <ReplayDrawer state={replayState} controls={replayControls} disabled={!!currentFile && isBinaryExtension(currentFile.path)} />
       )}
 
       {/* New file dialog */}

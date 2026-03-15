@@ -27,9 +27,10 @@ const SECTIONS: Section[] = [
 
 interface SidebarTabsProps {
   children: (sectionId: SectionId) => ReactNode;
+  disabled?: boolean;
 }
 
-export default function SidebarTabs({ children }: SidebarTabsProps) {
+export default function SidebarTabs({ children, disabled }: SidebarTabsProps) {
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(() => {
     const initial = new Set<SectionId>();
     for (const section of SECTIONS) {
@@ -53,7 +54,7 @@ export default function SidebarTabs({ children }: SidebarTabsProps) {
   };
 
   return (
-    <div className="sidebar-sections">
+    <div className={`sidebar-sections${disabled ? ' sidebar-sections--disabled' : ''}`}>
       {SECTIONS.map((section) => {
         const isExpanded = expandedSections.has(section.id);
         return (

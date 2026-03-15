@@ -61,6 +61,12 @@
   background: #16213e;
 }
 
+/* Dimmed state during replay mode */
+.sidebar-sections--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* When FILES section is expanded, let it take available space */
 .sidebar-section.expanded:first-child .section-content {
   flex: 1;

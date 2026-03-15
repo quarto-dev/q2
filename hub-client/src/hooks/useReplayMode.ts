@@ -24,6 +24,7 @@ export interface ReplayControls {
   pause: () => void;
   stepForward: () => void;
   stepBackward: () => void;
+  getTimestampAtIndex: (index: number) => number | null;
 }
 
 const INITIAL_STATE: ReplayState = {
@@ -35,7 +36,10 @@ const INITIAL_STATE: ReplayState = {
   timestamp: null,
 };
 
-const PLAY_INTERVAL_MS = 80;
+// Target ~15 seconds for a full playback, clamped to [16ms, 200ms] per step
+const PLAY_TARGET_DURATION_MS = 15000;
+const PLAY_MIN_INTERVAL_MS = 16;
+const PLAY_MAX_INTERVAL_MS = 200;
 
 // Type helpers for DocHandle methods we use (avoids importing Automerge types)
 interface ViewableHandle {
@@ -155,7 +159,17 @@ export function useReplayMode(
     const history = historyRef.current;
     if (history.length === 0) return;
 
+    // If at the end, restart from the beginning
+    if (indexRef.current >= history.length - 1) {
+      seekTo(0);
+    }
+
     setState(prev => ({ ...prev, isPlaying: true }));
+
+    const interval = Math.max(
+      PLAY_MIN_INTERVAL_MS,
+      Math.min(PLAY_MAX_INTERVAL_MS, Math.round(PLAY_TARGET_DURATION_MS / history.length)),
+    );
 
     intervalRef.current = setInterval(() => {
       const nextIndex = indexRef.current + 1;
@@ -173,8 +187,8 @@ export function useReplayMode(
         currentContent: content,
         timestamp,
       }));
-    }, PLAY_INTERVAL_MS);
-  }, [clearPlayInterval, getContentAtIndex, getTimestampAtIndex]);
+    }, interval);
+  }, [clearPlayInterval, getContentAtIndex, getTimestampAtIndex, seekTo]);
 
   const pause = useCallback(() => {
     stopPlaying();
@@ -241,6 +255,7 @@ export function useReplayMode(
       pause,
       stepForward,
       stepBackward,
+      getTimestampAtIndex,
     },
   };
 }
