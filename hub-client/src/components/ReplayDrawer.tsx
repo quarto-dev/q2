@@ -8,7 +8,28 @@ interface Props {
   disabled?: boolean;
 }
 
+function formatRelativeTime(ts: number): string {
+  const now = Date.now();
+  const diffMs = now - ts * 1000;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  if (diffDays < 30) return `${diffDays}d ago`;
+  // Beyond 30 days, show short date
+  const date = new Date(ts * 1000);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 function formatTimestamp(ts: number | null): string {
+  if (ts === null) return '';
+  return formatRelativeTime(ts);
+}
+
+function formatFullTimestamp(ts: number | null): string {
   if (ts === null) return '';
   const date = new Date(ts * 1000);
   return date.toLocaleString();
@@ -121,7 +142,8 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
           </span>
           {state.timestamp && (
             <span className="replay-drawer__timestamp">
-              {formatTimestamp(state.timestamp)}
+              {formatFullTimestamp(state.timestamp)}
+              <span className="replay-drawer__relative">{formatTimestamp(state.timestamp)}</span>
             </span>
           )}
         </div>

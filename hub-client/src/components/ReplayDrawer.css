@@ -93,6 +93,13 @@
 .replay-drawer__timestamp {
   font-size: 11px;
   color: #666;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.replay-drawer__relative {
+  color: #888;
 }
 
 /* Controls row: transport + scrubber */
