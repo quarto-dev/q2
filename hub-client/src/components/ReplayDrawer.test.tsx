@@ -18,6 +18,7 @@ function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
     playbackSpeed: 1,
     currentContent: '',
     timestamp: null,
+    chunkAuthors: [],
     ...overrides,
   };
 }
@@ -35,6 +36,7 @@ function makeControls(overrides: Partial<ReplayControls> = {}): ReplayControls {
     stepForward: vi.fn(),
     stepBackward: vi.fn(),
     cycleSpeed: vi.fn(),
+    getTimestampAtIndex: vi.fn().mockReturnValue(null),
     ...overrides,
   };
 }
@@ -70,6 +72,7 @@ describe('ReplayDrawer', () => {
       currentIndex: 42,
       currentContent: 'hello',
       timestamp: 1710000000,
+      chunkAuthors: Array.from({ length: 10 }, () => 1),
     });
 
     it('renders transport controls when active', () => {
@@ -153,6 +156,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 50,
       currentContent: 'test',
+      chunkAuthors: Array.from({ length: 10 }, () => 1),
     });
 
     it('Space toggles play/pause', () => {

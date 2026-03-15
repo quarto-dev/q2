@@ -171,12 +171,58 @@
   color: #6ee7a0;
 }
 
-.replay-drawer__scrubber {
+/* Waveform scrubber container */
+.replay-waveform-container {
   flex: 1;
   min-width: 80px;
-  display: flex;
-  align-items: center;
   position: relative;
+  height: 24px;
+}
+
+.replay-waveform {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+}
+
+/* Transparent range input overlaid on waveform for interaction */
+.replay-waveform__input {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+}
+
+.replay-waveform__input::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 100%;
+}
+
+.replay-waveform__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 0;
+  height: 0;
+}
+
+.replay-waveform__input::-moz-range-track {
+  background: transparent;
+  height: 100%;
+  border: none;
+}
+
+.replay-waveform__input::-moz-range-thumb {
+  width: 0;
+  height: 0;
+  border: none;
 }
 
 .replay-drawer__tooltip {
@@ -192,60 +238,4 @@
   font-size: 11px;
   white-space: nowrap;
   pointer-events: none;
-}
-
-.replay-drawer__slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 4px;
-  margin: 0;
-  padding: 8px 0;
-  background: transparent;
-  box-sizing: content-box;
-  outline: none;
-  cursor: pointer;
-}
-
-.replay-drawer__slider::-webkit-slider-runnable-track {
-  height: 4px;
-  background: var(--slider-track, #1f3460);
-  border-radius: 2px;
-}
-
-.replay-drawer__slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  background: #8899aa;
-  border: none;
-  border-radius: 50%;
-  margin-top: -4px;
-  transition: background 0.15s, transform 0.15s;
-}
-
-.replay-drawer__slider:hover::-webkit-slider-thumb {
-  background: #ccc;
-  transform: scale(1.2);
-}
-
-.replay-drawer__slider::-moz-range-track {
-  height: 4px;
-  background: var(--slider-track, #1f3460);
-  border-radius: 2px;
-  border: none;
-}
-
-.replay-drawer__slider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  background: #8899aa;
-  border: none;
-  border-radius: 50%;
-  transition: background 0.15s, transform 0.15s;
-}
-
-.replay-drawer__slider:hover::-moz-range-thumb {
-  background: #ccc;
-  transform: scale(1.2);
 }

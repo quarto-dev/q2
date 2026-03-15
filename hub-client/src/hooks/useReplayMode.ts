@@ -18,6 +18,7 @@ export interface ReplayState {
   playbackSpeed: PlaybackSpeed;
   currentContent: string;
   timestamp: number | null;
+  chunkAuthors: number[]; // distinct author count per equal-width chunk (0 = pending)
 }
 
 export interface ReplayControls {
@@ -43,6 +44,7 @@ const INITIAL_STATE: ReplayState = {
   playbackSpeed: 1,
   currentContent: '',
   timestamp: null,
+  chunkAuthors: [],
 };
 
 // Base interval at 1x speed; divided by playback speed multiplier
@@ -51,7 +53,7 @@ const PLAY_BASE_INTERVAL_MS = 200;
 // Type helpers for DocHandle methods we use (avoids importing Automerge types)
 interface ViewableHandle {
   history(): unknown[] | undefined;
-  metadata(change?: string): { time?: number } | undefined;
+  metadata(change?: string): { time?: number; actor?: string } | undefined;
 }
 
 function asViewable(handle: unknown): ViewableHandle {
@@ -122,8 +124,6 @@ export function useReplayMode(
   const enter = useCallback(() => {
     if (!filePath) return;
 
-    // These calls can throw (WASM errors). If any fail, no refs have been
-    // set yet so there is nothing to roll back.
     let handle, history: unknown[], clone;
     try {
       handle = getFileHandle(filePath);
@@ -138,7 +138,6 @@ export function useReplayMode(
       return;
     }
 
-    // Past this point everything is safe (assignments + cached accessors).
     handleRef.current = handle;
     historyRef.current = history;
     cloneRef.current = clone;
@@ -148,6 +147,32 @@ export function useReplayMode(
     const lastIndex = history.length - 1;
     indexRef.current = lastIndex;
 
+    // Split history into ≤100 equal chunks for the author-color gradient.
+    const MAX_CHUNKS = 100;
+    const chunkCount = Math.min(history.length, MAX_CHUNKS);
+    const chunkSize = history.length / chunkCount;
+
+    // Compute author counts synchronously — ≤500 metadata() calls (100 chunks × 5 samples).
+    const SAMPLES_PER_CHUNK = 5;
+    const viewable = asViewable(handle);
+    const chunkAuthors = new Array<number>(chunkCount);
+    for (let i = 0; i < chunkCount; i++) {
+      const startIdx = Math.round(i * chunkSize);
+      const endIdx = Math.min(Math.round((i + 1) * chunkSize), history.length);
+      const span = endIdx - startIdx;
+      const step = Math.max(1, Math.floor(span / SAMPLES_PER_CHUNK));
+      const actors = new Set<string>();
+      for (let j = startIdx; j < endIdx; j += step) {
+        const heads = history[j];
+        const changeHash = Array.isArray(heads) ? heads[0] : heads;
+        if (typeof changeHash === 'string') {
+          const meta = viewable.metadata(changeHash);
+          if (meta?.actor) actors.add(meta.actor);
+        }
+      }
+      chunkAuthors[i] = actors.size;
+    }
+
     setState({
       isActive: true,
       historyLength: history.length,
@@ -156,6 +181,7 @@ export function useReplayMode(
       playbackSpeed: 1,
       currentContent: getContentAtIndex(lastIndex),
       timestamp: getTimestampAtIndex(lastIndex),
+      chunkAuthors,
     });
   }, [filePath, getContentAtIndex, getTimestampAtIndex]);
 

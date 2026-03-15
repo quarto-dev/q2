@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import './ReplayDrawer.css';
 
@@ -102,6 +102,22 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
   const handleScrubberMouseLeave = useCallback(() => {
     setScrubberTooltip(null);
   }, []);
+
+  // Two stops per chunk (start + end at same color) to prevent SVG interpolation.
+  // Lerps from blue (1 author) to orange (5+ authors).
+  const gradientStops = useMemo(() => {
+    const chunks = state.chunkAuthors;
+    const n = chunks.length || 1;
+    const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+    const stops: { color: string; offset: number }[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const t = Math.min(1, Math.max(0, (chunks[i] - 1) / 4));
+      const color = `rgb(${lerp(74, 204, t)},${lerp(128, 122, t)},${lerp(204, 74, t)})`;
+      stops.push({ color, offset: (i / n) * 100 });
+      stops.push({ color, offset: ((i + 1) / n) * 100 });
+    }
+    return stops;
+  }, [state.chunkAuthors]);
 
   if (!state.isActive) {
     return (
@@ -212,7 +228,28 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
           </button>
         </div>
 
-        <div className="replay-drawer__scrubber" ref={scrubberRef}>
+        <div className="replay-waveform-container" ref={scrubberRef}>
+          <svg
+            className="replay-waveform"
+            viewBox="0 0 100 1"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient id="replay-waveform-grad" gradientUnits="userSpaceOnUse" x1="0" x2="100" y1="0" y2="0">
+                {gradientStops.map((s, i) => (
+                  <stop key={i} offset={`${s.offset}%`} stopColor={s.color} />
+                ))}
+              </linearGradient>
+            </defs>
+            <rect width={100} height={1} fill="#1f3460" />
+            <rect width={progressPercent} height={1} fill="url(#replay-waveform-grad)" />
+            <line
+              x1={progressPercent} y1={0}
+              x2={progressPercent} y2={1}
+              stroke="rgba(255,255,255,0.6)"
+              strokeWidth={0.3}
+            />
+          </svg>
           <input
             type="range"
             min={0}
@@ -221,9 +258,8 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
             onChange={handleScrubberChange}
             onMouseMove={handleScrubberMouseMove}
             onMouseLeave={handleScrubberMouseLeave}
-            className="replay-drawer__slider"
+            className="replay-waveform__input"
             role="slider"
-            style={{ '--slider-track': `linear-gradient(to right, #4a80cc ${progressPercent}%, #1f3460 ${progressPercent}%)` } as React.CSSProperties}
           />
           {scrubberTooltip && (
             <div
