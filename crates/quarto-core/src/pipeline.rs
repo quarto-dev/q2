@@ -186,9 +186,11 @@ pub fn build_html_pipeline() -> Pipeline {
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 3. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 4. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
-/// 5. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 6. `ApplyTemplateStage` - Apply HTML template
+/// 4. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 5. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
+/// 6. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 7. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 8. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -204,7 +206,9 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         // No EngineExecutionStage - code cells pass through as-is
         Box::new(MetadataMergeStage::new()),
         Box::new(CompileThemeCssStage::new()),
+        Box::new(UserFiltersStage::pre()),
         Box::new(AstTransformsStage::new()),
+        Box::new(UserFiltersStage::post()),
         Box::new(RenderHtmlBodyStage::new()),
         Box::new(ApplyTemplateStage::new()),
     ];
@@ -709,8 +713,8 @@ mod tests {
     #[test]
     fn test_build_wasm_html_pipeline() {
         let pipeline = build_wasm_html_pipeline();
-        // WASM pipeline has 6 stages (no engine execution)
-        assert_eq!(pipeline.len(), 6);
+        // WASM pipeline has 8 stages (no engine execution, but has user filters)
+        assert_eq!(pipeline.len(), 8);
     }
 
     #[test]

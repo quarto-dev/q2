@@ -34,7 +34,15 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
         .expect("Failed to write filter");
 
     let context = ASTContext::anonymous();
-    let result = apply_lua_filters(doc, context, &[filter_file.path().to_path_buf()], "html");
+    let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+        std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
+    let result = apply_lua_filters(
+        doc,
+        context,
+        &[filter_file.path().to_path_buf()],
+        "html",
+        runtime,
+    );
     let (pandoc, context, _diagnostics) = result.expect("Filter failed");
     (pandoc, context)
 }

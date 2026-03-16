@@ -118,9 +118,9 @@ jobs:
         run: brew install llvm
         shell: bash
 
-      - name: Install wasm-pack
+      - name: Install wasm-bindgen-cli
         shell: bash
-        run: cargo install wasm-pack
+        run: cargo install wasm-bindgen-cli --version 0.2.108
 
       - name: Build WASM module
         shell: bash

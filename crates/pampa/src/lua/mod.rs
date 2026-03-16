@@ -23,5 +23,8 @@ mod types;
 mod utils;
 
 pub use filter::{LuaFilterError, apply_lua_filters};
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unused_imports)]
-pub use runtime::{NativeRuntime, RuntimeError, RuntimeResult, SystemRuntime};
+pub use runtime::NativeRuntime;
+#[allow(unused_imports)]
+pub use runtime::{RuntimeError, RuntimeResult, SystemRuntime};

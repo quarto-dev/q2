@@ -308,7 +308,9 @@ fn main() {
             .map(|s| unified_filter::FilterSpec::parse(s))
             .collect();
 
-        match unified_filter::apply_filters(pandoc, context, &filter_specs, &args.to) {
+        let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+            std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
+        match unified_filter::apply_filters(pandoc, context, &filter_specs, &args.to, runtime) {
             Ok((filtered_pandoc, filtered_context, diagnostics)) => {
                 // Output any diagnostics from filters
                 if !diagnostics.is_empty() {

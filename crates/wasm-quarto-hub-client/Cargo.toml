@@ -10,7 +10,7 @@ description = "WASM client for quarto-hub web frontend"
 crate-type = ["cdylib"]
 
 [dependencies]
-pampa = { path = "../pampa", default-features = false }
+pampa = { path = "../pampa", default-features = false, features = ["lua-filter"] }
 quarto-ast-reconcile = { path = "../quarto-ast-reconcile" }
 quarto-core = { path = "../quarto-core" }
 quarto-error-reporting = { path = "../quarto-error-reporting" }
@@ -29,3 +29,8 @@ serde_yaml = "0.9"
 yaml-rust2 = "0.11"
 console_error_panic_hook = "0.1"
 base64 = "0.22"
+getrandom = { version = "0.2", features = ["js"] }
+
+[patch.crates-io]
+lua-src = { path = "../lua-src-wasm" }
+wasm-bindgen-futures = { path = "../wasm-bindgen-futures-patch" }

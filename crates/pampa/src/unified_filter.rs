@@ -14,8 +14,11 @@
  */
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
+
+use quarto_system_runtime::SystemRuntime;
 
 use crate::pandoc::Pandoc;
 use crate::pandoc::ast_context::ASTContext;
@@ -180,6 +183,7 @@ pub fn apply_filter(
     context: ASTContext,
     filter: &FilterSpec,
     target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
 ) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), FilterError> {
     match filter {
         FilterSpec::Citeproc => {
@@ -190,8 +194,13 @@ pub fn apply_filter(
 
         #[cfg(feature = "lua-filter")]
         FilterSpec::Lua(path) => {
-            let (new_pandoc, new_context, diagnostics) =
-                crate::lua::apply_lua_filters(pandoc, context, &[path.clone()], target_format)?;
+            let (new_pandoc, new_context, diagnostics) = crate::lua::apply_lua_filters(
+                pandoc,
+                context,
+                &[path.clone()],
+                target_format,
+                runtime,
+            )?;
             Ok((new_pandoc, new_context, diagnostics))
         }
 
@@ -225,14 +234,20 @@ pub fn apply_filters(
     context: ASTContext,
     filters: &[FilterSpec],
     target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
 ) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), FilterError> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
     let mut all_diagnostics = Vec::new();
 
     for filter in filters {
-        let (new_pandoc, new_context, diagnostics) =
-            apply_filter(current_pandoc, current_context, filter, target_format)?;
+        let (new_pandoc, new_context, diagnostics) = apply_filter(
+            current_pandoc,
+            current_context,
+            filter,
+            target_format,
+            runtime.clone(),
+        )?;
         current_pandoc = new_pandoc;
         current_context = new_context;
         all_diagnostics.extend(diagnostics);

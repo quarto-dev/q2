@@ -2,12 +2,18 @@
 /**
  * Build the WASM module for hub-client
  *
- * This script builds wasm-quarto-hub-client with the proper environment
- * variables. Works on macOS, Linux, and Windows.
+ * Uses `cargo build --target wasm32-unknown-unknown` + `wasm-bindgen` CLI
+ * instead of wasm-pack, because we need `-Zbuild-std=std,panic_unwind` for
+ * Lua's error handling (panic/catch_unwind replacing setjmp/longjmp).
+ *
+ * Requirements:
+ *   - Nightly Rust with rust-src: `rustup component add rust-src`
+ *   - wasm-bindgen CLI: `cargo install wasm-bindgen-cli`
+ *   - Homebrew LLVM (macOS): `brew install llvm`
  */
 
 import { spawn } from 'child_process';
-import { existsSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, rmSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { platform } from 'os';
@@ -16,95 +22,92 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../..');
 const wasmCrate = join(repoRoot, 'crates', 'wasm-quarto-hub-client');
 
-function findLlvmPath() {
+function findLlvmClang() {
   if (platform() === 'darwin') {
-    // macOS: Check Homebrew locations
     const locations = [
-      '/opt/homebrew/opt/llvm/bin',  // Apple Silicon
-      '/usr/local/opt/llvm/bin',      // Intel
+      '/opt/homebrew/opt/llvm/bin/clang',  // Apple Silicon
+      '/usr/local/opt/llvm/bin/clang',      // Intel
     ];
     for (const loc of locations) {
-      if (existsSync(loc)) {
-        return loc;
-      }
+      if (existsSync(loc)) return loc;
     }
-    console.warn('Warning: LLVM not found in Homebrew locations.');
-    console.warn('You may need to install it: brew install llvm');
+    console.error('Error: Homebrew LLVM not found.');
+    console.error('Apple clang does not support wasm32-unknown-unknown.');
+    console.error('Install LLVM with: brew install llvm');
+    process.exit(1);
   }
-  // On Linux/Windows, assume LLVM is in PATH or not needed
-  return null;
+  // On Linux, system clang typically supports wasm32
+  return 'clang';
 }
 
-function buildWasm() {
+function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    console.log('Building wasm-quarto-hub-client...');
-
-    // Clean pkg/ directory to avoid wasm-pack EEXIST errors
-    const pkgDir = join(wasmCrate, 'pkg');
-    if (existsSync(pkgDir)) {
-      console.log('Cleaning existing pkg/ directory...');
-      rmSync(pkgDir, { recursive: true });
-    }
-
-    // Set up environment
-    const env = { ...process.env };
-
-    // Add LLVM to PATH if found
-    const llvmPath = findLlvmPath();
-    if (llvmPath) {
-      env.PATH = `${llvmPath}${platform() === 'win32' ? ';' : ':'}${env.PATH}`;
-    }
-
-    // Set CFLAGS for wasm32 target (needed for tree-sitter C code)
-    const wasmSysroot = join(wasmCrate, 'wasm-sysroot');
-    const cflags = [
-      `-I${wasmSysroot}`,
-      '-Wbad-function-cast',
-      '-Wcast-function-type',
-      '-fno-builtin',
-      '-DHAVE_ENDIAN_H',
-    ].join(' ');
-    env.CFLAGS_wasm32_unknown_unknown = cflags;
-
-    // Determine the command based on platform
     const isWindows = platform() === 'win32';
-    const cmd = isWindows ? 'wasm-pack.cmd' : 'wasm-pack';
-
-    const args = ['build', '--target', 'web'];
-
-    console.log(`Running: ${cmd} ${args.join(' ')}`);
-    console.log(`Working directory: ${wasmCrate}`);
-
+    console.log(`  $ ${cmd} ${args.join(' ')}`);
     const child = spawn(cmd, args, {
-      cwd: wasmCrate,
-      env,
       stdio: 'inherit',
       shell: isWindows,
+      ...opts,
     });
-
-    child.on('error', (err) => {
-      if (err.code === 'ENOENT') {
-        console.error('Error: wasm-pack is not installed.');
-        console.error('Install it with: cargo install wasm-pack');
-      }
-      reject(err);
-    });
-
+    child.on('error', reject);
     child.on('close', (code) => {
-      if (code === 0) {
-        console.log(`\nWASM build complete: ${join(wasmCrate, 'pkg')}/`);
-        resolve();
-      } else {
-        reject(new Error(`wasm-pack exited with code ${code}`));
-      }
+      if (code === 0) resolve();
+      else reject(new Error(`${cmd} exited with code ${code}`));
     });
   });
+}
+
+async function buildWasm() {
+  console.log('Building wasm-quarto-hub-client...\n');
+
+  // Clean pkg/ directory
+  const pkgDir = join(wasmCrate, 'pkg');
+  if (existsSync(pkgDir)) {
+    console.log('Cleaning existing pkg/ directory...');
+    rmSync(pkgDir, { recursive: true });
+  }
+  mkdirSync(pkgDir, { recursive: true });
+
+  // Environment for cargo build
+  const env = { ...process.env };
+
+  // Point CC to Homebrew LLVM clang (Apple clang can't target wasm32)
+  const clang = findLlvmClang();
+  env.CC_wasm32_unknown_unknown = clang;
+
+  // Provide stub sysroot headers for all C dependencies (tree-sitter, lua-src, etc.)
+  const wasmSysroot = join(wasmCrate, 'wasm-sysroot');
+  env.CFLAGS_wasm32_unknown_unknown = `-isystem ${wasmSysroot}`;
+
+  // Step 1: cargo build (uses .cargo/config.toml for -Zbuild-std and rustflags)
+  console.log('Step 1/2: cargo build --target wasm32-unknown-unknown --release');
+  await run('cargo', [
+    'build',
+    '--target', 'wasm32-unknown-unknown',
+    '--release',
+  ], { cwd: wasmCrate, env });
+
+  // Step 2: wasm-bindgen to generate JS glue
+  const wasmFile = join(
+    wasmCrate,
+    'target', 'wasm32-unknown-unknown', 'release',
+    'wasm_quarto_hub_client.wasm',
+  );
+
+  console.log('\nStep 2/2: wasm-bindgen --target web');
+  await run('wasm-bindgen', [
+    '--target', 'web',
+    '--out-dir', pkgDir,
+    wasmFile,
+  ]);
+
+  console.log(`\nWASM build complete: ${pkgDir}/`);
 }
 
 // Main
 buildWasm()
   .then(() => process.exit(0))
   .catch((err) => {
-    console.error('Build failed:', err.message);
+    console.error('\nBuild failed:', err.message);
     process.exit(1);
   });

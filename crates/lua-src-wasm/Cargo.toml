@@ -1,0 +1,18 @@
+[package]
+name = "lua-src"
+version = "550.0.0"
+authors = ["Aleksandr Orlenko <zxteam@protonmail.com>"]
+edition = "2024"
+repository = "https://github.com/mlua-rs/lua-src-rs"
+readme = "README.md"
+license = "MIT"
+description = """
+Sources of Lua 5.4.8 with wasm32-unknown-unknown support.
+Forked from lua-src-rs for the Quarto WASM experiment.
+"""
+
+[features]
+ucid = [] # accept UniCode IDentifiers
+
+[dependencies]
+cc = "1.2"

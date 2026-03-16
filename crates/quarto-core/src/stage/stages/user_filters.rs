@@ -129,9 +129,14 @@ impl PipelineStage for UserFiltersStage {
 
         let target_format = ctx.format.identifier.as_str();
 
-        let (new_ast, new_context, diagnostics) =
-            pampa::unified_filter::apply_filters(doc.ast, doc.ast_context, filters, target_format)
-                .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+        let (new_ast, new_context, diagnostics) = pampa::unified_filter::apply_filters(
+            doc.ast,
+            doc.ast_context,
+            filters,
+            target_format,
+            ctx.runtime.clone(),
+        )
+        .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
 
         doc.ast = new_ast;
         doc.ast_context = new_context;

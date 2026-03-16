@@ -238,6 +238,9 @@ unreadable_literal = "warn"
 verbose_bit_mask = "warn"
 verbose_file_reads = "warn"
 
+[patch.crates-io]
+lua-src = { path = "crates/lua-src-wasm" }
+
 # Profiles must be set at the workspace level
 [profile.dev]
 # Tell `rustc` to optimize for small code size to

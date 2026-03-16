@@ -72,6 +72,24 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
+/// Basic unwind test — no Lua, just catch_unwind.
+#[wasm_bindgen]
+pub fn test_unwind() -> String {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        panic!("test panic");
+    })) {
+        Ok(()) => "no panic (unexpected)".to_string(),
+        Err(_) => "caught panic successfully".to_string(),
+    }
+}
+
+/// Test function: create a Lua VM and run a simple script.
+/// Returns the result string or an error message.
+#[wasm_bindgen]
+pub fn test_lua(script: &str) -> String {
+    pampa::lua_wasm_test(script)
+}
+
 // ============================================================================
 // RESPONSE TYPES
 // ============================================================================
