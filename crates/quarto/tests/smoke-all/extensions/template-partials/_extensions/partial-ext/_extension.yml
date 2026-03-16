@@ -1,0 +1,8 @@
+title: Partial Extension
+author: Test
+contributes:
+  formats:
+    html:
+      template: template.html
+      template-partials:
+        - header.html

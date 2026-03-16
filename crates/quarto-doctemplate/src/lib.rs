@@ -60,4 +60,7 @@ pub use doc::Doc;
 pub use error::TemplateError;
 pub use eval_context::{DiagnosticCollector, EvalContext};
 pub use parser::Template;
-pub use resolver::{FileSystemResolver, MemoryResolver, NullResolver, PartialResolver};
+pub use resolver::{
+    ChainedResolver, FileSystemResolver, MemoryResolver, NullResolver, PartialResolver,
+    resolve_partial_path,
+};

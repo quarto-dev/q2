@@ -98,6 +98,30 @@ impl PartialResolver for MemoryResolver {
     }
 }
 
+/// Resolver that chains two resolvers: tries the primary first, falls back to the secondary.
+///
+/// Useful for combining explicit partials (e.g., from extensions) with
+/// a fallback that loads from disk or runtime.
+pub struct ChainedResolver<A, B> {
+    primary: A,
+    fallback: B,
+}
+
+impl<A, B> ChainedResolver<A, B> {
+    /// Create a new chained resolver.
+    pub fn new(primary: A, fallback: B) -> Self {
+        Self { primary, fallback }
+    }
+}
+
+impl<A: PartialResolver, B: PartialResolver> PartialResolver for ChainedResolver<A, B> {
+    fn get_partial(&self, name: &str, base_path: &Path) -> Option<String> {
+        self.primary
+            .get_partial(name, base_path)
+            .or_else(|| self.fallback.get_partial(name, base_path))
+    }
+}
+
 /// Resolve the path to a partial file.
 ///
 /// Follows Pandoc/doctemplates path resolution rules:
@@ -219,6 +243,43 @@ mod tests {
         assert_eq!(
             resolver.get_partial("b", Path::new("/x.html")),
             Some("content b".to_string())
+        );
+    }
+
+    #[test]
+    fn test_chained_resolver_primary_wins() {
+        let primary = MemoryResolver::with_partials([("header", "<h1>Primary</h1>")]);
+        let fallback = MemoryResolver::with_partials([("header", "<h1>Fallback</h1>")]);
+        let chained = ChainedResolver::new(primary, fallback);
+
+        assert_eq!(
+            chained.get_partial("header", Path::new("/t.html")),
+            Some("<h1>Primary</h1>".to_string())
+        );
+    }
+
+    #[test]
+    fn test_chained_resolver_fallback_when_primary_missing() {
+        let primary = MemoryResolver::new();
+        let fallback = MemoryResolver::with_partials([("footer", "<footer>End</footer>")]);
+        let chained = ChainedResolver::new(primary, fallback);
+
+        assert_eq!(
+            chained.get_partial("footer", Path::new("/t.html")),
+            Some("<footer>End</footer>".to_string())
+        );
+    }
+
+    #[test]
+    fn test_chained_resolver_none_when_both_missing() {
+        let primary = MemoryResolver::new();
+        let fallback = MemoryResolver::new();
+        let chained = ChainedResolver::new(primary, fallback);
+
+        assert!(
+            chained
+                .get_partial("missing", Path::new("/t.html"))
+                .is_none()
         );
     }
 }

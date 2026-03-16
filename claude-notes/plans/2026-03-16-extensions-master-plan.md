@@ -1,7 +1,7 @@
 # Quarto Extensions Master Plan
 
 **Created**: 2026-03-16
-**Status**: In Progress (Phase 1 partially complete)
+**Status**: In Progress (Phases 1 + 4 complete)
 **Worktree**: `worktree-extensions-phase1` branch, at `.claude/worktrees/extensions-phase1`
 **Sub-plans**: Phase 1 detail at `claude-notes/plans/2026-03-16-extensions-phase1-yml-and-metadata.md`
 
@@ -371,20 +371,32 @@ shortcode processing pipeline.
 - How do shortcodes currently work in q2? (Need to check `ShortcodeResolveTransform`)
 - Are shortcodes already resolved from file paths, or is there a registry?
 
-### Phase 4: Template and Partial Support
+### Phase 4: Template and Partial Support ✅
 
 **Goal**: Format extensions can provide custom templates and template partials.
 
-- [ ] Read `template` and `template-partials` from extension format metadata
-- [ ] Wire into `ApplyTemplateStage` (uses `quarto-doctemplate`)
-- [ ] Template search order: extension template → default template
-- [ ] Partial search order: extension partials → default partials
-- [ ] Tests
+- [x] Read `template` and `template-partials` from extension format metadata
+- [x] Wire into `ApplyTemplateStage` (uses `quarto-doctemplate`)
+- [x] Template search order: extension template → default template
+- [x] Partial search order: extension partials → default partials
+- [x] Tests (unit + smoke)
 
-**Open questions**:
-- How does `quarto-doctemplate` currently resolve templates?
-- Does it support a search path or just a single template file?
-- How do partials compose with the base template?
+**Completed**: Phase 4 implemented across 7 sub-phases. Key changes:
+- **Dead code cleanup**: Removed unused `ApplyTemplateConfig.template`,
+  `HtmlRenderConfig.template`, `render_with_custom_template()`, and TODO at
+  `pipeline.rs:375`.
+- **Path resolution**: `template`/`template-partials` values in extension YAML
+  are converted to `ConfigValueKind::Path` in `parse_formats()`, then rebased
+  by `adjust_paths_to_document_dir()` during metadata merge.
+- **Template compilation**: `ApplyTemplateStage` extracts template/partials from
+  merged metadata, compiles with `RuntimeResolver` (WASM-compatible) and/or
+  `ChainedResolver` + `MemoryResolver` for explicit partials.
+- **Rendering refactor**: Extracted `render_with_compiled_template()` as shared
+  core. `render_with_format()` and `render_with_resources()` delegate to it.
+  Full-template extras (version, page-layout) always injected.
+- **Context stripping**: `template` and `template-partials` excluded from
+  template context alongside `css`.
+- **Detail plan**: `claude-notes/plans/2026-03-16-extensions-phase4-templates.md`
 
 ### Phase 5: Custom Writers
 

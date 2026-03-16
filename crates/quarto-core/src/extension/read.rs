@@ -195,7 +195,7 @@ fn parse_formats(
             continue;
         }
 
-        let merged_value = if let Some(common_cv) = common {
+        let mut merged_value = if let Some(common_cv) = common {
             // Merge: common is lower priority, format-specific is higher
             let layers: Vec<&ConfigValue> = vec![common_cv, &entry.value];
             let merged = MergedConfig::new(layers);
@@ -204,10 +204,49 @@ fn parse_formats(
             entry.value.clone()
         };
 
+        // Convert known path-valued keys to ConfigValueKind::Path so that
+        // adjust_paths_to_document_dir() will rebase them during metadata merge.
+        mark_path_valued_keys(&mut merged_value);
+
         result.insert(entry.key.clone(), merged_value);
     }
 
     Ok(result)
+}
+
+/// Keys in extension format config whose values are file paths relative to
+/// the extension directory.
+const PATH_VALUED_KEYS: &[&str] = &["template", "template-partials"];
+
+/// Convert scalar string values for known path-valued keys to
+/// `ConfigValueKind::Path`. For array-valued keys (like `template-partials`),
+/// each element is converted.
+fn mark_path_valued_keys(format_config: &mut ConfigValue) {
+    let ConfigValueKind::Map(entries) = &mut format_config.value else {
+        return;
+    };
+    for entry in entries.iter_mut() {
+        if !PATH_VALUED_KEYS.contains(&entry.key.as_str()) {
+            continue;
+        }
+        match &mut entry.value.value {
+            ConfigValueKind::Scalar(yaml) => {
+                if let Some(s) = yaml.as_str() {
+                    entry.value.value = ConfigValueKind::Path(s.to_string());
+                }
+            }
+            ConfigValueKind::Array(items) => {
+                for item in items.iter_mut() {
+                    if let ConfigValueKind::Scalar(yaml) = &item.value {
+                        if let Some(s) = yaml.as_str() {
+                            item.value = ConfigValueKind::Path(s.to_string());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Parse filters from the contributes section.
@@ -521,5 +560,106 @@ contributes:
 
         assert_eq!(ext.version.as_deref(), Some("1.2.3"));
         assert_eq!(ext.quarto_required.as_deref(), Some(">= 1.4.0"));
+    }
+
+    #[test]
+    fn test_template_converted_to_path_kind() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/acm");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: ACM Format
+author: Author
+contributes:
+  formats:
+    html:
+      template: template.html
+      toc: true
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+
+        // template should be ConfigValueKind::Path, not Scalar
+        let template_cv = html_meta.get("template").unwrap();
+        assert!(
+            matches!(&template_cv.value, ConfigValueKind::Path(s) if s == "template.html"),
+            "expected Path(\"template.html\"), got {:?}",
+            template_cv.value
+        );
+
+        // toc should remain unchanged (boolean, not converted)
+        assert_eq!(html_meta.get("toc").unwrap().as_bool(), Some(true));
+    }
+
+    #[test]
+    fn test_template_partials_converted_to_path_kind() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/acm");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: ACM Format
+author: Author
+contributes:
+  formats:
+    html:
+      template-partials:
+        - title-block.html
+        - header.html
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let partials = html_meta.get("template-partials").unwrap();
+        let items = partials.as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Path(s) if s == "title-block.html"),
+            "expected Path(\"title-block.html\"), got {:?}",
+            items[0].value
+        );
+        assert!(
+            matches!(&items[1].value, ConfigValueKind::Path(s) if s == "header.html"),
+            "expected Path(\"header.html\"), got {:?}",
+            items[1].value
+        );
+    }
+
+    #[test]
+    fn test_non_path_metadata_unaffected_by_path_conversion() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/test");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Test
+author: Author
+contributes:
+  formats:
+    html:
+      toc: true
+      theme: cosmo
+      number-sections: true
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        assert_eq!(html_meta.get("toc").unwrap().as_bool(), Some(true));
+        assert_eq!(html_meta.get("theme").unwrap().as_str(), Some("cosmo"));
+        assert_eq!(
+            html_meta.get("number-sections").unwrap().as_bool(),
+            Some(true)
+        );
     }
 }

@@ -1,0 +1,15 @@
+---
+title: Custom Template Test
+_quarto:
+  tests:
+    custom-tmpl-html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["CUSTOM-TEMPLATE-ACTIVE", "<p>Extension provides a custom HTML template.</p>"]
+        - []
+      ensureHtmlElements:
+        - ["div.custom-template-marker"]
+        - []
+---
+
+Extension provides a custom HTML template.

@@ -205,7 +205,6 @@ pub fn render_document_to_file(
     // Configure the pipeline with CSS paths
     let config = HtmlRenderConfig {
         css_paths: &resource_paths.css,
-        template: None,
     };
 
     // Run the render pipeline

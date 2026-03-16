@@ -20,6 +20,8 @@
 //! format-flattened config. Downstream stages (AST transforms, rendering)
 //! can read metadata without knowing about the layering.
 
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use quarto_config::{MergedConfig, resolve_format_config};
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
@@ -86,7 +88,7 @@ fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
 fn build_extension_metadata_layer(
     extensions: &[Extension],
     target_format: &str,
-) -> Option<ConfigValue> {
+) -> Option<(ConfigValue, PathBuf)> {
     let desc = parse_format_descriptor(target_format);
 
     let ext_name = desc.extension_name.as_deref()?;
@@ -98,7 +100,7 @@ fn build_extension_metadata_layer(
     // Also check for exact format name match (e.g., "acm-html" as a key)
     let exact_meta = ext.contributes.formats.get(target_format);
 
-    match (base_meta, exact_meta) {
+    let config = match (base_meta, exact_meta) {
         (Some(base), Some(exact)) => {
             // Merge: base is lower priority, exact match is higher
             let layers: Vec<&ConfigValue> = vec![base, exact];
@@ -108,7 +110,9 @@ fn build_extension_metadata_layer(
         (Some(base), None) => Some(base.clone()),
         (None, Some(exact)) => Some(exact.clone()),
         (None, None) => None,
-    }
+    };
+
+    config.map(|cv| (cv, ext.path.clone()))
 }
 
 /// Merge project, directory, document, and runtime metadata.
@@ -199,7 +203,13 @@ impl PipelineStage for MetadataMergeStage {
         });
 
         // Layer 2: Extension metadata (uses full target_format for lookup)
-        let extension_layer = build_extension_metadata_layer(&ctx.extensions, target_format);
+        // Adjust !path values from extension dir to document dir
+        let extension_layer = build_extension_metadata_layer(&ctx.extensions, target_format).map(
+            |(mut config, ext_dir)| {
+                adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir);
+                config
+            },
+        );
 
         // Layer 3: Directory metadata layers (each flattened for base format)
         let dir_layers: Vec<_> = if !ctx.project.is_single_file {
@@ -1607,9 +1617,10 @@ mod tests {
 
         let layer = build_extension_metadata_layer(&[ext], "acm-html");
         assert!(layer.is_some());
-        let cv = layer.unwrap();
+        let (cv, ext_path) = layer.unwrap();
         assert_eq!(cv.get("toc").unwrap().as_bool(), Some(true));
         assert_eq!(cv.get("number-sections").unwrap().as_bool(), Some(true));
+        assert_eq!(ext_path, PathBuf::from("/extensions/acm"));
     }
 
     #[test]

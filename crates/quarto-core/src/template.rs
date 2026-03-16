@@ -20,11 +20,41 @@
 //! is passed as a template variable, allowing the template to control the
 //! overall document structure while the HTML writer controls content rendering.
 
-use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
+use std::path::Path;
+
+use quarto_doctemplate::{PartialResolver, Template, TemplateContext, TemplateValue};
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
+use quarto_system_runtime::SystemRuntime;
 
 use crate::Result;
 use crate::format::{Format, is_minimal_html};
+
+// =============================================================================
+// Runtime Resolver
+// =============================================================================
+
+/// Resolver that loads partials via `SystemRuntime`, enabling WASM VFS access.
+///
+/// Unlike `FileSystemResolver` (which uses `std::fs`), this resolver goes
+/// through the runtime abstraction layer, so it works in both native and
+/// WASM contexts.
+pub struct RuntimeResolver<'a> {
+    runtime: &'a dyn SystemRuntime,
+}
+
+impl<'a> RuntimeResolver<'a> {
+    /// Create a new resolver backed by the given runtime.
+    pub fn new(runtime: &'a dyn SystemRuntime) -> Self {
+        Self { runtime }
+    }
+}
+
+impl PartialResolver for RuntimeResolver<'_> {
+    fn get_partial(&self, name: &str, base_path: &Path) -> Option<String> {
+        let partial_path = quarto_doctemplate::resolve_partial_path(name, base_path);
+        self.runtime.file_read_string(&partial_path).ok()
+    }
+}
 
 // =============================================================================
 // Template Definitions
@@ -225,23 +255,56 @@ pub fn render_with_template(body: &str, meta: &ConfigValue) -> Result<String> {
         .map_err(|e| crate::error::QuartoError::other(e.to_string()))
 }
 
-/// Render a document using a custom template.
+/// Render a document with a pre-compiled template.
+///
+/// This is the shared rendering core used by all template rendering paths.
+/// It builds the template context (body, metadata, CSS, version, page-layout)
+/// and renders with the given template. Full-template extras (`version`,
+/// `page-layout`) are always injected — unused variables are harmlessly ignored.
 ///
 /// # Arguments
 /// * `template` - A compiled template
 /// * `body` - The rendered body content (HTML)
 /// * `meta` - Document metadata from the Pandoc AST (as ConfigValue)
+/// * `css_paths` - Paths to CSS files (relative to output HTML)
 ///
 /// # Returns
 /// The complete HTML document as a string.
-pub fn render_with_custom_template(
+pub fn render_with_compiled_template(
     template: &Template,
     body: &str,
     meta: &ConfigValue,
+    css_paths: &[String],
 ) -> Result<String> {
     let mut ctx = TemplateContext::new();
     ctx.insert("body", TemplateValue::String(body.to_string()));
-    add_metadata_to_context(meta, &mut ctx);
+
+    // Add metadata, excluding keys that are handled specially or shouldn't
+    // leak into the template context as variables
+    add_metadata_to_context_except(meta, &mut ctx, &["css", "template", "template-partials"]);
+
+    // Build combined CSS list: default resources first, then user-specified
+    let mut css_list: Vec<TemplateValue> = css_paths
+        .iter()
+        .map(|p| TemplateValue::String(p.clone()))
+        .collect();
+
+    // Add any user-specified CSS from metadata
+    if let Some(user_css) = extract_css_from_meta(meta) {
+        css_list.extend(user_css);
+    }
+
+    ctx.insert("css", TemplateValue::List(css_list));
+
+    // Always inject full-template extras — custom templates may reference them,
+    // and unused variables are harmlessly ignored.
+    ctx.insert(
+        "version",
+        TemplateValue::String(env!("CARGO_PKG_VERSION").to_string()),
+    );
+    if ctx.get("page-layout").is_none() {
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+    }
 
     template
         .render(&ctx)
@@ -250,61 +313,20 @@ pub fn render_with_custom_template(
 
 /// Render a document with external resources.
 ///
-/// This function renders the document with the default template and adds
-/// CSS/JS resource paths to the template context. Resource paths from
-/// the `css_paths` parameter are combined with any CSS paths from metadata.
-///
-/// # Arguments
-/// * `body` - The rendered body content (HTML)
-/// * `meta` - Document metadata from the Pandoc AST (as ConfigValue)
-/// * `css_paths` - Paths to CSS files (relative to output HTML)
-///
-/// # Returns
-/// The complete HTML document as a string.
+/// Uses the default (minimal) HTML template with the given CSS paths.
 pub fn render_with_resources(
     body: &str,
     meta: &ConfigValue,
     css_paths: &[String],
 ) -> Result<String> {
     let template = default_html_template()?;
-
-    let mut ctx = TemplateContext::new();
-    ctx.insert("body", TemplateValue::String(body.to_string()));
-
-    // Add metadata, but we'll handle css specially
-    add_metadata_to_context_except(meta, &mut ctx, &["css"]);
-
-    // Build combined CSS list: default resources first, then user-specified
-    let mut css_list: Vec<TemplateValue> = css_paths
-        .iter()
-        .map(|p| TemplateValue::String(p.clone()))
-        .collect();
-
-    // Add any user-specified CSS from metadata
-    if let Some(user_css) = extract_css_from_meta(meta) {
-        css_list.extend(user_css);
-    }
-
-    ctx.insert("css", TemplateValue::List(css_list));
-
-    template
-        .render(&ctx)
-        .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+    render_with_compiled_template(&template, body, meta, css_paths)
 }
 
 /// Render a document with format-based template selection.
 ///
-/// This function selects the appropriate template (minimal or full) based on
+/// Selects the appropriate template (minimal or full) based on
 /// the format configuration, and adds CSS resource paths to the context.
-///
-/// # Arguments
-/// * `body` - The rendered body content (HTML)
-/// * `meta` - Document metadata from the Pandoc AST (as ConfigValue)
-/// * `format` - The output format configuration
-/// * `css_paths` - Paths to CSS files (relative to output HTML)
-///
-/// # Returns
-/// The complete HTML document as a string.
 pub fn render_with_format(
     body: &str,
     meta: &ConfigValue,
@@ -313,43 +335,23 @@ pub fn render_with_format(
 ) -> Result<String> {
     let minimal = is_minimal_html(meta);
     let template = select_template(minimal)?;
-    let use_full_template = !minimal;
+    render_with_compiled_template(&template, body, meta, css_paths)
+}
 
-    let mut ctx = TemplateContext::new();
-    ctx.insert("body", TemplateValue::String(body.to_string()));
-
-    // Add metadata, but we'll handle css specially
-    add_metadata_to_context_except(meta, &mut ctx, &["css"]);
-
-    // Build combined CSS list: default resources first, then user-specified
-    let mut css_list: Vec<TemplateValue> = css_paths
-        .iter()
-        .map(|p| TemplateValue::String(p.clone()))
-        .collect();
-
-    // Add any user-specified CSS from metadata
-    if let Some(user_css) = extract_css_from_meta(meta) {
-        css_list.extend(user_css);
-    }
-
-    ctx.insert("css", TemplateValue::List(css_list));
-
-    // Add full template specific variables
-    if use_full_template {
-        // Add version for generator meta tag
-        ctx.insert(
-            "version",
-            TemplateValue::String(env!("CARGO_PKG_VERSION").to_string()),
-        );
-
-        // Add page-layout with default if not already set
-        if ctx.get("page-layout").is_none() {
-            ctx.insert("page-layout", TemplateValue::String("article".to_string()));
-        }
-    }
-
-    template
-        .render(&ctx)
+/// Compile the appropriate built-in template (minimal or full) with a custom
+/// partial resolver. Used when extension metadata provides `template-partials`
+/// without a custom `template`.
+pub fn compile_builtin_template_with_partials(
+    meta: &ConfigValue,
+    resolver: &impl PartialResolver,
+) -> Result<Template> {
+    let minimal = is_minimal_html(meta);
+    let source = if minimal {
+        MINIMAL_HTML_TEMPLATE
+    } else {
+        FULL_HTML_TEMPLATE
+    };
+    Template::compile_with_resolver(source, std::path::Path::new("<builtin>"), resolver, 0)
         .map_err(|e| crate::error::QuartoError::other(e.to_string()))
 }
 
@@ -614,25 +616,6 @@ mod tests {
         let html = result.unwrap();
         assert!(html.contains(r#"<link rel="stylesheet" href="style1.css">"#));
         assert!(html.contains(r#"<link rel="stylesheet" href="style2.css">"#));
-    }
-
-    #[test]
-    fn test_render_with_custom_template() {
-        let template = Template::compile("Title: $title$\nBody: $body$").unwrap();
-        let meta = ConfigValue::new_map(
-            vec![ConfigMapEntry {
-                key: "title".to_string(),
-                key_source: dummy_source_info(),
-                value: ConfigValue::new_string("Custom", dummy_source_info()),
-            }],
-            dummy_source_info(),
-        );
-
-        let result = render_with_custom_template(&template, "Hello", &meta);
-        assert!(result.is_ok());
-        let output = result.unwrap();
-        assert!(output.contains("Title: Custom"));
-        assert!(output.contains("Body: Hello"));
     }
 
     #[test]
@@ -1556,5 +1539,63 @@ mod tests {
         assert!(html.contains("My Title"));
         // Should have author meta
         assert!(html.contains("<meta name=\"author\" content=\"Jane Doe\">"));
+    }
+
+    // === RuntimeResolver tests ===
+
+    #[test]
+    fn test_runtime_resolver_loads_partial() {
+        use quarto_doctemplate::PartialResolver;
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let template_path = tmp.path().join("template.html");
+        let partial_path = tmp.path().join("header.html");
+
+        std::fs::write(&template_path, "$header()$").unwrap();
+        std::fs::write(&partial_path, "<h1>Header Content</h1>").unwrap();
+
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let resolver = RuntimeResolver::new(&runtime);
+
+        let result = resolver.get_partial("header", &template_path);
+        assert_eq!(result, Some("<h1>Header Content</h1>".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_resolver_returns_none_for_missing() {
+        use quarto_doctemplate::PartialResolver;
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let template_path = tmp.path().join("template.html");
+        std::fs::write(&template_path, "").unwrap();
+
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let resolver = RuntimeResolver::new(&runtime);
+
+        let result = resolver.get_partial("nonexistent", &template_path);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_runtime_resolver_resolves_extension_from_base() {
+        use quarto_doctemplate::PartialResolver;
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let template_path = tmp.path().join("template.html");
+        // Partial without extension — should pick up .html from template
+        let partial_path = tmp.path().join("footer.html");
+
+        std::fs::write(&template_path, "").unwrap();
+        std::fs::write(&partial_path, "<footer>The End</footer>").unwrap();
+
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let resolver = RuntimeResolver::new(&runtime);
+
+        // Request "footer" (no extension) — should resolve to footer.html
+        let result = resolver.get_partial("footer", &template_path);
+        assert_eq!(result, Some("<footer>The End</footer>".to_string()));
     }
 }

@@ -46,7 +46,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use quarto_doctemplate::Template;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::Pandoc;
 use quarto_source_map::SourceContext;
@@ -78,26 +77,12 @@ pub struct HtmlRenderConfig<'a> {
     /// CSS paths to include in the document (relative to the output HTML).
     /// If empty, the default CSS artifact will be used.
     pub css_paths: &'a [String],
-
-    /// Custom template to use. If `None`, the built-in HTML5 template is used.
-    pub template: Option<&'a Template>,
 }
 
 impl<'a> HtmlRenderConfig<'a> {
     /// Create a new configuration with custom CSS paths.
     pub fn with_css(css_paths: &'a [String]) -> Self {
-        Self {
-            css_paths,
-            template: None,
-        }
-    }
-
-    /// Create a new configuration with a custom template.
-    pub fn with_template(template: &'a Template) -> Self {
-        Self {
-            css_paths: &[],
-            template: Some(template),
-        }
+        Self { css_paths }
     }
 }
 
@@ -381,10 +366,8 @@ pub async fn render_qmd_to_html(
 ) -> Result<RenderOutput> {
     // Build pipeline based on config
     // If custom CSS or template is specified, use a customized ApplyTemplateStage
-    let stages = if config.template.is_some() || !config.css_paths.is_empty() {
+    let stages = if !config.css_paths.is_empty() {
         let apply_config = ApplyTemplateConfig::new().with_css_paths(config.css_paths.to_vec());
-        // If custom template is provided, we'd need to pass it too
-        // For now, css_paths is the main customization needed
 
         let stages: Vec<Box<dyn PipelineStage>> = vec![
             Box::new(ParseDocumentStage::new()),

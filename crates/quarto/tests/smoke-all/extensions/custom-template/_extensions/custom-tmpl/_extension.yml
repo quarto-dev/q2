@@ -1,0 +1,6 @@
+title: Custom Template Extension
+author: Test
+contributes:
+  formats:
+    html:
+      template: template.html

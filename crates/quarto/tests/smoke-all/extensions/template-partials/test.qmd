@@ -1,0 +1,15 @@
+---
+title: Partial Test
+_quarto:
+  tests:
+    partial-ext-html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["PARTIAL-HEADER-CONTENT", "<p>Extension provides template partials.</p>"]
+        - []
+      ensureHtmlElements:
+        - ["header.ext-header"]
+        - []
+---
+
+Extension provides template partials.
