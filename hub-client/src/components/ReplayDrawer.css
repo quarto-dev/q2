@@ -90,6 +90,12 @@
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
 }
 
+.replay-drawer__actor {
+  font-size: 11px;
+  color: #888;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+}
+
 .replay-drawer__timestamp {
   font-size: 11px;
   color: #666;

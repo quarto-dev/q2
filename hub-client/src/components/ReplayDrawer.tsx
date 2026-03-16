@@ -156,6 +156,11 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
           <span className="replay-drawer__position">
             {state.currentIndex + 1} of {state.historyLength}
           </span>
+          {state.actor && (
+            <span className="replay-drawer__actor" title={`Actor: ${state.actor}`}>
+              {state.actor.slice(0, 8)}
+            </span>
+          )}
           {state.timestamp && (
             <span className="replay-drawer__timestamp">
               {formatFullTimestamp(state.timestamp)}

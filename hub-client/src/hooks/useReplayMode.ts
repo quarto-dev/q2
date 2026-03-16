@@ -18,6 +18,7 @@ export interface ReplayState {
   playbackSpeed: PlaybackSpeed;
   currentContent: string;
   timestamp: number | null;
+  actor: string | null; // short hash of the actor who made the change
   chunkAuthors: number[]; // distinct author count per equal-width chunk (0 = pending)
 }
 
@@ -44,6 +45,7 @@ const INITIAL_STATE: ReplayState = {
   playbackSpeed: 1,
   currentContent: '',
   timestamp: null,
+  actor: null,
   chunkAuthors: [],
 };
 
@@ -104,22 +106,26 @@ export function useReplayMode(
     return text;
   }, []);
 
-  const getTimestampAtIndex = useCallback((index: number): number | null => {
+  const getMetadataAtIndex = useCallback((index: number): { timestamp: number | null; actor: string | null } => {
     const handle = handleRef.current;
     const history = historyRef.current;
-    if (!handle || index < 0 || index >= history.length) return null;
+    if (!handle || index < 0 || index >= history.length) return { timestamp: null, actor: null };
     try {
       // metadata() expects a single change hash string.
       // history entries are UrlHeads (string[]), so extract the first element.
       const heads = history[index];
       const changeHash = Array.isArray(heads) ? heads[0] : heads;
-      if (typeof changeHash !== 'string') return null;
+      if (typeof changeHash !== 'string') return { timestamp: null, actor: null };
       const meta = asViewable(handle).metadata(changeHash);
-      return meta?.time ?? null;
+      return { timestamp: meta?.time ?? null, actor: meta?.actor ?? null };
     } catch {
-      return null;
+      return { timestamp: null, actor: null };
     }
   }, []);
+
+  const getTimestampAtIndex = useCallback((index: number): number | null => {
+    return getMetadataAtIndex(index).timestamp;
+  }, [getMetadataAtIndex]);
 
   const enter = useCallback(() => {
     if (!filePath) return;
@@ -173,6 +179,7 @@ export function useReplayMode(
       chunkAuthors[i] = actors.size;
     }
 
+    const lastMeta = getMetadataAtIndex(lastIndex);
     setState({
       isActive: true,
       historyLength: history.length,
@@ -180,10 +187,11 @@ export function useReplayMode(
       isPlaying: false,
       playbackSpeed: 1,
       currentContent: getContentAtIndex(lastIndex),
-      timestamp: getTimestampAtIndex(lastIndex),
+      timestamp: lastMeta.timestamp,
+      actor: lastMeta.actor,
       chunkAuthors,
     });
-  }, [filePath, getContentAtIndex, getTimestampAtIndex]);
+  }, [filePath, getContentAtIndex, getMetadataAtIndex]);
 
   const seekTo = useCallback((index: number) => {
     const history = historyRef.current;
@@ -192,15 +200,16 @@ export function useReplayMode(
     const clamped = Math.max(0, Math.min(index, history.length - 1));
     indexRef.current = clamped;
     const content = getContentAtIndex(clamped);
-    const timestamp = getTimestampAtIndex(clamped);
+    const meta = getMetadataAtIndex(clamped);
 
     setState(prev => ({
       ...prev,
       currentIndex: clamped,
       currentContent: content,
-      timestamp,
+      timestamp: meta.timestamp,
+      actor: meta.actor,
     }));
-  }, [getContentAtIndex, getTimestampAtIndex]);
+  }, [getContentAtIndex, getMetadataAtIndex]);
 
   const stopPlaying = useCallback(() => {
     clearPlayInterval();
@@ -222,12 +231,13 @@ export function useReplayMode(
         }
         indexRef.current = nextIndex;
         const content = getContentAtIndex(nextIndex);
-        const timestamp = getTimestampAtIndex(nextIndex);
+        const meta = getMetadataAtIndex(nextIndex);
         setState(prev => ({
           ...prev,
           currentIndex: nextIndex,
           currentContent: content,
-          timestamp,
+          timestamp: meta.timestamp,
+          actor: meta.actor,
         }));
       } catch (e) {
         console.error('[useReplayMode] Playback error, stopping:', e);
@@ -235,7 +245,7 @@ export function useReplayMode(
         setState(prev => ({ ...prev, isPlaying: false }));
       }
     }, interval);
-  }, [clearPlayInterval, getContentAtIndex, getTimestampAtIndex]);
+  }, [clearPlayInterval, getContentAtIndex, getMetadataAtIndex]);
 
   const play = useCallback(() => {
     const history = historyRef.current;

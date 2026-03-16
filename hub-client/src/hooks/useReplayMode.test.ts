@@ -32,7 +32,7 @@ const mockViewText = vi.mocked(viewText);
 // history() returns UrlHeads[] where each UrlHeads is string[].
 // metadata() receives a single change hash string (first element of UrlHeads).
 // Also configures mockCloneHandleDoc and mockViewText for the given texts.
-function createMockHandle(texts: string[], timestamps?: number[]) {
+function createMockHandle(texts: string[], timestamps?: number[], actors?: string[]) {
   const historyHeads = texts.map((_, i) => [`head-${i}`]);
 
   const handle = {
@@ -42,7 +42,8 @@ function createMockHandle(texts: string[], timestamps?: number[]) {
       const index = historyHeads.findIndex(h => h[0] === changeHash);
       if (index < 0) return undefined;
       const ts = timestamps?.[index] ?? 1000000 + index * 1000;
-      return { time: ts };
+      const actor = actors?.[index] ?? `actor${index}abcdef0123456789`;
+      return { time: ts, actor };
     }),
     doc: vi.fn(() => ({ text: texts[texts.length - 1] })),
   };
@@ -441,7 +442,7 @@ describe('useReplayMode', () => {
     });
   });
 
-  describe('timestamp', () => {
+  describe('timestamp and actor', () => {
     it('provides timestamp for current change', () => {
       const timestamps = [1000000, 1001000, 1002000];
       const handle = createMockHandle(['a', 'b', 'c'], timestamps);
@@ -452,6 +453,18 @@ describe('useReplayMode', () => {
       act(() => { result.current.controls.seekTo(1); });
 
       expect(result.current.state.timestamp).toBe(1001000);
+    });
+
+    it('provides actor hash for current change', () => {
+      const actors = ['aaa111', 'bbb222', 'ccc333'];
+      const handle = createMockHandle(['a', 'b', 'c'], undefined, actors);
+      mockGetFileHandle.mockReturnValue(handle as never);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      act(() => { result.current.controls.seekTo(1); });
+
+      expect(result.current.state.actor).toBe('bbb222');
     });
   });
 });

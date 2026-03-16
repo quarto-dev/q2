@@ -18,6 +18,7 @@ function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
     playbackSpeed: 1,
     currentContent: '',
     timestamp: null,
+    actor: null,
     chunkAuthors: [],
     ...overrides,
   };
@@ -72,6 +73,7 @@ describe('ReplayDrawer', () => {
       currentIndex: 42,
       currentContent: 'hello',
       timestamp: 1710000000,
+      actor: 'abcdef0123456789abcdef0123456789',
       chunkAuthors: Array.from({ length: 10 }, () => 1),
     });
 
@@ -105,6 +107,11 @@ describe('ReplayDrawer', () => {
     it('renders position indicator', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
       expect(screen.getByText(/43 of 100/)).toBeDefined();
+    });
+
+    it('renders actor short hash', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      expect(screen.getByText('abcdef01')).toBeDefined();
     });
 
     it('Apply button calls controls.apply()', () => {
