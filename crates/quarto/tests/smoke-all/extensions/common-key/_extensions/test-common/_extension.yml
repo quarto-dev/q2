@@ -1,0 +1,8 @@
+title: Test Common Extension
+author: Test
+contributes:
+  formats:
+    common:
+      toc: true
+    html:
+      number-sections: true

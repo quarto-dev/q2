@@ -16,6 +16,8 @@ use std::path::PathBuf;
 
 use quarto_pandoc_types::ConfigValue;
 
+use crate::extension::discover::parse_format_descriptor;
+
 /// Format identifier enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FormatIdentifier {
@@ -176,7 +178,7 @@ fn output_extension_for(id: FormatIdentifier) -> String {
 /// A complete format specification
 #[derive(Debug, Clone)]
 pub struct Format {
-    /// Format identifier
+    /// Format identifier (the base format enum, e.g., Html, Pdf)
     pub identifier: FormatIdentifier,
 
     /// The original format string (e.g., "q2-slides", "acm-html", "html")
@@ -229,6 +231,36 @@ impl Format {
             display_name: "DOCX".to_string(),
             output_extension: "docx".to_string(),
             native_pipeline: false,
+        }
+    }
+
+    /// Create a Format from a format string like "acm-html" or "html".
+    ///
+    /// Uses `parse_format_descriptor()` to split the extension name from the
+    /// base format. For example, "acm-pdf" becomes a PDF format with
+    /// `extension_name = Some("acm")` and `target_format = "acm-pdf"`.
+    pub fn from_format_string(format_str: &str) -> Self {
+        let desc = parse_format_descriptor(format_str);
+        let identifier =
+            FormatIdentifier::try_from(desc.base_format.as_str()).unwrap_or(FormatIdentifier::Html);
+        let native_pipeline = identifier.is_native();
+        let output_extension = match desc.base_format.as_str() {
+            "typst" => "typ".to_string(),
+            other => other.to_string(),
+        };
+        let display_name = if desc.extension_name.is_some() {
+            format_str.to_string()
+        } else {
+            identifier.as_str().to_uppercase()
+        };
+
+        Self {
+            identifier,
+            target_format: format_str.to_string(),
+            extension_name: desc.extension_name,
+            display_name,
+            output_extension,
+            native_pipeline,
         }
     }
 
@@ -552,6 +584,7 @@ mod tests {
 
         assert_eq!(format.identifier, FormatIdentifier::Html);
         assert_eq!(format.target_format, "html");
+        assert!(format.extension_name.is_none());
         assert_eq!(format.extension_name, None);
         assert_eq!(format.display_name, "HTML");
         assert_eq!(format.output_extension, "html");
@@ -564,6 +597,7 @@ mod tests {
 
         assert_eq!(format.identifier, FormatIdentifier::Pdf);
         assert_eq!(format.target_format, "pdf");
+        assert!(format.extension_name.is_none());
         assert_eq!(format.extension_name, None);
         assert_eq!(format.display_name, "PDF");
         assert_eq!(format.output_extension, "pdf");
@@ -576,6 +610,7 @@ mod tests {
 
         assert_eq!(format.identifier, FormatIdentifier::Docx);
         assert_eq!(format.target_format, "docx");
+        assert!(format.extension_name.is_none());
         assert_eq!(format.extension_name, None);
         assert_eq!(format.display_name, "DOCX");
         assert_eq!(format.output_extension, "docx");
@@ -634,6 +669,7 @@ mod tests {
 
         assert_eq!(format.identifier, FormatIdentifier::Html);
         assert_eq!(format.target_format, "html");
+        assert!(format.extension_name.is_none());
         assert_eq!(format.extension_name, None);
         assert_eq!(format.display_name, "HTML");
         assert_eq!(format.output_extension, "html");
@@ -651,6 +687,54 @@ mod tests {
         assert_eq!(original.display_name, cloned.display_name);
         assert_eq!(original.output_extension, cloned.output_extension);
         assert_eq!(original.native_pipeline, cloned.native_pipeline);
+    }
+
+    // === from_format_string tests ===
+
+    #[test]
+    fn test_from_format_string_plain_html() {
+        let format = Format::from_format_string("html");
+        assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.target_format, "html");
+        assert!(format.extension_name.is_none());
+        assert_eq!(format.display_name, "HTML");
+        assert_eq!(format.output_extension, "html");
+        assert!(format.native_pipeline);
+    }
+
+    #[test]
+    fn test_from_format_string_extension_pdf() {
+        let format = Format::from_format_string("acm-pdf");
+        assert_eq!(format.identifier, FormatIdentifier::Pdf);
+        assert_eq!(format.target_format, "acm-pdf");
+        assert_eq!(format.extension_name.as_deref(), Some("acm"));
+        assert_eq!(format.display_name, "acm-pdf");
+        assert_eq!(format.output_extension, "pdf");
+        assert!(!format.native_pipeline);
+    }
+
+    #[test]
+    fn test_from_format_string_multi_hyphen() {
+        let format = Format::from_format_string("my-journal-html");
+        assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.target_format, "my-journal-html");
+        assert_eq!(format.extension_name.as_deref(), Some("my-journal"));
+        assert!(format.native_pipeline);
+    }
+
+    #[test]
+    fn test_from_format_string_unknown_falls_back_to_html() {
+        let format = Format::from_format_string("unknown");
+        assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.target_format, "unknown");
+        assert!(format.extension_name.is_none());
+    }
+
+    #[test]
+    fn test_from_format_string_typst_extension() {
+        let format = Format::from_format_string("typst");
+        assert_eq!(format.identifier, FormatIdentifier::Typst);
+        assert_eq!(format.output_extension, "typ");
     }
 
     // === parse_format_descriptor tests ===

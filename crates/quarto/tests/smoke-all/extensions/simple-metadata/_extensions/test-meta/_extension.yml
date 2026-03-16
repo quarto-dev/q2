@@ -1,0 +1,7 @@
+title: Test Meta Extension
+author: Test
+contributes:
+  formats:
+    html:
+      toc: true
+      number-sections: true

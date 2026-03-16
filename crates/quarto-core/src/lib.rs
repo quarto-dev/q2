@@ -39,6 +39,7 @@
 pub mod artifact;
 pub mod engine;
 pub mod error;
+pub mod extension;
 pub mod filter_resolve;
 pub mod format;
 pub mod pipeline;

@@ -26,6 +26,7 @@ use super::cancellation::Cancellation;
 use super::error::PipelineError;
 use super::observer::{NoopObserver, PipelineObserver};
 use crate::artifact::ArtifactStore;
+use crate::extension::Extension;
 use crate::format::Format;
 use crate::project::{DocumentInfo, ProjectContext};
 
@@ -62,6 +63,9 @@ pub struct StageContext {
     /// Temporary directory for this pipeline run
     pub temp_dir: PathBuf,
 
+    /// Extensions discovered for this document
+    pub extensions: Vec<Extension>,
+
     // === Mutable state ===
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
@@ -96,12 +100,23 @@ impl StageContext {
             .map_err(|e| PipelineError::other(format!("Failed to create temp directory: {}", e)))?
             .into_path();
 
+        let extensions = crate::extension::discover_extensions(
+            &document.input,
+            if project.is_single_file {
+                None
+            } else {
+                Some(&project.dir)
+            },
+            runtime.as_ref(),
+        );
+
         Ok(Self {
             runtime,
             format,
             project,
             document,
             temp_dir,
+            extensions,
             artifacts: ArtifactStore::new(),
             diagnostics: Vec::new(),
             observer: Arc::new(NoopObserver),

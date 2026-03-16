@@ -25,6 +25,8 @@ use quarto_config::{MergedConfig, resolve_format_config};
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
 use quarto_source_map::SourceInfo;
 
+use crate::extension::Extension;
+use crate::extension::discover::{find_extension, parse_format_descriptor};
 use crate::project::{adjust_paths_to_document_dir, directory_metadata_for_document};
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -73,6 +75,39 @@ fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
         value: kind,
         source_info,
         merge_op: MergeOp::default(),
+    }
+}
+
+/// Build the extension metadata layer for the target format.
+///
+/// Parses the target format name to extract an extension reference (e.g.,
+/// "acm-html" → extension "acm", base format "html"), finds the matching
+/// extension, and returns its format-specific metadata as a ConfigValue.
+fn build_extension_metadata_layer(
+    extensions: &[Extension],
+    target_format: &str,
+) -> Option<ConfigValue> {
+    let desc = parse_format_descriptor(target_format);
+
+    let ext_name = desc.extension_name.as_deref()?;
+    let ext = find_extension(ext_name, extensions)?;
+
+    // Look up format metadata: try base format first, then exact match
+    let base_meta = ext.contributes.formats.get(&desc.base_format);
+
+    // Also check for exact format name match (e.g., "acm-html" as a key)
+    let exact_meta = ext.contributes.formats.get(target_format);
+
+    match (base_meta, exact_meta) {
+        (Some(base), Some(exact)) => {
+            // Merge: base is lower priority, exact match is higher
+            let layers: Vec<&ConfigValue> = vec![base, exact];
+            let merged = MergedConfig::new(layers);
+            Some(merged.materialize().unwrap_or_else(|_| exact.clone()))
+        }
+        (Some(base), None) => Some(base.clone()),
+        (None, Some(exact)) => Some(exact.clone()),
+        (None, None) => None,
     }
 }
 
@@ -131,20 +166,23 @@ impl PipelineStage for MetadataMergeStage {
             ));
         };
 
-        // Merge project config, directory metadata, document metadata, and
-        // runtime metadata. All metadata layers are flattened for the target
-        // format before merging. This extracts format-specific settings
-        // (e.g., format.html.*) and merges them with top-level settings.
+        // Merge project config, extension metadata, directory metadata,
+        // document metadata, and runtime metadata. All metadata layers are
+        // flattened for the target format before merging.
         //
         // Precedence (lowest to highest):
-        // 1. Project top-level settings
-        // 2. Project format-specific settings (format.{target}.*)
+        // 1. Project settings (flattened for format)
+        // 2. Extension metadata (flattened for format)
         // 3. Directory _metadata.yml layers (root → leaf, deeper wins)
-        // 4. Document top-level settings
-        // 5. Document format-specific settings (format.{target}.*)
-        // 6. Runtime metadata (e.g., --metadata flags, WASM preview settings)
+        // 4. Document settings (flattened for format)
+        // 5. Runtime metadata (e.g., --metadata flags, WASM preview settings)
         let runtime_meta_json = ctx.runtime.runtime_metadata();
-        let target_format = ctx.format.identifier.as_str();
+        // base_format is the Pandoc format name (e.g., "html") used to flatten
+        // format-specific settings from project/directory/document YAML.
+        let base_format = ctx.format.identifier.as_str();
+        // target_format is the full format string (e.g., "acm-html") used
+        // to look up extension metadata.
+        let target_format = &ctx.format.target_format;
 
         // Layer 1: Project metadata (flattened for format)
         // Adjust !path values to be relative to document directory
@@ -155,34 +193,40 @@ impl PipelineStage for MetadataMergeStage {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| ctx.project.dir.clone());
         let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
-            let mut flattened = resolve_format_config(m, target_format);
+            let mut flattened = resolve_format_config(m, base_format);
             adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
             flattened
         });
 
-        // Layer 2: Directory metadata layers (each flattened for format)
+        // Layer 2: Extension metadata (uses full target_format for lookup)
+        let extension_layer = build_extension_metadata_layer(&ctx.extensions, target_format);
+
+        // Layer 3: Directory metadata layers (each flattened for base format)
         let dir_layers: Vec<_> = if !ctx.project.is_single_file {
             directory_metadata_for_document(&ctx.project, &ctx.document.input, ctx.runtime.as_ref())
                 .unwrap_or_default()
                 .into_iter()
-                .map(|m| resolve_format_config(&m, target_format))
+                .map(|m| resolve_format_config(&m, base_format))
                 .collect()
         } else {
             vec![]
         };
 
-        // Layer 3: Document metadata (flattened for format)
-        let doc_layer = resolve_format_config(&doc.ast.meta, target_format);
+        // Layer 4: Document metadata (flattened for base format)
+        let doc_layer = resolve_format_config(&doc.ast.meta, base_format);
 
-        // Layer 4: Runtime metadata (flattened for format)
+        // Layer 5: Runtime metadata (flattened for base format)
         let runtime_layer = runtime_meta_json
             .as_ref()
-            .map(|json| resolve_format_config(&json_to_config_value(json), target_format));
+            .map(|json| resolve_format_config(&json_to_config_value(json), base_format));
 
-        // Build merge layers: project → dir[0] → dir[1] → ... → document → runtime
+        // Build merge layers: project → extension → dir[0..] → document → runtime
         let mut layers: Vec<&ConfigValue> = Vec::new();
         if let Some(ref proj) = project_layer {
             layers.push(proj);
+        }
+        if let Some(ref ext) = extension_layer {
+            layers.push(ext);
         }
         for dir_meta in &dir_layers {
             layers.push(dir_meta);
@@ -196,6 +240,11 @@ impl PipelineStage for MetadataMergeStage {
         let layer_count = layers.len();
         let merged = MergedConfig::new(layers);
         if let Ok(materialized) = merged.materialize() {
+            let has_ext = if extension_layer.is_some() {
+                " + ext"
+            } else {
+                ""
+            };
             let has_runtime = if runtime_layer.is_some() {
                 " + runtime"
             } else {
@@ -204,9 +253,10 @@ impl PipelineStage for MetadataMergeStage {
             trace_event!(
                 ctx,
                 EventLevel::Debug,
-                "merged {} metadata layers for format '{}' (project + {} dir + doc{})",
+                "merged {} metadata layers for format '{}' (project{} + {} dir + doc{})",
                 layer_count,
                 target_format,
+                has_ext,
                 dir_layers.len(),
                 has_runtime
             );
@@ -1421,5 +1471,179 @@ mod tests {
             Some("html"),
             "format name should be injected after merge"
         );
+    }
+
+    // ============================================================================
+    // Extension Metadata Merge Tests
+    // ============================================================================
+
+    use crate::extension::Extension;
+    use crate::extension::types::{Contributes, ExtensionId};
+
+    fn make_extension(
+        name: &str,
+        formats: std::collections::HashMap<String, ConfigValue>,
+    ) -> Extension {
+        Extension {
+            id: ExtensionId::new(name),
+            title: name.to_string(),
+            author: "Test".to_string(),
+            version: None,
+            quarto_required: None,
+            path: PathBuf::from("/extensions").join(name),
+            contributes: Contributes {
+                formats,
+                ..Default::default()
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extension_contributes_format_metadata() {
+        // Extension contributes formats.html.toc: true, document has no toc
+        // → merged metadata should have toc: true
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        // Use from_format_string so target_format is "test-ext-html"
+        let format = Format::from_format_string("test-ext-html");
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+
+        // Inject extension with format name "test-ext-html" → extension "test-ext", base "html"
+        let mut formats = std::collections::HashMap::new();
+        formats.insert(
+            "html".to_string(),
+            config_map(vec![("toc", config_bool(true))]),
+        );
+        ctx.extensions = vec![make_extension("test-ext", formats)];
+
+        // Now run the full MetadataMergeStage — it should pick up extension metadata
+        let stage = MetadataMergeStage::new();
+
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+
+        if let PipelineData::DocumentAst(doc_ast) = output {
+            let toc = doc_ast.ast.meta.get("toc").and_then(|v| v.as_bool());
+            assert_eq!(
+                toc,
+                Some(true),
+                "Extension toc:true should appear in merged metadata"
+            );
+        } else {
+            panic!("Expected DocumentAst output");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extension_metadata_not_applied_for_plain_format() {
+        // When format is just "html" (no extension prefix), no extension layer
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+
+        let mut formats = std::collections::HashMap::new();
+        formats.insert(
+            "html".to_string(),
+            config_map(vec![("toc", config_bool(true))]),
+        );
+        ctx.extensions = vec![make_extension("test-ext", formats)];
+
+        let stage = MetadataMergeStage::new();
+
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // toc should NOT be set because format is "html" not "test-ext-html"
+        assert!(result.ast.meta.get("toc").is_none());
+    }
+
+    #[test]
+    fn test_build_extension_metadata_layer_basic() {
+        let mut formats = std::collections::HashMap::new();
+        formats.insert(
+            "html".to_string(),
+            config_map(vec![
+                ("toc", config_bool(true)),
+                ("number-sections", config_bool(true)),
+            ]),
+        );
+        let ext = make_extension("acm", formats);
+
+        let layer = build_extension_metadata_layer(&[ext], "acm-html");
+        assert!(layer.is_some());
+        let cv = layer.unwrap();
+        assert_eq!(cv.get("toc").unwrap().as_bool(), Some(true));
+        assert_eq!(cv.get("number-sections").unwrap().as_bool(), Some(true));
+    }
+
+    #[test]
+    fn test_build_extension_metadata_layer_no_match() {
+        let mut formats = std::collections::HashMap::new();
+        formats.insert(
+            "html".to_string(),
+            config_map(vec![("toc", config_bool(true))]),
+        );
+        let ext = make_extension("acm", formats);
+
+        // Wrong extension name
+        let layer = build_extension_metadata_layer(&[ext.clone()], "other-html");
+        assert!(layer.is_none());
+
+        // Plain format (no extension prefix)
+        let layer = build_extension_metadata_layer(&[ext.clone()], "html");
+        assert!(layer.is_none());
+
+        // Right extension but wrong base format
+        let layer = build_extension_metadata_layer(&[ext], "acm-pdf");
+        assert!(layer.is_none());
+    }
+
+    #[test]
+    fn test_build_extension_metadata_layer_no_extensions() {
+        let layer = build_extension_metadata_layer(&[], "acm-html");
+        assert!(layer.is_none());
+    }
+
+    #[test]
+    fn test_no_extensions_existing_behavior_unchanged() {
+        // Regression test: with no extensions, behavior is identical to before
+        let layer = build_extension_metadata_layer(&[], "html");
+        assert!(layer.is_none());
     }
 }
