@@ -57,7 +57,7 @@ use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, EngineExecutionStage,
     LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
-    RenderHtmlBodyStage, StageContext,
+    RenderHtmlBodyStage, StageContext, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -131,16 +131,20 @@ pub struct AstOutput {
 /// 2. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
 /// 3. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 4. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 5. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 6. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 7. `ApplyTemplateStage` - Apply HTML template
+/// 5. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 6. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 7. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 8. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 9. `ApplyTemplateStage` - Apply HTML template
 pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
     vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(EngineExecutionStage::new()),
         Box::new(MetadataMergeStage::new()),
         Box::new(CompileThemeCssStage::new()),
+        Box::new(UserFiltersStage::pre()),
         Box::new(AstTransformsStage::new()),
+        Box::new(UserFiltersStage::post()),
         Box::new(RenderHtmlBodyStage::new()),
         Box::new(ApplyTemplateStage::new()),
     ]
@@ -153,9 +157,11 @@ pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
 /// 2. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
 /// 3. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 4. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 5. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 6. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 7. `ApplyTemplateStage` - Apply HTML template
+/// 5. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 6. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 7. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 8. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 9. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -381,7 +387,9 @@ pub async fn render_qmd_to_html(
             Box::new(EngineExecutionStage::new()),
             Box::new(MetadataMergeStage::new()),
             Box::new(CompileThemeCssStage::new()),
+            Box::new(UserFiltersStage::pre()),
             Box::new(AstTransformsStage::new()),
+            Box::new(UserFiltersStage::post()),
             Box::new(RenderHtmlBodyStage::new()),
             Box::new(ApplyTemplateStage::with_config(apply_config)),
         ];
@@ -680,20 +688,22 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 7);
+        assert_eq!(stages.len(), 9);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "engine-execution");
         assert_eq!(stages[2].name(), "metadata-merge");
         assert_eq!(stages[3].name(), "compile-theme-css");
-        assert_eq!(stages[4].name(), "ast-transforms");
-        assert_eq!(stages[5].name(), "render-html-body");
-        assert_eq!(stages[6].name(), "apply-template");
+        assert_eq!(stages[4].name(), "user-filters-pre");
+        assert_eq!(stages[5].name(), "ast-transforms");
+        assert_eq!(stages[6].name(), "user-filters-post");
+        assert_eq!(stages[7].name(), "render-html-body");
+        assert_eq!(stages[8].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 7);
+        assert_eq!(pipeline.len(), 9);
     }
 
     #[test]

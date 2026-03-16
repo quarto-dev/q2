@@ -1,0 +1,16 @@
+---
+title: Post Filter Test
+format: html
+filters:
+  - quarto
+  - uppercase.lua
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["HELLO WORLD"]
+        - ["hello world"]
+---
+
+hello world

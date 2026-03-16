@@ -13,6 +13,7 @@
 //! - [`ParseDocumentStage`] - Parse QMD content to Pandoc AST
 //! - [`EngineExecutionStage`] - Execute code cells via knitr/jupyter/markdown
 //! - [`MetadataMergeStage`] - Merge project/directory/document/runtime metadata
+//! - [`UserFiltersStage`] - Apply user-specified filters (Lua, JSON, citeproc)
 //! - [`AstTransformsStage`] - Apply Quarto-specific AST transforms
 //! - [`RenderHtmlBodyStage`] - Render AST to HTML body
 //! - [`ApplyTemplateStage`] - Apply HTML template to rendered body
@@ -24,6 +25,7 @@ mod engine_execution;
 mod metadata_merge;
 mod parse_document;
 mod render_html;
+mod user_filters;
 
 pub use apply_template::{ApplyTemplateConfig, ApplyTemplateStage};
 pub use ast_transforms::AstTransformsStage;
@@ -32,3 +34,4 @@ pub use engine_execution::EngineExecutionStage;
 pub use metadata_merge::MetadataMergeStage;
 pub use parse_document::ParseDocumentStage;
 pub use render_html::RenderHtmlBodyStage;
+pub use user_filters::UserFiltersStage;
