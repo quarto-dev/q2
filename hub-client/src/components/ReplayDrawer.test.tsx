@@ -19,7 +19,7 @@ function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
     currentContent: '',
     timestamp: null,
     actor: null,
-    chunkAuthors: [],
+    chunkActors: [],
     ...overrides,
   };
 }
@@ -74,7 +74,7 @@ describe('ReplayDrawer', () => {
       currentContent: 'hello',
       timestamp: 1710000000,
       actor: 'abcdef0123456789abcdef0123456789',
-      chunkAuthors: Array.from({ length: 10 }, () => 1),
+      chunkActors: Array.from({ length: 10 }, () => [{ actor: 'abcdef0123456789abcdef0123456789', fraction: 1 }]),
     });
 
     it('renders transport controls when active', () => {
@@ -163,7 +163,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 50,
       currentContent: 'test',
-      chunkAuthors: Array.from({ length: 10 }, () => 1),
+      chunkActors: Array.from({ length: 10 }, () => [{ actor: 'actor1', fraction: 1 }]),
     });
 
     it('Space toggles play/pause', () => {

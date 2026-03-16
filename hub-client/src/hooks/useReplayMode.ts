@@ -10,6 +10,11 @@ import {
 export const PLAYBACK_SPEEDS = [1, 2, 4] as const;
 export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
 
+export interface ChunkActorShare {
+  actor: string;
+  fraction: number;
+}
+
 export interface ReplayState {
   isActive: boolean;
   historyLength: number;
@@ -19,7 +24,13 @@ export interface ReplayState {
   currentContent: string;
   timestamp: number | null;
   actor: string | null; // short hash of the actor who made the change
-  chunkAuthors: number[]; // distinct author count per equal-width chunk (0 = pending)
+  chunkActors: ChunkActorShare[][]; // per-chunk actor fractions for the waveform
+}
+
+/** Deterministic color from an actor hash string. */
+export function actorColor(actor: string): string {
+  const hue = parseInt(actor.slice(0, 6), 16) % 360;
+  return `hsl(${hue}, 60%, 55%)`;
 }
 
 export interface ReplayControls {
@@ -46,7 +57,7 @@ const INITIAL_STATE: ReplayState = {
   currentContent: '',
   timestamp: null,
   actor: null,
-  chunkAuthors: [],
+  chunkActors: [],
 };
 
 // Base interval at 1x speed; divided by playback speed multiplier
@@ -153,30 +164,42 @@ export function useReplayMode(
     const lastIndex = history.length - 1;
     indexRef.current = lastIndex;
 
-    // Split history into ≤100 equal chunks for the author-color gradient.
+    // Split history into ≤100 equal chunks for the actor-colored waveform.
     const MAX_CHUNKS = 100;
     const chunkCount = Math.min(history.length, MAX_CHUNKS);
     const chunkSize = history.length / chunkCount;
 
-    // Compute author counts synchronously — ≤500 metadata() calls (100 chunks × 5 samples).
+    // Collect actor frequencies per chunk — ≤500 metadata() calls (100 chunks × 5 samples).
     const SAMPLES_PER_CHUNK = 5;
     const viewable = asViewable(handle);
-    const chunkAuthors = new Array<number>(chunkCount);
+    const chunkActors: ChunkActorShare[][] = new Array(chunkCount);
+
     for (let i = 0; i < chunkCount; i++) {
       const startIdx = Math.round(i * chunkSize);
       const endIdx = Math.min(Math.round((i + 1) * chunkSize), history.length);
       const span = endIdx - startIdx;
       const step = Math.max(1, Math.floor(span / SAMPLES_PER_CHUNK));
-      const actors = new Set<string>();
+      const counts = new Map<string, number>();
+      let totalSamples = 0;
       for (let j = startIdx; j < endIdx; j += step) {
         const heads = history[j];
         const changeHash = Array.isArray(heads) ? heads[0] : heads;
         if (typeof changeHash === 'string') {
           const meta = viewable.metadata(changeHash);
-          if (meta?.actor) actors.add(meta.actor);
+          if (meta?.actor) {
+            counts.set(meta.actor, (counts.get(meta.actor) ?? 0) + 1);
+            totalSamples++;
+          }
         }
       }
-      chunkAuthors[i] = actors.size;
+      if (totalSamples === 0) {
+        chunkActors[i] = [];
+      } else {
+        chunkActors[i] = Array.from(counts.entries()).map(([actor, count]) => ({
+          actor,
+          fraction: count / totalSamples,
+        }));
+      }
     }
 
     const lastMeta = getMetadataAtIndex(lastIndex);
@@ -189,7 +212,7 @@ export function useReplayMode(
       currentContent: getContentAtIndex(lastIndex),
       timestamp: lastMeta.timestamp,
       actor: lastMeta.actor,
-      chunkAuthors,
+      chunkActors,
     });
   }, [filePath, getContentAtIndex, getMetadataAtIndex]);
 

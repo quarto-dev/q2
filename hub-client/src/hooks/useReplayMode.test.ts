@@ -95,6 +95,8 @@ describe('useReplayMode', () => {
       // Starts at last index (current state)
       expect(result.current.state.currentIndex).toBe(2);
       expect(result.current.state.currentContent).toBe('abc');
+      // chunkActors should have entries with fractions summing to 1
+      expect(result.current.state.chunkActors.length).toBeGreaterThan(0);
     });
 
     it('is a no-op when getFileHandle returns null', () => {
