@@ -64,6 +64,40 @@ const INITIAL_STATE: ReplayState = {
 // Base interval at 1x speed; divided by playback speed multiplier
 const PLAY_BASE_INTERVAL_MS = 200;
 
+/** Compute per-chunk actor frequency data for the waveform visualization. */
+function computeChunkActors(session: ReplaySession): ChunkActorShare[][] {
+  const MAX_CHUNKS = 100;
+  const SAMPLES_PER_CHUNK = 5;
+  const chunkCount = Math.min(session.length, MAX_CHUNKS);
+  const chunkSize = session.length / chunkCount;
+  const chunkActors: ChunkActorShare[][] = new Array(chunkCount);
+
+  for (let i = 0; i < chunkCount; i++) {
+    const startIdx = Math.round(i * chunkSize);
+    const endIdx = Math.min(Math.round((i + 1) * chunkSize), session.length);
+    const span = endIdx - startIdx;
+    const step = Math.max(1, Math.floor(span / SAMPLES_PER_CHUNK));
+    const counts = new Map<string, number>();
+    let totalSamples = 0;
+    for (let j = startIdx; j < endIdx; j += step) {
+      const meta = session.getMetadataAt(j);
+      if (meta.actor) {
+        counts.set(meta.actor, (counts.get(meta.actor) ?? 0) + 1);
+        totalSamples++;
+      }
+    }
+    if (totalSamples === 0) {
+      chunkActors[i] = [];
+    } else {
+      chunkActors[i] = Array.from(counts.entries()).map(([actor, count]) => ({
+        actor,
+        fraction: count / totalSamples,
+      }));
+    }
+  }
+  return chunkActors;
+}
+
 export function useReplayMode(
   filePath: string | null,
 ): { state: ReplayState; controls: ReplayControls; isActiveRef: React.RefObject<boolean> } {
@@ -132,40 +166,8 @@ export function useReplayMode(
     const lastIndex = session.length - 1;
     indexRef.current = lastIndex;
 
-    // Split history into ≤100 equal chunks for the actor-colored waveform.
-    const MAX_CHUNKS = 100;
-    const chunkCount = Math.min(session.length, MAX_CHUNKS);
-    const chunkSize = session.length / chunkCount;
-
-    // Collect actor frequencies per chunk — ≤500 metadata() calls (100 chunks × 5 samples).
-    const SAMPLES_PER_CHUNK = 5;
-    const chunkActors: ChunkActorShare[][] = new Array(chunkCount);
-
-    for (let i = 0; i < chunkCount; i++) {
-      const startIdx = Math.round(i * chunkSize);
-      const endIdx = Math.min(Math.round((i + 1) * chunkSize), session.length);
-      const span = endIdx - startIdx;
-      const step = Math.max(1, Math.floor(span / SAMPLES_PER_CHUNK));
-      const counts = new Map<string, number>();
-      let totalSamples = 0;
-      for (let j = startIdx; j < endIdx; j += step) {
-        const meta = session.getMetadataAt(j);
-        if (meta.actor) {
-          counts.set(meta.actor, (counts.get(meta.actor) ?? 0) + 1);
-          totalSamples++;
-        }
-      }
-      if (totalSamples === 0) {
-        chunkActors[i] = [];
-      } else {
-        chunkActors[i] = Array.from(counts.entries()).map(([actor, count]) => ({
-          actor,
-          fraction: count / totalSamples,
-        }));
-      }
-    }
-
     const lastMeta = getMetadataAtIndex(lastIndex);
+    // Render immediately — waveform arrives on the next frame.
     setState({
       isActive: true,
       historyLength: session.length,
@@ -175,7 +177,16 @@ export function useReplayMode(
       currentContent: getContentAtIndex(lastIndex),
       timestamp: lastMeta.timestamp,
       actor: lastMeta.actor,
-      chunkActors,
+      chunkActors: [],
+    });
+
+    // Compute waveform data after paint so replay UI appears instantly.
+    requestAnimationFrame(() => {
+      // Guard: session may have been closed between setState and this callback.
+      if (!isActiveRef.current || sessionRef.current !== session) return;
+
+      const chunkActors = computeChunkActors(session);
+      setState(prev => ({ ...prev, chunkActors }));
     });
   }, [filePath, getContentAtIndex, getMetadataAtIndex]);
 

@@ -87,7 +87,9 @@ describe('useReplayMode', () => {
       // Starts at last index (current state)
       expect(result.current.state.currentIndex).toBe(2);
       expect(result.current.state.currentContent).toBe('abc');
-      // chunkActors should have entries with fractions summing to 1
+      // chunkActors is deferred — initially empty, populated after rAF
+      expect(result.current.state.chunkActors).toEqual([]);
+      act(() => { vi.advanceTimersByTime(16); }); // flush requestAnimationFrame
       expect(result.current.state.chunkActors.length).toBeGreaterThan(0);
       // Session should not be closed
       expect(session.close).not.toHaveBeenCalled();
