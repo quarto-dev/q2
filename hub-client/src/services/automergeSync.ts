@@ -18,13 +18,6 @@ import {
   type FilePayload,
 } from '@quarto/quarto-sync-client';
 
-import { decodeHeads } from '@automerge/automerge-repo';
-
-import {
-  free as automergeFreeFn,
-  clone as automergeCloneFn,
-  view as automergeViewFn,
-} from '@automerge/automerge';
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
 
 // Re-export types for use in other components
@@ -215,42 +208,6 @@ export async function createNewProject(options: CreateProjectOptions): Promise<C
  */
 export function getFileHandle(path: string) {
   return ensureClient().getFileHandle(path);
-}
-
-/**
- * Free an Automerge Doc's WASM resources immediately, rather than waiting
- * for JS garbage collection.
- */
-export function freeDoc(doc: unknown): void {
-  try {
-    automergeFreeFn(doc as Parameters<typeof automergeFreeFn>[0]);
-  } catch {
-    // doc may already be freed or not a WASM-backed object
-  }
-}
-
-/**
- * Clone the current document from a DocHandle.
- * Returns an independent Automerge doc with its own WASM state, so views
- * created from this clone do NOT hold borrows on the original handle's doc.
- */
-export function cloneHandleDoc(handle: unknown): unknown {
-  const doc = (handle as { doc(): unknown }).doc();
-  return automergeCloneFn(doc as Parameters<typeof automergeCloneFn>[0]);
-}
-
-/**
- * Create a read-only view of a cloned doc at given heads and extract the
- * text field.  Heads are UrlHeads (base58check-encoded string[]) as returned
- * by handle.history().
- */
-export function viewText(clonedDoc: unknown, heads: unknown): string {
-  const decoded = decodeHeads(heads as Parameters<typeof decodeHeads>[0]);
-  const viewed = automergeViewFn(
-    clonedDoc as Parameters<typeof automergeViewFn>[0],
-    decoded as unknown as Parameters<typeof automergeViewFn>[1],
-  );
-  return (viewed as { text?: string })?.text ?? '';
 }
 
 /**

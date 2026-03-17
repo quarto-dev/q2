@@ -2,10 +2,11 @@ import { useState, useCallback, useRef } from 'react';
 import {
   getFileHandle,
   updateFileContent,
-  freeDoc,
-  cloneHandleDoc,
-  viewText,
 } from '../services/automergeSync';
+import {
+  createReplaySession,
+  type ReplaySession,
+} from '@quarto/quarto-sync-client';
 
 export const PLAYBACK_SPEEDS = [1, 2, 4] as const;
 export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
@@ -63,31 +64,12 @@ const INITIAL_STATE: ReplayState = {
 // Base interval at 1x speed; divided by playback speed multiplier
 const PLAY_BASE_INTERVAL_MS = 200;
 
-// Type helpers for DocHandle methods we use (avoids importing Automerge types)
-interface ViewableHandle {
-  history(): unknown[] | undefined;
-  metadata(change?: string): { time?: number; actor?: string } | undefined;
-}
-
-function asViewable(handle: unknown): ViewableHandle {
-  return handle as ViewableHandle;
-}
-
 export function useReplayMode(
   filePath: string | null,
 ): { state: ReplayState; controls: ReplayControls; isActiveRef: React.RefObject<boolean> } {
   const [state, setState] = useState<ReplayState>(INITIAL_STATE);
 
-  // Store history array and handle in refs (stable across renders, not reactive)
-  const historyRef = useRef<unknown[]>([]);
-  const handleRef = useRef<unknown>(null);
-  // Independent clone of the doc used for all view() operations during replay.
-  // Views of this clone borrow from the clone's WASM state — not the original
-  // handle's — so handle.history() on re-entry is never blocked.
-  const cloneRef = useRef<unknown>(null);
-  // Cache of extracted text content keyed by history index.
-  // Avoids repeated WASM view() calls for the same index.
-  const textCacheRef = useRef<Map<number, string>>(new Map());
+  const sessionRef = useRef<ReplaySession | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Keep current index and speed in refs for the interval callback
   const indexRef = useRef(0);
@@ -105,33 +87,15 @@ export function useReplayMode(
   }, []);
 
   const getContentAtIndex = useCallback((index: number): string => {
-    const clone = cloneRef.current;
-    const history = historyRef.current;
-    if (!clone || index < 0 || index >= history.length) return '';
-
-    const cached = textCacheRef.current.get(index);
-    if (cached !== undefined) return cached;
-
-    const text = viewText(clone, history[index]);
-    textCacheRef.current.set(index, text);
-    return text;
+    const session = sessionRef.current;
+    if (!session) return '';
+    return session.getContentAt(index);
   }, []);
 
   const getMetadataAtIndex = useCallback((index: number): { timestamp: number | null; actor: string | null } => {
-    const handle = handleRef.current;
-    const history = historyRef.current;
-    if (!handle || index < 0 || index >= history.length) return { timestamp: null, actor: null };
-    try {
-      // metadata() expects a single change hash string.
-      // history entries are UrlHeads (string[]), so extract the first element.
-      const heads = history[index];
-      const changeHash = Array.isArray(heads) ? heads[0] : heads;
-      if (typeof changeHash !== 'string') return { timestamp: null, actor: null };
-      const meta = asViewable(handle).metadata(changeHash);
-      return { timestamp: meta?.time ?? null, actor: meta?.actor ?? null };
-    } catch {
-      return { timestamp: null, actor: null };
-    }
+    const session = sessionRef.current;
+    if (!session) return { timestamp: null, actor: null };
+    return session.getMetadataAt(index);
   }, []);
 
   const getTimestampAtIndex = useCallback((index: number): number | null => {
@@ -141,55 +105,54 @@ export function useReplayMode(
   const enter = useCallback(() => {
     if (!filePath) return;
 
-    let handle, history: unknown[], clone;
+    // Close any existing session first (fixes clone leak on double-enter)
+    if (sessionRef.current) {
+      sessionRef.current.close();
+      sessionRef.current = null;
+    }
+
+    let handle;
     try {
       handle = getFileHandle(filePath);
       if (!handle) return;
-
-      history = asViewable(handle).history() ?? [];
-      if (history.length === 0) return;
-
-      clone = cloneHandleDoc(handle);
     } catch (e) {
-      console.error('[useReplayMode] Failed to enter replay mode:', e);
+      console.error('[useReplayMode] Failed to get file handle:', e);
       return;
     }
 
-    handleRef.current = handle;
-    historyRef.current = history;
-    cloneRef.current = clone;
-    textCacheRef.current = new Map();
+    const session = createReplaySession(
+      handle,
+      (content: string) => updateFileContent(filePath, content),
+    );
+    if (!session) return;
+
+    sessionRef.current = session;
     isActiveRef.current = true;
 
-    const lastIndex = history.length - 1;
+    const lastIndex = session.length - 1;
     indexRef.current = lastIndex;
 
     // Split history into ≤100 equal chunks for the actor-colored waveform.
     const MAX_CHUNKS = 100;
-    const chunkCount = Math.min(history.length, MAX_CHUNKS);
-    const chunkSize = history.length / chunkCount;
+    const chunkCount = Math.min(session.length, MAX_CHUNKS);
+    const chunkSize = session.length / chunkCount;
 
     // Collect actor frequencies per chunk — ≤500 metadata() calls (100 chunks × 5 samples).
     const SAMPLES_PER_CHUNK = 5;
-    const viewable = asViewable(handle);
     const chunkActors: ChunkActorShare[][] = new Array(chunkCount);
 
     for (let i = 0; i < chunkCount; i++) {
       const startIdx = Math.round(i * chunkSize);
-      const endIdx = Math.min(Math.round((i + 1) * chunkSize), history.length);
+      const endIdx = Math.min(Math.round((i + 1) * chunkSize), session.length);
       const span = endIdx - startIdx;
       const step = Math.max(1, Math.floor(span / SAMPLES_PER_CHUNK));
       const counts = new Map<string, number>();
       let totalSamples = 0;
       for (let j = startIdx; j < endIdx; j += step) {
-        const heads = history[j];
-        const changeHash = Array.isArray(heads) ? heads[0] : heads;
-        if (typeof changeHash === 'string') {
-          const meta = viewable.metadata(changeHash);
-          if (meta?.actor) {
-            counts.set(meta.actor, (counts.get(meta.actor) ?? 0) + 1);
-            totalSamples++;
-          }
+        const meta = session.getMetadataAt(j);
+        if (meta.actor) {
+          counts.set(meta.actor, (counts.get(meta.actor) ?? 0) + 1);
+          totalSamples++;
         }
       }
       if (totalSamples === 0) {
@@ -205,7 +168,7 @@ export function useReplayMode(
     const lastMeta = getMetadataAtIndex(lastIndex);
     setState({
       isActive: true,
-      historyLength: history.length,
+      historyLength: session.length,
       currentIndex: lastIndex,
       isPlaying: false,
       playbackSpeed: 1,
@@ -217,10 +180,10 @@ export function useReplayMode(
   }, [filePath, getContentAtIndex, getMetadataAtIndex]);
 
   const seekTo = useCallback((index: number) => {
-    const history = historyRef.current;
-    if (history.length === 0) return;
+    const session = sessionRef.current;
+    if (!session) return;
 
-    const clamped = Math.max(0, Math.min(index, history.length - 1));
+    const clamped = Math.max(0, Math.min(index, session.length - 1));
     indexRef.current = clamped;
     const content = getContentAtIndex(clamped);
     const meta = getMetadataAtIndex(clamped);
@@ -241,13 +204,14 @@ export function useReplayMode(
 
   const startPlayInterval = useCallback(() => {
     clearPlayInterval();
-    const history = historyRef.current;
+    const session = sessionRef.current;
+    if (!session) return;
     const interval = Math.round(PLAY_BASE_INTERVAL_MS / speedRef.current);
 
     intervalRef.current = setInterval(() => {
       try {
         const nextIndex = indexRef.current + 1;
-        if (nextIndex >= history.length) {
+        if (nextIndex >= session.length) {
           clearPlayInterval();
           setState(prev => ({ ...prev, isPlaying: false }));
           return;
@@ -271,11 +235,11 @@ export function useReplayMode(
   }, [clearPlayInterval, getContentAtIndex, getMetadataAtIndex]);
 
   const play = useCallback(() => {
-    const history = historyRef.current;
-    if (history.length === 0) return;
+    const session = sessionRef.current;
+    if (!session) return;
 
     // If at the end, restart from the beginning
-    if (indexRef.current >= history.length - 1) {
+    if (indexRef.current >= session.length - 1) {
       seekTo(0);
     }
 
@@ -288,9 +252,10 @@ export function useReplayMode(
   }, [stopPlaying]);
 
   const stepForward = useCallback(() => {
-    const history = historyRef.current;
+    const session = sessionRef.current;
+    if (!session) return;
     const next = indexRef.current + 1;
-    if (next < history.length) {
+    if (next < session.length) {
       seekTo(next);
     }
   }, [seekTo]);
@@ -314,29 +279,25 @@ export function useReplayMode(
   }, [startPlayInterval]);
 
   const seekToStart = useCallback(() => {
-    if (historyRef.current.length > 0) {
+    if (sessionRef.current) {
       seekTo(0);
     }
   }, [seekTo]);
 
   const seekToEnd = useCallback(() => {
-    const history = historyRef.current;
-    if (history.length > 0) {
-      seekTo(history.length - 1);
+    const session = sessionRef.current;
+    if (session) {
+      seekTo(session.length - 1);
     }
   }, [seekTo]);
 
   const reset = useCallback(() => {
     clearPlayInterval();
     isActiveRef.current = false;
-    // Free the clone's WASM state immediately so borrows don't linger.
-    if (cloneRef.current) {
-      freeDoc(cloneRef.current);
-      cloneRef.current = null;
+    if (sessionRef.current) {
+      sessionRef.current.close();
+      sessionRef.current = null;
     }
-    handleRef.current = null;
-    historyRef.current = [];
-    textCacheRef.current = new Map();
     indexRef.current = 0;
     speedRef.current = 1;
     setState(INITIAL_STATE);
@@ -347,12 +308,12 @@ export function useReplayMode(
   }, [reset]);
 
   const apply = useCallback(() => {
-    const content = getContentAtIndex(indexRef.current);
-    if (filePath) {
-      updateFileContent(filePath, content);
+    const session = sessionRef.current;
+    if (session && filePath) {
+      session.applyContentAt(indexRef.current);
     }
     reset();
-  }, [filePath, getContentAtIndex, reset]);
+  }, [filePath, reset]);
 
   return {
     state,

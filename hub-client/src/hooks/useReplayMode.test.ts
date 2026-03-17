@@ -10,56 +10,49 @@ import { renderHook, act } from '@testing-library/react';
 vi.mock('../services/automergeSync', () => ({
   getFileHandle: vi.fn(),
   updateFileContent: vi.fn(),
-  freeDoc: vi.fn(),
-  cloneHandleDoc: vi.fn(),
-  viewText: vi.fn(),
+}));
+
+vi.mock('@quarto/quarto-sync-client', () => ({
+  createReplaySession: vi.fn(),
 }));
 
 import { useReplayMode } from './useReplayMode';
 import {
   getFileHandle,
   updateFileContent,
-  cloneHandleDoc,
-  viewText,
 } from '../services/automergeSync';
+import { createReplaySession } from '@quarto/quarto-sync-client';
 
 const mockGetFileHandle = vi.mocked(getFileHandle);
 const mockUpdateFileContent = vi.mocked(updateFileContent);
-const mockCloneHandleDoc = vi.mocked(cloneHandleDoc);
-const mockViewText = vi.mocked(viewText);
+const mockCreateReplaySession = vi.mocked(createReplaySession);
 
-// Helper to create a mock handle with history support.
-// history() returns UrlHeads[] where each UrlHeads is string[].
-// metadata() receives a single change hash string (first element of UrlHeads).
-// Also configures mockCloneHandleDoc and mockViewText for the given texts.
-function createMockHandle(texts: string[], timestamps?: number[], actors?: string[]) {
-  const historyHeads = texts.map((_, i) => [`head-${i}`]);
+/**
+ * Helper to create a mock ReplaySession and configure mocks.
+ * texts[i] is the content at history index i.
+ */
+function createMockSession(texts: string[], timestamps?: number[], actors?: string[]) {
+  const handle = { __mockHandle: true };
+  mockGetFileHandle.mockReturnValue(handle as never);
 
-  const handle = {
-    history: vi.fn(() => historyHeads),
-    metadata: vi.fn((changeHash?: string) => {
-      if (!changeHash) return undefined;
-      const index = historyHeads.findIndex(h => h[0] === changeHash);
-      if (index < 0) return undefined;
+  const session = {
+    get length() { return texts.length; },
+    getContentAt: vi.fn((index: number) => {
+      if (index < 0 || index >= texts.length) return '';
+      return texts[index];
+    }),
+    getMetadataAt: vi.fn((index: number) => {
+      if (index < 0 || index >= texts.length) return { timestamp: null, actor: null };
       const ts = timestamps?.[index] ?? 1000000 + index * 1000;
       const actor = actors?.[index] ?? `actor${index}abcdef0123456789`;
-      return { time: ts, actor };
+      return { timestamp: ts, actor };
     }),
-    doc: vi.fn(() => ({ text: texts[texts.length - 1] })),
+    applyContentAt: vi.fn(),
+    close: vi.fn(),
   };
 
-  // cloneHandleDoc returns a sentinel object representing the clone
-  const cloneObj = { __clone: true };
-  mockCloneHandleDoc.mockReturnValue(cloneObj);
-
-  // viewText extracts text from the clone given heads
-  mockViewText.mockImplementation((_clone: unknown, heads: unknown) => {
-    const headArr = heads as string[];
-    const index = historyHeads.findIndex(h => h[0] === headArr[0]);
-    return texts[index] ?? '';
-  });
-
-  return handle;
+  mockCreateReplaySession.mockReturnValue(session);
+  return { handle, session };
 }
 
 describe('useReplayMode', () => {
@@ -83,13 +76,12 @@ describe('useReplayMode', () => {
 
   describe('enter()', () => {
     it('loads history and activates replay', () => {
-      const handle = createMockHandle(['a', 'ab', 'abc']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      const { session } = createMockSession(['a', 'ab', 'abc']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
 
-      expect(handle.history).toHaveBeenCalled();
+      expect(mockCreateReplaySession).toHaveBeenCalled();
       expect(result.current.state.isActive).toBe(true);
       expect(result.current.state.historyLength).toBe(3);
       // Starts at last index (current state)
@@ -97,6 +89,8 @@ describe('useReplayMode', () => {
       expect(result.current.state.currentContent).toBe('abc');
       // chunkActors should have entries with fractions summing to 1
       expect(result.current.state.chunkActors.length).toBeGreaterThan(0);
+      // Session should not be closed
+      expect(session.close).not.toHaveBeenCalled();
     });
 
     it('is a no-op when getFileHandle returns null', () => {
@@ -108,23 +102,9 @@ describe('useReplayMode', () => {
       expect(result.current.state.isActive).toBe(false);
     });
 
-    it('is a no-op when handle.history() returns undefined', () => {
-      const handle = {
-        history: vi.fn(() => undefined),
-        metadata: vi.fn(),
-        doc: vi.fn(),
-      };
-      mockGetFileHandle.mockReturnValue(handle as never);
-
-      const { result } = renderHook(() => useReplayMode('index.qmd'));
-      act(() => { result.current.controls.enter(); });
-
-      expect(result.current.state.isActive).toBe(false);
-    });
-
-    it('is a no-op when history is empty', () => {
-      const handle = createMockHandle([]);
-      mockGetFileHandle.mockReturnValue(handle as never);
+    it('is a no-op when createReplaySession returns null', () => {
+      mockGetFileHandle.mockReturnValue({ __mockHandle: true } as never);
+      mockCreateReplaySession.mockReturnValue(null);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -139,12 +119,32 @@ describe('useReplayMode', () => {
       expect(mockGetFileHandle).not.toHaveBeenCalled();
       expect(result.current.state.isActive).toBe(false);
     });
+
+    it('closes previous session on re-enter', () => {
+      const { session: session1 } = createMockSession(['a', 'b']);
+
+      const { result } = renderHook(() => useReplayMode('index.qmd'));
+      act(() => { result.current.controls.enter(); });
+      expect(session1.close).not.toHaveBeenCalled();
+
+      // Create a new session for re-enter
+      const session2 = {
+        get length() { return 3; },
+        getContentAt: vi.fn((i: number) => ['x', 'y', 'z'][i] ?? ''),
+        getMetadataAt: vi.fn(() => ({ timestamp: 5000, actor: 'bob' })),
+        applyContentAt: vi.fn(),
+        close: vi.fn(),
+      };
+      mockCreateReplaySession.mockReturnValue(session2);
+
+      act(() => { result.current.controls.enter(); });
+      expect(session1.close).toHaveBeenCalled();
+    });
   });
 
   describe('seekTo()', () => {
     it('updates currentContent with correct text', () => {
-      const handle = createMockHandle(['first', 'second', 'third']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['first', 'second', 'third']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -155,8 +155,7 @@ describe('useReplayMode', () => {
     });
 
     it('clamps out-of-bounds index to valid range (too high)', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -166,8 +165,7 @@ describe('useReplayMode', () => {
     });
 
     it('clamps out-of-bounds index to valid range (negative)', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -179,8 +177,7 @@ describe('useReplayMode', () => {
 
   describe('play() / pause()', () => {
     it('starts auto-advance interval on play', () => {
-      const handle = createMockHandle(['a', 'b', 'c', 'd']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c', 'd']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -201,8 +198,7 @@ describe('useReplayMode', () => {
     });
 
     it('stops auto-advance on pause', () => {
-      const handle = createMockHandle(['a', 'b', 'c', 'd']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c', 'd']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -220,8 +216,7 @@ describe('useReplayMode', () => {
     });
 
     it('stops playing when reaching the end of history', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -240,8 +235,7 @@ describe('useReplayMode', () => {
 
   describe('cycleSpeed()', () => {
     it('cycles through 1x, 2x, 4x speeds', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -259,8 +253,7 @@ describe('useReplayMode', () => {
     });
 
     it('advances faster at 2x speed', () => {
-      const handle = createMockHandle(['a', 'b', 'c', 'd', 'e']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c', 'd', 'e']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -277,8 +270,7 @@ describe('useReplayMode', () => {
     });
 
     it('restarts interval at new speed when changed during playback', () => {
-      const handle = createMockHandle(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -299,8 +291,7 @@ describe('useReplayMode', () => {
     });
 
     it('resets speed on exit', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -314,8 +305,7 @@ describe('useReplayMode', () => {
 
   describe('stepForward() / stepBackward()', () => {
     it('steps forward by one', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -326,8 +316,7 @@ describe('useReplayMode', () => {
     });
 
     it('does not step forward past the end', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -338,8 +327,7 @@ describe('useReplayMode', () => {
     });
 
     it('steps backward by one', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -349,8 +337,7 @@ describe('useReplayMode', () => {
     });
 
     it('does not step backward past the beginning', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -363,8 +350,7 @@ describe('useReplayMode', () => {
 
   describe('seekToStart() / seekToEnd()', () => {
     it('seekToStart jumps to index 0', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -377,8 +363,7 @@ describe('useReplayMode', () => {
     });
 
     it('seekToEnd jumps to last index', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -392,9 +377,8 @@ describe('useReplayMode', () => {
   });
 
   describe('exit()', () => {
-    it('resets state', () => {
-      const handle = createMockHandle(['a', 'b', 'c']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+    it('resets state and closes session', () => {
+      const { session } = createMockSession(['a', 'b', 'c']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -405,11 +389,11 @@ describe('useReplayMode', () => {
       expect(result.current.state.isActive).toBe(false);
       expect(result.current.state.historyLength).toBe(0);
       expect(result.current.state.currentContent).toBe('');
+      expect(session.close).toHaveBeenCalled();
     });
 
     it('stops playback on exit', () => {
-      const handle = createMockHandle(['a', 'b', 'c', 'd']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c', 'd']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -427,9 +411,8 @@ describe('useReplayMode', () => {
   });
 
   describe('apply()', () => {
-    it('calls updateFileContent with historical content and resets', () => {
-      const handle = createMockHandle(['first', 'second', 'third']);
-      mockGetFileHandle.mockReturnValue(handle as never);
+    it('calls session.applyContentAt and resets', () => {
+      const { session } = createMockSession(['first', 'second', 'third']);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -439,7 +422,7 @@ describe('useReplayMode', () => {
 
       act(() => { result.current.controls.apply(); });
 
-      expect(mockUpdateFileContent).toHaveBeenCalledWith('index.qmd', 'second');
+      expect(session.applyContentAt).toHaveBeenCalledWith(1);
       expect(result.current.state.isActive).toBe(false);
     });
   });
@@ -447,8 +430,7 @@ describe('useReplayMode', () => {
   describe('timestamp and actor', () => {
     it('provides timestamp for current change', () => {
       const timestamps = [1000000, 1001000, 1002000];
-      const handle = createMockHandle(['a', 'b', 'c'], timestamps);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c'], timestamps);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
@@ -459,8 +441,7 @@ describe('useReplayMode', () => {
 
     it('provides actor hash for current change', () => {
       const actors = ['aaa111', 'bbb222', 'ccc333'];
-      const handle = createMockHandle(['a', 'b', 'c'], undefined, actors);
-      mockGetFileHandle.mockReturnValue(handle as never);
+      createMockSession(['a', 'b', 'c'], undefined, actors);
 
       const { result } = renderHook(() => useReplayMode('index.qmd'));
       act(() => { result.current.controls.enter(); });
