@@ -95,52 +95,19 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
 
+      # Free disk space on Linux runners (14 GB SSD is tight for Rust monorepo)
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1 # v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+
       # Custom lint checks (before build to fail fast)
       - name: Run custom lints
         shell: bash
         run: cargo xtask lint
-
-      # TypeScript workspace build
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Install npm dependencies
-        shell: bash
-        run: npm ci
-
-      # WASM build for hub-client (must happen before TypeScript build)
-      - name: Set up Clang (Linux)
-        if: runner.os == 'Linux'
-        uses: egor-tensin/setup-clang@v1
-        with:
-          version: latest
-          platform: x64
-
-      - name: Set up LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: brew install llvm
-        shell: bash
-
-      - name: Install wasm-pack
-        shell: bash
-        run: cargo install wasm-pack
-
-      # - name: Build WASM module
-      #   shell: bash
-      #   run: |
-      #     cd crates/wasm-quarto-hub-client
-      #     if [ "$RUNNER_OS" = "macOS" ]; then
-      #       export PATH="/opt/homebrew/opt/llvm/bin:/usr/local/opt/llvm/bin:$PATH"
-      #     fi
-      #     export CFLAGS_wasm32_unknown_unknown="-I$(pwd)/wasm-sysroot -Wbad-function-cast -Wcast-function-type -fno-builtin -DHAVE_ENDIAN_H"
-      #     wasm-pack build --target web
-
-      # - name: Build TypeScript packages
-      #   shell: bash
-      #   run: npm run build
 
       # Build and test
       # Deny warnings in CI so they don't accumulate silently
@@ -161,9 +128,3 @@ jobs:
         run: cargo nextest run
         env:
           RUSTFLAGS: "-D warnings"
-
-      # - name: Run hub-client tests
-      #   shell: bash
-      #   run: |
-      #     cd hub-client
-      #     npm run test:ci
