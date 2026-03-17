@@ -192,6 +192,7 @@
   width: 1px;
   background: #1f3460;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .editor-pane {

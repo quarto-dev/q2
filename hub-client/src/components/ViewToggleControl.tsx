@@ -2,47 +2,46 @@ import { useViewMode } from './ViewModeContext';
 import './ViewToggleControl.css';
 
 /**
- * A toggle control that sits at the middle center of the divider between panes.
- * Allows users to switch between markup-focused, both, and preview-focused views.
- *
- * Layout: [◀] [|] [▶]
- * Arrows indicate divider movement direction:
- * - ◀ moves divider left (expands preview)
- * - | returns to even split (both)
- * - ▶ moves divider right (expands markup)
+ * Compact vertical toggle on the pane divider.
+ * Three small square buttons with layout-split icons.
  */
 export default function ViewToggleControl() {
   const { viewMode, setViewMode } = useViewMode();
 
-  const isMarkup = viewMode === 'markup';
-  const isPreview = viewMode === 'preview';
-  const isBoth = viewMode === 'both';
-
   return (
     <div className="view-toggle-control">
       <button
-        className={`view-toggle-btn view-toggle-left${isPreview ? ' active' : ''}`}
+        className={`view-toggle-btn${viewMode === 'preview' ? ' active' : ''}`}
         onClick={() => setViewMode('preview')}
-        title="Move divider left (expand preview)"
+        title="Expand preview"
         aria-label="Preview view"
       >
-        ◀
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <rect x="0" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
+          <rect x="5" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
+        </svg>
       </button>
       <button
-        className={`view-toggle-btn view-toggle-center${isBoth ? ' active' : ''}`}
+        className={`view-toggle-btn${viewMode === 'both' ? ' active' : ''}`}
         onClick={() => setViewMode('both')}
-        title="Show both panes equally"
+        title="Split equally"
         aria-label="Split view"
       >
-        |
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <rect x="0" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
+          <rect x="7" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
+        </svg>
       </button>
       <button
-        className={`view-toggle-btn view-toggle-right${isMarkup ? ' active' : ''}`}
+        className={`view-toggle-btn${viewMode === 'markup' ? ' active' : ''}`}
         onClick={() => setViewMode('markup')}
-        title="Move divider right (expand markup)"
+        title="Expand markup"
         aria-label="Markup view"
       >
-        ▶
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <rect x="0" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
+          <rect x="9" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
+        </svg>
       </button>
     </div>
   );
