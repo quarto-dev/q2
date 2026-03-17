@@ -97,11 +97,94 @@ impl TryFrom<&str> for FormatIdentifier {
     }
 }
 
+/// Known base formats that can appear as suffixes in extension format strings.
+const KNOWN_BASE_FORMATS: &[&str] = &[
+    "html",
+    "pdf",
+    "docx",
+    "epub",
+    "typst",
+    "revealjs",
+    "gfm",
+    "commonmark",
+];
+
+/// Result of parsing a format string like "acm-html" or "html".
+#[derive(Debug, Clone, PartialEq)]
+pub struct FormatDescriptor {
+    /// The base format (e.g., "html" from "acm-html", or "html" from "html")
+    pub base_format: String,
+    /// The extension name, if present (e.g., Some("acm") from "acm-html")
+    pub extension_name: Option<String>,
+}
+
+/// Parse a format descriptor string into base format and optional extension.
+///
+/// Splits on the LAST hyphen that produces a known base format suffix.
+/// "acm-html" -> base="html", extension=Some("acm")
+/// "my-journal-html" -> base="html", extension=Some("my-journal")
+/// "q2-slides" -> base="q2-slides", extension=None (no known base suffix)
+/// "html" -> base="html", extension=None
+pub fn parse_format_descriptor(format_str: &str) -> FormatDescriptor {
+    // Try splitting from the right to find a known base format
+    for (i, _) in format_str.rmatch_indices('-') {
+        let suffix = &format_str[i + 1..];
+        if KNOWN_BASE_FORMATS.contains(&suffix) {
+            let prefix = &format_str[..i];
+            if !prefix.is_empty() {
+                return FormatDescriptor {
+                    base_format: suffix.to_string(),
+                    extension_name: Some(prefix.to_string()),
+                };
+            }
+        }
+    }
+    FormatDescriptor {
+        base_format: format_str.to_string(),
+        extension_name: None,
+    }
+}
+
+/// Builtin pseudo-formats that map to a known base format.
+/// Temporary bridge until the extensions system provides this mapping.
+/// Each entry should become an extension when that system lands.
+fn builtin_pseudo_format(name: &str) -> Option<&'static str> {
+    match name {
+        "q2-slides" => Some("html"),
+        _ => None,
+    }
+}
+
+/// Map a FormatIdentifier to its output file extension.
+fn output_extension_for(id: FormatIdentifier) -> String {
+    match id {
+        FormatIdentifier::Html => "html",
+        FormatIdentifier::Pdf => "pdf",
+        FormatIdentifier::Docx => "docx",
+        FormatIdentifier::Epub => "epub",
+        FormatIdentifier::Typst => "pdf",
+        FormatIdentifier::Revealjs => "html",
+        FormatIdentifier::Gfm => "md",
+        FormatIdentifier::CommonMark => "md",
+        FormatIdentifier::Custom(_) => "html",
+    }
+    .to_string()
+}
+
 /// A complete format specification
 #[derive(Debug, Clone)]
 pub struct Format {
     /// Format identifier
     pub identifier: FormatIdentifier,
+
+    /// The original format string (e.g., "q2-slides", "acm-html", "html")
+    pub target_format: String,
+
+    /// Extension name, if this is an extension format (e.g., Some("acm") for "acm-html")
+    pub extension_name: Option<String>,
+
+    /// Human-readable display name (e.g., "HTML", "q2-slides")
+    pub display_name: String,
 
     /// Output file extension (without leading dot)
     pub output_extension: String,
@@ -115,6 +198,9 @@ impl Format {
     pub fn html() -> Self {
         Self {
             identifier: FormatIdentifier::Html,
+            target_format: "html".to_string(),
+            extension_name: None,
+            display_name: "HTML".to_string(),
             output_extension: "html".to_string(),
             native_pipeline: true,
         }
@@ -124,6 +210,9 @@ impl Format {
     pub fn pdf() -> Self {
         Self {
             identifier: FormatIdentifier::Pdf,
+            target_format: "pdf".to_string(),
+            extension_name: None,
+            display_name: "PDF".to_string(),
             output_extension: "pdf".to_string(),
             native_pipeline: false,
         }
@@ -133,9 +222,66 @@ impl Format {
     pub fn docx() -> Self {
         Self {
             identifier: FormatIdentifier::Docx,
+            target_format: "docx".to_string(),
+            extension_name: None,
+            display_name: "DOCX".to_string(),
             output_extension: "docx".to_string(),
             native_pipeline: false,
         }
+    }
+
+    /// Parse a format string into a Format.
+    ///
+    /// Accepts:
+    /// - Known base formats: "html", "pdf", "docx", etc.
+    /// - Extension-style formats: "acm-html", "my-journal-pdf"
+    /// - Builtin pseudo-formats: "q2-slides" (temporary, until extensions)
+    ///
+    /// Returns Err for unrecognized format strings.
+    pub fn from_format_string(format_str: &str) -> Result<Self, String> {
+        // 1. Try as a known base format directly
+        if let Ok(identifier) = FormatIdentifier::try_from(format_str) {
+            return Ok(Self {
+                identifier,
+                target_format: format_str.to_string(),
+                extension_name: None,
+                display_name: identifier.as_str().to_uppercase(),
+                output_extension: output_extension_for(identifier),
+                native_pipeline: identifier.is_native(),
+            });
+        }
+
+        // 2. Try as extension-style: "acm-html" -> base "html", extension "acm"
+        // Note: For pseudo-formats like "q2-slides", parse_format_descriptor returns
+        // base_format="q2-slides" (no known suffix), so the try_from below fails
+        // just like step 1. This is intentional — step 3 handles pseudo-formats.
+        let desc = parse_format_descriptor(format_str);
+        if let Ok(identifier) = FormatIdentifier::try_from(desc.base_format.as_str()) {
+            return Ok(Self {
+                identifier,
+                target_format: format_str.to_string(),
+                extension_name: desc.extension_name,
+                display_name: format_str.to_string(),
+                output_extension: output_extension_for(identifier),
+                native_pipeline: identifier.is_native(),
+            });
+        }
+
+        // 3. Try as a builtin pseudo-format: "q2-slides" -> base "html"
+        if let Some(base) = builtin_pseudo_format(format_str) {
+            let identifier = FormatIdentifier::try_from(base).unwrap();
+            return Ok(Self {
+                identifier,
+                target_format: format_str.to_string(),
+                extension_name: None,
+                display_name: format_str.to_string(),
+                output_extension: output_extension_for(identifier),
+                native_pipeline: identifier.is_native(),
+            });
+        }
+
+        // 4. Unknown format
+        Err(format!("Unknown format: {}", format_str))
     }
 
     /// Check if this format is HTML-based
@@ -403,6 +549,9 @@ mod tests {
         let format = Format::html();
 
         assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.target_format, "html");
+        assert_eq!(format.extension_name, None);
+        assert_eq!(format.display_name, "HTML");
         assert_eq!(format.output_extension, "html");
         assert!(format.native_pipeline);
     }
@@ -412,6 +561,9 @@ mod tests {
         let format = Format::pdf();
 
         assert_eq!(format.identifier, FormatIdentifier::Pdf);
+        assert_eq!(format.target_format, "pdf");
+        assert_eq!(format.extension_name, None);
+        assert_eq!(format.display_name, "PDF");
         assert_eq!(format.output_extension, "pdf");
         assert!(!format.native_pipeline);
     }
@@ -421,6 +573,9 @@ mod tests {
         let format = Format::docx();
 
         assert_eq!(format.identifier, FormatIdentifier::Docx);
+        assert_eq!(format.target_format, "docx");
+        assert_eq!(format.extension_name, None);
+        assert_eq!(format.display_name, "DOCX");
         assert_eq!(format.output_extension, "docx");
         assert!(!format.native_pipeline);
     }
@@ -476,6 +631,9 @@ mod tests {
         let format = Format::default();
 
         assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.target_format, "html");
+        assert_eq!(format.extension_name, None);
+        assert_eq!(format.display_name, "HTML");
         assert_eq!(format.output_extension, "html");
         assert!(format.native_pipeline);
     }
@@ -486,8 +644,153 @@ mod tests {
         let cloned = original.clone();
 
         assert_eq!(original.identifier, cloned.identifier);
+        assert_eq!(original.target_format, cloned.target_format);
+        assert_eq!(original.extension_name, cloned.extension_name);
+        assert_eq!(original.display_name, cloned.display_name);
         assert_eq!(original.output_extension, cloned.output_extension);
         assert_eq!(original.native_pipeline, cloned.native_pipeline);
+    }
+
+    // === parse_format_descriptor tests ===
+
+    #[test]
+    fn test_parse_format_descriptor_plain() {
+        let d = parse_format_descriptor("html");
+        assert_eq!(d.base_format, "html");
+        assert_eq!(d.extension_name, None);
+    }
+
+    #[test]
+    fn test_parse_format_descriptor_extension() {
+        let d = parse_format_descriptor("acm-html");
+        assert_eq!(d.base_format, "html");
+        assert_eq!(d.extension_name, Some("acm".to_string()));
+    }
+
+    #[test]
+    fn test_parse_format_descriptor_multi_hyphen() {
+        let d = parse_format_descriptor("my-journal-pdf");
+        assert_eq!(d.base_format, "pdf");
+        assert_eq!(d.extension_name, Some("my-journal".to_string()));
+    }
+
+    #[test]
+    fn test_parse_format_descriptor_unknown_suffix() {
+        let d = parse_format_descriptor("q2-slides");
+        assert_eq!(d.base_format, "q2-slides");
+        assert_eq!(d.extension_name, None);
+    }
+
+    #[test]
+    fn test_parse_format_descriptor_empty() {
+        let d = parse_format_descriptor("");
+        assert_eq!(d.base_format, "");
+        assert_eq!(d.extension_name, None);
+    }
+
+    #[test]
+    fn test_parse_format_descriptor_hyphen_only() {
+        let d = parse_format_descriptor("-");
+        assert_eq!(d.extension_name, None);
+    }
+
+    #[test]
+    fn test_parse_format_descriptor_trailing_hyphen() {
+        let d = parse_format_descriptor("html-");
+        assert_eq!(d.base_format, "html-");
+        assert_eq!(d.extension_name, None);
+    }
+
+    #[test]
+    fn test_parse_format_descriptor_leading_hyphen() {
+        let d = parse_format_descriptor("-html");
+        assert_eq!(d.base_format, "-html");
+        assert_eq!(d.extension_name, None);
+    }
+
+    // === from_format_string tests ===
+
+    #[test]
+    fn test_from_format_string_known_base() {
+        let f = Format::from_format_string("html").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Html);
+        assert_eq!(f.target_format, "html");
+        assert_eq!(f.extension_name, None);
+        assert_eq!(f.display_name, "HTML");
+        assert_eq!(f.output_extension, "html");
+    }
+
+    #[test]
+    fn test_from_format_string_extension() {
+        let f = Format::from_format_string("acm-pdf").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Pdf);
+        assert_eq!(f.target_format, "acm-pdf");
+        assert_eq!(f.extension_name, Some("acm".to_string()));
+        assert_eq!(f.output_extension, "pdf");
+    }
+
+    #[test]
+    fn test_from_format_string_pseudo_format() {
+        let f = Format::from_format_string("q2-slides").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Html);
+        assert_eq!(f.target_format, "q2-slides");
+        assert_eq!(f.extension_name, None);
+        assert_eq!(f.output_extension, "html");
+        assert!(f.native_pipeline);
+    }
+
+    #[test]
+    fn test_from_format_string_typst_extension() {
+        let f = Format::from_format_string("typst").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Typst);
+        assert_eq!(f.output_extension, "pdf");
+    }
+
+    #[test]
+    fn test_from_format_string_revealjs() {
+        let f = Format::from_format_string("revealjs").unwrap();
+        assert_eq!(f.output_extension, "html");
+    }
+
+    #[test]
+    fn test_from_format_string_gfm() {
+        let f = Format::from_format_string("gfm").unwrap();
+        assert_eq!(f.output_extension, "md");
+    }
+
+    #[test]
+    fn test_from_format_string_unknown_errors() {
+        assert!(Format::from_format_string("unknown").is_err());
+        assert!(Format::from_format_string("htlm").is_err());
+    }
+
+    #[test]
+    fn test_from_format_string_error_message() {
+        let err = Format::from_format_string("htlm").unwrap_err();
+        assert!(
+            err.contains("htlm"),
+            "error should include the bad format name"
+        );
+    }
+
+    #[test]
+    fn test_from_format_string_empty_string() {
+        assert!(Format::from_format_string("").is_err());
+    }
+
+    #[test]
+    fn test_from_format_string_hyphen_only() {
+        assert!(Format::from_format_string("-").is_err());
+    }
+
+    #[test]
+    fn test_from_format_string_trailing_hyphen() {
+        assert!(Format::from_format_string("html-").is_err());
+    }
+
+    #[test]
+    fn test_from_format_string_leading_hyphen() {
+        assert!(Format::from_format_string("-html").is_err());
     }
 
     // === is_minimal_html tests ===

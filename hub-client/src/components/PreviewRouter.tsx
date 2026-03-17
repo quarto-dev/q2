@@ -31,7 +31,13 @@ interface PreviewRouterProps {
 function hasQ2SlidesFormat(astJson: string): boolean {
   try {
     const ast = JSON.parse(astJson);
-    return 'q2-slides' === ast?.meta?.format?.c?.[0]?.c;
+    const fmt = ast?.meta?.format;
+    if (!fmt) return false;
+    // MetaString: { t: "MetaString", c: "q2-slides" }
+    if (fmt.t === 'MetaString') return fmt.c === 'q2-slides';
+    // MetaInlines: { t: "MetaInlines", c: [{ t: "Str", c: "q2-slides" }] }
+    if (fmt.t === 'MetaInlines') return fmt.c?.[0]?.c === 'q2-slides';
+    return false;
   } catch (err) {
     console.error('[PreviewRouter] Failed to parse AST:', err);
     return false;

@@ -198,7 +198,7 @@ pub fn render_document_to_file(
 
     // Set up render context
     let doc_info = DocumentInfo::from_path(input_path);
-    let render_format = format_from_name(format);
+    let render_format = format_from_name(format)?;
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, &doc_info, &render_format, &binaries);
 
@@ -307,13 +307,8 @@ fn determine_output_paths(
 }
 
 /// Convert a format name to a Format instance.
-fn format_from_name(name: &str) -> Format {
-    match name {
-        "html" => Format::html(),
-        "pdf" => Format::pdf(),
-        "docx" => Format::docx(),
-        _ => Format::html(),
-    }
+fn format_from_name(name: &str) -> Result<Format> {
+    Format::from_format_string(name).map_err(|e| QuartoError::other(e).into())
 }
 
 #[cfg(test)]

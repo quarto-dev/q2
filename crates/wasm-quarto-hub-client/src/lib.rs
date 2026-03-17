@@ -494,6 +494,42 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
     }
 }
 
+/// Detect the format string from QMD content's YAML frontmatter.
+/// Returns the format name (e.g., "q2-slides", "html", "acm-html")
+/// or "html" as default when no format key is present.
+fn detect_format_from_content(content: &str) -> String {
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return "html".to_string();
+    }
+    let after_first = &trimmed[3..];
+    let end = after_first.find("\n---");
+    let yaml_str = match end {
+        Some(pos) => &after_first[..pos],
+        None => return "html".to_string(),
+    };
+    let docs = match yaml_rust2::YamlLoader::load_from_str(yaml_str) {
+        Ok(docs) => docs,
+        Err(_) => return "html".to_string(),
+    };
+    let doc = match docs.first() {
+        Some(doc) => doc,
+        None => return "html".to_string(),
+    };
+    match doc["format"] {
+        yaml_rust2::Yaml::String(ref s) => s.clone(),
+        yaml_rust2::Yaml::Hash(ref map) => {
+            // yaml-rust2 preserves insertion order (uses LinkedHashMap)
+            map.keys()
+                .next()
+                .and_then(|k| k.as_str())
+                .unwrap_or("html")
+                .to_string()
+        }
+        _ => "html".to_string(),
+    }
+}
+
 /// Parse QMD content to Pandoc AST JSON using the unified pipeline.
 ///
 /// This function uses the same pipeline infrastructure as `render_qmd_to_html`,
@@ -522,7 +558,21 @@ pub async fn parse_qmd_to_ast(content: &str) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
-    let format = Format::html();
+    let format_str = detect_format_from_content(content);
+    let format = match Format::from_format_string(&format_str) {
+        Ok(f) => f,
+        Err(e) => {
+            return serde_json::to_string(&AstResponse {
+                success: false,
+                ast: None,
+                qmd: None,
+                error: Some(e),
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap_or_default();
+        }
+    };
 
     let options = RenderOptions {
         verbose: false,
@@ -679,7 +729,21 @@ pub async fn render_qmd(path: &str) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
-    let format = Format::html();
+    let content_str = std::str::from_utf8(&content).unwrap_or("");
+    let format_str = detect_format_from_content(content_str);
+    let format = match Format::from_format_string(&format_str) {
+        Ok(f) => f,
+        Err(e) => {
+            return serde_json::to_string(&RenderResponse {
+                success: false,
+                error: Some(e),
+                html: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap();
+        }
+    };
 
     let options = RenderOptions {
         verbose: false,
@@ -764,7 +828,20 @@ pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
-    let format = Format::html();
+    let format_str = detect_format_from_content(content);
+    let format = match Format::from_format_string(&format_str) {
+        Ok(f) => f,
+        Err(e) => {
+            return serde_json::to_string(&RenderResponse {
+                success: false,
+                error: Some(e),
+                html: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap_or_default();
+        }
+    };
 
     let options = RenderOptions {
         verbose: false,

@@ -215,6 +215,20 @@ impl PipelineStage for MetadataMergeStage {
         // Note: If materialization fails (shouldn't happen with well-formed configs),
         // we silently continue with the original document metadata.
 
+        // Inject resolved format name into merged metadata.
+        // The Format struct doesn't cross the WASM serialization boundary,
+        // so we communicate the format name via the metadata map.
+        // In quarto-cli this is done via Format.identifier.kTargetFormat
+        // and QUARTO_FILTER_PARAMS; we use the metadata map instead.
+        if let ConfigValueKind::Map(ref mut entries) = doc.ast.meta.value {
+            entries.retain(|e| e.key != "format");
+            entries.push(ConfigMapEntry {
+                key: "format".to_string(),
+                key_source: SourceInfo::default(),
+                value: ConfigValue::new_string(&ctx.format.target_format, SourceInfo::default()),
+            });
+        }
+
         Ok(PipelineData::DocumentAst(doc))
     }
 }
@@ -531,8 +545,12 @@ mod tests {
 
         // toc should be inherited from project's format.html settings
         assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(true));
-        // format key should be removed (flattened)
-        assert!(result.ast.meta.get("format").is_none());
+        // format name should be injected after merge
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("html"),
+            "format name should be injected after merge"
+        );
     }
 
     #[tokio::test]
@@ -636,8 +654,12 @@ mod tests {
         );
         // documentclass from pdf format should NOT be present
         assert!(result.ast.meta.get("documentclass").is_none());
-        // format key should be removed
-        assert!(result.ast.meta.get("format").is_none());
+        // format name should be injected after merge
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("html"),
+            "format name should be injected after merge"
+        );
     }
 
     #[tokio::test]
@@ -1005,8 +1027,255 @@ mod tests {
             result.ast.meta.get("source-location").unwrap().as_str(),
             Some("full")
         );
-        // format key should be removed (flattened)
-        assert!(result.ast.meta.get("format").is_none());
+        // format name should be injected after merge
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("html"),
+            "format name should be injected after merge"
+        );
+    }
+
+    // ============================================================================
+    // Format name preservation tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_format_name_preserved_simple_string() {
+        // Document has format: q2-slides (simple string)
+        // After merge, format key should be preserved so hub-client can detect it
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-slides").unwrap();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = MetadataMergeStage::new();
+
+        // Document has format: q2-slides
+        let doc_metadata = config_map(vec![
+            ("title", config_str("My Slides")),
+            ("format", config_str("q2-slides")),
+        ]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // title should be preserved
+        assert_eq!(
+            result.ast.meta.get("title").unwrap().as_str(),
+            Some("My Slides")
+        );
+        // format name should be preserved as a string
+        assert!(
+            result.ast.meta.get("format").is_some(),
+            "format key must be preserved after metadata merge"
+        );
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("q2-slides"),
+            "format value must be 'q2-slides'"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_format_name_preserved_map_format() {
+        // Document has format: { html: { toc: true } }
+        // After merge, format key should contain "html"
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = MetadataMergeStage::new();
+
+        // Document has format: { html: { toc: true } }
+        let doc_metadata = config_map(vec![(
+            "format",
+            config_map(vec![("html", config_map(vec![("toc", config_bool(true))]))]),
+        )]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        // toc should be flattened
+        assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(true));
+        // format name should be preserved
+        assert!(
+            result.ast.meta.get("format").is_some(),
+            "format key must be preserved after metadata merge"
+        );
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("html"),
+            "format value must be 'html' (the matched format key)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_format_name_injected_when_no_format_key() {
+        // Document has no format key at all — should still get format: "html" injected
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = MetadataMergeStage::new();
+
+        let doc_metadata = config_map(vec![("title", config_str("No Format"))]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("html"),
+            "format name should be injected even when document has no format key"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_format_name_preserved_extension_format() {
+        // format: acm-html with Format::from_format_string("acm-html")
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("acm-html").unwrap();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = MetadataMergeStage::new();
+
+        let doc_metadata = config_map(vec![
+            ("title", config_str("ACM Paper")),
+            ("format", config_str("acm-html")),
+        ]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("acm-html"),
+            "format name should be the target_format from StageContext"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_format_injection_uses_context_not_document() {
+        // Document has format: unknown-garbage but StageContext has Format::html()
+        // The injected format should be "html" (from ctx), not "unknown-garbage"
+        let runtime = Arc::new(MockRuntime);
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = MetadataMergeStage::new();
+
+        let doc_metadata = config_map(vec![
+            ("title", config_str("Bad Format")),
+            ("format", config_str("unknown-garbage")),
+        ]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("html"),
+            "injected format should come from ctx.format.target_format, not document"
+        );
     }
 
     #[tokio::test]
@@ -1146,10 +1415,11 @@ mod tests {
             Some(true),
             "format.html.toc should be flattened to top-level toc for single-file renders"
         );
-        // format key should be removed
-        assert!(
-            result.ast.meta.get("format").is_none(),
-            "format key should be removed after flattening"
+        // format name should be injected after merge
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("html"),
+            "format name should be injected after merge"
         );
     }
 }
