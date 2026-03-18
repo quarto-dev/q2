@@ -108,7 +108,7 @@ fn check_pandoc() {
 
     let Ok(output) = output else {
         println!(
-            "\n  Warning: pandoc not found. Four pampa comparison tests will be skipped.\n  \
+            "\n  Warning: pandoc not found. Four pampa comparison tests will fail.\n  \
              Install from https://pandoc.org/installing.html"
         );
         return;
@@ -124,7 +124,7 @@ fn check_pandoc() {
         let first_line = version_str.lines().next().unwrap_or("unknown version");
         println!(
             "\n  Warning: {first_line} detected — pampa comparison tests require 3.6+.\n  \
-             Four tests will be skipped. Update from https://pandoc.org/installing.html"
+             Four tests will fail. Update from https://pandoc.org/installing.html"
         );
     }
 }
