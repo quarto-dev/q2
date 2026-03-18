@@ -97,5 +97,63 @@ pub fn run() -> Result<()> {
         println!("Installed {installed} tool(s), {already} already present.");
     }
 
+    check_pandoc();
+
     Ok(())
+}
+
+/// Check for Pandoc 3.6+ (optional — needed only for pampa comparison tests).
+fn check_pandoc() {
+    let output = Command::new("pandoc").arg("--version").output();
+
+    let Ok(output) = output else {
+        println!(
+            "\n  Warning: pandoc not found. Four pampa comparison tests will be skipped.\n  \
+             Install from https://pandoc.org/installing.html"
+        );
+        return;
+    };
+
+    let version_str = String::from_utf8_lossy(&output.stdout);
+    let is_good = pandoc_version_at_least(&version_str, 3, 6);
+
+    if is_good {
+        println!("\n  pandoc — suitable version detected");
+    } else {
+        // Extract first line for display (e.g. "pandoc 3.1.3")
+        let first_line = version_str.lines().next().unwrap_or("unknown version");
+        println!(
+            "\n  Warning: {first_line} detected — pampa comparison tests require 3.6+.\n  \
+             Four tests will be skipped. Update from https://pandoc.org/installing.html"
+        );
+    }
+}
+
+/// Parse the first line of `pandoc --version` output and check if the version
+/// is at least `major.minor`. Expects format like "pandoc 3.6.1" or "pandoc 3.6".
+fn pandoc_version_at_least(version_output: &str, min_major: u32, min_minor: u32) -> bool {
+    let first_line = version_output.lines().next().unwrap_or("");
+    // Extract version string after "pandoc "
+    let version_part = first_line.strip_prefix("pandoc ").unwrap_or(first_line);
+    let mut parts = version_part.split('.');
+    let major: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (major, minor) >= (min_major, min_minor)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pandoc_version_at_least() {
+        assert!(pandoc_version_at_least("pandoc 3.6\n...", 3, 6));
+        assert!(pandoc_version_at_least("pandoc 3.6.1\n...", 3, 6));
+        assert!(pandoc_version_at_least("pandoc 3.9\n...", 3, 6));
+        assert!(pandoc_version_at_least("pandoc 4.0\n...", 3, 6));
+        assert!(!pandoc_version_at_least("pandoc 3.1.3\n...", 3, 6));
+        assert!(!pandoc_version_at_least("pandoc 3.5.9\n...", 3, 6));
+        assert!(!pandoc_version_at_least("pandoc 2.19\n...", 3, 6));
+        assert!(!pandoc_version_at_least("", 3, 6));
+    }
 }

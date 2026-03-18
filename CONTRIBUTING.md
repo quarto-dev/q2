@@ -18,6 +18,12 @@ cargo dev-setup
 
 This detects already-installed tools and skips them. When [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) is available, it downloads pre-built binaries (seconds); otherwise it falls back to `cargo install --locked` (slower, compiles from source).
 
+### Pandoc 3.6+ (optional)
+
+Four tests in the `pampa` crate compare output against Pandoc. These tests require Pandoc 3.6 or later and are skipped (with a clear message) when Pandoc is missing or too old. `cargo dev-setup` checks this and warns if needed.
+
+Install from [pandoc.org/installing](https://pandoc.org/installing.html).
+
 ### Node.js and npm
 
 Required for the hub-client web application. Any recent LTS version works.
