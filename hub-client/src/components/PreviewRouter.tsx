@@ -77,7 +77,6 @@ export default function PreviewRouter(props: PreviewRouterProps) {
 
         if (result.success) {
           const format = getQ2Format(result.ast);
-          console.log("FORMAT", format)
           setReactFormat(format);
           props.onFormatChange?.(format);
         } else {
