@@ -34,7 +34,6 @@ import ProjectTab from './tabs/ProjectTab';
 import StatusTab from './tabs/StatusTab';
 import SettingsTab from './tabs/SettingsTab';
 import AboutTab from './tabs/AboutTab';
-import ViewToggleControl from './ViewToggleControl';
 import { useViewMode } from './ViewModeContext';
 import MarkdownSummary from './MarkdownSummary';
 import ReplayDrawer from './ReplayDrawer';
@@ -924,11 +923,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           </div>
         )}
 
-        {/* Divider with view toggle control */}
+        {/* Pane divider */}
         {!isFullscreenPreview && (
-          <div className="pane-divider">
-            <ViewToggleControl />
-          </div>
+          <div className="pane-divider" />
         )}
 
         <div className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}>

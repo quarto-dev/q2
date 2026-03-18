@@ -5,6 +5,7 @@
  * and project name with navigation on the right.
  */
 
+import ViewToggleControl from './ViewToggleControl';
 import './MinimalHeader.css';
 
 interface MinimalHeaderProps {
@@ -28,6 +29,7 @@ export default function MinimalHeader({
   return (
     <header className="minimal-header">
       <div className="header-left">
+        <ViewToggleControl />
         {currentFilePath ? (
           <span className="file-path">{currentFilePath}</span>
         ) : (

@@ -1,20 +1,8 @@
 .view-toggle-control {
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 8px 12px;
-  opacity: 0.35;
-  transition: opacity 0.2s ease;
-}
-
-.view-toggle-control:hover,
-.view-toggle-control:focus-within {
-  opacity: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
 }
 
 .view-toggle-btn {

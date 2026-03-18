@@ -2,7 +2,7 @@ import { useViewMode } from './ViewModeContext';
 import './ViewToggleControl.css';
 
 /**
- * Compact vertical toggle on the pane divider.
+ * Compact horizontal view toggle at the top of the sidebar.
  * Three small square buttons with layout-split icons.
  */
 export default function ViewToggleControl() {
