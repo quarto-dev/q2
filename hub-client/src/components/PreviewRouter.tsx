@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../types/project';
 import type { Diagnostic } from '../types/diagnostic';
@@ -52,15 +52,23 @@ function hasQ2SlidesFormat(astJson: string): boolean {
  */
 export default function PreviewRouter(props: PreviewRouterProps) {
   const [useReactPreview, setUseReactPreview] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
+  // Only true until the very first format check completes for a given file
+  const [initialChecking, setInitialChecking] = useState(true);
+  const prevFilePathRef = useRef(props.currentFile?.path);
+
+  // Reset to loading state when switching to a different file
+  useEffect(() => {
+    if (props.currentFile?.path !== prevFilePathRef.current) {
+      prevFilePathRef.current = props.currentFile?.path;
+      setInitialChecking(true);
+    }
+  }, [props.currentFile?.path]);
 
   // Check the format whenever content changes
   useEffect(() => {
     let cancelled = false;
 
     async function checkFormat() {
-      setIsChecking(true);
-
       try {
         // Ensure WASM is ready
         if (!isWasmReady()) {
@@ -89,7 +97,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         }
       } finally {
         if (!cancelled) {
-          setIsChecking(false);
+          setInitialChecking(false);
         }
       }
     }
@@ -101,8 +109,10 @@ export default function PreviewRouter(props: PreviewRouterProps) {
     };
   }, [props.content, props.currentFile?.path]);
 
-  // Show loading state while checking format
-  if (isChecking) {
+  // Show loading state only during the very first format check.
+  // Subsequent re-checks keep the current Preview mounted to avoid
+  // a destructive unmount/remount cycle on every keystroke.
+  if (initialChecking) {
     return (
       <div style={{ padding: '20px', color: '#666' }}>
         Loading preview...
