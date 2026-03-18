@@ -14,6 +14,7 @@ use anyhow::{Context, Result, bail};
 use std::process::Command;
 
 use crate::lint;
+use crate::test;
 
 const TOTAL_STEPS: u32 = 7;
 
@@ -145,9 +146,11 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
                 ""
             }
         );
+        let nextest_args = test::nextest_base_args();
+        let nextest_refs: Vec<&str> = nextest_args.iter().map(|s| s.as_str()).collect();
         run_command(
             "cargo",
-            &["nextest", "run", "--workspace"],
+            &nextest_refs,
             &project_root,
             rustflags,
             "Rust tests failed",

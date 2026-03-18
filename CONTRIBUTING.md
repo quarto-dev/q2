@@ -51,10 +51,12 @@ npm run build:all        # builds WASM module + web client
 ### Rust tests
 
 ```bash
-cargo nextest run --workspace
+cargo xtask test
 ```
 
-Do **not** use `cargo test` — nextest is required for correct test execution in this workspace.
+This runs `cargo nextest run --workspace` with platform-appropriate crate exclusions (see [Windows](#windows) below). On macOS/Linux it runs the full suite with no exclusions.
+
+Do **not** use `cargo test` — nextest is required for correct test execution in this workspace. Extra arguments are forwarded to nextest: `cargo xtask test -- -p quarto-doctemplate --no-fail-fast`.
 
 ### Full verification
 
@@ -84,31 +86,9 @@ cargo xtask lint
 
 **pampa-fuzz**: Excluded from default workspace members via `default-members` in `Cargo.toml`. The `libfuzzer-sys` dependency only builds on Linux/macOS.
 
-**v8 test compilation**: The `v8` crate does not produce an rlib on Windows, causing test compilation (not regular builds) to fail for crates that transitively depend on it. `cargo build --workspace` works fine. For tests, exclude the affected crates (Git Bash or Unix shell):
+**v8 test compilation**: The `v8` crate does not produce an rlib on Windows, causing test compilation (not regular builds) to fail for 12 crates that transitively depend on it. `cargo build --workspace` works fine. `cargo xtask test` handles this automatically by excluding the affected crates on Windows.
 
-```bash
-cargo nextest run --workspace \
-  --exclude quarto-system-runtime \
-  --exclude pampa \
-  --exclude quarto-core \
-  --exclude quarto-sass \
-  --exclude quarto-test \
-  --exclude quarto \
-  --exclude quarto-project-create \
-  --exclude qmd-syntax-helper \
-  --exclude comrak-to-pandoc \
-  --exclude quarto-lsp \
-  --exclude quarto-lsp-core \
-  --exclude reconcile-viewer
-```
-
-For PowerShell, use a single line without `\` continuations:
-
-```powershell
-cargo nextest run --workspace --exclude quarto-system-runtime --exclude pampa --exclude quarto-core --exclude quarto-sass --exclude quarto-test --exclude quarto --exclude quarto-project-create --exclude qmd-syntax-helper --exclude comrak-to-pandoc --exclude quarto-lsp --exclude quarto-lsp-core --exclude reconcile-viewer
-```
-
-See `claude-notes/instructions/windows-dev.md` for the full details and the list of testable crates.
+See `claude-notes/instructions/windows-dev.md` for the full dependency cascade and list of testable crates.
 
 ### macOS / Linux
 

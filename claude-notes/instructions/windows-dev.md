@@ -26,24 +26,18 @@ This cascades to all crates that transitively depend on v8 via `quarto-system-ru
 
 ### Running Tests on Windows
 
-Nextest's `default-filter` only controls which tests *run*, not which *compile*.
-You must use `--exclude` to prevent cargo from attempting test compilation:
+Use `cargo xtask test` — it automatically excludes v8-dependent crates on Windows:
 
 ```bash
-cargo nextest run --workspace \
-  --exclude quarto-system-runtime \
-  --exclude pampa \
-  --exclude quarto-core \
-  --exclude quarto-sass \
-  --exclude quarto-test \
-  --exclude quarto \
-  --exclude quarto-project-create \
-  --exclude qmd-syntax-helper \
-  --exclude comrak-to-pandoc \
-  --exclude quarto-lsp \
-  --exclude quarto-lsp-core \
-  --exclude reconcile-viewer
+cargo xtask test                                    # run all testable crates
+cargo xtask test -- -p quarto-doctemplate           # run a specific crate
+cargo xtask test -- --no-fail-fast                  # don't stop on first failure
+cargo xtask test --deny-warnings                    # match CI strictness
 ```
+
+Nextest's `default-filter` only controls which tests *run*, not which *compile*.
+`cargo xtask test` handles this by passing `--exclude` flags for each affected crate.
+The exclude list is maintained in `crates/xtask/src/test.rs`.
 
 ### Testable crates on Windows
 
