@@ -8,22 +8,15 @@
 
 The repo includes a `rust-toolchain.toml` that auto-installs the correct nightly toolchain, components (rustfmt, clippy), and the `wasm32-unknown-unknown` target on your first `cargo` invocation. No manual `rustup` steps needed.
 
-### cargo-nextest
+### Development tools (cargo-nextest, wasm-pack)
 
-This project uses [nextest](https://nexte.st/) instead of `cargo test`:
-
-```bash
-cargo binstall cargo-nextest
-# or: cargo install cargo-nextest
-```
-
-### wasm-pack
-
-Required for building the WASM modules used by hub-client:
+This project uses [nextest](https://nexte.st/) instead of `cargo test`, and [wasm-pack](https://rustwasm.github.io/wasm-pack/) for building WASM modules. Install both with:
 
 ```bash
-cargo install wasm-pack
+cargo dev-setup
 ```
+
+This detects already-installed tools and skips them. When [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) is available, it downloads pre-built binaries (seconds); otherwise it falls back to `cargo install --locked` (slower, compiles from source).
 
 ### Node.js and npm
 

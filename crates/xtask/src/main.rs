@@ -6,9 +6,11 @@
 //! ```
 //!
 //! Available commands:
+//! - `dev-setup`: Install required development tools (cargo-nextest, wasm-pack)
 //! - `lint`: Run custom lint checks on the codebase
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 
+mod dev_setup;
 mod lint;
 mod verify;
 
@@ -26,6 +28,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Install required development tools.
+    ///
+    /// Checks for cargo-nextest and wasm-pack, installing any that are missing.
+    /// Uses cargo-binstall for faster binary installs when available,
+    /// falling back to cargo install --locked otherwise.
+    DevSetup {},
+
     /// Run custom lint checks on the codebase.
     ///
     /// These checks catch issues that standard Rust linters miss,
@@ -87,6 +96,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Command::DevSetup {} => dev_setup::run(),
         Command::Lint { verbose, quiet } => {
             let config = lint::LintConfig { verbose, quiet };
             lint::run(&config)

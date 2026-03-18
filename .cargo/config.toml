@@ -4,3 +4,4 @@
 # Run project-specific tasks via: cargo xtask <command>
 # See crates/xtask/src/main.rs for available commands
 xtask = "run --package xtask --"
+dev-setup = "xtask dev-setup"
