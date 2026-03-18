@@ -19,6 +19,7 @@ interface PreviewRouterProps {
   onDiagnosticsChange: (diagnostics: Diagnostic[]) => void;
   onWasmStatusChange?: (status: 'loading' | 'ready' | 'error', error: string | null) => void;
   onRegisterScrollToLine?: (fn: (line: number) => void) => void;
+  onRegisterSetScrollRatio?: (fn: (ratio: number) => void) => void;
   onAstChange?: (astJson: string | null) => void;
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
@@ -117,8 +118,8 @@ export default function PreviewRouter(props: PreviewRouterProps) {
 
   // Render the appropriate preview component
   if (reactFormat) {
-    // ReactPreview doesn't use onRegisterScrollToLine or onFormatChange, so we omit them
-    const { onRegisterScrollToLine, onFormatChange, ...reactPreviewProps } = props;
+    // ReactPreview doesn't use onRegisterScrollToLine/onRegisterSetScrollRatio/onFormatChange, so we omit them
+    const { onRegisterScrollToLine, onRegisterSetScrollRatio, onFormatChange, ...reactPreviewProps } = props;
     return <ReactPreview {...reactPreviewProps} format={reactFormat} />;
   } else {
     const { onFormatChange, setContent, ...previewProps } = props;

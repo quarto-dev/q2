@@ -7,6 +7,7 @@ import { postProcessIframe } from '../utils/iframePostProcessor';
 export interface MorphIframeHandle {
   scrollToLine: (line: number) => void;
   getScrollRatio: () => number | null;
+  setScrollRatio: (ratio: number) => void;
   setSelection: (startPos: SourceLocation, endPos: SourceLocation) => void;
   clearSelection: () => void;
 }
@@ -356,6 +357,14 @@ function MorphIframe({
       if (previewMaxScroll <= 0) return 0;
 
       return previewScrollY / previewMaxScroll;
+    },
+    setScrollRatio: (ratio: number) => {
+      const iframe = iframeRef.current;
+      if (!iframe?.contentWindow || !iframe?.contentDocument) return;
+      const maxScroll = iframe.contentDocument.documentElement.scrollHeight - iframe.contentWindow.innerHeight;
+      if (maxScroll > 0) {
+        iframe.contentWindow.scrollTo({ top: ratio * maxScroll });
+      }
     },
     setSelection: (startPos: SourceLocation, endPos: SourceLocation) => {
       const iframe = iframeRef.current;

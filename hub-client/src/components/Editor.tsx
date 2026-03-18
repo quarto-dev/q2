@@ -191,8 +191,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
 
-  // Preview scroll function for external control (from MarkdownSummary)
+  // Preview scroll functions for external control (from MarkdownSummary / replay)
   const previewScrollToLineRef = useRef<((line: number) => void) | null>(null);
+  const previewSetScrollRatioRef = useRef<((ratio: number) => void) | null>(null);
 
   // Editor drag-drop state for image insertion
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
@@ -259,9 +260,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setContentVersion(prev => prev + 1);
   }, []);
 
-  // Callback for preview to register scroll-to-line function
+  // Callbacks for preview to register scroll functions
   const handleRegisterScrollToLine = useCallback((fn: (line: number) => void) => {
     previewScrollToLineRef.current = fn;
+  }, []);
+  const handleRegisterSetScrollRatio = useCallback((fn: (ratio: number) => void) => {
+    previewSetScrollRatioRef.current = fn;
   }, []);
 
   // Update document title based on current file and project
@@ -290,15 +294,39 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   // When replay content changes, update Monaco and VFS for display.
   // Writing to VFS ensures the preview renderer sees historical content.
+  // We also move the cursor to the first changed line so that both the
+  // editor and preview scroll to the relevant location automatically.
+  const prevReplayContentRef = useRef<string>('');
   useEffect(() => {
     if (!replayState.isActive) return;
 
-    const model = editorRef.current?.getModel();
-    if (model && editorRef.current) {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (model && editor) {
       applyingRemoteRef.current = true;
       model.setValue(replayState.currentContent);
       applyingRemoteRef.current = false;
+
+      // Find the first line that differs and scroll both panes there
+      const oldLines = prevReplayContentRef.current.split('\n');
+      const newLines = replayState.currentContent.split('\n');
+      let changedLine = 1;
+      for (let i = 0; i < Math.max(oldLines.length, newLines.length); i++) {
+        if (oldLines[i] !== newLines[i]) {
+          changedLine = i + 1; // Monaco lines are 1-based
+          break;
+        }
+      }
+      editor.revealLineInCenter(changedLine);
+      // Match preview scroll ratio to editor after it settles
+      requestAnimationFrame(() => {
+        const maxScroll = editor.getScrollHeight() - editor.getLayoutInfo().height;
+        if (maxScroll > 0) {
+          previewSetScrollRatioRef.current?.(editor.getScrollTop() / maxScroll);
+        }
+      });
     }
+    prevReplayContentRef.current = replayState.currentContent;
 
     // Update VFS so the WASM renderer sees the historical content
     if (currentFile && isWasmReady()) {
@@ -313,10 +341,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     const wasActive = prevReplayActiveRef.current;
     prevReplayActiveRef.current = replayState.isActive;
 
-    if (wasActive && !replayState.isActive && currentFile && isWasmReady()) {
-      const liveContent = fileContents.get(currentFile.path);
-      if (liveContent !== undefined) {
-        vfsAddFile(currentFile.path, liveContent);
+    if (wasActive && !replayState.isActive) {
+      prevReplayContentRef.current = '';
+      if (currentFile && isWasmReady()) {
+        const liveContent = fileContents.get(currentFile.path);
+        if (liveContent !== undefined) {
+          vfsAddFile(currentFile.path, liveContent);
+        }
       }
     }
   }, [replayState.isActive, currentFile, fileContents]);
@@ -951,6 +982,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onDiagnosticsChange={handleDiagnosticsChange}
             onWasmStatusChange={handleWasmStatusChange}
             onRegisterScrollToLine={handleRegisterScrollToLine}
+            onRegisterSetScrollRatio={handleRegisterSetScrollRatio}
             onAstChange={handleAstChange}
             currentSlideIndex={currentSlideIndex}
             onSlideChange={handleSlideChange}
