@@ -298,6 +298,7 @@ The changelog is rendered in the About section of the hub-client UI.
 - **CRITICAL**: Use `cargo nextest run` instead of `cargo test`.
 - **CRITICAL**: Do NOT pipe `cargo nextest run` through `tail` or other commands - it causes hangs. Run it directly.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
+- **Windows**: Some crates are auto-excluded from tests. See claude-notes/instructions/windows-dev.md for details.
 
 ## Build Commands
 
