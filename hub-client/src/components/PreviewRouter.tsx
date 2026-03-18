@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../types/project';
 import type { Diagnostic } from '../types/diagnostic';
@@ -56,17 +56,8 @@ function getQ2Format(astJson: string): string | null {
  */
 export default function PreviewRouter(props: PreviewRouterProps) {
   const [reactFormat, setReactFormat] = useState<string | null>(null);
-  // Only true until the very first format check completes for a given file
-  const [initialChecking, setInitialChecking] = useState(true);
-  const prevFilePathRef = useRef(props.currentFile?.path);
-
-  // Reset to loading state when switching to a different file
-  useEffect(() => {
-    if (props.currentFile?.path !== prevFilePathRef.current) {
-      prevFilePathRef.current = props.currentFile?.path;
-      setInitialChecking(true);
-    }
-  }, [props.currentFile?.path]);
+  const [checkedPath, setCheckedPath] = useState<string | undefined>(undefined);
+  const initialChecking = checkedPath !== props.currentFile?.path;
 
   // Check the format whenever content changes
   useEffect(() => {
@@ -102,7 +93,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         }
       } finally {
         if (!cancelled) {
-          setInitialChecking(false);
+          setCheckedPath(props.currentFile?.path);
         }
       }
     }
