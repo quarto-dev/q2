@@ -308,23 +308,25 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       applyingRemoteRef.current = false;
 
       // Find the first line that differs and scroll both panes there
-      const oldLines = prevReplayContentRef.current.split('\n');
-      const newLines = replayState.currentContent.split('\n');
+      const old = prevReplayContentRef.current;
+      const cur = replayState.currentContent;
       let changedLine = 1;
-      for (let i = 0; i < Math.max(oldLines.length, newLines.length); i++) {
-        if (oldLines[i] !== newLines[i]) {
-          changedLine = i + 1; // Monaco lines are 1-based
-          break;
-        }
+      const minLen = Math.min(old.length, cur.length);
+      let ci = 0;
+      for (; ci < minLen; ci++) {
+        if (old[ci] !== cur[ci]) break;
+        if (old[ci] === '\n') changedLine++;
       }
-      editor.revealLineInCenter(changedLine);
-      // Match preview scroll ratio to editor after it settles
-      requestAnimationFrame(() => {
-        const maxScroll = editor.getScrollHeight() - editor.getLayoutInfo().height;
-        if (maxScroll > 0) {
-          previewSetScrollRatioRef.current?.(editor.getScrollTop() / maxScroll);
-        }
-      });
+      if (ci < minLen || old.length !== cur.length) {
+        editor.revealLineInCenter(changedLine);
+        // Match preview scroll ratio to editor after it settles
+        requestAnimationFrame(() => {
+          const maxScroll = editor.getScrollHeight() - editor.getLayoutInfo().height;
+          if (maxScroll > 0) {
+            previewSetScrollRatioRef.current?.(editor.getScrollTop() / maxScroll);
+          }
+        });
+      }
     }
     prevReplayContentRef.current = replayState.currentContent;
 
