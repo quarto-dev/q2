@@ -22,36 +22,40 @@ interface PreviewRouterProps {
   onAstChange?: (astJson: string | null) => void;
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
-  onFormatChange?: (isSlides: boolean) => void;
+  onFormatChange?: (format: string | null) => void;
+  setContent: (content: string) => void;
 }
 
 /**
- * Check if the parsed AST metadata contains format: q2-slides
+ * Extract format string from the parsed AST metadata
+ * Returns null if no format is found, otherwise returns the format string (e.g., 'q2-slides', 'q2-debug')
  */
-function hasQ2SlidesFormat(astJson: string): boolean {
+function getQ2Format(astJson: string): string | null {
   try {
     const ast = JSON.parse(astJson);
     const fmt = ast?.meta?.format;
-    if (!fmt) return false;
+    if (!fmt) return null;
     // MetaString: { t: "MetaString", c: "q2-slides" }
-    if (fmt.t === 'MetaString') return fmt.c === 'q2-slides';
+    if (fmt.t === 'MetaString') return fmt.c;
     // MetaInlines: { t: "MetaInlines", c: [{ t: "Str", c: "q2-slides" }] }
-    if (fmt.t === 'MetaInlines') return fmt.c?.[0]?.c === 'q2-slides';
-    return false;
+    if (fmt.t === 'MetaInlines') {
+      return fmt.c?.[0]?.c;
+    }
+    return null;
   } catch (err) {
     console.error('[PreviewRouter] Failed to parse AST:', err);
-    return false;
+    return null;
   }
 }
 
 /**
  * Router component that selects between Preview and ReactPreview based on document format.
  *
- * - If format: q2-slides is present in the YAML frontmatter, use ReactPreview (for slides)
+ * - If format: q2-slides or format: q2-debug is present in the YAML frontmatter, use ReactPreview
  * - Otherwise, use the normal Preview component (for regular HTML rendering)
  */
 export default function PreviewRouter(props: PreviewRouterProps) {
-  const [useReactPreview, setUseReactPreview] = useState(false);
+  const [reactFormat, setReactFormat] = useState<string | null>(null);
   // Only true until the very first format check completes for a given file
   const [initialChecking, setInitialChecking] = useState(true);
   const prevFilePathRef = useRef(props.currentFile?.path);
@@ -81,19 +85,20 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         if (cancelled) return;
 
         if (result.success) {
-          const hasSlides = hasQ2SlidesFormat(result.ast);
-          setUseReactPreview(hasSlides);
-          props.onFormatChange?.(hasSlides);
+          const format = getQ2Format(result.ast);
+          console.log("FORMAT", format)
+          setReactFormat(format);
+          props.onFormatChange?.(format);
         } else {
           // On parse error, default to normal Preview
-          setUseReactPreview(false);
-          props.onFormatChange?.(false);
+          setReactFormat(null);
+          props.onFormatChange?.(null);
         }
       } catch (err) {
         console.error('[PreviewRouter] Error checking format:', err);
         if (!cancelled) {
-          setUseReactPreview(false);
-          props.onFormatChange?.(false);
+          setReactFormat(null);
+          props.onFormatChange?.(null);
         }
       } finally {
         if (!cancelled) {
@@ -121,12 +126,12 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   }
 
   // Render the appropriate preview component
-  if (useReactPreview) {
+  if (reactFormat) {
     // ReactPreview doesn't use onRegisterScrollToLine or onFormatChange, so we omit them
     const { onRegisterScrollToLine, onFormatChange, ...reactPreviewProps } = props;
-    return <ReactPreview {...reactPreviewProps} />;
+    return <ReactPreview {...reactPreviewProps} format={reactFormat} />;
   } else {
-    const { onFormatChange, ...previewProps } = props;
+    const { onFormatChange, setContent, ...previewProps } = props;
     return <Preview {...previewProps} />;
   }
 }

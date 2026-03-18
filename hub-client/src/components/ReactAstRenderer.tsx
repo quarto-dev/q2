@@ -98,6 +98,13 @@ function renderBlock(
   key: number,
   onNavigateToDocument?: (path: string, anchor: string | null) => void
 ): React.ReactNode {
+  return <div style={{ borderRight: '1px solid black' }}>{renderBlock2(block, key, onNavigateToDocument)}</div>
+}
+function renderBlock2(
+  block: Block,
+  key: number,
+  onNavigateToDocument?: (path: string, anchor: string | null) => void
+): React.ReactNode {
   switch (block.t) {
     case 'Para': {
       const paraBlock = block as ParaBlock;

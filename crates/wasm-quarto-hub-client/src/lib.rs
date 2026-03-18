@@ -495,7 +495,7 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
 }
 
 /// Detect the format string from QMD content's YAML frontmatter.
-/// Returns the format name (e.g., "q2-slides", "html", "acm-html")
+/// Returns the format name (e.g., "q2-slides", "q2-debug", "html", "acm-html")
 /// or "html" as default when no format key is present.
 fn detect_format_from_content(content: &str) -> String {
     let trimmed = content.trim_start();

@@ -302,8 +302,9 @@ pub async fn parse_qmd_to_ast(
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(EngineExecutionStage::new()),
-        Box::new(MetadataMergeStage::new()),
-        Box::new(AstTransformsStage::new()),
+        // elliot note: I want this function to give an un-processed AST
+        // Box::new(MetadataMergeStage::new()),
+        // Box::new(AstTransformsStage::new()),
     ];
 
     let (output, warnings) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
@@ -428,7 +429,7 @@ pub async fn render_qmd_to_html(
 /// 10. `AppendixStructureTransform` - Consolidate appendix content into container
 /// 11. `ResourceCollectorTransform` - Collect image dependencies
 pub fn build_transform_pipeline() -> TransformPipeline {
-    let mut pipeline = TransformPipeline::new();
+    let mut pipeline: TransformPipeline = TransformPipeline::new();
 
     // === NORMALIZATION PHASE ===
     pipeline.push(Box::new(CalloutTransform::new()));

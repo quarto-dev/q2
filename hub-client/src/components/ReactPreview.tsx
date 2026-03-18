@@ -3,7 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../types/project';
 import { isQmdFile } from '../types/project';
 import type { Diagnostic } from '../types/diagnostic';
-import { initWasm, parseQmdToAst, isWasmReady } from '../services/wasmRenderer';
+import { initWasm, parseQmdToAst, isWasmReady, incrementalWriteQmd } from '../services/wasmRenderer';
 import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import ReactRenderer from './ReactRenderer';
@@ -36,6 +36,8 @@ interface PreviewProps {
   onAstChange?: (astJson: string | null) => void;
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
+  setContent: (content: string) => void;
+  format: string; // 'q2-slides' or 'q2-debug'
 }
 
 // Result of rendering QMD content to AST
@@ -104,6 +106,8 @@ export default function ReactPreview({
   onAstChange,
   currentSlideIndex,
   onSlideChange,
+  setContent,
+  format,
 }: PreviewProps) {
   const [wasmStatus, setWasmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [wasmError, setWasmError] = useState<string | null>(null);
@@ -245,6 +249,16 @@ export default function ReactPreview({
     setCurrentError(null);
   }, [currentFile?.path]);
 
+  // Handler for AST modifications - converts AST back to QMD and updates content
+  const handleSetAst = useCallback((newAst: any) => {
+    try {
+      const newQmd = incrementalWriteQmd(content, newAst);
+      setContent(newQmd);
+    } catch (err) {
+      console.error('Failed to write AST back to QMD:', err);
+    }
+  }, [content, setContent]);
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {wasmError && (
@@ -258,8 +272,10 @@ export default function ReactPreview({
             astJson={ast}
             currentFilePath={currentFile?.path ?? ''}
             onNavigateToDocument={handleNavigateToDocument}
+            setAst={handleSetAst}
             currentSlideIndex={currentSlideIndex}
             onSlideChange={onSlideChange}
+            format={format}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

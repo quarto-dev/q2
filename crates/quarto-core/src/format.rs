@@ -124,6 +124,7 @@ pub struct FormatDescriptor {
 /// "acm-html" -> base="html", extension=Some("acm")
 /// "my-journal-html" -> base="html", extension=Some("my-journal")
 /// "q2-slides" -> base="q2-slides", extension=None (no known base suffix)
+/// "q2-debug" -> base="q2-debug", extension=None (no known base suffix)
 /// "html" -> base="html", extension=None
 pub fn parse_format_descriptor(format_str: &str) -> FormatDescriptor {
     // Try splitting from the right to find a known base format
@@ -151,6 +152,7 @@ pub fn parse_format_descriptor(format_str: &str) -> FormatDescriptor {
 fn builtin_pseudo_format(name: &str) -> Option<&'static str> {
     match name {
         "q2-slides" => Some("html"),
+        "q2-debug" => Some("html"),
         _ => None,
     }
 }
@@ -235,7 +237,7 @@ impl Format {
     /// Accepts:
     /// - Known base formats: "html", "pdf", "docx", etc.
     /// - Extension-style formats: "acm-html", "my-journal-pdf"
-    /// - Builtin pseudo-formats: "q2-slides" (temporary, until extensions)
+    /// - Builtin pseudo-formats: "q2-slides", "q2-debug" (temporary, until extensions)
     ///
     /// Returns Err for unrecognized format strings.
     pub fn from_format_string(format_str: &str) -> Result<Self, String> {

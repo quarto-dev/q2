@@ -6,6 +6,8 @@
  */
 
 import type { Diagnostic, RenderResponse } from '../types/diagnostic';
+import type { RustQmdJson } from '@quarto/pandoc-types'
+import type { AstResponse } from 'wasm-quarto-hub-client'
 
 // Response types from WASM module
 interface VfsResponse {
@@ -38,6 +40,7 @@ interface WasmModuleExtended {
   create_project: (choiceId: string, title: string) => Promise<string>;
   parse_qmd_to_ast: (content: string) => Promise<string>;
   write_qmd: (astJson: string) => Promise<string>;
+  incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
   convert: (document: string, inputFormat: string, outputFormat: string) => Promise<string>;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
@@ -461,6 +464,28 @@ export async function writeQmd(astJson: string): Promise<WriteQmdResult> {
       error: err instanceof Error ? err.message : JSON.stringify(err),
     };
   }
+}
+
+/**
+ * Incrementally write a modified AST back to QMD, preserving unchanged
+ * portions of the original source text verbatim.
+ *
+ * Must call initWasm() before first use.
+ */
+export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): string {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+
+  const newAstJson = JSON.stringify(newAst)
+  const responseJson = wasmModule.incremental_write_qmd(originalQmd, newAstJson)
+  const response: AstResponse = JSON.parse(responseJson)
+
+  if (!response.success || !response.qmd) {
+    throw new Error(`Incremental write failed: ${response.error}`)
+  }
+
+  return response.qmd
 }
 
 /**

@@ -164,22 +164,22 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // AST JSON for slide thumbnails
   const [astJson, setAstJson] = useState<string | null>(null);
 
-  // Whether the current document is in slide format (format: q2-slides)
-  const [isSlideFormat, setIsSlideFormat] = useState(false);
+  // Current document format (e.g., 'q2-slides', 'q2-debug', or null for default)
+  const [currentFormat, setCurrentFormat] = useState<string | null>(null);
 
   // Handle format changes from PreviewRouter
-  const handleFormatChange = useCallback((isSlides: boolean) => {
-    setIsSlideFormat(isSlides);
+  const handleFormatChange = useCallback((format: string | null) => {
+    setCurrentFormat(format);
   }, []);
 
-  // Generate thumbnails for slides (only when in slide format)
+  // Generate thumbnails for slides (only when format is q2-slides)
   const thumbnails = useSlideThumbnails({
     astJson,
     currentFilePath: currentFile?.path ?? '',
     symbols,
     previewReady: wasmStatus === 'ready' && editorReady,
     contentVersion,
-    enabled: isSlideFormat,
+    enabled: currentFormat === 'q2-slides',
   });
 
   // New file dialog state
@@ -881,45 +881,45 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             )}
             {/* Always render Monaco but hide in preview mode */}
             <div style={{ display: viewMode === 'preview' ? 'none' : 'block', height: '100%' }}>
-            <MonacoEditor
-              // Use key to force remount when switching files (resets editor state cleanly)
-              key={currentFile?.path ?? ''}
-              height="100%"
-              language="markdown"
-              theme="vs-dark"
-              // Use defaultValue instead of value to make Monaco uncontrolled.
-              // This prevents the wrapper from calling setValue() on re-renders,
-              // which would reset cursor position. We manage content via executeEdits().
-              defaultValue={content}
-              onChange={handleEditorChange}
-              onMount={handleEditorMount}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                lineNumbers: 'on',
-                wordWrap: 'on',
-                padding: { top: 16 },
-                scrollBeyondLastLine: false,
-                // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
-                // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
-                pasteAs: { enabled: false },
-                // Move hover/diagnostic widgets to a fixed container outside the editor's
-                // overflow:hidden boundary, preventing them from being clipped by the navbar.
-                fixedOverflowWidgets: true,
-                // Prefer showing hover below the line. This prevents diagnostic popups near
-                // the top of the editor from overlapping the navbar.
-                hover: { above: false },
-                // Disable aggressive autocomplete/suggestions
-                quickSuggestions: false,
-                suggestOnTriggerCharacters: false,
-                wordBasedSuggestions: 'off',
-                acceptSuggestionOnEnter: 'off',
-                acceptSuggestionOnCommitCharacter: false,
-                suggest: { showWords: false, showSnippets: false },
-                inlineSuggest: { enabled: false },
-              }}
-            />
-          </div>
+              <MonacoEditor
+                // Use key to force remount when switching files (resets editor state cleanly)
+                key={currentFile?.path ?? ''}
+                height="100%"
+                language="markdown"
+                theme="vs-dark"
+                // Use defaultValue instead of value to make Monaco uncontrolled.
+                // This prevents the wrapper from calling setValue() on re-renders,
+                // which would reset cursor position. We manage content via executeEdits().
+                defaultValue={content}
+                onChange={handleEditorChange}
+                onMount={handleEditorMount}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineNumbers: 'on',
+                  wordWrap: 'on',
+                  padding: { top: 16 },
+                  scrollBeyondLastLine: false,
+                  // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
+                  // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
+                  pasteAs: { enabled: false },
+                  // Move hover/diagnostic widgets to a fixed container outside the editor's
+                  // overflow:hidden boundary, preventing them from being clipped by the navbar.
+                  fixedOverflowWidgets: true,
+                  // Prefer showing hover below the line. This prevents diagnostic popups near
+                  // the top of the editor from overlapping the navbar.
+                  hover: { above: false },
+                  // Disable aggressive autocomplete/suggestions
+                  quickSuggestions: false,
+                  suggestOnTriggerCharacters: false,
+                  wordBasedSuggestions: 'off',
+                  acceptSuggestionOnEnter: 'off',
+                  acceptSuggestionOnCommitCharacter: false,
+                  suggest: { showWords: false, showSnippets: false },
+                  inlineSuggest: { enabled: false },
+                }}
+              />
+            </div>
           </div>
         )}
 
@@ -955,6 +955,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             currentSlideIndex={currentSlideIndex}
             onSlideChange={handleSlideChange}
             onFormatChange={handleFormatChange}
+            setContent={handleEditorChange}
           />
         </div>
       </main>
