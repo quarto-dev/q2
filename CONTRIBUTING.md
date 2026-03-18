@@ -84,7 +84,7 @@ cargo xtask lint
 
 **pampa-fuzz**: Excluded from default workspace members via `default-members` in `Cargo.toml`. The `libfuzzer-sys` dependency only builds on Linux/macOS.
 
-**v8 test compilation**: The `v8` crate does not produce an rlib on Windows, causing test compilation (not regular builds) to fail for crates that transitively depend on it. `cargo build --workspace` works fine. For tests, exclude the affected crates:
+**v8 test compilation**: The `v8` crate does not produce an rlib on Windows, causing test compilation (not regular builds) to fail for crates that transitively depend on it. `cargo build --workspace` works fine. For tests, exclude the affected crates (Git Bash or Unix shell):
 
 ```bash
 cargo nextest run --workspace \
@@ -100,6 +100,12 @@ cargo nextest run --workspace \
   --exclude quarto-lsp \
   --exclude quarto-lsp-core \
   --exclude reconcile-viewer
+```
+
+For PowerShell, use a single line without `\` continuations:
+
+```powershell
+cargo nextest run --workspace --exclude quarto-system-runtime --exclude pampa --exclude quarto-core --exclude quarto-sass --exclude quarto-test --exclude quarto --exclude quarto-project-create --exclude qmd-syntax-helper --exclude comrak-to-pandoc --exclude quarto-lsp --exclude quarto-lsp-core --exclude reconcile-viewer
 ```
 
 See `claude-notes/instructions/windows-dev.md` for the full details and the list of testable crates.

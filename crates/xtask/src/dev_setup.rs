@@ -48,19 +48,24 @@ fn has_binstall() -> bool {
 }
 
 fn install(package: &str, use_binstall: bool) -> Result<()> {
-    let (program, args): (&str, Vec<&str>) = if use_binstall {
-        ("cargo", vec!["binstall", "--no-confirm", package])
-    } else {
-        ("cargo", vec!["install", "--locked", package])
-    };
+    if use_binstall {
+        println!("  Installing {package} via cargo binstall...");
+        let status = Command::new("cargo")
+            .args(["binstall", "--no-confirm", package])
+            .status()
+            .with_context(|| format!("Failed to run cargo binstall {package}"))?;
 
-    let method = if use_binstall { "binstall" } else { "install" };
-    println!("  Installing {package} via cargo {method}...");
+        if status.success() {
+            return Ok(());
+        }
+        println!("  binstall failed, falling back to cargo install...");
+    }
 
-    let status = Command::new(program)
-        .args(&args)
+    println!("  Installing {package} via cargo install...");
+    let status = Command::new("cargo")
+        .args(["install", "--locked", package])
         .status()
-        .with_context(|| format!("Failed to run cargo {method} {package}"))?;
+        .with_context(|| format!("Failed to run cargo install {package}"))?;
 
     if !status.success() {
         bail!("Failed to install {package}");
