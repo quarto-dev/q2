@@ -28,7 +28,9 @@ import {
  * Example: `<span data-sid="5" data-loc="0:1:1-1:5">Hello</span>` → `Hello`
  */
 function stripSourceTrackingSpans(html: string): string {
-  return html.replace(/<span data-sid="[^"]*" data-loc="[^"]*">([^<]*)<\/span>/g, '$1');
+  // Strip spans with both data-sid and data-loc (paragraph-level tracking)
+  // AND spans with only data-sid (inline text tracking added by source-location: full)
+  return html.replace(/<span data-sid="[^"]*"(?: data-loc="[^"]*")?>([^<]*)<\/span>/g, '$1');
 }
 
 // ---------------------------------------------------------------------------
