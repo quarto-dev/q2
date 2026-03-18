@@ -104,7 +104,12 @@ impl PipelineStage for UserFiltersStage {
             .parent()
             .unwrap_or(std::path::Path::new("."));
 
-        let resolved = resolve_filters(&doc.ast.meta, document_dir);
+        let resolved = resolve_filters(
+            &doc.ast.meta,
+            document_dir,
+            &ctx.extensions,
+            ctx.runtime.as_ref(),
+        );
 
         let filters = self.select_filters(&resolved);
         if filters.is_empty() {

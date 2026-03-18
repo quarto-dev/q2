@@ -1523,7 +1523,7 @@ mod tests {
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         // Use from_format_string so target_format is "test-ext-html"
-        let format = Format::from_format_string("test-ext-html");
+        let format = Format::from_format_string("test-ext-html").unwrap();
 
         let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
 

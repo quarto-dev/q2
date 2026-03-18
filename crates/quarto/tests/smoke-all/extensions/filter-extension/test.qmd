@@ -1,0 +1,15 @@
+---
+title: Filter Extension Test
+format: html
+filters:
+  - test-filter
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["EXTENSION-FILTER-ACTIVE"]
+        - ["MARKER-PLACEHOLDER"]
+---
+
+MARKER-PLACEHOLDER

@@ -218,6 +218,10 @@ fn parse_formats(
 /// the extension directory.
 const PATH_VALUED_KEYS: &[&str] = &["template", "template-partials"];
 
+/// Reserved filter names that should NOT be marked as Path.
+/// These are special identifiers, not file paths.
+const FILTER_RESERVED_NAMES: &[&str] = &["citeproc", "quarto"];
+
 /// Convert scalar string values for known path-valued keys to
 /// `ConfigValueKind::Path`. For array-valued keys (like `template-partials`),
 /// each element is converted.
@@ -226,6 +230,40 @@ fn mark_path_valued_keys(format_config: &mut ConfigValue) {
         return;
     };
     for entry in entries.iter_mut() {
+        // Handle filters separately: array of strings and maps with reserved name exclusion
+        if entry.key == "filters" {
+            if let ConfigValueKind::Array(items) = &mut entry.value.value {
+                for item in items.iter_mut() {
+                    match &mut item.value {
+                        // String form: mark as Path unless reserved
+                        ConfigValueKind::Scalar(yaml) => {
+                            if let Some(s) = yaml.as_str() {
+                                if !FILTER_RESERVED_NAMES.contains(&s) {
+                                    item.value = ConfigValueKind::Path(s.to_string());
+                                }
+                            }
+                        }
+                        // Map form: {path: "filter.lua", at: "post-render"}
+                        // Always mark the path sub-key
+                        ConfigValueKind::Map(map_entries) => {
+                            if let Some(path_entry) =
+                                map_entries.iter_mut().find(|e| e.key == "path")
+                            {
+                                if let ConfigValueKind::Scalar(yaml) = &path_entry.value.value {
+                                    if let Some(s) = yaml.as_str() {
+                                        path_entry.value.value =
+                                            ConfigValueKind::Path(s.to_string());
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            continue;
+        }
+
         if !PATH_VALUED_KEYS.contains(&entry.key.as_str()) {
             continue;
         }
@@ -630,6 +668,192 @@ contributes:
             matches!(&items[1].value, ConfigValueKind::Path(s) if s == "header.html"),
             "expected Path(\"header.html\"), got {:?}",
             items[1].value
+        );
+    }
+
+    #[test]
+    fn test_format_filter_string_marked_as_path() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/acm");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: ACM Format
+author: Author
+contributes:
+  formats:
+    html:
+      filters:
+        - filter.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let filters = html_meta.get("filters").unwrap();
+        let items = filters.as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Path(s) if s == "filter.lua"),
+            "expected Path(\"filter.lua\"), got {:?}",
+            items[0].value
+        );
+    }
+
+    #[test]
+    fn test_format_filter_map_path_marked() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/acm");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: ACM Format
+author: Author
+contributes:
+  formats:
+    html:
+      filters:
+        - path: f.lua
+          at: post-render
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let filters = html_meta.get("filters").unwrap();
+        let items = filters.as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        // The path sub-key value should be marked as Path
+        let path_val = items[0].get("path").unwrap();
+        assert!(
+            matches!(&path_val.value, ConfigValueKind::Path(s) if s == "f.lua"),
+            "expected Path(\"f.lua\"), got {:?}",
+            path_val.value
+        );
+        // The at sub-key should remain unchanged
+        let at_val = items[0].get("at").unwrap();
+        assert_eq!(at_val.as_str(), Some("post-render"));
+    }
+
+    #[test]
+    fn test_format_filter_citeproc_not_marked() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/acm");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: ACM Format
+author: Author
+contributes:
+  formats:
+    html:
+      filters:
+        - citeproc
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let filters = html_meta.get("filters").unwrap();
+        let items = filters.as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for citeproc, got {:?}",
+            items[0].value
+        );
+    }
+
+    #[test]
+    fn test_format_filter_quarto_not_marked() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/acm");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: ACM Format
+author: Author
+contributes:
+  formats:
+    html:
+      filters:
+        - quarto
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let filters = html_meta.get("filters").unwrap();
+        let items = filters.as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for quarto, got {:?}",
+            items[0].value
+        );
+    }
+
+    #[test]
+    fn test_format_filter_mixed_entries() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/acm");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: ACM Format
+author: Author
+contributes:
+  formats:
+    html:
+      filters:
+        - pre.lua
+        - citeproc
+        - quarto
+        - path: post.lua
+          at: post-render
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let filters = html_meta.get("filters").unwrap();
+        let items = filters.as_array().unwrap();
+        assert_eq!(items.len(), 4);
+
+        // pre.lua → Path
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Path(s) if s == "pre.lua"),
+            "expected Path(\"pre.lua\"), got {:?}",
+            items[0].value
+        );
+        // citeproc → Scalar (not marked)
+        assert!(
+            matches!(&items[1].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for citeproc, got {:?}",
+            items[1].value
+        );
+        // quarto → Scalar (not marked)
+        assert!(
+            matches!(&items[2].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for quarto, got {:?}",
+            items[2].value
+        );
+        // post.lua map → path sub-key marked as Path
+        let path_val = items[3].get("path").unwrap();
+        assert!(
+            matches!(&path_val.value, ConfigValueKind::Path(s) if s == "post.lua"),
+            "expected Path(\"post.lua\"), got {:?}",
+            path_val.value
         );
     }
 

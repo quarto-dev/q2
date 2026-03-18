@@ -1,0 +1,14 @@
+---
+title: Mixed Filters Test
+filters:
+  - user-filter.lua
+_quarto:
+  tests:
+    marker-ext-html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["EXT-FILTER-RAN", "USER-FILTER-RAN"]
+        - ["EXT-PLACEHOLDER", "USER-PLACEHOLDER"]
+---
+
+EXT-PLACEHOLDER and USER-PLACEHOLDER

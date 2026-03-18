@@ -1,0 +1,12 @@
+---
+title: Format With Filter Test
+_quarto:
+  tests:
+    fmt-filter-html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["FORMAT-FILTER-ACTIVE"]
+        - ["FMT-PLACEHOLDER"]
+---
+
+FMT-PLACEHOLDER

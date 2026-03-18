@@ -260,7 +260,7 @@ fn determine_output_paths(
     options: &RenderToFileOptions,
 ) -> Result<(PathBuf, PathBuf, String)> {
     // Determine file extension using the base format (strips extension prefix)
-    let render_format = Format::from_format_string(format);
+    let render_format = Format::from_format_string(format).unwrap_or_else(|_| Format::html());
     let extension = match render_format.identifier.as_str() {
         "html" => "html",
         "pdf" => "pdf",

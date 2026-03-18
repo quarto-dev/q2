@@ -178,8 +178,7 @@ mod tests {
 
     #[test]
     fn test_resolve_format_unknown() {
-        // from_format_string falls back to HTML for unknown formats
-        let format = resolve_format("unknown").unwrap();
-        assert_eq!(format.identifier, FormatIdentifier::Html);
+        // from_format_string returns an error for unknown formats
+        assert!(resolve_format("unknown").is_err());
     }
 }
