@@ -36,12 +36,13 @@ function getQ2Format(astJson: string): string | null {
     const ast = JSON.parse(astJson);
     const fmt = ast?.meta?.format;
     if (!fmt) return null;
+    let formatStr: string | null = null;
     // MetaString: { t: "MetaString", c: "q2-slides" }
-    if (fmt.t === 'MetaString') return fmt.c;
+    if (fmt.t === 'MetaString') formatStr = fmt.c;
     // MetaInlines: { t: "MetaInlines", c: [{ t: "Str", c: "q2-slides" }] }
-    if (fmt.t === 'MetaInlines') {
-      return fmt.c?.[0]?.c;
-    }
+    if (fmt.t === 'MetaInlines') formatStr = fmt.c?.[0]?.c;
+    // Only return formats handled by ReactPreview
+    if (formatStr?.startsWith('q2-')) return formatStr;
     return null;
   } catch (err) {
     console.error('[PreviewRouter] Failed to parse AST:', err);
