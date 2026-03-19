@@ -103,11 +103,11 @@ function ensureClient(): SyncClient {
  * Auth is handled via HttpOnly cookies, sent automatically by the
  * browser on same-origin WebSocket upgrades.
  */
-export async function connect(syncServerUrl: string, indexDocId: string): Promise<FileEntry[]> {
+export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(syncServerUrl, indexDocId);
+  return ensureClient().connect(syncServerUrl, indexDocId, actorId);
 }
 
 /**
@@ -195,11 +195,11 @@ export function isConnected(): boolean {
 /**
  * Create a new project with the given files.
  */
-export async function createNewProject(options: CreateProjectOptions): Promise<CreateProjectResult> {
+export async function createNewProject(options: CreateProjectOptions, actorId?: string): Promise<CreateProjectResult> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().createNewProject(options);
+  return ensureClient().createNewProject(options, actorId);
 }
 
 /**

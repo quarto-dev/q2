@@ -7,6 +7,7 @@ interface Props {
   state: ReplayState;
   controls: ReplayControls;
   disabled?: boolean;
+  currentActorId?: string | null;
 }
 
 function formatRelativeTime(ts: number): string {
@@ -36,7 +37,7 @@ function formatFullTimestamp(ts: number | null): string {
   return date.toLocaleString();
 }
 
-export default function ReplayDrawer({ state, controls, disabled }: Props) {
+export default function ReplayDrawer({ state, controls, disabled, currentActorId }: Props) {
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Auto-focus the drawer when replay mode activates so keyboard shortcuts work immediately
@@ -159,8 +160,8 @@ export default function ReplayDrawer({ state, controls, disabled }: Props) {
             {state.currentIndex + 1} of {state.historyLength}
           </span>
           {state.actor && (
-            <span className="replay-drawer__actor" title={`Actor: ${state.actor}`}>
-              {state.actor.slice(0, 8)}
+            <span className="replay-drawer__actor">
+              {currentActorId && state.actor === currentActorId ? 'Me' : state.actor.slice(0, 8)}
             </span>
           )}
           {state.timestamp && (

@@ -538,6 +538,7 @@ struct AuthMeResponse {
     email: String,
     name: Option<String>,
     picture: Option<String>,
+    actor_id: String,
 }
 
 /// Request body for POST /auth/refresh.
@@ -559,10 +560,12 @@ async fn auth_me(
         .authenticate_claims(token.as_deref())
         .await
         .map_err(|_| unauthorized())?;
+    let actor_id = crate::auth::sub_to_actor_id(&claims.sub);
     Ok(Json(AuthMeResponse {
         email: claims.email,
         name: claims.name,
         picture: claims.picture,
+        actor_id,
     }))
 }
 

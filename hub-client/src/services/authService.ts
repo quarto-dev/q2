@@ -14,6 +14,15 @@ export interface AuthState {
   email: string;
   name: string | null;
   picture: string | null;
+  actorId: string;
+}
+
+/** Raw JSON shape from GET /auth/me (snake_case). */
+interface AuthMeResponse {
+  email: string;
+  name: string | null;
+  picture: string | null;
+  actor_id: string;
 }
 
 /** Fetch user info from the server. Returns null on 401 (not authenticated). */
@@ -21,7 +30,13 @@ export async function fetchAuthMe(): Promise<AuthState | null> {
   const res = await fetch('/auth/me', { credentials: 'same-origin' });
   if (res.status === 401 || res.status === 403) return null;
   if (!res.ok) throw new Error(`/auth/me failed: ${res.status}`);
-  return res.json() as Promise<AuthState>;
+  const data = await res.json() as AuthMeResponse;
+  return {
+    email: data.email,
+    name: data.name,
+    picture: data.picture,
+    actorId: data.actor_id,
+  };
 }
 
 /** Clear the auth cookie server-side and revoke Google session. */

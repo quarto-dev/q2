@@ -59,7 +59,7 @@ describe('useAuth', () => {
     });
 
     it('sets auth on successful /auth/me', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, actorId: 'abc123' };
       mockFetchAuthMe.mockResolvedValue(user);
 
       const { result } = renderHook(() => useAuth());
@@ -91,7 +91,7 @@ describe('useAuth', () => {
 
   describe('logout', () => {
     it('clears auth state and calls server logout', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, actorId: 'abc123' };
       mockFetchAuthMe.mockResolvedValue(user);
 
       const { result } = renderHook(() => useAuth());
@@ -106,7 +106,7 @@ describe('useAuth', () => {
     });
 
     it('clears auth even if server logout fails', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, actorId: 'abc123' };
       mockFetchAuthMe.mockResolvedValue(user);
       mockServerLogout.mockRejectedValue(new Error('offline'));
 
@@ -133,7 +133,7 @@ describe('useAuth', () => {
     });
 
     it('starts with Google One Tap disabled', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, actorId: 'abc123' };
       mockFetchAuthMe.mockResolvedValue(user);
 
       renderHook(() => useAuth());
@@ -144,11 +144,12 @@ describe('useAuth', () => {
     });
 
     it('updates auth on successful One Tap refresh', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, actorId: 'abc123' };
       const refreshedUser = {
         email: 'a@b.com',
         name: 'A Updated',
         picture: null,
+        actorId: 'abc123',
       };
       mockFetchAuthMe.mockResolvedValue(user);
 
@@ -182,7 +183,7 @@ describe('useAuth', () => {
     });
 
     it('clears auth when cookie expires and no refresh in progress', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, actorId: 'abc123' };
       mockFetchAuthMe
         .mockResolvedValueOnce(user) // mount check
         .mockResolvedValueOnce(null); // expiry re-check
@@ -213,11 +214,12 @@ describe('useAuth', () => {
     });
 
     it('keeps auth if server confirms valid cookie at expiry', async () => {
-      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const user = { email: 'a@b.com', name: 'A', picture: null, actorId: 'abc123' };
       const freshUser = {
         email: 'a@b.com',
         name: 'Still Valid',
         picture: null,
+        actorId: 'abc123',
       };
       mockFetchAuthMe
         .mockResolvedValueOnce(user) // mount check

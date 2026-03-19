@@ -92,8 +92,11 @@
 
 .replay-drawer__actor {
   font-size: 11px;
-  color: #888;
+  color: #aad4ff;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  border: 1px solid #335580;
+  border-radius: 3px;
+  padding: 0 4px;
 }
 
 .replay-drawer__timestamp {

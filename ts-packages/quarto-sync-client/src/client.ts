@@ -8,6 +8,7 @@
 
 import { Repo, DocHandle, updateText } from '@automerge/automerge-repo';
 import type { DocumentId, Patch } from '@automerge/automerge-repo';
+import { clone as automergeClone } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 
 import type {
@@ -45,6 +46,7 @@ interface SyncClientState {
   fileHandles: Map<string, DocHandle<FileDocument>>;
   binaryFiles: Set<string>;
   cleanupFns: (() => void)[];
+  actorId: string | null;
 }
 
 /**
@@ -70,6 +72,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     fileHandles: new Map(),
     binaryFiles: new Set(),
     cleanupFns: [],
+    actorId: null,
   };
 
   // AST cache: last successful parse per file (for round-tripping)
@@ -137,9 +140,32 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     });
   }
 
-  // Helper: subscribe to a file document
-  async function subscribeToFile(path: string, handle: DocHandle<FileDocument>): Promise<void> {
+  // Helper: apply actor ID to a document handle via clone.
+  // The initial repo.create() writes one change with a random actor before this
+  // switches to the sub-derived actor. That random actor persists in history as
+  // noise — not a privacy concern (it's random, not identity-derived).
+  function applyActorId<T>(handle: DocHandle<T>, actorId: string | null): void {
+    if (!actorId) return;
+    handle.update(doc => automergeClone(doc, { actor: actorId }));
+  }
+
+  // Helper: create a document with actor ID applied.
+  function createDoc<T>(): DocHandle<T> {
+    const handle = state.repo!.create<T>();
+    applyActorId(handle, state.actorId);
+    return handle;
+  }
+
+  // Helper: find a document by ID, wait for it to be ready, and apply actor ID.
+  async function findDoc<T>(docId: DocumentId): Promise<DocHandle<T>> {
+    const handle = await state.repo!.find<T>(docId);
     await handle.whenReady();
+    applyActorId(handle, state.actorId);
+    return handle;
+  }
+
+  // Helper: subscribe to a file document (assumes handle is already ready).
+  async function subscribeToFile(path: string, handle: DocHandle<FileDocument>): Promise<void> {
     state.fileHandles.set(path, handle);
 
     const doc = handle.doc();
@@ -226,7 +252,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const docId = file.docId.startsWith('automerge:')
         ? file.docId
         : `automerge:${file.docId}`;
-      const handle = await state.repo.find<FileDocument>(docId as DocumentId);
+      const handle = await findDoc<FileDocument>(docId as DocumentId);
       await subscribeToFile(file.path, handle);
     }
   }
@@ -242,7 +268,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         const docId = file.docId.startsWith('automerge:')
           ? file.docId
           : `automerge:${file.docId}`;
-        const handle = await state.repo.find<FileDocument>(docId as DocumentId);
+        const handle = await findDoc<FileDocument>(docId as DocumentId);
         await subscribeToFile(file.path, handle);
       }
     }
@@ -265,23 +291,22 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Connect to a sync server and load a project.
    */
-  async function connect(syncServerUrl: string, indexDocId: string): Promise<FileEntry[]> {
+  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string): Promise<FileEntry[]> {
     // Disconnect from any existing connection
     await disconnect();
 
     try {
       state.wsAdapter = new BrowserWebSocketClientAdapter(syncServerUrl);
       state.repo = new Repo({ network: [state.wsAdapter] });
+      state.actorId = actorId ?? null;
 
       console.log('Waiting for peer connection...');
       await waitForPeer(state.repo, 30000);
       console.log('Peer connected');
 
       const docId = indexDocId as DocumentId;
-      const indexHandle = await state.repo.find<IndexDocument>(docId);
+      const indexHandle = await findDoc<IndexDocument>(docId);
       state.indexHandle = indexHandle;
-
-      await indexHandle.whenReady();
 
       const doc = indexHandle.doc();
       if (!doc) {
@@ -340,6 +365,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
     state.repo = null;
     state.indexHandle = null;
+    state.actorId = null;
 
     callbacks.onConnectionChange?.(false);
   }
@@ -404,7 +430,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       throw new Error('Not connected');
     }
 
-    const handle = state.repo.create<TextDocumentContent>();
+    const handle = createDoc<TextDocumentContent>();
     handle.change(doc => {
       doc.text = content;
     });
@@ -456,7 +482,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       }
     }
 
-    const handle = state.repo.create<BinaryDocumentContent>();
+    const handle = createDoc<BinaryDocumentContent>();
     handle.change(doc => {
       doc.content = content;
       doc.mimeType = mimeType;
@@ -565,16 +591,17 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Create a new project with the given files.
    */
-  async function createNewProject(options: CreateProjectOptions): Promise<CreateProjectResult> {
+  async function createNewProject(options: CreateProjectOptions, actorId?: string): Promise<CreateProjectResult> {
     await disconnect();
 
     try {
       state.wsAdapter = new BrowserWebSocketClientAdapter(options.syncServer);
       state.repo = new Repo({ network: [state.wsAdapter] });
+      state.actorId = actorId ?? null;
 
       await waitForPeer(state.repo, 30000);
 
-      const indexHandle = state.repo.create<IndexDocument>();
+      const indexHandle = createDoc<IndexDocument>();
       indexHandle.change(doc => {
         doc.files = {};
       });
@@ -589,7 +616,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           const mimeType = file.mimeType || 'application/octet-stream';
           const hash = await computeSHA256(binaryContent);
 
-          const handle = state.repo.create<BinaryDocumentContent>();
+          const handle = createDoc<BinaryDocumentContent>();
           handle.change(doc => {
             doc.content = binaryContent;
             doc.mimeType = mimeType;
@@ -606,7 +633,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           callbacks.onFileAdded(file.path, { type: 'binary', data: binaryContent, mimeType });
           createdFiles.push({ path: file.path, docId });
         } else {
-          const handle = state.repo.create<TextDocumentContent>();
+          const handle = createDoc<TextDocumentContent>();
           handle.change(doc => {
             doc.text = file.content;
           });

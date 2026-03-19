@@ -27,8 +27,9 @@ import './App.css';
 async function connectAndLoadContents(
   syncServer: string,
   indexDocId: string,
+  actorId?: string,
 ): Promise<{ files: FileEntry[]; contents: Map<string, string> }> {
-  const files = await connect(syncServer, indexDocId);
+  const files = await connect(syncServer, indexDocId, actorId);
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -122,7 +123,7 @@ function App() {
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId);
+              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId);
               setProject(targetProject);
               setFiles(loadedFiles);
               setFileContents(contents);
@@ -170,7 +171,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId);
             setProject(existingProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -203,7 +204,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId);
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -296,7 +297,7 @@ function App() {
     setConnectionError(null);
 
     try {
-      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId);
+      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId);
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
@@ -311,7 +312,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, navigateToFile]);
+  }, [navigateToProject, navigateToFile, auth]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -354,7 +355,7 @@ function App() {
       const result = await createNewProject({
         syncServer,
         files,
-      });
+      }, auth?.actorId);
 
       // Store the project in IndexedDB
       const projectEntry = await projectStorage.addProject(
@@ -383,7 +384,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject]);
+  }, [navigateToProject, auth]);
 
   const handleClearPendingShare = useCallback(() => {
     setPendingShareData(null);
@@ -429,6 +430,7 @@ function App() {
             onNavigateToFile={(filePath, options) => {
               navigateToFile(project.id, filePath, options);
             }}
+            actorId={auth?.actorId}
           />
         </ViewModeProvider>
       )}

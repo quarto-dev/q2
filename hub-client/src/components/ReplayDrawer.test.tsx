@@ -114,6 +114,21 @@ describe('ReplayDrawer', () => {
       expect(screen.getByText('abcdef01')).toBeDefined();
     });
 
+    it('renders "Me" when currentActorId matches actor', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} currentActorId="abcdef0123456789abcdef0123456789" />);
+      expect(screen.getByText('Me')).toBeDefined();
+    });
+
+    it('renders short hash when currentActorId does not match', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} currentActorId="different0123456789abcdef01234567" />);
+      expect(screen.getByText('abcdef01')).toBeDefined();
+    });
+
+    it('renders short hash when currentActorId is null', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} currentActorId={null} />);
+      expect(screen.getByText('abcdef01')).toBeDefined();
+    });
+
     it('Apply button calls controls.apply()', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
       fireEvent.click(screen.getByText('Restore'));
