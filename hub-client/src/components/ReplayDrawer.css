@@ -80,14 +80,16 @@
   justify-content: center;
   background: none;
   border: none;
-  padding: 4px 0;
+  padding: 0;
+  margin: -4px 0 0;
+  align-self: stretch;
   cursor: pointer;
   min-width: 0;
 }
 
 .replay-drawer__handle-bar {
   display: block;
-  width: 100px;
+  width: 160px;
   height: 3px;
   border-radius: 2px;
   background: #444;
