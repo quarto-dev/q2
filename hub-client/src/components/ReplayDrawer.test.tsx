@@ -98,15 +98,15 @@ describe('ReplayDrawer', () => {
       expect(controls.seekToEnd).toHaveBeenCalled();
     });
 
-    it('renders Apply button and collapse toggle in header', () => {
+    it('renders Apply button and handle', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
       expect(screen.getByText('Restore')).toBeDefined();
-      expect(screen.getByLabelText('Collapse history')).toBeDefined();
+      expect(screen.getByLabelText('Close replay')).toBeDefined();
     });
 
     it('renders position indicator', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
-      expect(screen.getByText(/43 of 100/)).toBeDefined();
+      expect(screen.getByText(/43\/100/)).toBeDefined();
     });
 
     it('renders actor short hash', () => {
@@ -135,10 +135,17 @@ describe('ReplayDrawer', () => {
       expect(controls.apply).toHaveBeenCalled();
     });
 
-    it('header toggle calls controls.exit()', () => {
+    it('handle calls controls.exit()', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
-      fireEvent.click(screen.getByLabelText('Collapse history'));
+      fireEvent.click(screen.getByLabelText('Close replay'));
       expect(controls.exit).toHaveBeenCalled();
+    });
+
+    it('header row does not exit on click', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      // Clicking the position text in the header should not trigger exit
+      fireEvent.click(screen.getByText(/43\/100/));
+      expect(controls.exit).not.toHaveBeenCalled();
     });
 
     it('shows Pause button when playing', () => {

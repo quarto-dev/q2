@@ -149,16 +149,21 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      <div className="replay-drawer__header" onClick={controls.exit} role="button" aria-label="Collapse history">
+      <div className="replay-drawer__header">
         <span className="replay-drawer__toggle">
           <span className="replay-drawer__chevron">&#x25BC;</span>
           <span>Replay</span>
         </span>
 
+        <button
+          className="replay-drawer__handle"
+          onClick={controls.exit}
+          aria-label="Close replay"
+        >
+          <span className="replay-drawer__handle-bar" />
+        </button>
+
         <div className="replay-drawer__info">
-          <span className="replay-drawer__position">
-            {state.currentIndex + 1} of {state.historyLength}
-          </span>
           {state.actor && (
             <span className="replay-drawer__actor">
               {currentActorId && state.actor === currentActorId ? 'Me' : state.actor.slice(0, 8)}
@@ -166,18 +171,15 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
           )}
           {state.timestamp && (
             <span className="replay-drawer__timestamp">
-              {formatFullTimestamp(state.timestamp)}
               <span className="replay-drawer__relative">{formatTimestamp(state.timestamp)}</span>
+              <span className="replay-drawer__absolute">{formatFullTimestamp(state.timestamp)}</span>
             </span>
           )}
+          <span className="replay-drawer__position">
+            {state.currentIndex + 1}/{state.historyLength}
+          </span>
         </div>
 
-        <button
-          className="replay-drawer__btn replay-drawer__btn--apply"
-          onClick={(e) => { e.stopPropagation(); controls.apply(); }}
-        >
-          Restore
-        </button>
       </div>
 
       <div className="replay-drawer__controls">
@@ -278,6 +280,13 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
             </div>
           )}
         </div>
+
+        <button
+          className="replay-drawer__btn replay-drawer__btn--apply"
+          onClick={controls.apply}
+        >
+          Restore
+        </button>
       </div>
     </div>
   );
