@@ -812,18 +812,19 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   return (
     <div className="editor-container">
       {!isFullscreenPreview && (
-        <MinimalHeader
-          currentFilePath={currentFile?.path ?? null}
-          projectName={project.description}
-          onChooseNewProject={onDisconnect}
-          onShare={handleShare}
-          onToggleFullscreenPreview={handleToggleFullscreenPreview}
-          isFullscreenPreview={isFullscreenPreview}
-        />
-      )}
-
-      {!isFullscreenPreview && replayState.isActive && (
-        <div className="replay-mode-banner">REPLAY MODE</div>
+        <div className="header-wrapper">
+          <MinimalHeader
+            currentFilePath={currentFile?.path ?? null}
+            projectName={project.description}
+            onChooseNewProject={onDisconnect}
+            onShare={handleShare}
+            onToggleFullscreenPreview={handleToggleFullscreenPreview}
+            isFullscreenPreview={isFullscreenPreview}
+          />
+          {replayState.isActive && (
+            <div className="replay-mode-banner">REPLAY MODE</div>
+          )}
+        </div>
       )}
 
       {!isFullscreenPreview && unlocatedErrors.length > 0 && (

@@ -337,16 +337,31 @@
   z-index: 0;
 }
 
-/* Replay mode banner */
+.header-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Replay mode banner — overlays bottom edge of header */
 .replay-mode-banner {
-  background: #0a4f0a;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(74, 222, 128, 0.15),
+    rgba(74, 222, 128, 0.15) 4px,
+    transparent 4px,
+    transparent 8px
+  );
   color: #4ade80;
   text-align: center;
-  padding: 4px 0;
-  font-size: 11px;
+  padding: 2px 0;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
-  border-bottom: 1px solid #166616;
+  z-index: 1;
 }
 
 /* Monaco editor overrides */
