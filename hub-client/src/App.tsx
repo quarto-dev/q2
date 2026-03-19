@@ -312,7 +312,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, navigateToFile, auth]);
+  }, [navigateToProject, navigateToFile, auth?.actorId]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -384,7 +384,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, auth]);
+  }, [navigateToProject, auth?.actorId]);
 
   const handleClearPendingShare = useCallback(() => {
     setPendingShareData(null);
