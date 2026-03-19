@@ -985,60 +985,36 @@ mod tests {
     // ── sub_to_actor_id ──────────────────────────────────────────
 
     #[test]
-    fn sub_to_actor_id_google_numeric() {
-        let id = sub_to_actor_id("114946389732038281927");
-        assert_eq!(id.len(), 64);
-        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn sub_to_actor_id_azure_mixed_case() {
-        let id = sub_to_actor_id("AAAAABBBBBcccccc");
-        assert_eq!(id.len(), 64);
-        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn sub_to_actor_id_auth0_special_chars() {
-        let id = sub_to_actor_id("auth0|5f7c8ec7c33c6c004bbafe82");
-        assert_eq!(id.len(), 64);
-        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+    fn sub_to_actor_id_uniform_64_hex_for_all_providers() {
+        let subs = [
+            "114946389732038281927",          // Google numeric
+            "AAAAABBBBBcccccc",               // Azure mixed-case
+            "auth0|5f7c8ec7c33c6c004bbafe82", // Auth0 with special chars
+            "x",                              // minimal
+            "a-very-long-subject-identifier-from-some-provider-that-uses-uuids-as-sub-claims",
+        ];
+        for sub in &subs {
+            let id = sub_to_actor_id(sub);
+            assert_eq!(
+                id.len(),
+                64,
+                "expected 64 hex chars for sub '{sub}', got {}",
+                id.len()
+            );
+            assert!(
+                id.chars().all(|c| c.is_ascii_hexdigit()),
+                "non-hex char in id for sub '{sub}'"
+            );
+        }
     }
 
     #[test]
     fn sub_to_actor_id_deterministic() {
-        let id1 = sub_to_actor_id("same-sub-value");
-        let id2 = sub_to_actor_id("same-sub-value");
-        assert_eq!(id1, id2);
+        assert_eq!(sub_to_actor_id("same-sub"), sub_to_actor_id("same-sub"));
     }
 
     #[test]
-    fn sub_to_actor_id_different_subs_produce_different_ids() {
-        let id1 = sub_to_actor_id("user-one");
-        let id2 = sub_to_actor_id("user-two");
-        assert_ne!(id1, id2);
-    }
-
-    #[test]
-    fn sub_to_actor_id_uniform_length() {
-        // All providers produce 64 hex chars
-        let ids = [
-            sub_to_actor_id("114946389732038281927"),
-            sub_to_actor_id("AAAAABBBBBcccccc"),
-            sub_to_actor_id("auth0|5f7c8ec7c33c6c004bbafe82"),
-            sub_to_actor_id("x"),
-            sub_to_actor_id(
-                "a-very-long-subject-identifier-from-some-provider-that-uses-uuids-as-sub-claims",
-            ),
-        ];
-        for id in &ids {
-            assert_eq!(
-                id.len(),
-                64,
-                "expected 64 hex chars, got {} for '{}'",
-                id.len(),
-                id
-            );
-        }
+    fn sub_to_actor_id_different_subs_differ() {
+        assert_ne!(sub_to_actor_id("user-one"), sub_to_actor_id("user-two"));
     }
 }
