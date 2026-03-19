@@ -31,7 +31,7 @@ interface PreviewRouterProps {
  * Extract format string from the parsed AST metadata
  * Returns null if no format is found, otherwise returns the format string (e.g., 'q2-slides', 'q2-debug')
  */
-function getQ2Format(astJson: string): string | null {
+export function getQ2Format(astJson: string): string | null {
   try {
     const ast = JSON.parse(astJson);
     const fmt = ast?.meta?.format;
