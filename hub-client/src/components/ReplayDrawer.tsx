@@ -164,15 +164,15 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
         </button>
 
         <div className="replay-drawer__info">
-          {state.actor && (
-            <span className="replay-drawer__actor">
-              {currentActorId && state.actor === currentActorId ? 'Me' : state.actor.slice(0, 8)}
-            </span>
-          )}
           {state.timestamp && (
             <span className="replay-drawer__timestamp">
               <span className="replay-drawer__relative">{formatTimestamp(state.timestamp)}</span>
               <span className="replay-drawer__absolute">{formatFullTimestamp(state.timestamp)}</span>
+            </span>
+          )}
+          {state.actor && (
+            <span className="replay-drawer__actor">
+              {currentActorId && state.actor === currentActorId ? 'Me' : state.actor.slice(0, 8)}
             </span>
           )}
           <span className="replay-drawer__position">
