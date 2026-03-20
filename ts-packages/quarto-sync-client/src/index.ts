@@ -8,6 +8,7 @@
 // Re-export schema types for convenience
 export type {
   IndexDocument,
+  ActorIdentity,
   TextDocumentContent,
   BinaryDocumentContent,
   FileDocumentContent,

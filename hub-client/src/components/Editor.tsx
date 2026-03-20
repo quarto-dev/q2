@@ -52,8 +52,8 @@ interface Props {
   onNavigateToFile: (filePath: string, options?: { anchor?: string; replace?: boolean }) => void;
   /** Current user's Automerge actor ID (for "Me" label in replay) */
   actorId?: string | null;
-  /** Actor ID -> screen name mapping from the IndexDocument */
-  identities?: Record<string, string>;
+  /** Actor ID -> identity mapping from the IndexDocument */
+  identities?: Record<string, import('../services/automergeSync').ActorIdentity>;
 }
 
 // Select the best default file: prefer index.qmd, then first .qmd, then first file

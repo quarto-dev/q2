@@ -12,6 +12,7 @@ import {
   type SyncClientCallbacks,
   type Patch,
   type FileEntry,
+  type ActorIdentity,
   type CreateBinaryFileResult,
   type CreateProjectOptions,
   type CreateProjectResult,
@@ -21,11 +22,11 @@ import {
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
 
 // Re-export types for use in other components
-export type { Patch, FileEntry, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
+export type { Patch, FileEntry, ActorIdentity, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
-type IdentitiesChangeHandler = (identities: Record<string, string>) => void;
+type IdentitiesChangeHandler = (identities: Record<string, ActorIdentity>) => void;
 type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
 type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
@@ -110,11 +111,11 @@ function ensureClient(): SyncClient {
  * Auth is handled via HttpOnly cookies, sent automatically by the
  * browser on same-origin WebSocket upgrades.
  */
-export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string): Promise<FileEntry[]> {
+export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName);
+  return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName, color);
 }
 
 /**
@@ -202,11 +203,11 @@ export function isConnected(): boolean {
 /**
  * Create a new project with the given files.
  */
-export async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string): Promise<CreateProjectResult> {
+export async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string, color?: string): Promise<CreateProjectResult> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().createNewProject(options, actorId, screenName);
+  return ensureClient().createNewProject(options, actorId, screenName, color);
 }
 
 /**

@@ -16,6 +16,7 @@ import type {
   TextDocumentContent,
   BinaryDocumentContent,
   FileEntry,
+  ActorIdentity,
 } from '@quarto/quarto-automerge-schema';
 import {
   isTextDocument,
@@ -121,12 +122,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   // Helper: get identities from index document
-  function getIdentitiesFromIndex(doc: IndexDocument): Record<string, string> {
+  function getIdentitiesFromIndex(doc: IndexDocument): Record<string, ActorIdentity> {
     return doc.identities ? { ...doc.identities } : {};
   }
 
   // Track last-seen identities for diffing
-  let lastIdentities: Record<string, string> = {};
+  let lastIdentities: Record<string, ActorIdentity> = {};
 
   // Helper: fire onIdentitiesChange if identities differ from last seen
   function notifyIdentitiesIfChanged(doc: IndexDocument): void {
@@ -310,7 +311,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Connect to a sync server and load a project.
    */
-  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string): Promise<FileEntry[]> {
+  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string): Promise<FileEntry[]> {
     // Disconnect from any existing connection
     await disconnect();
 
@@ -336,7 +337,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       indexHandle.change(d => {
         migrateIndexDocument(d);
         if (actorId && screenName) {
-          setIdentity(d, actorId, screenName);
+          setIdentity(d, actorId, screenName, color || '');
         }
       });
 
@@ -625,7 +626,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Create a new project with the given files.
    */
-  async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string): Promise<CreateProjectResult> {
+  async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string, color?: string): Promise<CreateProjectResult> {
     await disconnect();
 
     try {
@@ -641,7 +642,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         doc.version = 1;
         doc.identities = {};
         if (actorId && screenName) {
-          doc.identities[actorId] = screenName;
+          setIdentity(doc, actorId, screenName, color || '');
         }
       });
       state.indexHandle = indexHandle;

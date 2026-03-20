@@ -12,6 +12,7 @@ import {
   getFileContent,
   updateFileContent,
   createNewProject,
+  type ActorIdentity,
 } from './services/automergeSync';
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
@@ -30,8 +31,9 @@ async function connectAndLoadContents(
   indexDocId: string,
   actorId?: string,
   screenName?: string,
+  color?: string,
 ): Promise<{ files: FileEntry[]; contents: Map<string, string> }> {
-  const files = await connect(syncServer, indexDocId, actorId, screenName);
+  const files = await connect(syncServer, indexDocId, actorId, screenName, color);
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -65,7 +67,8 @@ function App() {
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [screenName, setScreenName] = useState<string | undefined>();
-  const [identities, setIdentities] = useState<Record<string, string>>({});
+  const [cursorColor, setCursorColor] = useState<string | undefined>();
+  const [identities, setIdentities] = useState<Record<string, ActorIdentity>>({});
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
   const [authError] = useState(() => {
@@ -83,8 +86,10 @@ function App() {
       if (auth?.name && settings.userName.startsWith('Anonymous ')) {
         const updated = await updateUserName(auth.name);
         setScreenName(updated.userName);
+        setCursorColor(updated.userColor);
       } else {
         setScreenName(settings.userName);
+        setCursorColor(settings.userColor);
       }
     });
   }, [authLoading]);
@@ -142,7 +147,7 @@ function App() {
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName);
+              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName, cursorColor);
               setProject(targetProject);
               setFiles(loadedFiles);
               setFileContents(contents);
@@ -190,7 +195,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId, screenName);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId, screenName, cursorColor);
             setProject(existingProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -223,7 +228,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName, cursorColor);
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -319,7 +324,7 @@ function App() {
     setConnectionError(null);
 
     try {
-      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId, screenName);
+      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId, screenName, cursorColor);
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
@@ -334,7 +339,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, navigateToFile, auth?.actorId, screenName]);
+  }, [navigateToProject, navigateToFile, auth?.actorId, screenName, cursorColor]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -377,7 +382,7 @@ function App() {
       const result = await createNewProject({
         syncServer,
         files,
-      }, auth?.actorId, screenName);
+      }, auth?.actorId, screenName, cursorColor);
 
       // Store the project in IndexedDB
       const projectEntry = await projectStorage.addProject(
@@ -406,7 +411,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, auth?.actorId, screenName]);
+  }, [navigateToProject, auth?.actorId, screenName, cursorColor]);
 
   const handleClearPendingShare = useCallback(() => {
     setPendingShareData(null);
@@ -450,6 +455,7 @@ function App() {
           authEmail={auth?.email}
           authPicture={auth?.picture}
           onScreenNameChange={setScreenName}
+          onColorChange={setCursorColor}
           authName={auth?.name}
         />
       ) : (

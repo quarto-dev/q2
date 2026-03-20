@@ -32,6 +32,8 @@ interface Props {
   authPicture?: string | null;
   /** Called when the user changes their screen name. */
   onScreenNameChange?: (name: string) => void;
+  /** Called when the user changes their cursor color. */
+  onColorChange?: (color: string) => void;
   /** Authenticated user's OIDC display name (for screen name reset). */
   authName?: string | null;
 }
@@ -54,6 +56,7 @@ export default function ProjectSelector({
   authEmail,
   authPicture,
   onScreenNameChange,
+  onColorChange,
   authName,
 }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
@@ -186,6 +189,7 @@ export default function ProjectSelector({
     try {
       const updated = await userSettingsService.updateUserColor(color);
       setUserSettings(updated);
+      onColorChange?.(updated.userColor);
     } catch (err) {
       console.error('Failed to update color:', err);
     }

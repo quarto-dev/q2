@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import { actorColor } from '../hooks/useReplayMode';
+import type { ActorIdentity } from '../services/automergeSync';
 import './ReplayDrawer.css';
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
   controls: ReplayControls;
   disabled?: boolean;
   currentActorId?: string | null;
-  identities?: Record<string, string>;
+  identities?: Record<string, ActorIdentity>;
 }
 
 function formatRelativeTime(ts: number): string {
@@ -106,6 +107,12 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
     setScrubberTooltip(null);
   }, []);
 
+  // Resolve an actor's color: prefer identity color from the index document, fall back to hash-based.
+  const resolveActorColor = useCallback((actor: string): string => {
+    const identity = identities?.[actor];
+    return (identity?.color) || actorColor(actor);
+  }, [identities]);
+
   // Build per-chunk stacked rects: each chunk is a vertical column, split by actor fractions.
   const chunkRects = useMemo(() => {
     const chunks = state.chunkActors;
@@ -116,12 +123,12 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
       const x = i * chunkWidth;
       let y = 0;
       for (const { actor, fraction } of chunks[i]) {
-        rects.push({ x, y, width: chunkWidth, height: fraction, color: actorColor(actor) });
+        rects.push({ x, y, width: chunkWidth, height: fraction, color: resolveActorColor(actor) });
         y += fraction;
       }
     }
     return rects;
-  }, [state.chunkActors]);
+  }, [state.chunkActors, resolveActorColor]);
 
   if (!state.isActive) {
     return (
@@ -173,7 +180,11 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
           )}
           {state.actor && (
             <span className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}>
-              {identities?.[state.actor] || state.actor.slice(0, 8)}
+              <span
+                className="replay-drawer__actor-dot"
+                style={{ backgroundColor: resolveActorColor(state.actor) }}
+              />
+              {identities?.[state.actor]?.name || state.actor.slice(0, 8)}
             </span>
           )}
           <span className="replay-drawer__position">

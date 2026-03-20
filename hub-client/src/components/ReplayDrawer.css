@@ -114,6 +114,9 @@
 }
 
 .replay-drawer__actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: #bbb;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -121,6 +124,14 @@
   border-radius: 3px;
   padding: 0 4px;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.replay-drawer__actor-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .replay-drawer__actor--me {
