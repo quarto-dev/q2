@@ -32,6 +32,8 @@ interface Props {
   authPicture?: string | null;
   /** Called when the user changes their screen name. */
   onScreenNameChange?: (name: string) => void;
+  /** Authenticated user's OIDC display name (for screen name reset). */
+  authName?: string | null;
 }
 
 // Curated color palette for user selection (10 colors, single row)
@@ -52,6 +54,7 @@ export default function ProjectSelector({
   authEmail,
   authPicture,
   onScreenNameChange,
+  authName,
 }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,19 +191,26 @@ export default function ProjectSelector({
     }
   };
 
-  const handleRandomizeName = async () => {
+  const handleResetName = async () => {
     try {
-      // Reset generates a new random name
-      const reset = await userSettingsService.resetUserIdentity();
-      // But keep the color if user had one selected
-      if (userSettings && userSettings.userColor !== reset.userColor) {
-        const updated = await userSettingsService.updateUserColor(userSettings.userColor);
+      if (authName) {
+        // Reset to OIDC display name
+        const updated = await userSettingsService.updateUserName(authName);
         setUserSettings(updated);
+        onScreenNameChange?.(updated.userName);
       } else {
-        setUserSettings(reset);
+        // No auth name available — generate a new random name
+        const reset = await userSettingsService.resetUserIdentity();
+        // But keep the color if user had one selected
+        if (userSettings && userSettings.userColor !== reset.userColor) {
+          const updated = await userSettingsService.updateUserColor(userSettings.userColor);
+          setUserSettings(updated);
+        } else {
+          setUserSettings(reset);
+        }
       }
     } catch (err) {
-      console.error('Failed to randomize name:', err);
+      console.error('Failed to reset name:', err);
     }
   };
 
@@ -627,8 +637,8 @@ export default function ProjectSelector({
             </div>
 
             <div className="identity-actions">
-              <button type="button" onClick={handleRandomizeName} className="randomize-btn">
-                Randomize Name
+              <button type="button" onClick={handleResetName} className="randomize-btn">
+                {authName ? 'Reset Name' : 'Randomize Name'}
               </button>
             </div>
 

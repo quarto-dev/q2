@@ -15,7 +15,7 @@ import {
 } from './services/automergeSync';
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
-import { getUserIdentity } from './services/userSettings';
+import { getUserIdentity, updateUserName } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useAuth } from './hooks/useAuth';
 import type { Route, ShareRoute } from './utils/routing';
@@ -75,12 +75,19 @@ function App() {
   });
 
   // Load screen name from IndexedDB (for identity mapping in Automerge docs).
-  // Loaded eagerly on mount — fast IndexedDB read, must resolve before any connect.
+  // When auth is enabled, wait for it to resolve so we can upgrade anonymous
+  // names to the OIDC display name on first login. Without auth, load immediately.
   useEffect(() => {
-    getUserIdentity().then(settings => {
-      setScreenName(settings.userName);
+    if (AUTH_ENABLED && authLoading) return;
+    getUserIdentity().then(async (settings) => {
+      if (auth?.name && settings.userName.startsWith('Anonymous ')) {
+        const updated = await updateUserName(auth.name);
+        setScreenName(updated.userName);
+      } else {
+        setScreenName(settings.userName);
+      }
     });
-  }, []);
+  }, [authLoading]);
 
   // Pending share link data (when user visits a shareable URL for a project they don't have)
   const [pendingShareData, setPendingShareData] = useState<PendingShareData | null>(null);
@@ -327,7 +334,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, navigateToFile, auth?.actorId]);
+  }, [navigateToProject, navigateToFile, auth?.actorId, screenName]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -399,7 +406,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, auth?.actorId]);
+  }, [navigateToProject, auth?.actorId, screenName]);
 
   const handleClearPendingShare = useCallback(() => {
     setPendingShareData(null);
@@ -443,6 +450,7 @@ function App() {
           authEmail={auth?.email}
           authPicture={auth?.picture}
           onScreenNameChange={setScreenName}
+          authName={auth?.name}
         />
       ) : (
         <ViewModeProvider>
