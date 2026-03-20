@@ -1,12 +1,12 @@
 # Extensions Phase 1: _extension.yml Parsing and Metadata Contributions
 
 **Created**: 2026-03-16
-**Status**: Complete (1.1-1.5, 1.4b, 1.7-1.8 done; 1.6 deferred)
-**Parent Plan**: `claude-notes/plans/2026-03-16-extensions-master-plan.md`
+**Status**: Complete (all phases done; 1.6 format-resources deferred)
+**Parent Plan**: `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
 
 ## Codebase Context for New Agents
 
-**READ FIRST**: The master plan (`claude-notes/plans/2026-03-16-extensions-master-plan.md`)
+**READ FIRST**: The grand plan (`claude-notes/plans/2026-03-16-extensions-grand-plan.md`)
 has a "Codebase Context" section with the full crate map, type reference, and
 testing patterns. Read that before starting this work.
 
@@ -873,14 +873,14 @@ use the `NativeRuntime` or similar concrete implementation — grep for
 | `crates/quarto-core/src/lib.rs` | Modify | Done | Register `extension` module |
 | `crates/quarto-core/src/stage/context.rs` | Modify | Done | Add `extensions` field to `StageContext` |
 | `crates/quarto-core/src/stage/stages/metadata_merge.rs` | Modify | Done | Insert extension layer + `build_extension_metadata_layer()` |
-| `crates/quarto-core/src/format.rs` | Modify | TODO | Add `target_format`, `extension_name`, `display_name` to `Format`; add `from_format_string()` |
-| `crates/quarto-core/src/render_to_file.rs` | Modify | TODO | Update `format_from_name()` to use `Format::from_format_string()` |
-| `crates/quarto-test/src/runner.rs` | Modify | TODO | Update format construction if needed |
-| `crates/quarto/tests/smoke-all/extensions/` | Create | TODO | Smoke test fixtures |
+| `crates/quarto-core/src/format.rs` | Modify | Done | Add `target_format`, `extension_name`, `display_name` to `Format`; add `from_format_string()` |
+| `crates/quarto-core/src/render_to_file.rs` | Modify | Done | Update `format_from_name()` to use `Format::from_format_string()` |
+| `crates/quarto-test/src/runner.rs` | Modify | Done | Update format construction if needed |
+| `crates/quarto/tests/smoke-all/extensions/` | Create | Done | Smoke test fixtures |
 
 ## References
 
-- Master plan: `claude-notes/plans/2026-03-16-extensions-master-plan.md`
+- Grand plan: `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
 - TS Quarto format descriptor: `src/core/pandoc/pandoc-formats.ts` (`parseFormatString()`)
 - TS Quarto format identifier: `src/config/types.ts` (`FormatIdentifier` interface)
 - TS Quarto extension reading: `src/extension/extension.ts`

@@ -1657,4 +1657,42 @@ mod tests {
         let layer = build_extension_metadata_layer(&[], "html");
         assert!(layer.is_none());
     }
+
+    #[test]
+    fn test_extension_format_shortcode_paths_rebased_through_merge() {
+        // Extension contributes formats.html.shortcodes: [handler.lua]
+        // After mark_path_valued_keys (Phase 3.1), these become ConfigValueKind::Path.
+        // build_extension_metadata_layer should preserve the Path kind so that
+        // adjust_paths_to_document_dir() can rebase them during full merge.
+        let shortcodes_array = ConfigValue {
+            value: ConfigValueKind::Array(vec![ConfigValue {
+                value: ConfigValueKind::Path("handler.lua".to_string()),
+                source_info: SourceInfo::default(),
+                merge_op: Default::default(),
+            }]),
+            source_info: SourceInfo::default(),
+            merge_op: Default::default(),
+        };
+
+        let mut formats = std::collections::HashMap::new();
+        formats.insert(
+            "html".to_string(),
+            config_map(vec![("shortcodes", shortcodes_array)]),
+        );
+        let ext = make_extension("myext", formats);
+
+        let layer = build_extension_metadata_layer(&[ext], "myext-html");
+        assert!(layer.is_some());
+        let (cv, ext_path) = layer.unwrap();
+        assert_eq!(ext_path, PathBuf::from("/extensions/myext"));
+
+        // Verify shortcodes key is present with Path-typed entries
+        let sc = cv.get("shortcodes").expect("shortcodes key should exist");
+        let items = sc.as_array().expect("shortcodes should be an array");
+        assert_eq!(items.len(), 1);
+        match &items[0].value {
+            ConfigValueKind::Path(p) => assert_eq!(p, "handler.lua"),
+            other => panic!("Expected Path, got {:?}", other),
+        }
+    }
 }

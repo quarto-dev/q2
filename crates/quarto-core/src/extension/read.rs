@@ -216,7 +216,7 @@ fn parse_formats(
 
 /// Keys in extension format config whose values are file paths relative to
 /// the extension directory.
-const PATH_VALUED_KEYS: &[&str] = &["template", "template-partials"];
+const PATH_VALUED_KEYS: &[&str] = &["template", "template-partials", "shortcodes"];
 
 /// Reserved filter names that should NOT be marked as Path.
 /// These are special identifiers, not file paths.
@@ -885,5 +885,107 @@ contributes:
             html_meta.get("number-sections").unwrap().as_bool(),
             Some(true)
         );
+    }
+
+    #[test]
+    fn test_format_shortcode_paths_marked() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/test");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Test
+author: Author
+contributes:
+  formats:
+    html:
+      shortcodes:
+        - handler.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let shortcodes = html_meta.get("shortcodes").unwrap();
+        let items = shortcodes.as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Path(s) if s == "handler.lua"),
+            "expected Path(\"handler.lua\"), got {:?}",
+            items[0].value
+        );
+    }
+
+    #[test]
+    fn test_format_shortcode_multiple_paths_marked() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/test");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Test
+author: Author
+contributes:
+  formats:
+    html:
+      shortcodes:
+        - hello.lua
+        - goodbye.lua
+        - utils/helper.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        let shortcodes = html_meta.get("shortcodes").unwrap();
+        let items = shortcodes.as_array().unwrap();
+        assert_eq!(items.len(), 3);
+        for (i, expected) in ["hello.lua", "goodbye.lua", "utils/helper.lua"]
+            .iter()
+            .enumerate()
+        {
+            assert!(
+                matches!(&items[i].value, ConfigValueKind::Path(s) if s == *expected),
+                "expected Path(\"{}\"), got {:?}",
+                expected,
+                items[i].value
+            );
+        }
+    }
+
+    #[test]
+    fn test_shortcode_marking_doesnt_affect_other_keys() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/test");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Test
+author: Author
+contributes:
+  formats:
+    html:
+      shortcodes:
+        - handler.lua
+      toc: true
+      theme: cosmo
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = ext.contributes.formats.get("html").unwrap();
+        // shortcodes should be marked
+        let shortcodes = html_meta.get("shortcodes").unwrap();
+        let items = shortcodes.as_array().unwrap();
+        assert!(matches!(&items[0].value, ConfigValueKind::Path(_)));
+        // other keys should be unchanged
+        assert_eq!(html_meta.get("toc").unwrap().as_bool(), Some(true));
+        assert_eq!(html_meta.get("theme").unwrap().as_str(), Some("cosmo"));
     }
 }

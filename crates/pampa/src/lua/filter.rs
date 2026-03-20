@@ -19,6 +19,7 @@ use crate::pandoc::{Block, Inline, Pandoc};
 
 use super::constructors::register_pandoc_namespace;
 use super::mediabag::create_shared_mediabag;
+use super::quarto_api::register_quarto_api;
 use super::readwrite::{create_reader_options_table, create_writer_options_table};
 use super::runtime::SystemRuntime;
 use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table};
@@ -134,6 +135,18 @@ pub fn apply_lua_filter(
 
     // Register pandoc namespace with constructors (also registers quarto namespace)
     register_pandoc_namespace(&lua, runtime, mediabag)?;
+
+    // Register quarto.json, quarto.log, quarto.utils
+    register_quarto_api(&lua)?;
+
+    // Set script dir for quarto.utils.resolve_path
+    let script_dir = filter_path
+        .parent()
+        .unwrap_or(Path::new(""))
+        .to_string_lossy()
+        .to_string();
+    lua.globals()
+        .set("_quarto_script_dir", script_dir.as_str())?;
 
     // Set global variables
     // FORMAT - the target output format (html, latex, etc.)
@@ -307,6 +320,42 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
     }
 
     Ok(filter_table)
+}
+
+/// Extract an Inline from a Lua UserData value.
+pub(crate) fn extract_lua_inline(ud: &mlua::AnyUserData) -> Result<Inline> {
+    Ok(ud.borrow::<LuaInline>()?.0.clone())
+}
+
+/// Extract a Block from a Lua UserData value.
+pub(crate) fn extract_lua_block(ud: &mlua::AnyUserData) -> Result<Block> {
+    Ok(ud.borrow::<LuaBlock>()?.0.clone())
+}
+
+/// Extract a Vec<Inline> from a Lua table of UserData values.
+pub(crate) fn extract_lua_inlines_from_table(table: &mlua::Table) -> Result<Vec<Inline>> {
+    let len = table.raw_len();
+    let mut inlines = Vec::new();
+    for i in 1..=len {
+        let value: Value = table.get(i)?;
+        if let Value::UserData(ud) = value {
+            inlines.push(extract_lua_inline(&ud)?);
+        }
+    }
+    Ok(inlines)
+}
+
+/// Extract a Vec<Block> from a Lua table of UserData values.
+pub(crate) fn extract_lua_blocks_from_table(table: &mlua::Table) -> Result<Vec<Block>> {
+    let len = table.raw_len();
+    let mut blocks = Vec::new();
+    for i in 1..=len {
+        let value: Value = table.get(i)?;
+        if let Value::UserData(ud) = value {
+            blocks.push(extract_lua_block(&ud)?);
+        }
+    }
+    Ok(blocks)
 }
 
 /// Handle return value from an inline filter

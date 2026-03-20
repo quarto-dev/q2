@@ -1,0 +1,16 @@
+---
+title: Block Shortcode Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["hr.ext-break"]
+---
+
+Before the break.
+
+{{< break >}}
+
+After the break.

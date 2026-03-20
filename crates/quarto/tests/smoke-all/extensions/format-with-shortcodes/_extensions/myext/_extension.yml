@@ -1,0 +1,7 @@
+title: Format Shortcode Extension
+author: Test
+contributes:
+  formats:
+    html:
+      shortcodes:
+        - greeting.lua

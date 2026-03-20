@@ -2,7 +2,7 @@
 
 **Created**: 2026-03-16
 **Status**: Complete
-**Parent Plan**: `claude-notes/plans/2026-03-16-extensions-master-plan.md`
+**Parent Plan**: `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
 **Depends on**: Phase 1 (complete)
 
 ## Overview
@@ -361,9 +361,9 @@ on `quarto-system-runtime`), the `RuntimeResolver` must live in `quarto-core`
 - [x] **4.7.1** `cargo build --workspace` — clean build
 - [x] **4.7.2** `cargo nextest run --workspace` — 6693 tests pass, 0 failures
 
-### Phase 4.8: Update master plan
+### Phase 4.8: Update grand plan
 
-- [x] **4.8.1** Updated `claude-notes/plans/2026-03-16-extensions-master-plan.md`
+- [x] **4.8.1** Updated `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
   to mark Phase 4 complete with summary of changes.
 
 ---

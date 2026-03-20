@@ -1,0 +1,12 @@
+---
+title: Shortcode Extension Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["HELLO-SHORTCODE-ACTIVE"]
+---
+
+Result: {{< hello >}}

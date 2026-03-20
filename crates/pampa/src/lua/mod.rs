@@ -15,8 +15,10 @@ mod json;
 mod list;
 pub mod mediabag;
 mod path;
+mod quarto_api;
 mod readwrite;
 pub mod runtime;
+pub mod shortcode;
 mod system;
 mod text;
 mod types;
@@ -28,3 +30,7 @@ pub use filter::{LuaFilterError, apply_lua_filters};
 pub use runtime::NativeRuntime;
 #[allow(unused_imports)]
 pub use runtime::{RuntimeError, RuntimeResult, SystemRuntime};
+#[allow(unused_imports)]
+pub use shortcode::{
+    LuaShortcodeEngine, LuaShortcodeError, LuaShortcodeResult, ShortcodeArgs, ShortcodeCallContext,
+};

@@ -45,7 +45,7 @@ pub use footnotes::FootnotesTransform;
 pub use metadata_normalize::MetadataNormalizeTransform;
 pub use resource_collector::ResourceCollectorTransform;
 pub use sectionize::SectionizeTransform;
-pub use shortcode_resolve::ShortcodeResolveTransform;
+pub use shortcode_resolve::{ShortcodeResolveTransform, extract_shortcode_paths};
 pub use title_block::TitleBlockTransform;
 pub use toc_generate::TocGenerateTransform;
 pub use toc_render::TocRenderTransform;

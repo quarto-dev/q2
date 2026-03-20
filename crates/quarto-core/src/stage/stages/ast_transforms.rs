@@ -54,20 +54,30 @@ use crate::transform::TransformPipeline;
 ///
 /// Returns an error if any transform in the pipeline fails.
 pub struct AstTransformsStage {
-    pipeline: TransformPipeline,
+    /// Custom pipeline (set via `with_pipeline`). If `None`, the pipeline
+    /// is built just-in-time in `run()` using `StageContext` data.
+    custom_pipeline: Option<TransformPipeline>,
 }
 
 impl AstTransformsStage {
-    /// Create an AstTransformsStage with the standard transform pipeline.
+    /// Create an AstTransformsStage that builds the pipeline at run time.
+    ///
+    /// The pipeline is constructed in `run()` using data from `StageContext`
+    /// (extensions, runtime, format) needed by the shortcode transform.
     pub fn new() -> Self {
         Self {
-            pipeline: build_transform_pipeline(),
+            custom_pipeline: None,
         }
     }
 
     /// Create an AstTransformsStage with a custom transform pipeline.
+    ///
+    /// The provided pipeline is used as-is, bypassing `StageContext`-based
+    /// construction. Used in tests that only need built-in handlers.
     pub fn with_pipeline(pipeline: TransformPipeline) -> Self {
-        Self { pipeline }
+        Self {
+            custom_pipeline: Some(pipeline),
+        }
     }
 }
 
@@ -105,7 +115,29 @@ impl PipelineStage for AstTransformsStage {
             ));
         };
 
-        let transform_count = self.pipeline.len();
+        // Build the JIT pipeline if no custom pipeline was provided
+        let jit_pipeline;
+        let pipeline = if let Some(ref p) = self.custom_pipeline {
+            p
+        } else {
+            // Build pipeline JIT using StageContext data needed by shortcode transform
+            let document_dir = ctx
+                .document
+                .input
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
+            let shortcode_paths =
+                crate::transforms::extract_shortcode_paths(&doc.ast.meta, document_dir);
+            jit_pipeline = build_transform_pipeline(
+                shortcode_paths,
+                ctx.extensions.clone(),
+                ctx.runtime.clone(),
+                ctx.format.identifier.as_str().to_string(),
+            );
+            &jit_pipeline
+        };
+
+        let transform_count = pipeline.len();
         trace_event!(
             ctx,
             EventLevel::Debug,
@@ -125,7 +157,7 @@ impl PipelineStage for AstTransformsStage {
         render_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
 
         // Execute the transform pipeline
-        let result = self.pipeline.execute(&mut doc.ast, &mut render_ctx);
+        let result = pipeline.execute(&mut doc.ast, &mut render_ctx);
 
         // Transfer artifacts back to StageContext
         ctx.artifacts = render_ctx.artifacts;

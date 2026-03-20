@@ -1,8 +1,8 @@
 # Extensions Phase 2: Extension Filter Resolution
 
 **Created**: 2026-03-17
-**Status**: Not Started
-**Parent Plan**: `claude-notes/plans/2026-03-16-extensions-master-plan.md`
+**Status**: Complete (merged as `cffc2e6c`)
+**Parent Plan**: `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
 **Depends on**: Phase 1 (complete), Lua filter support (complete, rebased)
 
 ## What Phase 1 Built (already on this branch)
@@ -485,7 +485,7 @@ extension filter smoke tests below follow the same pattern.
 
 - [x] **2.5.1** `cargo build --workspace` — clean build
 - [x] **2.5.2** `cargo nextest run --workspace` — all tests pass
-- [x] **2.5.3** Update master plan to mark Phase 2 complete
+- [x] **2.5.3** Update grand plan to mark Phase 2 complete
 
 ---
 

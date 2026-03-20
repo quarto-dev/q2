@@ -43,11 +43,17 @@ use quarto_pandoc_types::shortcode::{Shortcode, ShortcodeArg};
 use quarto_pandoc_types::table::Table;
 use quarto_source_map::SourceInfo;
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use quarto_analysis::AnalysisContext;
 
 use crate::Result;
+use crate::extension::discover::find_extension;
+use crate::extension::types::Extension;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
+use quarto_system_runtime::SystemRuntime;
 
 /// Error information for shortcode resolution failures.
 pub struct ShortcodeError {
@@ -61,6 +67,8 @@ pub struct ShortcodeError {
 pub enum ShortcodeResult {
     /// Resolved to inline content
     Inlines(Vec<Inline>),
+    /// Resolved to block content (for block-context shortcodes)
+    Blocks(Vec<Block>),
     /// Error - renders visible content AND emits diagnostic
     Error(ShortcodeError),
     /// Shortcode should be preserved as literal text (e.g., escaped shortcodes)
@@ -75,6 +83,15 @@ pub struct ShortcodeContext<'a> {
     pub source_info: &'a SourceInfo,
 }
 
+/// Whether the shortcode is being resolved in block or inline context.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolutionContext {
+    /// Shortcode is the sole content of a Para/Plain — may return Blocks
+    Block,
+    /// Shortcode is inline among other content — must return Inlines
+    Inline,
+}
+
 /// Trait for shortcode handlers.
 ///
 /// Each built-in shortcode (meta, var, env, etc.) implements this trait.
@@ -83,7 +100,12 @@ pub trait ShortcodeHandler: Send + Sync {
     fn name(&self) -> &str;
 
     /// Resolve the shortcode to content.
-    fn resolve(&self, shortcode: &Shortcode, ctx: &ShortcodeContext) -> ShortcodeResult;
+    fn resolve(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext,
+        resolution_ctx: ResolutionContext,
+    ) -> ShortcodeResult;
 }
 
 /// Handler for the `meta` shortcode.
@@ -99,7 +121,12 @@ impl ShortcodeHandler for MetaShortcodeHandler {
         "meta"
     }
 
-    fn resolve(&self, shortcode: &Shortcode, ctx: &ShortcodeContext) -> ShortcodeResult {
+    fn resolve(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext,
+        _resolution_ctx: ResolutionContext,
+    ) -> ShortcodeResult {
         // Get the key from positional args
         let key = match shortcode.positional_args.first() {
             Some(ShortcodeArg::String(s)) => s.clone(),
@@ -221,29 +248,110 @@ fn flatten_blocks_to_inlines(blocks: &[Block]) -> Vec<Inline> {
 }
 
 /// Transform that resolves shortcodes in the AST.
+///
+/// Supports both built-in Rust handlers and Lua shortcode scripts loaded from
+/// extensions or user-specified paths.
+///
+/// The `LuaShortcodeEngine` (which holds a `!Send + !Sync` Lua state) is created
+/// inside `transform()` as a stack-local variable, never stored as a field.
 pub struct ShortcodeResolveTransform {
     handlers: Vec<Box<dyn ShortcodeHandler>>,
+    /// Shortcode script paths from merged metadata (absolute)
+    lua_shortcode_paths: Vec<PathBuf>,
+    /// Extensions for name-based shortcode lookup
+    extensions: Vec<Extension>,
+    /// System runtime for reading Lua files
+    runtime: Option<Arc<dyn SystemRuntime>>,
+    /// Target format string (e.g., "html") for Lua FORMAT global
+    target_format: String,
 }
 
 impl ShortcodeResolveTransform {
-    /// Create a new shortcode resolve transform with default handlers.
+    /// Create a new shortcode resolve transform with default handlers only.
+    /// Used in tests that don't need Lua support.
     pub fn new() -> Self {
         Self {
             handlers: vec![Box::new(MetaShortcodeHandler)],
+            lua_shortcode_paths: Vec::new(),
+            extensions: Vec::new(),
+            runtime: None,
+            target_format: String::new(),
+        }
+    }
+
+    /// Create a shortcode resolve transform with Lua support.
+    ///
+    /// The `LuaShortcodeEngine` is NOT created here (it's `!Send + !Sync`).
+    /// It is created on the stack inside `transform()`.
+    pub fn with_lua_support(
+        lua_shortcode_paths: Vec<PathBuf>,
+        extensions: Vec<Extension>,
+        runtime: Arc<dyn SystemRuntime>,
+        target_format: String,
+    ) -> Self {
+        Self {
+            handlers: vec![Box::new(MetaShortcodeHandler)],
+            lua_shortcode_paths,
+            extensions,
+            runtime: Some(runtime),
+            target_format,
         }
     }
 
     /// Resolve a shortcode using the appropriate handler.
-    fn resolve_shortcode(&self, shortcode: &Shortcode, ctx: &ShortcodeContext) -> ShortcodeResult {
+    ///
+    /// Priority: built-in Rust handlers > loaded Lua handlers > extension name lookup.
+    fn resolve_shortcode(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext,
+        resolution_ctx: ResolutionContext,
+        lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
+    ) -> ShortcodeResult {
         // Handle escaped shortcodes - preserve as literal text
         if shortcode.is_escaped {
             return ShortcodeResult::Preserve;
         }
 
-        // Find and call handler
+        // 1. Try built-in Rust handlers first
         for handler in &self.handlers {
             if handler.name() == shortcode.name {
-                return handler.resolve(shortcode, ctx);
+                return handler.resolve(shortcode, ctx, resolution_ctx);
+            }
+        }
+
+        // 2. Try Lua engine (loaded handlers)
+        if let Some(engine) = lua_engine.as_mut() {
+            // If handler is already loaded, call it
+            if engine.has_handler(&shortcode.name) {
+                return dispatch_lua_shortcode(engine, shortcode, ctx, resolution_ctx);
+            }
+
+            // 3. Try name-based extension lookup (on-demand loading)
+            if let Some(ext) = find_extension(&shortcode.name, &self.extensions) {
+                if !ext.contributes.shortcodes.is_empty() {
+                    for script_path in &ext.contributes.shortcodes {
+                        if let Err(e) = engine.load_script(script_path) {
+                            let diagnostic =
+                                DiagnosticMessageBuilder::warning("Shortcode script error")
+                                    .problem(format!(
+                                        "Failed to load shortcode script `{}`: {}",
+                                        script_path.display(),
+                                        e
+                                    ))
+                                    .with_location(ctx.source_info.clone())
+                                    .build();
+                            return ShortcodeResult::Error(ShortcodeError {
+                                key: shortcode.name.clone(),
+                                diagnostic,
+                            });
+                        }
+                    }
+                    // Retry after loading extension scripts
+                    if engine.has_handler(&shortcode.name) {
+                        return dispatch_lua_shortcode(engine, shortcode, ctx, resolution_ctx);
+                    }
+                }
             }
         }
 
@@ -266,6 +374,133 @@ impl Default for ShortcodeResolveTransform {
     }
 }
 
+/// Dispatch a shortcode call to the Lua engine and convert the result.
+fn dispatch_lua_shortcode(
+    engine: &mut pampa::lua::LuaShortcodeEngine,
+    shortcode: &Shortcode,
+    ctx: &ShortcodeContext,
+    resolution_ctx: ResolutionContext,
+) -> ShortcodeResult {
+    let args = shortcode_to_lua_args(shortcode, ctx.metadata);
+    let call_ctx = match resolution_ctx {
+        ResolutionContext::Block => pampa::lua::ShortcodeCallContext::Block,
+        ResolutionContext::Inline => pampa::lua::ShortcodeCallContext::Inline,
+    };
+    match engine.call(&shortcode.name, &args, call_ctx) {
+        Some(result) => lua_result_to_shortcode_result(result, ctx.source_info),
+        None => {
+            let diagnostic = DiagnosticMessageBuilder::warning("Shortcode handler not found")
+                .problem(format!(
+                    "Lua handler for shortcode `{}` was not found",
+                    shortcode.name
+                ))
+                .with_location(ctx.source_info.clone())
+                .build();
+            ShortcodeResult::Error(ShortcodeError {
+                key: shortcode.name.clone(),
+                diagnostic,
+            })
+        }
+    }
+}
+
+/// Convert a q2 `Shortcode` to pampa's `ShortcodeArgs` for Lua dispatch.
+fn shortcode_to_lua_args(
+    shortcode: &Shortcode,
+    metadata: &ConfigValue,
+) -> pampa::lua::ShortcodeArgs {
+    let positional: Vec<String> = shortcode
+        .positional_args
+        .iter()
+        .filter_map(|arg| match arg {
+            ShortcodeArg::String(s) => Some(s.clone()),
+            ShortcodeArg::Number(n) => Some(n.to_string()),
+            ShortcodeArg::Boolean(b) => Some(b.to_string()),
+            _ => None,
+        })
+        .collect();
+
+    let keyword: Vec<(String, String)> = shortcode
+        .keyword_args
+        .iter()
+        .filter_map(|(key, value)| match value {
+            ShortcodeArg::String(s) => Some((key.clone(), s.clone())),
+            ShortcodeArg::Number(n) => Some((key.clone(), n.to_string())),
+            ShortcodeArg::Boolean(b) => Some((key.clone(), b.to_string())),
+            _ => None,
+        })
+        .collect();
+
+    // Extract top-level metadata as string key-value pairs for Lua
+    let meta_entries: Vec<(String, String)> = if let Some(entries) = metadata.as_map_entries() {
+        entries
+            .iter()
+            .filter_map(|entry| {
+                entry
+                    .value
+                    .as_str()
+                    .map(|v| (entry.key.clone(), v.to_string()))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    pampa::lua::ShortcodeArgs {
+        positional,
+        keyword,
+        metadata: meta_entries,
+    }
+}
+
+/// Convert a pampa `LuaShortcodeResult` back to a q2 `ShortcodeResult`.
+fn lua_result_to_shortcode_result(
+    result: pampa::lua::LuaShortcodeResult,
+    source_info: &SourceInfo,
+) -> ShortcodeResult {
+    match result {
+        pampa::lua::LuaShortcodeResult::Inlines(inlines) => ShortcodeResult::Inlines(inlines),
+        pampa::lua::LuaShortcodeResult::Blocks(blocks) => ShortcodeResult::Blocks(blocks),
+        pampa::lua::LuaShortcodeResult::Text(text) => {
+            ShortcodeResult::Inlines(vec![Inline::Str(Str {
+                text,
+                source_info: SourceInfo::default(),
+            })])
+        }
+        pampa::lua::LuaShortcodeResult::Error(msg) => {
+            let diagnostic = DiagnosticMessageBuilder::warning("Shortcode error")
+                .problem(msg)
+                .with_location(source_info.clone())
+                .build();
+            ShortcodeResult::Error(ShortcodeError {
+                key: "lua-shortcode".to_string(),
+                diagnostic,
+            })
+        }
+    }
+}
+
+/// Extract shortcode paths from merged metadata.
+///
+/// After metadata merge, `meta["shortcodes"]` contains an array of paths
+/// (either `ConfigValueKind::Path` from extensions or `Scalar` from user frontmatter).
+pub fn extract_shortcode_paths(meta: &ConfigValue, document_dir: &std::path::Path) -> Vec<PathBuf> {
+    let Some(sc_val) = meta.get("shortcodes") else {
+        return vec![];
+    };
+    let Some(items) = sc_val.as_array() else {
+        return vec![];
+    };
+    items
+        .iter()
+        .filter_map(|item| match &item.value {
+            ConfigValueKind::Path(s) => Some(document_dir.join(s)),
+            ConfigValueKind::Scalar(_) => item.as_str().map(|s| document_dir.join(s)),
+            _ => None,
+        })
+        .collect()
+}
+
 impl AstTransform for ShortcodeResolveTransform {
     fn name(&self) -> &str {
         "shortcode-resolve"
@@ -275,8 +510,52 @@ impl AstTransform for ShortcodeResolveTransform {
         // Collect diagnostics during traversal
         let mut diagnostics: Vec<DiagnosticMessage> = Vec::new();
 
+        // Create Lua engine on the stack if we have paths, extensions, or a runtime.
+        // The engine is !Send + !Sync so it cannot be stored as a field.
+        let mut lua_engine = if (!self.lua_shortcode_paths.is_empty()
+            || !self.extensions.is_empty())
+            && self.runtime.is_some()
+        {
+            let runtime = self.runtime.as_ref().unwrap().clone();
+            match pampa::lua::LuaShortcodeEngine::new(&self.target_format, runtime) {
+                Ok(mut engine) => {
+                    // Load scripts from metadata-specified paths
+                    for path in &self.lua_shortcode_paths {
+                        if let Err(e) = engine.load_script(path) {
+                            diagnostics.push(
+                                DiagnosticMessageBuilder::warning("Shortcode script error")
+                                    .problem(format!(
+                                        "Failed to load shortcode script `{}`: {}",
+                                        path.display(),
+                                        e
+                                    ))
+                                    .build(),
+                            );
+                        }
+                    }
+                    Some(engine)
+                }
+                Err(e) => {
+                    diagnostics.push(
+                        DiagnosticMessageBuilder::warning("Lua shortcode engine error")
+                            .problem(format!("Failed to create Lua shortcode engine: {}", e))
+                            .build(),
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         // Resolve shortcodes in all blocks
-        resolve_blocks(&mut ast.blocks, self, &ast.meta, &mut diagnostics);
+        resolve_blocks(
+            &mut ast.blocks,
+            self,
+            &ast.meta,
+            &mut diagnostics,
+            &mut lua_engine,
+        );
 
         // Add any diagnostics to the render context
         for diagnostic in diagnostics {
@@ -288,14 +567,87 @@ impl AstTransform for ShortcodeResolveTransform {
 }
 
 /// Resolve shortcodes in a vector of blocks.
+///
+/// Uses index-based iteration because block-context shortcodes can splice
+/// multiple blocks in place of a single Para/Plain.
 fn resolve_blocks(
     blocks: &mut Vec<Block>,
     transform: &ShortcodeResolveTransform,
     metadata: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
 ) {
-    for block in blocks.iter_mut() {
-        resolve_block(block, transform, metadata, diagnostics);
+    let mut i = 0;
+    while i < blocks.len() {
+        // Check for block-context shortcode: Para/Plain with exactly one non-escaped Shortcode
+        if let Some(shortcode) = single_shortcode_in_para_or_plain(&blocks[i]) {
+            let shortcode_owned = shortcode.clone();
+            let ctx = ShortcodeContext {
+                metadata,
+                source_info: &shortcode_owned.source_info,
+            };
+            match transform.resolve_shortcode(
+                &shortcode_owned,
+                &ctx,
+                ResolutionContext::Block,
+                lua_engine,
+            ) {
+                ShortcodeResult::Blocks(new_blocks) => {
+                    let n = new_blocks.len();
+                    blocks.splice(i..=i, new_blocks);
+                    i += n.max(1);
+                    continue;
+                }
+                ShortcodeResult::Inlines(inlines) => {
+                    replace_shortcode_in_block(&mut blocks[i], inlines);
+                    i += 1;
+                    continue;
+                }
+                ShortcodeResult::Error(error) => {
+                    diagnostics.push(error.diagnostic);
+                    let error_inline = make_error_inline(&error.key);
+                    replace_shortcode_in_block(&mut blocks[i], vec![error_inline]);
+                    i += 1;
+                    continue;
+                }
+                ShortcodeResult::Preserve => {
+                    let literal = shortcode_to_literal(&shortcode_owned);
+                    replace_shortcode_in_block(&mut blocks[i], vec![literal]);
+                    i += 1;
+                    continue;
+                }
+            }
+        }
+        // General case: recurse into block
+        resolve_block(&mut blocks[i], transform, metadata, diagnostics, lua_engine);
+        i += 1;
+    }
+}
+
+/// Check if a block is a Para/Plain with exactly one non-escaped Shortcode inline.
+fn single_shortcode_in_para_or_plain(block: &Block) -> Option<&Shortcode> {
+    let content = match block {
+        Block::Paragraph(Paragraph { content, .. }) | Block::Plain(Plain { content, .. }) => {
+            content
+        }
+        _ => return None,
+    };
+    if content.len() != 1 {
+        return None;
+    }
+    match &content[0] {
+        Inline::Shortcode(sc) if !sc.is_escaped => Some(sc),
+        _ => None,
+    }
+}
+
+/// Replace the single Shortcode inline in a Para/Plain with the given inlines.
+fn replace_shortcode_in_block(block: &mut Block, inlines: Vec<Inline>) {
+    match block {
+        Block::Paragraph(Paragraph { content, .. }) | Block::Plain(Plain { content, .. }) => {
+            *content = inlines;
+        }
+        _ => {}
     }
 }
 
@@ -305,53 +657,54 @@ fn resolve_block(
     transform: &ShortcodeResolveTransform,
     metadata: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
 ) {
     match block {
         Block::Plain(Plain { content, .. }) | Block::Paragraph(Paragraph { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Block::LineBlock(LineBlock { content, .. }) => {
             for line in content {
-                resolve_inlines(line, transform, metadata, diagnostics);
+                resolve_inlines(line, transform, metadata, diagnostics, lua_engine);
             }
         }
         Block::Header(Header { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Block::BlockQuote(BlockQuote { content, .. }) => {
-            resolve_blocks(content, transform, metadata, diagnostics);
+            resolve_blocks(content, transform, metadata, diagnostics, lua_engine);
         }
         Block::OrderedList(OrderedList { content, .. }) => {
             for item in content {
-                resolve_blocks(item, transform, metadata, diagnostics);
+                resolve_blocks(item, transform, metadata, diagnostics, lua_engine);
             }
         }
         Block::BulletList(BulletList { content, .. }) => {
             for item in content {
-                resolve_blocks(item, transform, metadata, diagnostics);
+                resolve_blocks(item, transform, metadata, diagnostics, lua_engine);
             }
         }
         Block::DefinitionList(DefinitionList { content, .. }) => {
             for (term, defs) in content {
-                resolve_inlines(term, transform, metadata, diagnostics);
+                resolve_inlines(term, transform, metadata, diagnostics, lua_engine);
                 for def in defs {
-                    resolve_blocks(def, transform, metadata, diagnostics);
+                    resolve_blocks(def, transform, metadata, diagnostics, lua_engine);
                 }
             }
         }
         Block::Figure(Figure {
             content, caption, ..
         }) => {
-            resolve_blocks(content, transform, metadata, diagnostics);
+            resolve_blocks(content, transform, metadata, diagnostics, lua_engine);
             if let Some(short) = &mut caption.short {
-                resolve_inlines(short, transform, metadata, diagnostics);
+                resolve_inlines(short, transform, metadata, diagnostics, lua_engine);
             }
             if let Some(long) = &mut caption.long {
-                resolve_blocks(long, transform, metadata, diagnostics);
+                resolve_blocks(long, transform, metadata, diagnostics, lua_engine);
             }
         }
         Block::Div(Div { content, .. }) => {
-            resolve_blocks(content, transform, metadata, diagnostics);
+            resolve_blocks(content, transform, metadata, diagnostics, lua_engine);
         }
         Block::Table(Table {
             caption,
@@ -362,29 +715,47 @@ fn resolve_block(
         }) => {
             // Table caption
             if let Some(short) = &mut caption.short {
-                resolve_inlines(short, transform, metadata, diagnostics);
+                resolve_inlines(short, transform, metadata, diagnostics, lua_engine);
             }
             if let Some(long) = &mut caption.long {
-                resolve_blocks(long, transform, metadata, diagnostics);
+                resolve_blocks(long, transform, metadata, diagnostics, lua_engine);
             }
             // Table head
             for row in &mut head.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, transform, metadata, diagnostics);
+                    resolve_blocks(
+                        &mut cell.content,
+                        transform,
+                        metadata,
+                        diagnostics,
+                        lua_engine,
+                    );
                 }
             }
             // Table bodies
             for body in bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        resolve_blocks(&mut cell.content, transform, metadata, diagnostics);
+                        resolve_blocks(
+                            &mut cell.content,
+                            transform,
+                            metadata,
+                            diagnostics,
+                            lua_engine,
+                        );
                     }
                 }
             }
             // Table foot
             for row in &mut foot.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, transform, metadata, diagnostics);
+                    resolve_blocks(
+                        &mut cell.content,
+                        transform,
+                        metadata,
+                        diagnostics,
+                        lua_engine,
+                    );
                 }
             }
         }
@@ -393,14 +764,14 @@ fn resolve_block(
             for slot in custom.slots.values_mut() {
                 match slot {
                     quarto_pandoc_types::custom::Slot::Block(b) => {
-                        resolve_block(b, transform, metadata, diagnostics);
+                        resolve_block(b, transform, metadata, diagnostics, lua_engine);
                     }
                     quarto_pandoc_types::custom::Slot::Blocks(bs) => {
-                        resolve_blocks(bs, transform, metadata, diagnostics);
+                        resolve_blocks(bs, transform, metadata, diagnostics, lua_engine);
                     }
                     quarto_pandoc_types::custom::Slot::Inline(i) => {
                         let mut inlines = vec![i.as_ref().clone()];
-                        resolve_inlines(&mut inlines, transform, metadata, diagnostics);
+                        resolve_inlines(&mut inlines, transform, metadata, diagnostics, lua_engine);
                         if inlines.len() == 1 {
                             **i = inlines.pop().unwrap();
                         }
@@ -408,7 +779,7 @@ fn resolve_block(
                         // back into a single Inline slot - keep the original
                     }
                     quarto_pandoc_types::custom::Slot::Inlines(is) => {
-                        resolve_inlines(is, transform, metadata, diagnostics);
+                        resolve_inlines(is, transform, metadata, diagnostics, lua_engine);
                     }
                 }
             }
@@ -430,22 +801,36 @@ fn resolve_inlines(
     transform: &ShortcodeResolveTransform,
     metadata: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
 ) {
     let mut i = 0;
     while i < inlines.len() {
         if let Inline::Shortcode(shortcode) = &inlines[i] {
+            let shortcode_owned = shortcode.clone();
             let shortcode_ctx = ShortcodeContext {
                 metadata,
-                source_info: &shortcode.source_info,
+                source_info: &shortcode_owned.source_info,
             };
 
-            match transform.resolve_shortcode(shortcode, &shortcode_ctx) {
+            match transform.resolve_shortcode(
+                &shortcode_owned,
+                &shortcode_ctx,
+                ResolutionContext::Inline,
+                lua_engine,
+            ) {
                 ShortcodeResult::Inlines(replacement) => {
                     // Replace shortcode with resolved inlines
                     let replacement_len = replacement.len();
                     inlines.splice(i..=i, replacement);
                     // Advance past the replacement (they shouldn't contain shortcodes,
                     // but even if they do, we don't want infinite loops)
+                    i += replacement_len.max(1);
+                }
+                ShortcodeResult::Blocks(blocks) => {
+                    // Graceful degradation: flatten blocks to inlines
+                    let replacement = flatten_blocks_to_inlines(&blocks);
+                    let replacement_len = replacement.len();
+                    inlines.splice(i..=i, replacement);
                     i += replacement_len.max(1);
                 }
                 ShortcodeResult::Error(error) => {
@@ -458,14 +843,20 @@ fn resolve_inlines(
                 }
                 ShortcodeResult::Preserve => {
                     // Convert escaped shortcode to literal text
-                    let literal = shortcode_to_literal(shortcode);
+                    let literal = shortcode_to_literal(&shortcode_owned);
                     inlines[i] = literal;
                     i += 1;
                 }
             }
         } else {
             // Recurse into inline containers
-            recurse_inline(&mut inlines[i], transform, metadata, diagnostics);
+            recurse_inline(
+                &mut inlines[i],
+                transform,
+                metadata,
+                diagnostics,
+                lua_engine,
+            );
             i += 1;
         }
     }
@@ -477,6 +868,7 @@ fn recurse_inline(
     transform: &ShortcodeResolveTransform,
     metadata: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
 ) {
     match inline {
         Inline::Emph(Emph { content, .. })
@@ -489,45 +881,45 @@ fn recurse_inline(
         | Inline::Insert(Insert { content, .. })
         | Inline::Delete(Delete { content, .. })
         | Inline::Highlight(Highlight { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Inline::Quoted(Quoted { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Inline::Cite(Cite { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Inline::Link(Link { content, .. }) | Inline::Image(Image { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Inline::Note(Note { content, .. }) => {
-            resolve_blocks(content, transform, metadata, diagnostics);
+            resolve_blocks(content, transform, metadata, diagnostics, lua_engine);
         }
         Inline::Span(Span { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Inline::EditComment(EditComment { content, .. }) => {
-            resolve_inlines(content, transform, metadata, diagnostics);
+            resolve_inlines(content, transform, metadata, diagnostics, lua_engine);
         }
         Inline::Custom(custom) => {
             // Resolve shortcodes in custom inline node slots
             for slot in custom.slots.values_mut() {
                 match slot {
                     quarto_pandoc_types::custom::Slot::Inlines(is) => {
-                        resolve_inlines(is, transform, metadata, diagnostics);
+                        resolve_inlines(is, transform, metadata, diagnostics, lua_engine);
                     }
                     quarto_pandoc_types::custom::Slot::Inline(i) => {
                         let mut inlines = vec![i.as_ref().clone()];
-                        resolve_inlines(&mut inlines, transform, metadata, diagnostics);
+                        resolve_inlines(&mut inlines, transform, metadata, diagnostics, lua_engine);
                         if inlines.len() == 1 {
                             **i = inlines.pop().unwrap();
                         }
                     }
                     quarto_pandoc_types::custom::Slot::Blocks(bs) => {
-                        resolve_blocks(bs, transform, metadata, diagnostics);
+                        resolve_blocks(bs, transform, metadata, diagnostics, lua_engine);
                     }
                     quarto_pandoc_types::custom::Slot::Block(b) => {
-                        resolve_block(b, transform, metadata, diagnostics);
+                        resolve_block(b, transform, metadata, diagnostics, lua_engine);
                     }
                 }
             }
@@ -741,7 +1133,7 @@ mod tests {
             source_info: &shortcode.source_info,
         };
 
-        let result = handler.resolve(&shortcode, &ctx);
+        let result = handler.resolve(&shortcode, &ctx, ResolutionContext::Inline);
         match result {
             ShortcodeResult::Inlines(inlines) => {
                 assert_eq!(inlines.len(), 1);
@@ -773,7 +1165,7 @@ mod tests {
             source_info: &shortcode.source_info,
         };
 
-        let result = handler.resolve(&shortcode, &ctx);
+        let result = handler.resolve(&shortcode, &ctx, ResolutionContext::Inline);
         match result {
             ShortcodeResult::Error(err) => {
                 assert_eq!(err.key, "meta:nonexistent");
@@ -794,7 +1186,7 @@ mod tests {
             source_info: &shortcode.source_info,
         };
 
-        let result = handler.resolve(&shortcode, &ctx);
+        let result = handler.resolve(&shortcode, &ctx, ResolutionContext::Inline);
         match result {
             ShortcodeResult::Error(err) => {
                 assert_eq!(err.key, "meta");
@@ -820,7 +1212,8 @@ mod tests {
             source_info: &shortcode.source_info,
         };
 
-        let result = transform.resolve_shortcode(&shortcode, &ctx);
+        let result =
+            transform.resolve_shortcode(&shortcode, &ctx, ResolutionContext::Inline, &mut None);
         assert!(matches!(result, ShortcodeResult::Preserve));
     }
 
@@ -835,7 +1228,8 @@ mod tests {
             source_info: &shortcode.source_info,
         };
 
-        let result = transform.resolve_shortcode(&shortcode, &ctx);
+        let result =
+            transform.resolve_shortcode(&shortcode, &ctx, ResolutionContext::Inline, &mut None);
         match result {
             ShortcodeResult::Error(err) => {
                 assert_eq!(err.key, "unknown");
@@ -965,5 +1359,544 @@ mod tests {
 
         // Verify warning was emitted
         assert_eq!(ctx.diagnostics.len(), 1);
+    }
+
+    /// A test handler that returns Blocks when in block context.
+    struct BlockTestHandler;
+    impl ShortcodeHandler for BlockTestHandler {
+        fn name(&self) -> &str {
+            "block-test"
+        }
+        fn resolve(
+            &self,
+            _shortcode: &Shortcode,
+            _ctx: &ShortcodeContext,
+            resolution_ctx: ResolutionContext,
+        ) -> ShortcodeResult {
+            match resolution_ctx {
+                ResolutionContext::Block => ShortcodeResult::Blocks(vec![Block::HorizontalRule(
+                    quarto_pandoc_types::block::HorizontalRule {
+                        source_info: SourceInfo::default(),
+                    },
+                )]),
+                ResolutionContext::Inline => ShortcodeResult::Inlines(vec![Inline::Str(Str {
+                    text: "inline-fallback".to_string(),
+                    source_info: SourceInfo::default(),
+                })]),
+            }
+        }
+    }
+
+    #[test]
+    fn test_block_shortcode_replaces_para() {
+        let transform = ShortcodeResolveTransform {
+            handlers: vec![Box::new(BlockTestHandler)],
+            lua_shortcode_paths: Vec::new(),
+            extensions: Vec::new(),
+            runtime: None,
+            target_format: String::new(),
+        };
+
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Shortcode(make_shortcode("block-test", vec![]))],
+                source_info: dummy_source_info(),
+            })],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // The Para should be replaced by a HorizontalRule
+        assert_eq!(ast.blocks.len(), 1);
+        assert!(
+            matches!(&ast.blocks[0], Block::HorizontalRule(_)),
+            "Expected HorizontalRule, got {:?}",
+            ast.blocks[0]
+        );
+    }
+
+    #[test]
+    fn test_inline_shortcode_in_para_stays_inline() {
+        let transform = ShortcodeResolveTransform {
+            handlers: vec![Box::new(BlockTestHandler)],
+            lua_shortcode_paths: Vec::new(),
+            extensions: Vec::new(),
+            runtime: None,
+            target_format: String::new(),
+        };
+
+        // Para with text + shortcode — not a block-context shortcode
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![
+                    Inline::Str(Str {
+                        text: "Before: ".to_string(),
+                        source_info: dummy_source_info(),
+                    }),
+                    Inline::Shortcode(make_shortcode("block-test", vec![])),
+                ],
+                source_info: dummy_source_info(),
+            })],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Should remain a Paragraph with resolved inline content
+        assert_eq!(ast.blocks.len(), 1);
+        if let Block::Paragraph(para) = &ast.blocks[0] {
+            assert_eq!(para.content.len(), 2);
+            if let Inline::Str(s) = &para.content[1] {
+                assert_eq!(s.text, "inline-fallback");
+            } else {
+                panic!("Expected Str inline, got {:?}", para.content[1]);
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    /// Handler that always returns Blocks regardless of context.
+    struct AlwaysBlockHandler;
+    impl ShortcodeHandler for AlwaysBlockHandler {
+        fn name(&self) -> &str {
+            "always-block"
+        }
+        fn resolve(
+            &self,
+            _shortcode: &Shortcode,
+            _ctx: &ShortcodeContext,
+            _resolution_ctx: ResolutionContext,
+        ) -> ShortcodeResult {
+            ShortcodeResult::Blocks(vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "from-block".to_string(),
+                    source_info: SourceInfo::default(),
+                })],
+                source_info: SourceInfo::default(),
+            })])
+        }
+    }
+
+    #[test]
+    fn test_block_result_in_inline_context() {
+        let transform = ShortcodeResolveTransform {
+            handlers: vec![Box::new(AlwaysBlockHandler)],
+            lua_shortcode_paths: Vec::new(),
+            extensions: Vec::new(),
+            runtime: None,
+            target_format: String::new(),
+        };
+
+        // Para with text + shortcode — inline context, handler returns Blocks
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![
+                    Inline::Str(Str {
+                        text: "Before: ".to_string(),
+                        source_info: dummy_source_info(),
+                    }),
+                    Inline::Shortcode(make_shortcode("always-block", vec![])),
+                ],
+                source_info: dummy_source_info(),
+            })],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Blocks should be flattened to inlines
+        if let Block::Paragraph(para) = &ast.blocks[0] {
+            assert_eq!(para.content.len(), 2);
+            if let Inline::Str(s) = &para.content[1] {
+                assert_eq!(s.text, "from-block");
+            } else {
+                panic!("Expected Str inline, got {:?}", para.content[1]);
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    #[test]
+    fn test_escaped_shortcode_block_context() {
+        let transform = ShortcodeResolveTransform {
+            handlers: vec![Box::new(MetaShortcodeHandler)],
+            lua_shortcode_paths: Vec::new(),
+            extensions: Vec::new(),
+            runtime: None,
+            target_format: String::new(),
+        };
+
+        // Escaped shortcode alone in Para — should preserve as literal
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Shortcode(Shortcode {
+                    is_escaped: true,
+                    name: "meta".to_string(),
+                    positional_args: vec![ShortcodeArg::String("title".to_string())],
+                    keyword_args: HashMap::new(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Should be converted to literal text in the Para
+        if let Block::Paragraph(para) = &ast.blocks[0] {
+            assert_eq!(para.content.len(), 1);
+            if let Inline::Str(s) = &para.content[0] {
+                assert_eq!(s.text, "{{< meta title >}}");
+            } else {
+                panic!("Expected Str inline, got {:?}", para.content[0]);
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    // === Lua integration tests (3.4.6) ===
+    // These tests require the native Lua runtime
+    #[cfg(not(target_arch = "wasm32"))]
+    mod lua_integration {
+        use super::*;
+        use crate::extension::types::{Contributes, Extension, ExtensionId};
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        fn make_runtime() -> Arc<dyn quarto_system_runtime::SystemRuntime> {
+            Arc::new(quarto_system_runtime::NativeRuntime::new())
+        }
+
+        fn write_lua_script(dir: &std::path::Path, name: &str, content: &str) -> PathBuf {
+            let path = dir.join(name);
+            let mut f = std::fs::File::create(&path).unwrap();
+            f.write_all(content.as_bytes()).unwrap();
+            path
+        }
+
+        fn make_extension(name: &str, shortcode_paths: Vec<PathBuf>) -> Extension {
+            Extension {
+                id: ExtensionId::new(name),
+                title: name.to_string(),
+                author: String::new(),
+                version: None,
+                quarto_required: None,
+                path: PathBuf::from("/extensions").join(name),
+                contributes: Contributes {
+                    shortcodes: shortcode_paths,
+                    ..Default::default()
+                },
+            }
+        }
+
+        #[test]
+        fn test_lua_shortcode_from_metadata_paths() {
+            let tmp = TempDir::new().unwrap();
+            let script_path = write_lua_script(
+                tmp.path(),
+                "hello.lua",
+                r#"return { hello = function(args) return "Hello from Lua" end }"#,
+            );
+
+            let runtime = make_runtime();
+            let transform = ShortcodeResolveTransform::with_lua_support(
+                vec![script_path],
+                Vec::new(),
+                runtime,
+                "html".to_string(),
+            );
+
+            let mut ast = Pandoc {
+                meta: ConfigValue::default(),
+                blocks: vec![Block::Paragraph(Paragraph {
+                    content: vec![Inline::Shortcode(make_shortcode("hello", vec![]))],
+                    source_info: dummy_source_info(),
+                })],
+            };
+
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            transform.transform(&mut ast, &mut ctx).unwrap();
+
+            if let Block::Paragraph(para) = &ast.blocks[0] {
+                if let Inline::Str(s) = &para.content[0] {
+                    assert_eq!(s.text, "Hello from Lua");
+                } else {
+                    panic!("Expected Str inline, got {:?}", para.content[0]);
+                }
+            } else {
+                panic!("Expected Paragraph");
+            }
+            assert!(ctx.diagnostics.is_empty());
+        }
+
+        #[test]
+        fn test_lua_shortcode_by_extension_name() {
+            let tmp = TempDir::new().unwrap();
+            let script_path = write_lua_script(
+                tmp.path(),
+                "greet.lua",
+                r#"return { greet = function(args) return "Extension greeting" end }"#,
+            );
+
+            let ext = make_extension("greet", vec![script_path]);
+            let runtime = make_runtime();
+
+            // No metadata paths — extension discovered by name
+            let transform = ShortcodeResolveTransform::with_lua_support(
+                Vec::new(),
+                vec![ext],
+                runtime,
+                "html".to_string(),
+            );
+
+            let mut ast = Pandoc {
+                meta: ConfigValue::default(),
+                blocks: vec![Block::Paragraph(Paragraph {
+                    content: vec![Inline::Shortcode(make_shortcode("greet", vec![]))],
+                    source_info: dummy_source_info(),
+                })],
+            };
+
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            transform.transform(&mut ast, &mut ctx).unwrap();
+
+            if let Block::Paragraph(para) = &ast.blocks[0] {
+                if let Inline::Str(s) = &para.content[0] {
+                    assert_eq!(s.text, "Extension greeting");
+                } else {
+                    panic!("Expected Str inline, got {:?}", para.content[0]);
+                }
+            } else {
+                panic!("Expected Paragraph");
+            }
+            assert!(ctx.diagnostics.is_empty());
+        }
+
+        #[test]
+        fn test_rust_handler_overrides_lua() {
+            let tmp = TempDir::new().unwrap();
+            // Lua script defines a "meta" handler that should be ignored
+            let script_path = write_lua_script(
+                tmp.path(),
+                "meta.lua",
+                r#"return { meta = function(args) return "FROM LUA" end }"#,
+            );
+
+            let runtime = make_runtime();
+            let transform = ShortcodeResolveTransform::with_lua_support(
+                vec![script_path],
+                Vec::new(),
+                runtime,
+                "html".to_string(),
+            );
+
+            let meta = ConfigValue::new_map(
+                vec![make_map_entry(
+                    "title",
+                    ConfigValue::new_string("Rust Title", dummy_source_info()),
+                )],
+                dummy_source_info(),
+            );
+
+            let mut ast = Pandoc {
+                meta,
+                blocks: vec![Block::Paragraph(Paragraph {
+                    content: vec![Inline::Shortcode(make_shortcode("meta", vec!["title"]))],
+                    source_info: dummy_source_info(),
+                })],
+            };
+
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            transform.transform(&mut ast, &mut ctx).unwrap();
+
+            // Built-in Rust handler should win over Lua
+            if let Block::Paragraph(para) = &ast.blocks[0] {
+                if let Inline::Str(s) = &para.content[0] {
+                    assert_eq!(s.text, "Rust Title");
+                } else {
+                    panic!("Expected Str inline, got {:?}", para.content[0]);
+                }
+            } else {
+                panic!("Expected Paragraph");
+            }
+        }
+
+        #[test]
+        fn test_unknown_shortcode_error() {
+            let runtime = make_runtime();
+            let transform = ShortcodeResolveTransform::with_lua_support(
+                Vec::new(),
+                Vec::new(),
+                runtime,
+                "html".to_string(),
+            );
+
+            let mut ast = Pandoc {
+                meta: ConfigValue::default(),
+                blocks: vec![Block::Paragraph(Paragraph {
+                    content: vec![Inline::Shortcode(make_shortcode("nonexistent", vec![]))],
+                    source_info: dummy_source_info(),
+                })],
+            };
+
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            transform.transform(&mut ast, &mut ctx).unwrap();
+
+            // Should produce error inline
+            if let Block::Paragraph(para) = &ast.blocks[0] {
+                if let Inline::Strong(strong) = &para.content[0] {
+                    if let Inline::Str(s) = &strong.content[0] {
+                        assert_eq!(s.text, "?nonexistent");
+                    } else {
+                        panic!("Expected Str in Strong");
+                    }
+                } else {
+                    panic!("Expected Strong inline, got {:?}", para.content[0]);
+                }
+            } else {
+                panic!("Expected Paragraph");
+            }
+            assert_eq!(ctx.diagnostics.len(), 1);
+        }
+
+        #[test]
+        fn test_extension_shortcode_block_context() {
+            let tmp = TempDir::new().unwrap();
+            let script_path = write_lua_script(
+                tmp.path(),
+                "break.lua",
+                r#"return { ["break"] = function(args) return pandoc.HorizontalRule() end }"#,
+            );
+
+            let ext = make_extension("break", vec![script_path]);
+            let runtime = make_runtime();
+
+            let transform = ShortcodeResolveTransform::with_lua_support(
+                Vec::new(),
+                vec![ext],
+                runtime,
+                "html".to_string(),
+            );
+
+            // Shortcode alone in Para → block context
+            let mut ast = Pandoc {
+                meta: ConfigValue::default(),
+                blocks: vec![Block::Paragraph(Paragraph {
+                    content: vec![Inline::Shortcode(make_shortcode("break", vec![]))],
+                    source_info: dummy_source_info(),
+                })],
+            };
+
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            transform.transform(&mut ast, &mut ctx).unwrap();
+
+            // Para should be replaced by HorizontalRule
+            assert_eq!(ast.blocks.len(), 1);
+            assert!(
+                matches!(&ast.blocks[0], Block::HorizontalRule(_)),
+                "Expected HorizontalRule, got {:?}",
+                ast.blocks[0]
+            );
+            assert!(ctx.diagnostics.is_empty());
+        }
+
+        #[test]
+        fn test_full_transform_block_shortcode_rawblock() {
+            let tmp = TempDir::new().unwrap();
+            let script_path = write_lua_script(
+                tmp.path(),
+                "pagebreak.lua",
+                r#"return { pagebreak = function(args) return pandoc.RawBlock("html", "<hr class=\"page-break\">") end }"#,
+            );
+
+            let runtime = make_runtime();
+            let transform = ShortcodeResolveTransform::with_lua_support(
+                vec![script_path],
+                Vec::new(),
+                runtime,
+                "html".to_string(),
+            );
+
+            let mut ast = Pandoc {
+                meta: ConfigValue::default(),
+                blocks: vec![Block::Paragraph(Paragraph {
+                    content: vec![Inline::Shortcode(make_shortcode("pagebreak", vec![]))],
+                    source_info: dummy_source_info(),
+                })],
+            };
+
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            transform.transform(&mut ast, &mut ctx).unwrap();
+
+            // Para should be replaced by RawBlock
+            assert_eq!(ast.blocks.len(), 1);
+            match &ast.blocks[0] {
+                Block::RawBlock(rb) => {
+                    assert_eq!(rb.format, "html");
+                    assert!(rb.text.contains("page-break"));
+                }
+                other => panic!("Expected RawBlock, got {:?}", other),
+            }
+            assert!(ctx.diagnostics.is_empty());
+        }
     }
 }

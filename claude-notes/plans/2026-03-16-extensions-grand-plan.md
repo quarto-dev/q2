@@ -1,9 +1,12 @@
-# Quarto Extensions Master Plan
+# Quarto Extensions Grand Plan
 
 **Created**: 2026-03-16
-**Status**: In Progress (Phases 1 + 4 complete)
-**Worktree**: `worktree-extensions-phase1` branch, at `.claude/worktrees/extensions-phase1`
-**Sub-plans**: Phase 1 detail at `claude-notes/plans/2026-03-16-extensions-phase1-yml-and-metadata.md`
+**Status**: In Progress (Phases 1, 2, 3, 4 complete)
+**Sub-plans**:
+- Phase 1: `claude-notes/plans/2026-03-16-extensions-phase1-yml-and-metadata.md`
+- Phase 2: `claude-notes/plans/2026-03-17-extensions-phase2-filter-resolution.md`
+- Phase 3: `claude-notes/plans/2026-03-20-extensions-phase3-shortcode-resolution.md`
+- Phase 4: `claude-notes/plans/2026-03-16-extensions-phase4-templates-partials.md`
 
 ## Codebase Context for New Agents
 
@@ -321,55 +324,55 @@ before file discovery.
 **Goal**: Parse `_extension.yml`, discover extensions, and merge extension metadata
 into the rendering pipeline. No filter/shortcode execution yet — just metadata.
 
-**Current status** (as of 2026-03-16):
+**Status**: Complete (merged as `68420002`)
 
-| Sub-phase | Status | Summary |
-|-----------|--------|---------|
-| 1.1 Data model | Done | `ExtensionId`, `Extension`, `Contributes`, `ExtensionFilter` in `extension/types.rs` |
-| 1.2 YAML parser | Done | `read_extension()` in `extension/read.rs` with "common" key merging |
-| 1.3 Discovery | Done | `discover_extensions()` in `extension/discover.rs`, walks `_extensions/` dirs |
-| 1.4 Format parsing | Done | `parse_format_descriptor()` splits "acm-html" → extension "acm" + base "html" |
-| 1.4b Format string preservation | **TODO** | `Format` struct needs `target_format`, `extension_name`, `display_name` fields |
-| 1.5 Metadata merge | Done | `build_extension_metadata_layer()` in metadata_merge.rs, but **blocked by 1.4b** |
-| 1.6 format-resources | Deferred | Will be a separate PR |
-| 1.7 Smoke tests | TODO | Depends on 1.4b |
-| 1.8 Workspace verify | Partial | Build + tests pass; WASM verify still needed |
-
-**Key blocker**: Phase 1.4b. The `Format` struct currently has no field to preserve
-the original format string (e.g., "acm-html"). `format_from_name()` in `render_to_file.rs`
-silently falls back to `Format::html()`, losing the extension name. The metadata
-merge layer receives "html" instead of "acm-html" and never finds an extension match.
-
-See the Phase 1 sub-plan for full details on 1.4b implementation.
+All sub-phases done. `Format` struct has `target_format`, `extension_name`,
+`display_name` fields. Extension metadata merges correctly into the pipeline.
+`format-resources` deferred to a later phase. See sub-plan for details.
 
 ---
 
-### Phase 2: Extension Filter Resolution
+### Phase 2: Extension Filter Resolution ✅
 
 **Goal**: Resolve filter names that reference extensions (e.g., `filters: [lightbox]`
 where `lightbox` is an extension contributing filters).
 
-- [ ] Update `filter_resolve.rs` to accept extension context
-- [ ] When a filter name doesn't resolve to a file path, look it up in extensions
-- [ ] If found, substitute the extension's contributed filter paths
-- [ ] Handle per-format filters from format extensions
-- [ ] Tests: extension filter resolution, missing extension → error
+- [x] Update `filter_resolve.rs` to accept extension context
+- [x] When a filter name doesn't resolve to a file path, look it up in extensions
+- [x] If found, substitute the extension's contributed filter paths
+- [x] Handle per-format filters from format extensions
+- [x] Tests: extension filter resolution, missing extension → error
 
-**Depends on**: Phase 1 (extension discovery) + current user-filters work
+**Status**: Complete (merged as `cffc2e6c`)
 
-### Phase 3: Extension Shortcode Resolution
+Two mechanisms implemented:
+1. **Per-format filters**: `mark_path_valued_keys()` converts filter paths in
+   extension format metadata to `ConfigValueKind::Path`, which gets rebased by
+   `adjust_paths_to_document_dir()` during metadata merge.
+2. **Name-based resolution**: `resolve_filters()` accepts `&[Extension]` and
+   `&dyn SystemRuntime`. Uses file-first resolution (matching TS Quarto): check
+   if path exists on disk, only try extension lookup if it doesn't. Supports
+   both string and map forms with `at` propagation.
+
+**Detail plan**: `claude-notes/plans/2026-03-17-extensions-phase2-filter-resolution.md`
+
+### Phase 3: Extension Shortcode Resolution ✅
 
 **Goal**: Resolve shortcode references from extensions and wire them into the
-shortcode processing pipeline.
+shortcode processing pipeline. Includes block-level shortcode support and a new
+`LuaShortcodeEngine` in pampa for loading and dispatching Lua shortcode handlers.
 
-- [ ] Discover shortcodes contributed by active extensions
-- [ ] Add extension shortcode paths to shortcode resolution
-- [ ] Handle per-format shortcodes from format extensions
-- [ ] Tests
+- [x] Mark per-format shortcode paths as `ConfigValueKind::Path` in `mark_path_valued_keys()`
+- [x] Create `LuaShortcodeEngine` in pampa (single Lua state, load scripts, dispatch by name)
+- [x] Add block-level shortcode support (`ShortcodeResult::Blocks`, two-pass resolution)
+- [x] Wire extensions and Lua engine into `ShortcodeResolveTransform`
+- [x] Name-based extension lookup for unknown shortcode names
+- [x] `quarto.shortcode` Lua API (`read_arg`, `error_output`)
+- [x] Integration and smoke tests
 
-**Open questions**:
-- How do shortcodes currently work in q2? (Need to check `ShortcodeResolveTransform`)
-- Are shortcodes already resolved from file paths, or is there a registry?
+**Detail plan**: `claude-notes/plans/2026-03-20-extensions-phase3-shortcode-resolution.md`
+
+**Depends on**: Phase 1 (extension discovery), Phase 2 (filter resolution pattern)
 
 ### Phase 4: Template and Partial Support ✅
 
@@ -492,6 +495,27 @@ shortcode processing pipeline.
 - Which built-in extensions are essential for initial release?
 - Can we bundle TS Quarto's built-in extensions directly, or do they need porting?
 
+### Phase 12: Semver Validation for `quarto-required`
+
+**Goal**: Validate the `quarto-required` field in `_extension.yml` against the
+running Quarto version, warning or erroring when an extension requires a version
+the user doesn't have.
+
+- [ ] Add `semver` crate dependency (dtolnay's — the de facto Rust standard)
+- [ ] Parse `quarto-required` as `VersionReq` during `read_extension()`
+- [ ] Check against `quarto_util::version::cli_version()` during extension discovery
+- [ ] Emit a diagnostic when version doesn't satisfy the requirement
+- [ ] Optionally parse and store `version` field as `semver::Version`
+- [ ] Tests
+
+**Notes**:
+- `cli_version()` returns `"99.9.9-dev"` during development. Under strict semver,
+  prereleases don't satisfy range constraints like `>=1.4.0`. Either strip the
+  `-dev` suffix before checking or use `99.9.9` as the dev version.
+- TS Quarto warns (not hard error) on version mismatch.
+- The extension's own `version` field is currently stored as a plain string.
+  Could optionally be parsed as `semver::Version` for consistency.
+
 ---
 
 ## Architecture Decisions
@@ -543,9 +567,7 @@ and `!concat` tag support. No new merge logic needed.
 
 ## Open Questions (Cross-cutting)
 
-1. **Semver validation**: Should we validate `version` and `quarto-required` fields
-   during parsing, or just store them as strings? TS Quarto uses the `semver` npm
-   package for range checking.
+1. ~~**Semver validation**~~: Moved to Phase 12.
 
 2. **Extension caching**: TS Quarto caches extensions per-context. In q2, should we
    cache per-render, per-project, or globally? (Probably per-project is sufficient.)
@@ -563,16 +585,18 @@ and `!concat` tag support. No new merge logic needed.
    infrastructure exists in `quarto-yaml` — we should preserve it through
    extension loading.
 
-6. **Format name mapping**: ~~When a user writes `format: acm-pdf`, how do we
-   determine that `acm` is the extension name and `pdf` is the base format?~~
-   **RESOLVED**: `parse_format_descriptor()` in `extension/discover.rs` splits on
-   the last hyphen matching a known base format. Matches TS Quarto's
-   `parseFormatString()`. The `Format` struct needs `target_format` and
-   `extension_name` fields to carry this through the pipeline (Phase 1.4b).
+## Design Decisions (Resolved)
 
-7. **Extension ordering**: When multiple extensions contribute to the same format,
-   what's the merge order? TS Quarto uses discovery order (built-in first, then
-   project hierarchy). We should match this.
+6. **Format name mapping**: `parse_format_descriptor()` in `extension/discover.rs`
+   splits on the last hyphen matching a known base format (e.g., `"acm-pdf"` →
+   extension `"acm"`, base `"pdf"`). The `Format` struct carries `target_format`,
+   `extension_name`, and `display_name` fields. Matches TS Quarto's
+   `parseFormatString()`. (Resolved in Phase 1.4b.)
+
+7. **Extension ordering**: Multiple extensions contributing to the same format are
+   merged in discovery order: built-in first, then project hierarchy (closest to
+   project root first, closest to document last). This matches TS Quarto's behavior.
+   Implemented in `discover_extensions()`. (Resolved in Phase 1.3.)
 
 ## TS Quarto ↔ Rust Quarto Vocabulary
 
@@ -600,4 +624,5 @@ Confirmed via DeepWiki research on `quarto-dev/quarto-cli`:
 - q2 metadata merge: `crates/quarto-core/src/stage/stages/metadata_merge.rs`
 - q2 filter resolve: `crates/quarto-core/src/filter_resolve.rs`
 - q2 user filters plan: `claude-notes/plans/2026-03-16-user-filters-pipeline.md`
+- Metadata pipeline / Lua detection: `claude-notes/plans/2026-03-18-metadata-pipeline-lua-detection.md`
 - q2 config merging design: `claude-notes/plans/2025-12-07-config-merging-design.md`

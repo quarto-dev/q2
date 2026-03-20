@@ -1,0 +1,11 @@
+---
+title: Format Shortcode Test
+_quarto:
+  tests:
+    myext-html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["FORMAT-SHORTCODE-ACTIVE"]
+---
+
+Result: {{< greeting >}}

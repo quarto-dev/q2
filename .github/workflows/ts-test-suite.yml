@@ -132,8 +132,8 @@ jobs:
           cd hub-client
           npm run build:all
 
-      # - name: Run hub-client tests
-      #   shell: bash
-      #   run: |
-      #     cd hub-client
-      #     npm run test:ci
+      - name: Run hub-client tests
+        shell: bash
+        run: |
+          cd hub-client
+          npm run test:ci

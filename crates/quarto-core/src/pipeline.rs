@@ -297,9 +297,7 @@ pub async fn parse_qmd_to_ast(
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(EngineExecutionStage::new()),
-        // elliot note: I want this function to give an un-processed AST
-        // Box::new(MetadataMergeStage::new()),
-        // Box::new(AstTransformsStage::new()),
+        Box::new(MetadataMergeStage::new()),
     ];
 
     let (output, warnings) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
@@ -423,13 +421,23 @@ pub async fn render_qmd_to_html(
 /// ## Finalization Phase
 /// 10. `AppendixStructureTransform` - Consolidate appendix content into container
 /// 11. `ResourceCollectorTransform` - Collect image dependencies
-pub fn build_transform_pipeline() -> TransformPipeline {
+pub fn build_transform_pipeline(
+    shortcode_paths: Vec<std::path::PathBuf>,
+    extensions: Vec<crate::extension::types::Extension>,
+    runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
+    target_format: String,
+) -> TransformPipeline {
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
     // === NORMALIZATION PHASE ===
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
-    pipeline.push(Box::new(ShortcodeResolveTransform::new()));
+    pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
+        shortcode_paths,
+        extensions,
+        runtime,
+        target_format,
+    )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     pipeline.push(Box::new(TitleBlockTransform::new()));
     pipeline.push(Box::new(SectionizeTransform::new()));

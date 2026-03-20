@@ -1,0 +1,5 @@
+title: Hello Shortcode Extension
+author: Test
+contributes:
+  shortcodes:
+    - hello.lua

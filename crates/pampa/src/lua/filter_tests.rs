@@ -5575,3 +5575,85 @@ end
         _ => panic!("Expected two Paragraphs"),
     }
 }
+
+// =========================================================================
+// quarto.* API availability in filters
+// =========================================================================
+
+#[test]
+fn test_filter_quarto_json_available() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("json_test.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Str(elem)
+    local t = quarto.json.decode('{"val":"decoded"}')
+    return pandoc.Str(t.val)
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: Default::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "input".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (result, _, _) =
+        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+            .expect("Filter should succeed");
+
+    match &result.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "decoded"),
+            other => panic!("Expected Str, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_filter_quarto_log_available() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("log_test.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Str(elem)
+    quarto.log.warning("test warning from filter")
+    return pandoc.Str("logged")
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: Default::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "input".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (result, _, _) =
+        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+            .expect("Filter should succeed");
+
+    match &result.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "logged"),
+            other => panic!("Expected Str, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
