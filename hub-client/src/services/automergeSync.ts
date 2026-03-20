@@ -25,12 +25,14 @@ export type { Patch, FileEntry, CreateBinaryFileResult, CreateProjectOptions, Cr
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
+type IdentitiesChangeHandler = (identities: Record<string, string>) => void;
 type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
 type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
 type ErrorHandler = (error: Error) => void;
 
 let onFilesChange: FilesChangeHandler | null = null;
+let onIdentitiesChange: IdentitiesChangeHandler | null = null;
 let onFileContent: FileContentHandler | null = null;
 let onBinaryContent: BinaryContentHandler | null = null;
 let onConnectionChange: ConnectionHandler | null = null;
@@ -44,12 +46,14 @@ let client: SyncClient | null = null;
  */
 export function setSyncHandlers(handlers: {
   onFilesChange?: FilesChangeHandler;
+  onIdentitiesChange?: IdentitiesChangeHandler;
   onFileContent?: FileContentHandler;
   onBinaryContent?: BinaryContentHandler;
   onConnectionChange?: ConnectionHandler;
   onError?: ErrorHandler;
 }) {
   if (handlers.onFilesChange) onFilesChange = handlers.onFilesChange;
+  if (handlers.onIdentitiesChange) onIdentitiesChange = handlers.onIdentitiesChange;
   if (handlers.onFileContent) onFileContent = handlers.onFileContent;
   if (handlers.onBinaryContent) onBinaryContent = handlers.onBinaryContent;
   if (handlers.onConnectionChange) onConnectionChange = handlers.onConnectionChange;
@@ -85,6 +89,9 @@ function ensureClient(): SyncClient {
       onFilesChange: (files: FileEntry[]) => {
         onFilesChange?.(files);
       },
+      onIdentitiesChange: (identities: Record<string, string>) => {
+        onIdentitiesChange?.(identities);
+      },
       onConnectionChange: (connected: boolean) => {
         onConnectionChange?.(connected);
       },
@@ -103,11 +110,11 @@ function ensureClient(): SyncClient {
  * Auth is handled via HttpOnly cookies, sent automatically by the
  * browser on same-origin WebSocket upgrades.
  */
-export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string): Promise<FileEntry[]> {
+export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(syncServerUrl, indexDocId, actorId);
+  return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName);
 }
 
 /**
@@ -195,11 +202,11 @@ export function isConnected(): boolean {
 /**
  * Create a new project with the given files.
  */
-export async function createNewProject(options: CreateProjectOptions, actorId?: string): Promise<CreateProjectResult> {
+export async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string): Promise<CreateProjectResult> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().createNewProject(options, actorId);
+  return ensureClient().createNewProject(options, actorId, screenName);
 }
 
 /**
@@ -244,6 +251,7 @@ export function _resetForTesting(): void {
 
   // Clear all event handlers
   onFilesChange = null;
+  onIdentitiesChange = null;
   onFileContent = null;
   onBinaryContent = null;
   onConnectionChange = null;

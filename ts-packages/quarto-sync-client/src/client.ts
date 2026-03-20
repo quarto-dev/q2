@@ -22,6 +22,8 @@ import {
   isBinaryDocument,
   getDocumentType,
   isBinaryExtension,
+  migrateIndexDocument,
+  setIdentity,
 } from '@quarto/quarto-automerge-schema';
 
 import type {
@@ -116,6 +118,31 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       path,
       docId: String(docId),
     }));
+  }
+
+  // Helper: get identities from index document
+  function getIdentitiesFromIndex(doc: IndexDocument): Record<string, string> {
+    return doc.identities ? { ...doc.identities } : {};
+  }
+
+  // Track last-seen identities for diffing
+  let lastIdentities: Record<string, string> = {};
+
+  // Helper: fire onIdentitiesChange if identities differ from last seen
+  function notifyIdentitiesIfChanged(doc: IndexDocument): void {
+    const current = getIdentitiesFromIndex(doc);
+    const keys = new Set([...Object.keys(current), ...Object.keys(lastIdentities)]);
+    let changed = false;
+    for (const k of keys) {
+      if (current[k] !== lastIdentities[k]) {
+        changed = true;
+        break;
+      }
+    }
+    if (changed) {
+      lastIdentities = current;
+      callbacks.onIdentitiesChange?.(current);
+    }
   }
 
   // Helper: wait for peer connection
@@ -291,7 +318,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Connect to a sync server and load a project.
    */
-  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string): Promise<FileEntry[]> {
+  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string): Promise<FileEntry[]> {
     // Disconnect from any existing connection
     await disconnect();
 
@@ -313,7 +340,19 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         throw new Error('Failed to load index document');
       }
 
-      const files = getFilesFromIndex(doc);
+      // Migrate schema and sync identity
+      indexHandle.change(d => {
+        migrateIndexDocument(d);
+        if (actorId && screenName) {
+          setIdentity(d, actorId, screenName);
+        }
+      });
+
+      const files = getFilesFromIndex(indexHandle.doc()!);
+
+      // Fire initial identities
+      lastIdentities = getIdentitiesFromIndex(indexHandle.doc()!);
+      callbacks.onIdentitiesChange?.(lastIdentities);
 
       // Subscribe to index changes
       const indexChangeHandler = () => {
@@ -322,6 +361,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           const newFiles = getFilesFromIndex(changedDoc);
           syncWithFiles(newFiles);
           callbacks.onFilesChange?.(newFiles);
+          notifyIdentitiesIfChanged(changedDoc);
         }
       };
       indexHandle.on('change', indexChangeHandler);
@@ -366,6 +406,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     state.repo = null;
     state.indexHandle = null;
     state.actorId = null;
+    lastIdentities = {};
 
     callbacks.onConnectionChange?.(false);
   }
@@ -591,7 +632,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Create a new project with the given files.
    */
-  async function createNewProject(options: CreateProjectOptions, actorId?: string): Promise<CreateProjectResult> {
+  async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string): Promise<CreateProjectResult> {
     await disconnect();
 
     try {
@@ -604,8 +645,17 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const indexHandle = createDoc<IndexDocument>();
       indexHandle.change(doc => {
         doc.files = {};
+        doc.version = 1;
+        doc.identities = {};
+        if (actorId && screenName) {
+          doc.identities[actorId] = screenName;
+        }
       });
       state.indexHandle = indexHandle;
+
+      // Fire initial identities
+      lastIdentities = getIdentitiesFromIndex(indexHandle.doc()!);
+      callbacks.onIdentitiesChange?.(lastIdentities);
 
       const indexDocId = indexHandle.documentId;
       const createdFiles: FileEntry[] = [];
@@ -656,6 +706,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           const newFiles = getFilesFromIndex(changedDoc);
           syncWithFiles(newFiles);
           callbacks.onFilesChange?.(newFiles);
+          notifyIdentitiesIfChanged(changedDoc);
         }
       };
       indexHandle.on('change', indexChangeHandler);

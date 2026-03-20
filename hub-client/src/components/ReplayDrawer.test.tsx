@@ -109,17 +109,44 @@ describe('ReplayDrawer', () => {
       expect(screen.getByText(/43\/100/)).toBeDefined();
     });
 
-    it('renders actor short hash', () => {
+    it('renders actor short hash when no identity available', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
       expect(screen.getByText('abcdef01')).toBeDefined();
     });
 
-    it('renders "Me" when currentActorId matches actor', () => {
-      render(<ReplayDrawer state={activeState} controls={controls} currentActorId="abcdef0123456789abcdef0123456789" />);
-      expect(screen.getByText('Me')).toBeDefined();
+    it('renders screen name when identity is available', () => {
+      const identities = { 'abcdef0123456789abcdef0123456789': 'Alice' };
+      render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
+      expect(screen.getByText('Alice')).toBeDefined();
     });
 
-    it('renders short hash when currentActorId does not match', () => {
+    it('renders truncated hex when identity is not in map', () => {
+      const identities = { 'otheractor': 'Bob' };
+      render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
+      expect(screen.getByText('abcdef01')).toBeDefined();
+    });
+
+    it('applies --me CSS class when currentActorId matches', () => {
+      const identities = { 'abcdef0123456789abcdef0123456789': 'Alice' };
+      render(<ReplayDrawer state={activeState} controls={controls} currentActorId="abcdef0123456789abcdef0123456789" identities={identities} />);
+      const actorEl = screen.getByText('Alice');
+      expect(actorEl.className).toContain('replay-drawer__actor--me');
+    });
+
+    it('does not apply --me CSS class when actor is not current user', () => {
+      const identities = { 'abcdef0123456789abcdef0123456789': 'Alice' };
+      render(<ReplayDrawer state={activeState} controls={controls} currentActorId="different0123456789abcdef01234567" identities={identities} />);
+      const actorEl = screen.getByText('Alice');
+      expect(actorEl.className).not.toContain('replay-drawer__actor--me');
+    });
+
+    it('applies --me CSS class with truncated hex when no identity', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} currentActorId="abcdef0123456789abcdef0123456789" />);
+      const actorEl = screen.getByText('abcdef01');
+      expect(actorEl.className).toContain('replay-drawer__actor--me');
+    });
+
+    it('renders short hash when currentActorId does not match and no identities', () => {
       render(<ReplayDrawer state={activeState} controls={controls} currentActorId="different0123456789abcdef01234567" />);
       expect(screen.getByText('abcdef01')).toBeDefined();
     });

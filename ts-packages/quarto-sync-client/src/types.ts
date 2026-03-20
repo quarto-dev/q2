@@ -73,6 +73,12 @@ export interface SyncClientCallbacks {
   onFilesChange?: (files: FileEntry[]) => void;
 
   /**
+   * Called when the identity map changes (optional).
+   * Provides the full actorId -> screenName mapping.
+   */
+  onIdentitiesChange?: (identities: Record<string, string>) => void;
+
+  /**
    * Called when connection state changes (optional).
    */
   onConnectionChange?: (connected: boolean) => void;

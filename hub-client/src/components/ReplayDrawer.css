@@ -115,11 +115,18 @@
 
 .replay-drawer__actor {
   font-size: 11px;
-  color: #aad4ff;
+  color: #bbb;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-  border: 1px solid #335580;
+  border: 1px solid #666;
   border-radius: 3px;
   padding: 0 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.replay-drawer__actor--me {
+  color: #aad4ff;
+  border-color: #335580;
+  background: rgba(51, 85, 128, 0.15);
 }
 
 .replay-drawer__timestamp {

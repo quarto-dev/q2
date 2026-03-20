@@ -30,6 +30,8 @@ interface Props {
   authEmail?: string;
   /** Authenticated user's Google avatar URL. */
   authPicture?: string | null;
+  /** Called when the user changes their screen name. */
+  onScreenNameChange?: (name: string) => void;
 }
 
 // Curated color palette for user selection (10 colors, single row)
@@ -49,6 +51,7 @@ export default function ProjectSelector({
   onSignOut,
   authEmail,
   authPicture,
+  onScreenNameChange,
 }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -165,6 +168,7 @@ export default function ProjectSelector({
       const updated = await userSettingsService.updateUserName(editNameValue.trim());
       setUserSettings(updated);
       setEditingName(false);
+      onScreenNameChange?.(updated.userName);
     } catch (err) {
       console.error('Failed to update name:', err);
     }

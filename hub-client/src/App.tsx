@@ -15,6 +15,7 @@ import {
 } from './services/automergeSync';
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
+import { getUserIdentity } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useAuth } from './hooks/useAuth';
 import type { Route, ShareRoute } from './utils/routing';
@@ -28,8 +29,9 @@ async function connectAndLoadContents(
   syncServer: string,
   indexDocId: string,
   actorId?: string,
+  screenName?: string,
 ): Promise<{ files: FileEntry[]; contents: Map<string, string> }> {
-  const files = await connect(syncServer, indexDocId, actorId);
+  const files = await connect(syncServer, indexDocId, actorId, screenName);
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -62,6 +64,8 @@ function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [screenName, setScreenName] = useState<string | null>(null);
+  const [identities, setIdentities] = useState<Record<string, string>>({});
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
   const [authError] = useState(() => {
@@ -69,6 +73,14 @@ function App() {
     if (has) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     return has;
   });
+
+  // Load screen name from IndexedDB (for identity mapping in Automerge docs).
+  // Loaded eagerly on mount — fast IndexedDB read, must resolve before any connect.
+  useEffect(() => {
+    getUserIdentity().then(settings => {
+      setScreenName(settings.userName);
+    });
+  }, []);
 
   // Pending share link data (when user visits a shareable URL for a project they don't have)
   const [pendingShareData, setPendingShareData] = useState<PendingShareData | null>(null);
@@ -123,7 +135,7 @@ function App() {
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId);
+              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName ?? undefined);
               setProject(targetProject);
               setFiles(loadedFiles);
               setFileContents(contents);
@@ -171,7 +183,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId, screenName ?? undefined);
             setProject(existingProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -204,7 +216,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName ?? undefined);
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -269,6 +281,9 @@ function App() {
       onFilesChange: (newFiles) => {
         setFiles(newFiles);
       },
+      onIdentitiesChange: (newIdentities) => {
+        setIdentities(newIdentities);
+      },
       onFileContent: (path, content, _patches) => {
         // Note: patches are ignored - we use diff-based sync in Editor.tsx
         setFileContents((prev) => {
@@ -297,7 +312,7 @@ function App() {
     setConnectionError(null);
 
     try {
-      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId);
+      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId, screenName ?? undefined);
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
@@ -355,7 +370,7 @@ function App() {
       const result = await createNewProject({
         syncServer,
         files,
-      }, auth?.actorId);
+      }, auth?.actorId, screenName ?? undefined);
 
       // Store the project in IndexedDB
       const projectEntry = await projectStorage.addProject(
@@ -404,6 +419,16 @@ function App() {
     return <LoginScreen error={authError} />;
   }
 
+  // Gate on screen name being loaded (fast IndexedDB read).
+  // Prevents connects from firing before the identity can be written.
+  if (screenName === null) {
+    return (
+      <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <>
       {!project ? (
@@ -417,6 +442,7 @@ function App() {
           onSignOut={AUTH_ENABLED ? logout : undefined}
           authEmail={auth?.email}
           authPicture={auth?.picture}
+          onScreenNameChange={setScreenName}
         />
       ) : (
         <ViewModeProvider>
@@ -431,6 +457,7 @@ function App() {
               navigateToFile(project.id, filePath, options);
             }}
             actorId={auth?.actorId}
+            identities={identities}
           />
         </ViewModeProvider>
       )}
