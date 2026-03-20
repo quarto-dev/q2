@@ -1,8 +1,0 @@
-# Nextest configuration for the q2 workspace.
-#
-# On Windows, the v8 crate does not produce an rlib, which causes test
-# compilation to fail for all crates that transitively depend on v8
-# (via quarto-system-runtime). This is a compile-time issue that nextest's
-# default-filter cannot solve — use --exclude flags instead.
-#
-# See claude-notes/instructions/windows-dev.md for the full exclude list.
