@@ -174,7 +174,7 @@ export function SlideAst({ astJson, currentFilePath, onNavigateToDocument, curre
           }}
         >
           {slides.length > 0
-            ? renderSlide(slides[currentSlide], currentFilePath, onNavigateToDocument)
+            ? renderSlide(slides[Math.min(currentSlide, slides.length - 1)], currentFilePath, onNavigateToDocument)
             : null}
         </div>
       </AspectRatioScaler>
