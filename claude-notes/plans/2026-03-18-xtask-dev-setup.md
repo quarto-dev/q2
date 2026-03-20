@@ -50,14 +50,14 @@ Check for `cargo-nextest` via `cargo nextest --version` and `wasm-pack` via `was
 
 ## Work Items
 
-- [ ] Add `DevSetup` variant to the `Command` enum in `crates/xtask/src/main.rs`
-- [ ] Create `crates/xtask/src/dev_setup.rs` with install logic
-- [ ] Implement tool detection (already-installed check)
-- [ ] Implement install via cargo-binstall (if available) or cargo install
-- [ ] Add Windows platform notes output
-- [ ] Test on Windows: verify it installs nextest and wasm-pack correctly
-- [ ] Update CONTRIBUTING.md to reference `cargo xtask dev-setup`
-- [ ] Add brief xtask overview to CLAUDE.md (what it is, where subcommands live)
+- [x] Add `DevSetup` variant to the `Command` enum in `crates/xtask/src/main.rs`
+- [x] Create `crates/xtask/src/dev_setup.rs` with install logic
+- [x] Implement tool detection (already-installed check)
+- [x] Implement install via cargo-binstall (if available) or cargo install
+- [x] Add Windows platform notes output
+- [x] Test on Windows: verify it installs nextest and wasm-pack correctly
+- [x] Update CONTRIBUTING.md to reference `cargo xtask dev-setup`
+- [x] Add brief xtask overview to CLAUDE.md (what it is, where subcommands live)
 
 ## Example output
 
