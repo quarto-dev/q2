@@ -299,29 +299,43 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // We also move the cursor to the first changed line so that both the
   // editor and preview scroll to the relevant location automatically.
   const prevReplayContentRef = useRef<string>('');
+  const prevReplayIndexRef = useRef<number>(0);
   useEffect(() => {
     if (!replayState.isActive) return;
 
     const editor = editorRef.current;
     const model = editor?.getModel();
     if (model && editor) {
-      applyingRemoteRef.current = true;
-      model.setValue(replayState.currentContent);
-      applyingRemoteRef.current = false;
+      const prevContent = prevReplayContentRef.current;
+      const newContent = replayState.currentContent;
 
-      // Find the first line that differs and scroll both panes there
-      const old = prevReplayContentRef.current;
-      const cur = replayState.currentContent;
-      let changedLine = 1;
-      const minLen = Math.min(old.length, cur.length);
-      let ci = 0;
-      for (; ci < minLen; ci++) {
-        if (old[ci] !== cur[ci]) break;
-        if (old[ci] === '\n') changedLine++;
-      }
-      if (ci < minLen || old.length !== cur.length) {
+      if (prevContent !== newContent) {
+        const indexDelta = Math.abs(replayState.currentIndex - prevReplayIndexRef.current);
+        applyingRemoteRef.current = true;
+        if (indexDelta === 1 && prevContent !== '') {
+          // Single-step change (playback or manual step) — use applyEdits
+          // for minimal incremental changes. This preserves tokenization
+          // in unchanged regions and avoids the full re-layout that
+          // setValue() triggers.
+          const edits = diffToMonacoEdits(prevContent, newContent);
+          if (edits.length > 0) {
+            model.applyEdits(edits);
+          }
+        } else {
+          // Initial entry or large jump (scrubbing) — use setValue
+          model.setValue(newContent);
+        }
+        applyingRemoteRef.current = false;
+
+        // Find the first line that differs and scroll both panes there
+        let changedLine = 1;
+        const minLen = Math.min(prevContent.length, newContent.length);
+        let ci = 0;
+        for (; ci < minLen; ci++) {
+          if (prevContent[ci] !== newContent[ci]) break;
+          if (prevContent[ci] === '\n') changedLine++;
+        }
         editor.revealLineInCenter(changedLine);
-        // Match preview scroll ratio to editor after it settles
         requestAnimationFrame(() => {
           const maxScroll = editor.getScrollHeight() - editor.getLayoutInfo().height;
           if (maxScroll > 0) {
@@ -331,12 +345,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       }
     }
     prevReplayContentRef.current = replayState.currentContent;
+    prevReplayIndexRef.current = replayState.currentIndex;
 
     // Update VFS so the WASM renderer sees the historical content
     if (currentFile && isWasmReady()) {
       vfsAddFile(currentFile.path, replayState.currentContent);
     }
-  }, [replayState.isActive, replayState.currentContent, currentFile]);
+  }, [replayState.isActive, replayState.currentContent, replayState.currentIndex, currentFile]);
 
   // Restore VFS when replay exits — the Automerge sync effect restores Monaco
   // and React state, but doesn't re-write VFS unless fileContents changed.
@@ -347,6 +362,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
     if (wasActive && !replayState.isActive) {
       prevReplayContentRef.current = '';
+      prevReplayIndexRef.current = 0;
       if (currentFile && isWasmReady()) {
         const liveContent = fileContents.get(currentFile.path);
         if (liveContent !== undefined) {
