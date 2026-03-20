@@ -131,15 +131,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // Helper: fire onIdentitiesChange if identities differ from last seen
   function notifyIdentitiesIfChanged(doc: IndexDocument): void {
     const current = getIdentitiesFromIndex(doc);
-    const keys = new Set([...Object.keys(current), ...Object.keys(lastIdentities)]);
-    let changed = false;
-    for (const k of keys) {
-      if (current[k] !== lastIdentities[k]) {
-        changed = true;
-        break;
-      }
-    }
-    if (changed) {
+    if (JSON.stringify(current) !== JSON.stringify(lastIdentities)) {
       lastIdentities = current;
       callbacks.onIdentitiesChange?.(current);
     }
@@ -348,10 +340,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         }
       });
 
-      const files = getFilesFromIndex(indexHandle.doc()!);
+      const currentDoc = indexHandle.doc()!;
+      const files = getFilesFromIndex(currentDoc);
 
       // Fire initial identities
-      lastIdentities = getIdentitiesFromIndex(indexHandle.doc()!);
+      lastIdentities = getIdentitiesFromIndex(currentDoc);
       callbacks.onIdentitiesChange?.(lastIdentities);
 
       // Subscribe to index changes

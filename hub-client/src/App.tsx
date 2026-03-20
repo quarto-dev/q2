@@ -64,7 +64,7 @@ function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
-  const [screenName, setScreenName] = useState<string | null>(null);
+  const [screenName, setScreenName] = useState<string | undefined>();
   const [identities, setIdentities] = useState<Record<string, string>>({});
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
@@ -135,7 +135,7 @@ function App() {
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName ?? undefined);
+              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName);
               setProject(targetProject);
               setFiles(loadedFiles);
               setFileContents(contents);
@@ -183,7 +183,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId, screenName ?? undefined);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId, screenName);
             setProject(existingProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -216,7 +216,7 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName ?? undefined);
+            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName);
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -312,7 +312,7 @@ function App() {
     setConnectionError(null);
 
     try {
-      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId, screenName ?? undefined);
+      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId, screenName);
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
@@ -370,7 +370,7 @@ function App() {
       const result = await createNewProject({
         syncServer,
         files,
-      }, auth?.actorId, screenName ?? undefined);
+      }, auth?.actorId, screenName);
 
       // Store the project in IndexedDB
       const projectEntry = await projectStorage.addProject(
@@ -421,7 +421,7 @@ function App() {
 
   // Gate on screen name being loaded (fast IndexedDB read).
   // Prevents connects from firing before the identity can be written.
-  if (screenName === null) {
+  if (screenName === undefined) {
     return (
       <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading...</div>

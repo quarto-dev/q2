@@ -171,16 +171,11 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
               <span className="replay-drawer__absolute">{formatFullTimestamp(state.timestamp)}</span>
             </span>
           )}
-          {state.actor && (() => {
-            const isMe = !!(currentActorId && state.actor === currentActorId);
-            const resolvedName = identities?.[state.actor];
-            const displayName = resolvedName || state.actor.slice(0, 8);
-            return (
-              <span className={`replay-drawer__actor${isMe ? ' replay-drawer__actor--me' : ''}`}>
-                {displayName}
-              </span>
-            );
-          })()}
+          {state.actor && (
+            <span className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}>
+              {identities?.[state.actor] || state.actor.slice(0, 8)}
+            </span>
+          )}
           <span className="replay-drawer__position">
             {state.currentIndex + 1}/{state.historyLength}
           </span>
