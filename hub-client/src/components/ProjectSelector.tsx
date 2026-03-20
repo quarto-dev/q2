@@ -192,25 +192,30 @@ export default function ProjectSelector({
   };
 
   const handleResetName = async () => {
+    if (!authName) return;
     try {
-      if (authName) {
-        // Reset to OIDC display name
-        const updated = await userSettingsService.updateUserName(authName);
+      const updated = await userSettingsService.updateUserName(authName);
+      setUserSettings(updated);
+      onScreenNameChange?.(updated.userName);
+    } catch (err) {
+      console.error('Failed to reset name:', err);
+    }
+  };
+
+  const handleRandomizeName = async () => {
+    try {
+      const reset = await userSettingsService.resetUserIdentity();
+      // Keep the color if user had one selected
+      if (userSettings && userSettings.userColor !== reset.userColor) {
+        const updated = await userSettingsService.updateUserColor(userSettings.userColor);
         setUserSettings(updated);
         onScreenNameChange?.(updated.userName);
       } else {
-        // No auth name available — generate a new random name
-        const reset = await userSettingsService.resetUserIdentity();
-        // But keep the color if user had one selected
-        if (userSettings && userSettings.userColor !== reset.userColor) {
-          const updated = await userSettingsService.updateUserColor(userSettings.userColor);
-          setUserSettings(updated);
-        } else {
-          setUserSettings(reset);
-        }
+        setUserSettings(reset);
+        onScreenNameChange?.(reset.userName);
       }
     } catch (err) {
-      console.error('Failed to reset name:', err);
+      console.error('Failed to randomize name:', err);
     }
   };
 
@@ -637,8 +642,13 @@ export default function ProjectSelector({
             </div>
 
             <div className="identity-actions">
-              <button type="button" onClick={handleResetName} className="randomize-btn">
-                {authName ? 'Reset Name' : 'Randomize Name'}
+              {authName && (
+                <button type="button" onClick={handleResetName} className="randomize-btn">
+                  Reset
+                </button>
+              )}
+              <button type="button" onClick={handleRandomizeName} className="randomize-btn">
+                Randomize
               </button>
             </div>
 

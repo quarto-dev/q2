@@ -59,12 +59,19 @@ This ensures name changes are propagated to the document.
 
 Screen name is loaded from `getUserIdentity()` (async, IndexedDB) in `App.tsx`. It must be available **before** any connect/create call. The loading sequence:
 
-1. Auth resolves (`useAuth()` — provides `actorId`)
+1. Auth resolves (`useAuth()` — provides `actorId` and OIDC `name`)
 2. User identity resolves (`getUserIdentity()` — provides `userName`)
-3. Both are available when project selector renders
-4. `screenName` is passed alongside `actorId` through `connect()` and `createNewProject()`
+3. **OIDC name defaulting**: If auth provides a display name and the stored name is still an auto-generated anonymous one (starts with "Anonymous "), the screen name is automatically upgraded to the OIDC display name and persisted to IndexedDB. This happens once on first login; subsequent visits use the persisted value.
+4. Both are available when project selector renders
+5. `screenName` is passed alongside `actorId` through `connect()` and `createNewProject()`
 
-This means `App.tsx` needs a new `useEffect` + state for `screenName`, loaded once auth completes (or unconditionally if auth is disabled). The project selector and all connect paths already wait for auth; adding screen name to that gate is minimal.
+For non-auth instances (`AUTH_ENABLED` is false), screen name loads immediately from IndexedDB without waiting for auth, preserving the anonymous name default.
+
+### Screen Name Reset
+
+The ProjectSelector "Your Identity" section has a reset button:
+- **With auth**: "Reset Name" — resets screen name to the OIDC display name (`auth.name`)
+- **Without auth**: "Randomize Name" — generates a new anonymous name (original behavior)
 
 ### Identity Change Notification
 
@@ -191,13 +198,18 @@ Identities persist in the Automerge document forever. This is intentional — th
 - `connect()`, `createNewProject()`: add `screenName` passthrough
 
 ### `hub-client/src/App.tsx`
-- New state: `screenName` (loaded from `getUserIdentity()`)
-- Pass `screenName` to connect/create calls
+- New state: `screenName` (loaded from `getUserIdentity()`, auto-upgraded from OIDC name on first login)
+- Pass `screenName` to connect/create calls (with `screenName` in dependency arrays)
 - Store + update `identities` via `onIdentitiesChange` callback
 - Pass `identities` to `Editor`
+- Pass `authName` to `ProjectSelector` for screen name reset
 
 ### `hub-client/src/components/Editor.tsx`
 - Accept + forward `identities` prop to `ReplayDrawer`
+
+### `hub-client/src/components/ProjectSelector.tsx`
+- Accept `authName` prop (OIDC display name)
+- "Reset Name" button: resets to OIDC name when available, randomizes when not
 
 ### `hub-client/src/components/ReplayDrawer.tsx`
 - Accept `identities` prop
@@ -219,7 +231,7 @@ Identities persist in the Automerge document forever. This is intentional — th
 
 1. **Optional fields**: `version` and `identities` are optional on the type to handle V0 docs. Migration happens at connect time.
 
-2. **Screen name source**: Always use `getUserIdentity().userName` (the locally-set screen name from IndexedDB). Never use `auth.name` or any other Google profile field — these contain PII that must not be persisted in the Automerge document. The screen name in the project selector is the authoritative source.
+2. **Screen name source**: The screen name stored in IndexedDB is the authoritative source, persisted in the Automerge document's `identities` map. On first login, if the stored name is still an auto-generated "Anonymous ..." name, it is automatically upgraded to the OIDC display name (`auth.name`) and persisted to IndexedDB. Users can further customize it; a "Reset Name" button restores it to the OIDC display name. For non-auth instances, anonymous names are used as the default.
 
 3. **Screen name loading**: Loaded in `App.tsx` via `useEffect` after auth. Available before any project connection. Passed explicitly through the call chain — not fetched inside the sync client (which has no IndexedDB access).
 
