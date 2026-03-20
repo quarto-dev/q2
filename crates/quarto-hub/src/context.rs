@@ -146,6 +146,7 @@ impl HubContext {
                 qmd_count = files.qmd_files.len(),
                 config_count = files.config_files.len(),
                 binary_count = files.binary_files.len(),
+                extension_count = files.extension_files.len(),
                 "Discovered project files"
             );
             Some(files)

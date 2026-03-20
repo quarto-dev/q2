@@ -49,12 +49,35 @@ test.describe('smoke-all E2E tests', () => {
       }
 
       test(testName, async ({ page }) => {
+        // Collect console errors and HTTP failures for diagnostics
+        const consoleErrors: string[] = [];
+        page.on('console', (msg) => {
+          if (msg.type() === 'error') {
+            consoleErrors.push(msg.text());
+          }
+        });
+        page.on('pageerror', (err) => {
+          consoleErrors.push(err.message);
+        });
+        page.on('response', (resp) => {
+          if (resp.status() >= 500) {
+            consoleErrors.push(`HTTP ${resp.status()} from ${resp.url()}`);
+          }
+        });
+
         const serverUrl = getServerUrl();
 
-        // Create Automerge project with all fixture files
+        // Create Automerge project with all fixture files.
+        // Sync the render target (QMD) LAST so that extension/filter files
+        // are already in the VFS when the Preview component's first render fires.
+        const sortedFiles = [...fixture.projectFiles].sort((a, b) => {
+          const aIsTarget = a.path === fixture.renderPath ? 1 : 0;
+          const bIsTarget = b.path === fixture.renderPath ? 1 : 0;
+          return aIsTarget - bIsTarget;
+        });
         const indexDocId = await createProjectOnServer(
           serverUrl,
-          fixture.projectFiles.map((f) => ({
+          sortedFiles.map((f) => ({
             path: f.path,
             content: f.content,
             contentType: 'text' as const,
@@ -77,7 +100,10 @@ test.describe('smoke-all E2E tests', () => {
 
         // Wait for render (or error)
         if (!spec.expectsError) {
-          await waitForPreviewRender(page, { timeout: 45000 });
+          await waitForPreviewRender(page, {
+            timeout: 45000,
+            consoleErrors,
+          });
         } else {
           // For expected errors, wait a bit for the render attempt to complete
           await page.waitForTimeout(5000);

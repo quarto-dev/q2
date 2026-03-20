@@ -14,23 +14,60 @@ import type { Page } from '@playwright/test';
  * comment on each render. We wait for:
  * 1. An iframe with class `preview-active` to exist
  * 2. Its body to have non-empty innerHTML (content rendered)
+ *
+ * If `consoleErrors` is provided, the wait will abort early when a fatal
+ * browser error is detected (e.g. WebSocket failure, WASM crash), avoiding
+ * a long timeout with no diagnostic info.
  */
 export async function waitForPreviewRender(
   page: Page,
-  opts: { timeout?: number } = {},
+  opts: { timeout?: number; consoleErrors?: string[] } = {},
 ): Promise<void> {
   const timeout = opts.timeout ?? 30000;
+  const consoleErrors = opts.consoleErrors;
 
-  // Wait for the active preview iframe to have rendered content
-  // The render marker comment (<!-- render-XXX -->) indicates completion
-  await page.waitForFunction(
-    () => {
+  // Poll for render completion, but also check for fatal console errors
+  // so we can fail fast with a useful message instead of timing out.
+  const pollInterval = 250;
+  const deadline = Date.now() + timeout;
+
+  while (Date.now() < deadline) {
+    // Check if any fatal console errors have been collected
+    if (consoleErrors && consoleErrors.length > 0) {
+      // Only treat unrecoverable WASM traps as immediately fatal.
+      // Lua panics ("panicked at ... lua error") are transient — they happen
+      // when extension files haven't synced yet, and the app retries on re-render.
+      // Network errors (500s) may also be transient.
+      const fatal = consoleErrors.find(
+        (e) =>
+          e.includes('unreachable') ||
+          e.includes('RuntimeError'),
+      );
+      if (fatal) {
+        throw new Error(
+          `Fatal browser error during render wait: ${fatal}\nAll console errors:\n${consoleErrors.join('\n')}`,
+        );
+      }
+    }
+
+    // Check if the preview iframe has rendered content
+    const rendered = await page.evaluate(() => {
       const iframe = document.querySelector('iframe.preview-active') as HTMLIFrameElement | null;
       if (!iframe?.contentDocument?.body) return false;
-      const html = iframe.contentDocument.body.innerHTML;
-      return html.length > 0;
-    },
-    { timeout },
+      return iframe.contentDocument.body.innerHTML.length > 0;
+    });
+
+    if (rendered) return;
+
+    await page.waitForTimeout(pollInterval);
+  }
+
+  // Timed out — build a useful error message
+  const errorContext = consoleErrors?.length
+    ? `\nConsole errors:\n${consoleErrors.join('\n')}`
+    : '\nNo console errors captured.';
+  throw new Error(
+    `Timed out after ${timeout}ms waiting for preview iframe to render.${errorContext}`,
   );
 }
 

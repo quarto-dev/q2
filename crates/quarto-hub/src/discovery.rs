@@ -20,6 +20,9 @@ pub struct ProjectFiles {
 
     /// Binary resource files (images, PDFs, etc., paths relative to project root)
     pub binary_files: Vec<PathBuf>,
+
+    /// All text files discovered inside `_extensions/` directories (paths relative to project root)
+    pub extension_files: Vec<PathBuf>,
 }
 
 impl ProjectFiles {
@@ -41,6 +44,26 @@ impl ProjectFiles {
             let path = entry.path();
 
             if path.is_file() {
+                // Files inside _extensions/ are included wholesale (Lua filters,
+                // JSON manifests, YAML metadata, etc. are all needed at render time).
+                // Binary files within _extensions/ go into binary_files; everything
+                // else is treated as text and goes into extension_files.
+                let in_extensions = path.components().any(|c| c.as_os_str() == "_extensions");
+
+                if in_extensions {
+                    if let Ok(relative) = path.strip_prefix(project_root) {
+                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                        if is_binary_extension(ext) {
+                            debug!(?relative, "Discovered extension binary file");
+                            files.binary_files.push(relative.to_path_buf());
+                        } else {
+                            debug!(?relative, "Discovered extension text file");
+                            files.extension_files.push(relative.to_path_buf());
+                        }
+                    }
+                    continue;
+                }
+
                 // Check for config files first (by name)
                 if let Some(file_name) = path.file_name()
                     && (file_name == "_quarto.yml"
@@ -83,18 +106,22 @@ impl ProjectFiles {
         files.qmd_files.sort();
         files.config_files.sort();
         files.binary_files.sort();
+        files.extension_files.sort();
 
         files
     }
 
     /// Returns the total number of discovered files.
     pub fn total_count(&self) -> usize {
-        self.qmd_files.len() + self.config_files.len() + self.binary_files.len()
+        self.qmd_files.len()
+            + self.config_files.len()
+            + self.binary_files.len()
+            + self.extension_files.len()
     }
 
-    /// Returns the count of text files (config + qmd).
+    /// Returns the count of text files (config + qmd + extension text files).
     pub fn text_file_count(&self) -> usize {
-        self.qmd_files.len() + self.config_files.len()
+        self.qmd_files.len() + self.config_files.len() + self.extension_files.len()
     }
 
     /// Returns an iterator over all discovered file paths.
@@ -102,12 +129,16 @@ impl ProjectFiles {
         self.config_files
             .iter()
             .chain(self.qmd_files.iter())
+            .chain(self.extension_files.iter())
             .chain(self.binary_files.iter())
     }
 
-    /// Returns an iterator over text files only (config + qmd).
+    /// Returns an iterator over text files only (config + qmd + extension text files).
     pub fn text_files(&self) -> impl Iterator<Item = &PathBuf> {
-        self.config_files.iter().chain(self.qmd_files.iter())
+        self.config_files
+            .iter()
+            .chain(self.qmd_files.iter())
+            .chain(self.extension_files.iter())
     }
 }
 
@@ -335,5 +366,53 @@ mod tests {
         assert_eq!(text.len(), 2);
         assert!(text.contains(&&PathBuf::from("_quarto.yml")));
         assert!(text.contains(&&PathBuf::from("index.qmd")));
+    }
+
+    #[test]
+    fn test_discover_extensions_directory() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+
+        // Create a typical _extensions/ layout
+        let ext_dir = temp.path().join("_extensions").join("lipsum");
+        fs::create_dir_all(&ext_dir).unwrap();
+        fs::write(ext_dir.join("_extension.yml"), "title: Lipsum").unwrap();
+        fs::write(ext_dir.join("lipsum.lua"), "function Str(el) end").unwrap();
+        fs::write(ext_dir.join("data.json"), "{}").unwrap();
+        fs::write(ext_dir.join("logo.png"), &[0x89, 0x50, 0x4E, 0x47]).unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        // Text files in _extensions/ go into extension_files
+        assert_eq!(files.extension_files.len(), 3);
+        assert!(
+            files
+                .extension_files
+                .contains(&PathBuf::from("_extensions/lipsum/_extension.yml"))
+        );
+        assert!(
+            files
+                .extension_files
+                .contains(&PathBuf::from("_extensions/lipsum/lipsum.lua"))
+        );
+        assert!(
+            files
+                .extension_files
+                .contains(&PathBuf::from("_extensions/lipsum/data.json"))
+        );
+
+        // Binary files in _extensions/ still go into binary_files
+        assert!(
+            files
+                .binary_files
+                .contains(&PathBuf::from("_extensions/lipsum/logo.png"))
+        );
+
+        // Extension files appear in text_files() and all_files()
+        let text: Vec<_> = files.text_files().collect();
+        assert!(text.contains(&&PathBuf::from("_extensions/lipsum/lipsum.lua")));
+
+        assert_eq!(files.total_count(), 5); // 1 qmd + 3 extension text + 1 extension binary
     }
 }
