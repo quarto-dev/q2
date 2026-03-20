@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useImperativeHandle } from 'react';
 import type { Ref } from 'react';
-import { postProcessIframe } from '../utils/iframePostProcessor';
+import { postProcessIframe } from '../../utils/iframePostProcessor';
 
 // Methods exposed via ref
 export interface DoubleBufferedIframeHandle {

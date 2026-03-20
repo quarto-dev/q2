@@ -1,0 +1,20 @@
+const {
+  renderNode,
+  inlineStyle,
+  renderChildren
+} = window.__REACT_AST_DEBUG_RENDERER__;
+
+function isComment(inline: InlineNode): boolean {
+    if (inline.t === 'Span' && 'c' in inline) {
+        const attrs = (inline as SpanInline).c[0];
+        const classes = attrs[1];
+        return classes.includes('quarto-edit-comment');
+    }
+    return false;
+}
+
+export const Inline = (args: NodeArgs<InlineNode>) => renderNode(args, isComment(args.node) ? 'Comment' : args.node.t)
+
+export const Comment = (args: NodeArgs<SpanInline>) => <span style={{ ...inlineStyle, backgroundColor: '#fff3cd', borderColor: '#ffc107' }}>
+        <strong>Comment:</strong> {renderChildren(args)}
+    </span>

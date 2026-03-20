@@ -1,12 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../types/project';
-import { isQmdFile } from '../types/project';
-import type { Diagnostic } from '../types/diagnostic';
-import { initWasm, renderToHtml, isWasmReady, setScrollSyncEnabled } from '../services/wasmRenderer';
-import { useScrollSync } from '../hooks/useScrollSync';
-import { useSelectionSync } from '../hooks/useSelectionSync';
-import { stripAnsi } from '../utils/stripAnsi';
+import type { FileEntry } from '../../types/project';
+import { isQmdFile } from '../../types/project';
+import type { Diagnostic } from '../../types/diagnostic';
+import { initWasm, renderToHtml, isWasmReady, setScrollSyncEnabled } from '../../services/wasmRenderer';
+import { useScrollSync } from '../../hooks/useScrollSync';
+import { useSelectionSync } from '../../hooks/useSelectionSync';
+import { stripAnsi } from '../../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import MorphIframe, { type MorphIframeHandle } from './MorphIframe';
 

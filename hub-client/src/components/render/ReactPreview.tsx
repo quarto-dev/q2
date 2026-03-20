@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../types/project';
-import { isQmdFile } from '../types/project';
-import type { Diagnostic } from '../types/diagnostic';
-import { initWasm, parseQmdToAst, isWasmReady, incrementalWriteQmd } from '../services/wasmRenderer';
-import { stripAnsi } from '../utils/stripAnsi';
+import type { FileEntry } from '../../types/project';
+import { isQmdFile } from '../../types/project';
+import type { Diagnostic } from '../../types/diagnostic';
+import { initWasm, parseQmdToAst, isWasmReady, incrementalWriteQmd } from '../../services/wasmRenderer';
+import { stripAnsi } from '../../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import ReactRenderer from './ReactRenderer';
 
@@ -25,6 +25,7 @@ interface PreviewProps {
   content: string;
   currentFile: FileEntry | null;
   files: FileEntry[];
+  fileContents: Map<string, string>;
   scrollSyncEnabled: boolean;
   editorRef: React.RefObject<Monaco.editor.IStandaloneCodeEditor | null>;
   editorReady: boolean;
@@ -98,6 +99,7 @@ export default function ReactPreview({
   content,
   currentFile,
   files,
+  fileContents,
   scrollSyncEnabled,
   onFileChange,
   onOpenNewFileDialog,
@@ -271,6 +273,8 @@ export default function ReactPreview({
           <ReactRenderer
             astJson={ast}
             currentFilePath={currentFile?.path ?? ''}
+            files={files}
+            fileContents={fileContents}
             onNavigateToDocument={handleNavigateToDocument}
             setAst={handleSetAst}
             currentSlideIndex={currentSlideIndex}

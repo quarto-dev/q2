@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../types/project';
-import type { Diagnostic } from '../types/diagnostic';
-import { parseQmdToAst, isWasmReady, initWasm } from '../services/wasmRenderer';
+import type { FileEntry } from '../../types/project';
+import type { Diagnostic } from '../../types/diagnostic';
+import { parseQmdToAst, isWasmReady, initWasm } from '../../services/wasmRenderer';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
 
@@ -10,6 +10,7 @@ interface PreviewRouterProps {
   content: string;
   currentFile: FileEntry | null;
   files: FileEntry[];
+  fileContents: Map<string, string>;
   scrollSyncEnabled: boolean;
   editorRef: React.RefObject<Monaco.editor.IStandaloneCodeEditor | null>;
   editorReady: boolean;
@@ -61,6 +62,9 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   const [checkedPath, setCheckedPath] = useState<string | undefined>(undefined);
   const initialChecking = checkedPath !== props.currentFile?.path;
 
+  // Track the last stable format to avoid unmounting during re-checks
+  const lastStableFormatRef = useRef<string | null>(null);
+
   // Check the format whenever content changes
   useEffect(() => {
     let cancelled = false;
@@ -80,16 +84,19 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         if (result.success) {
           const format = getQ2Format(result.ast);
           setReactFormat(format);
+          lastStableFormatRef.current = format;
           props.onFormatChange?.(format);
         } else {
           // On parse error, default to normal Preview
           setReactFormat(null);
+          lastStableFormatRef.current = null;
           props.onFormatChange?.(null);
         }
       } catch (err) {
         console.error('[PreviewRouter] Error checking format:', err);
         if (!cancelled) {
           setReactFormat(null);
+          lastStableFormatRef.current = null;
           props.onFormatChange?.(null);
         }
       } finally {
@@ -123,7 +130,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
     const { onRegisterScrollToLine, onRegisterSetScrollRatio, onFormatChange, ...reactPreviewProps } = props;
     return <ReactPreview {...reactPreviewProps} format={reactFormat} />;
   } else {
-    const { onFormatChange, setContent, ...previewProps } = props;
+    const { onFormatChange, setContent, fileContents, ...previewProps } = props;
     return <Preview {...previewProps} />;
   }
 }

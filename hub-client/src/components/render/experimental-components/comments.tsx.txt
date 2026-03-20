@@ -1,0 +1,337 @@
+const React = window.React;
+const {
+  Block: B
+} = window.__REACT_AST_DEBUG_RENDERER__;
+
+function isComment(inline: InlineNode): boolean {
+    if (inline.t === 'Span' && 'c' in inline) {
+        const attrs = (inline as SpanInline).c[0];
+        const classes = attrs[1];
+        return classes.includes('quarto-edit-comment');
+    }
+    return false;
+}
+
+// export const Block = B
+// BlockWithComments component
+const splitEmoji = (string: string) => [...new Intl.Segmenter().segment(string)].map(x => x.segment)
+export const Block = (args: NodeArgs<BlockNode>) => {
+    const { node: block, onNavigateToDocument, setLocalAst } = args
+    // Gather comments from inline children if block has them
+    let comments: InlineNode[] = [];
+    let newBlock = block
+    if ('c' in block && block.c) {
+        // For Para, Plain: c is Inline[]
+        if ((block.t === 'Para' || block.t === 'Plain') && Array.isArray(block.c)) {
+            comments = block.c.filter(isComment);
+            newBlock = structuredClone(block)
+            newBlock.c = block.c.filter((n: any) => !isComment(n));
+        }
+        // For Header: c is [number, [string, string[], [string, string][]], Inline[]]
+        else if (block.t === 'Header' && Array.isArray(block.c) && Array.isArray(block.c[2])) {
+            comments = block.c[2].filter(isComment);
+            newBlock = structuredClone(block)
+            //@ts-ignore
+            newBlock.c[2] = block.c[2].filter((n: any) => !isComment(n));
+        }
+    }
+
+    const commentContents = comments.map((c) => (c as SpanInline).c[1].map((o: InlineNode) => {
+        if (o.t === 'Str') return (o as StrInline).c;
+        if (o.t === 'Space') return ' ';
+        return '';
+    }).join(''))
+    const reactions = commentContents.filter(c => splitEmoji(c).length === 1)
+    const reactionCounts = reactions.reduce((acc, emoji) =>
+        acc.set(emoji, (acc.get(emoji) || 0) + 1),
+        new Map<string, number>()
+    );
+    comments = comments.filter((_, i) => splitEmoji(commentContents[i]).length !== 1)
+
+    // Skip CommentWrapper for BulletList and OrderedList
+    if (block.t === 'BulletList' || block.t === 'OrderedList') {
+        return <B node={block} onNavigateToDocument={onNavigateToDocument} setLocalAst={setLocalAst}></B>;
+    }
+
+    return <CommentWrapper reactionCounts={reactionCounts} comments={comments} setLocalAst={setLocalAst} block={block}>
+        <B node={newBlock} onNavigateToDocument={onNavigateToDocument} setLocalAst={setLocalAst}></B>
+    </CommentWrapper>;
+};
+
+/**
+ * CommentWrapper renders children in a box and displays gathered comments
+ */
+const CommentWrapper = ({ children, comments, reactionCounts, setLocalAst, block }: { children: React.ReactNode, reactionCounts: Map<String, number>, comments: InlineNode[], setLocalAst: (newBlock: BlockNode) => void, block: BlockNode }) => {
+    const [commentText, setCommentText] = React.useState('');
+    const [showEmojiPicker, setShowEmojiPicker] = React.useState(false);
+    const [showCommentsList, setShowCommentsList] = React.useState(false);
+    const emojiPickerRef = React.useRef<HTMLDivElement>(null);
+    const commentsListRef = React.useRef<HTMLDivElement>(null);
+    const commentInputRef = React.useRef<HTMLInputElement>(null);
+
+    // Close emoji picker when clicking outside
+    React.useEffect(() => {
+        if (!showEmojiPicker) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+                setShowEmojiPicker(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showEmojiPicker]);
+
+    // Close comments list when clicking outside
+    React.useEffect(() => {
+        if (!showCommentsList) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (commentsListRef.current && !commentsListRef.current.contains(event.target as Node)) {
+                setShowCommentsList(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showCommentsList]);
+
+    // Focus the input when comments list opens
+    React.useEffect(() => {
+        if (showCommentsList && commentInputRef.current) {
+            commentInputRef.current.focus();
+        }
+    }, [showCommentsList]);
+
+    const addComment = () => {
+        const newComment: SpanInline = {
+            t: 'Span',
+            c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: commentText }]]
+        };
+
+        const newBlock: BlockNode = structuredClone(block) as BlockNode;
+        if (newBlock.t === 'Para' || newBlock.t === 'Plain') {
+            (newBlock as ParaBlock | PlainBlock).c.push(newComment);
+        } else if (newBlock.t === 'Header') {
+            (newBlock as HeaderBlock).c[2].push(newComment);
+        }
+        setLocalAst(newBlock);
+        setCommentText('')
+    };
+
+    const addReaction = (emoji: string) => {
+        const newReaction: SpanInline = {
+            t: 'Span',
+            c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: emoji }]]
+        };
+
+        const newBlock: BlockNode = structuredClone(block) as BlockNode;
+        if (newBlock.t === 'Para' || newBlock.t === 'Plain') {
+            (newBlock as ParaBlock | PlainBlock).c.push(newReaction);
+        } else if (newBlock.t === 'Header') {
+            (newBlock as HeaderBlock).c[2].push(newReaction);
+        }
+        setLocalAst(newBlock);
+        setShowEmojiPicker(false);
+    };
+
+    const commonEmojis = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '✅'];
+    const reactionEntries = Array.from(reactionCounts.entries());
+
+    return (
+        <div style={{
+            position: 'relative',
+        }}>
+            {children}
+
+            {/* Container for all bubbles */}
+            <div style={{
+                position: 'absolute',
+                bottom: '-11px',
+                right: '-10px',
+                display: 'flex',
+                flexDirection: 'row',
+                gap: '4px',
+                alignItems: 'center',
+            }}>
+                {/* Reaction count bubbles */}
+                {reactionEntries.map(([emoji, count]) => (
+                    <div
+                        key={emoji as string}
+                        style={{
+                            backgroundColor: '#dbdbdb',
+                            color: '#333',
+                            padding: '2px 5px',
+                            borderRadius: '12px',
+                            border: '1px solid #777',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                            userSelect: 'none',
+                            display: 'flex',
+                            gap: '4px',
+                            transition: 'background-color 0.2s',
+                        }}
+                        onClick={() => addReaction(emoji as string)}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ededed'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#dbdbdb'}
+                        title={`Add ${emoji}`}
+                    >
+                        <span>{emoji}</span>
+                        <span>{count}</span>
+                    </div>
+                ))}
+
+                {/* Add reaction bubble */}
+                <div
+                    ref={emojiPickerRef}
+                    style={{
+                        position: 'relative',
+                    }}>
+                    <div
+                        style={{
+                            backgroundColor: showEmojiPicker ? '#e0f0ff' : '#b3d9ff',
+                            color: '#4a7ba7',
+                            padding: '2px 5px',
+                            borderRadius: '12px',
+                            border: '1px solid #4a7ba7',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                            userSelect: 'none',
+                            transition: 'background-color 0.2s',
+                        }}
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e0f0ff'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = showEmojiPicker ? '#e0f0ff' : '#b3d9ff'}
+                        title="Add reaction"
+                    >
+                        + 🙂
+                    </div>
+
+                    {/* Simple emoji picker */}
+                    {showEmojiPicker && (
+                        <div style={{
+                            position: 'absolute',
+                            marginBottom: '4px',
+                            top: '30px',
+                            backgroundColor: 'white',
+                            border: '1px solid #ccc',
+                            borderRadius: '8px',
+                            padding: '8px',
+                            boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                            display: 'flex',
+                            flexDirection: 'row',
+                            gap: '4px',
+                            right: '0',
+                            zIndex: '9999'
+                        }}>
+                            {commonEmojis.map(emoji => (
+                                <span
+                                    key={emoji}
+                                    style={{
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        borderRadius: '4px',
+                                        transition: 'background-color 0.2s'
+                                    }}
+                                    onClick={() => addReaction(emoji)}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                    {emoji}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Comments count bubble */}
+                {(
+                    <div
+                        ref={commentsListRef}
+                        style={{
+                            position: 'relative',
+                        }}>
+                        <div
+                            style={{
+                                backgroundColor: showCommentsList ? '#e0f0ff' : '#b3d9ff',
+                                color: '#4a7ba7',
+                                padding: '4px 8px',
+                                borderRadius: '12px',
+                                border: '1px solid #4a7ba7',
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                userSelect: 'none',
+                                transition: 'background-color 0.2s',
+                            }}
+                            onClick={() => setShowCommentsList(!showCommentsList)}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e0f0ff'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = showCommentsList ? '#e0f0ff' : '#b3d9ff'}
+                            title={`${comments.length} comment${comments.length !== 1 ? 's' : ''}`}
+                        >
+                            💬 {comments.length}
+                        </div>
+
+                        {/* Comments list popup */}
+                        {showCommentsList && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '30px',
+                                right: '0',
+                                backgroundColor: 'white',
+                                border: '1px solid #ccc',
+                                borderRadius: '8px',
+                                padding: '8px',
+                                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                                minWidth: '200px',
+                                maxWidth: '300px',
+                                zIndex: '9999'
+                            }}>
+                                {comments.map((comment, i) => {
+                                    const commentContent = (comment as SpanInline).c[1]
+                                        .map((inline: InlineNode) => {
+                                            if (inline.t === 'Str') return (inline as StrInline).c;
+                                            if (inline.t === 'Space') return ' ';
+                                            return '';
+                                        })
+                                        .join('');
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            style={{
+                                                padding: '8px',
+                                                borderBottom: i < comments.length - 1 ? '1px solid #eee' : 'none',
+                                                fontSize: '12px',
+                                                color: '#333',
+                                                wordWrap: 'break-word'
+                                            }}
+                                        >
+                                            {commentContent}
+                                        </div>
+                                    );
+                                })}
+                                <div style={{ marginTop: '8px', display: 'flex', gap: '4px' }}>
+                                    <input
+                                        ref={commentInputRef}
+                                        value={commentText}
+                                        onChange={(e) => setCommentText(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && commentText && addComment()}
+                                        placeholder="Add comment"
+                                        style={{ flex: 1, padding: '4px', fontFamily: 'monospace', fontSize: '12px', backgroundColor: '#f0f0f0', color: 'black', border: '1px solid #ccc', borderRadius: '4px' }}
+                                    />
+                                    <button onClick={addComment} disabled={!commentText} style={{ padding: '4px 8px', backgroundColor: '#f0f0f0', color: '#333', border: '1px solid #ccc', borderRadius: '4px' }}>+</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};

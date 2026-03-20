@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import type { Symbol } from '../types/intelligence';
-import { parseSlides, type PandocAST } from '../components/ReactAstSlideRenderer';
+import { parseSlides, type PandocAST } from '../components/render/ReactAstSlideRenderer';
 
 interface SlideMapping {
   /** The starting line (0-based) where this slide begins. */

@@ -1,0 +1,45 @@
+const React = window.React;
+const {
+  renderChildren
+} = window.__REACT_AST_DEBUG_RENDERER__;
+
+const STYLES = { height: '100px', width: '100px', background: 'black', color: "white" }
+
+export const Div = (args) => {
+  const attrs = new Map(args.node.c[0][2])
+  const initialX = Number(attrs.get('x') ?? 0)
+  const initialY = Number(attrs.get('y') ?? 0)
+
+  const [x, setX] = React.useState(initialX)
+  const [y, setY] = React.useState(initialY)
+  const dragStartRef = React.useRef(null)
+
+  const t = `translate(${x}px, ${y}px)`
+  return <div
+    onMouseDown={(e) => {
+      dragStartRef.current = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        startX: x,
+        startY: y
+      }
+    }}
+    onMouseMove={(e) => {
+      if (e.buttons === 1 && dragStartRef.current) {
+        const dx = e.clientX - dragStartRef.current.mouseX
+        const dy = e.clientY - dragStartRef.current.mouseY
+        setX(dragStartRef.current.startX + dx)
+        setY(dragStartRef.current.startY + dy)
+      }
+    }}
+    onMouseUp={() => {
+      if (dragStartRef.current) {
+        args.node.c[0][2] = [['x', x + ''], ['y', y + '']]
+        args.setLocalAst(args.node)
+        dragStartRef.current = null
+      }
+    }}
+    style={{ transform: t, ...STYLES, }}>
+    {renderChildren(args)}
+  </div>
+}

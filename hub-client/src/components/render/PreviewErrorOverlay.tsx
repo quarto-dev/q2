@@ -1,6 +1,6 @@
-import type { Diagnostic } from '../types/diagnostic';
-import { stripAnsi } from '../utils/stripAnsi';
-import { usePreference } from '../hooks/usePreference';
+import type { Diagnostic } from '../../types/diagnostic';
+import { stripAnsi } from '../../utils/stripAnsi';
+import { usePreference } from '../../hooks/usePreference';
 
 interface PreviewErrorOverlayProps {
   error: { message: string; diagnostics?: Diagnostic[] } | null;

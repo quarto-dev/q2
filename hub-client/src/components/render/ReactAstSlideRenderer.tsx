@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { AspectRatioScaler } from './AspectRatioScaler';
+import { AspectRatioScaler } from '../render/AspectRatioScaler';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
+import { vfsReadFile, vfsReadBinaryFile } from '../../services/wasmRenderer';
 
 /**
  * Simplified Pandoc AST types for rendering

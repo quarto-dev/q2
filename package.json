@@ -18,5 +18,8 @@
     "html2canvas": "^1.4.1",
     "katex": "^0.16.28",
     "morphdom": "^2.7.8"
+  },
+  "devDependencies": {
+    "@types/babel__standalone": "^7.1.9"
   }
 }

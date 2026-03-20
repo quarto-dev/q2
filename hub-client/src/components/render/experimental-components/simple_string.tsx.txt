@@ -1,0 +1,17 @@
+const {
+  renderChildren
+} = window.__REACT_AST_DEBUG_RENDERER__;
+
+export const BulletList = (args) => <ul>{renderChildren(args)}</ul>
+
+export const Plain = (args) => <li>{renderChildren(args)}</li>
+
+export const Header = (args) => <h2>{renderChildren(args)}</h2>
+
+export const Para = (args) => <p>{renderChildren(args)}</p>
+
+export const Str = ({ node, setLocalAst }) => <>{node.c}</>
+
+export const Space = ({ node }) => ' '
+
+//onClick={()=>setLocalAst({t:'Str', c:node.c+='🌍'})}

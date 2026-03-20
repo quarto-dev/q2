@@ -38,7 +38,7 @@ import { useViewMode } from './ViewModeContext';
 import MarkdownSummary from './MarkdownSummary';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
-import PreviewRouter from './PreviewRouter';
+import PreviewRouter from './render/PreviewRouter';
 
 interface Props {
   project: ProjectEntry;
@@ -52,6 +52,35 @@ interface Props {
   onNavigateToFile: (filePath: string, options?: { anchor?: string; replace?: boolean }) => void;
   /** Current user's Automerge actor ID (for "Me" label in replay) */
   actorId?: string | null;
+}
+
+// Map file extension to Monaco language ID
+function getLanguageForFile(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'tsx':
+    case 'ts':
+      return 'typescript';
+    case 'jsx':
+    case 'js':
+      return 'javascript';
+    case 'json':
+      return 'json';
+    case 'html':
+      return 'html';
+    case 'css':
+      return 'css';
+    case 'scss':
+      return 'scss';
+    case 'yaml':
+    case 'yml':
+      return 'yaml';
+    case 'md':
+    case 'qmd':
+      return 'markdown';
+    default:
+      return 'markdown';
+  }
 }
 
 // Select the best default file: prefer index.qmd, then first .qmd, then first file
@@ -490,6 +519,44 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       setContent(value);
       onContentChange(currentFile.path, value);
       // Thumbnail regeneration will be triggered by handleAstChange when preview finishes
+    }
+  };
+
+  // Configure Monaco before mount (for TypeScript diagnostics)
+  const handleBeforeMount = (monaco: typeof Monaco) => {
+    // Disable TypeScript diagnostics to avoid noisy errors in TSX/TS files
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const languages = (monaco.languages as any);
+    try {
+      if (languages.typescript?.typescriptDefaults) {
+        // Enable JSX support
+        languages.typescript.typescriptDefaults.setCompilerOptions({
+          jsx: languages.typescript.JsxEmit.React,
+          jsxFactory: 'React.createElement',
+          reactNamespace: 'React',
+          allowNonTsExtensions: true,
+          allowJs: true,
+        });
+        languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+          noSemanticValidation: true,
+          noSyntaxValidation: true, // Disable all validation
+        });
+      }
+      if (languages.typescript?.javascriptDefaults) {
+        languages.typescript.javascriptDefaults.setCompilerOptions({
+          jsx: languages.typescript.JsxEmit.React,
+          jsxFactory: 'React.createElement',
+          reactNamespace: 'React',
+          allowNonTsExtensions: true,
+        });
+        languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+          noSemanticValidation: true,
+          noSyntaxValidation: true, // Disable all validation
+        });
+      }
+    } catch (e) {
+      // Ignore if TypeScript language service is not available
+      console.warn('Could not configure TypeScript diagnostics:', e);
     }
   };
 
@@ -937,12 +1004,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                 // Use key to force remount when switching files (resets editor state cleanly)
                 key={currentFile?.path ?? ''}
                 height="100%"
-                language="markdown"
+                language={getLanguageForFile(currentFile?.path ?? '')}
                 theme="vs-dark"
                 // Use defaultValue instead of value to make Monaco uncontrolled.
                 // This prevents the wrapper from calling setValue() on re-renders,
                 // which would reset cursor position. We manage content via executeEdits().
                 defaultValue={content}
+                beforeMount={handleBeforeMount}
                 onChange={handleEditorChange}
                 onMount={handleEditorMount}
                 options={{
@@ -994,6 +1062,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             content={displayContent}
             currentFile={currentFile}
             files={files}
+            fileContents={fileContents}
             scrollSyncEnabled={scrollSyncEnabled}
             editorRef={editorRef}
             editorReady={editorReady}
