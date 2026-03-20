@@ -1,26 +1,7 @@
 .DS_Store
 target
 
-# This is from https://github.com/steveyegge/beads/blob/main/.gitignore
-
-# Daemon runtime files
-.beads/daemon.log
-.beads/daemon.pid
-.beads/daemon.lock
-.beads/daemon-error
-.beads/bd.sock
-.beads/beads.db
-.beads/beads.db-wal
-.beads/.exclusive-lock
-
-# .beads directory files (keep JSONL only)
-.beads/.gitignore
-.beads/db.sqlite
-.beads/k.db
-.beads/k.db*
-
-# Keep JSONL exports (source of truth for git)
-!.beads/*.jsonl
+# Beads ignore rules managed by .beads/.gitignore (created by br init)
 
 external-sources/
 !external-sources/commonmark-spec/spec.txt

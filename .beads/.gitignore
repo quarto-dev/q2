@@ -1,0 +1,44 @@
+# Created to match br init defaults (beads_rust)
+# SQLite database (local-only, rebuilt from issues.jsonl)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Lock and temporary files
+*.lock
+*.tmp
+last-touched
+
+# Local history backups
+.br_history/
+
+# Sync state
+.sync.lock
+sync_base.jsonl
+sync-state.json
+
+# Merge artifacts
+beads.base.jsonl
+beads.base.meta.json
+beads.left.jsonl
+beads.left.meta.json
+beads.right.jsonl
+beads.right.meta.json
+
+# Daemon runtime (legacy bd)
+daemon.log
+daemon.pid
+bd.sock
+
+# Worktree redirect
+redirect
+
+# Beads viewer lock
+.bv.lock
+
+# Migration artifacts
+*.migrated
+
+# Local version marker
+.local_version
