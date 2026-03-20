@@ -90,7 +90,7 @@ function ensureClient(): SyncClient {
       onFilesChange: (files: FileEntry[]) => {
         onFilesChange?.(files);
       },
-      onIdentitiesChange: (identities: Record<string, string>) => {
+      onIdentitiesChange: (identities: Record<string, ActorIdentity>) => {
         onIdentitiesChange?.(identities);
       },
       onConnectionChange: (connected: boolean) => {

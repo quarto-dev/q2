@@ -110,7 +110,7 @@ export default function ReplayDrawer({ state, controls, disabled, currentActorId
   // Resolve an actor's color: prefer identity color from the index document, fall back to hash-based.
   const resolveActorColor = useCallback((actor: string): string => {
     const identity = identities?.[actor];
-    return (identity?.color) || actorColor(actor);
+    return identity?.color || actorColor(actor);
   }, [identities]);
 
   // Build per-chunk stacked rects: each chunk is a vertical column, split by actor fractions.

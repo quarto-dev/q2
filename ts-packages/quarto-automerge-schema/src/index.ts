@@ -29,7 +29,6 @@ export interface ActorIdentity {
  *
  * `version` and `identities` are optional because V0 documents
  * (created before schema versioning) will not have them.
- *
  */
 export interface IndexDocument {
   files: Record<string, string>; // path -> docId mapping

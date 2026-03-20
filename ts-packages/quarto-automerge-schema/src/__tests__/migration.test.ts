@@ -97,5 +97,4 @@ describe('setIdentity', () => {
     expect(doc.identities!['actor1']).toEqual({ name: 'Alicia', color: '#E91E63' });
     expect(doc.identities!['actor2']).toEqual({ name: 'Bob', color: '#4CAF50' });
   });
-
 });
