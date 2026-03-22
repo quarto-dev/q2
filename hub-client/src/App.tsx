@@ -75,6 +75,14 @@ function App() {
   // Undefined when not connected; null would indicate a failed fetch (handled inline).
   const [actorId, setActorId] = useState<string | undefined>();
 
+  // Fetch per-project actor ID; calls logout and returns null on session expiry.
+  const resolveActorId = useCallback(async (indexDocId: string): Promise<string | undefined | null> => {
+    if (!AUTH_ENABLED) return undefined;
+    const id = await fetchActorId(indexDocId);
+    if (id === null) logout();
+    return id;
+  }, [logout]);
+
   // Capture auth error from redirect query param (once, before URL is cleaned).
   const [authError] = useState(() => {
     const has = new URLSearchParams(window.location.search).has('auth_error');
@@ -153,13 +161,8 @@ function App() {
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const newActorId = AUTH_ENABLED
-                ? await fetchActorId(targetProject.indexDocId)
-                : undefined;
-              if (newActorId === null) {
-                logout();
-                return;
-              }
+              const newActorId = await resolveActorId(targetProject.indexDocId);
+              if (newActorId === null) return;
               const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
               setProject(targetProject);
               setFiles(loadedFiles);
@@ -209,13 +212,8 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const newActorId = AUTH_ENABLED
-              ? await fetchActorId(existingProject.indexDocId)
-              : undefined;
-            if (newActorId === null) {
-              logout();
-              return;
-            }
+            const newActorId = await resolveActorId(existingProject.indexDocId);
+            if (newActorId === null) return;
             const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, newActorId, screenName, cursorColor);
             setProject(existingProject);
             setFiles(loadedFiles);
@@ -250,13 +248,8 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const newActorId = AUTH_ENABLED
-              ? await fetchActorId(targetProject.indexDocId)
-              : undefined;
-            if (newActorId === null) {
-              logout();
-              return;
-            }
+            const newActorId = await resolveActorId(targetProject.indexDocId);
+            if (newActorId === null) return;
             const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
             setProject(targetProject);
             setFiles(loadedFiles);
@@ -355,13 +348,8 @@ function App() {
     setConnectionError(null);
 
     try {
-      const newActorId = AUTH_ENABLED
-        ? await fetchActorId(selectedProject.indexDocId)
-        : undefined;
-      if (newActorId === null) {
-        logout();
-        return;
-      }
+      const newActorId = await resolveActorId(selectedProject.indexDocId);
+      if (newActorId === null) return;
       const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, newActorId, screenName, cursorColor);
       setProject(selectedProject);
       setFiles(loadedFiles);
@@ -378,7 +366,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, navigateToFile, logout, screenName, cursorColor]);
+  }, [navigateToProject, navigateToFile, resolveActorId, screenName, cursorColor]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -433,13 +421,8 @@ function App() {
       );
 
       // Fetch the per-project actor ID now that we have the indexDocId
-      const newActorId = AUTH_ENABLED
-        ? await fetchActorId(result.indexDocId)
-        : undefined;
-      if (newActorId === null) {
-        logout();
-        return;
-      }
+      const newActorId = await resolveActorId(result.indexDocId);
+      if (newActorId === null) return;
       setActorId(newActorId);
 
       // Set up the project state
@@ -462,7 +445,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, logout, screenName, cursorColor]);
+  }, [navigateToProject, resolveActorId, screenName, cursorColor]);
 
   const handleClearPendingShare = useCallback(() => {
     setPendingShareData(null);
