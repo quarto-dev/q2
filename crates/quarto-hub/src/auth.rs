@@ -15,6 +15,8 @@ use hmac::{Hmac, Mac};
 use jsonwebtoken::{Algorithm, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+
+type HmacSha256 = Hmac<Sha256>;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -450,7 +452,6 @@ pub fn validate_image_domain(domain: &str) -> Result<(), String> {
 /// JSON strings) or Automerge IDs (`automerge:<bs58>`), preventing separator
 /// injection attacks.
 pub fn sub_to_actor_id_for_project(server_secret: &[u8], sub: &str, project_id: &str) -> String {
-    type HmacSha256 = Hmac<Sha256>;
     let mut mac =
         HmacSha256::new_from_slice(server_secret).expect("HMAC accepts keys of any length");
     mac.update(sub.as_bytes());

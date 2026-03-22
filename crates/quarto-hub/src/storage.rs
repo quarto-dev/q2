@@ -112,7 +112,7 @@ impl HubStorageConfig {
     /// On Unix the file is opened with `mode(0o600)` before writing, so it is
     /// never visible with permissive permissions (no TOCTOU window). On
     /// non-Unix platforms the file is written without an explicit mode.
-    pub fn save(&self, hub_dir: &Path) -> Result<()> {
+    fn save(&self, hub_dir: &Path) -> Result<()> {
         let config_path = hub_dir.join("hub.json");
         let content =
             serde_json::to_string_pretty(self).map_err(|e| Error::ConfigParse(e.to_string()))?;
@@ -153,6 +153,19 @@ pub fn default_standalone_data_dir() -> PathBuf {
     }
 }
 
+/// Decode a 64-char hex string into a 32-byte array, with a source label for
+/// error messages.
+fn decode_secret_hex(hex: &str, source: &str) -> Result<[u8; 32]> {
+    let bytes =
+        hex::decode(hex).map_err(|e| Error::ConfigParse(format!("{source}: invalid hex: {e}")))?;
+    bytes.as_slice().try_into().map_err(|_| {
+        Error::ConfigParse(format!(
+            "{source}: expected 32 bytes (64 hex chars), got {}",
+            bytes.len()
+        ))
+    })
+}
+
 /// Resolve the server secret for HMAC actor ID derivation.
 ///
 /// Resolution order (highest priority first):
@@ -166,40 +179,19 @@ pub fn default_standalone_data_dir() -> PathBuf {
 pub fn resolve_server_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> Result<[u8; 32]> {
     // 1. Environment variable (highest priority — no file I/O, no config mutation)
     if let Ok(hex) = std::env::var("HUB_SERVER_SECRET") {
-        let bytes = hex::decode(&hex)
-            .map_err(|e| Error::ConfigParse(format!("HUB_SERVER_SECRET: invalid hex: {e}")))?;
-        if bytes.len() != 32 {
-            return Err(Error::ConfigParse(format!(
-                "HUB_SERVER_SECRET: expected 32 bytes (64 hex chars), got {}",
-                bytes.len()
-            )));
-        }
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(&bytes);
-        return Ok(arr);
+        return decode_secret_hex(&hex, "HUB_SERVER_SECRET");
     }
 
     // 2. Existing config value
-    if let Some(ref hex) = config.server_secret.clone() {
-        let bytes = hex::decode(hex)
-            .map_err(|e| Error::ConfigParse(format!("hub.json server_secret: invalid hex: {e}")))?;
-        if bytes.len() != 32 {
-            return Err(Error::ConfigParse(format!(
-                "hub.json server_secret: expected 32 bytes (64 hex chars), got {}",
-                bytes.len()
-            )));
-        }
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(&bytes);
-        return Ok(arr);
+    if let Some(ref hex) = config.server_secret {
+        return decode_secret_hex(hex, "hub.json server_secret");
     }
 
     // 3. Auto-generate, persist, and return
     use rand::RngCore;
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
-    let hex = hex::encode(bytes);
-    config.server_secret = Some(hex);
+    config.server_secret = Some(hex::encode(bytes));
     config.save(hub_dir)?;
     Ok(bytes)
 }
