@@ -19,6 +19,7 @@ import * as projectStorage from './services/projectStorage';
 import { getUserIdentity, updateUserName } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useAuth } from './hooks/useAuth';
+import { fetchActorId } from './services/authService';
 import type { Route, ShareRoute } from './utils/routing';
 import './App.css';
 
@@ -69,6 +70,10 @@ function App() {
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
   const [identities, setIdentities] = useState<Record<string, ActorIdentity>>({});
+
+  // Per-project actor ID fetched from /auth/actor (HMAC-based, project-scoped).
+  // Undefined when not connected; null would indicate a failed fetch (handled inline).
+  const [actorId, setActorId] = useState<string | undefined>();
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
   const [authError] = useState(() => {
@@ -137,6 +142,7 @@ function App() {
         setFiles([]);
         setFileContents(new Map());
         setConnectionError(null);
+        setActorId(undefined);
       } else if (route.type === 'project' || route.type === 'file') {
         // Navigating to a project (possibly different from current)
         const currentProjectId = project?.id;
@@ -147,10 +153,18 @@ function App() {
             setIsConnecting(true);
             setConnectionError(null);
             try {
-              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName, cursorColor);
+              const newActorId = AUTH_ENABLED
+                ? await fetchActorId(targetProject.indexDocId)
+                : undefined;
+              if (newActorId === null) {
+                logout();
+                return;
+              }
+              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
               setProject(targetProject);
               setFiles(loadedFiles);
               setFileContents(contents);
+              setActorId(newActorId);
             } catch (err) {
               setConnectionError(err instanceof Error ? err.message : String(err));
               navigateToProjectSelector({ replace: true });
@@ -195,10 +209,18 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, auth?.actorId, screenName, cursorColor);
+            const newActorId = AUTH_ENABLED
+              ? await fetchActorId(existingProject.indexDocId)
+              : undefined;
+            if (newActorId === null) {
+              logout();
+              return;
+            }
+            const { files: loadedFiles, contents } = await connectAndLoadContents(existingProject.syncServer, existingProject.indexDocId, newActorId, screenName, cursorColor);
             setProject(existingProject);
             setFiles(loadedFiles);
             setFileContents(contents);
+            setActorId(newActorId);
 
             if (shareRoute.filePath) {
               navigateToFile(existingProject.id, shareRoute.filePath, { replace: true });
@@ -228,10 +250,18 @@ function App() {
           setIsConnecting(true);
           setConnectionError(null);
           try {
-            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, auth?.actorId, screenName, cursorColor);
+            const newActorId = AUTH_ENABLED
+              ? await fetchActorId(targetProject.indexDocId)
+              : undefined;
+            if (newActorId === null) {
+              logout();
+              return;
+            }
+            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
+            setActorId(newActorId);
           } catch (err) {
             setConnectionError(err instanceof Error ? err.message : String(err));
             navigateToProjectSelector({ replace: true });
@@ -260,6 +290,7 @@ function App() {
       setFiles([]);
       setFileContents(new Map());
       setConnectionError(null);
+      setActorId(undefined);
     }
   }, [auth, authLoading, project]);
 
@@ -324,10 +355,18 @@ function App() {
     setConnectionError(null);
 
     try {
-      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, auth?.actorId, screenName, cursorColor);
+      const newActorId = AUTH_ENABLED
+        ? await fetchActorId(selectedProject.indexDocId)
+        : undefined;
+      if (newActorId === null) {
+        logout();
+        return;
+      }
+      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, newActorId, screenName, cursorColor);
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
+      setActorId(newActorId);
 
       if (filePathOverride) {
         navigateToFile(selectedProject.id, filePathOverride, { replace: true });
@@ -339,7 +378,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, navigateToFile, auth?.actorId, screenName, cursorColor]);
+  }, [navigateToProject, navigateToFile, logout, screenName, cursorColor]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -347,6 +386,7 @@ function App() {
     setFiles([]);
     setFileContents(new Map());
     setConnectionError(null);
+    setActorId(undefined);
     // Update URL to show project selector
     navigateToProjectSelector({ replace: true });
   }, [navigateToProjectSelector]);
@@ -378,11 +418,12 @@ function App() {
         mimeType: f.mime_type,
       }));
 
-      // Create the Automerge documents
+      // Create the Automerge documents (initial creation without actorId;
+      // the per-project HMAC actor ID is fetched after we have the indexDocId).
       const result = await createNewProject({
         syncServer,
         files,
-      }, auth?.actorId, screenName, cursorColor);
+      }, undefined, screenName, cursorColor);
 
       // Store the project in IndexedDB
       const projectEntry = await projectStorage.addProject(
@@ -390,6 +431,16 @@ function App() {
         syncServer,
         title
       );
+
+      // Fetch the per-project actor ID now that we have the indexDocId
+      const newActorId = AUTH_ENABLED
+        ? await fetchActorId(result.indexDocId)
+        : undefined;
+      if (newActorId === null) {
+        logout();
+        return;
+      }
+      setActorId(newActorId);
 
       // Set up the project state
       setProject(projectEntry);
@@ -411,7 +462,7 @@ function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject, auth?.actorId, screenName, cursorColor]);
+  }, [navigateToProject, logout, screenName, cursorColor]);
 
   const handleClearPendingShare = useCallback(() => {
     setPendingShareData(null);
@@ -470,7 +521,7 @@ function App() {
             onNavigateToFile={(filePath, options) => {
               navigateToFile(project.id, filePath, options);
             }}
-            actorId={auth?.actorId}
+            actorId={actorId}
             identities={identities}
           />
         </ViewModeProvider>

@@ -14,7 +14,6 @@ export interface AuthState {
   email: string;
   name: string | null;
   picture: string | null;
-  actorId: string;
 }
 
 /** Raw JSON shape from GET /auth/me (snake_case). */
@@ -22,7 +21,6 @@ interface AuthMeResponse {
   email: string;
   name: string | null;
   picture: string | null;
-  actor_id: string;
 }
 
 /** Fetch user info from the server. Returns null on 401 (not authenticated). */
@@ -35,8 +33,32 @@ export async function fetchAuthMe(): Promise<AuthState | null> {
     email: data.email,
     name: data.name,
     picture: data.picture,
-    actorId: data.actor_id,
   };
+}
+
+/** Raw JSON shape from GET /auth/actor (snake_case). */
+interface AuthActorResponse {
+  actor_id: string;
+}
+
+/**
+ * Fetch the per-project actor ID for the authenticated user.
+ *
+ * Returns the actor ID string on success, or null on 401/403 (session expired
+ * or forbidden). Throws on unexpected errors (e.g. 500).
+ *
+ * The server computes `HMAC-SHA256(server_secret, sub || "\0" || projectId)`,
+ * so the same user gets a different actor ID in each project.
+ */
+export async function fetchActorId(projectId: string): Promise<string | null> {
+  const res = await fetch(
+    `/auth/actor?project=${encodeURIComponent(projectId)}`,
+    { credentials: 'same-origin' },
+  );
+  if (res.status === 401 || res.status === 403) return null;
+  if (!res.ok) throw new Error(`/auth/actor failed: ${res.status}`);
+  const data = await res.json() as AuthActorResponse;
+  return data.actor_id;
 }
 
 /** Clear the auth cookie server-side and revoke Google session. */

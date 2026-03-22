@@ -21,6 +21,8 @@ resources/basic-quarto-website-compiled/
 # Claude Code session-specific plan symlink
 claude-notes/plans/CURRENT.md
 node_modules/
+# Hub server secret — never commit this (matches any project subdirectory)
+**/.quarto/hub/hub.json
 ts-packages/*/dist/
 ts-packages/*/*.tsbuildinfo
 q2-demos/*/dist/

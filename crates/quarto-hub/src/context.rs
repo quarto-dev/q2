@@ -251,6 +251,11 @@ impl HubContext {
         &self.storage
     }
 
+    /// Returns the server secret bytes for HMAC actor ID derivation.
+    pub fn server_secret_bytes(&self) -> &[u8] {
+        self.storage.server_secret()
+    }
+
     /// Get discovered project files (None in standalone mode).
     pub fn project_files(&self) -> Option<&ProjectFiles> {
         self.project_files.as_ref()

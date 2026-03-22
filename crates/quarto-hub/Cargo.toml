@@ -77,6 +77,12 @@ notify-debouncer-mini = "0.7"
 # Cryptographic hashing for content checksums
 sha2 = "0.10"
 
+# HMAC for per-project actor ID derivation
+hmac = "0.12"
+
+# Random number generation for server secret
+rand = "0.9"
+
 # Hex encoding/decoding for change hash serialization
 hex = "0.4"
 
@@ -84,7 +90,6 @@ hex = "0.4"
 infer = "0.19"
 
 [dev-dependencies]
-rand = "0.9"
 tempfile = "3"
 
 [lints]

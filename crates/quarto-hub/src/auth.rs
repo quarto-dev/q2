@@ -11,9 +11,10 @@
 
 use axum::http::StatusCode;
 use axum_jwt_auth::RemoteJwksDecoder;
+use hmac::{Hmac, Mac};
 use jsonwebtoken::{Algorithm, Validation};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -433,17 +434,30 @@ pub fn validate_image_domain(domain: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Derive an Automerge actor ID from an OIDC `sub` claim.
+/// Derive a per-project Automerge actor ID using HMAC-SHA256.
 ///
-/// SHA-256 hashes the `sub` string to produce a uniform 32-byte (64 hex char)
-/// actor ID regardless of provider. This ensures true opacity — some providers
-/// like Auth0 include identifying prefixes (`auth0|...`) in the `sub`.
+/// Uses `HMAC-SHA256(key=server_secret, message="{sub}\0{project_id}")`.
 ///
-/// The same `sub` always produces the same actor ID, so a user's changes are
-/// consistently attributed across sessions, devices, and reconnections.
-pub fn sub_to_actor_id(sub: &str) -> String {
-    let digest = Sha256::digest(sub.as_bytes());
-    format!("{:x}", digest)
+/// Properties:
+/// - **Per-project isolation**: Same user gets a different actor ID in every
+///   project. Cross-project correlation via actor_id is impossible.
+/// - **Server-secret binding**: The actor_id cannot be computed outside the
+///   server even if an attacker knows both `sub` and `project_id`.
+/// - **Per-session consistency**: Within a single project, the same user gets
+///   the same actor_id across sessions/devices/reconnections.
+///
+/// The null byte separator (`\0`) cannot appear in JWT `sub` claims (which are
+/// JSON strings) or Automerge IDs (`automerge:<bs58>`), preventing separator
+/// injection attacks.
+pub fn sub_to_actor_id_for_project(server_secret: &[u8], sub: &str, project_id: &str) -> String {
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac =
+        HmacSha256::new_from_slice(server_secret).expect("HMAC accepts keys of any length");
+    mac.update(sub.as_bytes());
+    mac.update(b"\0");
+    mac.update(project_id.as_bytes());
+    let result = mac.finalize();
+    format!("{:x}", result.into_bytes())
 }
 
 #[cfg(test)]
@@ -982,39 +996,68 @@ mod tests {
         assert_eq!(algos, vec![Algorithm::RS256]);
     }
 
-    // ── sub_to_actor_id ──────────────────────────────────────────
+    // ── sub_to_actor_id_for_project ──────────────────────────────
 
-    #[test]
-    fn sub_to_actor_id_uniform_64_hex_for_all_providers() {
-        let subs = [
-            "114946389732038281927",          // Google numeric
-            "AAAAABBBBBcccccc",               // Azure mixed-case
-            "auth0|5f7c8ec7c33c6c004bbafe82", // Auth0 with special chars
-            "x",                              // minimal
-            "a-very-long-subject-identifier-from-some-provider-that-uses-uuids-as-sub-claims",
-        ];
-        for sub in &subs {
-            let id = sub_to_actor_id(sub);
-            assert_eq!(
-                id.len(),
-                64,
-                "expected 64 hex chars for sub '{sub}', got {}",
-                id.len()
-            );
-            assert!(
-                id.chars().all(|c| c.is_ascii_hexdigit()),
-                "non-hex char in id for sub '{sub}'"
-            );
-        }
+    fn make_secret() -> [u8; 32] {
+        [1u8; 32]
     }
 
     #[test]
-    fn sub_to_actor_id_deterministic() {
-        assert_eq!(sub_to_actor_id("same-sub"), sub_to_actor_id("same-sub"));
+    fn actor_id_for_project_is_64_hex_chars() {
+        let id = sub_to_actor_id_for_project(&make_secret(), "user123", "automerge:abc");
+        assert_eq!(id.len(), 64, "expected 64 hex chars, got {}", id.len());
+        assert!(
+            id.chars().all(|c| c.is_ascii_hexdigit()),
+            "non-hex char in id"
+        );
     }
 
     #[test]
-    fn sub_to_actor_id_different_subs_differ() {
-        assert_ne!(sub_to_actor_id("user-one"), sub_to_actor_id("user-two"));
+    fn actor_id_for_project_deterministic() {
+        let secret = make_secret();
+        let id1 = sub_to_actor_id_for_project(&secret, "user123", "automerge:abc");
+        let id2 = sub_to_actor_id_for_project(&secret, "user123", "automerge:abc");
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn actor_id_for_project_differs_across_projects() {
+        let secret = make_secret();
+        let id1 = sub_to_actor_id_for_project(&secret, "user123", "automerge:project1");
+        let id2 = sub_to_actor_id_for_project(&secret, "user123", "automerge:project2");
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn actor_id_for_project_differs_across_subs() {
+        let secret = make_secret();
+        let id1 = sub_to_actor_id_for_project(&secret, "user-one", "automerge:abc");
+        let id2 = sub_to_actor_id_for_project(&secret, "user-two", "automerge:abc");
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn actor_id_for_project_differs_across_secrets() {
+        let id1 = sub_to_actor_id_for_project(&[1u8; 32], "user123", "automerge:abc");
+        let id2 = sub_to_actor_id_for_project(&[2u8; 32], "user123", "automerge:abc");
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn actor_id_for_project_no_separator_injection() {
+        // Without a separator, plain concatenation of (sub, project_id) would be
+        // ambiguous: "userproject" + "abc" == "user" + "projectabc".
+        // With the \0 separator, these yield distinct HMAC messages:
+        //   "userproject\0abc" != "user\0projectabc"
+        // Because \0 cannot appear in JWT sub claims or Automerge IDs, the mapping
+        // (sub, project_id) → HMAC-message is injective for all valid inputs.
+        let secret = make_secret();
+        let id1 = sub_to_actor_id_for_project(&secret, "userproject", "abc");
+        let id2 = sub_to_actor_id_for_project(&secret, "user", "projectabc");
+        assert_ne!(
+            id1, id2,
+            "\\0 separator must prevent ambiguity between \
+             (sub='userproject', project='abc') and (sub='user', project='projectabc')"
+        );
     }
 }

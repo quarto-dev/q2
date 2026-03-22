@@ -7,7 +7,7 @@ use std::time::Duration;
 use axum::{
     Json, Router,
     extract::{
-        Form, FromRef, FromRequestParts, Path, State,
+        Form, FromRef, FromRequestParts, Path, Query, State,
         ws::{WebSocket, WebSocketUpgrade},
     },
     http::{HeaderMap, StatusCode, request::Parts},
@@ -538,6 +538,17 @@ struct AuthMeResponse {
     email: String,
     name: Option<String>,
     picture: Option<String>,
+}
+
+/// Query parameters for GET /auth/actor.
+#[derive(Deserialize)]
+struct AuthActorQuery {
+    project: String,
+}
+
+/// Response for GET /auth/actor.
+#[derive(Serialize)]
+struct AuthActorResponse {
     actor_id: String,
 }
 
@@ -560,13 +571,39 @@ async fn auth_me(
         .authenticate_claims(token.as_deref())
         .await
         .map_err(|_| unauthorized())?;
-    let actor_id = crate::auth::sub_to_actor_id(&claims.sub);
     Ok(Json(AuthMeResponse {
         email: claims.email,
         name: claims.name,
         picture: claims.picture,
-        actor_id,
     }))
+}
+
+/// Return a per-project actor ID for the authenticated user.
+///
+/// The actor ID is `HMAC-SHA256(server_secret, sub || "\0" || project_id)`,
+/// so the same user gets a different actor ID in each project. Cross-project
+/// correlation is impossible without the server secret.
+///
+/// - Returns 401 if the cookie is missing or invalid.
+/// - Returns 400 if the `project` query parameter is missing (Axum extractor).
+/// - No server-side project validation: an unknown `project_id` just yields an
+///   actor ID that will never match any document content.
+async fn auth_actor(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+    Query(query): Query<AuthActorQuery>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let token = cookie_token(&headers);
+    let claims = ctx
+        .authenticate_claims(token.as_deref())
+        .await
+        .map_err(|_| unauthorized())?;
+    let actor_id = crate::auth::sub_to_actor_id_for_project(
+        ctx.server_secret_bytes(),
+        &claims.sub,
+        &query.project,
+    );
+    Ok(Json(AuthActorResponse { actor_id }))
 }
 
 /// Clear the auth cookie.
@@ -747,6 +784,7 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         )
         // Auth endpoints
         .route("/auth/me", get(auth_me))
+        .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/refresh", post(auth_refresh))
         // WebSocket endpoint for automerge sync

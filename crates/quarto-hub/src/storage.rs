@@ -47,6 +47,13 @@ pub struct HubStorageConfig {
     /// These are persisted so the hub reconnects to the same peers on restart.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub peers: Vec<String>,
+
+    /// Server secret for HMAC actor ID derivation (hex-encoded 32 bytes).
+    /// Auto-generated on first run, used to compute per-project actor IDs:
+    /// `HMAC-SHA256(server_secret, sub || "\0" || project_id)`.
+    /// Absent in old configs; a new secret is generated on first startup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_secret: Option<String>,
 }
 
 impl HubStorageConfig {
@@ -58,6 +65,7 @@ impl HubStorageConfig {
             last_started_at: None,
             index_document_id: None,
             peers: Vec::new(),
+            server_secret: None,
         }
     }
 
@@ -100,11 +108,29 @@ impl HubStorageConfig {
     }
 
     /// Save config to file.
-    fn save(&self, hub_dir: &Path) -> Result<()> {
+    ///
+    /// On Unix the file is opened with `mode(0o600)` before writing, so it is
+    /// never visible with permissive permissions (no TOCTOU window). On
+    /// non-Unix platforms the file is written without an explicit mode.
+    pub fn save(&self, hub_dir: &Path) -> Result<()> {
         let config_path = hub_dir.join("hub.json");
         let content =
             serde_json::to_string_pretty(self).map_err(|e| Error::ConfigParse(e.to_string()))?;
-        fs::write(&config_path, content)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&config_path)?;
+            f.write_all(content.as_bytes())?;
+        }
+        #[cfg(not(unix))]
+        {
+            fs::write(&config_path, content)?;
+        }
         Ok(())
     }
 }
@@ -125,6 +151,57 @@ pub fn default_standalone_data_dir() -> PathBuf {
             .join("share")
             .join("quarto-hub")
     }
+}
+
+/// Resolve the server secret for HMAC actor ID derivation.
+///
+/// Resolution order (highest priority first):
+/// 1. `HUB_SERVER_SECRET` environment variable (64-char lowercase hex). Use for
+///    containers, secret managers, and CI. No file I/O is performed.
+/// 2. `config.server_secret` field in `hub.json`. Auto-loaded from the existing file.
+/// 3. Auto-generate: 32 random bytes are generated, hex-encoded, stored in
+///    `config.server_secret`, and persisted via `config.save(hub_dir)`.
+///
+/// Returns the resolved secret as a 32-byte array.
+pub fn resolve_server_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> Result<[u8; 32]> {
+    // 1. Environment variable (highest priority — no file I/O, no config mutation)
+    if let Ok(hex) = std::env::var("HUB_SERVER_SECRET") {
+        let bytes = hex::decode(&hex)
+            .map_err(|e| Error::ConfigParse(format!("HUB_SERVER_SECRET: invalid hex: {e}")))?;
+        if bytes.len() != 32 {
+            return Err(Error::ConfigParse(format!(
+                "HUB_SERVER_SECRET: expected 32 bytes (64 hex chars), got {}",
+                bytes.len()
+            )));
+        }
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        return Ok(arr);
+    }
+
+    // 2. Existing config value
+    if let Some(ref hex) = config.server_secret.clone() {
+        let bytes = hex::decode(hex)
+            .map_err(|e| Error::ConfigParse(format!("hub.json server_secret: invalid hex: {e}")))?;
+        if bytes.len() != 32 {
+            return Err(Error::ConfigParse(format!(
+                "hub.json server_secret: expected 32 bytes (64 hex chars), got {}",
+                bytes.len()
+            )));
+        }
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        return Ok(arr);
+    }
+
+    // 3. Auto-generate, persist, and return
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    let hex = hex::encode(bytes);
+    config.server_secret = Some(hex);
+    config.save(hub_dir)?;
+    Ok(bytes)
 }
 
 /// Get current time as ISO 8601 string (without external crate).
@@ -157,6 +234,10 @@ pub struct StorageManager {
 
     /// Hub storage configuration (version, timestamps)
     config: HubStorageConfig,
+
+    /// Resolved server secret (32 bytes). Decoded once at startup from the
+    /// env var or `hub.json`; never re-derived per request.
+    server_secret: [u8; 32],
 }
 
 impl StorageManager {
@@ -218,7 +299,10 @@ impl StorageManager {
         writeln!(lock_file, "{}", std::process::id())?;
 
         // Load or create hub config
-        let config = HubStorageConfig::load_or_create(&hub_dir)?;
+        let mut config = HubStorageConfig::load_or_create(&hub_dir)?;
+
+        // Resolve and cache the server secret for HMAC actor ID derivation.
+        let server_secret = resolve_server_secret(&mut config, &hub_dir)?;
 
         if let Some(ref project_root) = project_root {
             info!(
@@ -240,6 +324,7 @@ impl StorageManager {
             hub_dir,
             lock_file,
             config,
+            server_secret,
         })
     }
 
@@ -284,6 +369,15 @@ impl StorageManager {
     pub fn set_index_document_id(&mut self, doc_id: &str) -> Result<()> {
         self.config.index_document_id = Some(doc_id.to_string());
         self.config.save(&self.hub_dir)
+    }
+
+    /// Returns the resolved server secret (32 bytes).
+    ///
+    /// The secret is decoded once at startup and stored opaquely.
+    /// Use with [`crate::auth::sub_to_actor_id_for_project`] to compute
+    /// per-project actor IDs.
+    pub fn server_secret(&self) -> &[u8] {
+        &self.server_secret
     }
 
     /// Returns the configured peer URLs.
@@ -419,5 +513,120 @@ mod tests {
 
         let result = StorageManager::new_standalone(&data_dir);
         assert!(matches!(result, Err(Error::HubAlreadyRunning)));
+    }
+
+    // ── resolve_server_secret ─────────────────────────────────────
+
+    /// Mutex to serialize env var tests (env vars are process-global).
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn resolve_secret_env_var_used_directly() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        let expected = [42u8; 32];
+        let hex = hex::encode(expected);
+
+        // SAFETY: test-only env mutation, serialized by ENV_MUTEX.
+        unsafe { std::env::set_var("HUB_SERVER_SECRET", &hex) };
+        let mut config = HubStorageConfig::new();
+        let result = resolve_server_secret(&mut config, &hub_dir);
+        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+
+        assert_eq!(result.unwrap(), expected);
+        // Config must not have been mutated (no file I/O path)
+        assert!(config.server_secret.is_none());
+        // No hub.json written
+        assert!(!hub_dir.join("hub.json").exists());
+    }
+
+    #[test]
+    fn resolve_secret_env_var_invalid_hex_returns_error() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        unsafe { std::env::set_var("HUB_SERVER_SECRET", "not-hex") };
+        let mut config = HubStorageConfig::new();
+        let result = resolve_server_secret(&mut config, &hub_dir);
+        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("HUB_SERVER_SECRET"), "got: {msg}");
+    }
+
+    #[test]
+    fn resolve_secret_generates_and_saves_when_config_empty() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+
+        let mut config = HubStorageConfig::new();
+        let secret = resolve_server_secret(&mut config, &hub_dir).unwrap();
+
+        // Secret should be 32 non-zero bytes (statistically almost always true)
+        assert_eq!(secret.len(), 32);
+        // Config should now have the secret stored as hex
+        assert!(config.server_secret.is_some());
+        let stored_hex = config.server_secret.as_ref().unwrap();
+        assert_eq!(stored_hex.len(), 64);
+        // Should round-trip correctly
+        let decoded = hex::decode(stored_hex).unwrap();
+        assert_eq!(decoded.as_slice(), &secret);
+        // hub.json should have been written
+        assert!(hub_dir.join("hub.json").exists());
+    }
+
+    #[test]
+    fn resolve_secret_returns_same_secret_across_calls() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+
+        let mut config = HubStorageConfig::new();
+        let secret1 = resolve_server_secret(&mut config, &hub_dir).unwrap();
+        let secret2 = resolve_server_secret(&mut config, &hub_dir).unwrap();
+
+        assert_eq!(secret1, secret2);
+    }
+
+    #[test]
+    fn resolve_secret_old_config_without_field_generates_new() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+
+        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+
+        // Write a config that lacks the server_secret field (old format)
+        let old_config = r#"{"version": 1, "created_at": "123456"}"#;
+        fs::write(hub_dir.join("hub.json"), old_config).unwrap();
+
+        // Deserialize it — server_secret should be None
+        let mut config: HubStorageConfig = serde_json::from_str(old_config).unwrap();
+        assert!(config.server_secret.is_none());
+
+        let secret = resolve_server_secret(&mut config, &hub_dir).unwrap();
+
+        // Should have generated a new secret
+        assert_eq!(secret.len(), 32);
+        assert!(config.server_secret.is_some());
     }
 }
