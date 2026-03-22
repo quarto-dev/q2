@@ -169,7 +169,7 @@ fn decode_secret_hex(hex: &str, source: &str) -> Result<[u8; 32]> {
 /// Resolve the server secret for HMAC actor ID derivation.
 ///
 /// Resolution order (highest priority first):
-/// 1. `HUB_SERVER_SECRET` environment variable (64-char lowercase hex). Use for
+/// 1. `QUARTO_HUB_SERVER_SECRET` environment variable (64-char lowercase hex). Use for
 ///    containers, secret managers, and CI. No file I/O is performed.
 /// 2. `config.server_secret` field in `hub.json`. Auto-loaded from the existing file.
 /// 3. Auto-generate: 32 random bytes are generated, hex-encoded, stored in
@@ -178,8 +178,8 @@ fn decode_secret_hex(hex: &str, source: &str) -> Result<[u8; 32]> {
 /// Returns the resolved secret as a 32-byte array.
 pub fn resolve_server_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> Result<[u8; 32]> {
     // 1. Environment variable (highest priority — no file I/O, no config mutation)
-    if let Ok(hex) = std::env::var("HUB_SERVER_SECRET") {
-        return decode_secret_hex(&hex, "HUB_SERVER_SECRET");
+    if let Ok(hex) = std::env::var("QUARTO_HUB_SERVER_SECRET") {
+        return decode_secret_hex(&hex, "QUARTO_HUB_SERVER_SECRET");
     }
 
     // 2. Existing config value
@@ -524,10 +524,10 @@ mod tests {
         let hex = hex::encode(expected);
 
         // SAFETY: test-only env mutation, serialized by ENV_MUTEX.
-        unsafe { std::env::set_var("HUB_SERVER_SECRET", &hex) };
+        unsafe { std::env::set_var("QUARTO_HUB_SERVER_SECRET", &hex) };
         let mut config = HubStorageConfig::new();
         let result = resolve_server_secret(&mut config, &hub_dir);
-        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
 
         assert_eq!(result.unwrap(), expected);
         // Config must not have been mutated (no file I/O path)
@@ -544,14 +544,14 @@ mod tests {
         let hub_dir = temp.path().join("hub");
         fs::create_dir_all(&hub_dir).unwrap();
 
-        unsafe { std::env::set_var("HUB_SERVER_SECRET", "not-hex") };
+        unsafe { std::env::set_var("QUARTO_HUB_SERVER_SECRET", "not-hex") };
         let mut config = HubStorageConfig::new();
         let result = resolve_server_secret(&mut config, &hub_dir);
-        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
 
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("HUB_SERVER_SECRET"), "got: {msg}");
+        assert!(msg.contains("QUARTO_HUB_SERVER_SECRET"), "got: {msg}");
     }
 
     #[test]
@@ -562,7 +562,7 @@ mod tests {
         let hub_dir = temp.path().join("hub");
         fs::create_dir_all(&hub_dir).unwrap();
 
-        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
 
         let mut config = HubStorageConfig::new();
         let secret = resolve_server_secret(&mut config, &hub_dir).unwrap();
@@ -588,7 +588,7 @@ mod tests {
         let hub_dir = temp.path().join("hub");
         fs::create_dir_all(&hub_dir).unwrap();
 
-        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
 
         let mut config = HubStorageConfig::new();
         let secret1 = resolve_server_secret(&mut config, &hub_dir).unwrap();
@@ -605,7 +605,7 @@ mod tests {
         let hub_dir = temp.path().join("hub");
         fs::create_dir_all(&hub_dir).unwrap();
 
-        unsafe { std::env::remove_var("HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
 
         // Write a config that lacks the server_secret field (old format)
         let old_config = r#"{"version": 1, "created_at": "123456"}"#;

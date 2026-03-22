@@ -38,8 +38,8 @@ This is an accepted trade-off for the privacy improvement.
   opening the file with the restricted mode **before** writing — this avoids the TOCTOU
   window that exists when `fs::write` is followed by a separate `set_permissions` call
 - [x] Write tests for server secret resolution:
-  - `HUB_SERVER_SECRET` env var set → used directly, no file I/O
-  - `HUB_SERVER_SECRET` set to invalid hex → returns error
+  - `QUARTO_HUB_SERVER_SECRET` env var set → used directly, no file I/O
+  - `QUARTO_HUB_SERVER_SECRET` set to invalid hex → returns error
   - No env var, new config → generates a 32-byte hex secret, saves, returns it
   - No env var, loaded config → returns the same secret across calls (no regeneration)
   - No env var, old config without `server_secret` field → generates, saves, returns new secret
@@ -89,7 +89,7 @@ This is an accepted trade-off for the privacy improvement.
 
 ### Secret resolution order
 
-1. **`HUB_SERVER_SECRET` env var** (highest priority): 64-char lowercase hex string. Use this for
+1. **`QUARTO_HUB_SERVER_SECRET` env var** (highest priority): 64-char lowercase hex string. Use this for
    containers, secret managers (Vault, AWS Secrets Manager, etc.), and CI. When set, `hub.json`
    is not read or written for the secret.
 2. **`hub.json` config file**: auto-generated on first run, persisted for subsequent restarts.
