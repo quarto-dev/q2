@@ -187,8 +187,20 @@ pub fn apply_json_filters(
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
+
+    /// Make a file executable on Unix; no-op on Windows where scripts are
+    /// invoked via their interpreter (e.g. `python3 script.py`).
+    #[cfg(unix)]
+    fn make_executable(path: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path, perms).unwrap();
+    }
+
+    #[cfg(not(unix))]
+    fn make_executable(_path: &std::path::Path) {}
 
     fn create_identity_filter(dir: &TempDir) -> std::path::PathBuf {
         let filter_path = dir.path().join("identity.py");
@@ -203,10 +215,7 @@ json.dump(doc, sys.stdout)
 "#,
         )
         .unwrap();
-        // Make executable
-        let mut perms = fs::metadata(&filter_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&filter_path, perms).unwrap();
+        make_executable(&filter_path);
         filter_path
     }
 
@@ -235,10 +244,7 @@ json.dump(uppercase_strs(doc), sys.stdout)
 "#,
         )
         .unwrap();
-        // Make executable
-        let mut perms = fs::metadata(&filter_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&filter_path, perms).unwrap();
+        make_executable(&filter_path);
         filter_path
     }
 
@@ -252,10 +258,7 @@ sys.exit(1)
 "#,
         )
         .unwrap();
-        // Make executable
-        let mut perms = fs::metadata(&filter_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&filter_path, perms).unwrap();
+        make_executable(&filter_path);
         filter_path
     }
 
@@ -478,9 +481,7 @@ print("not valid json")
 "#,
         )
         .unwrap();
-        let mut perms = fs::metadata(&filter_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&filter_path, perms).unwrap();
+        make_executable(&filter_path);
 
         let pandoc = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
@@ -510,9 +511,7 @@ printf '\xff\xfe'  # Invalid UTF-8 bytes
 "#,
         )
         .unwrap();
-        let mut perms = fs::metadata(&filter_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&filter_path, perms).unwrap();
+        make_executable(&filter_path);
 
         let pandoc = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
