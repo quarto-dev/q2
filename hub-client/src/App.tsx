@@ -373,12 +373,14 @@ function App() {
   }, [navigateToProjectSelector]);
 
   const handleContentChange = useCallback((path: string, content: string) => {
+    // updateFileContent fires handle.change(), which synchronously triggers the
+    // 'change' event on the DocHandle. The registered changeHandler calls
+    // callbacks.onFileChanged with the true merged Automerge document state,
+    // which propagates to setFileContents via onFileContent. Setting fileContents
+    // directly here with the raw editor content would overwrite that merged state,
+    // causing concurrent remote edits to be silently deleted by subsequent
+    // updateText calls that diff against the stale Monaco content.
     updateFileContent(path, content);
-    setFileContents((prev) => {
-      const next = new Map(prev);
-      next.set(path, content);
-      return next;
-    });
   }, []);
 
   const handleProjectCreated = useCallback(async (

@@ -461,9 +461,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       updateText(doc, ['text'], content);
     });
 
-    // Notify callback (local change)
-    callbacks.onFileChanged(path, content, []);
-    tryParseAndNotify(path, content);
+    // onFileChanged and tryParseAndNotify are called by the 'change' event handler
+    // registered in subscribeToFile/subscribeToFileInternal, which passes the true
+    // merged Automerge document state. Calling them again here with the raw editor
+    // content would overwrite the merged state in fileContents, causing concurrent
+    // remote edits to be silently deleted on the next updateFileContent call.
   }
 
   /**
