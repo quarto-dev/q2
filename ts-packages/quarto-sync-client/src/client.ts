@@ -6,9 +6,9 @@
  * them to provide their own storage/VFS implementation.
  */
 
-import { Repo, DocHandle, updateText } from '@automerge/automerge-repo';
+import { Repo, DocHandle, updateText, generateAutomergeUrl, parseAutomergeUrl } from '@automerge/automerge-repo';
 import type { DocumentId, Patch } from '@automerge/automerge-repo';
-import { clone as automergeClone } from '@automerge/automerge';
+import { clone as automergeClone, from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 
 import type {
@@ -169,11 +169,20 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     handle.update(doc => automergeClone(doc, { actor: actorId }));
   }
 
-  // Helper: create a document with actor ID applied.
-  function createDoc<T>(): DocHandle<T> {
-    const handle = state.repo!.create<T>();
-    applyActorId(handle, state.actorId);
-    return handle;
+  // Helper: create a new document with the correct actor ID from the
+  // very first change. Uses Automerge.from() + repo.import() so the
+  // initial data is attributed to the HMAC actor (not a random one).
+  // applyActorId is still needed after import because repo.import()
+  // does not preserve the actor for future handle.change() calls.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function createDoc<T>(initialValue?: any, docId?: DocumentId): DocHandle<T> {
+    if (state.actorId) {
+      const doc = automergeFrom(initialValue ?? {}, { actor: state.actorId });
+      const handle = state.repo!.import<T>(automergeSerialize(doc), docId ? { docId } : undefined);
+      applyActorId(handle, state.actorId);
+      return handle;
+    }
+    return state.repo!.create<T>();
   }
 
   // Helper: find a document by ID, wait for it to be ready, and apply actor ID.
@@ -626,32 +635,52 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Create a new project with the given files.
    */
-  async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string, color?: string): Promise<CreateProjectResult> {
+  async function createNewProject(
+    options: CreateProjectOptions,
+    actorId?: string,
+    screenName?: string,
+    color?: string,
+    resolveActorId?: (indexDocId: string) => Promise<string | null | undefined>,
+  ): Promise<CreateProjectResult> {
     await disconnect();
 
     try {
       state.wsAdapter = new BrowserWebSocketClientAdapter(options.syncServer);
       state.repo = new Repo({ network: [state.wsAdapter] });
-      state.actorId = actorId ?? null;
 
       await waitForPeer(state.repo, 30000);
 
-      const indexHandle = createDoc<IndexDocument>();
-      indexHandle.change(doc => {
-        doc.files = {};
-        doc.version = 1;
-        doc.identities = {};
-        if (actorId && screenName) {
-          setIdentity(doc, actorId, screenName, color || '');
-        }
-      });
+      // Phase 1: Generate a document ID and resolve the actor ID before
+      // creating any documents. This avoids the chicken-and-egg problem
+      // where repo.create() writes an initial change with a random actor.
+      const indexUrl = generateAutomergeUrl();
+      const { documentId: indexDocId } = parseAutomergeUrl(indexUrl);
+
+      const resolvedActorId = resolveActorId
+        ? (await resolveActorId(indexDocId)) ?? undefined
+        : actorId;
+      state.actorId = resolvedActorId ?? null;
+
+      // Phase 2: Create the index document via createDoc with the
+      // pre-generated ID so the first change uses the correct actor.
+      const indexHandle = createDoc<IndexDocument>(
+        { files: {}, version: 1, identities: {} },
+        indexDocId,
+      );
       state.indexHandle = indexHandle;
+
+      // Write identity (separate change so the schema init is clean).
+      if (resolvedActorId && screenName) {
+        indexHandle.change(doc => {
+          setIdentity(doc, resolvedActorId, screenName, color || '');
+        });
+      }
 
       // Fire initial identities
       lastIdentities = getIdentitiesFromIndex(indexHandle.doc()!);
       callbacks.onIdentitiesChange?.(lastIdentities);
 
-      const indexDocId = indexHandle.documentId;
+      // Phase 3: Create file documents (now using the correct actor).
       const createdFiles: FileEntry[] = [];
 
       for (const file of options.files) {
@@ -752,6 +781,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     return astCache.get(path)?.ast ?? null;
   }
 
+  /**
+   * Get the current actor ID, or null if not set.
+   */
+  function getActorId(): string | null {
+    return state.actorId;
+  }
+
   // Return the public API
   return {
     connect,
@@ -770,6 +806,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     getFileHandle,
     getFilePaths,
     createNewProject,
+    getActorId,
   };
 }
 

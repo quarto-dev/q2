@@ -71,10 +71,6 @@ function App() {
   const [cursorColor, setCursorColor] = useState<string | undefined>();
   const [identities, setIdentities] = useState<Record<string, ActorIdentity>>({});
 
-  // Per-project actor ID fetched from /auth/actor (HMAC-based, project-scoped).
-  // Undefined when not connected; null would indicate a failed fetch (handled inline).
-  const [actorId, setActorId] = useState<string | undefined>();
-
   // Fetch per-project actor ID; calls logout and returns null on session expiry.
   const resolveActorId = useCallback(async (indexDocId: string): Promise<string | undefined | null> => {
     if (!AUTH_ENABLED) return undefined;
@@ -150,7 +146,6 @@ function App() {
         setFiles([]);
         setFileContents(new Map());
         setConnectionError(null);
-        setActorId(undefined);
       } else if (route.type === 'project' || route.type === 'file') {
         // Navigating to a project (possibly different from current)
         const currentProjectId = project?.id;
@@ -167,7 +162,6 @@ function App() {
               setProject(targetProject);
               setFiles(loadedFiles);
               setFileContents(contents);
-              setActorId(newActorId);
             } catch (err) {
               setConnectionError(err instanceof Error ? err.message : String(err));
               navigateToProjectSelector({ replace: true });
@@ -218,7 +212,7 @@ function App() {
             setProject(existingProject);
             setFiles(loadedFiles);
             setFileContents(contents);
-            setActorId(newActorId);
+            
 
             if (shareRoute.filePath) {
               navigateToFile(existingProject.id, shareRoute.filePath, { replace: true });
@@ -254,7 +248,7 @@ function App() {
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
-            setActorId(newActorId);
+            
           } catch (err) {
             setConnectionError(err instanceof Error ? err.message : String(err));
             navigateToProjectSelector({ replace: true });
@@ -283,7 +277,7 @@ function App() {
       setFiles([]);
       setFileContents(new Map());
       setConnectionError(null);
-      setActorId(undefined);
+
     }
   }, [auth, authLoading, project]);
 
@@ -354,7 +348,7 @@ function App() {
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
-      setActorId(newActorId);
+      
 
       if (filePathOverride) {
         navigateToFile(selectedProject.id, filePathOverride, { replace: true });
@@ -374,7 +368,6 @@ function App() {
     setFiles([]);
     setFileContents(new Map());
     setConnectionError(null);
-    setActorId(undefined);
     // Update URL to show project selector
     navigateToProjectSelector({ replace: true });
   }, [navigateToProjectSelector]);
@@ -406,12 +399,13 @@ function App() {
         mimeType: f.mime_type,
       }));
 
-      // Create the Automerge documents (initial creation without actorId;
-      // the per-project HMAC actor ID is fetched after we have the indexDocId).
+      // Create the Automerge documents. The resolveActorId callback is
+      // called after the index doc is created (to derive the HMAC actor
+      // ID from the indexDocId) but before any file docs are written.
       const result = await createNewProject({
         syncServer,
         files,
-      }, undefined, screenName, cursorColor);
+      }, undefined, screenName, cursorColor, resolveActorId);
 
       // Store the project in IndexedDB
       const projectEntry = await projectStorage.addProject(
@@ -420,10 +414,6 @@ function App() {
         title
       );
 
-      // Fetch the per-project actor ID now that we have the indexDocId
-      const newActorId = await resolveActorId(result.indexDocId);
-      if (newActorId === null) return;
-      setActorId(newActorId);
 
       // Set up the project state
       setProject(projectEntry);
@@ -504,7 +494,6 @@ function App() {
             onNavigateToFile={(filePath, options) => {
               navigateToFile(project.id, filePath, options);
             }}
-            actorId={actorId}
             identities={identities}
           />
         </ViewModeProvider>

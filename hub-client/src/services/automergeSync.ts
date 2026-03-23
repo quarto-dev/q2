@@ -203,11 +203,24 @@ export function isConnected(): boolean {
 /**
  * Create a new project with the given files.
  */
-export async function createNewProject(options: CreateProjectOptions, actorId?: string, screenName?: string, color?: string): Promise<CreateProjectResult> {
+export async function createNewProject(
+  options: CreateProjectOptions,
+  actorId?: string,
+  screenName?: string,
+  color?: string,
+  resolveActorId?: (indexDocId: string) => Promise<string | null | undefined>,
+): Promise<CreateProjectResult> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().createNewProject(options, actorId, screenName, color);
+  return ensureClient().createNewProject(options, actorId, screenName, color, resolveActorId);
+}
+
+/**
+ * Get the current actor ID, or null if not set.
+ */
+export function getActorId(): string | null {
+  return client?.getActorId() ?? null;
 }
 
 /**

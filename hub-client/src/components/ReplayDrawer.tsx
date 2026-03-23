@@ -2,13 +2,13 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import { actorColor } from '../hooks/useReplayMode';
 import type { ActorIdentity } from '../services/automergeSync';
+import { getActorId } from '../services/automergeSync';
 import './ReplayDrawer.css';
 
 interface Props {
   state: ReplayState;
   controls: ReplayControls;
   disabled?: boolean;
-  currentActorId?: string | null;
   identities?: Record<string, ActorIdentity>;
 }
 
@@ -39,7 +39,8 @@ function formatFullTimestamp(ts: number | null): string {
   return date.toLocaleString();
 }
 
-export default function ReplayDrawer({ state, controls, disabled, currentActorId, identities }: Props) {
+export default function ReplayDrawer({ state, controls, disabled, identities }: Props) {
+  const currentActorId = getActorId();
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Auto-focus the drawer when replay mode activates so keyboard shortcuts work immediately
