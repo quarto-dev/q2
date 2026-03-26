@@ -366,16 +366,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
 
 
-      // Only attempt to modify documents if we're online (to avoid conflicts)
-      if (isOnline) {
-        // Migrate schema and sync identity
-        indexHandle.change(d => {
-          migrateIndexDocument(d);
-          if (actorId && screenName) {
-            setIdentity(d, actorId, screenName, color || '');
-          }
-        });
-      }
+      // Migrate schema and sync identity.
+      // Always write locally — Automerge will sync when the peer connects.
+      indexHandle.change(d => {
+        migrateIndexDocument(d);
+        if (actorId && screenName) {
+          setIdentity(d, actorId, screenName, color || '');
+        }
+      });
 
       const currentDoc = indexHandle.doc()!;
       const files = getFilesFromIndex(currentDoc);
@@ -721,8 +719,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const indexUrl = generateAutomergeUrl();
       const { documentId: indexDocId } = parseAutomergeUrl(indexUrl);
 
-      // Only resolve actor ID from server if we're online
-      const resolvedActorId = isOnline && resolveActorId
+      const resolvedActorId = resolveActorId
         ? (await resolveActorId(indexDocId)) ?? undefined
         : actorId;
       state.actorId = resolvedActorId ?? null;
