@@ -4,7 +4,6 @@
  * This module provides CRUD operations for project entries and integrates
  * with the schema versioning/migration system.
  */
-import type { IDBPDatabase } from 'idb';
 import type { ProjectEntry } from '../types/project';
 import type { ExportData, UserSettings } from './storage/types';
 import {
