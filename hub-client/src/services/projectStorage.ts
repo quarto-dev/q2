@@ -4,69 +4,16 @@
  * This module provides CRUD operations for project entries and integrates
  * with the schema versioning/migration system.
  */
-import { openDB } from 'idb';
 import type { IDBPDatabase } from 'idb';
 import type { ProjectEntry } from '../types/project';
 import type { ExportData, UserSettings } from './storage/types';
 import {
-  DB_NAME,
   STORES,
-  CURRENT_DB_VERSION,
   CURRENT_SCHEMA_VERSION,
-  getStructuralMigrations,
-  runMigrations,
+  getDb,
+  resetDbPromise,
   getSchemaVersion,
 } from './storage';
-
-/**
- * Cached database promise.
- * Reset to null if database needs to be reopened.
- */
-let dbPromise: Promise<IDBPDatabase> | null = null;
-
-/**
- * Get or open the database, running migrations as needed.
- *
- * This function:
- * 1. Opens the database with the current version
- * 2. Runs structural migrations (store/index creation) in the upgrade callback
- * 3. Runs data transformation migrations after the database is open
- */
-async function getDb(): Promise<IDBPDatabase> {
-  if (!dbPromise) {
-    dbPromise = (async () => {
-      // Open the database with structural migrations in the upgrade callback
-      const db = await openDB(DB_NAME, CURRENT_DB_VERSION, {
-        upgrade(db, oldVersion, _newVersion, transaction) {
-          // Create projects store if this is a fresh database
-          if (!db.objectStoreNames.contains(STORES.PROJECTS)) {
-            const store = db.createObjectStore(STORES.PROJECTS, { keyPath: 'id' });
-            store.createIndex('indexDocId', 'indexDocId', { unique: true });
-            store.createIndex('lastAccessed', 'lastAccessed');
-          }
-
-          // Run structural migrations for version upgrades
-          // oldVersion is 0 for new databases, so we start from 1
-          const fromVersion = oldVersion || 1;
-          const structuralMigrations = getStructuralMigrations(fromVersion);
-
-          for (const migration of structuralMigrations) {
-            if (migration.structural) {
-              console.log(`Running structural migration v${migration.version}: ${migration.description}`);
-              migration.structural(db, transaction);
-            }
-          }
-        },
-      });
-
-      // Run data transformation migrations after the database is open
-      await runMigrations(db);
-
-      return db;
-    })();
-  }
-  return dbPromise;
-}
 
 /**
  * Generate a unique ID for a new project entry.
@@ -279,8 +226,6 @@ export async function getDatabaseSchemaVersion(): Promise<number> {
  * Call this when you need to force a reconnection (e.g., after schema changes).
  */
 export function closeDatabase(): void {
-  if (dbPromise) {
-    dbPromise.then(db => db.close()).catch(() => {});
-    dbPromise = null;
-  }
+  getDb().then(db => db.close()).catch(() => {});
+  resetDbPromise();
 }

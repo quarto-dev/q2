@@ -5,27 +5,15 @@
  * User identity is used for presence features (cursor colors, display names).
  */
 
-import { openDB } from 'idb';
-import type { IDBPDatabase } from 'idb';
 import type { UserSettings } from './storage/types';
 import {
-  DB_NAME,
   STORES,
-  CURRENT_DB_VERSION,
+  getDb,
   generateColorFromId,
   generateAnonymousName,
   isValidHexColor,
   isValidUserName,
 } from './storage';
-
-/**
- * Get the database instance.
- * Note: This opens the DB independently to avoid circular dependencies with projectStorage.
- * The DB version and migration system ensures consistency.
- */
-async function getDb(): Promise<IDBPDatabase> {
-  return openDB(DB_NAME, CURRENT_DB_VERSION);
-}
 
 /**
  * Get the current user identity.
@@ -35,12 +23,6 @@ async function getDb(): Promise<IDBPDatabase> {
  */
 export async function getUserIdentity(): Promise<UserSettings> {
   const db = await getDb();
-
-  // Check if store exists
-  if (!db.objectStoreNames.contains(STORES.USER_SETTINGS)) {
-    throw new Error('User settings store not found. Database may not be fully initialized.');
-  }
-
   const settings = await db.get(STORES.USER_SETTINGS, 'identity');
 
   if (settings) {

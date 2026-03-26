@@ -39,6 +39,9 @@ export {
   MigrationFailedError,
 } from './migrationRunner';
 
+// Database initialization
+export { getDb, resetDbPromise } from './db';
+
 // Utilities
 export {
   generateColorFromId,
