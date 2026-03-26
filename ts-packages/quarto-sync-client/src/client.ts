@@ -364,8 +364,6 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         );
       }
 
-
-
       // Migrate schema and sync identity.
       // Always write locally — Automerge will sync when the peer connects.
       indexHandle.change(d => {
