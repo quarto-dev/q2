@@ -35,7 +35,7 @@ interface PreviewProps {
   onAstChange?: (astJson: string | null) => void;
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
-  setContent: (content: string) => void;
+  onContentRewrite: (content: string) => void;
   format: string; // 'q2-slides' or 'q2-debug'
 }
 
@@ -105,7 +105,7 @@ export default function ReactPreview({
   onAstChange,
   currentSlideIndex,
   onSlideChange,
-  setContent,
+  onContentRewrite,
   format,
 }: PreviewProps) {
   // Preview state machine for error handling
@@ -209,11 +209,11 @@ export default function ReactPreview({
   const handleSetAst = useCallback((newAst: any) => {
     try {
       const newQmd = incrementalWriteQmd(content, newAst);
-      setContent(newQmd);
+      onContentRewrite(newQmd);
     } catch (err) {
       console.error('Failed to write AST back to QMD:', err);
     }
-  }, [content, setContent]);
+  }, [content, onContentRewrite]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>

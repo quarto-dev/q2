@@ -6,7 +6,7 @@
  * them to provide their own storage/VFS implementation.
  */
 
-import { Repo, DocHandle, updateText, generateAutomergeUrl, parseAutomergeUrl } from '@automerge/automerge-repo';
+import { Repo, DocHandle, updateText, splice, generateAutomergeUrl, parseAutomergeUrl } from '@automerge/automerge-repo';
 import type { DocumentId, Patch } from '@automerge/automerge-repo';
 import { clone as automergeClone, from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
@@ -29,6 +29,7 @@ import {
 } from '@quarto/quarto-automerge-schema';
 
 import type {
+  EditorContentChange,
   SyncClientCallbacks,
   ASTOptions,
   CreateBinaryFileResult,
@@ -515,6 +516,31 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Apply positional editor operations (splice-based) to a text file.
+   *
+   * Each change maps directly to an Automerge `splice` call, avoiding the
+   * full-text diff race condition in `updateText`. Changes must be ordered
+   * end-to-beginning (Monaco's documented ordering) so earlier offsets
+   * remain valid as later changes are applied.
+   */
+  function applyEditorOperations(path: string, changes: EditorContentChange[]): void {
+    if (changes.length === 0) return;
+
+    const handle = state.fileHandles.get(path);
+    if (!handle) {
+      console.warn(`No handle found for file: ${path}`);
+      return;
+    }
+
+    handle.change((doc) => {
+      const textDoc = doc as unknown as { text: string };
+      for (const change of changes) {
+        splice(textDoc, ['text'], change.rangeOffset, change.rangeLength, change.text);
+      }
+    });
+  }
+
+  /**
    * Create a new text file.
    */
   async function createFile(path: string, content: string = ''): Promise<void> {
@@ -882,6 +908,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     getFileContent,
     getBinaryFileContent,
     updateFileContent,
+    applyEditorOperations,
     updateFileAst,
     getFileAst,
     createFile,

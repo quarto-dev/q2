@@ -9,6 +9,26 @@ import type { FileEntry, ActorIdentity } from '@quarto/quarto-automerge-schema';
 export type { Patch };
 
 // ============================================================================
+// Editor Operation Types
+// ============================================================================
+
+/**
+ * Mirrors Monaco's `IModelContentChange` shape for positional text operations.
+ * Used by `applyEditorOperations` to apply splice-based edits to Automerge.
+ *
+ * `rangeOffset` and `rangeLength` are in UTF-16 code units (JavaScript's native
+ * string encoding), matching both Monaco and Automerge's WASM build.
+ */
+export interface EditorContentChange {
+  /** The offset of the range that got replaced (UTF-16 code units). */
+  rangeOffset: number;
+  /** The length of the range that got replaced (UTF-16 code units). */
+  rangeLength: number;
+  /** The new text for the range. */
+  text: string;
+}
+
+// ============================================================================
 // File Payload Types (discriminated union)
 // ============================================================================
 

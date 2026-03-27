@@ -28,7 +28,7 @@ interface PreviewRouterProps {
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
   onFormatChange?: (format: string | null) => void;
-  setContent: (content: string) => void;
+  onContentRewrite: (content: string) => void;
 }
 
 /**
@@ -114,7 +114,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   }
 
   // Render the appropriate preview component with shared WASM error banner
-  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onFormatChange, setContent, fileContents, ...commonProps } = props;
+  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onFormatChange, onContentRewrite, fileContents, ...commonProps } = props;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -124,7 +124,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
       )}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {reactFormat ? (
-          <ReactPreview {...commonProps} setContent={setContent} fileContents={fileContents} format={reactFormat} />
+          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} />
         ) : (
           <Preview {...commonProps} onRegisterScrollToLine={onRegisterScrollToLine} onRegisterSetScrollRatio={onRegisterSetScrollRatio} />
         )}

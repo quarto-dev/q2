@@ -12,6 +12,7 @@
 import type { Patch } from '@automerge/automerge-repo';
 import type {
   SyncClientCallbacks,
+  EditorContentChange,
   TextFilePayload,
   BinaryFilePayload,
   FilePayload,
@@ -164,6 +165,23 @@ export function createMockSyncClient(
       }
       files.set(path, { type: 'text', text: content });
       callbacks.onFileChanged(path, content, []);
+    },
+
+    applyEditorOperations(path: string, changes: EditorContentChange[]): void {
+      if (changes.length === 0) return;
+      const existing = files.get(path);
+      if (!existing || existing.type !== 'text') {
+        throw new Error(`Cannot update non-text file: ${path}`);
+      }
+      // Apply changes end-to-beginning (matching real splice behavior)
+      let text = existing.text;
+      for (const change of changes) {
+        const before = text.slice(0, change.rangeOffset);
+        const after = text.slice(change.rangeOffset + change.rangeLength);
+        text = before + change.text + after;
+      }
+      files.set(path, { type: 'text', text });
+      callbacks.onFileChanged(path, text, []);
     },
 
     async createFile(path: string, content: string = ''): Promise<void> {

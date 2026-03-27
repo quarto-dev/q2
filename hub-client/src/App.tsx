@@ -10,9 +10,10 @@ import {
   disconnect,
   setSyncHandlers,
   getFileContent,
-  updateFileContent,
+  applyEditorOperations,
   createNewProject,
   type ActorIdentity,
+  type EditorContentChange,
 } from './services/automergeSync';
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
@@ -377,15 +378,8 @@ function App() {
     navigateToProjectSelector({ replace: true });
   }, [navigateToProjectSelector]);
 
-  const handleContentChange = useCallback((path: string, content: string) => {
-    // updateFileContent fires handle.change(), which synchronously triggers the
-    // 'change' event on the DocHandle. The registered changeHandler calls
-    // callbacks.onFileChanged with the true merged Automerge document state,
-    // which propagates to setFileContents via onFileContent. Setting fileContents
-    // directly here with the raw editor content would overwrite that merged state,
-    // causing concurrent remote edits to be silently deleted by subsequent
-    // updateText calls that diff against the stale Monaco content.
-    updateFileContent(path, content);
+  const handleContentOperations = useCallback((path: string, changes: EditorContentChange[]) => {
+    applyEditorOperations(path, changes);
   }, []);
 
   const handleProjectCreated = useCallback(async (
@@ -496,7 +490,7 @@ function App() {
             files={files}
             fileContents={fileContents}
             onDisconnect={handleDisconnect}
-            onContentChange={handleContentChange}
+            onContentOperations={handleContentOperations}
             route={route}
             onNavigateToFile={(filePath, options) => {
               navigateToFile(project.id, filePath, options);

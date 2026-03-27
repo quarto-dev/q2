@@ -29,6 +29,7 @@ export {
 // Export sync client types
 export type {
   Patch,
+  EditorContentChange,
   TextFilePayload,
   BinaryFilePayload,
   FilePayload,

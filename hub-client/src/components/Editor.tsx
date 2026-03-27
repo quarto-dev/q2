@@ -11,6 +11,7 @@ import {
   deleteFile,
   renameFile,
   exportProjectAsZip,
+  type EditorContentChange,
 } from '../services/automergeSync';
 import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
 import type { Diagnostic } from '../types/diagnostic';
@@ -45,7 +46,7 @@ interface Props {
   files: FileEntry[];
   fileContents: Map<string, string>;
   onDisconnect: () => void;
-  onContentChange: (path: string, content: string) => void;
+  onContentOperations: (path: string, changes: EditorContentChange[]) => void;
   /** Current route from URL */
   route: Route;
   /** Callback to update URL when file changes */
@@ -101,7 +102,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentChange, route, onNavigateToFile, identities, isOnline }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, isOnline }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
 
@@ -510,7 +511,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
   }, [route, files, fileContents, currentFile]);
 
-  const handleEditorChange = (value: string | undefined) => {
+  const handleEditorChange = (value: string | undefined, event: Monaco.editor.IModelContentChangedEvent) => {
     // Skip changes during replay mode. Use the ref (always current) rather than
     // the closure value (can be stale between setState and re-render).
     if (replayActiveRef.current) return;
@@ -519,10 +520,25 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
     if (value !== undefined && currentFile) {
       setContent(value);
-      onContentChange(currentFile.path, value);
-      // Thumbnail regeneration will be triggered by handleAstChange when preview finishes
+      onContentOperations(currentFile.path, event.changes);
     }
   };
+
+  // Route AST rewrites through Monaco → onChange → splice path.
+  // Uses diffToMonacoEdits to compute minimal edits, so concurrent remote
+  // edits in unchanged regions merge cleanly via CRDT. Also preserves undo.
+  const handleContentRewrite = useCallback((newContent: string) => {
+    if (!editorRef.current || !currentFile) return;
+    const model = editorRef.current.getModel();
+    if (!model) return;
+
+    const oldContent = model.getValue();
+    const edits = diffToMonacoEdits(oldContent, newContent);
+    if (edits.length > 0) {
+      editorRef.current.executeEdits('ast-rewrite', edits);
+    }
+    // onChange fires synchronously → handleEditorChange → setContent + onContentOperations
+  }, [currentFile]);
 
   // Configure Monaco before mount (for TypeScript diagnostics)
   const handleBeforeMount = (monaco: typeof Monaco) => {
@@ -757,13 +773,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             text: markdown,
             forceMoveMarkers: true,
           }]);
-
-          // Update local content state to match
-          const newContent = editorRef.current.getValue();
-          setContent(newContent);
-          if (currentFile) {
-            onContentChange(currentFile.path, newContent);
-          }
+          // Monaco's onChange fires synchronously from executeEdits,
+          // updating both React state and CRDT via the splice path.
         }
         return; // Internal drag handled, don't process as external
       } catch {
@@ -793,7 +804,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       setPendingUploadFiles(files);
       setShowNewFileDialog(true);
     }
-  }, [currentFile, onContentChange]);
+  }, [currentFile]);
 
   // Cleanup editor drag-drop listeners and Monaco providers on unmount
   useEffect(() => {
@@ -850,23 +861,18 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           text: markdown,
           forceMoveMarkers: true,
         }]);
+        // Monaco's onChange fires synchronously from executeEdits,
+        // updating both React state and CRDT via the splice path.
 
         // Clear the pending position after insertion
         pendingDropPositionRef.current = null;
-
-        // Update local content state to match
-        const newContent = editorRef.current.getValue();
-        setContent(newContent);
-        if (currentFile) {
-          onContentChange(currentFile.path, newContent);
-        }
       }
     } catch (err) {
       console.error('Failed to upload file:', err);
       // Clear pending position on error too
       pendingDropPositionRef.current = null;
     }
-  }, [handleCreateTextFile, currentFile, onContentChange]);
+  }, [handleCreateTextFile, currentFile]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
@@ -1083,7 +1089,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             currentSlideIndex={currentSlideIndex}
             onSlideChange={handleSlideChange}
             onFormatChange={handleFormatChange}
-            setContent={handleEditorChange}
+            onContentRewrite={handleContentRewrite}
           />
         </div>
       </main>

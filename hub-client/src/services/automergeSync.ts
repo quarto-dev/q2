@@ -11,6 +11,7 @@ import {
   type SyncClient,
   type SyncClientCallbacks,
   type Patch,
+  type EditorContentChange,
   type FileEntry,
   type ActorIdentity,
   type CreateBinaryFileResult,
@@ -22,7 +23,7 @@ import {
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
 
 // Re-export types for use in other components
-export type { Patch, FileEntry, ActorIdentity, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
+export type { Patch, EditorContentChange, FileEntry, ActorIdentity, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
@@ -155,6 +156,16 @@ export function getBinaryFileContent(path: string): { content: Uint8Array; mimeT
 export function updateFileContent(path: string, content: string): void {
   ensureClient().updateFileContent(path, content);
   // VFS is updated via callback
+}
+
+/**
+ * Apply positional editor operations (splice-based) to a text file.
+ * Each change maps directly to an Automerge splice, avoiding the
+ * full-text diff race in updateText.
+ */
+export function applyEditorOperations(path: string, changes: EditorContentChange[]): void {
+  ensureClient().applyEditorOperations(path, changes);
+  // VFS is updated via callback (change handler fires onFileChanged)
 }
 
 /**

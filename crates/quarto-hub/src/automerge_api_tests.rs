@@ -407,4 +407,148 @@ mod tests {
         // Result should have filesystem's changes
         assert_eq!(read_text(&doc), "Modified by filesystem");
     }
+
+    // =========================================================================
+    // UTF-16 encoding verification
+    //
+    // The JS/WASM client uses UTF-16 code units for text indices (JavaScript's
+    // native string encoding). The Rust server must use the same encoding so
+    // that positional splice operations produce consistent CRDT element IDs.
+    // These tests verify that the `utf16-indexing` feature flag is active and
+    // that splice_text works correctly with non-BMP characters (emoji, etc.).
+    // =========================================================================
+
+    #[test]
+    fn test_text_encoding_is_utf16() {
+        // Verify the feature flag is active: platform_default() should be Utf16CodeUnit
+        assert_eq!(
+            automerge::TextEncoding::platform_default(),
+            automerge::TextEncoding::Utf16CodeUnit,
+            "automerge must be compiled with utf16-indexing feature for JS client compatibility"
+        );
+    }
+
+    #[test]
+    fn test_splice_text_with_emoji() {
+        // 🎉 (U+1F389) is a non-BMP character:
+        //   - 1 Unicode code point
+        //   - 2 UTF-16 code units (surrogate pair: 0xD83C 0xDF89)
+        //   - 4 UTF-8 bytes
+        // If encoding is wrong, offsets after emoji will be off.
+        let mut doc = create_doc_with_text("Hello 🎉 world");
+        let (_, text_obj) = doc.get(ROOT, "text").unwrap().unwrap();
+
+        // "Hello 🎉 world"
+        //  UTF-16 offsets: H=0 e=1 l=2 l=3 o=4 ' '=5 🎉=6,7 ' '=8 w=9 o=10 r=11 l=12 d=13
+        //  length in UTF-16 code units = 14
+
+        // Verify length uses UTF-16 code units
+        assert_eq!(doc.length(&text_obj), 14);
+
+        // splice_text at UTF-16 offset 8 (the space after 🎉) to insert "!"
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.splice_text(&text_obj, 8, 0, "!")?;
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(read_text(&doc), "Hello 🎉! world");
+    }
+
+    #[test]
+    fn test_splice_text_delete_emoji() {
+        // Deleting an emoji requires deleteCount=2 in UTF-16
+        let mut doc = create_doc_with_text("A🎉B");
+        let (_, text_obj) = doc.get(ROOT, "text").unwrap().unwrap();
+
+        // UTF-16 offsets: A=0 🎉=1,2 B=3 → length=4
+        assert_eq!(doc.length(&text_obj), 4);
+
+        // Delete the emoji (2 UTF-16 code units starting at offset 1)
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.splice_text(&text_obj, 1, 2, "")?;
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(read_text(&doc), "AB");
+    }
+
+    #[test]
+    fn test_splice_text_replace_after_multiple_emoji() {
+        // Multiple emoji shift offsets more dramatically
+        let mut doc = create_doc_with_text("🌍🎉🚀end");
+        let (_, text_obj) = doc.get(ROOT, "text").unwrap().unwrap();
+
+        // UTF-16 offsets: 🌍=0,1 🎉=2,3 🚀=4,5 e=6 n=7 d=8 → length=9
+        assert_eq!(doc.length(&text_obj), 9);
+
+        // Replace "end" (3 chars at offset 6) with "fin"
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.splice_text(&text_obj, 6, 3, "fin")?;
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(read_text(&doc), "🌍🎉🚀fin");
+    }
+
+    #[test]
+    fn test_update_text_preserves_emoji_in_concurrent_edits() {
+        // Simulate the scenario that motivated operation-based sync:
+        // Two peers editing a document containing emoji concurrently.
+        let mut doc = create_doc_with_text("Hello 🎉 world");
+        let checkpoint = doc.get_heads();
+
+        // Peer A: insert " beautiful" after 🎉 (at UTF-16 offset 8)
+        let (_, text_obj) = doc.get(ROOT, "text").unwrap().unwrap();
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.splice_text(&text_obj, 8, 0, " beautiful")?;
+            Ok(())
+        })
+        .unwrap();
+
+        // Peer B (forked at checkpoint): append "!"
+        let mut forked = doc.fork_at(&checkpoint).unwrap();
+        let (_, text_obj_b) = forked.get(ROOT, "text").unwrap().unwrap();
+        let forked_len = forked.length(&text_obj_b);
+        forked
+            .transact::<_, _, automerge::AutomergeError>(|tx| {
+                tx.splice_text(&text_obj_b, forked_len, 0, "!")?;
+                Ok(())
+            })
+            .unwrap();
+
+        // Merge — both edits should survive
+        doc.merge(&mut forked).unwrap();
+        let result = read_text(&doc);
+
+        // Both the " beautiful" insertion and the trailing "!" should be present.
+        // The emoji must be intact (not split or corrupted).
+        assert!(result.contains("🎉"), "emoji must survive merge");
+        assert!(result.contains("beautiful"), "peer A's edit must survive");
+        assert!(result.ends_with('!'), "peer B's edit must survive");
+    }
+
+    #[test]
+    fn test_splice_text_with_mixed_bmp_and_non_bmp() {
+        // Mix of BMP (CJK) and non-BMP (emoji) characters
+        let mut doc = create_doc_with_text("你好🌍世界");
+        let (_, text_obj) = doc.get(ROOT, "text").unwrap().unwrap();
+
+        // UTF-16: 你=0 好=1 🌍=2,3 世=4 界=5 → length=6
+        // (CJK characters are in the BMP, so 1 code unit each)
+        assert_eq!(doc.length(&text_obj), 6);
+
+        // Insert between 🌍 and 世 (offset 4)
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.splice_text(&text_obj, 4, 0, "🎉")?;
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(read_text(&doc), "你好🌍🎉世界");
+        // New length: 你=0 好=1 🌍=2,3 🎉=4,5 世=6 界=7 → 8
+        assert_eq!(doc.length(&text_obj), 8);
+    }
 }
