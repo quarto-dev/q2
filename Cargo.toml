@@ -2,14 +2,13 @@
 members = [
     "crates/*",
     "crates/experiments/reconcile-viewer",
-    "crates/pampa/fuzz",
 ]
 default-members = ["crates/*", "crates/experiments/reconcile-viewer"]
-# WASM crates cannot be compiled on native platforms as part of the default workspace
-# because they pull in dependencies (like V8 via deno_core) that are incompatible with
-# native shared libraries. Build them explicitly with wasm-pack or --target wasm32-unknown-unknown.
+# Excluded crates require special build toolchains or targets:
+# - WASM crates: build with wasm-pack or --target wasm32-unknown-unknown
+# - pampa/fuzz: requires nightly Rust + libfuzzer-sys (Linux/macOS only), run via `cargo fuzz`
 # crates/experiments is a container directory, not a crate, so we exclude it from crates/* matching.
-exclude = ["crates/wasm-quarto-hub-client", "crates/wasm-qmd-parser", "crates/experiments"]
+exclude = ["crates/wasm-quarto-hub-client", "crates/wasm-qmd-parser", "crates/experiments", "crates/pampa/fuzz"]
 resolver = "2"
 
 [workspace.package]
