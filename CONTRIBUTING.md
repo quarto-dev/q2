@@ -84,11 +84,7 @@ cargo xtask lint
 
 ### Windows
 
-**pampa-fuzz**: Excluded from default workspace members via `default-members` in `Cargo.toml`. The `libfuzzer-sys` dependency only builds on Linux/macOS.
-
-**v8 test compilation**: The `v8` crate does not produce an rlib on Windows, causing test compilation (not regular builds) to fail for 12 crates that transitively depend on it. `cargo build --workspace` works fine. `cargo xtask test` handles this automatically by excluding the affected crates on Windows.
-
-See `claude-notes/instructions/windows-dev.md` for the full dependency cascade and list of testable crates.
+**pampa-fuzz**: Excluded from the workspace via `exclude` in `Cargo.toml`. The `libfuzzer-sys` dependency requires nightly Rust and only builds on Linux/macOS. Run fuzz targets directly: `cargo fuzz run hello_fuzz --fuzz-dir ./fuzz` from `crates/pampa/`.
 
 ### macOS / Linux
 

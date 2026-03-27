@@ -17,6 +17,13 @@ The v8 crate previously did not produce rlib on Windows, requiring 12 crates to 
 excluded from test compilation. This was resolved (likely by an upstream v8/deno_core
 update) and all workspace crates now compile tests on Windows.
 
+## pampa-fuzz
+
+The `pampa-fuzz` crate is excluded from the workspace (`exclude` in root `Cargo.toml`).
+`libfuzzer-sys` requires nightly Rust and only builds on Linux/macOS — it fails with
+`LNK1561` on Windows. This does not affect any other crate; run fuzz targets from
+`crates/pampa/` on a supported platform.
+
 ## Dev Drive
 
 For faster builds and tests on Windows, use a Dev Drive (ReFS volume).
