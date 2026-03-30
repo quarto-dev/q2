@@ -17,6 +17,45 @@ use quarto_error_reporting::DiagnosticMessage;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
+
+/// Find the Python interpreter, checking `python3` first then `python`.
+/// The result is cached for the lifetime of the process.
+///
+/// On Windows, bare `python3` may resolve to the Microsoft Store stub
+/// (which exits with code 9009) rather than a real interpreter. We also
+/// probe `.bat` and `.cmd` variants so that pyenv-win and similar shim
+/// managers are found.
+fn find_python() -> &'static str {
+    static PYTHON: OnceLock<&str> = OnceLock::new();
+    *PYTHON.get_or_init(|| {
+        let candidates: &[&str] = if cfg!(windows) {
+            &[
+                "python3",
+                "python",
+                "python3.bat",
+                "python.bat",
+                "python3.cmd",
+                "python.cmd",
+            ]
+        } else {
+            &["python3", "python"]
+        };
+        for candidate in candidates {
+            if let Ok(status) = Command::new(candidate)
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+            {
+                if status.success() {
+                    return candidate;
+                }
+            }
+        }
+        "python3"
+    })
+}
 
 /// Errors that can occur during JSON filter execution
 #[derive(Debug)]
@@ -526,6 +565,36 @@ printf '\xff\xfe'  # Invalid UTF-8 bytes
             JsonFilterError::InvalidUtf8Output(_) => {}
             err => panic!("Expected InvalidUtf8Output, got: {:?}", err),
         }
+    }
+
+    #[test]
+    fn test_find_python_returns_working_interpreter() {
+        let python = find_python();
+        let output = Command::new(python)
+            .arg("--version")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("failed to run python");
+        assert!(
+            output.status.success(),
+            "python --version failed with: {}",
+            python
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Python --version prints to stdout (3.4+) or stderr (older)
+        let version_output = if stdout.contains("Python") {
+            stdout
+        } else {
+            stderr
+        };
+        assert!(
+            version_output.contains("Python"),
+            "unexpected output from {}: {}",
+            python,
+            version_output
+        );
     }
 
     #[test]
