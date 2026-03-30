@@ -6,7 +6,7 @@
 //! ```
 //!
 //! Available commands:
-//! - `dev-setup`: Install required development tools (cargo-nextest, wasm-pack)
+//! - `dev-setup`: Install required development tools (cargo-nextest, wasm-bindgen-cli)
 //! - `lint`: Run custom lint checks on the codebase
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
@@ -32,7 +32,7 @@ struct Cli {
 enum Command {
     /// Install required development tools.
     ///
-    /// Checks for cargo-nextest and wasm-pack, installing any that are missing.
+    /// Checks for cargo-nextest and wasm-bindgen-cli (pinned version), installing any that are missing.
     /// Uses cargo-binstall for faster binary installs when available,
     /// falling back to cargo install --locked otherwise.
     DevSetup {},

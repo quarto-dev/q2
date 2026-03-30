@@ -8,15 +8,32 @@
 
 The repo includes a `rust-toolchain.toml` that auto-installs the correct nightly toolchain, components (rustfmt, clippy), and the `wasm32-unknown-unknown` target on your first `cargo` invocation. No manual `rustup` steps needed.
 
-### Development tools (cargo-nextest, wasm-pack)
+### Development tools (cargo-nextest, wasm-bindgen-cli)
 
-This project uses [nextest](https://nexte.st/) instead of `cargo test`, and [wasm-pack](https://rustwasm.github.io/wasm-pack/) for building WASM modules. Install both with:
+This project uses [nextest](https://nexte.st/) instead of `cargo test`, and
+[wasm-bindgen-cli](https://rustwasm.github.io/wasm-bindgen/) for building WASM modules. Install both with:
 
 ```bash
 cargo dev-setup
 ```
 
 This detects already-installed tools and skips them. When [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) is available, it downloads pre-built binaries (seconds); otherwise it falls back to `cargo install --locked` (slower, compiles from source).
+
+> **Note:** `wasm-bindgen-cli` must exactly match the `wasm-bindgen` crate version pinned in
+> `crates/wasm-quarto-hub-client/Cargo.lock`. `cargo dev-setup` installs the correct pinned version
+> automatically. If you install it manually, use the version shown in that `Cargo.lock`
+> (currently `0.2.108`): `cargo install wasm-bindgen-cli --version 0.2.108`.
+> Running `npm run build:all` will tell you if there's a version mismatch.
+
+### macOS: Homebrew LLVM (for WASM builds)
+
+The WASM build compiles Lua C source for `wasm32-unknown-unknown`, which requires LLVM clang — Apple's built-in clang does not support that target.
+
+```bash
+brew install llvm
+```
+
+This only needs to be done once. The build scripts locate it automatically in the standard Homebrew paths (`/opt/homebrew/opt/llvm` on Apple Silicon, `/usr/local/opt/llvm` on Intel).
 
 ### Pandoc 3.6+ (optional)
 

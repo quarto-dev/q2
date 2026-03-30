@@ -12,8 +12,8 @@
  *   - Homebrew LLVM (macOS): `brew install llvm`
  */
 
-import { spawn } from 'child_process';
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { spawn, spawnSync } from 'child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { platform } from 'os';
@@ -57,7 +57,58 @@ function run(cmd, args, opts = {}) {
   });
 }
 
+/**
+ * Read the wasm-bindgen version locked in the wasm crate's Cargo.lock.
+ * Returns a string like "0.2.108", or null if it can't be determined.
+ */
+function lockedWasmBindgenVersion() {
+  try {
+    const lockPath = join(wasmCrate, 'Cargo.lock');
+    const text = readFileSync(lockPath, 'utf-8');
+    const match = text.match(/name = "wasm-bindgen"\nversion = "([^"]+)"/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify that the installed wasm-bindgen CLI matches the version locked in
+ * Cargo.lock.  The versions must match exactly — a mismatch causes a hard
+ * build error ("schema version … must exactly match").
+ */
+function checkWasmBindgenVersion() {
+  const expected = lockedWasmBindgenVersion();
+  if (!expected) {
+    console.warn('Warning: could not read wasm-bindgen version from Cargo.lock');
+    return;
+  }
+
+  const result = spawnSync('wasm-bindgen', ['--version'], { encoding: 'utf-8' });
+  if (result.error || result.status !== 0) {
+    console.error('Error: wasm-bindgen CLI not found.');
+    console.error(`Install the pinned version with:`);
+    console.error(`  cargo install -f wasm-bindgen-cli --version ${expected}`);
+    console.error('Or run: cargo dev-setup');
+    process.exit(1);
+  }
+
+  const installed = (result.stdout || result.stderr || '').trim();
+  if (!installed.includes(expected)) {
+    console.error(`Error: wasm-bindgen version mismatch.`);
+    console.error(`  installed: ${installed}`);
+    console.error(`  required:  wasm-bindgen ${expected}  (from Cargo.lock)`);
+    console.error('');
+    console.error('The CLI version must exactly match the wasm-bindgen crate version.');
+    console.error(`Fix with:`);
+    console.error(`  cargo install -f wasm-bindgen-cli --version ${expected}`);
+    console.error('Or run: cargo dev-setup');
+    process.exit(1);
+  }
+}
+
 async function buildWasm() {
+  checkWasmBindgenVersion();
   console.log('Building wasm-quarto-hub-client...\n');
 
   // Clean pkg/ directory

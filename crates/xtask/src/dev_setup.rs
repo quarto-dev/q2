@@ -14,6 +14,10 @@ struct Tool {
     /// Command and args to check if the tool is installed.
     check_cmd: &'static str,
     check_args: &'static [&'static str],
+    /// If set, the tool must report exactly this version string (matched as a
+    /// substring of its `--version` output).  A wrong version is treated the
+    /// same as "not installed" and the pinned version is (re-)installed.
+    required_version: Option<&'static str>,
 }
 
 const TOOLS: &[Tool] = &[
@@ -21,21 +25,42 @@ const TOOLS: &[Tool] = &[
         package: "cargo-nextest",
         check_cmd: "cargo",
         check_args: &["nextest", "--version"],
+        required_version: None,
     },
+    // wasm-bindgen-cli must exactly match the wasm-bindgen crate version locked
+    // in crates/wasm-quarto-hub-client/Cargo.lock.  A version mismatch produces
+    // a hard build error ("schema version … must exactly match").
     Tool {
-        package: "wasm-pack",
-        check_cmd: "wasm-pack",
+        package: "wasm-bindgen-cli",
+        check_cmd: "wasm-bindgen",
         check_args: &["--version"],
+        required_version: Some("0.2.108"),
     },
 ];
 
 fn is_installed(tool: &Tool) -> bool {
-    Command::new(tool.check_cmd)
-        .args(tool.check_args)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+    let output = Command::new(tool.check_cmd).args(tool.check_args).output();
+
+    let Ok(output) = output else { return false };
+    if !output.status.success() {
+        return false;
+    }
+
+    if let Some(required) = tool.required_version {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let combined = format!("{stdout}{stderr}");
+        if !combined.contains(required) {
+            let found = combined.lines().next().unwrap_or("unknown").trim();
+            println!(
+                "  {} — wrong version installed ({found}), need {required}",
+                tool.package
+            );
+            return false;
+        }
+    }
+
+    true
 }
 
 fn has_binstall() -> bool {
@@ -47,13 +72,20 @@ fn has_binstall() -> bool {
         .is_ok_and(|s| s.success())
 }
 
-fn install(package: &str, use_binstall: bool) -> Result<()> {
+fn install(tool: &Tool, use_binstall: bool) -> Result<()> {
+    let package = tool.package;
+    // Build the versioned package spec, e.g. "wasm-bindgen-cli@0.2.108"
+    let versioned = tool
+        .required_version
+        .map(|v| format!("{package}@{v}"))
+        .unwrap_or_else(|| package.to_string());
+
     if use_binstall {
-        println!("  Installing {package} via cargo binstall...");
+        println!("  Installing {versioned} via cargo binstall...");
         let status = Command::new("cargo")
-            .args(["binstall", "--no-confirm", package])
+            .args(["binstall", "--no-confirm", &versioned])
             .status()
-            .with_context(|| format!("Failed to run cargo binstall {package}"))?;
+            .with_context(|| format!("Failed to run cargo binstall {versioned}"))?;
 
         if status.success() {
             return Ok(());
@@ -61,14 +93,20 @@ fn install(package: &str, use_binstall: bool) -> Result<()> {
         println!("  binstall failed, falling back to cargo install...");
     }
 
-    println!("  Installing {package} via cargo install...");
+    let mut args = vec!["install", "--locked"];
+    if let Some(v) = tool.required_version {
+        args.extend(["--version", v]);
+    }
+    args.push(package);
+
+    println!("  Installing {versioned} via cargo install...");
     let status = Command::new("cargo")
-        .args(["install", "--locked", package])
+        .args(&args)
         .status()
-        .with_context(|| format!("Failed to run cargo install {package}"))?;
+        .with_context(|| format!("Failed to run cargo install {versioned}"))?;
 
     if !status.success() {
-        bail!("Failed to install {package}");
+        bail!("Failed to install {versioned}");
     }
 
     Ok(())
@@ -90,7 +128,7 @@ pub fn run() -> Result<()> {
             println!("  {} — already installed", tool.package);
             already += 1;
         } else {
-            install(tool.package, use_binstall)?;
+            install(tool, use_binstall)?;
             installed += 1;
         }
     }
