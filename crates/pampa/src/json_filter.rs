@@ -57,6 +57,40 @@ fn find_python() -> &'static str {
     })
 }
 
+/// Build a [`Command`] for running a filter.
+///
+/// Uses the exists-then-dispatch pattern:
+/// - If the filter file exists on disk and we're on Windows, dispatch by
+///   file extension (`.py` → Python, `.sh`/`.bash` → bash) since Windows
+///   has no shebang support.
+/// - If the file doesn't exist, treat it as a bare command name and let
+///   the OS resolve it via PATH (e.g., `pandoc-crossref`).
+/// - On Unix, always use `Command::new` directly — shebangs work.
+fn build_filter_command(filter_path: &Path) -> Command {
+    if cfg!(windows) && filter_path.exists() {
+        if let Some(ext) = filter_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+        {
+            match ext.as_str() {
+                "py" => {
+                    let mut cmd = Command::new(find_python());
+                    cmd.arg(filter_path);
+                    return cmd;
+                }
+                "sh" | "bash" => {
+                    let mut cmd = Command::new("bash");
+                    cmd.arg(filter_path);
+                    return cmd;
+                }
+                _ => {}
+            }
+        }
+    }
+    Command::new(filter_path)
+}
+
 /// Errors that can occur during JSON filter execution
 #[derive(Debug)]
 pub enum JsonFilterError {
@@ -154,7 +188,7 @@ pub fn apply_json_filter(
     )?;
 
     // 2. Spawn the filter subprocess
-    let mut child = Command::new(filter_path)
+    let mut child = build_filter_command(filter_path)
         .arg(target_format)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
