@@ -32,10 +32,10 @@ fn find_python() -> &'static str {
         let candidates: &[&str] = if cfg!(windows) {
             &[
                 "python3",
-                "python",
                 "python3.bat",
-                "python.bat",
                 "python3.cmd",
+                "python",
+                "python.bat",
                 "python.cmd",
             ]
         } else {
