@@ -57,6 +57,26 @@ fn find_python() -> &'static str {
     })
 }
 
+/// Check whether `bash` is available on PATH.
+/// The result is cached for the lifetime of the process.
+fn find_bash() -> Option<&'static str> {
+    static BASH: OnceLock<Option<&str>> = OnceLock::new();
+    *BASH.get_or_init(|| {
+        if Command::new("bash")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            Some("bash")
+        } else {
+            None
+        }
+    })
+}
+
 /// Build a [`Command`] for running a filter.
 ///
 /// Uses the exists-then-dispatch pattern:
@@ -80,9 +100,11 @@ fn build_filter_command(filter_path: &Path) -> Command {
                     return cmd;
                 }
                 "sh" | "bash" => {
-                    let mut cmd = Command::new("bash");
-                    cmd.arg(filter_path);
-                    return cmd;
+                    if let Some(bash) = find_bash() {
+                        let mut cmd = Command::new(bash);
+                        cmd.arg(filter_path);
+                        return cmd;
+                    }
                 }
                 _ => {}
             }
@@ -573,6 +595,10 @@ print("not valid json")
 
     #[test]
     fn test_invalid_utf8_filter() {
+        if find_bash().is_none() {
+            eprintln!("skipping test_invalid_utf8_filter: bash not available");
+            return;
+        }
         let dir = TempDir::new().unwrap();
         let filter_path = dir.path().join("invalid_utf8.sh");
         // Create a shell script that outputs invalid UTF-8
