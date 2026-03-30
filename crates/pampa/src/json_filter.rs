@@ -57,32 +57,11 @@ fn find_python() -> &'static str {
     })
 }
 
-/// Check whether `bash` is available on PATH.
-/// The result is cached for the lifetime of the process.
-fn find_bash() -> Option<&'static str> {
-    static BASH: OnceLock<Option<&str>> = OnceLock::new();
-    *BASH.get_or_init(|| {
-        if Command::new("bash")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-        {
-            Some("bash")
-        } else {
-            None
-        }
-    })
-}
-
 /// Build a [`Command`] for running a filter.
 ///
 /// Uses the exists-then-dispatch pattern:
 /// - If the filter file exists on disk and we're on Windows, dispatch by
-///   file extension (`.py` → Python, `.sh`/`.bash` → bash) since Windows
-///   has no shebang support.
+///   file extension (`.py` → Python) since Windows has no shebang support.
 /// - If the file doesn't exist, treat it as a bare command name and let
 ///   the OS resolve it via PATH (e.g., `pandoc-crossref`).
 /// - On Unix, always use `Command::new` directly — shebangs work.
@@ -99,13 +78,9 @@ fn build_filter_command(filter_path: &Path) -> Command {
                     cmd.arg(filter_path);
                     return cmd;
                 }
-                "sh" | "bash" => {
-                    if let Some(bash) = find_bash() {
-                        let mut cmd = Command::new(bash);
-                        cmd.arg(filter_path);
-                        return cmd;
-                    }
-                }
+                // .sh/.bash filters are not dispatched to bash on Windows — path
+                // translation varies across bash variants (WSL, Git Bash, Cygwin).
+                // On Unix, the shebang line handles dispatch via Command::new().
                 _ => {}
             }
         }
@@ -593,12 +568,9 @@ print("not valid json")
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_invalid_utf8_filter() {
-        if find_bash().is_none() {
-            eprintln!("skipping test_invalid_utf8_filter: bash not available");
-            return;
-        }
         let dir = TempDir::new().unwrap();
         let filter_path = dir.path().join("invalid_utf8.sh");
         // Create a shell script that outputs invalid UTF-8
@@ -611,6 +583,31 @@ printf '\xff\xfe'  # Invalid UTF-8 bytes
         )
         .unwrap();
         make_executable(&filter_path);
+
+        let pandoc = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![],
+        };
+        let context = ASTContext::new();
+
+        let result = apply_json_filter(&pandoc, &context, &filter_path, "html");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            JsonFilterError::InvalidUtf8Output(_) => {}
+            err => panic!("Expected InvalidUtf8Output, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_invalid_utf8_filter_py() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("invalid_utf8.py");
+        fs::write(
+            &filter_path,
+            "#!/usr/bin/env python3\nimport sys\nsys.stdin.read()\nsys.stdout.buffer.write(b'\\xff\\xfe')\n",
+        )
+        .unwrap();
 
         let pandoc = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
