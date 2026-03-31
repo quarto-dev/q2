@@ -78,6 +78,23 @@ function ensureCursorStyle(color: string, odorId: string): void {
 }
 
 /**
+ * Shift a character offset to account for a single edit.
+ * Offsets after the edit move by delta; offsets inside the replaced range
+ * clamp to the end of the replacement text; offsets before are unchanged.
+ */
+function transformOffset(
+  offset: number,
+  editStart: number,
+  oldEnd: number,
+  newEnd: number,
+  delta: number,
+): number {
+  if (offset >= oldEnd) return offset + delta;
+  if (offset > editStart) return newEnd;
+  return offset;
+}
+
+/**
  * Convert a color to a safe CSS class identifier.
  */
 function colorToId(color: string): string {
@@ -189,26 +206,18 @@ export function usePresence(
         const newEnd = editStart + change.text.length;
         const delta = change.text.length - change.rangeLength;
 
-        // --- cursors ---
         for (const [peerId, offset] of adjustedCursorsRef.current) {
           if (skip.has(peerId)) continue;
-          if (offset >= oldEnd) {
-            adjustedCursorsRef.current.set(peerId, offset + delta);
-          } else if (offset > editStart) {
-            adjustedCursorsRef.current.set(peerId, newEnd);
-          }
+          adjustedCursorsRef.current.set(
+            peerId, transformOffset(offset, editStart, oldEnd, newEnd, delta));
         }
 
-        // --- selections ---
         for (const [peerId, sel] of adjustedSelectionsRef.current) {
           if (skip.has(peerId)) continue;
-          const s = sel.start >= oldEnd ? sel.start + delta
-            : sel.start > editStart ? newEnd
-            : sel.start;
-          const end = sel.end >= oldEnd ? sel.end + delta
-            : sel.end > editStart ? newEnd
-            : sel.end;
-          adjustedSelectionsRef.current.set(peerId, { start: s, end });
+          adjustedSelectionsRef.current.set(peerId, {
+            start: transformOffset(sel.start, editStart, oldEnd, newEnd, delta),
+            end: transformOffset(sel.end, editStart, oldEnd, newEnd, delta),
+          });
         }
       }
 
