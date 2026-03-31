@@ -2914,6 +2914,7 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-treesitter-ast",
+ "quarto-util",
  "quarto-yaml",
  "regex",
  "serde",
