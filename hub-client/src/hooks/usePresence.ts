@@ -95,6 +95,20 @@ function transformOffset(
 }
 
 /**
+ * Per-peer OT state for remote cursor/selection tracking.
+ */
+interface PeerCursorState {
+  /** OT-adjusted cursor offset */
+  cursor: number;
+  /** Last raw cursor value from the presence network */
+  lastPresenceCursor: number;
+  /** OT-adjusted selection range (absent if peer has no selection) */
+  selection?: { start: number; end: number };
+  /** Last raw selection from the presence network */
+  lastPresenceSelection?: { start: number; end: number };
+}
+
+/**
  * Convert a color to a safe CSS class identifier.
  */
 function colorToId(color: string): string {
@@ -130,22 +144,14 @@ export function usePresence(
   // must re-render after every content change to keep them in sync.
   const [modelVersion, setModelVersion] = useState(0);
 
-  // Operational-transform adjusted cursor offsets for each remote peer.
-  // Between presence updates, content edits shift these offsets so that
-  // decorations stay at the correct logical position even when the document
-  // length changes (e.g. a deletion in paragraph 1 shouldn't move a cursor
-  // in paragraph 2).
-  const adjustedCursorsRef = useRef<Map<string, number>>(new Map());
-  const adjustedSelectionsRef = useRef<Map<string, { start: number; end: number }>>(new Map());
-
-  // Last raw presence values received from the network.  Used to detect when
-  // a genuinely new presence update has arrived (as opposed to OT drift).
-  const lastPresenceCursorRef = useRef<Map<string, number>>(new Map());
-  const lastPresenceSelRef = useRef<Map<string, { start: number; end: number }>>(new Map());
+  // Per-peer OT state: adjusted offsets and last raw presence values.
+  // Between presence updates, content edits shift `cursor`/`selection` so
+  // decorations stay at the correct logical position.  `lastPresence*`
+  // fields detect genuinely new presence updates vs. OT drift.
+  const peerStateRef = useRef<Map<string, PeerCursorState>>(new Map());
 
   // Peers whose cursor already reflects an edit whose content change hasn't
-  // arrived yet.  The OT handler must skip these once so it doesn't
-  // double-shift the offset.
+  // arrived yet.  The OT handler skips these once to avoid double-shifting.
   const anticipatingEditRef = useRef<Set<string>>(new Set());
 
   // Callback for when editor mounts
@@ -206,18 +212,15 @@ export function usePresence(
         const newEnd = editStart + change.text.length;
         const delta = change.text.length - change.rangeLength;
 
-        for (const [peerId, offset] of adjustedCursorsRef.current) {
+        for (const [peerId, state] of peerStateRef.current) {
           if (skip.has(peerId)) continue;
-          adjustedCursorsRef.current.set(
-            peerId, transformOffset(offset, editStart, oldEnd, newEnd, delta));
-        }
-
-        for (const [peerId, sel] of adjustedSelectionsRef.current) {
-          if (skip.has(peerId)) continue;
-          adjustedSelectionsRef.current.set(peerId, {
-            start: transformOffset(sel.start, editStart, oldEnd, newEnd, delta),
-            end: transformOffset(sel.end, editStart, oldEnd, newEnd, delta),
-          });
+          state.cursor = transformOffset(state.cursor, editStart, oldEnd, newEnd, delta);
+          if (state.selection) {
+            state.selection = {
+              start: transformOffset(state.selection.start, editStart, oldEnd, newEnd, delta),
+              end: transformOffset(state.selection.end, editStart, oldEnd, newEnd, delta),
+            };
+          }
         }
       }
 
@@ -251,8 +254,8 @@ export function usePresence(
       // --- Cursor decoration (OT-adjusted) ---
       if (user.cursor !== null) {
         try {
-          const lastRaw = lastPresenceCursorRef.current.get(user.peerId);
-          const isNewPresence = lastRaw === undefined || lastRaw !== user.cursor;
+          let state = peerStateRef.current.get(user.peerId);
+          const isNewPresence = !state || state.lastPresenceCursor !== user.cursor;
 
           let cursorToRender: number;
           if (isNewPresence) {
@@ -261,20 +264,24 @@ export function usePresence(
             // Only anticipate for small forward movements (typing); large
             // jumps or backward moves are navigation and won't produce a
             // matching content change.
-            const prevAdjusted = adjustedCursorsRef.current.get(user.peerId);
-            const cursorDelta = user.cursor - (lastRaw ?? user.cursor);
-            if (lastRaw !== undefined && prevAdjusted === lastRaw &&
+            const cursorDelta = user.cursor - (state?.lastPresenceCursor ?? user.cursor);
+            if (state && state.cursor === state.lastPresenceCursor &&
                 cursorDelta > 0 && cursorDelta <= 2) {
               anticipatingEditRef.current.add(user.peerId);
             }
 
             // New presence update — adopt the authoritative offset
             cursorToRender = user.cursor;
-            adjustedCursorsRef.current.set(user.peerId, user.cursor);
-            lastPresenceCursorRef.current.set(user.peerId, user.cursor);
+            if (state) {
+              state.cursor = user.cursor;
+              state.lastPresenceCursor = user.cursor;
+            } else {
+              state = { cursor: user.cursor, lastPresenceCursor: user.cursor };
+              peerStateRef.current.set(user.peerId, state);
+            }
           } else {
             // No new update — use the OT-shifted value
-            cursorToRender = adjustedCursorsRef.current.get(user.peerId) ?? user.cursor;
+            cursorToRender = state.cursor;
           }
 
           if (cursorToRender < 0 || cursorToRender > docLength) {
@@ -299,26 +306,27 @@ export function usePresence(
           // Ignore invalid positions
         }
       } else {
-        adjustedCursorsRef.current.delete(user.peerId);
-        lastPresenceCursorRef.current.delete(user.peerId);
+        peerStateRef.current.delete(user.peerId);
       }
 
       // --- Selection decoration (OT-adjusted) ---
       if (user.selection && user.selection.start !== user.selection.end) {
         try {
-          const lastSel = lastPresenceSelRef.current.get(user.peerId);
-          const isNewSel =
-            lastSel === undefined ||
+          const state = peerStateRef.current.get(user.peerId);
+          if (!state) continue;
+
+          const lastSel = state.lastPresenceSelection;
+          const isNewSel = !lastSel ||
             lastSel.start !== user.selection.start ||
             lastSel.end !== user.selection.end;
 
           let selToRender: { start: number; end: number };
           if (isNewSel) {
             selToRender = user.selection;
-            adjustedSelectionsRef.current.set(user.peerId, { ...user.selection });
-            lastPresenceSelRef.current.set(user.peerId, { ...user.selection });
+            state.selection = { ...user.selection };
+            state.lastPresenceSelection = { ...user.selection };
           } else {
-            selToRender = adjustedSelectionsRef.current.get(user.peerId) ?? user.selection;
+            selToRender = state.selection ?? user.selection;
           }
 
           if (selToRender.end > docLength) {
@@ -344,8 +352,11 @@ export function usePresence(
           // Ignore invalid positions
         }
       } else {
-        adjustedSelectionsRef.current.delete(user.peerId);
-        lastPresenceSelRef.current.delete(user.peerId);
+        const state = peerStateRef.current.get(user.peerId);
+        if (state) {
+          delete state.selection;
+          delete state.lastPresenceSelection;
+        }
       }
     }
 
