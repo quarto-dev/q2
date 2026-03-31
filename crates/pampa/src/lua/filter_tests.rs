@@ -4,6 +4,7 @@
 //! against Pandoc AST structures and verifying the results.
 
 use super::*;
+use quarto_util::to_forward_slashes;
 use std::fs;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -856,7 +857,7 @@ function Blocks(blocks)
     return blocks
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
@@ -969,7 +970,7 @@ function Block(elem)
     return elem
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
@@ -1028,7 +1029,7 @@ function Inline(elem)
     return elem
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
@@ -1089,7 +1090,7 @@ function Str(elem)
     return elem
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
@@ -1163,7 +1164,7 @@ function Str(elem)
     return elem
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
@@ -1239,7 +1240,7 @@ function Para(elem)
     return elem
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
@@ -1319,7 +1320,7 @@ function Div(elem)
     }}
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
@@ -1471,7 +1472,7 @@ function Para(elem)
     return pandoc.Para(walked)
 end
 "#,
-            order_file.display()
+            to_forward_slashes(&order_file)
         ),
     )
     .unwrap();
