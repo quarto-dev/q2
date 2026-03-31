@@ -12,6 +12,7 @@ import {
   setSyncHandlers,
   isConnected,
   getFileContent,
+  applyEditorOperations,
   isFileBinary,
   _resetForTesting,
   _setClientForTesting,
@@ -211,6 +212,55 @@ describe('automergeSync', () => {
       await expect(mockClient.connect('ws://test', 'automerge:test')).rejects.toThrow(
         'Server unavailable',
       );
+    });
+  });
+
+  describe('applyEditorOperations', () => {
+    beforeEach(async () => {
+      mockClient = createMockSyncClient(
+        {
+          onFileAdded: vi.fn(),
+          onFileChanged: vi.fn(),
+          onBinaryChanged: vi.fn(),
+          onFileRemoved: vi.fn(),
+        },
+        { initialFiles: new Map() },
+      );
+      _setClientForTesting(mockClient);
+      await mockClient.connect('ws://test', 'automerge:test');
+      await mockClient.createFile('test.qmd', 'hello world');
+    });
+
+    it('should apply a selection replacement (delete+insert) atomically', () => {
+      // Simulate typing "a" to replace selected "world"
+      applyEditorOperations('test.qmd', [
+        { rangeOffset: 6, rangeLength: 5, text: 'a' },
+      ]);
+      expect(getFileContent('test.qmd')).toBe('hello a');
+    });
+
+    it('should apply a simple insert', () => {
+      applyEditorOperations('test.qmd', [
+        { rangeOffset: 5, rangeLength: 0, text: ',' },
+      ]);
+      expect(getFileContent('test.qmd')).toBe('hello, world');
+    });
+
+    it('should apply a simple delete', () => {
+      applyEditorOperations('test.qmd', [
+        { rangeOffset: 5, rangeLength: 6, text: '' },
+      ]);
+      expect(getFileContent('test.qmd')).toBe('hello');
+    });
+
+    it('should apply multi-change batch in correct order', () => {
+      // Find-replace all: "hello" → "HI", "world" → "EARTH"
+      // Monaco sends changes end-to-beginning
+      applyEditorOperations('test.qmd', [
+        { rangeOffset: 6, rangeLength: 5, text: 'EARTH' },
+        { rangeOffset: 0, rangeLength: 5, text: 'HI' },
+      ]);
+      expect(getFileContent('test.qmd')).toBe('HI EARTH');
     });
   });
 
