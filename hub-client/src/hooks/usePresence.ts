@@ -8,7 +8,7 @@
  * with @monaco-editor/react's CDN-loaded Monaco instance.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import type * as Monaco from 'monaco-editor';
 import {
   initPresence,
@@ -44,22 +44,32 @@ interface UsePresenceResult {
 }
 
 /**
- * Generate CSS for cursor decorations.
- * Injected once per color into the document head.
+ * Generate CSS for a specific user's cursor decorations.
+ * Creates/updates a per-user style element with their color and name label.
+ *
+ * A single decoration element uses ::after for the teardrop dot and
+ * ::before for the name label. The label stays visible as long as
+ * the cursor is present.
  */
-function ensureCursorStyle(color: string, odorId: string): void {
-  const styleId = `presence-cursor-${odorId}`;
-  if (document.getElementById(styleId)) return;
+function ensureUserCursorStyle(peerId: string, color: string, userName: string): void {
+  const styleId = `presence-user-${peerId}`;
+  const escapedName = userName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-  const style = document.createElement('style');
-  style.id = styleId;
-  style.textContent = `
-    .presence-cursor-${odorId} {
+  let style = document.getElementById(styleId) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement('style');
+    style.id = styleId;
+    document.head.appendChild(style);
+  }
+
+  const newContent = `
+    .presence-cursor-${peerId} {
+      position: relative;
       background-color: ${color};
       width: 2px !important;
       margin-left: -1px;
     }
-    .presence-cursor-${odorId}::after {
+    .presence-cursor-${peerId}::after {
       content: '';
       position: absolute;
       top: 0;
@@ -70,11 +80,29 @@ function ensureCursorStyle(color: string, odorId: string): void {
       border-radius: 50% 50% 50% 0;
       transform: rotate(-45deg);
     }
-    .presence-selection-${odorId} {
-      background-color: ${color}33;
+    .presence-cursor-${peerId}::before {
+      content: '${escapedName}';
+      position: absolute;
+      top: -5px;
+      left: 5px;
+      color: ${color};
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      text-shadow: 0 0 3px var(--vscode-editor-background, #fff), 0 0 3px var(--vscode-editor-background, #fff);
+
+    }
+    .presence-selection-${peerId} {
+      background-color: ${color}22;
     }
   `;
-  document.head.appendChild(style);
+  if (style.textContent !== newContent) {
+    style.textContent = newContent;
+  }
 }
 
 /**
@@ -109,10 +137,18 @@ interface PeerCursorState {
 }
 
 /**
- * Convert a color to a safe CSS class identifier.
+ * Remove a user's cursor styles when they leave.
  */
-function colorToId(color: string): string {
-  return color.replace('#', '').toLowerCase();
+function removeUserCursorStyle(peerId: string): void {
+  document.getElementById(`presence-user-${peerId}`)?.remove();
+}
+
+/**
+ * Sanitize a peerId for use as a CSS class suffix.
+ * Replaces non-alphanumeric characters with hyphens.
+ */
+function sanitizePeerId(peerId: string): string {
+  return peerId.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
 /**
@@ -153,6 +189,9 @@ export function usePresence(
   // Peers whose cursor already reflects an edit whose content change hasn't
   // arrived yet.  The OT handler skips these once to avoid double-shifting.
   const anticipatingEditRef = useRef<Set<string>>(new Set());
+
+  // Track which peerIds have active styles, for cleanup
+  const activePeerStylesRef = useRef<Set<string>>(new Set());
 
   // Callback for when editor mounts
   const onEditorMount = useCallback((mountedEditor: Monaco.editor.IStandaloneCodeEditor) => {
@@ -230,8 +269,10 @@ export function usePresence(
     return () => disposable.dispose();
   }, [editor]);
 
-  // Render remote cursors and selections using Monaco decorations
-  useEffect(() => {
+  // Render remote cursors and selections using Monaco decorations.
+  // useLayoutEffect ensures decorations are updated before the browser paints,
+  // preventing flicker from Monaco's auto-shifted decorations being visible.
+  useLayoutEffect(() => {
     if (!editor || !enabled) return;
 
     const model = editor.getModel();
@@ -243,13 +284,16 @@ export function usePresence(
     const newDecorations: Monaco.editor.IModelDeltaDecoration[] = [];
 
     const docLength = model.getValueLength();
+    const currentPeerIds = new Set<string>();
 
     for (const user of remoteUsers) {
       // Skip our own presence
       if (user.peerId === localPeerId) continue;
 
-      const colorId = colorToId(user.userColor);
-      ensureCursorStyle(user.userColor, colorId);
+      const safePeerId = sanitizePeerId(user.peerId);
+      currentPeerIds.add(safePeerId);
+      ensureUserCursorStyle(safePeerId, user.userColor, user.userName);
+      activePeerStylesRef.current.add(safePeerId);
 
       // --- Cursor decoration (OT-adjusted) ---
       if (user.cursor !== null) {
@@ -297,7 +341,7 @@ export function usePresence(
               endColumn: position.column,
             },
             options: {
-              className: `presence-cursor-${colorId}`,
+              className: `presence-cursor-${safePeerId}`,
               hoverMessage: { value: user.userName },
               stickiness: 1, // NeverGrowsWhenTypingAtEdges
             },
@@ -343,7 +387,7 @@ export function usePresence(
               endColumn: endPos.column,
             },
             options: {
-              className: `presence-selection-${colorId}`,
+              className: `presence-selection-${safePeerId}`,
               hoverMessage: { value: `${user.userName}'s selection` },
               stickiness: 1,
             },
@@ -360,6 +404,14 @@ export function usePresence(
       }
     }
 
+    // Clean up styles for users who have left
+    for (const peerId of activePeerStylesRef.current) {
+      if (!currentPeerIds.has(peerId)) {
+        removeUserCursorStyle(peerId);
+        activePeerStylesRef.current.delete(peerId);
+      }
+    }
+
     // Apply decorations (deltaDecorations replaces old with new)
     decorationIdsRef.current = editor.deltaDecorations(
       decorationIdsRef.current,
@@ -372,6 +424,11 @@ export function usePresence(
         editor.deltaDecorations(decorationIdsRef.current, []);
         decorationIdsRef.current = [];
       }
+      // Clean up all injected style elements
+      for (const peerId of activePeerStylesRef.current) {
+        removeUserCursorStyle(peerId);
+      }
+      activePeerStylesRef.current.clear();
     };
   // modelVersion triggers a re-render after every content change so that
   // OT-adjusted offsets are used to reposition decorations.
