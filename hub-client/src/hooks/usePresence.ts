@@ -281,7 +281,7 @@ export function usePresence(
             }
           } else {
             // No new update — use the OT-shifted value
-            cursorToRender = state.cursor;
+            cursorToRender = state!.cursor;
           }
 
           if (cursorToRender < 0 || cursorToRender > docLength) {
