@@ -13,6 +13,8 @@ import {
   exportProjectAsZip,
   getFileContent,
   setImmediateFileChangeCallback,
+  hasPendingRemoteSync,
+  clearPendingRemoteSync,
   type EditorContentChange,
 } from '../services/automergeSync';
 import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
@@ -428,10 +430,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setUnlocatedErrors(unlocatedDiagnostics);
   }, [diagnostics]);
 
-  // Synchronous Monaco sync: apply remote Automerge changes to Monaco
-  // immediately (within the same macrotask as the WebSocket message handler),
-  // preventing position mismatch when keystrokes interleave with async React
-  // state updates. Local changes are no-ops (Monaco already has the content).
+  // Synchronous Monaco sync: apply remote Automerge changes to Monaco as
+  // soon as Automerge notifies us, preventing position mismatch when
+  // keystrokes interleave with async React state updates.
+  // Local changes are no-ops (Monaco already has the content).
+  // The onKeyDown guard in handleEditorMount provides a second line of
+  // defence for the rare case where Automerge's async pipeline delays
+  // the change event past the next keystroke macrotask.
   useEffect(() => {
     if (!currentFile) return;
 
@@ -453,6 +458,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         applyingRemoteRef.current = false;
       }
       setContent(content);
+      clearPendingRemoteSync();
     };
 
     setImmediateFileChangeCallback(handleImmediateSync);
@@ -624,6 +630,35 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     // Register intelligence providers (DocumentSymbolProvider, FoldingRangeProvider)
     // The callback uses a ref so it always returns the current file path
     registerIntelligenceProviders(monaco, () => currentFilePathRef.current);
+
+    // Pre-input sync: if Automerge has a pending remote change that hasn't
+    // been applied to Monaco yet (Automerge-repo's async pipeline can delay
+    // the change event), sync Monaco before the keystroke is processed so
+    // positions are computed against up-to-date content.
+    // Cost: O(1) boolean check per keystroke; full sync only when flag is set.
+    editor.onKeyDown(() => {
+      if (!hasPendingRemoteSync()) return;
+
+      const path = currentFilePathRef.current;
+      if (!path) return;
+
+      const automergeContent = getFileContent(path);
+      if (automergeContent === null) return;
+
+      const model = editor.getModel();
+      if (!model) return;
+
+      const monacoContent = model.getValue();
+      if (monacoContent !== automergeContent) {
+        const edits = diffToMonacoEdits(monacoContent, automergeContent);
+        if (edits.length > 0) {
+          applyingRemoteRef.current = true;
+          editor.executeEdits('remote-sync', edits);
+          applyingRemoteRef.current = false;
+        }
+      }
+      clearPendingRemoteSync();
+    });
 
     // Track editor focus state for scroll sync
     editor.onDidFocusEditorText(() => {

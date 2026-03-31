@@ -51,6 +51,20 @@ export function setImmediateFileChangeCallback(cb: ImmediateFileChangeCallback |
   immediateFileChangeCallback = cb;
 }
 
+// Dirty flag: set when a remote change updates Automerge but Monaco may not
+// yet be synced. Checked by Editor.tsx's onKeyDown guard so the expensive
+// model.getValue() + diff is only done when actually needed.
+let pendingRemoteSync = false;
+let isApplyingLocal = false;
+
+export function hasPendingRemoteSync(): boolean {
+  return pendingRemoteSync;
+}
+
+export function clearPendingRemoteSync(): void {
+  pendingRemoteSync = false;
+}
+
 // The sync client instance
 let client: SyncClient | null = null;
 
@@ -90,7 +104,10 @@ function createInternalCallbacks(): SyncClientCallbacks {
     },
     onFileChanged: (path: string, text: string, patches: Patch[]) => {
       vfsAddFile(path, text);
-      immediateFileChangeCallback?.(path, text);
+      if (!isApplyingLocal) {
+        pendingRemoteSync = true;
+        immediateFileChangeCallback?.(path, text);
+      }
       onFileContent?.(path, text, patches);
     },
     onBinaryChanged: (path: string, data: Uint8Array, mimeType: string) => {
@@ -183,7 +200,9 @@ export function updateFileContent(path: string, content: string): void {
  * full-text diff race in updateText.
  */
 export function applyEditorOperations(path: string, changes: EditorContentChange[]): void {
+  isApplyingLocal = true;
   ensureClient().applyEditorOperations(path, changes);
+  isApplyingLocal = false;
   // VFS is updated via callback (change handler fires onFileChanged)
 }
 
@@ -301,6 +320,8 @@ export function _resetForTesting(): void {
   onConnectionChange = null;
   onError = null;
   immediateFileChangeCallback = null;
+  pendingRemoteSync = false;
+  isApplyingLocal = false;
 }
 
 /**

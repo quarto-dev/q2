@@ -15,6 +15,8 @@ import {
   applyEditorOperations,
   isFileBinary,
   setImmediateFileChangeCallback,
+  hasPendingRemoteSync,
+  clearPendingRemoteSync,
   _resetForTesting,
   _setClientForTesting,
   _getCallbacksForTesting,
@@ -292,18 +294,14 @@ describe('automergeSync', () => {
       expect(callbackFired).toBe(true);
     });
 
-    it('should fire callback synchronously on local splice', async () => {
+    it('should NOT fire callback on local splice', async () => {
       await mockClient.createFile('test.qmd', 'hello');
 
-      let callbackFired = false;
-      setImmediateFileChangeCallback((path, content) => {
-        callbackFired = true;
-        expect(path).toBe('test.qmd');
-        expect(content).toBe('helloX');
-      });
+      const callback = vi.fn();
+      setImmediateFileChangeCallback(callback);
 
       applyEditorOperations('test.qmd', [{ rangeOffset: 5, rangeLength: 0, text: 'X' }]);
-      expect(callbackFired).toBe(true);
+      expect(callback).not.toHaveBeenCalled();
     });
 
     it('should fire callback before onFileContent handler', async () => {
@@ -372,6 +370,39 @@ describe('automergeSync', () => {
 
       expect(callbackA).not.toHaveBeenCalled();
       expect(callbackB).toHaveBeenCalledWith('test.qmd', 'new content');
+    });
+  });
+
+  describe('pendingRemoteSync flag', () => {
+    beforeEach(async () => {
+      mockClient = createMockSyncClient(
+        _getCallbacksForTesting(),
+        { initialFiles: new Map() },
+      );
+      _setClientForTesting(mockClient);
+      await mockClient.connect('ws://test', 'automerge:test');
+      await mockClient.createFile('test.qmd', 'hello');
+    });
+
+    it('should be false initially', () => {
+      expect(hasPendingRemoteSync()).toBe(false);
+    });
+
+    it('should be set on remote change', () => {
+      mockClient._simulateRemoteChange('test.qmd', 'updated');
+      expect(hasPendingRemoteSync()).toBe(true);
+    });
+
+    it('should NOT be set on local splice', () => {
+      applyEditorOperations('test.qmd', [{ rangeOffset: 5, rangeLength: 0, text: '!' }]);
+      expect(hasPendingRemoteSync()).toBe(false);
+    });
+
+    it('should be clearable', () => {
+      mockClient._simulateRemoteChange('test.qmd', 'updated');
+      expect(hasPendingRemoteSync()).toBe(true);
+      clearPendingRemoteSync();
+      expect(hasPendingRemoteSync()).toBe(false);
     });
   });
 
