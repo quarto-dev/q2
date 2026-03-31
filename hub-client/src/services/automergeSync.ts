@@ -316,12 +316,7 @@ export function _setClientForTesting(mockClient: SyncClient | null): void {
 }
 
 /**
- * Get the internal callback chain for testing.
- *
- * Returns the same callbacks that ensureClient() would wire up, so mock
- * clients can use the real VFS + immediate callback + handler chain
- * instead of stub callbacks.
- *
+ * Get the internal callback chain for use with mock clients in tests.
  * @internal For testing only - not part of the public API
  */
 export function _getCallbacksForTesting(): SyncClientCallbacks {
