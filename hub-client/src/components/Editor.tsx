@@ -11,6 +11,7 @@ import {
   deleteFile,
   renameFile,
   exportProjectAsZip,
+  getFileContent,
   type EditorContentChange,
 } from '../services/automergeSync';
 import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
@@ -446,8 +447,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     // During replay mode, the replay hook controls content — skip Automerge sync
     if (replayState.isActive) return;
 
-    const automergeContent = fileContents.get(currentFile.path);
-    if (automergeContent === undefined) return;
+    // Read directly from the Automerge handle to avoid stale closure data.
+    // fileContents triggers this effect, but the actual content is read live
+    // to prevent a race where Monaco has already been updated by user input
+    // but this effect still holds stale render-time content.
+    const automergeContent = getFileContent(currentFile.path);
+    if (automergeContent === null) return;
 
     // Get Monaco's actual model content
     const model = editorRef.current?.getModel();
