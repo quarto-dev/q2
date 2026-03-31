@@ -464,6 +464,7 @@ fn guess_mime_type(filepath: &str) -> String {
 mod tests {
     use super::*;
     use crate::lua::runtime::NativeRuntime;
+    use quarto_util::to_forward_slashes;
 
     fn create_test_lua() -> (Lua, Arc<dyn SystemRuntime>, SharedMediaBag) {
         let lua = Lua::new();
@@ -657,7 +658,7 @@ mod tests {
 
         // Create temp directory
         let temp = runtime.temp_dir("mediabag_write_single").unwrap();
-        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+        let temp_path = to_forward_slashes(temp.path());
 
         // Insert a file
         mediabag.borrow_mut().insert(
@@ -688,7 +689,7 @@ mod tests {
         let (lua, runtime, mediabag) = create_test_lua();
 
         let temp = runtime.temp_dir("mediabag_write_all").unwrap();
-        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+        let temp_path = to_forward_slashes(temp.path());
 
         // Insert multiple files
         mediabag
@@ -717,7 +718,7 @@ mod tests {
         let test_file = temp.path().join("test_data.txt");
         std::fs::write(&test_file, "Local file content").unwrap();
 
-        let file_path = test_file.to_string_lossy().to_string().replace('\\', "/");
+        let file_path = to_forward_slashes(&test_file);
 
         // Fetch via Lua
         let (mime, content): (String, String) = lua
@@ -903,7 +904,7 @@ mod tests {
         let (lua, runtime, _) = create_test_lua();
 
         let temp = runtime.temp_dir("mediabag_write_error").unwrap();
-        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+        let temp_path = to_forward_slashes(temp.path());
 
         // Try to write a file that doesn't exist in mediabag
         let result = lua.load(format!(
@@ -920,7 +921,7 @@ mod tests {
         let (lua, runtime, mediabag) = create_test_lua();
 
         let temp = runtime.temp_dir("mediabag_write_subdir").unwrap();
-        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+        let temp_path = to_forward_slashes(temp.path());
 
         // Insert a file with subdirectory path
         mediabag.borrow_mut().insert(
@@ -950,7 +951,7 @@ mod tests {
         let (lua, runtime, mediabag) = create_test_lua();
 
         let temp = runtime.temp_dir("mediabag_write_all_subdir").unwrap();
-        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+        let temp_path = to_forward_slashes(temp.path());
 
         // Insert files with subdirectory paths
         mediabag.borrow_mut().insert(
