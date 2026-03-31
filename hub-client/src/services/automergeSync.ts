@@ -40,6 +40,17 @@ let onBinaryContent: BinaryContentHandler | null = null;
 let onConnectionChange: ConnectionHandler | null = null;
 let onError: ErrorHandler | null = null;
 
+// Synchronous callback that fires from within onFileChanged, BEFORE the React
+// state update path. Used by Editor.tsx to apply remote diffs to Monaco
+// immediately, preventing position mismatch when keystrokes interleave with
+// async React state updates.
+type ImmediateFileChangeCallback = (path: string, content: string) => void;
+let immediateFileChangeCallback: ImmediateFileChangeCallback | null = null;
+
+export function setImmediateFileChangeCallback(cb: ImmediateFileChangeCallback | null): void {
+  immediateFileChangeCallback = cb;
+}
+
 // The sync client instance
 let client: SyncClient | null = null;
 
@@ -63,45 +74,53 @@ export function setSyncHandlers(handlers: {
 }
 
 /**
+ * Create the internal callback chain that bridges SyncClient events to
+ * module-level handlers (VFS updates, immediate callback, React state).
+ */
+function createInternalCallbacks(): SyncClientCallbacks {
+  return {
+    onFileAdded: (path: string, file: FilePayload) => {
+      if (file.type === 'text') {
+        vfsAddFile(path, file.text);
+        onFileContent?.(path, file.text, []);
+      } else {
+        vfsAddBinaryFile(path, file.data);
+        onBinaryContent?.(path, file.data, file.mimeType);
+      }
+    },
+    onFileChanged: (path: string, text: string, patches: Patch[]) => {
+      vfsAddFile(path, text);
+      immediateFileChangeCallback?.(path, text);
+      onFileContent?.(path, text, patches);
+    },
+    onBinaryChanged: (path: string, data: Uint8Array, mimeType: string) => {
+      vfsAddBinaryFile(path, data);
+      onBinaryContent?.(path, data, mimeType);
+    },
+    onFileRemoved: (path: string) => {
+      vfsRemoveFile(path);
+    },
+    onFilesChange: (files: FileEntry[]) => {
+      onFilesChange?.(files);
+    },
+    onIdentitiesChange: (identities: Record<string, ActorIdentity>) => {
+      onIdentitiesChange?.(identities);
+    },
+    onConnectionChange: (connected: boolean) => {
+      onConnectionChange?.(connected);
+    },
+    onError: (error: Error) => {
+      onError?.(error);
+    },
+  };
+}
+
+/**
  * Create the sync client with VFS callbacks.
  */
 function ensureClient(): SyncClient {
   if (!client) {
-    const callbacks: SyncClientCallbacks = {
-      onFileAdded: (path: string, file: FilePayload) => {
-        if (file.type === 'text') {
-          vfsAddFile(path, file.text);
-          onFileContent?.(path, file.text, []);
-        } else {
-          vfsAddBinaryFile(path, file.data);
-          onBinaryContent?.(path, file.data, file.mimeType);
-        }
-      },
-      onFileChanged: (path: string, text: string, patches: Patch[]) => {
-        vfsAddFile(path, text);
-        onFileContent?.(path, text, patches);
-      },
-      onBinaryChanged: (path: string, data: Uint8Array, mimeType: string) => {
-        vfsAddBinaryFile(path, data);
-        onBinaryContent?.(path, data, mimeType);
-      },
-      onFileRemoved: (path: string) => {
-        vfsRemoveFile(path);
-      },
-      onFilesChange: (files: FileEntry[]) => {
-        onFilesChange?.(files);
-      },
-      onIdentitiesChange: (identities: Record<string, ActorIdentity>) => {
-        onIdentitiesChange?.(identities);
-      },
-      onConnectionChange: (connected: boolean) => {
-        onConnectionChange?.(connected);
-      },
-      onError: (error: Error) => {
-        onError?.(error);
-      },
-    };
-    client = createSyncClient(callbacks);
+    client = createSyncClient(createInternalCallbacks());
   }
   return client;
 }
@@ -281,6 +300,7 @@ export function _resetForTesting(): void {
   onBinaryContent = null;
   onConnectionChange = null;
   onError = null;
+  immediateFileChangeCallback = null;
 }
 
 /**
@@ -293,4 +313,17 @@ export function _resetForTesting(): void {
  */
 export function _setClientForTesting(mockClient: SyncClient | null): void {
   client = mockClient;
+}
+
+/**
+ * Get the internal callback chain for testing.
+ *
+ * Returns the same callbacks that ensureClient() would wire up, so mock
+ * clients can use the real VFS + immediate callback + handler chain
+ * instead of stub callbacks.
+ *
+ * @internal For testing only - not part of the public API
+ */
+export function _getCallbacksForTesting(): SyncClientCallbacks {
+  return createInternalCallbacks();
 }

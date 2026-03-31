@@ -14,8 +14,10 @@ import {
   getFileContent,
   applyEditorOperations,
   isFileBinary,
+  setImmediateFileChangeCallback,
   _resetForTesting,
   _setClientForTesting,
+  _getCallbacksForTesting,
 } from './automergeSync';
 import { createMockSyncClient, type MockSyncClient } from '../test-utils/mockSyncClient';
 
@@ -264,10 +266,210 @@ describe('automergeSync', () => {
     });
   });
 
+  describe('immediate file change callback', () => {
+    beforeEach(async () => {
+      // Use real internal callbacks so immediateFileChangeCallback fires
+      mockClient = createMockSyncClient(
+        _getCallbacksForTesting(),
+        { initialFiles: new Map() },
+      );
+      _setClientForTesting(mockClient);
+      await mockClient.connect('ws://test', 'automerge:test');
+    });
+
+    it('should fire callback synchronously on remote change', async () => {
+      await mockClient.createFile('test.qmd', 'hello');
+
+      let callbackFired = false;
+      setImmediateFileChangeCallback((path, content) => {
+        callbackFired = true;
+        expect(path).toBe('test.qmd');
+        expect(content).toBe('new content');
+      });
+
+      mockClient._simulateRemoteChange('test.qmd', 'new content');
+      // The callback must have fired synchronously — no await needed
+      expect(callbackFired).toBe(true);
+    });
+
+    it('should fire callback synchronously on local splice', async () => {
+      await mockClient.createFile('test.qmd', 'hello');
+
+      let callbackFired = false;
+      setImmediateFileChangeCallback((path, content) => {
+        callbackFired = true;
+        expect(path).toBe('test.qmd');
+        expect(content).toBe('helloX');
+      });
+
+      applyEditorOperations('test.qmd', [{ rangeOffset: 5, rangeLength: 0, text: 'X' }]);
+      expect(callbackFired).toBe(true);
+    });
+
+    it('should fire callback before onFileContent handler', async () => {
+      await mockClient.createFile('test.qmd', 'hello');
+
+      let immediateCallbackFired = false;
+      let onFileContentCalled = false;
+
+      setImmediateFileChangeCallback(() => {
+        immediateCallbackFired = true;
+      });
+
+      // Register an onFileContent handler that checks ordering
+      setSyncHandlers({
+        onFileContent: () => {
+          // Immediate callback must have already fired
+          expect(immediateCallbackFired).toBe(true);
+          onFileContentCalled = true;
+        },
+      });
+
+      mockClient._simulateRemoteChange('test.qmd', 'updated');
+
+      // Verify both handlers actually fired (not a vacuous pass)
+      expect(immediateCallbackFired).toBe(true);
+      expect(onFileContentCalled).toBe(true);
+    });
+
+    it('should receive correct path for different files', async () => {
+      await mockClient.createFile('a.qmd', 'aaa');
+      await mockClient.createFile('b.qmd', 'bbb');
+
+      const calls: [string, string][] = [];
+      setImmediateFileChangeCallback((path, content) => {
+        calls.push([path, content]);
+      });
+
+      mockClient._simulateRemoteChange('a.qmd', 'aaa updated');
+      mockClient._simulateRemoteChange('b.qmd', 'bbb updated');
+
+      expect(calls).toEqual([
+        ['a.qmd', 'aaa updated'],
+        ['b.qmd', 'bbb updated'],
+      ]);
+    });
+
+    it('should not throw when callback is null', async () => {
+      await mockClient.createFile('test.qmd', 'hello');
+      setImmediateFileChangeCallback(null);
+
+      expect(() => {
+        mockClient._simulateRemoteChange('test.qmd', 'new content');
+      }).not.toThrow();
+    });
+
+    it('should only call the most recently registered callback', async () => {
+      await mockClient.createFile('test.qmd', 'hello');
+
+      const callbackA = vi.fn();
+      const callbackB = vi.fn();
+
+      setImmediateFileChangeCallback(callbackA);
+      setImmediateFileChangeCallback(callbackB);
+
+      mockClient._simulateRemoteChange('test.qmd', 'new content');
+
+      expect(callbackA).not.toHaveBeenCalled();
+      expect(callbackB).toHaveBeenCalledWith('test.qmd', 'new content');
+    });
+  });
+
+  describe('position-correctness scenarios', () => {
+    beforeEach(async () => {
+      // Use real internal callbacks so immediateFileChangeCallback fires
+      mockClient = createMockSyncClient(
+        _getCallbacksForTesting(),
+        { initialFiles: new Map() },
+      );
+      _setClientForTesting(mockClient);
+      await mockClient.connect('ws://test', 'automerge:test');
+    });
+
+    it('should maintain correct order in same-paragraph concurrent edits', async () => {
+      // Scenario 1 from the plan: Document "hello"
+      await mockClient.createFile('test.qmd', 'hello');
+
+      const receivedContents: string[] = [];
+      setImmediateFileChangeCallback((_path, content) => {
+        receivedContents.push(content);
+      });
+
+      // Step 1: Local user types 'a' at pos 5 → "helloa"
+      applyEditorOperations('test.qmd', [{ rangeOffset: 5, rangeLength: 0, text: 'a' }]);
+      expect(getFileContent('test.qmd')).toBe('helloa');
+
+      // Step 2: Remote user inserts 'x' at pos 0 → "xhelloa"
+      mockClient._simulateRemoteChange('test.qmd', 'xhelloa');
+      // The immediate callback fires synchronously, delivering "xhelloa"
+      // to Editor.tsx, which would sync Monaco before the next keystroke.
+      expect(receivedContents).toContain('xhelloa');
+
+      // Step 3: Local user types 'b' at pos 7 (after 'a' in synced "xhelloa")
+      // With Monaco synced, the user's cursor is at pos 7 (not stale pos 6).
+      applyEditorOperations('test.qmd', [{ rangeOffset: 7, rangeLength: 0, text: 'b' }]);
+      expect(getFileContent('test.qmd')).toBe('xhelloab');
+
+      // WITHOUT the fix: if Monaco were stale ("helloa"), the user would type
+      // 'b' at pos 6, and splice(6, 0, 'b') on "xhelloa" would produce
+      // "xhelloba" — letters reversed. The fix ensures the correct offset (7).
+    });
+
+    it('should maintain correct order in cross-paragraph concurrent edits', async () => {
+      // Scenario 2 from the plan: Document "aaa\n\nbbb"
+      await mockClient.createFile('test.qmd', 'aaa\n\nbbb');
+
+      const receivedContents: string[] = [];
+      setImmediateFileChangeCallback((_path, content) => {
+        receivedContents.push(content);
+      });
+
+      // Step 1: Local user types 'x' at end of paragraph 2 (pos 8) → "aaa\n\nbbbx"
+      applyEditorOperations('test.qmd', [{ rangeOffset: 8, rangeLength: 0, text: 'x' }]);
+      expect(getFileContent('test.qmd')).toBe('aaa\n\nbbbx');
+
+      // Step 2: Remote user types 'y' at end of paragraph 1 (pos 3) → "aaay\n\nbbbx"
+      mockClient._simulateRemoteChange('test.qmd', 'aaay\n\nbbbx');
+      expect(receivedContents).toContain('aaay\n\nbbbx');
+
+      // Step 3: Local user types 'z' at pos 10 (after 'x' in synced "aaay\n\nbbbx")
+      // With Monaco synced, 'x' is at pos 9, so 'z' goes at pos 10.
+      applyEditorOperations('test.qmd', [{ rangeOffset: 10, rangeLength: 0, text: 'z' }]);
+      expect(getFileContent('test.qmd')).toBe('aaay\n\nbbbxz');
+
+      // WITHOUT the fix: if Monaco were stale ("aaa\n\nbbbx"), the user would
+      // type 'z' at pos 9, and splice(9, 0, 'z') on "aaay\n\nbbbx" would
+      // produce "aaay\n\nbbzx" — 'z' lands before 'x', not after.
+    });
+  });
+
   describe('test isolation', () => {
     it('should have clean state after reset', () => {
       _resetForTesting();
       expect(isConnected()).toBe(false);
+    });
+
+    it('should clear immediate callback on reset', () => {
+      const callback = vi.fn();
+      setImmediateFileChangeCallback(callback);
+
+      _resetForTesting();
+
+      // After reset, set up a new client and trigger a change —
+      // the old callback should not fire
+      mockClient = createMockSyncClient(
+        {
+          onFileAdded: vi.fn(),
+          onFileChanged: vi.fn(),
+          onBinaryChanged: vi.fn(),
+          onFileRemoved: vi.fn(),
+        },
+        { initialFiles: new Map() },
+      );
+      _setClientForTesting(mockClient);
+
+      // The callback should have been cleared by _resetForTesting
+      expect(callback).not.toHaveBeenCalled();
     });
   });
 });

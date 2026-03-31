@@ -12,6 +12,7 @@ import {
   renameFile,
   exportProjectAsZip,
   getFileContent,
+  setImmediateFileChangeCallback,
   type EditorContentChange,
 } from '../services/automergeSync';
 import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
@@ -426,6 +427,37 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     monacoRef.current.editor.setModelMarkers(model, 'quarto', markers);
     setUnlocatedErrors(unlocatedDiagnostics);
   }, [diagnostics]);
+
+  // Synchronous Monaco sync: apply remote Automerge changes to Monaco
+  // immediately (within the same macrotask as the WebSocket message handler),
+  // preventing position mismatch when keystrokes interleave with async React
+  // state updates. Local changes are no-ops (Monaco already has the content).
+  useEffect(() => {
+    if (!currentFile) return;
+
+    const handleImmediateSync = (path: string, content: string) => {
+      if (path !== currentFile.path) return;
+      if (replayActiveRef.current) return;
+
+      const editor = editorRef.current;
+      const model = editor?.getModel();
+      if (!editor || !model) return;
+
+      const monacoContent = model.getValue();
+      if (monacoContent === content) return; // Local change — already in sync
+
+      const edits = diffToMonacoEdits(monacoContent, content);
+      if (edits.length > 0) {
+        applyingRemoteRef.current = true;
+        editor.executeEdits('remote-sync', edits);
+        applyingRemoteRef.current = false;
+      }
+      setContent(content);
+    };
+
+    setImmediateFileChangeCallback(handleImmediateSync);
+    return () => setImmediateFileChangeCallback(null);
+  }, [currentFile, replayState.isActive]);
 
   // Sync Monaco editor with external Automerge state using diff-based edits.
   //
