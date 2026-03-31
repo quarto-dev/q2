@@ -16,8 +16,8 @@ jobs:
           echo "::group::Fetching cache list for PR #${{ github.event.pull_request.number }}"
           echo "Branch ref: $BRANCH"
 
-          # Get full cache list with details for logging
-          cacheList=$(gh cache list --ref $BRANCH --limit 100 --json id,key,sizeInBytes)
+          # Get all caches for this PR ref
+          cacheList=$(gh cache list --ref $BRANCH --limit 1000 --json id,key,sizeInBytes)
           cacheCount=$(echo "$cacheList" | jq '. | length')
 
           echo "Found $cacheCount cache(s) for this PR"
@@ -35,9 +35,6 @@ jobs:
 
           # Extract just the IDs for deletion
           cacheKeysForPR=$(echo "$cacheList" | jq -r '.[].id')
-
-          ## Setting this to not fail the workflow while deleting cache keys.
-          set +e
 
           echo "::group::Deleting caches"
           deleted=0
