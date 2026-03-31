@@ -608,6 +608,7 @@ printf '\xff\xfe'  # Invalid UTF-8 bytes
             "#!/usr/bin/env python3\nimport sys\nsys.stdin.read()\nsys.stdout.buffer.write(b'\\xff\\xfe')\n",
         )
         .unwrap();
+        make_executable(&filter_path);
 
         let pandoc = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
