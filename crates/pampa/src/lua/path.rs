@@ -422,34 +422,62 @@ mod tests {
     fn test_is_absolute() {
         let (lua, _) = create_test_lua();
 
-        let result: bool = lua
+        // Unix-style `/path` is absolute on Unix but drive-relative on Windows
+        let unix_result: bool = lua
             .load("pandoc.path.is_absolute('/home/user')")
             .eval()
             .unwrap();
-        assert!(result);
+        #[cfg(not(windows))]
+        assert!(unix_result);
+        #[cfg(windows)]
+        assert!(!unix_result);
 
-        let result: bool = lua
+        // Windows-style path with drive letter
+        #[cfg(windows)]
+        {
+            let win_result: bool = lua
+                .load(r#"pandoc.path.is_absolute('C:\\Users\\user')"#)
+                .eval()
+                .unwrap();
+            assert!(win_result);
+        }
+
+        let relative_result: bool = lua
             .load("pandoc.path.is_absolute('relative/path')")
             .eval()
             .unwrap();
-        assert!(!result);
+        assert!(!relative_result);
     }
 
     #[test]
     fn test_is_relative() {
         let (lua, _) = create_test_lua();
 
-        let result: bool = lua
+        let relative_result: bool = lua
             .load("pandoc.path.is_relative('relative/path')")
             .eval()
             .unwrap();
-        assert!(result);
+        assert!(relative_result);
 
-        let result: bool = lua
+        // Unix-style `/path` is only non-relative on Unix
+        let unix_result: bool = lua
             .load("pandoc.path.is_relative('/absolute/path')")
             .eval()
             .unwrap();
-        assert!(!result);
+        #[cfg(not(windows))]
+        assert!(!unix_result);
+        #[cfg(windows)]
+        assert!(unix_result);
+
+        // Windows-style absolute path
+        #[cfg(windows)]
+        {
+            let win_result: bool = lua
+                .load(r#"pandoc.path.is_relative('C:\\Users\\user')"#)
+                .eval()
+                .unwrap();
+            assert!(!win_result);
+        }
     }
 
     #[test]
