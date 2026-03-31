@@ -494,6 +494,7 @@ fn system_time_to_lua_table(lua: &Lua, time: Option<SystemTime>) -> Result<Value
 mod tests {
     use super::*;
     use crate::lua::runtime::NativeRuntime;
+    use quarto_util::to_forward_slashes;
 
     fn create_test_lua() -> (Lua, Arc<dyn SystemRuntime>) {
         let lua = Lua::new();
@@ -629,8 +630,8 @@ mod tests {
         // Create source file
         std::fs::write(&src, "test content").unwrap();
 
-        let src_str = src.to_string_lossy().to_string().replace('\\', "\\\\");
-        let dst_str = dst.to_string_lossy().to_string().replace('\\', "\\\\");
+        let src_str = to_forward_slashes(&src);
+        let dst_str = to_forward_slashes(&dst);
 
         // Copy file
         lua.load(format!("pandoc.system.copy('{}', '{}')", src_str, dst_str))
@@ -651,8 +652,8 @@ mod tests {
 
         std::fs::write(&old, "content").unwrap();
 
-        let old_str = old.to_string_lossy().to_string().replace('\\', "\\\\");
-        let new_str = new.to_string_lossy().to_string().replace('\\', "\\\\");
+        let old_str = to_forward_slashes(&old);
+        let new_str = to_forward_slashes(&new);
 
         lua.load(format!(
             "pandoc.system.rename('{}', '{}')",
@@ -675,7 +676,7 @@ mod tests {
         std::fs::write(&file, "content").unwrap();
         assert!(file.exists());
 
-        let file_str = file.to_string_lossy().to_string().replace('\\', "\\\\");
+        let file_str = to_forward_slashes(&file);
 
         lua.load(format!("pandoc.system.remove('{}')", file_str))
             .exec()
@@ -953,7 +954,7 @@ mod tests {
 
         let temp = runtime.temp_dir("system_test").unwrap();
         let nested = temp.path().join("a/b/c");
-        let nested_str = nested.to_string_lossy().to_string().replace('\\', "\\\\");
+        let nested_str = to_forward_slashes(&nested);
 
         // Create nested directories with create_parent=true
         lua.load(format!(
