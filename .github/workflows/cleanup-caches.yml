@@ -16,7 +16,7 @@ jobs:
           echo "::group::Fetching cache list for PR #${{ github.event.pull_request.number }}"
           echo "Branch ref: $BRANCH"
 
-          # Get all caches for this PR ref
+          # Get up to 1000 caches for this PR ref
           cacheList=$(gh cache list --ref $BRANCH --limit 1000 --json id,key,sizeInBytes)
           cacheCount=$(echo "$cacheList" | jq '. | length')
 
@@ -45,10 +45,10 @@ jobs:
               echo "Deleting cache ID: $cacheKey"
               if gh cache delete $cacheKey; then
                 echo "  ✓ Successfully deleted cache $cacheKey"
-                ((deleted++))
+                deleted=$((deleted+1))
               else
                 echo "  ✗ Failed to delete cache $cacheKey"
-                ((failed++))
+                failed=$((failed+1))
               fi
           done
 
