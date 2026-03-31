@@ -9,6 +9,10 @@ on:
       - main
       - kyoto
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   PANDOC_VERSION: "3.8.3"
 
