@@ -267,19 +267,8 @@ impl LuaShortcodeEngine {
 
     fn build_args_table(&self, args: &ShortcodeArgs) -> Result<Value> {
         let table = self.lua.create_table()?;
-        let mut idx = 1;
-        for arg in &args.positional {
-            let entry = self.lua.create_table()?;
-            entry.set("value", arg.as_str())?;
-            table.set(idx, entry)?;
-            idx += 1;
-        }
-        for (key, val) in &args.keyword {
-            let entry = self.lua.create_table()?;
-            entry.set("name", key.as_str())?;
-            entry.set("value", val.as_str())?;
-            table.set(idx, entry)?;
-            idx += 1;
+        for (i, arg) in args.positional.iter().enumerate() {
+            table.set(i + 1, arg.as_str())?;
         }
         Ok(Value::Table(table))
     }
@@ -289,6 +278,15 @@ impl LuaShortcodeEngine {
         for (key, val) in &args.keyword {
             table.set(key.as_str(), val.as_str())?;
         }
+        // TS Quarto compat: missing keys return empty pandoc.Inlines({})
+        let mt = self.lua.create_table()?;
+        mt.set(
+            "__index",
+            self.lua
+                .load("function(t, k) return pandoc.Inlines({}) end")
+                .eval::<Function>()?,
+        )?;
+        table.set_metatable(Some(mt))?;
         Ok(Value::Table(table))
     }
 
@@ -351,18 +349,22 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
 
     let shortcode_ns = lua.create_table()?;
 
-    // quarto.shortcode.read_arg(args, n)
+    // quarto.shortcode.read_arg(args, n) — TS Quarto compat
     shortcode_ns.set(
         "read_arg",
-        lua.create_function(|_lua, (args, n): (Table, usize)| -> Result<Value> {
-            // 1-based index
-            let entry: Value = args.get(n)?;
-            match entry {
-                Value::Table(t) => t.get("value"),
-                Value::Nil => Ok(Value::Nil),
-                other => Ok(other),
-            }
-        })?,
+        lua.load(
+            r#"
+            function(args, n)
+                local arg = args[n or 1]
+                if arg == nil then return nil end
+                if type(arg) ~= "string" then
+                    return pandoc.utils.stringify(arg)
+                end
+                return arg
+            end
+            "#,
+        )
+        .eval::<Function>()?,
     )?;
 
     // quarto.shortcode.error_output(name, message, context)
@@ -696,7 +698,7 @@ return {
             r#"
 return {
     echo = function(args, kwargs, meta, raw_args, context)
-        return args[1].value
+        return args[1]
     end
 }
 "#,
@@ -1053,6 +1055,401 @@ return {
                 assert_eq!(s, expected);
             }
             other => panic!("Expected Text for ext2, got {:?}", other),
+        }
+    }
+
+    // --- Phase 1: TS Quarto compat tests (should fail before fix) ---
+
+    #[test]
+    fn test_args_are_plain_strings() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "stringify_arg.lua",
+            r#"
+return {
+    stringify_arg = function(args, kwargs, meta, raw_args, context)
+        return pandoc.utils.stringify(args[1])
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        let args = ShortcodeArgs {
+            positional: vec!["5".to_string()],
+            keyword: vec![],
+            metadata: vec![],
+        };
+        let result = engine
+            .call("stringify_arg", &args, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "5"),
+            other => panic!("Expected Text(\"5\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_args_exclude_kwargs() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "count_args.lua",
+            r#"
+return {
+    count_args = function(args, kwargs, meta, raw_args, context)
+        return tostring(#args)
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        let args = ShortcodeArgs {
+            positional: vec!["hello".to_string()],
+            keyword: vec![("key".to_string(), "val".to_string())],
+            metadata: vec![],
+        };
+        let result = engine
+            .call("count_args", &args, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "1", "kwargs should not be in args"),
+            other => panic!("Expected Text(\"1\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_kwargs_missing_key_returns_inlines() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "kwargs_type.lua",
+            r#"
+return {
+    kwargs_type = function(args, kwargs, meta, raw_args, context)
+        local val = kwargs["nonexistent"]
+        return tostring(type(val))
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        let result = engine
+            .call(
+                "kwargs_type",
+                &make_empty_args(),
+                ShortcodeCallContext::Inline,
+            )
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => {
+                // pandoc.Inlines({}) returns a table in our Lua env
+                assert_ne!(s, "nil", "missing kwargs should not return nil");
+                assert!(
+                    s == "table" || s == "userdata",
+                    "missing kwargs should return Inlines (table or userdata), got: {s}"
+                )
+            }
+            other => panic!("Expected Text(\"userdata\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_stringify_args_lipsum_pattern() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "lipsum_pattern.lua",
+            r#"
+return {
+    lipsum_pattern = function(args, kwargs, meta, raw_args, context)
+        local range = pandoc.utils.stringify(args[1])
+        local _, _, bareVal = range:find("^(%d+)$")
+        if bareVal then
+            return bareVal
+        else
+            return "NO_MATCH"
+        end
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        let args = ShortcodeArgs {
+            positional: vec!["3".to_string()],
+            keyword: vec![],
+            metadata: vec![],
+        };
+        let result = engine
+            .call("lipsum_pattern", &args, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "3"),
+            other => panic!("Expected Text(\"3\"), got {:?}", other),
+        }
+    }
+
+    /// Test the fontawesome/unsplash pattern: stringify a kwarg value.
+    #[test]
+    fn test_kwargs_stringify_value() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "fa.lua",
+            r#"
+return {
+    fa = function(args, kwargs, meta, raw_args, context)
+        local title = pandoc.utils.stringify(kwargs["title"])
+        if title ~= "" then
+            return title
+        end
+        return "NO_TITLE"
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        let args = ShortcodeArgs {
+            positional: vec!["icon-name".to_string()],
+            keyword: vec![("title".to_string(), "My Icon".to_string())],
+            metadata: vec![],
+        };
+        let result = engine
+            .call("fa", &args, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "My Icon"),
+            other => panic!("Expected Text(\"My Icon\"), got {:?}", other),
+        }
+    }
+
+    /// Test the unsplash pattern: kwargs missing key with length check.
+    /// In TS Quarto, missing kwargs return pandoc.Inlines({}), which has
+    /// length 0. Extensions check `kwargs['key'] ~= nil and #kwargs['key'] > 0`.
+    #[test]
+    fn test_kwargs_missing_key_length_check() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "unsplash.lua",
+            r#"
+return {
+    unsplash = function(args, kwargs, meta, raw_args, context)
+        local width = nil
+        if kwargs['width'] ~= nil and #kwargs['width'] > 0 then
+            width = pandoc.utils.stringify(kwargs['width'])
+        end
+        if width then
+            return width
+        end
+        return "DEFAULT"
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        // With width kwarg present
+        let args_with = ShortcodeArgs {
+            positional: vec![],
+            keyword: vec![("width".to_string(), "800".to_string())],
+            metadata: vec![],
+        };
+        let result = engine
+            .call("unsplash", &args_with, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "800"),
+            other => panic!("Expected Text(\"800\"), got {:?}", other),
+        }
+
+        // Without width kwarg — missing key should have length 0
+        let args_without = ShortcodeArgs {
+            positional: vec![],
+            keyword: vec![],
+            metadata: vec![],
+        };
+        let result = engine
+            .call("unsplash", &args_without, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "DEFAULT"),
+            other => panic!("Expected Text(\"DEFAULT\"), got {:?}", other),
+        }
+    }
+
+    /// Test meta parameter access pattern: handler reads document metadata.
+    #[test]
+    fn test_meta_access_pattern() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "meta_sc.lua",
+            r#"
+return {
+    meta_sc = function(args, kwargs, meta, raw_args, context)
+        local title = meta["title"]
+        local author = meta["author"]
+        if title and author then
+            return title .. " by " .. author
+        elseif title then
+            return title
+        end
+        return "NO_META"
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        let args = ShortcodeArgs {
+            positional: vec![],
+            keyword: vec![],
+            metadata: vec![
+                ("title".to_string(), "My Document".to_string()),
+                ("author".to_string(), "Jane".to_string()),
+            ],
+        };
+        let result = engine
+            .call("meta_sc", &args, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "My Document by Jane"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+    }
+
+    /// Test raw_args parameter: handlers can access the unparsed argument strings.
+    #[test]
+    fn test_raw_args_access() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "raw.lua",
+            r#"
+return {
+    raw = function(args, kwargs, meta, raw_args, context)
+        local parts = {}
+        for i, v in ipairs(raw_args) do
+            parts[i] = v
+        end
+        return table.concat(parts, ",")
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        let args = ShortcodeArgs {
+            positional: vec!["hello".to_string(), "world".to_string()],
+            keyword: vec![],
+            metadata: vec![],
+        };
+        let result = engine
+            .call("raw", &args, ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "hello,world"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+    }
+
+    /// Test context parameter with block output: handler returns different
+    /// types based on context string.
+    #[test]
+    fn test_context_driven_output() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "ctx_out.lua",
+            r#"
+return {
+    ctx_out = function(args, kwargs, meta, raw_args, context)
+        if context == "block" then
+            return pandoc.Para({pandoc.Str("block-output")})
+        elseif context == "inline" then
+            return pandoc.Str("inline-output")
+        else
+            return "text-output"
+        end
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        // Block context → Para block
+        let result = engine
+            .call("ctx_out", &make_empty_args(), ShortcodeCallContext::Block)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Blocks(blocks) => {
+                assert_eq!(blocks.len(), 1);
+                match &blocks[0] {
+                    Block::Paragraph(p) => match &p.content[0] {
+                        Inline::Str(s) => assert_eq!(s.text, "block-output"),
+                        other => panic!("Expected Str, got {:?}", other),
+                    },
+                    other => panic!("Expected Paragraph, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Blocks, got {:?}", other),
+        }
+
+        // Inline context → Str inline
+        let result = engine
+            .call("ctx_out", &make_empty_args(), ShortcodeCallContext::Inline)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Inlines(inlines) => {
+                assert_eq!(inlines.len(), 1);
+                match &inlines[0] {
+                    Inline::Str(s) => assert_eq!(s.text, "inline-output"),
+                    other => panic!("Expected Str, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Inlines, got {:?}", other),
+        }
+
+        // Text context → plain string
+        let result = engine
+            .call("ctx_out", &make_empty_args(), ShortcodeCallContext::Text)
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "text-output"),
+            other => panic!("Expected Text, got {:?}", other),
         }
     }
 }
