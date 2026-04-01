@@ -511,15 +511,15 @@ fn create_new_method(lua: &Lua) -> Result<Function> {
 // ============================================================================
 
 use super::types::{
-    LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table, lua_table_to_blocks,
-    lua_table_to_inlines, walk_blocks_with_filter, walk_inlines_with_filter,
+    LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table, peek_blocks_fuzzy,
+    peek_inlines_fuzzy, walk_blocks_with_filter, walk_inlines_with_filter,
 };
 
 /// Create walk() method for Inlines lists
 fn create_inlines_walk_method(lua: &Lua) -> Result<Function> {
     lua.create_function(|lua, (table, filter): (Table, Table)| {
         // Convert table to Vec<Inline>
-        let inlines = lua_table_to_inlines(lua, Value::Table(table))?;
+        let inlines = peek_inlines_fuzzy(lua, Value::Table(table))?;
 
         // Apply the filter
         let filtered = walk_inlines_with_filter(lua, &inlines, &filter)?;
@@ -533,7 +533,7 @@ fn create_inlines_walk_method(lua: &Lua) -> Result<Function> {
 fn create_blocks_walk_method(lua: &Lua) -> Result<Function> {
     lua.create_function(|lua, (table, filter): (Table, Table)| {
         // Convert table to Vec<Block>
-        let blocks = lua_table_to_blocks(lua, Value::Table(table))?;
+        let blocks = peek_blocks_fuzzy(lua, Value::Table(table))?;
 
         // Apply the filter
         let filtered = walk_blocks_with_filter(lua, &blocks, &filter)?;

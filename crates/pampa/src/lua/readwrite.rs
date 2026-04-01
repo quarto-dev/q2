@@ -19,7 +19,7 @@ use crate::options::{
 use crate::pandoc::Pandoc;
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 
-use super::types::{blocks_to_lua_table, lua_table_to_blocks, meta_value_to_lua};
+use super::types::{blocks_to_lua_table, meta_value_to_lua, peek_blocks_fuzzy};
 
 /// Register pandoc.read, pandoc.write, and option constructors on the pandoc table.
 pub fn register_pandoc_readwrite(lua: &Lua, pandoc: &Table) -> Result<()> {
@@ -344,7 +344,7 @@ fn lua_pandoc_to_rust(lua: &Lua, val: Value) -> Result<Pandoc> {
         Value::Table(t) => {
             // Get blocks
             let blocks_val: Value = t.get("blocks").unwrap_or(Value::Nil);
-            let blocks = lua_table_to_blocks(lua, blocks_val)?;
+            let blocks = peek_blocks_fuzzy(lua, blocks_val)?;
 
             // Phase 5: Convert meta directly from Lua to ConfigValue
             let meta_val: Value = t.get("meta").unwrap_or(Value::Nil);

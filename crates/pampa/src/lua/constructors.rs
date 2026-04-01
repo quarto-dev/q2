@@ -33,7 +33,7 @@ use super::list::{
     get_or_create_blocks_metatable, get_or_create_inlines_metatable, get_or_create_list_metatable,
 };
 use super::types::{
-    LuaAttr, LuaBlock, LuaInline, filter_source_info, lua_table_to_blocks, lua_table_to_inlines,
+    LuaAttr, LuaBlock, LuaInline, filter_source_info, peek_blocks_fuzzy, peek_inlines_fuzzy,
 };
 use mlua::UserData;
 
@@ -310,7 +310,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Emph",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Emph(Emph {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -322,7 +322,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Strong",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Strong(Strong {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -334,7 +334,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Underline",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Underline(Underline {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -346,7 +346,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Strikeout",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Strikeout(Strikeout {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -358,7 +358,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Superscript",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Superscript(Superscript {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -370,7 +370,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Subscript",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Subscript(Subscript {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -382,7 +382,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "SmallCaps",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::SmallCaps(SmallCaps {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -404,7 +404,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     )));
                 }
             };
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Quoted(Quoted {
                 quote_type: qt,
                 content: inlines,
@@ -461,7 +461,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Link",
         lua.create_function(
             |lua, (content, target, title, attr): (Value, String, Option<String>, Option<Value>)| {
-                let inlines = lua_table_to_inlines(lua, content)?;
+                let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
                 lua.create_userdata(LuaInline(Inline::Link(Link {
@@ -481,7 +481,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Image",
         lua.create_function(
             |lua, (content, src, title, attr): (Value, String, Option<String>, Option<Value>)| {
-                let inlines = lua_table_to_inlines(lua, content)?;
+                let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
                 lua.create_userdata(LuaInline(Inline::Image(Image {
@@ -500,7 +500,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Span",
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
             lua.create_userdata(LuaInline(Inline::Span(Span {
                 content: inlines,
@@ -515,7 +515,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Note",
         lua.create_function(|lua, content: Value| {
-            let blocks = lua_table_to_blocks(lua, content)?;
+            let blocks = peek_blocks_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Note(Note {
                 content: blocks,
                 source_info: filter_source_info(lua),
@@ -528,7 +528,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Cite",
         lua.create_function(|lua, (citations, content): (Value, Value)| {
             let citations = parse_citations(lua, citations)?;
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaInline(Inline::Cite(Cite {
                 citations,
                 content: inlines,
@@ -545,7 +545,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Para",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaBlock(Block::Paragraph(Paragraph {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -557,7 +557,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Plain",
         lua.create_function(|lua, content: Value| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             lua.create_userdata(LuaBlock(Block::Plain(Plain {
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -569,7 +569,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Header",
         lua.create_function(|lua, (level, content, attr): (i64, Value, Option<Value>)| {
-            let inlines = lua_table_to_inlines(lua, content)?;
+            let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
             lua.create_userdata(LuaBlock(Block::Header(Header {
                 level: level as usize,
@@ -611,7 +611,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "BlockQuote",
         lua.create_function(|lua, content: Value| {
-            let blocks = lua_table_to_blocks(lua, content)?;
+            let blocks = peek_blocks_fuzzy(lua, content)?;
             lua.create_userdata(LuaBlock(Block::BlockQuote(BlockQuote {
                 content: blocks,
                 source_info: filter_source_info(lua),
@@ -652,7 +652,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Div",
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
-            let blocks = lua_table_to_blocks(lua, content)?;
+            let blocks = peek_blocks_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
             lua.create_userdata(LuaBlock(Block::Div(Div {
                 content: blocks,
@@ -705,7 +705,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Figure",
         lua.create_function(
             |lua, (content, caption, attr): (Value, Option<Value>, Option<Value>)| {
-                let blocks = lua_table_to_blocks(lua, content)?;
+                let blocks = peek_blocks_fuzzy(lua, content)?;
                 let caption = parse_caption(lua, caption)?;
                 let attr = parse_attr(lua, attr)?;
                 lua.create_userdata(LuaBlock(Block::Figure(Figure {
@@ -796,12 +796,16 @@ fn parse_list_items(lua: &Lua, items: Value) -> Result<Vec<Vec<Block>>> {
             let mut result = Vec::new();
             for item in table.sequence_values::<Value>() {
                 let item = item?;
-                let blocks = lua_table_to_blocks(lua, item)?;
+                let blocks = peek_blocks_fuzzy(lua, item)?;
                 result.push(blocks);
             }
             Ok(result)
         }
-        _ => Err(Error::runtime("expected table of items")),
+        // Single blocks-like value → singleton list, matching Pandoc's peekItemsFuzzy
+        _ => {
+            let blocks = peek_blocks_fuzzy(lua, items)?;
+            Ok(vec![blocks])
+        }
     }
 }
 
@@ -837,11 +841,11 @@ fn parse_single_citation(lua: &Lua, val: Value) -> Result<Citation> {
             let prefix: Value = table
                 .get("prefix")
                 .unwrap_or(Value::Table(lua.create_table()?));
-            let prefix = lua_table_to_inlines(lua, prefix).unwrap_or_default();
+            let prefix = peek_inlines_fuzzy(lua, prefix).unwrap_or_default();
             let suffix: Value = table
                 .get("suffix")
                 .unwrap_or(Value::Table(lua.create_table()?));
-            let suffix = lua_table_to_inlines(lua, suffix).unwrap_or_default();
+            let suffix = peek_inlines_fuzzy(lua, suffix).unwrap_or_default();
             let note_num: i64 = table.get("note_num").unwrap_or(0);
             let hash: i64 = table.get("hash").unwrap_or(0);
 
@@ -873,7 +877,7 @@ fn parse_definition_list_items(
                     Value::Table(pair) => {
                         // First element is term (inlines), second is definitions (list of blocks)
                         let term_val: Value = pair.get(1)?;
-                        let term = lua_table_to_inlines(lua, term_val)?;
+                        let term = peek_inlines_fuzzy(lua, term_val)?;
                         let defs_val: Value = pair.get(2)?;
                         let defs = parse_list_items(lua, defs_val)?;
                         result.push((term, defs));
@@ -894,7 +898,7 @@ fn parse_line_block_content(lua: &Lua, val: Value) -> Result<Vec<Vec<Inline>>> {
             let mut result = Vec::new();
             for item in table.sequence_values::<Value>() {
                 let item = item?;
-                let inlines = lua_table_to_inlines(lua, item)?;
+                let inlines = peek_inlines_fuzzy(lua, item)?;
                 result.push(inlines);
             }
             Ok(result)
@@ -914,15 +918,13 @@ fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
         Some(Value::Table(table)) => {
             let short_val: Option<Value> = table.get("short").ok();
             let short = match short_val {
-                Some(Value::Table(_)) => Some(lua_table_to_inlines(lua, short_val.unwrap())?),
                 Some(Value::Nil) | None => None,
-                _ => None,
+                Some(v) => Some(peek_inlines_fuzzy(lua, v)?),
             };
             let long_val: Option<Value> = table.get("long").ok();
             let long = match long_val {
-                Some(Value::Table(_)) => Some(lua_table_to_blocks(lua, long_val.unwrap())?),
                 Some(Value::Nil) | None => None,
-                _ => None,
+                Some(v) => Some(peek_blocks_fuzzy(lua, v)?),
             };
             Ok(Caption {
                 short,
@@ -938,7 +940,15 @@ fn parse_caption(lua: &Lua, val: Option<Value>) -> Result<Caption> {
                 Err(Error::runtime("expected Caption userdata"))
             }
         }
-        _ => Err(Error::runtime("expected caption table or nil")),
+        // Fallback: try as blocks-like value (matching Pandoc's peekCaptionFuzzy)
+        Some(val) => {
+            let long = peek_blocks_fuzzy(lua, val)?;
+            Ok(Caption {
+                short: None,
+                long: Some(long),
+                source_info: filter_source_info(lua),
+            })
+        }
     }
 }
 
@@ -1193,7 +1203,7 @@ fn parse_single_cell(lua: &Lua, val: Value) -> Result<Cell> {
                 // Try to treat the table itself as blocks content
                 Value::Table(table.clone())
             });
-            let content = lua_table_to_blocks(lua, content_val)?;
+            let content = peek_blocks_fuzzy(lua, content_val)?;
             let align_val: Value = table.get("alignment").unwrap_or(Value::Nil);
             let alignment = parse_alignment(align_val).unwrap_or(Alignment::Default);
             let row_span: i64 = table.get("row_span").unwrap_or(1);
@@ -1317,11 +1327,11 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     _ => CitationMode::NormalCitation,
                 };
                 let prefix = match prefix {
-                    Some(v) => lua_table_to_inlines(lua, v).unwrap_or_default(),
+                    Some(v) => peek_inlines_fuzzy(lua, v).unwrap_or_default(),
                     None => vec![],
                 };
                 let suffix = match suffix {
-                    Some(v) => lua_table_to_inlines(lua, v).unwrap_or_default(),
+                    Some(v) => peek_inlines_fuzzy(lua, v).unwrap_or_default(),
                     None => vec![],
                 };
                 let citation = Citation {
@@ -1365,11 +1375,11 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (short, long): (Option<Value>, Option<Value>)| {
             let short_inlines = match short {
                 Some(Value::Nil) | None => None,
-                Some(v) => Some(lua_table_to_inlines(lua, v)?),
+                Some(v) => Some(peek_inlines_fuzzy(lua, v)?),
             };
             let long_blocks = match long {
                 Some(Value::Nil) | None => None,
-                Some(v) => Some(lua_table_to_blocks(lua, v)?),
+                Some(v) => Some(peek_blocks_fuzzy(lua, v)?),
             };
             let caption = Caption {
                 short: short_inlines,
@@ -1466,7 +1476,7 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 Option<i64>,
                 Option<Value>,
             )| {
-                let blocks = lua_table_to_blocks(lua, content)?;
+                let blocks = peek_blocks_fuzzy(lua, content)?;
                 let alignment = match align {
                     Some(v) => parse_alignment(v).unwrap_or(Alignment::Default),
                     None => Alignment::Default,
@@ -1572,58 +1582,20 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set("List", list_mt)?;
 
     // pandoc.Inlines(content) - creates an Inlines list
+    // Delegates to peek_inlines_fuzzy for coercion, matching Pandoc behavior
     pandoc.set(
         "Inlines",
         lua.create_function(|lua, content: Option<Value>| {
             let mt = get_or_create_inlines_metatable(lua)?;
             let table = match content {
                 None | Some(Value::Nil) => lua.create_table()?,
-                Some(Value::Table(t)) => {
-                    // Convert table contents to proper format if needed
+                Some(val) => {
+                    let inlines = peek_inlines_fuzzy(lua, val)?;
                     let result = lua.create_table()?;
-                    let len = t.raw_len();
-                    for i in 1..=len {
-                        let val: Value = t.raw_get(i)?;
-                        // Handle string conversion to Str
-                        let inline = match val {
-                            Value::String(s) => {
-                                let text = s.to_str()?.to_string();
-                                Value::UserData(lua.create_userdata(LuaInline(Inline::Str(
-                                    Str {
-                                        text,
-                                        source_info: filter_source_info(lua),
-                                    },
-                                )))?)
-                            }
-                            _ => val,
-                        };
-                        result.raw_set(i, inline)?;
+                    for (i, inline) in inlines.into_iter().enumerate() {
+                        result.raw_set(i + 1, lua.create_userdata(LuaInline(inline))?)?;
                     }
                     result
-                }
-                Some(Value::String(s)) => {
-                    // Convert string to Inlines containing Str elements
-                    let result = lua.create_table()?;
-                    let text = s.to_str()?.to_string();
-                    result.raw_set(
-                        1,
-                        lua.create_userdata(LuaInline(Inline::Str(Str {
-                            text,
-                            source_info: filter_source_info(lua),
-                        })))?,
-                    )?;
-                    result
-                }
-                Some(Value::UserData(ud)) => {
-                    // Single inline element - wrap in list
-                    let result = lua.create_table()?;
-                    result.raw_set(1, Value::UserData(ud))?;
-                    result
-                }
-                Some(_) => {
-                    return Err(Error::runtime(
-                        "pandoc.Inlines expects a table, string, or Inline element",
-                    ));
                 }
             };
             table.set_metatable(Some(mt))?;
@@ -1632,23 +1604,20 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     )?;
 
     // pandoc.Blocks(content) - creates a Blocks list
+    // Delegates to peek_blocks_fuzzy for coercion, matching Pandoc behavior
     pandoc.set(
         "Blocks",
         lua.create_function(|lua, content: Option<Value>| {
             let mt = get_or_create_blocks_metatable(lua)?;
             let table = match content {
                 None | Some(Value::Nil) => lua.create_table()?,
-                Some(Value::Table(t)) => t,
-                Some(Value::UserData(ud)) => {
-                    // Single block element - wrap in list
+                Some(val) => {
+                    let blocks = peek_blocks_fuzzy(lua, val)?;
                     let result = lua.create_table()?;
-                    result.raw_set(1, Value::UserData(ud))?;
+                    for (i, block) in blocks.into_iter().enumerate() {
+                        result.raw_set(i + 1, lua.create_userdata(LuaBlock(block))?)?;
+                    }
                     result
-                }
-                Some(_) => {
-                    return Err(Error::runtime(
-                        "pandoc.Blocks expects a table or Block element",
-                    ));
                 }
             };
             table.set_metatable(Some(mt))?;
@@ -4057,6 +4026,301 @@ mod tests {
         let lua = create_lua_env();
         let result: mlua::Result<Value> = lua.load(r#"return pandoc.Blocks(123)"#).eval();
         assert!(result.is_err());
+    }
+
+    // ========== Fuzzy coercion constructor tests ==========
+
+    #[test]
+    fn test_para_string_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local p = pandoc.Para("hello world")
+                -- Should word-split: Str("hello"), Space, Str("world")
+                return p.content[1].text .. "|" .. p.content[2].t .. "|" .. p.content[3].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "hello|Space|world");
+    }
+
+    #[test]
+    fn test_para_single_inline_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local p = pandoc.Para(pandoc.Str("x"))
+                return p.content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "x");
+    }
+
+    #[test]
+    fn test_para_mixed_table_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local p = pandoc.Para({"hello", pandoc.Space(), "world"})
+                return p.content[1].text .. "|" .. p.content[2].t .. "|" .. p.content[3].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "hello|Space|world");
+    }
+
+    #[test]
+    fn test_emph_string_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local e = pandoc.Emph("text")
+                return e.content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "text");
+    }
+
+    #[test]
+    fn test_strong_string_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Strong("bold")
+                return s.content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "bold");
+    }
+
+    #[test]
+    fn test_header_string_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local h = pandoc.Header(1, "title")
+                return h.content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "title");
+    }
+
+    #[test]
+    fn test_div_single_block_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local d = pandoc.Div(pandoc.Para({pandoc.Str("inside")}))
+                return d.content[1].content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "inside");
+    }
+
+    #[test]
+    fn test_div_string_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local d = pandoc.Div("text")
+                -- Should become Div([Plain([Str("text")])])
+                return d.content[1].t .. "|" .. d.content[1].content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Plain|text");
+    }
+
+    #[test]
+    fn test_blockquote_string_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local b = pandoc.BlockQuote("quoted")
+                return b.content[1].t .. "|" .. b.content[1].content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Plain|quoted");
+    }
+
+    #[test]
+    fn test_inlines_string_word_split() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local i = pandoc.Inlines("hello world")
+                return i[1].text .. "|" .. i[2].t .. "|" .. i[3].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "hello|Space|world");
+    }
+
+    #[test]
+    fn test_blocks_string_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local b = pandoc.Blocks("text")
+                return b[1].t .. "|" .. b[1].content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Plain|text");
+    }
+
+    #[test]
+    fn test_blocks_inline_coercion() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local b = pandoc.Blocks(pandoc.Str("x"))
+                return b[1].t .. "|" .. b[1].content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Plain|x");
+    }
+
+    #[test]
+    fn test_bullet_list_string_items() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local bl = pandoc.BulletList({"item one", "item two"})
+                -- Each string becomes blocks: [Plain([word-split inlines])]
+                return bl.content[1][1].content[1].text .. "|" .. bl.content[2][1].content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "item|item");
+    }
+
+    #[test]
+    fn test_bullet_list_single_item() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local bl = pandoc.BulletList(pandoc.Para({pandoc.Str("solo")}))
+                return #bl.content
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_line_block_string_lines() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local lb = pandoc.LineBlock({"line one", "line two"})
+                return lb.content[1][1].text .. "|" .. lb.content[2][1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        // peekInlinesFuzzy word-splits each line
+        assert_eq!(result, "line|line");
+    }
+
+    #[test]
+    fn test_link_string_content() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local l = pandoc.Link("click here", "http://example.com")
+                return l.content[1].text .. "|" .. l.content[2].t .. "|" .. l.content[3].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "click|Space|here");
+    }
+
+    #[test]
+    fn test_span_string_content() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Span("inside")
+                return s.content[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "inside");
+    }
+
+    #[test]
+    fn test_lipsum_pattern() {
+        // Simulates the pattern from the lipsum extension:
+        // a plain string passed to pandoc.Para() should word-split
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local text = "Lorem ipsum dolor"
+                local p = pandoc.Para(text)
+                return p.content[1].text .. "|" .. p.content[2].t .. "|" .. p.content[3].text .. "|" .. p.content[4].t .. "|" .. p.content[5].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Lorem|Space|ipsum|Space|dolor");
+    }
+
+    #[test]
+    fn test_existing_explicit_table_still_works() {
+        // Verify that the explicit form still works (regression test)
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local p = pandoc.Para({pandoc.Str("hello"), pandoc.Space(), pandoc.Str("world")})
+                return p.content[1].text .. "|" .. p.content[2].t .. "|" .. p.content[3].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "hello|Space|world");
     }
 
     // ========== List metatable tests ==========

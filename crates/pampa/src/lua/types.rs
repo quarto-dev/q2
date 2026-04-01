@@ -275,41 +275,41 @@ impl LuaInline {
 
             // Content-bearing inlines
             (Inline::Emph(e), "content") => {
-                e.content = lua_table_to_inlines(lua, val)?;
+                e.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Strong(s), "content") => {
-                s.content = lua_table_to_inlines(lua, val)?;
+                s.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Underline(u), "content") => {
-                u.content = lua_table_to_inlines(lua, val)?;
+                u.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Strikeout(s), "content") => {
-                s.content = lua_table_to_inlines(lua, val)?;
+                s.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Superscript(s), "content") => {
-                s.content = lua_table_to_inlines(lua, val)?;
+                s.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Subscript(s), "content") => {
-                s.content = lua_table_to_inlines(lua, val)?;
+                s.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::SmallCaps(s), "content") => {
-                s.content = lua_table_to_inlines(lua, val)?;
+                s.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Span(s), "content") => {
-                s.content = lua_table_to_inlines(lua, val)?;
+                s.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
 
             // Link
             (Inline::Link(l), "content") => {
-                l.content = lua_table_to_inlines(lua, val)?;
+                l.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Link(l), "target") => {
@@ -323,7 +323,7 @@ impl LuaInline {
 
             // Image
             (Inline::Image(i), "content") => {
-                i.content = lua_table_to_inlines(lua, val)?;
+                i.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Image(i), "src") => {
@@ -359,13 +359,13 @@ impl LuaInline {
 
             // Quoted
             (Inline::Quoted(q), "content") => {
-                q.content = lua_table_to_inlines(lua, val)?;
+                q.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
 
             // Note
             (Inline::Note(n), "content") => {
-                n.content = lua_table_to_blocks(lua, val)?;
+                n.content = peek_blocks_fuzzy(lua, val)?;
                 Ok(())
             }
 
@@ -427,7 +427,7 @@ impl LuaInline {
 
             // Cite
             (Inline::Cite(c), "content") => {
-                c.content = lua_table_to_inlines(lua, val)?;
+                c.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Cite(c), "citations") => {
@@ -437,7 +437,7 @@ impl LuaInline {
 
             // Insert
             (Inline::Insert(ins), "content") => {
-                ins.content = lua_table_to_inlines(lua, val)?;
+                ins.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Insert(ins), "attr") => {
@@ -455,7 +455,7 @@ impl LuaInline {
 
             // Delete
             (Inline::Delete(d), "content") => {
-                d.content = lua_table_to_inlines(lua, val)?;
+                d.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Delete(d), "attr") => {
@@ -473,7 +473,7 @@ impl LuaInline {
 
             // Highlight
             (Inline::Highlight(h), "content") => {
-                h.content = lua_table_to_inlines(lua, val)?;
+                h.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::Highlight(h), "attr") => {
@@ -491,7 +491,7 @@ impl LuaInline {
 
             // EditComment
             (Inline::EditComment(ec), "content") => {
-                ec.content = lua_table_to_inlines(lua, val)?;
+                ec.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Inline::EditComment(ec), "attr") => {
@@ -842,11 +842,11 @@ impl LuaBlock {
         match (&mut self.0, key) {
             // Plain and Para
             (Block::Plain(p), "content") => {
-                p.content = lua_table_to_inlines(lua, val)?;
+                p.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Block::Paragraph(p), "content") => {
-                p.content = lua_table_to_inlines(lua, val)?;
+                p.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
 
@@ -856,7 +856,7 @@ impl LuaBlock {
                 Ok(())
             }
             (Block::Header(h), "content") => {
-                h.content = lua_table_to_inlines(lua, val)?;
+                h.content = peek_inlines_fuzzy(lua, val)?;
                 Ok(())
             }
             (Block::Header(h), "identifier") => {
@@ -886,13 +886,13 @@ impl LuaBlock {
 
             // BlockQuote
             (Block::BlockQuote(b), "content") => {
-                b.content = lua_table_to_blocks(lua, val)?;
+                b.content = peek_blocks_fuzzy(lua, val)?;
                 Ok(())
             }
 
             // Div
             (Block::Div(d), "content") => {
-                d.content = lua_table_to_blocks(lua, val)?;
+                d.content = peek_blocks_fuzzy(lua, val)?;
                 Ok(())
             }
             (Block::Div(d), "identifier") => {
@@ -902,7 +902,7 @@ impl LuaBlock {
 
             // Figure
             (Block::Figure(f), "content") => {
-                f.content = lua_table_to_blocks(lua, val)?;
+                f.content = peek_blocks_fuzzy(lua, val)?;
                 Ok(())
             }
             (Block::Figure(f), "identifier") => {
@@ -1134,9 +1134,9 @@ fn lua_table_to_citations(_lua: &Lua, val: Value) -> Result<Vec<crate::pandoc::C
                 let cit_table = item?;
                 let id: String = cit_table.get("id")?;
                 let prefix_val: Value = cit_table.get("prefix")?;
-                let prefix = lua_table_to_inlines(_lua, prefix_val)?;
+                let prefix = peek_inlines_fuzzy(_lua, prefix_val)?;
                 let suffix_val: Value = cit_table.get("suffix")?;
-                let suffix = lua_table_to_inlines(_lua, suffix_val)?;
+                let suffix = peek_inlines_fuzzy(_lua, suffix_val)?;
                 let mode_str: String = cit_table.get("mode")?;
                 let mode = match mode_str.as_str() {
                     "AuthorInText" => crate::pandoc::CitationMode::AuthorInText,
@@ -1250,12 +1250,12 @@ pub fn lua_to_meta_value(lua: &Lua, val: Value) -> Result<crate::pandoc::MetaVal
                     }
                     "MetaInlines" => {
                         let content: Value = table.get("content")?;
-                        let inlines = lua_table_to_inlines(lua, content)?;
+                        let inlines = peek_inlines_fuzzy(lua, content)?;
                         Ok(MetaValue::MetaInlines(inlines))
                     }
                     "MetaBlocks" => {
                         let content: Value = table.get("content")?;
-                        let blocks = lua_table_to_blocks(lua, content)?;
+                        let blocks = peek_blocks_fuzzy(lua, content)?;
                         Ok(MetaValue::MetaBlocks(blocks))
                     }
                     "MetaList" => {
@@ -1339,51 +1339,210 @@ pub fn lua_table_to_meta(lua: &Lua, val: Value) -> Result<crate::pandoc::Meta> {
     }
 }
 
-/// Convert Lua table to Vec<Inline>
-pub fn lua_table_to_inlines(_lua: &Lua, val: Value) -> Result<Vec<Inline>> {
+/// Split a string into Inlines, matching Pandoc's `B.text` from pandoc-types Builder.hs.
+///
+/// Groups consecutive characters by space vs non-space:
+/// - Non-space runs → `Str(text)`
+/// - Space-only runs → `SoftBreak` if the run contains `\n` or `\r`, else `Space`
+/// - Empty string → empty vec
+pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
+    use crate::pandoc::{SoftBreak, Space, Str};
+
+    if s.is_empty() {
+        return Vec::new();
+    }
+
+    let is_space = |c: char| matches!(c, ' ' | '\r' | '\n' | '\t');
+    let is_newline = |c: char| matches!(c, '\r' | '\n');
+
+    let mut result = Vec::new();
+    let mut chars = s.chars().peekable();
+
+    while chars.peek().is_some() {
+        let first = *chars.peek().unwrap();
+        if is_space(first) {
+            // Consume all consecutive space chars
+            let mut has_newline = false;
+            while let Some(&c) = chars.peek() {
+                if is_space(c) {
+                    if is_newline(c) {
+                        has_newline = true;
+                    }
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            if has_newline {
+                result.push(Inline::SoftBreak(SoftBreak {
+                    source_info: SourceInfo::default(),
+                }));
+            } else {
+                result.push(Inline::Space(Space {
+                    source_info: SourceInfo::default(),
+                }));
+            }
+        } else {
+            // Consume all consecutive non-space chars
+            let mut word = String::new();
+            while let Some(&c) = chars.peek() {
+                if is_space(c) {
+                    break;
+                }
+                word.push(c);
+                chars.next();
+            }
+            result.push(Inline::Str(Str {
+                text: word,
+                source_info: SourceInfo::default(),
+            }));
+        }
+    }
+
+    result
+}
+
+/// Peek a single Inline from a Lua value, with fuzzy coercion.
+///
+/// Matches Pandoc's `peekInlineFuzzy`:
+/// 1. String → `Str(text)` (NO word splitting)
+/// 2. UserData containing LuaInline → extract
+/// 3. Otherwise → error
+pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
+    use crate::pandoc::Str;
     match val {
+        Value::String(s) => {
+            let text = s.to_str()?.to_string();
+            Ok(Inline::Str(Str {
+                text,
+                source_info: filter_source_info(lua),
+            }))
+        }
+        Value::UserData(ud) => {
+            if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
+                Ok(lua_inline.0.clone())
+            } else {
+                Err(Error::runtime(
+                    "expected Inline userdata, string, or Inline-like value",
+                ))
+            }
+        }
+        _ => Err(Error::runtime(
+            "expected Inline userdata, string, or Inline-like value",
+        )),
+    }
+}
+
+/// Peek a list of Inlines from a Lua value, with fuzzy coercion.
+///
+/// Matches Pandoc's `peekInlinesFuzzy`:
+/// 1. String → word-split via `split_string_to_inlines()`
+/// 2. Table → iterate sequence values, each via `peek_inline_fuzzy()`
+/// 3. UserData containing LuaInline → wrap in singleton vec
+/// 4. Otherwise → error
+pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
+    match val {
+        Value::String(s) => {
+            let text = s.to_str()?;
+            Ok(split_string_to_inlines(&text))
+        }
         Value::Table(table) => {
             let mut inlines = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
-                match value {
-                    Value::UserData(ud) => {
-                        if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
-                            inlines.push(lua_inline.0.clone());
-                        } else {
-                            return Err(Error::runtime("expected Inline userdata"));
-                        }
-                    }
-                    _ => return Err(Error::runtime("expected table of Inline userdata")),
-                }
+                inlines.push(peek_inline_fuzzy(lua, value)?);
             }
             Ok(inlines)
         }
-        _ => Err(Error::runtime("expected table")),
+        Value::UserData(ud) => {
+            if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
+                Ok(vec![lua_inline.0.clone()])
+            } else {
+                Err(Error::runtime(
+                    "expected Inline, list of Inlines, or string",
+                ))
+            }
+        }
+        _ => Err(Error::runtime(
+            "expected Inline, list of Inlines, or string",
+        )),
     }
 }
 
-/// Convert Lua table to Vec<Block>
-pub fn lua_table_to_blocks(_lua: &Lua, val: Value) -> Result<Vec<Block>> {
-    match val {
+/// Peek a single Block from a Lua value, with fuzzy coercion.
+///
+/// Matches Pandoc's `peekBlockFuzzy`:
+/// 1. UserData containing LuaBlock → extract
+/// 2. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain`
+/// 3. Otherwise → error
+pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
+    use crate::pandoc::Plain;
+    match &val {
+        Value::UserData(ud) => {
+            if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
+                return Ok(lua_block.0.clone());
+            }
+            // Not a block — fall through to inlines coercion
+            let inlines = peek_inlines_fuzzy(lua, val)?;
+            Ok(Block::Plain(Plain {
+                content: inlines,
+                source_info: SourceInfo::default(),
+            }))
+        }
+        _ => {
+            // Try inlines coercion for strings, tables of inlines, etc.
+            match peek_inlines_fuzzy(lua, val) {
+                Ok(inlines) => Ok(Block::Plain(Plain {
+                    content: inlines,
+                    source_info: SourceInfo::default(),
+                })),
+                Err(_) => Err(Error::runtime("expected Block, list of Inlines, or string")),
+            }
+        }
+    }
+}
+
+/// Peek a list of Blocks from a Lua value, with fuzzy coercion.
+///
+/// Matches Pandoc's `peekBlocksFuzzy`:
+/// 1. Table → iterate sequence values, each via `peek_block_fuzzy()`
+/// 2. UserData containing LuaBlock → wrap in singleton vec
+/// 3. Any value accepted by `peek_inlines_fuzzy()` → wrap in `Plain` block singleton
+/// 4. Otherwise → error
+pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
+    use crate::pandoc::Plain;
+    match &val {
         Value::Table(table) => {
             let mut blocks = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
-                match value {
-                    Value::UserData(ud) => {
-                        if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
-                            blocks.push(lua_block.0.clone());
-                        } else {
-                            return Err(Error::runtime("expected Block userdata"));
-                        }
-                    }
-                    _ => return Err(Error::runtime("expected table of Block userdata")),
-                }
+                blocks.push(peek_block_fuzzy(lua, value)?);
             }
             Ok(blocks)
         }
-        _ => Err(Error::runtime("expected table")),
+        Value::UserData(ud) => {
+            if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
+                return Ok(vec![lua_block.0.clone()]);
+            }
+            // Not a block — try inlines coercion
+            let inlines = peek_inlines_fuzzy(lua, val)?;
+            Ok(vec![Block::Plain(Plain {
+                content: inlines,
+                source_info: SourceInfo::default(),
+            })])
+        }
+        _ => {
+            // Try inlines coercion for strings
+            match peek_inlines_fuzzy(lua, val) {
+                Ok(inlines) => Ok(vec![Block::Plain(Plain {
+                    content: inlines,
+                    source_info: SourceInfo::default(),
+                })]),
+                Err(_) => Err(Error::runtime(
+                    "expected Block, list of Blocks, or compatible element",
+                )),
+            }
+        }
     }
 }
 
@@ -2651,5 +2810,302 @@ mod tests {
         let attr = (String::new(), vec![], attrs);
         let lua_attr = LuaAttr(attr);
         assert_eq!(lua_attr.attributes().get("key"), Some(&"value".to_string()));
+    }
+
+    // ========== split_string_to_inlines tests ==========
+
+    /// Helper to extract text representation from inlines for easier assertion
+    fn inlines_to_tags(inlines: &[Inline]) -> Vec<String> {
+        inlines
+            .iter()
+            .map(|i| match i {
+                Inline::Str(s) => format!("Str({})", s.text),
+                Inline::Space(_) => "Space".to_string(),
+                Inline::SoftBreak(_) => "SoftBreak".to_string(),
+                _ => format!("{:?}", i),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_split_string_empty() {
+        let result = split_string_to_inlines("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_split_string_single_word() {
+        let result = split_string_to_inlines("hello");
+        assert_eq!(inlines_to_tags(&result), vec!["Str(hello)"]);
+    }
+
+    #[test]
+    fn test_split_string_multi_word() {
+        let result = split_string_to_inlines("hello world");
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "Space", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_split_string_multiple_spaces_collapse() {
+        let result = split_string_to_inlines("hello   world");
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "Space", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_split_string_newline_becomes_softbreak() {
+        let result = split_string_to_inlines("hello\nworld");
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "SoftBreak", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_split_string_mixed_space_newline_becomes_softbreak() {
+        let result = split_string_to_inlines("hello \n world");
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "SoftBreak", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_split_string_tab_is_space() {
+        let result = split_string_to_inlines("hello\tworld");
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "Space", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_split_string_leading_trailing_space() {
+        let result = split_string_to_inlines(" hello ");
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Space", "Str(hello)", "Space"]
+        );
+    }
+
+    #[test]
+    fn test_split_string_carriage_return() {
+        let result = split_string_to_inlines("hello\r\nworld");
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "SoftBreak", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_split_string_only_spaces() {
+        let result = split_string_to_inlines("   ");
+        assert_eq!(inlines_to_tags(&result), vec!["Space"]);
+    }
+
+    #[test]
+    fn test_split_string_only_newline() {
+        let result = split_string_to_inlines("\n");
+        assert_eq!(inlines_to_tags(&result), vec!["SoftBreak"]);
+    }
+
+    // ========== peek_inlines_fuzzy tests ==========
+
+    #[test]
+    fn test_peek_inlines_fuzzy_string_word_split() {
+        let lua = Lua::new();
+        let val = Value::String(lua.create_string("hello world").unwrap());
+        let result = peek_inlines_fuzzy(&lua, val).unwrap();
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "Space", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_peek_inlines_fuzzy_table_of_inlines() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table
+            .set(
+                1,
+                lua.create_userdata(LuaInline(Inline::Str(Str {
+                    text: "a".into(),
+                    source_info: si(),
+                })))
+                .unwrap(),
+            )
+            .unwrap();
+        table
+            .set(
+                2,
+                lua.create_userdata(LuaInline(Inline::Space(Space { source_info: si() })))
+                    .unwrap(),
+            )
+            .unwrap();
+        let result = peek_inlines_fuzzy(&lua, Value::Table(table)).unwrap();
+        assert_eq!(inlines_to_tags(&result), vec!["Str(a)", "Space"]);
+    }
+
+    #[test]
+    fn test_peek_inlines_fuzzy_table_with_mixed_strings() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.set(1, lua.create_string("hello").unwrap()).unwrap();
+        table
+            .set(
+                2,
+                lua.create_userdata(LuaInline(Inline::Space(Space { source_info: si() })))
+                    .unwrap(),
+            )
+            .unwrap();
+        table.set(3, lua.create_string("world").unwrap()).unwrap();
+        let result = peek_inlines_fuzzy(&lua, Value::Table(table)).unwrap();
+        assert_eq!(
+            inlines_to_tags(&result),
+            vec!["Str(hello)", "Space", "Str(world)"]
+        );
+    }
+
+    #[test]
+    fn test_peek_inlines_fuzzy_single_userdata() {
+        let lua = Lua::new();
+        let ud = lua
+            .create_userdata(LuaInline(Inline::Str(Str {
+                text: "solo".into(),
+                source_info: si(),
+            })))
+            .unwrap();
+        let result = peek_inlines_fuzzy(&lua, Value::UserData(ud)).unwrap();
+        assert_eq!(inlines_to_tags(&result), vec!["Str(solo)"]);
+    }
+
+    #[test]
+    fn test_peek_inlines_fuzzy_error_on_number() {
+        let lua = Lua::new();
+        let result = peek_inlines_fuzzy(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_peek_inline_fuzzy_string_no_word_split() {
+        let lua = Lua::new();
+        let val = Value::String(lua.create_string("hello world").unwrap());
+        let result = peek_inline_fuzzy(&lua, val).unwrap();
+        match result {
+            Inline::Str(s) => assert_eq!(s.text, "hello world"),
+            _ => panic!("expected Str, got {:?}", result),
+        }
+    }
+
+    // ========== peek_blocks_fuzzy tests ==========
+
+    #[test]
+    fn test_peek_blocks_fuzzy_table_of_blocks() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table
+            .set(
+                1,
+                lua.create_userdata(LuaBlock(Block::HorizontalRule(HorizontalRule {
+                    source_info: si(),
+                })))
+                .unwrap(),
+            )
+            .unwrap();
+        let result = peek_blocks_fuzzy(&lua, Value::Table(table)).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::HorizontalRule(_)));
+    }
+
+    #[test]
+    fn test_peek_blocks_fuzzy_single_block() {
+        let lua = Lua::new();
+        let ud = lua
+            .create_userdata(LuaBlock(Block::HorizontalRule(HorizontalRule {
+                source_info: si(),
+            })))
+            .unwrap();
+        let result = peek_blocks_fuzzy(&lua, Value::UserData(ud)).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::HorizontalRule(_)));
+    }
+
+    #[test]
+    fn test_peek_blocks_fuzzy_string_becomes_plain() {
+        let lua = Lua::new();
+        let val = Value::String(lua.create_string("hello").unwrap());
+        let result = peek_blocks_fuzzy(&lua, val).unwrap();
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::Plain(p) => {
+                assert_eq!(inlines_to_tags(&p.content), vec!["Str(hello)"]);
+            }
+            _ => panic!("expected Plain, got {:?}", result[0]),
+        }
+    }
+
+    #[test]
+    fn test_peek_blocks_fuzzy_table_of_inlines_becomes_multiple_plains() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table
+            .set(
+                1,
+                lua.create_userdata(LuaInline(Inline::Str(Str {
+                    text: "x".into(),
+                    source_info: si(),
+                })))
+                .unwrap(),
+            )
+            .unwrap();
+        table
+            .set(
+                2,
+                lua.create_userdata(LuaInline(Inline::Str(Str {
+                    text: "y".into(),
+                    source_info: si(),
+                })))
+                .unwrap(),
+            )
+            .unwrap();
+        let result = peek_blocks_fuzzy(&lua, Value::Table(table)).unwrap();
+        assert_eq!(result.len(), 2);
+        match &result[0] {
+            Block::Plain(p) => assert_eq!(inlines_to_tags(&p.content), vec!["Str(x)"]),
+            _ => panic!("expected Plain"),
+        }
+        match &result[1] {
+            Block::Plain(p) => assert_eq!(inlines_to_tags(&p.content), vec!["Str(y)"]),
+            _ => panic!("expected Plain"),
+        }
+    }
+
+    #[test]
+    fn test_peek_blocks_fuzzy_error_on_number() {
+        let lua = Lua::new();
+        let result = peek_blocks_fuzzy(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_peek_block_fuzzy_string_becomes_plain_with_word_split() {
+        let lua = Lua::new();
+        let val = Value::String(lua.create_string("hello world").unwrap());
+        let result = peek_block_fuzzy(&lua, val).unwrap();
+        match result {
+            Block::Plain(p) => {
+                assert_eq!(
+                    inlines_to_tags(&p.content),
+                    vec!["Str(hello)", "Space", "Str(world)"]
+                );
+            }
+            _ => panic!("expected Plain, got {:?}", result),
+        }
     }
 }
