@@ -700,6 +700,10 @@ impl SystemRuntime for WasmRuntime {
         ))
     }
 
+    fn unix_timestamp(&self) -> RuntimeResult<u64> {
+        Ok((js_sys::Date::now() / 1000.0) as u64)
+    }
+
     fn xdg_dir(&self, _kind: XdgDirKind, _subpath: Option<&Path>) -> RuntimeResult<PathBuf> {
         Err(RuntimeError::NotSupported(
             "XDG directories are not available in browser environment".to_string(),

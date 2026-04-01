@@ -440,6 +440,19 @@ pub trait SystemRuntime: Send + Sync {
     /// Corresponds to: `pandoc.system.cputime`
     fn cpu_time(&self) -> RuntimeResult<u64>;
 
+    /// Current wall-clock time as Unix timestamp (seconds since epoch).
+    ///
+    /// Used by the synthetic `os.time()` Lua function. Default implementation
+    /// uses `std::time::SystemTime`. WASM overrides with `js_sys::Date::now()`.
+    fn unix_timestamp(&self) -> RuntimeResult<u64> {
+        use std::time::UNIX_EPOCH;
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| RuntimeError::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?
+            .as_secs();
+        Ok(secs)
+    }
+
     /// XDG base directory lookup.
     ///
     /// Corresponds to: `pandoc.system.xdg`

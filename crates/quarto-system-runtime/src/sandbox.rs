@@ -283,6 +283,10 @@ impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
         self.inner.cpu_time()
     }
 
+    fn unix_timestamp(&self) -> RuntimeResult<u64> {
+        self.inner.unix_timestamp()
+    }
+
     fn xdg_dir(&self, kind: XdgDirKind, subpath: Option<&Path>) -> RuntimeResult<PathBuf> {
         self.inner.xdg_dir(kind, subpath)
     }

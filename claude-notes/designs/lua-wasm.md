@@ -211,6 +211,37 @@ string functions. For an experiment, hand-writing them avoids dependency
 management. For production, well-tested crate implementations would be better
 for the more complex functions (especially `strtod`).
 
+#### Real implementations (correct behavior)
+
+| Function(s) | Header | Notes |
+|---|---|---|
+| `malloc`, `calloc`, `realloc`, `free` | `stdlib.h` | Full Rust allocator delegation; stores `Layout` before the data pointer for correct deallocation |
+| `memcpy`, `memmove`, `memset`, `memcmp` | `string.h` | Thin wrappers around `std::ptr::copy*` / slice — correct |
+| `strlen`, `strcmp`, `strncmp`, `strchr`, `strcpy`, `strpbrk`, `strspn`, `strcoll`, `memchr` | `string.h` | Hand-rolled but semantically correct; `strcoll` falls back to `strcmp` (no locale needed in WASM) |
+| `strtod` | `stdlib.h` | Full implementation: decimal, hex floats (`0x…p…`), `inf`/`infinity`/`nan`, exponents |
+| `isdigit`, `isalpha`, `isalnum`, `isspace`, `isupper`, `islower`, `iscntrl`, `ispunct`, `isgraph`, `isxdigit`, `toupper`, `tolower`, `isprint` | `ctype.h` | ASCII-range only — correct for Lua's purposes |
+| `iswspace`, `iswalnum`, `iswdigit`, `iswalpha`, `towlower` | `wctype.h` | Backed by Rust's `char` Unicode methods — actually more correct than C's locale-dependent versions |
+| `frexp` | `math.h` | Correct IEEE bit-manipulation implementation |
+| `localeconv` | `locale.h` | Returns a stub `lconv` with `decimal_point = "."` — correct for WASM (no locale) |
+| `snprintf` | `stdio.h` | Handles `%d/%i`, `%u`, `%s`, `%c`, `%ld/%lu`, `%lld/%llu`, `%zu/%zd`, `%%` — sufficient for Lua/tree-sitter |
+| `abs` | `stdlib.h` | Trivial, correct |
+| `rust_lua_protected_call`, `rust_lua_throw` | (custom) | Replace `setjmp`/`longjmp` with `catch_unwind`/`panic!` — the architectural centerpiece |
+
+#### Dummy / stub implementations (intentionally non-functional)
+
+| Function(s) | Behavior | Reason |
+|---|---|---|
+| `fprintf`, `fputs`, `fputc`, `fdopen`, `fclose`, `fwrite` | `panic!("… not supported")` | Will crash if called; presence required for linking |
+| `fopen`, `freopen`, `fgets`, `fread` | Return `NULL` / `0` | Silent no-ops; file I/O goes through `SystemRuntime` instead |
+| `fflush`, `ferror` | Return `0` (success/no error) | Never called in practice |
+| `feof`, `getc` | Return `1` / `-1` (EOF) | Never called in practice |
+| `clock` | Returns `0` | `os.clock()` disabled anyway |
+| `time` | Returns `42` | Used only for `math.randomseed` default; constant seed is acceptable |
+| `vsnprintf` | Returns `0`, writes nothing | Lua uses `snprintf`; `vsnprintf` with `va_list` is not needed |
+| `strerror` | Returns `"unknown error"` | Error messages only; acceptable |
+| `__errno_location` | Returns pointer to a static `0` | Not thread-safe, but WASM is single-threaded |
+| `luaopen_io`, `luaopen_os`, `luaopen_package` | Return `0` | These libraries are explicitly excluded from `Lua::new_with()` |
+
 ### 4. `wasm-sysroot/` — Extended stub C headers
 
 Added headers that Lua's C source includes: `ctype.h`, `errno.h`, `float.h`,

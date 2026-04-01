@@ -6,6 +6,21 @@
 - When choosing hex colors for CSS test assertions (`ensureCssRegexMatches`), use **non-condensable** 6-digit hex values. CSS minifiers shorten `#RRGGBB` to `#RGB` when each pair is a repeated digit (e.g., `#cc5500` → `#c50`). Break at least one pair to prevent this: `#cc5501` instead of `#cc5500`.
 - Do not write tests that expect known-bad inputs. Instead, add a failing test, and create a beads task to handle the problem.
 
+## WASM-Restricted Stdlib for Lua Tests
+
+Shortcode and filter tests always run against the WASM-restricted Lua stdlib
+(`StdLib::COROUTINE | TABLE | STRING | UTF8 | MATH`), even on native CI. This is
+enforced via `#[cfg(any(target_arch = "wasm32", test))]` guards in `shortcode.rs`
+and `filter.rs`.
+
+This means tests cannot use Lua standard libraries that are unavailable in WASM
+(`package`, `debug`, or the real C-backed `io`/`os`). Instead, synthetic `io` and
+`os` tables are registered from Rust, backed by the `SystemRuntime` abstraction.
+
+If a test needs file I/O, use `io.open()` (which goes through the runtime) or
+`pandoc.system.read_file()` / `pandoc.system.write_file()`. These work identically
+in tests and WASM because they both go through the runtime abstraction.
+
 ## End-to-End Testing for WASM Features
 
 **CRITICAL**: When implementing features that involve the WASM module (`wasm-quarto-hub-client`), you MUST write and run end-to-end tests BEFORE claiming the feature works.

@@ -1,0 +1,5 @@
+title: Lipsum Shortcode Extension
+author: Test
+contributes:
+  shortcodes:
+    - lipsum.lua

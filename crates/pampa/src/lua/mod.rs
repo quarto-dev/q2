@@ -11,9 +11,11 @@
 mod constructors;
 mod diagnostics;
 mod filter;
+mod io_wasm;
 mod json;
 mod list;
 pub mod mediabag;
+mod os_wasm;
 mod path;
 mod quarto_api;
 mod readwrite;

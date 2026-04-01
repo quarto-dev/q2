@@ -69,14 +69,20 @@ impl LuaShortcodeEngine {
         target_format: &str,
         runtime: Arc<dyn SystemRuntime>,
     ) -> std::result::Result<Self, LuaShortcodeError> {
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", test))]
         let lua = {
             use mlua::StdLib;
             let libs =
                 StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH;
-            Lua::new_with(libs, mlua::LuaOptions::default()).map_err(LuaShortcodeError::LuaError)?
+            let lua = Lua::new_with(libs, mlua::LuaOptions::default())
+                .map_err(LuaShortcodeError::LuaError)?;
+            super::os_wasm::register_wasm_os(&lua, runtime.clone())
+                .map_err(LuaShortcodeError::LuaError)?;
+            super::io_wasm::register_wasm_io(&lua, runtime.clone())
+                .map_err(LuaShortcodeError::LuaError)?;
+            lua
         };
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(any(target_arch = "wasm32", test)))]
         let lua = Lua::new();
 
         let mediabag = create_shared_mediabag();
