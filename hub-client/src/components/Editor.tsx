@@ -11,8 +11,6 @@ import {
   deleteFile,
   renameFile,
   exportProjectAsZip,
-  getFileContent,
-  setImmediateFileChangeCallback,
   type EditorContentChange,
 } from '../services/automergeSync';
 import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
@@ -25,6 +23,7 @@ import { useIntelligence } from '../hooks/useIntelligence';
 import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
 import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { useReplayMode } from '../hooks/useReplayMode';
+import { useAutomergeSync } from '../hooks/useAutomergeSync';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import FileSidebar from './FileSidebar';
@@ -141,9 +140,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Track current file path in a ref for Monaco providers (they need stable callbacks)
   const currentFilePathRef = useRef<string | null>(currentFile?.path ?? null);
 
-  // Flag to prevent local changes from echoing back during remote edits
-  const applyingRemoteRef = useRef(false);
-
   // Presence for collaborative cursors
   const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(currentFile?.path ?? null);
 
@@ -163,13 +159,21 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // re-renders — so it can guard handleEditorChange against stale closures.
   const { state: replayState, controls: replayControls, isActiveRef: replayActiveRef } = useReplayMode(currentFile?.path ?? null);
 
-  // Get content from fileContents map, or use default for new files
-  const getContent = useCallback((file: FileEntry | null): string => {
-    if (!file) return '';
-    return fileContents.get(file.path) ?? '';
-  }, [fileContents]);
-
-  const [content, setContent] = useState<string>(getContent(currentFile));
+  // Bidirectional Automerge ↔ Monaco sync
+  const {
+    content,
+    setContent,
+    applyingRemoteRef,
+    handleEditorChange,
+    handleContentRewrite,
+    onEditorMount: onSyncEditorMount,
+  } = useAutomergeSync({
+    currentFile,
+    fileContents,
+    onContentOperations,
+    replayActiveRef,
+    replayIsActive: replayState.isActive,
+  });
 
   // Keep current file path ref in sync for Monaco providers
   useEffect(() => {
@@ -428,91 +432,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setUnlocatedErrors(unlocatedDiagnostics);
   }, [diagnostics]);
 
-  // Synchronous Monaco sync: apply remote Automerge changes to Monaco
-  // immediately (within the same macrotask as the WebSocket message handler),
-  // preventing position mismatch when keystrokes interleave with async React
-  // state updates. Local changes are no-ops (Monaco already has the content).
-  useEffect(() => {
-    if (!currentFile) return;
-
-    const handleImmediateSync = (path: string, content: string) => {
-      if (path !== currentFile.path) return;
-      if (replayActiveRef.current) return;
-
-      const editor = editorRef.current;
-      const model = editor?.getModel();
-      if (!editor || !model) return;
-
-      const monacoContent = model.getValue();
-      if (monacoContent === content) return; // Local change — already in sync
-
-      const edits = diffToMonacoEdits(monacoContent, content);
-      if (edits.length > 0) {
-        applyingRemoteRef.current = true;
-        editor.executeEdits('remote-sync', edits);
-        applyingRemoteRef.current = false;
-      }
-      setContent(content);
-    };
-
-    setImmediateFileChangeCallback(handleImmediateSync);
-    return () => setImmediateFileChangeCallback(null);
-  }, [currentFile, replayState.isActive]);
-
-  // Sync Monaco editor with external Automerge state using diff-based edits.
-  //
-  // This approach computes the diff between Monaco's current content and
-  // Automerge's content, then applies minimal edits to preserve cursor position.
-  // This is more robust than patch-based synchronization because:
-  // 1. It doesn't depend on timing assumptions about when patches were computed
-  // 2. It handles any divergence between Monaco and Automerge correctly
-  // 3. Automerge's merged content is the authoritative source of truth
-  //
-  // Monaco is configured as uncontrolled (defaultValue instead of value), so
-  // setContent() only updates React state for preview rendering - it won't
-  // cause the wrapper to call setValue() and reset cursor position.
-  //
-  // Note: setState in effect is intentional - we're syncing with external state.
-  useEffect(() => {
-    if (!currentFile) return;
-
-    // During replay mode, the replay hook controls content — skip Automerge sync
-    if (replayState.isActive) return;
-
-    // Read directly from the Automerge handle to avoid stale closure data.
-    // fileContents triggers this effect, but the actual content is read live
-    // to prevent a race where Monaco has already been updated by user input
-    // but this effect still holds stale render-time content.
-    const automergeContent = getFileContent(currentFile.path);
-    if (automergeContent === null) return;
-
-    // Get Monaco's actual model content
-    const model = editorRef.current?.getModel();
-    const monacoContent = model?.getValue();
-
-    // If Monaco isn't ready yet, just sync React state for preview
-    if (monacoContent === undefined) {
-      setContent(automergeContent);
-      return;
-    }
-
-    // If Monaco content differs from Automerge, apply minimal edits
-    if (monacoContent !== automergeContent) {
-      const edits = diffToMonacoEdits(monacoContent, automergeContent);
-
-      if (edits.length > 0 && editorRef.current) {
-        // Mark that we're applying remote changes to prevent echo
-        applyingRemoteRef.current = true;
-        editorRef.current.executeEdits('remote-sync', edits);
-        applyingRemoteRef.current = false;
-      }
-    }
-
-    // Always update React state to keep preview in sync.
-    // Since Monaco is uncontrolled, this won't affect editor content or cursor.
-    setContent(automergeContent);
-  }, [currentFile, fileContents, replayState.isActive]);
-
   // Update currentFile when files list changes (e.g., on initial load)
   // Note: setState in effect is intentional - syncing with external file list
   useEffect(() => {
@@ -547,35 +466,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       }
     }
   }, [route, files, fileContents, currentFile]);
-
-  const handleEditorChange = (value: string | undefined, event: Monaco.editor.IModelContentChangedEvent) => {
-    // Skip changes during replay mode. Use the ref (always current) rather than
-    // the closure value (can be stale between setState and re-render).
-    if (replayActiveRef.current) return;
-    // Skip echo when applying remote changes
-    if (applyingRemoteRef.current) return;
-
-    if (value !== undefined && currentFile) {
-      setContent(value);
-      onContentOperations(currentFile.path, event.changes);
-    }
-  };
-
-  // Route AST rewrites through Monaco → onChange → splice path.
-  // Uses diffToMonacoEdits to compute minimal edits, so concurrent remote
-  // edits in unchanged regions merge cleanly via CRDT. Also preserves undo.
-  const handleContentRewrite = useCallback((newContent: string) => {
-    if (!editorRef.current || !currentFile) return;
-    const model = editorRef.current.getModel();
-    if (!model) return;
-
-    const oldContent = model.getValue();
-    const edits = diffToMonacoEdits(oldContent, newContent);
-    if (edits.length > 0) {
-      editorRef.current.executeEdits('ast-rewrite', edits);
-    }
-    // onChange fires synchronously → handleEditorChange → setContent + onContentOperations
-  }, [currentFile]);
 
   // Configure Monaco before mount (for TypeScript diagnostics)
   const handleBeforeMount = (monaco: typeof Monaco) => {
@@ -619,6 +509,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    onSyncEditorMount(editor);
     onPresenceEditorMount(editor);
 
     // Register intelligence providers (DocumentSymbolProvider, FoldingRangeProvider)

@@ -41,9 +41,9 @@ let onConnectionChange: ConnectionHandler | null = null;
 let onError: ErrorHandler | null = null;
 
 // Synchronous callback that fires from within onFileChanged, BEFORE the React
-// state update path. Used by Editor.tsx to apply remote diffs to Monaco
-// immediately, preventing position mismatch when keystrokes interleave with
-// async React state updates.
+// state update path. Used by useAutomergeSync to apply remote diffs to Monaco
+// immediately (real-time remote edit path), preventing position mismatch when
+// keystrokes interleave with async React state updates.
 type ImmediateFileChangeCallback = (path: string, content: string) => void;
 let immediateFileChangeCallback: ImmediateFileChangeCallback | null = null;
 
