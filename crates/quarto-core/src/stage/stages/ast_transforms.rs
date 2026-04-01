@@ -153,14 +153,16 @@ impl PipelineStage for AstTransformsStage {
         let mut render_ctx =
             RenderContext::new(&ctx.project, &ctx.document, &ctx.format, &binaries);
 
-        // Transfer artifacts to the RenderContext
+        // Transfer mutable state to the RenderContext
         render_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
+        render_ctx.includes = std::mem::take(&mut ctx.includes);
 
         // Execute the transform pipeline
         let result = pipeline.execute(&mut doc.ast, &mut render_ctx);
 
-        // Transfer artifacts back to StageContext
+        // Transfer mutable state back to StageContext
         ctx.artifacts = render_ctx.artifacts;
+        ctx.includes = render_ctx.includes;
 
         // Transfer any diagnostics collected during transforms
         ctx.diagnostics.extend(render_ctx.diagnostics);

@@ -30,3 +30,5 @@ crates/wasm-quarto-hub-client/pkg/
 
 # Git worktrees
 .worktrees/
+
+/.luarc.json

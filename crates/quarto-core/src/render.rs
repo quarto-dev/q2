@@ -21,6 +21,7 @@ use quarto_system_runtime::SystemRuntime;
 use crate::artifact::ArtifactStore;
 use crate::format::Format;
 use crate::project::{DocumentInfo, ProjectContext};
+use crate::stage::PandocIncludes;
 
 /// Binary dependencies available for rendering
 #[derive(Debug, Clone, Default)]
@@ -95,6 +96,12 @@ pub struct RenderContext<'a> {
     /// Render options
     pub options: RenderOptions,
 
+    /// Text includes to inject into the output document.
+    ///
+    /// Populated by shortcode transforms via `quarto.doc.include_text()`.
+    /// Bridged to/from `StageContext` by `AstTransformsStage`.
+    pub includes: PandocIncludes,
+
     /// Diagnostics (warnings, errors, info) collected during transforms
     pub diagnostics: Vec<DiagnosticMessage>,
 }
@@ -130,6 +137,7 @@ impl<'a> RenderContext<'a> {
             format,
             binaries,
             options: RenderOptions::default(),
+            includes: PandocIncludes::default(),
             diagnostics: Vec::new(),
         }
     }

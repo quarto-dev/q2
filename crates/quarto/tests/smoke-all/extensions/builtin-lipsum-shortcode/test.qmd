@@ -1,0 +1,13 @@
+---
+title: Built-in Lipsum Extension Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Lorem ipsum dolor sit amet"]
+        - ["Nunc ac dignissim magna"]
+---
+
+{{< lipsum 1 >}}

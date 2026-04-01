@@ -51,18 +51,43 @@ fn get_runtime_arc() -> &'static Arc<WasmRuntime> {
     })
 }
 
-/// Populate the VFS with embedded Bootstrap SCSS resources.
+/// Populate the VFS with embedded resources.
 ///
-/// This makes Bootstrap 5.3.1 SCSS files available in the VFS under
-/// `/__quarto_resources__/bootstrap/scss/` for SASS compilation.
+/// This makes the following available in the VFS:
+/// - Bootstrap 5.3.1 SCSS files under `/__quarto_resources__/bootstrap/scss/`
+/// - Built-in extensions under `/__quarto_resources__/extensions/`
 fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
+    // Bootstrap SCSS resources
     let prefix = format!("{}/bootstrap/scss", RESOURCE_PATH_PREFIX);
-
     for file_path in BOOTSTRAP_RESOURCES.file_paths() {
         let vfs_path = format!("{}/{}", prefix, file_path);
         if let Some(content) = BOOTSTRAP_RESOURCES.read(Path::new(file_path)) {
             runtime.add_file(Path::new(&vfs_path), content.to_vec());
         }
+    }
+
+    // Built-in extensions
+    populate_builtin_extensions(runtime);
+}
+
+/// Populate the VFS with built-in extensions from the embedded directory.
+fn populate_builtin_extensions(runtime: &WasmRuntime) {
+    use include_dir::{Dir, include_dir};
+
+    static EXTENSIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../resources/extensions");
+
+    let prefix = format!("{}/extensions", RESOURCE_PATH_PREFIX);
+    populate_dir_recursive(runtime, &EXTENSIONS_DIR, &prefix);
+}
+
+/// Recursively add all files from an embedded directory to the VFS.
+fn populate_dir_recursive(runtime: &WasmRuntime, dir: &include_dir::Dir<'_>, prefix: &str) {
+    for file in dir.files() {
+        let vfs_path = format!("{}/{}", prefix, file.path().display());
+        runtime.add_file(Path::new(&vfs_path), file.contents().to_vec());
+    }
+    for subdir in dir.dirs() {
+        populate_dir_recursive(runtime, subdir, prefix);
     }
 }
 

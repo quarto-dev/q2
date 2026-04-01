@@ -23,6 +23,27 @@ use quarto_system_runtime::SystemRuntime;
 use crate::pandoc::Pandoc;
 use crate::pandoc::ast_context::ASTContext;
 
+#[cfg(feature = "lua-filter")]
+use crate::lua::{HtmlDependency, TextInclude};
+
+/// Output from applying filters to a document.
+///
+/// Contains the filtered document, context, diagnostics, and any HTML dependencies
+/// or text includes registered via the `quarto.doc` API during Lua filter execution.
+pub struct FilterOutput {
+    pub pandoc: Pandoc,
+    pub context: ASTContext,
+    pub diagnostics: Vec<DiagnosticMessage>,
+    /// HTML dependencies (CSS/JS files) registered via `quarto.doc.add_html_dependency()`.
+    /// Only populated by Lua filters.
+    #[cfg(feature = "lua-filter")]
+    pub html_dependencies: Vec<HtmlDependency>,
+    /// Text includes registered via `quarto.doc.include_text()`.
+    /// Only populated by Lua filters.
+    #[cfg(feature = "lua-filter")]
+    pub text_includes: Vec<TextInclude>,
+}
+
 /// A filter specification parsed from a command-line argument.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterSpec {
@@ -177,31 +198,46 @@ impl std::error::Error for CiteprocFilterError {}
 
 /// Apply a filter to a Pandoc document.
 ///
-/// Returns the filtered document, updated context, and any diagnostics.
+/// Returns the filtered document, updated context, diagnostics, and any
+/// HTML dependencies or text includes (from Lua filters only).
 pub fn apply_filter(
     pandoc: Pandoc,
     context: ASTContext,
     filter: &FilterSpec,
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
-) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), FilterError> {
+) -> Result<FilterOutput, FilterError> {
     match filter {
         FilterSpec::Citeproc => {
             let (new_pandoc, new_context, diagnostics) =
                 crate::citeproc_filter::apply_citeproc_filter(pandoc, context, target_format)?;
-            Ok((new_pandoc, new_context, diagnostics))
+            Ok(FilterOutput {
+                pandoc: new_pandoc,
+                context: new_context,
+                diagnostics,
+                #[cfg(feature = "lua-filter")]
+                html_dependencies: Vec::new(),
+                #[cfg(feature = "lua-filter")]
+                text_includes: Vec::new(),
+            })
         }
 
         #[cfg(feature = "lua-filter")]
         FilterSpec::Lua(path) => {
-            let (new_pandoc, new_context, diagnostics) = crate::lua::apply_lua_filters(
+            let lua_output = crate::lua::apply_lua_filters(
                 pandoc,
                 context,
                 &[path.clone()],
                 target_format,
                 runtime,
             )?;
-            Ok((new_pandoc, new_context, diagnostics))
+            Ok(FilterOutput {
+                pandoc: lua_output.pandoc,
+                context: lua_output.context,
+                diagnostics: lua_output.diagnostics,
+                html_dependencies: lua_output.html_dependencies,
+                text_includes: lua_output.text_includes,
+            })
         }
 
         #[cfg(not(feature = "lua-filter"))]
@@ -214,7 +250,15 @@ pub fn apply_filter(
         FilterSpec::Json(path) => {
             let (new_pandoc, new_context, diagnostics) =
                 crate::json_filter::apply_json_filter(&pandoc, &context, path, target_format)?;
-            Ok((new_pandoc, new_context, diagnostics))
+            Ok(FilterOutput {
+                pandoc: new_pandoc,
+                context: new_context,
+                diagnostics,
+                #[cfg(feature = "lua-filter")]
+                html_dependencies: Vec::new(),
+                #[cfg(feature = "lua-filter")]
+                text_includes: Vec::new(),
+            })
         }
 
         #[cfg(not(feature = "json-filter"))]
@@ -228,32 +272,49 @@ pub fn apply_filter(
 /// Apply multiple filters in sequence.
 ///
 /// Filters are applied in the order provided. The output of each filter
-/// becomes the input to the next.
+/// becomes the input to the next. Diagnostics, HTML dependencies, and
+/// text includes are accumulated across all filter passes.
 pub fn apply_filters(
     pandoc: Pandoc,
     context: ASTContext,
     filters: &[FilterSpec],
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
-) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), FilterError> {
+) -> Result<FilterOutput, FilterError> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
     let mut all_diagnostics = Vec::new();
+    #[cfg(feature = "lua-filter")]
+    let mut all_html_dependencies = Vec::new();
+    #[cfg(feature = "lua-filter")]
+    let mut all_text_includes = Vec::new();
 
     for filter in filters {
-        let (new_pandoc, new_context, diagnostics) = apply_filter(
+        let output = apply_filter(
             current_pandoc,
             current_context,
             filter,
             target_format,
             runtime.clone(),
         )?;
-        current_pandoc = new_pandoc;
-        current_context = new_context;
-        all_diagnostics.extend(diagnostics);
+        current_pandoc = output.pandoc;
+        current_context = output.context;
+        all_diagnostics.extend(output.diagnostics);
+        #[cfg(feature = "lua-filter")]
+        all_html_dependencies.extend(output.html_dependencies);
+        #[cfg(feature = "lua-filter")]
+        all_text_includes.extend(output.text_includes);
     }
 
-    Ok((current_pandoc, current_context, all_diagnostics))
+    Ok(FilterOutput {
+        pandoc: current_pandoc,
+        context: current_context,
+        diagnostics: all_diagnostics,
+        #[cfg(feature = "lua-filter")]
+        html_dependencies: all_html_dependencies,
+        #[cfg(feature = "lua-filter")]
+        text_includes: all_text_includes,
+    })
 }
 
 #[cfg(test)]

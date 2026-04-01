@@ -12,20 +12,36 @@ use std::path::Path;
 use quarto_system_runtime::{PathKind, SystemRuntime};
 use tracing::warn;
 
-use super::read::read_extension;
+use super::read::{read_extension, read_extension_with_org};
 use super::types::Extension;
 
 /// Discover all extensions available for a document.
 ///
 /// Searches `_extensions/` directories in the project hierarchy,
 /// walking from the input file's directory up to the project root.
+///
+/// When `builtin_extensions_dir` is provided, it is scanned **first**
+/// (lowest priority). User extensions discovered later appear later in
+/// the vec, and `find_extension()` returns the last match — so user
+/// extensions override built-ins with the same name.
 pub fn discover_extensions(
     input: &Path,
     project_dir: Option<&Path>,
+    builtin_extensions_dir: Option<&Path>,
     runtime: &dyn SystemRuntime,
 ) -> Vec<Extension> {
     let mut extensions = Vec::new();
     let mut dirs_to_search = Vec::new();
+
+    // Built-in extensions first (lowest priority)
+    if let Some(builtin_dir) = builtin_extensions_dir {
+        if runtime
+            .path_exists(builtin_dir, Some(PathKind::Directory))
+            .unwrap_or(false)
+        {
+            scan_extensions_dir(builtin_dir, runtime, &mut extensions);
+        }
+    }
 
     let start_dir = input.parent().unwrap_or(input);
 
@@ -57,17 +73,26 @@ pub fn discover_extensions(
             continue;
         }
 
-        let entries = match runtime.dir_list(ext_dir) {
-            Ok(entries) => entries,
-            Err(_) => continue,
-        };
-
-        for entry in entries {
-            scan_extension_entry(&entry, runtime, &mut extensions);
-        }
+        scan_extensions_dir(ext_dir, runtime, &mut extensions);
     }
 
     extensions
+}
+
+/// Scan all entries in an extensions directory.
+fn scan_extensions_dir(
+    ext_dir: &Path,
+    runtime: &dyn SystemRuntime,
+    extensions: &mut Vec<Extension>,
+) {
+    let entries = match runtime.dir_list(ext_dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries {
+        scan_extension_entry(&entry, runtime, extensions);
+    }
 }
 
 /// Scan a single entry in an `_extensions/` directory.
@@ -94,6 +119,8 @@ fn scan_extension_entry(
     }
 
     // Check subdirectories (organized: org/name/)
+    // The entry directory name is the organization.
+    let org_name = entry.file_name().map(|n| n.to_string_lossy().to_string());
     let sub_entries = match runtime.dir_list(entry) {
         Ok(entries) => entries,
         Err(_) => return,
@@ -105,7 +132,7 @@ fn scan_extension_entry(
             .path_exists(&sub_ext_file, Some(PathKind::File))
             .unwrap_or(false)
         {
-            match read_extension(&sub_ext_file, runtime) {
+            match read_extension_with_org(&sub_ext_file, org_name.as_deref(), runtime) {
                 Ok(ext) => extensions.push(ext),
                 Err(e) => warn!("Failed to read extension {}: {}", sub_ext_file.display(), e),
             }
@@ -115,15 +142,19 @@ fn scan_extension_entry(
 
 /// Find a specific extension by name among discovered extensions.
 ///
+/// Returns the **last** match so that user extensions (appended after
+/// built-ins) take priority. This matches TS Quarto's "later overwrites
+/// earlier" semantics in `loadExtensions()`.
+///
 /// If `name` contains `/`, split into `org/name` and match both.
 /// Otherwise, match by name only (any organization).
 pub fn find_extension<'a>(name: &str, extensions: &'a [Extension]) -> Option<&'a Extension> {
     if let Some((org, ext_name)) = name.split_once('/') {
         extensions
             .iter()
-            .find(|e| e.id.name == ext_name && e.id.organization.as_deref() == Some(org))
+            .rfind(|e| e.id.name == ext_name && e.id.organization.as_deref() == Some(org))
     } else {
-        extensions.iter().find(|e| e.id.name == name)
+        extensions.iter().rfind(|e| e.id.name == name)
     }
 }
 
@@ -206,7 +237,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, &runtime);
+        let extensions = discover_extensions(&input, None, None, &runtime);
 
         assert_eq!(extensions.len(), 1);
         assert_eq!(extensions[0].id.name, "test-ext");
@@ -229,7 +260,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, &runtime);
+        let extensions = discover_extensions(&input, None, None, &runtime);
 
         assert_eq!(extensions.len(), 1);
         assert_eq!(extensions[0].id.name, "ext");
@@ -271,7 +302,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = sub_dir.join("test.qmd");
-        let extensions = discover_extensions(&input, Some(project_dir), &runtime);
+        let extensions = discover_extensions(&input, Some(project_dir), None, &runtime);
 
         assert_eq!(extensions.len(), 2);
         // Project-level should come first (lower priority)
@@ -286,7 +317,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, &runtime);
+        let extensions = discover_extensions(&input, None, None, &runtime);
 
         assert!(extensions.is_empty());
     }
@@ -297,7 +328,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, &runtime);
+        let extensions = discover_extensions(&input, None, None, &runtime);
 
         assert!(extensions.is_empty());
     }
@@ -331,7 +362,7 @@ contributes:
 
         let runtime = make_runtime();
         let input = tmp.path().join("test.qmd");
-        let extensions = discover_extensions(&input, None, &runtime);
+        let extensions = discover_extensions(&input, None, None, &runtime);
 
         // Only the valid extension should be discovered
         assert_eq!(extensions.len(), 1);
@@ -373,6 +404,183 @@ contributes:
         assert!(find_extension("quarto-journals/acm", &extensions).is_some());
         assert!(find_extension("acm", &extensions).is_some()); // name-only match
         assert!(find_extension("other-org/acm", &extensions).is_none());
+    }
+
+    #[test]
+    fn test_find_extension_returns_last_match() {
+        // Built-in (first in vec) should be overridden by user (last in vec)
+        let builtin = Extension {
+            id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
+            title: "Lipsum Built-in".to_string(),
+            author: "Built-in Author".to_string(),
+            version: None,
+            quarto_required: None,
+            path: PathBuf::from("/builtin/quarto/lipsum"),
+            contributes: Default::default(),
+        };
+        let user = Extension {
+            id: super::super::types::ExtensionId::new("lipsum"),
+            title: "Lipsum User".to_string(),
+            author: "User Author".to_string(),
+            version: None,
+            quarto_required: None,
+            path: PathBuf::from("/user/lipsum"),
+            contributes: Default::default(),
+        };
+        let extensions = vec![builtin, user];
+
+        // Name-only lookup: should find user (last match)
+        let found = find_extension("lipsum", &extensions).unwrap();
+        assert_eq!(found.title, "Lipsum User");
+    }
+
+    #[test]
+    fn test_find_extension_org_name_returns_last_match() {
+        let builtin = Extension {
+            id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
+            title: "Lipsum Built-in".to_string(),
+            author: "Built-in Author".to_string(),
+            version: None,
+            quarto_required: None,
+            path: PathBuf::from("/builtin/quarto/lipsum"),
+            contributes: Default::default(),
+        };
+        let user = Extension {
+            id: super::super::types::ExtensionId::with_organization("lipsum", "quarto"),
+            title: "Lipsum User Override".to_string(),
+            author: "User Author".to_string(),
+            version: None,
+            quarto_required: None,
+            path: PathBuf::from("/user/quarto/lipsum"),
+            contributes: Default::default(),
+        };
+        let extensions = vec![builtin, user];
+
+        // Org/name lookup: should find user (last match)
+        let found = find_extension("quarto/lipsum", &extensions).unwrap();
+        assert_eq!(found.title, "Lipsum User Override");
+    }
+
+    // === Built-in extension discovery tests ===
+
+    #[test]
+    fn test_discover_builtin_extensions() {
+        let tmp = TempDir::new().unwrap();
+        let builtin_dir = tmp.path().join("builtin");
+        // Create org/name structure matching resources/extensions/
+        write_extension(
+            &builtin_dir.join("quarto/lipsum"),
+            r#"
+title: Lipsum
+author: Charles Teague
+contributes:
+  shortcodes:
+    - lipsum.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let input_dir = tmp.path().join("project");
+        fs::create_dir_all(&input_dir).unwrap();
+        let input = input_dir.join("test.qmd");
+
+        let extensions = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
+
+        assert_eq!(extensions.len(), 1);
+        assert_eq!(extensions[0].id.name, "lipsum");
+        assert_eq!(extensions[0].id.organization.as_deref(), Some("quarto"));
+    }
+
+    #[test]
+    fn test_user_extension_overrides_builtin() {
+        let tmp = TempDir::new().unwrap();
+
+        // Built-in extension
+        let builtin_dir = tmp.path().join("builtin");
+        write_extension(
+            &builtin_dir.join("quarto/lipsum"),
+            r#"
+title: Lipsum Built-in
+author: Charles Teague
+contributes:
+  shortcodes:
+    - lipsum.lua
+"#,
+        );
+
+        // User extension (unorganized, same name)
+        let project_dir = tmp.path().join("project");
+        write_extension(
+            &project_dir.join("_extensions/lipsum"),
+            r#"
+title: Lipsum User
+author: User
+contributes:
+  shortcodes:
+    - lipsum.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let input = project_dir.join("test.qmd");
+
+        let extensions = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
+
+        // Both should be discovered
+        assert_eq!(extensions.len(), 2);
+        // Built-in first, user second
+        assert_eq!(extensions[0].title, "Lipsum Built-in");
+        assert_eq!(extensions[1].title, "Lipsum User");
+
+        // find_extension should return user (last match)
+        let found = find_extension("lipsum", &extensions).unwrap();
+        assert_eq!(found.title, "Lipsum User");
+    }
+
+    #[test]
+    fn test_user_org_extension_overrides_builtin() {
+        let tmp = TempDir::new().unwrap();
+
+        // Built-in extension
+        let builtin_dir = tmp.path().join("builtin");
+        write_extension(
+            &builtin_dir.join("quarto/lipsum"),
+            r#"
+title: Lipsum Built-in
+author: Charles Teague
+contributes:
+  shortcodes:
+    - lipsum.lua
+"#,
+        );
+
+        // User extension with org (quarto/lipsum)
+        let project_dir = tmp.path().join("project");
+        write_extension(
+            &project_dir.join("_extensions/quarto/lipsum"),
+            r#"
+title: Lipsum User Org
+author: User
+contributes:
+  shortcodes:
+    - lipsum.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let input = project_dir.join("test.qmd");
+
+        let extensions = discover_extensions(&input, None, Some(&builtin_dir), &runtime);
+
+        assert_eq!(extensions.len(), 2);
+
+        // find_extension with org/name should return user (last match)
+        let found = find_extension("quarto/lipsum", &extensions).unwrap();
+        assert_eq!(found.title, "Lipsum User Org");
+
+        // find_extension with bare name should also return user
+        let found = find_extension("lipsum", &extensions).unwrap();
+        assert_eq!(found.title, "Lipsum User Org");
     }
 
     // === Format descriptor tests ===

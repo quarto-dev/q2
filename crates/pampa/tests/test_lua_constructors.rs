@@ -42,7 +42,8 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
         "html",
         runtime,
     );
-    let (pandoc, context, _diagnostics) = result.expect("Filter failed");
+    let output = result.expect("Filter failed");
+    let (pandoc, context) = (output.pandoc, output.context);
     (pandoc, context)
 }
 

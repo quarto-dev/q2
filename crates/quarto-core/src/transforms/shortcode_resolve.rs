@@ -557,6 +557,50 @@ impl AstTransform for ShortcodeResolveTransform {
             &mut lua_engine,
         );
 
+        // Extract Lua-registered data before the engine is dropped
+        if let Some(engine) = lua_engine.as_mut() {
+            // Extract diagnostics from quarto.warn()/quarto.error()
+            match engine.extract_diagnostics() {
+                Ok(lua_diags) => diagnostics.extend(lua_diags),
+                Err(e) => diagnostics.push(
+                    DiagnosticMessageBuilder::warning("Lua extraction error")
+                        .problem(format!("Failed to extract Lua diagnostics: {}", e))
+                        .build(),
+                ),
+            }
+
+            // Extract HTML dependencies and store as artifacts
+            match engine.extract_html_dependencies() {
+                Ok(deps) => {
+                    if let Some(ref runtime) = self.runtime {
+                        crate::dependency::store_html_dependencies(
+                            deps,
+                            &mut ctx.artifacts,
+                            runtime.as_ref(),
+                            &mut diagnostics,
+                        );
+                    }
+                }
+                Err(e) => diagnostics.push(
+                    DiagnosticMessageBuilder::warning("Lua extraction error")
+                        .problem(format!("Failed to extract HTML dependencies: {}", e))
+                        .build(),
+                ),
+            }
+
+            // Extract text includes and push onto context
+            match engine.extract_text_includes() {
+                Ok(includes) => {
+                    crate::dependency::push_text_includes(includes, &mut ctx.includes);
+                }
+                Err(e) => diagnostics.push(
+                    DiagnosticMessageBuilder::warning("Lua extraction error")
+                        .problem(format!("Failed to extract text includes: {}", e))
+                        .build(),
+                ),
+            }
+        }
+
         // Add any diagnostics to the render context
         for diagnostic in diagnostics {
             ctx.add_diagnostic(diagnostic);

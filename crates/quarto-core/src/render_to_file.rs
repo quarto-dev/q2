@@ -233,6 +233,36 @@ pub fn render_document_to_file(
             ))
         })?;
 
+    // Write extension CSS/JS dependency artifacts (e.g., libs/kbd/kbd.css)
+    for (key, artifact) in ctx.artifacts.iter() {
+        if key == "css:default" {
+            continue;
+        }
+        if (key.starts_with("css:") || key.starts_with("js:"))
+            && let Some(path) = &artifact.path
+        {
+            let output_path = resource_paths.resource_dir.join(path);
+            if let Some(parent) = output_path.parent() {
+                runtime.dir_create(parent, true).map_err(|e| {
+                    QuartoError::other(format!(
+                        "Failed to create directory {}: {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
+            runtime
+                .file_write(&output_path, &artifact.content)
+                .map_err(|e| {
+                    QuartoError::other(format!(
+                        "Failed to write dependency file {}: {}",
+                        output_path.display(),
+                        e
+                    ))
+                })?;
+        }
+    }
+
     // Write output HTML
     runtime
         .file_write(&output_path, render_output.html.as_bytes())

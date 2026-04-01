@@ -9,6 +9,7 @@
  * `pandoc` and `quarto` globals).
  */
 
+use base64::prelude::*;
 use mlua::{Lua, MultiValue, Result, Table, Value};
 use std::path::{Component, Path, PathBuf};
 
@@ -17,10 +18,35 @@ use std::path::{Component, Path, PathBuf};
 pub fn register_quarto_api(lua: &Lua) -> Result<()> {
     let quarto: Table = lua.globals().get("quarto")?;
 
+    init_script_dir_stack(lua)?;
+    register_quarto_version(lua, &quarto)?;
+    register_quarto_base64(lua, &quarto)?;
     register_quarto_json(lua, &quarto)?;
     register_quarto_log(lua, &quarto)?;
     register_quarto_utils(lua, &quarto)?;
 
+    Ok(())
+}
+
+/// `quarto.version` — table {0, 1, 0} so extensions can do
+/// `table.concat(quarto.version, '.')` to get "0.1.0"
+fn register_quarto_version(lua: &Lua, quarto: &Table) -> Result<()> {
+    let version = lua.create_table()?;
+    version.set(1, 0)?;
+    version.set(2, 1)?;
+    version.set(3, 0)?;
+    quarto.set("version", version)?;
+    Ok(())
+}
+
+/// `quarto.base64` — base64 encoding
+fn register_quarto_base64(lua: &Lua, quarto: &Table) -> Result<()> {
+    let base64_table = lua.create_table()?;
+    base64_table.set(
+        "encode",
+        lua.create_function(|_, data: String| Ok(BASE64_STANDARD.encode(data.as_bytes())))?,
+    )?;
+    quarto.set("base64", base64_table)?;
     Ok(())
 }
 
@@ -143,11 +169,52 @@ fn stringify_table(lua: &Lua, table: &Table, depth: usize) -> Result<String> {
     Ok(format!("{{{}}}", parts.join(", ")))
 }
 
+// =========================================================================
+// Script-dir stack
+// =========================================================================
+
+/// Initialize the script-dir stack in the Lua state.
+/// Must be called during Lua state setup, before any script execution.
+pub fn init_script_dir_stack(lua: &Lua) -> Result<()> {
+    lua.globals()
+        .set("_quarto_script_dir_stack", lua.create_table()?)?;
+    Ok(())
+}
+
+/// Push a directory onto the script-dir stack.
+pub fn push_script_dir(lua: &Lua, dir: &str) -> Result<()> {
+    let stack: Table = lua.globals().get("_quarto_script_dir_stack")?;
+    let len = stack.raw_len();
+    stack.set(len + 1, dir)?;
+    Ok(())
+}
+
+/// Pop the top entry from the script-dir stack.
+pub fn pop_script_dir(lua: &Lua) -> Result<()> {
+    let stack: Table = lua.globals().get("_quarto_script_dir_stack")?;
+    let len = stack.raw_len();
+    if len > 0 {
+        stack.set(len, mlua::Value::Nil)?;
+    }
+    Ok(())
+}
+
+/// Get the current script directory (top of the stack), or empty string if empty.
+pub fn current_script_dir(lua: &Lua) -> Result<String> {
+    let stack: Table = lua.globals().get("_quarto_script_dir_stack")?;
+    let len = stack.raw_len();
+    if len > 0 {
+        Ok(stack.get::<String>(len).unwrap_or_default())
+    } else {
+        Ok(String::new())
+    }
+}
+
 /// `quarto.utils` — utility functions
 fn register_quarto_utils(lua: &Lua, quarto: &Table) -> Result<()> {
     let utils = lua.create_table()?;
 
-    // quarto.utils.resolve_path(path) — resolve relative to script dir
+    // quarto.utils.resolve_path(path) — resolve relative to script dir (stack top)
     utils.set(
         "resolve_path",
         lua.create_function(|lua, path: String| {
@@ -155,10 +222,7 @@ fn register_quarto_utils(lua: &Lua, quarto: &Table) -> Result<()> {
             if p.is_absolute() {
                 return Ok(path);
             }
-            let script_dir: String = lua
-                .globals()
-                .get::<String>("_quarto_script_dir")
-                .unwrap_or_default();
+            let script_dir = current_script_dir(lua)?;
             if script_dir.is_empty() {
                 return Ok(path);
             }
@@ -335,9 +399,7 @@ mod tests {
     #[test]
     fn test_quarto_utils_resolve_path_relative() {
         let lua = create_test_lua();
-        lua.globals()
-            .set("_quarto_script_dir", "/some/extension/dir")
-            .unwrap();
+        push_script_dir(&lua, "/some/extension/dir").unwrap();
         let result: String = lua
             .load(r#"return quarto.utils.resolve_path("data.json")"#)
             .eval()
@@ -348,7 +410,7 @@ mod tests {
     #[test]
     fn test_quarto_utils_resolve_path_relative_with_subdir() {
         let lua = create_test_lua();
-        lua.globals().set("_quarto_script_dir", "/ext/dir").unwrap();
+        push_script_dir(&lua, "/ext/dir").unwrap();
         let result: String = lua
             .load(r#"return quarto.utils.resolve_path("sub/data.json")"#)
             .eval()
@@ -370,9 +432,7 @@ mod tests {
     #[test]
     fn test_quarto_utils_resolve_path_with_dotdot() {
         let lua = create_test_lua();
-        lua.globals()
-            .set("_quarto_script_dir", "/some/extension/dir")
-            .unwrap();
+        push_script_dir(&lua, "/some/extension/dir").unwrap();
         let result: String = lua
             .load(r#"return quarto.utils.resolve_path("../shared/data.json")"#)
             .eval()
@@ -433,5 +493,108 @@ mod tests {
     #[test]
     fn test_normalize_path_relative_with_dotdot() {
         assert_eq!(normalize_path(Path::new("a/b/../c")), "a/c");
+    }
+
+    // =========================================================================
+    // quarto.version tests
+    // =========================================================================
+
+    #[test]
+    fn test_quarto_version_is_table() {
+        let lua = create_test_lua();
+        let result: String = lua.load(r#"return type(quarto.version)"#).eval().unwrap();
+        assert_eq!(result, "table");
+    }
+
+    #[test]
+    fn test_quarto_version_concat() {
+        let lua = create_test_lua();
+        let result: String = lua
+            .load(r#"return table.concat(quarto.version, '.')"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result, "0.1.0");
+    }
+
+    // =========================================================================
+    // quarto.base64 tests
+    // =========================================================================
+
+    #[test]
+    fn test_quarto_base64_encode_hello() {
+        let lua = create_test_lua();
+        let result: String = lua
+            .load(r#"return quarto.base64.encode("hello")"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result, "aGVsbG8=");
+    }
+
+    #[test]
+    fn test_quarto_base64_encode_empty() {
+        let lua = create_test_lua();
+        let result: String = lua
+            .load(r#"return quarto.base64.encode("")"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result, "");
+    }
+
+    // =========================================================================
+    // Script-dir stack tests
+    // =========================================================================
+
+    #[test]
+    fn test_script_dir_stack_push_pop() {
+        let lua = create_test_lua();
+        assert_eq!(current_script_dir(&lua).unwrap(), "");
+
+        push_script_dir(&lua, "/ext").unwrap();
+        assert_eq!(current_script_dir(&lua).unwrap(), "/ext");
+
+        push_script_dir(&lua, "/ext/helpers").unwrap();
+        assert_eq!(current_script_dir(&lua).unwrap(), "/ext/helpers");
+
+        pop_script_dir(&lua).unwrap();
+        assert_eq!(current_script_dir(&lua).unwrap(), "/ext");
+
+        pop_script_dir(&lua).unwrap();
+        assert_eq!(current_script_dir(&lua).unwrap(), "");
+    }
+
+    #[test]
+    fn test_script_dir_stack_resolve_path_uses_top() {
+        let lua = create_test_lua();
+
+        push_script_dir(&lua, "/ext").unwrap();
+        let result: String = lua
+            .load(r#"return quarto.utils.resolve_path("style.css")"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result, "/ext/style.css");
+
+        // Push nested dir — resolve_path should use the new top
+        push_script_dir(&lua, "/ext/helpers").unwrap();
+        let result: String = lua
+            .load(r#"return quarto.utils.resolve_path("style.css")"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result, "/ext/helpers/style.css");
+
+        // Pop — back to /ext
+        pop_script_dir(&lua).unwrap();
+        let result: String = lua
+            .load(r#"return quarto.utils.resolve_path("style.css")"#)
+            .eval()
+            .unwrap();
+        assert_eq!(result, "/ext/style.css");
+    }
+
+    #[test]
+    fn test_script_dir_stack_pop_on_empty_is_noop() {
+        let lua = create_test_lua();
+        // Should not error
+        pop_script_dir(&lua).unwrap();
+        assert_eq!(current_script_dir(&lua).unwrap(), "");
     }
 }

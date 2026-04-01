@@ -71,8 +71,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -125,8 +126,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -163,8 +165,9 @@ fn test_uppercase_filter() {
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -194,8 +197,9 @@ fn test_identity_filter() {
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     // Identity filter should preserve the document
     match &filtered.blocks[0] {
@@ -253,8 +257,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => {
@@ -302,8 +307,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => {
@@ -359,8 +365,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -433,8 +440,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Header(h) => {
@@ -485,8 +493,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -543,8 +552,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -620,8 +630,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     // In topdown mode, Emph is replaced with Span before we visit the Str inside
     // So we should see Span(Str("replaced")), not the original "should_not_see_this"
@@ -666,8 +677,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     // The filtered Str should have FilterProvenance source info
     match &filtered.blocks[0] {
@@ -743,8 +755,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -800,8 +813,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -939,8 +953,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -1420,8 +1435,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
 
     // The Str should NOT be uppercased because the Para returned false to stop descent
     match &filtered.blocks[0] {
@@ -1546,8 +1562,10 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, diagnostics) =
+    let output =
         apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = output.pandoc;
+    let diagnostics = output.diagnostics;
 
     // Document should be unchanged
     match &filtered.blocks[0] {
@@ -1611,8 +1629,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (_, _, diagnostics) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let diagnostics = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .diagnostics;
 
     // Should have one error diagnostic
     assert_eq!(diagnostics.len(), 1, "Expected 1 diagnostic");
@@ -1657,8 +1676,9 @@ end
     };
     let context = ASTContext::new();
 
-    let (_, _, diagnostics) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let diagnostics = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .diagnostics;
 
     // Should have 3 diagnostics
     assert_eq!(diagnostics.len(), 3, "Expected 3 diagnostics");
@@ -1717,7 +1737,7 @@ end
     };
     let context = ASTContext::new();
 
-    let (_, _, diagnostics) = apply_lua_filters(
+    let output = apply_lua_filters(
         pandoc,
         context,
         &[filter1_path, filter2_path],
@@ -1725,6 +1745,7 @@ end
         native_runtime(),
     )
     .unwrap();
+    let diagnostics = output.diagnostics;
 
     // Should have 2 diagnostics from both filters
     assert_eq!(
@@ -1797,8 +1818,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "strong:bold"),
@@ -1821,8 +1843,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "underline:underlined"),
@@ -1845,8 +1868,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "strikeout:crossed"),
@@ -1869,8 +1893,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "super:2"),
@@ -1893,8 +1918,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "sub:n"),
@@ -1917,8 +1943,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "smallcaps:small"),
@@ -1961,8 +1988,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "SingleQuote:quoted"),
@@ -1986,8 +2014,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "DoubleQuote:double"),
@@ -2031,8 +2060,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -2074,8 +2104,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "InlineMath:x^2"),
@@ -2096,8 +2127,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "DisplayMath:E=mc^2"),
@@ -2136,8 +2168,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "raw:html:<b>bold</b>"),
@@ -2188,8 +2221,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -2241,8 +2275,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -2290,8 +2325,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "note:footnote content"),
@@ -2344,8 +2380,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -2404,8 +2441,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "insert:added|id:ins-id"),
@@ -2430,8 +2468,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "delete:removed|id:del-id"),
@@ -2456,8 +2495,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "highlight:important|id:hl-id"),
@@ -2494,8 +2534,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "noteref:fn1"),
@@ -2536,8 +2577,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "modified"),
@@ -2603,8 +2645,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Emph(e) => match &e.content[0] {
@@ -2630,8 +2673,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Strong(s) => match &s.content[0] {
@@ -2657,8 +2701,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Underline(u) => match &u.content[0] {
@@ -2684,8 +2729,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Strikeout(st) => match &st.content[0] {
@@ -2731,8 +2777,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Span(span) => {
@@ -2785,8 +2832,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Link(link) => {
@@ -2841,8 +2889,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Image(img) => {
@@ -2890,8 +2939,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Code(code) => {
@@ -2933,8 +2983,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::RawInline(raw) => {
@@ -2975,8 +3026,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Math(math) => {
@@ -3019,8 +3071,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Quoted(q) => match &q.content[0] {
@@ -3066,8 +3119,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Note(note) => match &note.content[0] {
@@ -3125,8 +3179,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Insert(ins) => match &ins.content[0] {
@@ -3154,8 +3209,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Delete(del) => match &del.content[0] {
@@ -3183,8 +3239,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Highlight(hl) => match &hl.content[0] {
@@ -3224,8 +3281,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::NoteReference(nr) => {
@@ -3274,8 +3332,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Span(span) => {
@@ -3327,8 +3386,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "plain:test"),
@@ -3348,8 +3408,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "para:hello"),
@@ -3396,8 +3457,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "level:2,text:Title,id:my-header,cls:section"),
@@ -3439,8 +3501,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "code:print('hello'),id:code-id,cls:python"),
@@ -3476,8 +3539,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "raw:<div>html</div>,format:html"),
@@ -3521,8 +3585,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "quote:quoted"),
@@ -3569,8 +3634,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "div:id=div-id,cls=wrapper"),
@@ -3619,8 +3685,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "items:2"),
@@ -3666,8 +3733,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "items:1,start:5"),
@@ -3714,8 +3782,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Plain(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "modified_plain"),
@@ -3735,8 +3804,9 @@ end
             source_info: quarto_source_map::SourceInfo::default(),
         })],
     };
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "modified_para"),
@@ -3778,8 +3848,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Header(h) => {
             assert_eq!(h.level, 3);
@@ -3824,8 +3895,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::CodeBlock(c) => {
             assert_eq!(c.text, "new_code()");
@@ -3863,8 +3935,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::RawBlock(r) => {
             assert_eq!(r.text, "<p>new</p>");
@@ -3904,8 +3977,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::BlockQuote(bq) => match &bq.content[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -3955,8 +4029,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Div(d) => {
             assert_eq!(d.attr.0, "new-div-id");
@@ -4018,8 +4093,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4070,8 +4146,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4120,8 +4197,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Span(span) => {
@@ -4175,8 +4253,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Span(span) => {
@@ -4229,8 +4308,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "len:3"),
@@ -4285,8 +4365,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4349,8 +4430,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4395,8 +4477,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Span(span) => {
@@ -4461,8 +4544,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4510,8 +4594,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4565,8 +4650,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4614,8 +4700,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4671,8 +4758,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4721,8 +4809,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4784,8 +4873,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4844,8 +4934,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4902,8 +4993,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => {
             // Should have: "a", "[SB]", "b", "[LB]", "c"
@@ -4941,8 +5033,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
@@ -4995,8 +5088,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Plain(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "HELLO"),
@@ -5043,8 +5137,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Header(h) => match &h.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "TITLE"),
@@ -5091,8 +5186,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::BlockQuote(bq) => match &bq.content[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -5142,8 +5238,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::BulletList(bl) => match &bl.content[0][0] {
             Block::Plain(p) => match &p.content[0] {
@@ -5198,8 +5295,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::OrderedList(ol) => match &ol.content[0][0] {
             Block::Plain(p) => match &p.content[0] {
@@ -5262,8 +5360,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Figure(f) => match &f.content[0] {
             Block::Plain(p) => match &p.content[0] {
@@ -5310,8 +5409,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::LineBlock(lb) => match &lb.content[0][0] {
             Inline::Str(s) => assert_eq!(s.text, "LINE"),
@@ -5360,8 +5460,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Div(d) => match &d.content[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -5406,8 +5507,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => {
             assert_eq!(p.content.len(), 3);
@@ -5455,8 +5557,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     assert_eq!(filtered.blocks.len(), 2);
     match (&filtered.blocks[0], &filtered.blocks[1]) {
         (Block::Paragraph(p1), Block::Paragraph(p2)) => match (&p1.content[0], &p2.content[0]) {
@@ -5503,8 +5606,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     match &filtered.blocks[0] {
         Block::Paragraph(p) => {
             // Should have replaced Emph with [X]
@@ -5561,8 +5665,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (filtered, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .unwrap()
+        .pandoc;
     assert_eq!(filtered.blocks.len(), 2);
     match (&filtered.blocks[0], &filtered.blocks[1]) {
         (Block::Paragraph(p1), Block::Paragraph(p2)) => match (&p1.content[0], &p2.content[0]) {
@@ -5606,9 +5711,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (result, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
-            .expect("Filter should succeed");
+    let result = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .expect("Filter should succeed")
+        .pandoc;
 
     match &result.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
@@ -5645,9 +5750,9 @@ end
         })],
     };
     let context = ASTContext::new();
-    let (result, _, _) =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
-            .expect("Filter should succeed");
+    let result = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .expect("Filter should succeed")
+        .pandoc;
 
     match &result.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {

@@ -1,4 +1,4 @@
-title: Lipsum Shortcode Extension
+title: Lipsum Override
 author: Test
 contributes:
   shortcodes:

@@ -227,6 +227,17 @@ impl PipelineStage for EngineExecutionStage {
             result.markdown.len()
         );
 
+        // Save engine-produced includes (e.g., from knitr/jupyter) onto context
+        ctx.includes
+            .header_includes
+            .extend(result.includes.header_includes);
+        ctx.includes
+            .include_before
+            .extend(result.includes.include_before);
+        ctx.includes
+            .include_after
+            .extend(result.includes.include_after);
+
         // Step 7: Parse the executed markdown back to AST
         let source_name = doc_ast.path.display().to_string();
         let (executed_ast, new_ast_context, parse_warnings) = pampa::readers::qmd::read(
@@ -596,5 +607,64 @@ mod tests {
     fn test_stage_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<EngineExecutionStage>();
+    }
+
+    /// Mock engine that returns includes to test the knitr gap fix.
+    struct MockIncludesEngine;
+
+    impl crate::engine::ExecutionEngine for MockIncludesEngine {
+        fn name(&self) -> &str {
+            "mock-includes"
+        }
+
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            use crate::stage::PandocIncludes;
+            Ok(crate::engine::ExecuteResult {
+                markdown: input.to_string(),
+                includes: PandocIncludes {
+                    header_includes: vec!["<style>h1 { color: red; }</style>".to_string()],
+                    include_before: vec!["<div>before</div>".to_string()],
+                    include_after: vec!["<div>after</div>".to_string()],
+                },
+                ..Default::default()
+            })
+        }
+
+        fn is_available(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn test_engine_execution_preserves_includes() {
+        // Build a custom registry with our mock engine
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(MockIncludesEngine));
+
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+
+        // Force engine: mock-includes via metadata
+        let content = b"---\ntitle: Test\nengine: mock-includes\n---\n\n# Hello\n\nWorld";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let _output = stage.run(input, &mut ctx).await.unwrap();
+
+        // Verify includes were preserved onto StageContext
+        assert_eq!(ctx.includes.header_includes.len(), 1);
+        assert_eq!(
+            ctx.includes.header_includes[0],
+            "<style>h1 { color: red; }</style>"
+        );
+        assert_eq!(ctx.includes.include_before.len(), 1);
+        assert_eq!(ctx.includes.include_before[0], "<div>before</div>");
+        assert_eq!(ctx.includes.include_after.len(), 1);
+        assert_eq!(ctx.includes.include_after[0], "<div>after</div>");
     }
 }

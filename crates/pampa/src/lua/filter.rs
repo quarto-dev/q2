@@ -92,17 +92,29 @@ pub fn get_walking_order(filter_table: &Table) -> Result<WalkingOrder> {
     }
 }
 
+/// Output from applying a Lua filter.
+///
+/// Contains the filtered document, context, diagnostics, and any HTML dependencies
+/// or text includes registered via the `quarto.doc` API.
+pub struct FilterOutput {
+    pub pandoc: Pandoc,
+    pub context: ASTContext,
+    pub diagnostics: Vec<DiagnosticMessage>,
+    pub html_dependencies: Vec<super::quarto_doc::HtmlDependency>,
+    pub text_includes: Vec<super::quarto_doc::TextInclude>,
+}
+
 /// Apply a single Lua filter to a document
 ///
-/// Returns the filtered document, context, and any diagnostics emitted by the filter
-/// via `quarto.warn()` or `quarto.error()`.
+/// Returns the filtered document, context, diagnostics, and any HTML dependencies
+/// or text includes registered via the `quarto.doc` API.
 pub fn apply_lua_filter(
     pandoc: &Pandoc,
     context: &ASTContext,
     filter_path: &Path,
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
-) -> FilterResult<(Pandoc, ASTContext, Vec<DiagnosticMessage>)> {
+) -> FilterResult<FilterOutput> {
     // Read filter file via runtime (supports VFS on WASM)
     let filter_bytes = runtime.file_read(filter_path).map_err(|e| {
         LuaFilterError::FileReadError(
@@ -128,6 +140,7 @@ pub fn apply_lua_filter(
             .map_err(|e| LuaFilterError::LuaError(e))?;
         super::os_wasm::register_wasm_os(&lua, runtime.clone())?;
         super::io_wasm::register_wasm_io(&lua, runtime.clone())?;
+        super::dofile_wasm::register_wasm_dofile(&lua, runtime.clone())?;
         lua
     };
     #[cfg(not(any(target_arch = "wasm32", test)))]
@@ -143,14 +156,16 @@ pub fn apply_lua_filter(
     // Register quarto.json, quarto.log, quarto.utils
     register_quarto_api(&lua)?;
 
-    // Set script dir for quarto.utils.resolve_path
+    // Register quarto.doc namespace (is_format, add_html_dependency, etc.)
+    super::quarto_doc::register_quarto_doc(&lua)?;
+
+    // Push script dir for quarto.utils.resolve_path
     let script_dir = filter_path
         .parent()
         .unwrap_or(Path::new(""))
         .to_string_lossy()
         .to_string();
-    lua.globals()
-        .set("_quarto_script_dir", script_dir.as_str())?;
+    super::quarto_api::push_script_dir(&lua, &script_dir)?;
 
     // Set global variables
     // FORMAT - the target output format (html, latex, etc.)
@@ -204,46 +219,65 @@ pub fn apply_lua_filter(
         WalkingOrder::Topdown => apply_topdown_filter(&lua, &filter_table, &pandoc.blocks)?,
     };
 
-    // Extract any diagnostics emitted by the filter
+    // Extract diagnostics, HTML dependencies, and text includes from Lua state
     let diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
+    let html_dependencies = super::quarto_doc::extract_html_dependencies(&lua)?;
+    let text_includes = super::quarto_doc::extract_text_includes(&lua)?;
 
-    // Return filtered document with diagnostics
+    // Return filtered document with all extracted data
     let filtered_pandoc = Pandoc {
         meta: pandoc.meta.clone(),
         blocks: filtered_blocks,
     };
 
-    Ok((filtered_pandoc, context.clone(), diagnostics))
+    Ok(FilterOutput {
+        pandoc: filtered_pandoc,
+        context: context.clone(),
+        diagnostics,
+        html_dependencies,
+        text_includes,
+    })
 }
 
 /// Apply multiple Lua filters in sequence
 ///
-/// Returns the filtered document, context, and accumulated diagnostics from all filters.
+/// Returns the filtered document, context, and accumulated diagnostics,
+/// HTML dependencies, and text includes from all filters.
 pub fn apply_lua_filters(
     pandoc: Pandoc,
     context: ASTContext,
     filter_paths: &[std::path::PathBuf],
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
-) -> FilterResult<(Pandoc, ASTContext, Vec<DiagnosticMessage>)> {
+) -> FilterResult<FilterOutput> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
     let mut all_diagnostics = Vec::new();
+    let mut all_html_dependencies = Vec::new();
+    let mut all_text_includes = Vec::new();
 
     for filter_path in filter_paths {
-        let (new_pandoc, new_context, diagnostics) = apply_lua_filter(
+        let output = apply_lua_filter(
             &current_pandoc,
             &current_context,
             filter_path,
             target_format,
             runtime.clone(),
         )?;
-        current_pandoc = new_pandoc;
-        current_context = new_context;
-        all_diagnostics.extend(diagnostics);
+        current_pandoc = output.pandoc;
+        current_context = output.context;
+        all_diagnostics.extend(output.diagnostics);
+        all_html_dependencies.extend(output.html_dependencies);
+        all_text_includes.extend(output.text_includes);
     }
 
-    Ok((current_pandoc, current_context, all_diagnostics))
+    Ok(FilterOutput {
+        pandoc: current_pandoc,
+        context: current_context,
+        diagnostics: all_diagnostics,
+        html_dependencies: all_html_dependencies,
+        text_includes: all_text_includes,
+    })
 }
 
 /// Get the filter table from Lua (either from return value or globals)

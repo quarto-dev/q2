@@ -10,6 +10,7 @@
 
 mod constructors;
 mod diagnostics;
+mod dofile_wasm;
 mod filter;
 mod io_wasm;
 mod json;
@@ -18,6 +19,7 @@ pub mod mediabag;
 mod os_wasm;
 mod path;
 mod quarto_api;
+mod quarto_doc;
 mod readwrite;
 pub mod runtime;
 pub mod shortcode;
@@ -26,7 +28,13 @@ mod text;
 mod types;
 mod utils;
 
+#[allow(unused_imports)]
+pub use filter::FilterOutput;
 pub use filter::{LuaFilterError, apply_lua_filters};
+#[allow(unused_imports)]
+pub use quarto_doc::{
+    HtmlDependency, IncludeLocation, TextInclude, extract_html_dependencies, extract_text_includes,
+};
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(unused_imports)]
 pub use runtime::NativeRuntime;

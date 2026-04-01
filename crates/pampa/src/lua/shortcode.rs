@@ -80,6 +80,8 @@ impl LuaShortcodeEngine {
                 .map_err(LuaShortcodeError::LuaError)?;
             super::io_wasm::register_wasm_io(&lua, runtime.clone())
                 .map_err(LuaShortcodeError::LuaError)?;
+            super::dofile_wasm::register_wasm_dofile(&lua, runtime.clone())
+                .map_err(LuaShortcodeError::LuaError)?;
             lua
         };
         #[cfg(not(any(target_arch = "wasm32", test)))]
@@ -91,6 +93,9 @@ impl LuaShortcodeEngine {
 
         // Register quarto.json, quarto.log, quarto.utils
         register_quarto_api(&lua).map_err(LuaShortcodeError::LuaError)?;
+
+        // Register quarto.doc namespace (is_format, add_html_dependency, etc.)
+        super::quarto_doc::register_quarto_doc(&lua).map_err(LuaShortcodeError::LuaError)?;
 
         lua.globals()
             .set("FORMAT", target_format)
@@ -126,15 +131,13 @@ impl LuaShortcodeEngine {
             )
         })?;
 
-        // Set script dir for quarto.utils.resolve_path
+        // Push script dir for quarto.utils.resolve_path
         let script_dir = script_path
             .parent()
             .unwrap_or(Path::new(""))
             .to_string_lossy()
             .to_string();
-        self.lua
-            .globals()
-            .set("_quarto_script_dir", script_dir.as_str())
+        super::quarto_api::push_script_dir(&self.lua, &script_dir)
             .map_err(LuaShortcodeError::LuaError)?;
 
         // Execute script in a sandboxed environment that inherits globals
@@ -211,17 +214,45 @@ impl LuaShortcodeEngine {
         let reg_key = self.handlers.get(name)?;
         let func: Function = self.lua.registry_value(reg_key).ok()?;
 
-        // Set script dir for this handler's extension
+        // Push script dir for this handler's extension, pop after call
         if let Some(dir) = self.handler_script_dirs.get(name) {
-            let _ = self.lua.globals().set("_quarto_script_dir", dir.as_str());
+            let _ = super::quarto_api::push_script_dir(&self.lua, dir);
         }
 
-        Some(self.call_handler(name, func, args, context))
+        let result = self.call_handler(name, func, args, context);
+
+        if self.handler_script_dirs.contains_key(name) {
+            let _ = super::quarto_api::pop_script_dir(&self.lua);
+        }
+
+        Some(result)
     }
 
     /// Check if a handler is registered for the given name.
     pub fn has_handler(&self, name: &str) -> bool {
         self.handlers.contains_key(name)
+    }
+
+    /// Extract diagnostics collected during shortcode execution.
+    pub fn extract_diagnostics(
+        &self,
+    ) -> std::result::Result<Vec<quarto_error_reporting::DiagnosticMessage>, LuaShortcodeError>
+    {
+        super::diagnostics::extract_lua_diagnostics(&self.lua).map_err(LuaShortcodeError::LuaError)
+    }
+
+    /// Extract HTML dependencies collected during shortcode execution.
+    pub fn extract_html_dependencies(
+        &self,
+    ) -> std::result::Result<Vec<super::quarto_doc::HtmlDependency>, LuaShortcodeError> {
+        super::quarto_doc::extract_html_dependencies(&self.lua).map_err(LuaShortcodeError::LuaError)
+    }
+
+    /// Extract text includes collected during shortcode execution.
+    pub fn extract_text_includes(
+        &self,
+    ) -> std::result::Result<Vec<super::quarto_doc::TextInclude>, LuaShortcodeError> {
+        super::quarto_doc::extract_text_includes(&self.lua).map_err(LuaShortcodeError::LuaError)
     }
 
     fn call_handler(
@@ -1451,5 +1482,72 @@ return {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "text-output"),
             other => panic!("Expected Text, got {:?}", other),
         }
+    }
+
+    // =====================================================================
+    // Extraction tests (Phase 4)
+    // =====================================================================
+
+    #[test]
+    fn test_shortcode_extract_html_dependencies() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "dep_sc.lua",
+            r#"
+return {
+    dep_sc = function(args, kwargs, meta, raw_args, context)
+        quarto.doc.add_html_dependency({
+            name = "my-dep",
+            stylesheets = {"style.css"},
+            scripts = {"script.js"},
+        })
+        return "ok"
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        engine
+            .call("dep_sc", &make_empty_args(), ShortcodeCallContext::Inline)
+            .unwrap();
+
+        let deps = engine.extract_html_dependencies().unwrap();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(deps[0].name, "my-dep");
+        assert_eq!(deps[0].stylesheets.len(), 1);
+        assert_eq!(deps[0].scripts.len(), 1);
+    }
+
+    #[test]
+    fn test_shortcode_extract_diagnostics() {
+        let tmp = TempDir::new().unwrap();
+        let script = write_script(
+            tmp.path(),
+            "warn_sc.lua",
+            r#"
+return {
+    warn_sc = function(args, kwargs, meta, raw_args, context)
+        quarto.warn("test warning from shortcode")
+        return "ok"
+    end
+}
+"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        engine.load_script(&script).unwrap();
+
+        engine
+            .call("warn_sc", &make_empty_args(), ShortcodeCallContext::Inline)
+            .unwrap();
+
+        let diagnostics = engine.extract_diagnostics().unwrap();
+        assert_eq!(diagnostics.len(), 1);
     }
 }

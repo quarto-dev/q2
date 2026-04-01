@@ -311,23 +311,23 @@ fn main() {
         let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
             std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
         match unified_filter::apply_filters(pandoc, context, &filter_specs, &args.to, runtime) {
-            Ok((filtered_pandoc, filtered_context, diagnostics)) => {
+            Ok(output) => {
                 // Output any diagnostics from filters
-                if !diagnostics.is_empty() {
+                if !output.diagnostics.is_empty() {
                     if args.json_errors {
-                        for diagnostic in &diagnostics {
+                        for diagnostic in &output.diagnostics {
                             eprintln!("{}", diagnostic.to_json());
                         }
                     } else {
-                        for diagnostic in &diagnostics {
+                        for diagnostic in &output.diagnostics {
                             eprintln!(
                                 "{}",
-                                diagnostic.to_text(Some(&filtered_context.source_context))
+                                diagnostic.to_text(Some(&output.context.source_context))
                             );
                         }
                     }
                 }
-                (filtered_pandoc, filtered_context)
+                (output.pandoc, output.context)
             }
             Err(e) => {
                 if args.json_errors {

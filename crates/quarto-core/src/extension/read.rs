@@ -21,7 +21,21 @@ use crate::error::Result;
 ///
 /// All relative paths in the extension are resolved to absolute paths
 /// relative to the extension directory (parent of the `_extension.yml` file).
+///
+/// When `organization` is `Some`, it is used directly as the extension's
+/// org (the scanner already determined this from directory structure).
+/// When `None`, the organization is derived from the path heuristic
+/// (checking for `_extensions/org/name/` layout).
 pub fn read_extension(extension_file: &Path, runtime: &dyn SystemRuntime) -> Result<Extension> {
+    read_extension_with_org(extension_file, None, runtime)
+}
+
+/// Read an extension with an explicit organization override.
+pub fn read_extension_with_org(
+    extension_file: &Path,
+    organization: Option<&str>,
+    runtime: &dyn SystemRuntime,
+) -> Result<Extension> {
     let content = runtime.file_read_string(extension_file).map_err(|e| {
         crate::error::QuartoError::Other(format!(
             "Failed to read {}: {}",
@@ -34,10 +48,16 @@ pub fn read_extension(extension_file: &Path, runtime: &dyn SystemRuntime) -> Res
         crate::error::QuartoError::Other("Extension file has no parent directory".to_string())
     })?;
 
-    // Derive extension name and organization from directory structure.
-    // _extensions/org/name/ → org + name
-    // _extensions/name/ → just name
-    let (ext_name, ext_org) = derive_extension_id(ext_dir);
+    // Use explicit org if provided, otherwise derive from directory structure.
+    let (ext_name, ext_org) = if let Some(org) = organization {
+        let name = ext_dir.file_name().map_or_else(
+            || "unknown".to_string(),
+            |n| n.to_string_lossy().to_string(),
+        );
+        (name, Some(org.to_string()))
+    } else {
+        derive_extension_id(ext_dir)
+    };
 
     let filename = extension_file.display().to_string();
     let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {

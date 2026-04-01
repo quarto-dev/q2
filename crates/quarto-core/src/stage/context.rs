@@ -23,6 +23,7 @@ use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
 
 use super::cancellation::Cancellation;
+use super::data::PandocIncludes;
 use super::error::PipelineError;
 use super::observer::{NoopObserver, PipelineObserver};
 use crate::artifact::ArtifactStore;
@@ -70,6 +71,12 @@ pub struct StageContext {
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
 
+    /// Text includes to inject into the output document.
+    ///
+    /// Populated by engine execution (knitr/jupyter), shortcode resolution,
+    /// and Lua filters via `quarto.doc.include_text()`.
+    pub includes: PandocIncludes,
+
     /// Diagnostics (warnings, errors, info) collected during execution
     pub diagnostics: Vec<DiagnosticMessage>,
 
@@ -100,6 +107,7 @@ impl StageContext {
             .map_err(|e| PipelineError::other(format!("Failed to create temp directory: {}", e)))?
             .into_path();
 
+        let builtin_ext_path = builtin_extensions_path(runtime.as_ref());
         let extensions = crate::extension::discover_extensions(
             &document.input,
             if project.is_single_file {
@@ -107,6 +115,7 @@ impl StageContext {
             } else {
                 Some(&project.dir)
             },
+            builtin_ext_path.as_deref(),
             runtime.as_ref(),
         );
 
@@ -118,6 +127,7 @@ impl StageContext {
             temp_dir,
             extensions,
             artifacts: ArtifactStore::new(),
+            includes: PandocIncludes::default(),
             diagnostics: Vec::new(),
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
@@ -492,5 +502,35 @@ mod tests {
         let debug = format!("{:?}", ctx);
         assert!(debug.contains("StageContext"));
         assert!(debug.contains("Html")); // FormatIdentifier::Html in Debug format
+    }
+}
+
+/// Resolve the path to built-in extensions.
+///
+/// - **Native**: extracts the embedded `ResourceBundle` to a temp dir.
+/// - **WASM**: returns the VFS path `/__quarto_resources__/extensions`
+///   if it exists (populated during WASM init).
+fn builtin_extensions_path(
+    _runtime: &dyn quarto_system_runtime::SystemRuntime,
+) -> Option<std::path::PathBuf> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        crate::extension::BUILTIN_EXTENSIONS
+            .path()
+            .ok()
+            .map(|p| p.to_path_buf())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let vfs_path = std::path::PathBuf::from("/__quarto_resources__/extensions");
+        if _runtime
+            .path_exists(&vfs_path, Some(quarto_system_runtime::PathKind::Directory))
+            .unwrap_or(false)
+        {
+            Some(vfs_path)
+        } else {
+            None
+        }
     }
 }

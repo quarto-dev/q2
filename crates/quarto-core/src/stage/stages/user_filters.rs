@@ -134,7 +134,7 @@ impl PipelineStage for UserFiltersStage {
 
         let target_format = ctx.format.identifier.as_str();
 
-        let (new_ast, new_context, diagnostics) = pampa::unified_filter::apply_filters(
+        let output = pampa::unified_filter::apply_filters(
             doc.ast,
             doc.ast_context,
             filters,
@@ -143,9 +143,20 @@ impl PipelineStage for UserFiltersStage {
         )
         .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
 
-        doc.ast = new_ast;
-        doc.ast_context = new_context;
-        ctx.diagnostics.extend(diagnostics);
+        doc.ast = output.pandoc;
+        doc.ast_context = output.context;
+        ctx.diagnostics.extend(output.diagnostics);
+
+        // Store HTML dependencies as artifacts and push text includes
+        let mut dep_diagnostics = Vec::new();
+        crate::dependency::store_html_dependencies(
+            output.html_dependencies,
+            &mut ctx.artifacts,
+            ctx.runtime.as_ref(),
+            &mut dep_diagnostics,
+        );
+        crate::dependency::push_text_includes(output.text_includes, &mut ctx.includes);
+        ctx.diagnostics.extend(dep_diagnostics);
 
         trace_event!(ctx, EventLevel::Debug, "user filters complete");
 

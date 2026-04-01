@@ -141,12 +141,31 @@ impl PipelineStage for ApplyTemplateStage {
         // Get metadata from the rendered output
         let metadata = rendered.metadata.clone();
 
-        // CSS paths for the template context
-        let css_paths: Vec<String> = if self.config.css_paths.is_empty() {
+        // CSS paths for the template context: default + extension deps
+        let mut css_paths: Vec<String> = if self.config.css_paths.is_empty() {
             vec![DEFAULT_CSS_ARTIFACT_PATH.to_string()]
         } else {
             self.config.css_paths.clone()
         };
+
+        // Add extension CSS dependencies (css:* artifacts, excluding css:default)
+        for (key, artifact) in ctx.artifacts.get_by_prefix("css:") {
+            if key == "css:default" {
+                continue;
+            }
+            if let Some(path) = &artifact.path {
+                css_paths.push(path.to_string_lossy().to_string());
+            }
+        }
+
+        // Collect JS paths from js:* artifacts
+        let script_paths: Vec<String> = ctx
+            .artifacts
+            .get_by_prefix("js:")
+            .iter()
+            .filter_map(|(_, a)| a.path.as_ref())
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
 
         // Extract custom template/partials from merged metadata
         let custom_template_path = metadata.get("template").and_then(|v| v.as_str());
@@ -219,6 +238,8 @@ impl PipelineStage for ApplyTemplateStage {
                     &rendered.content,
                     &metadata,
                     &css_paths,
+                    &script_paths,
+                    &ctx.includes,
                 )
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }
@@ -238,16 +259,23 @@ impl PipelineStage for ApplyTemplateStage {
                     &rendered.content,
                     &metadata,
                     &css_paths,
+                    &script_paths,
+                    &ctx.includes,
                 )
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }
             None => {
-                // No custom template, no partials: existing behavior
-                template::render_with_format(
+                // No custom template, no partials: select built-in template based on format
+                let minimal = crate::format::is_minimal_html(&metadata);
+                let compiled = template::select_template(minimal)
+                    .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+                template::render_with_compiled_template(
+                    &compiled,
                     &rendered.content,
                     &metadata,
-                    &rendered.format,
                     &css_paths,
+                    &script_paths,
+                    &ctx.includes,
                 )
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }

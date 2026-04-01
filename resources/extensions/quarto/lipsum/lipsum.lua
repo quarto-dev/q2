@@ -91,7 +91,7 @@ return {
         paraIdx =  (paraStart + 1) - i
       end
       local outIdx = ((paraIdx-1)%(#paras-1))+1
-      outputParas[i] = pandoc.Para({pandoc.Str(paras[outIdx])})
+      outputParas[i] = pandoc.Para(paras[outIdx])
     end
     
     return outputParas

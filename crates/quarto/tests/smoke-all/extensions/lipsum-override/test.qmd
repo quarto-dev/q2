@@ -1,13 +1,13 @@
 ---
-title: Lipsum Extension Test
+title: Lipsum Override Test
 format: html
 _quarto:
   tests:
     html:
       noErrors: true
       ensureFileRegexMatches:
+        - ["Λόρεμ ίψουμ δόλορ σιτ αμέτ"]
         - ["Lorem ipsum dolor sit amet"]
-        - ["Nunc ac dignissim magna"]
 ---
 
 {{< lipsum 1 >}}

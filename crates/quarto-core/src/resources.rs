@@ -331,7 +331,9 @@ mod embedded {
         /// The embedded directory tree.
         dir: &'static Dir<'static>,
         /// Lazily-initialized extraction directory.
-        extracted: OnceLock<TempDir>,
+        /// `Ok(TempDir)` on success, `Err(message)` if extraction failed
+        /// (e.g. in WASM where there's no real filesystem).
+        extracted: OnceLock<Result<TempDir, String>>,
     }
 
     impl ResourceBundle {
@@ -359,13 +361,17 @@ mod embedded {
         /// # Errors
         ///
         /// Returns an error if the temp directory cannot be created or if
-        /// resource extraction fails.
+        /// resource extraction fails (e.g. in WASM where `tempdir()` is
+        /// unavailable).
         pub fn path(&self) -> Result<&Path, ResourceError> {
-            let temp_dir = self
+            let result = self
                 .extracted
-                .get_or_init(|| self.extract().expect("Failed to extract resources"));
+                .get_or_init(|| self.extract().map_err(|e| e.to_string()));
 
-            Ok(temp_dir.path())
+            match result {
+                Ok(dir) => Ok(dir.path()),
+                Err(msg) => Err(ResourceError::Extract(msg.clone())),
+            }
         }
 
         /// Get the name of this bundle.
@@ -375,7 +381,7 @@ mod embedded {
 
         /// Check if resources have been extracted yet.
         pub fn is_extracted(&self) -> bool {
-            self.extracted.get().is_some()
+            self.extracted.get().is_some_and(|r| r.is_ok())
         }
 
         /// Extract all resources to a temp directory.
@@ -394,7 +400,7 @@ mod embedded {
 
     // ResourceBundle is Send + Sync because:
     // - name and dir are 'static references (inherently Send + Sync)
-    // - OnceLock<TempDir> is Send + Sync when TempDir is Send
+    // - OnceLock<Result<TempDir, String>> is Send + Sync when TempDir is Send
     // - TempDir is Send (it's just a PathBuf internally)
     unsafe impl Send for ResourceBundle {}
     unsafe impl Sync for ResourceBundle {}
