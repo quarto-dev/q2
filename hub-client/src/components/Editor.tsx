@@ -549,6 +549,27 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       editorHasFocusRef.current = false;
     });
 
+    // Workaround: normalize backward (RTL) selections to forward (LTR) on
+    // any printable keyDown. On some platforms the browser's input pipeline
+    // silently drops the first character typed into a backward selection
+    // because the hidden textarea's selection state confuses the OS input
+    // method. Flipping to LTR keeps the same highlighted range but places
+    // the cursor at the end, which the input method handles reliably.
+    editor.onKeyDown((e) => {
+      const sel = editor.getSelection();
+      if (!sel || sel.isEmpty() || sel.getDirection() === 0) return; // LTR or no selection
+      // Only intervene for printable characters (single char from e.browserEvent.key)
+      const key = e.browserEvent.key;
+      if (!key || key.length !== 1) return;
+      // Flip to LTR (same range, cursor moves to end)
+      editor.setSelection({
+        selectionStartLineNumber: sel.startLineNumber,
+        selectionStartColumn: sel.startColumn,
+        positionLineNumber: sel.endLineNumber,
+        positionColumn: sel.endColumn,
+      });
+    });
+
     // Track cursor position changes for slide navigation
     editor.onDidChangeCursorPosition((e) => {
       // Get the cursor line (0-based in Monaco)
