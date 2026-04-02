@@ -150,11 +150,8 @@ export function useAutomergeSync({
 
   // ── Monaco → Automerge ───────────────────────────────────────────────
   //
-  // Stable callback: uses refs for mutable state so the identity never
-  // changes.  This prevents @monaco-editor/react from disposing and
-  // re-subscribing its internal onDidChangeModelContent listener on
-  // every React render, which can race with keystrokes and cause the
-  // first character after a selection to be silently dropped.
+  // Stable callback: uses refs so the identity never changes, preventing
+  // @monaco-editor/react from re-subscribing its listener every render.
   const handleEditorChange = useCallback((value: string | undefined, event: Monaco.editor.IModelContentChangedEvent) => {
     if (replayActiveRef.current) return;
     if (applyingRemoteRef.current) return;

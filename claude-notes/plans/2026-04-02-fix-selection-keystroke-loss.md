@@ -47,8 +47,9 @@ A secondary issue: the `options` object passed to `<MonacoEditor>` was defined i
 
 - [x] Diagnose root cause of intermittent keystroke loss after selection
 - [x] Stabilize `handleEditorChange` with `useCallback` + `currentFileRef`
-- [x] Memoize static `editorOptions` with `useMemo`
+- [x] Promote static `editorOptions` to module-level constant
 - [x] Add regression tests
+- [x] Simplification pass (comment trimming, useMemo → module constant)
 - [x] Verify TypeScript compiles cleanly
 - [x] Verify all 398 hub-client tests pass
 
@@ -73,6 +74,6 @@ Together the two tests form a pincer: test 1 prevents the callback from becoming
 
 ### `hub-client/src/components/Editor.tsx`
 
-- Extracted the inline `options={{...}}` object into `const editorOptions = useMemo(() => ({...}), [])`.
-- Added `useMemo` to imports.
+- Promoted the inline `options={{...}}` to a module-level `const editorOptions` — fully static, never references component state, so no `useMemo` needed. Communicates intent more clearly and avoids per-instance hook overhead.
+- `as const` annotations on string literal values (`'on'`, `'off'`) are necessary because Monaco's `IStandaloneEditorConstructionOptions` expects string literal unions, not `string`.
 - Replaced inline options with `options={editorOptions}` on the `<MonacoEditor>` component.
