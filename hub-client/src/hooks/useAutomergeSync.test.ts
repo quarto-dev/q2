@@ -315,6 +315,66 @@ describe('useAutomergeSync', () => {
 
       expect(onContentOperations).not.toHaveBeenCalled();
     });
+
+    it('should maintain stable identity across re-renders (prevents listener churn)', () => {
+      // Regression: unstable handleEditorChange caused @monaco-editor/react to
+      // dispose and re-subscribe its onDidChangeModelContent listener on every
+      // render, which could race with keystrokes and drop the first character
+      // typed after a selection.
+      const onContentOperations = vi.fn();
+      const { result, rerender } = renderHook(
+        (props) => useAutomergeSync(props),
+        { initialProps: defaultOptions({ onContentOperations }) }
+      );
+
+      const first = result.current.handleEditorChange;
+
+      // Re-render with a different fileContents map (simulates remote edit to
+      // another file, presence state update, or any other unrelated state change).
+      rerender(defaultOptions({
+        onContentOperations,
+        fileContents: new Map([['test.qmd', '# Hello'], ['other.qmd', '# Other']]),
+      }));
+
+      expect(result.current.handleEditorChange).toBe(first);
+
+      // Re-render again with yet another map.
+      rerender(defaultOptions({
+        onContentOperations,
+        fileContents: new Map([['test.qmd', '# Hello changed']]),
+      }));
+
+      expect(result.current.handleEditorChange).toBe(first);
+    });
+
+    it('should read latest currentFile via ref after re-render', () => {
+      // Ensures the stable callback picks up file switches through the ref,
+      // not through a stale closure.
+      const onContentOperations = vi.fn();
+      const file1: FileEntry = { path: 'file1.qmd' };
+      const file2: FileEntry = { path: 'file2.qmd' };
+
+      const { result, rerender } = renderHook(
+        (props) => useAutomergeSync(props),
+        { initialProps: defaultOptions({ currentFile: file1, onContentOperations }) }
+      );
+
+      const stableCallback = result.current.handleEditorChange;
+
+      // Switch to a different file
+      rerender(defaultOptions({ currentFile: file2, onContentOperations }));
+
+      // Identity must not change
+      expect(result.current.handleEditorChange).toBe(stableCallback);
+
+      // But the callback must use the NEW file path
+      const mockEvent = { changes: [{ rangeOffset: 0, rangeLength: 0, text: 'x' }] };
+      act(() => {
+        result.current.handleEditorChange('x', mockEvent as never);
+      });
+
+      expect(onContentOperations).toHaveBeenCalledWith('file2.qmd', mockEvent.changes);
+    });
   });
 
   describe('handleContentRewrite', () => {

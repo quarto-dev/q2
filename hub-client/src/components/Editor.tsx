@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
@@ -466,6 +466,34 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       }
     }
   }, [route, files, fileContents, currentFile]);
+
+  // Stable options object so @monaco-editor/react doesn't call
+  // editor.updateOptions() on every render.
+  const editorOptions = useMemo(() => ({
+    minimap: { enabled: false },
+    fontSize: 14,
+    lineNumbers: 'on' as const,
+    wordWrap: 'on' as const,
+    padding: { top: 16 },
+    scrollBeyondLastLine: false,
+    // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
+    // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
+    pasteAs: { enabled: false },
+    // Move hover/diagnostic widgets to a fixed container outside the editor's
+    // overflow:hidden boundary, preventing them from being clipped by the navbar.
+    fixedOverflowWidgets: true,
+    // Prefer showing hover below the line. This prevents diagnostic popups near
+    // the top of the editor from overlapping the navbar.
+    hover: { above: false },
+    // Disable aggressive autocomplete/suggestions
+    quickSuggestions: false,
+    suggestOnTriggerCharacters: false,
+    wordBasedSuggestions: 'off' as const,
+    acceptSuggestionOnEnter: 'off' as const,
+    acceptSuggestionOnCommitCharacter: false,
+    suggest: { showWords: false, showSnippets: false },
+    inlineSuggest: { enabled: false },
+  }), []);
 
   // Configure Monaco before mount (for TypeScript diagnostics)
   const handleBeforeMount = (monaco: typeof Monaco) => {
@@ -956,31 +984,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                 beforeMount={handleBeforeMount}
                 onChange={handleEditorChange}
                 onMount={handleEditorMount}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  lineNumbers: 'on',
-                  wordWrap: 'on',
-                  padding: { top: 16 },
-                  scrollBeyondLastLine: false,
-                  // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
-                  // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
-                  pasteAs: { enabled: false },
-                  // Move hover/diagnostic widgets to a fixed container outside the editor's
-                  // overflow:hidden boundary, preventing them from being clipped by the navbar.
-                  fixedOverflowWidgets: true,
-                  // Prefer showing hover below the line. This prevents diagnostic popups near
-                  // the top of the editor from overlapping the navbar.
-                  hover: { above: false },
-                  // Disable aggressive autocomplete/suggestions
-                  quickSuggestions: false,
-                  suggestOnTriggerCharacters: false,
-                  wordBasedSuggestions: 'off',
-                  acceptSuggestionOnEnter: 'off',
-                  acceptSuggestionOnCommitCharacter: false,
-                  suggest: { showWords: false, showSnippets: false },
-                  inlineSuggest: { enabled: false },
-                }}
+                options={editorOptions}
               />
             </div>
           </div>
