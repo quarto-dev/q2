@@ -1,0 +1,12 @@
+---
+title: Built-in Placeholder Extension Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["data:image/svg"]
+---
+
+{{< placeholder 200 >}}

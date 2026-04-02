@@ -38,6 +38,16 @@ fn smoke_all() {
     // Sort for deterministic ordering
     test_files.sort();
 
+    // Optional filter: SMOKE_FILTER=kbd runs only fixtures whose path contains "kbd"
+    if let Ok(filter) = std::env::var("SMOKE_FILTER") {
+        test_files.retain(|p| {
+            p.strip_prefix(&smoke_all_dir)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .contains(&filter)
+        });
+    }
+
     if test_files.is_empty() {
         panic!(
             "No .qmd files found in smoke-all directory: {}",

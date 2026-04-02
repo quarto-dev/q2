@@ -1,0 +1,16 @@
+---
+title: Built-in Kbd Extension Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["kbd"]
+      ensureFileRegexMatches:
+        - ["kbd\\.css", "kbd\\.js"]
+---
+
+Press {{< kbd Ctrl-C >}} to copy.
+
+Press {{< kbd Shift-Ctrl-P mac=Shift-Command-P >}} to open the command palette.

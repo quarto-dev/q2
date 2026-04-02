@@ -1,0 +1,12 @@
+---
+title: Built-in Version Extension Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["0\\.1\\.0"]
+---
+
+The current version is {{< version >}}.

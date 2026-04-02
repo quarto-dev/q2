@@ -552,8 +552,16 @@ describe('smoke-all WASM tests', () => {
     let passed = 0;
     let skipped = 0;
 
+    // Optional filter: SMOKE_FILTER=kbd runs only fixtures whose path contains "kbd"
+    const smokeFilter = process.env.SMOKE_FILTER || '';
+
     for (const testFile of testFiles) {
       const relPath = relative(SMOKE_ALL_DIR, testFile);
+
+      if (smokeFilter && !relPath.includes(smokeFilter)) {
+        skipped++;
+        continue;
+      }
       const content = await readFile(testFile, 'utf-8');
       const metadata = readFrontmatter(content);
       const { runConfig, formatSpecs } = parseTestSpecs(metadata, {

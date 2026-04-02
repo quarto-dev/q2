@@ -27,6 +27,12 @@ const TOOLS: &[Tool] = &[
         check_args: &["nextest", "--version"],
         required_version: None,
     },
+    Tool {
+        package: "tree-sitter-cli",
+        check_cmd: "tree-sitter",
+        check_args: &["--version"],
+        required_version: None,
+    },
     // wasm-bindgen-cli must exactly match the wasm-bindgen crate version locked
     // in crates/wasm-quarto-hub-client/Cargo.lock.  A version mismatch produces
     // a hard build error ("schema version … must exactly match").

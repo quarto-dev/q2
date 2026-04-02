@@ -110,7 +110,32 @@ cd hub-client && npx playwright test e2e/smoke-all.spec.ts
 
 ### Writing Fixtures
 
-Each fixture is a `.qmd` file with test assertions in frontmatter. The project must have a `_quarto.yml`. Assertions use a two-array format `[mustMatch[], mustNotMatch[]]`:
+Each fixture is a `.qmd` file with test assertions in frontmatter. The project must have a `_quarto.yml`.
+
+**IMPORTANT**: `ensureFileRegexMatches`, `ensureCssRegexMatches`, and
+`ensureHtmlElements` all use the same two-array format. The outer array
+has exactly **two positional elements** (second is optional):
+
+1. First element: array of patterns that **must match**
+2. Second element: array of patterns that **must NOT match**
+
+Each element is an array of patterns, not a single pattern. Put **all**
+must-match patterns together in the first array. A common mistake is
+listing patterns as separate array elements — the second one becomes
+a must-NOT-match list:
+
+```yaml
+# WRONG — "kbd\\.js" becomes a must-NOT-match pattern!
+ensureFileRegexMatches:
+  - ["kbd\\.css"]
+  - ["kbd\\.js"]
+
+# CORRECT — both patterns must match
+ensureFileRegexMatches:
+  - ["kbd\\.css", "kbd\\.js"]
+```
+
+Full example:
 
 ```yaml
 _quarto:
@@ -123,13 +148,28 @@ _quarto:
         - ["nav#TOC", "div.callout"]       # CSS selectors that must match
         - ["div.should-not-exist"]         # selectors that must NOT match
       ensureFileRegexMatches:
-        - ["pattern in HTML output"]
+        - ["expected-pattern", "another-expected"]  # must match
+        - ["should-not-appear"]                     # must NOT match
       noErrors: true
 ```
 
-### Running a Subset
+### Running a Single Fixture
 
-To debug a specific fixture, check the rendered output directly:
+Use `SMOKE_FILTER` to run only fixtures whose relative path contains the
+given string. This works for both the Rust and WASM runners:
+
 ```bash
-cargo run -- render crates/quarto/tests/smoke-all/path/to/doc.qmd -v
+# Rust — run only kbd fixture
+SMOKE_FILTER=kbd cargo nextest run -p quarto -E 'test(smoke_all)'
+
+# WASM Vitest — run only kbd fixture
+SMOKE_FILTER=kbd npm run test:wasm
+
+# Playwright — use native --grep (no env var needed)
+npx playwright test smoke-all --grep kbd
+```
+
+To render a fixture directly and inspect its output:
+```bash
+cargo run --bin q2 -- render crates/quarto/tests/smoke-all/path/to/doc.qmd -v
 ```
