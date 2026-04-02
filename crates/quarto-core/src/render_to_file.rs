@@ -202,9 +202,14 @@ pub fn render_document_to_file(
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, &doc_info, &render_format, &binaries);
 
-    // Configure the pipeline with CSS paths
+    // Configure the pipeline with CSS paths and resource prefix.
+    // The resource prefix (e.g., "doc_files/") ensures extension dependency
+    // paths like "libs/kbd/kbd.css" become "doc_files/libs/kbd/kbd.css" in
+    // the HTML output, matching where the files are written on disk.
+    let resource_prefix = format!("{}_files/", output_stem);
     let config = HtmlRenderConfig {
         css_paths: &resource_paths.css,
+        resource_prefix: &resource_prefix,
     };
 
     // Run the render pipeline

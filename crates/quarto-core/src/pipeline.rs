@@ -77,12 +77,18 @@ pub struct HtmlRenderConfig<'a> {
     /// CSS paths to include in the document (relative to the output HTML).
     /// If empty, the default CSS artifact will be used.
     pub css_paths: &'a [String],
+    /// Prefix for extension dependency paths (e.g., `"test_files/"` for
+    /// `test.html`). Passed through to `ApplyTemplateConfig::resource_prefix`.
+    pub resource_prefix: &'a str,
 }
 
 impl<'a> HtmlRenderConfig<'a> {
     /// Create a new configuration with custom CSS paths.
     pub fn with_css(css_paths: &'a [String]) -> Self {
-        Self { css_paths }
+        Self {
+            css_paths,
+            ..Default::default()
+        }
     }
 }
 
@@ -365,7 +371,9 @@ pub async fn render_qmd_to_html(
     // Build pipeline based on config
     // If custom CSS or template is specified, use a customized ApplyTemplateStage
     let stages = if !config.css_paths.is_empty() {
-        let apply_config = ApplyTemplateConfig::new().with_css_paths(config.css_paths.to_vec());
+        let apply_config = ApplyTemplateConfig::new()
+            .with_css_paths(config.css_paths.to_vec())
+            .with_resource_prefix(config.resource_prefix.to_string());
 
         let stages: Vec<Box<dyn PipelineStage>> = vec![
             Box::new(ParseDocumentStage::new()),

@@ -54,10 +54,10 @@ export function postProcessIframe(
   const doc = iframe.contentDocument;
   if (!doc) return;
 
-  // Replace CSS links with data URIs
+  // Replace CSS links with data URIs (both /.quarto/ and libs/ paths)
   doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
     const href = link.getAttribute('href');
-    if (href?.startsWith('/.quarto/')) {
+    if (href && (href.startsWith('/.quarto/') || href.startsWith('libs/'))) {
       const result = vfsReadFile(href);
       if (result.success && result.content) {
         // Use UTF-8 safe base64 encoding (btoa only handles Latin1)
@@ -66,6 +66,31 @@ export function postProcessIframe(
       }
     }
   });
+
+  // Inline VFS-backed scripts so the iframe can execute them.
+  // The iframe can't fetch relative src paths like "libs/kbd/kbd.js",
+  // so we read the content from VFS and replace with an inline script.
+  // After inlining, we re-fire DOMContentLoaded since many extension
+  // scripts (e.g., kbd.js) register listeners for that event, and it
+  // has already fired by the time the post-processor runs.
+  let didInlineScripts = false;
+  doc.querySelectorAll('script[src]').forEach((script) => {
+    const src = script.getAttribute('src');
+    if (src && (src.startsWith('/.quarto/') || src.startsWith('libs/'))) {
+      const result = vfsReadFile(src);
+      if (result.success && result.content) {
+        const inline = doc.createElement('script');
+        inline.textContent = result.content;
+        script.parentNode?.appendChild(inline);
+        script.remove();
+        didInlineScripts = true;
+      }
+    }
+  });
+
+  if (didInlineScripts) {
+    doc.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
+  }
 
   // Replace image sources with data URIs
   doc.querySelectorAll('img').forEach((img) => {

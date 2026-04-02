@@ -30,6 +30,11 @@ use crate::trace_event;
 pub struct ApplyTemplateConfig {
     /// CSS paths to include in the document (relative to the output HTML).
     pub css_paths: Vec<String>,
+    /// Prefix for extension dependency paths (e.g., `"test_files/"` for
+    /// `test.html`). Extension CSS/JS artifacts use paths like `libs/kbd/kbd.css`
+    /// which are relative to the resource directory. This prefix makes them
+    /// relative to the output HTML file.
+    pub resource_prefix: String,
 }
 
 impl ApplyTemplateConfig {
@@ -41,6 +46,12 @@ impl ApplyTemplateConfig {
     /// Set custom CSS paths.
     pub fn with_css_paths(mut self, paths: Vec<String>) -> Self {
         self.css_paths = paths;
+        self
+    }
+
+    /// Set the resource prefix for extension dependency paths.
+    pub fn with_resource_prefix(mut self, prefix: String) -> Self {
+        self.resource_prefix = prefix;
         self
     }
 }
@@ -148,13 +159,17 @@ impl PipelineStage for ApplyTemplateStage {
             self.config.css_paths.clone()
         };
 
-        // Add extension CSS dependencies (css:* artifacts, excluding css:default)
+        // Add extension CSS dependencies (css:* artifacts, excluding css:default).
+        // Artifact paths like `libs/kbd/kbd.css` are relative to the resource
+        // directory; prepend the resource prefix to make them relative to the
+        // output HTML file.
+        let prefix = &self.config.resource_prefix;
         for (key, artifact) in ctx.artifacts.get_by_prefix("css:") {
             if key == "css:default" {
                 continue;
             }
             if let Some(path) = &artifact.path {
-                css_paths.push(path.to_string_lossy().to_string());
+                css_paths.push(format!("{}{}", prefix, path.to_string_lossy()));
             }
         }
 
@@ -164,7 +179,7 @@ impl PipelineStage for ApplyTemplateStage {
             .get_by_prefix("js:")
             .iter()
             .filter_map(|(_, a)| a.path.as_ref())
-            .map(|p| p.to_string_lossy().to_string())
+            .map(|p| format!("{}{}", prefix, p.to_string_lossy()))
             .collect();
 
         // Extract custom template/partials from merged metadata
