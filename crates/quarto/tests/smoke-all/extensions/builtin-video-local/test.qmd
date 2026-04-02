@@ -1,0 +1,12 @@
+---
+title: Built-in Video Extension Test (Local/VideoJS)
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["video-js\\.css", "video\\.min\\.js", "quarto-video", "video-js vjs-default-skin"]
+---
+
+{{< video sample.mp4 >}}

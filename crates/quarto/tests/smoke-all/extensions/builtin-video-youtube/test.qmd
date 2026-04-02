@@ -1,0 +1,12 @@
+---
+title: Built-in Video Extension Test (YouTube)
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["youtube\\.com/embed", "quarto-video"]
+---
+
+{{< video https://www.youtube.com/watch?v=dQw4w9WgXcQ >}}

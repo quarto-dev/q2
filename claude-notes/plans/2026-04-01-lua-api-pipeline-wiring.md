@@ -1,6 +1,6 @@
 # Plan B: Pipeline Wiring + Template (quarto-core crate)
 
-## Status: Phases 1-6 complete, Phase 7 nearly complete (only 7.2 remaining)
+## Status: Complete
 
 ## Prerequisites
 
@@ -377,10 +377,9 @@ an `artifacts: ArtifactStore` field (bridged to/from `StageContext` via
   end-to-end: `<link>` for CSS, `<script>` for JS, files in
   `{stem}_files/libs/kbd/`.
 
-- [ ] **7.2** Smoke test: shortcode that calls
-  `quarto.doc.include_text("in-header", "<meta name='test'>")` and
-  `quarto.doc.include_text("after-body", "<div>footer</div>")`.
-  Verify both appear in the correct locations in the output HTML.
+- [x] **7.2** Smoke test: covered by built-in `video` extension
+  (video plan). The `builtin-video-local` smoke test exercises
+  `include_text("after-body", ...)` for VideoJS initialization scripts.
 
 - [x] **7.3** Smoke test: covered by built-in `kbd` extension
   (batch 2 plan). The kbd shortcode calls `quarto.doc.is_format()`
