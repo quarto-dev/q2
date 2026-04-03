@@ -217,9 +217,14 @@ cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
   --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
 
-WASM tests are NOT part of `cargo xtask verify` — they require nightly + WASM toolchain
-which not all contributors will have. They run in CI. Contributors modifying WASM-specific
-code should run them locally; others don't need to.
+WASM tests are NOT part of `cargo xtask verify` — they require nightly + Clang with
+wasm32 support + wasm-sysroot, which is Linux/macOS only. The WASM build itself
+(`build-wasm.js`) also doesn't support Windows (no Clang wasm32 target). WASM tests
+run in Linux CI only, matching the existing WASM build behavior.
+
+On Windows, skip WASM tests — this is consistent with the WASM build being skipped.
+On macOS/Linux with LLVM installed, contributors modifying WASM-specific code can run
+them locally.
 
 ## Out of scope
 
