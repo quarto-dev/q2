@@ -17,10 +17,21 @@ Additionally, `wasm-qmd-parser` is a stale crate fully superseded by
 `wasm-quarto-hub-client`. Its CI workflow (`build-wasm.yml`) and wasm-pack dependency
 are orphaned artifacts.
 
+## Success criteria
+
+- All 8 filter traversal tests pass on Windows (currently fail with os error 123)
+- WASM smoke tests pass in CI on wasm32-unknown-unknown target
+- No references to wasm-qmd-parser or wasm-pack remain in codebase
+- hub-client WASM build (`npm run build:all`) unaffected
+
 ## Solution
 
 Replace the cfg proxy with real WASM tests, clean up stale artifacts, and document the
 WASM testing convention.
+
+**Phase ordering:** WASM tests (Phase 3) must be added before or alongside the cfg proxy
+removal (Phase 2) to avoid any validation gap. In practice, Phase 3 setup and Phase 2
+cfg changes should land in the same changeset.
 
 ## Phase 1: Clean up stale WASM artifacts
 
@@ -29,7 +40,8 @@ WASM testing convention.
 - `crates/wasm-qmd-parser/` — entire crate (superseded by wasm-quarto-hub-client)
 - `.github/workflows/build-wasm.yml` — only builds wasm-qmd-parser, manual dispatch
 - wasm-pack from `cargo xtask dev-setup` install list
-- `Cargo.toml` root: remove wasm-qmd-parser from `exclude` list, remove wasm-pack comments
+- `Cargo.toml` root: remove wasm-qmd-parser from `exclude` list, remove
+  `[workspace.dependencies.wasm-qmd-parser]` entry (line 86-87), remove wasm-pack comments
 
 ### Check and update
 
@@ -88,6 +100,9 @@ Add to `.cargo/config.toml` (workspace root):
 runner = 'wasm-bindgen-test-runner'
 ```
 
+Note: the `runner` setting only applies to `cargo test`, not `cargo build`. The
+hub-client WASM production build (`build-wasm.js` → `cargo build`) is unaffected.
+
 ### Test file
 
 Create `crates/pampa/tests/wasm_lua.rs`:
@@ -130,7 +145,8 @@ Focused smoke tests of WASM-specific code paths (not duplication of native tests
 
 ### CI
 
-Add a job to an existing workflow (or a lightweight standalone workflow):
+Add a `wasm-tests` job to `.github/workflows/test-suite.yml` (the main Rust CI workflow).
+Trigger on the same paths as existing Rust tests, plus `crates/pampa/tests/wasm_lua.rs`:
 
 ```yaml
 wasm-tests:
@@ -142,9 +158,9 @@ wasm-tests:
         components: rust-src
         targets: wasm32-unknown-unknown
     - name: Install wasm-bindgen-test-runner
-      run: cargo install wasm-bindgen-cli --version 0.2  # must match wasm-bindgen crate version
+      run: cargo install wasm-bindgen-cli --version 0.2.108  # must match wasm-bindgen in Cargo.lock
     - name: Run WASM tests
-      run: cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown -Zbuild-std=std,panic_unwind
+      run: cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
 
 The WASM build step in hub-client workflows (`npm run build:all`, `npm run build:wasm`)
@@ -177,6 +193,8 @@ concern testing Rust code on the wasm32 target.
   exactly. CI should pin the version. Document this in dev-docs/wasm.md.
 - **`--test wasm_lua` required**: Running `cargo test -p pampa --target wasm32` without
   `--test` would fail (native tests can't compile for wasm32). Document this clearly.
+- **Feature flags required**: WASM test command must use `--no-default-features --features lua-filter`
+  to match how wasm-quarto-hub-client consumes pampa. Document the full command.
 
 ## Out of scope
 
