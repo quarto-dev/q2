@@ -21,7 +21,8 @@ are orphaned artifacts.
 
 - All 8 filter traversal tests pass on Windows (currently fail with os error 123)
 - WASM smoke tests pass in CI on wasm32-unknown-unknown target
-- No references to wasm-qmd-parser or wasm-pack remain in codebase
+- No active build/test/runtime references to wasm-qmd-parser or wasm-pack remain
+  (historical references in claude-notes/ plans are acceptable)
 - hub-client WASM build (`npm run build:all`) unaffected
 
 ## Solution
@@ -45,8 +46,8 @@ cfg changes should land in the same changeset.
 
 ### Check and update
 
-- `.github/workflows/hub-client-e2e.yml` — has `cargo install wasm-pack`; verify if
-  actually used or stale (wasm-quarto-hub-client build uses build-wasm.js, not wasm-pack)
+- `.github/workflows/hub-client-e2e.yml` — remove stale `cargo install wasm-pack` step
+  (verified: wasm-pack is installed but never used; WASM build uses build-wasm.js)
 - `hub-client/README.md` — remove wasm-pack prerequisite
 - `crates/wasm-quarto-hub-client/README.md` — remove wasm-pack references
 
@@ -175,7 +176,7 @@ concern testing Rust code on the wasm32 target.
 | `.claude/rules/wasm.md` | AI assistants | Never add `test` to wasm32 cfg guard; verify WASM tests when editing io_wasm/os_wasm |
 | `dev-docs/wasm.md` | Developers | Single source of truth for WASM architecture, build, and testing |
 | `claude-notes/instructions/testing.md` | AI assistants | Brief pointer to pampa CLAUDE.md for WASM details |
-| `tests/wasm_lua.rs` header | All | What this file tests and when to add to it |
+| `crates/pampa/tests/wasm_lua.rs` header | All | What this file tests and when to add to it |
 
 ## Testing strategy summary
 
@@ -183,7 +184,7 @@ concern testing Rust code on the wasm32 target.
 |-------|--------------|-------|---------|
 | Native unit tests (io_wasm, os_wasm) | Synthetic Lua API contract | Inline in source files | All OS via `cargo test` |
 | Native integration tests (filter_tests) | Filter logic with real Lua stdlib | Inline in source files | All OS via `cargo test` |
-| WASM integration tests (new) | WASM-specific setup works on real target | `tests/wasm_lua.rs` | wasm32 in CI |
+| WASM integration tests (new) | WASM-specific setup works on real target | `crates/pampa/tests/wasm_lua.rs` | wasm32 in CI |
 
 ## Risks and mitigations
 
@@ -196,6 +197,20 @@ concern testing Rust code on the wasm32 target.
   `--test` would fail (native tests can't compile for wasm32). Document this clearly.
 - **Feature flags required**: WASM test command must use `--no-default-features --features lua-filter`
   to match how wasm-quarto-hub-client consumes pampa. Document the full command.
+
+## Local developer workflow
+
+WASM tests require nightly Rust + `rust-src` component + `wasm-bindgen-test-runner`.
+`cargo xtask dev-setup` installs the runner. The full local command is:
+
+```bash
+cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
+  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
+```
+
+WASM tests are NOT part of `cargo xtask verify` — they require nightly + WASM toolchain
+which not all contributors will have. They run in CI. Contributors modifying WASM-specific
+code should run them locally; others don't need to.
 
 ## Out of scope
 
