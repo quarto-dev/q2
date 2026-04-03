@@ -157,8 +157,8 @@ wasm-tests:
       with:
         components: rust-src
         targets: wasm32-unknown-unknown
-    - name: Install wasm-bindgen-test-runner
-      run: cargo install wasm-bindgen-cli --version 0.2.108  # must match wasm-bindgen in Cargo.lock
+    - name: Install dev tools
+      run: cargo xtask dev-setup  # installs wasm-bindgen-cli version-matched from Cargo.lock
     - name: Run WASM tests
       run: cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
@@ -190,7 +190,8 @@ concern testing Rust code on the wasm32 target.
 - **`-Zbuild-std` is nightly-only**: Project is committed to nightly for WASM. If this
   changes, WASM tests would need adjustment. Acceptable risk.
 - **`wasm-bindgen-test-runner` version pinning**: Must match `wasm-bindgen` crate version
-  exactly. CI should pin the version. Document this in dev-docs/wasm.md.
+  exactly. `cargo xtask dev-setup` reads the version from Cargo.lock and installs the
+  matching CLI. CI uses `cargo xtask dev-setup` so the version stays in sync automatically.
 - **`--test wasm_lua` required**: Running `cargo test -p pampa --target wasm32` without
   `--test` would fail (native tests can't compile for wasm32). Document this clearly.
 - **Feature flags required**: WASM test command must use `--no-default-features --features lua-filter`
