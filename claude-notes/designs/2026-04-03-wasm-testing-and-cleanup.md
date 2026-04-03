@@ -90,7 +90,8 @@ change, since they'll use `Lua::new()` with real C stdlib instead of synthetic W
 
 - Add `wasm-bindgen-test` as dev-dependency to `crates/pampa/Cargo.toml`
 - Version must match the `wasm-bindgen` version used by the project
-- Install `wasm-bindgen-test-runner` CLI (version-matched)
+- Install `wasm-bindgen-cli` via `cargo xtask dev-setup` (this provides the
+  `wasm-bindgen-test-runner` binary, version-matched from Cargo.lock)
 
 ### Configuration
 
@@ -147,21 +148,23 @@ Focused smoke tests of WASM-specific code paths (not duplication of native tests
 ### CI
 
 Add a `wasm-tests` job to `.github/workflows/test-suite.yml` (the main Rust CI workflow).
-Trigger on the same paths as existing Rust tests, plus `crates/pampa/tests/wasm_lua.rs`:
+Trigger on the same paths as existing Rust tests, plus `crates/pampa/tests/wasm_lua.rs`.
 
-```yaml
-wasm-tests:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@nightly
-      with:
-        components: rust-src
-        targets: wasm32-unknown-unknown
-    - name: Install dev tools
-      run: cargo xtask dev-setup  # installs wasm-bindgen-cli version-matched from Cargo.lock
-    - name: Run WASM tests
-      run: cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
+**C toolchain prerequisite:** pampa with `lua-filter` pulls in `mlua` → `lua-src-wasm`,
+which compiles Lua from C source via the `cc` crate. When targeting wasm32, this requires
+Clang + `CC_wasm32_unknown_unknown` + `CFLAGS_wasm32_unknown_unknown` pointing to the
+wasm-sysroot. This is the same setup already used by `ts-test-suite.yml` for the
+production WASM build — the new job mirrors that toolchain setup.
+
+Note: `ts-test-suite.yml` currently hardcodes `wasm-bindgen-cli --version 0.2.108`.
+This should be migrated to `cargo xtask dev-setup` as part of this work.
+
+Test command:
+```bash
+CC_wasm32_unknown_unknown=clang \
+CFLAGS_wasm32_unknown_unknown="-isystem crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
+cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
+  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
 
 The WASM build step in hub-client workflows (`npm run build:all`, `npm run build:wasm`)
@@ -193,6 +196,10 @@ concern testing Rust code on the wasm32 target.
 - **`wasm-bindgen-test-runner` version pinning**: Must match `wasm-bindgen` crate version
   exactly. `cargo xtask dev-setup` reads the version from Cargo.lock and installs the
   matching CLI. CI uses `cargo xtask dev-setup` so the version stays in sync automatically.
+- **C toolchain for wasm32**: Required because mlua/lua-src compiles Lua from C. Both the
+  WASM test job and the existing TS test suite WASM build need this. Opportunity to share
+  the setup (composite action or reusable workflow) rather than duplicating Clang + env
+  vars across workflows.
 - **`--test wasm_lua` required**: Running `cargo test -p pampa --target wasm32` without
   `--test` would fail (native tests can't compile for wasm32). Document this clearly.
 - **Feature flags required**: WASM test command must use `--no-default-features --features lua-filter`
@@ -200,10 +207,12 @@ concern testing Rust code on the wasm32 target.
 
 ## Local developer workflow
 
-WASM tests require nightly Rust + `rust-src` component + `wasm-bindgen-test-runner`.
-`cargo xtask dev-setup` installs the runner. The full local command is:
+WASM tests require nightly Rust + `rust-src` component + Clang (for C compilation of
+Lua source) + `wasm-bindgen-test-runner` (installed via `cargo xtask dev-setup`).
 
 ```bash
+CC_wasm32_unknown_unknown=clang \
+CFLAGS_wasm32_unknown_unknown="-isystem crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
 cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
   --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
