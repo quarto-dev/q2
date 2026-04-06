@@ -337,7 +337,7 @@ function DoubleBufferedIframe({
         ref={iframeARef}
         srcDoc={iframeAHtml}
         title={`A`}
-        sandbox={'allow-same-origin allow-popups allow-scripts'}
+        sandbox={'allow-same-origin allow-popups'}
         onLoad={activeIframe === 'A' ? handleActiveLoad : handleInactiveLoad}
         className={activeIframe === 'A' ? 'preview-active' : 'preview-hidden'}
       />
@@ -345,7 +345,7 @@ function DoubleBufferedIframe({
         ref={iframeBRef}
         srcDoc={iframeBHtml}
         title={`B`}
-        sandbox={'allow-same-origin allow-popups allow-scripts'}
+        sandbox={'allow-same-origin allow-popups'}
         onLoad={activeIframe === 'B' ? handleActiveLoad : handleInactiveLoad}
         className={activeIframe === 'B' ? 'preview-active' : 'preview-hidden'}
       />

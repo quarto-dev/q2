@@ -532,7 +532,7 @@ function MorphIframe({
     <iframe
       ref={iframeRef}
       title="Preview"
-      sandbox={'allow-same-origin allow-popups allow-scripts'}
+      sandbox={'allow-same-origin allow-popups'}
       className="preview-active"
     />
   );
