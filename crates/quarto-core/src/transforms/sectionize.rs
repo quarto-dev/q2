@@ -42,12 +42,13 @@ impl Default for SectionizeTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for SectionizeTransform {
     fn name(&self) -> &str {
         "sectionize"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
         ast.blocks = pampa::transforms::sectionize_blocks(std::mem::take(&mut ast.blocks));
         Ok(())
     }
@@ -78,14 +79,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = SectionizeTransform::new();
         assert_eq!(transform.name(), "sectionize");
     }
 
-    #[test]
-    fn test_transform_wraps_headers_in_sections() {
+    #[tokio::test]
+    async fn test_transform_wraps_headers_in_sections() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
@@ -116,7 +117,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = SectionizeTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have one section Div
         assert_eq!(ast.blocks.len(), 1);
@@ -133,8 +134,8 @@ mod tests {
         assert_eq!(div.content.len(), 2);
     }
 
-    #[test]
-    fn test_default_trait() {
+    #[tokio::test]
+    async fn test_default_trait() {
         let _transform: SectionizeTransform = Default::default();
     }
 }

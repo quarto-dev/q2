@@ -114,7 +114,7 @@ impl LuaShortcodeEngine {
 
     /// Load a shortcode Lua script. Registers all handlers it defines.
     /// Supports both return-table and environment-function conventions.
-    pub fn load_script(
+    pub async fn load_script(
         &mut self,
         script_path: &Path,
     ) -> std::result::Result<(), LuaShortcodeError> {
@@ -161,7 +161,10 @@ impl LuaShortcodeEngine {
             .set_name(script_path.to_string_lossy())
             .set_environment(env.clone());
 
-        let ret: Value = chunk.eval().map_err(LuaShortcodeError::LuaError)?;
+        let ret: Value = chunk
+            .eval_async()
+            .await
+            .map_err(LuaShortcodeError::LuaError)?;
 
         // Convention 1: script returns a table of handlers
         if let Value::Table(ref table) = ret {
@@ -205,7 +208,7 @@ impl LuaShortcodeEngine {
 
     /// Call a named shortcode handler.
     /// Returns None if no handler is registered for the name.
-    pub fn call(
+    pub async fn call(
         &self,
         name: &str,
         args: &ShortcodeArgs,
@@ -219,7 +222,7 @@ impl LuaShortcodeEngine {
             let _ = super::quarto_api::push_script_dir(&self.lua, dir);
         }
 
-        let result = self.call_handler(name, func, args, context);
+        let result = self.call_handler(name, func, args, context).await;
 
         if self.handler_script_dirs.contains_key(name) {
             let _ = super::quarto_api::pop_script_dir(&self.lua);
@@ -255,14 +258,14 @@ impl LuaShortcodeEngine {
         super::quarto_doc::extract_text_includes(&self.lua).map_err(LuaShortcodeError::LuaError)
     }
 
-    fn call_handler(
+    async fn call_handler(
         &self,
         name: &str,
         func: Function,
         args: &ShortcodeArgs,
         context: ShortcodeCallContext,
     ) -> LuaShortcodeResult {
-        match self.build_and_call(func, args, context) {
+        match self.build_and_call(func, args, context).await {
             Ok(result) => result,
             Err(e) => {
                 LuaShortcodeResult::Error(format!("Shortcode '{}' handler error: {}", name, e))
@@ -270,7 +273,7 @@ impl LuaShortcodeEngine {
         }
     }
 
-    fn build_and_call(
+    async fn build_and_call(
         &self,
         func: Function,
         args: &ShortcodeArgs,
@@ -291,7 +294,9 @@ impl LuaShortcodeEngine {
         // Context string
         let ctx_str = context.as_str();
 
-        let ret: Value = func.call((lua_args, lua_kwargs, lua_meta, lua_raw_args, ctx_str))?;
+        let ret: Value = func
+            .call_async((lua_args, lua_kwargs, lua_meta, lua_raw_args, ctx_str))
+            .await?;
 
         Ok(convert_return_value(&self.lua, ret))
     }
@@ -538,8 +543,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_load_script_return_table() {
+    #[tokio::test]
+    async fn test_load_script_return_table() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -555,12 +560,12 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
         assert!(engine.has_handler("hello"));
     }
 
-    #[test]
-    fn test_load_script_env_function() {
+    #[tokio::test]
+    async fn test_load_script_env_function() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -574,12 +579,12 @@ end
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
         assert!(engine.has_handler("hello"));
     }
 
-    #[test]
-    fn test_call_returns_inlines() {
+    #[tokio::test]
+    async fn test_call_returns_inlines() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -595,10 +600,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("hello", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Inlines(inlines) => {
@@ -612,8 +618,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_call_returns_blocks() {
+    #[tokio::test]
+    async fn test_call_returns_blocks() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -629,10 +635,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("brk", &make_empty_args(), ShortcodeCallContext::Block)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Blocks(blocks) => {
@@ -649,8 +656,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_call_returns_string() {
+    #[tokio::test]
+    async fn test_call_returns_string() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -666,10 +673,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("ver", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "1.0.0"),
@@ -677,8 +685,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_call_returns_nil() {
+    #[tokio::test]
+    async fn test_call_returns_nil() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -694,10 +702,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("bad", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Error(msg) => {
@@ -707,21 +716,23 @@ return {
         }
     }
 
-    #[test]
-    fn test_call_unknown_handler() {
+    #[tokio::test]
+    async fn test_call_unknown_handler() {
         let runtime = make_runtime();
         let engine = LuaShortcodeEngine::new("html", runtime).unwrap();
 
-        let result = engine.call(
-            "nonexistent",
-            &make_empty_args(),
-            ShortcodeCallContext::Inline,
-        );
+        let result = engine
+            .call(
+                "nonexistent",
+                &make_empty_args(),
+                ShortcodeCallContext::Inline,
+            )
+            .await;
         assert!(result.is_none());
     }
 
-    #[test]
-    fn test_handler_receives_args() {
+    #[tokio::test]
+    async fn test_handler_receives_args() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -737,7 +748,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec!["world".to_string()],
@@ -746,6 +757,7 @@ return {
         };
         let result = engine
             .call("echo", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "world"),
@@ -753,8 +765,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_handler_receives_kwargs() {
+    #[tokio::test]
+    async fn test_handler_receives_kwargs() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -770,7 +782,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec![],
@@ -779,6 +791,7 @@ return {
         };
         let result = engine
             .call("kwarg", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "howdy"),
@@ -786,8 +799,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_handler_receives_meta() {
+    #[tokio::test]
+    async fn test_handler_receives_meta() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -803,7 +816,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec![],
@@ -812,6 +825,7 @@ return {
         };
         let result = engine
             .call("meta_reader", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "My Doc"),
@@ -819,8 +833,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_handler_receives_context() {
+    #[tokio::test]
+    async fn test_handler_receives_context() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -836,10 +850,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("ctx", &make_empty_args(), ShortcodeCallContext::Block)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "block"),
@@ -848,6 +863,7 @@ return {
 
         let result = engine
             .call("ctx", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "inline"),
@@ -856,6 +872,7 @@ return {
 
         let result = engine
             .call("ctx", &make_empty_args(), ShortcodeCallContext::Text)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "text"),
@@ -863,8 +880,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_later_script_overrides_earlier() {
+    #[tokio::test]
+    async fn test_later_script_overrides_earlier() {
         let tmp = TempDir::new().unwrap();
         let script1 = write_script(
             tmp.path(),
@@ -891,11 +908,12 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script1).unwrap();
-        engine.load_script(&script2).unwrap();
+        engine.load_script(&script1).await.unwrap();
+        engine.load_script(&script2).await.unwrap();
 
         let result = engine
             .call("greeting", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "second"),
@@ -903,8 +921,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_read_arg_helper() {
+    #[tokio::test]
+    async fn test_read_arg_helper() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -921,7 +939,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec!["test-value".to_string()],
@@ -930,6 +948,7 @@ return {
         };
         let result = engine
             .call("readarg", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "test-value"),
@@ -937,8 +956,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_shortcode_resolve_path() {
+    #[tokio::test]
+    async fn test_shortcode_resolve_path() {
         let tmp = TempDir::new().unwrap();
         // Write a data file next to the script
         std::fs::write(tmp.path().join("data.json"), r#"{"key":"value"}"#).unwrap();
@@ -957,10 +976,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("resolver", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => {
@@ -971,8 +991,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_shortcode_quarto_json() {
+    #[tokio::test]
+    async fn test_shortcode_quarto_json() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -989,10 +1009,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("jsontest", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "42"),
@@ -1000,8 +1021,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_shortcode_quarto_log() {
+    #[tokio::test]
+    async fn test_shortcode_quarto_log() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1018,10 +1039,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call("logtest", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "ok"),
@@ -1029,8 +1051,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_shortcode_resolve_path_multi_extension() {
+    #[tokio::test]
+    async fn test_shortcode_resolve_path_multi_extension() {
         // Test that script dirs are tracked per handler, not globally
         let tmp1 = TempDir::new().unwrap();
         let tmp2 = TempDir::new().unwrap();
@@ -1061,12 +1083,13 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script1).unwrap();
-        engine.load_script(&script2).unwrap();
+        engine.load_script(&script1).await.unwrap();
+        engine.load_script(&script2).await.unwrap();
 
         // ext1 should resolve relative to tmp1
         let result1 = engine
             .call("ext1", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result1 {
             LuaShortcodeResult::Text(s) => {
@@ -1079,6 +1102,7 @@ return {
         // ext2 should resolve relative to tmp2
         let result2 = engine
             .call("ext2", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result2 {
             LuaShortcodeResult::Text(s) => {
@@ -1091,8 +1115,8 @@ return {
 
     // --- Phase 1: TS Quarto compat tests (should fail before fix) ---
 
-    #[test]
-    fn test_args_are_plain_strings() {
+    #[tokio::test]
+    async fn test_args_are_plain_strings() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1108,7 +1132,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec!["5".to_string()],
@@ -1117,6 +1141,7 @@ return {
         };
         let result = engine
             .call("stringify_arg", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "5"),
@@ -1124,8 +1149,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_args_exclude_kwargs() {
+    #[tokio::test]
+    async fn test_args_exclude_kwargs() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1141,7 +1166,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec!["hello".to_string()],
@@ -1150,6 +1175,7 @@ return {
         };
         let result = engine
             .call("count_args", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "1", "kwargs should not be in args"),
@@ -1157,8 +1183,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_kwargs_missing_key_returns_inlines() {
+    #[tokio::test]
+    async fn test_kwargs_missing_key_returns_inlines() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1175,7 +1201,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let result = engine
             .call(
@@ -1183,6 +1209,7 @@ return {
                 &make_empty_args(),
                 ShortcodeCallContext::Inline,
             )
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => {
@@ -1197,8 +1224,8 @@ return {
         }
     }
 
-    #[test]
-    fn test_stringify_args_lipsum_pattern() {
+    #[tokio::test]
+    async fn test_stringify_args_lipsum_pattern() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1220,7 +1247,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec!["3".to_string()],
@@ -1229,6 +1256,7 @@ return {
         };
         let result = engine
             .call("lipsum_pattern", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "3"),
@@ -1237,8 +1265,8 @@ return {
     }
 
     /// Test the fontawesome/unsplash pattern: stringify a kwarg value.
-    #[test]
-    fn test_kwargs_stringify_value() {
+    #[tokio::test]
+    async fn test_kwargs_stringify_value() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1258,7 +1286,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec!["icon-name".to_string()],
@@ -1267,6 +1295,7 @@ return {
         };
         let result = engine
             .call("fa", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "My Icon"),
@@ -1277,8 +1306,8 @@ return {
     /// Test the unsplash pattern: kwargs missing key with length check.
     /// In TS Quarto, missing kwargs return pandoc.Inlines({}), which has
     /// length 0. Extensions check `kwargs['key'] ~= nil and #kwargs['key'] > 0`.
-    #[test]
-    fn test_kwargs_missing_key_length_check() {
+    #[tokio::test]
+    async fn test_kwargs_missing_key_length_check() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1301,7 +1330,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         // With width kwarg present
         let args_with = ShortcodeArgs {
@@ -1311,6 +1340,7 @@ return {
         };
         let result = engine
             .call("unsplash", &args_with, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "800"),
@@ -1325,6 +1355,7 @@ return {
         };
         let result = engine
             .call("unsplash", &args_without, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "DEFAULT"),
@@ -1333,8 +1364,8 @@ return {
     }
 
     /// Test meta parameter access pattern: handler reads document metadata.
-    #[test]
-    fn test_meta_access_pattern() {
+    #[tokio::test]
+    async fn test_meta_access_pattern() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1357,7 +1388,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec![],
@@ -1369,6 +1400,7 @@ return {
         };
         let result = engine
             .call("meta_sc", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "My Document by Jane"),
@@ -1377,8 +1409,8 @@ return {
     }
 
     /// Test raw_args parameter: handlers can access the unparsed argument strings.
-    #[test]
-    fn test_raw_args_access() {
+    #[tokio::test]
+    async fn test_raw_args_access() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1398,7 +1430,7 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         let args = ShortcodeArgs {
             positional: vec!["hello".to_string(), "world".to_string()],
@@ -1407,6 +1439,7 @@ return {
         };
         let result = engine
             .call("raw", &args, ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "hello,world"),
@@ -1416,8 +1449,8 @@ return {
 
     /// Test context parameter with block output: handler returns different
     /// types based on context string.
-    #[test]
-    fn test_context_driven_output() {
+    #[tokio::test]
+    async fn test_context_driven_output() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1439,11 +1472,12 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         // Block context → Para block
         let result = engine
             .call("ctx_out", &make_empty_args(), ShortcodeCallContext::Block)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Blocks(blocks) => {
@@ -1462,6 +1496,7 @@ return {
         // Inline context → Str inline
         let result = engine
             .call("ctx_out", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Inlines(inlines) => {
@@ -1477,6 +1512,7 @@ return {
         // Text context → plain string
         let result = engine
             .call("ctx_out", &make_empty_args(), ShortcodeCallContext::Text)
+            .await
             .unwrap();
         match result {
             LuaShortcodeResult::Text(s) => assert_eq!(s, "text-output"),
@@ -1488,8 +1524,8 @@ return {
     // Extraction tests (Phase 4)
     // =====================================================================
 
-    #[test]
-    fn test_shortcode_extract_html_dependencies() {
+    #[tokio::test]
+    async fn test_shortcode_extract_html_dependencies() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1510,10 +1546,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         engine
             .call("dep_sc", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
 
         let deps = engine.extract_html_dependencies().unwrap();
@@ -1523,8 +1560,8 @@ return {
         assert_eq!(deps[0].scripts.len(), 1);
     }
 
-    #[test]
-    fn test_shortcode_extract_diagnostics() {
+    #[tokio::test]
+    async fn test_shortcode_extract_diagnostics() {
         let tmp = TempDir::new().unwrap();
         let script = write_script(
             tmp.path(),
@@ -1541,10 +1578,11 @@ return {
 
         let runtime = make_runtime();
         let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
-        engine.load_script(&script).unwrap();
+        engine.load_script(&script).await.unwrap();
 
         engine
             .call("warn_sc", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
             .unwrap();
 
         let diagnostics = engine.extract_diagnostics().unwrap();

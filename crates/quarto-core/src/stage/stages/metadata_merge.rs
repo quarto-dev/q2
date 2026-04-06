@@ -142,8 +142,7 @@ impl Default for MetadataMergeStage {
     }
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[async_trait(?Send)]
 impl PipelineStage for MetadataMergeStage {
     fn name(&self) -> &str {
         "metadata-merge"
@@ -308,6 +307,7 @@ mod tests {
     // Mock runtime for testing
     struct MockRuntime;
 
+    #[async_trait::async_trait]
     impl quarto_system_runtime::SystemRuntime for MockRuntime {
         fn file_read(
             &self,
@@ -413,7 +413,10 @@ mod tests {
         {
             Ok(std::collections::HashMap::new())
         }
-        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+        async fn fetch_url(
+            &self,
+            _url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
             Err(quarto_system_runtime::RuntimeError::NotSupported(
                 "mock".to_string(),
             ))
@@ -785,6 +788,7 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
     impl quarto_system_runtime::SystemRuntime for MockRuntimeWithMetadata {
         fn file_read(
             &self,
@@ -890,7 +894,10 @@ mod tests {
         {
             Ok(std::collections::HashMap::new())
         }
-        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+        async fn fetch_url(
+            &self,
+            _url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
             Err(quarto_system_runtime::RuntimeError::NotSupported(
                 "mock".to_string(),
             ))

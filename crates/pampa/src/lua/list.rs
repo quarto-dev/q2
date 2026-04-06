@@ -517,29 +517,29 @@ use super::types::{
 
 /// Create walk() method for Inlines lists
 fn create_inlines_walk_method(lua: &Lua) -> Result<Function> {
-    lua.create_function(|lua, (table, filter): (Table, Table)| {
+    lua.create_async_function(|lua, (table, filter): (Table, Table)| async move {
         // Convert table to Vec<Inline>
-        let inlines = peek_inlines_fuzzy(lua, Value::Table(table))?;
+        let inlines = peek_inlines_fuzzy(&lua, Value::Table(table))?;
 
         // Apply the filter
-        let filtered = walk_inlines_with_filter(lua, &inlines, &filter)?;
+        let filtered = walk_inlines_with_filter(&lua, &inlines, &filter).await?;
 
         // Convert back to Lua table with Inlines metatable
-        inlines_to_lua_table(lua, &filtered)
+        inlines_to_lua_table(&lua, &filtered)
     })
 }
 
 /// Create walk() method for Blocks lists
 fn create_blocks_walk_method(lua: &Lua) -> Result<Function> {
-    lua.create_function(|lua, (table, filter): (Table, Table)| {
+    lua.create_async_function(|lua, (table, filter): (Table, Table)| async move {
         // Convert table to Vec<Block>
-        let blocks = peek_blocks_fuzzy(lua, Value::Table(table))?;
+        let blocks = peek_blocks_fuzzy(&lua, Value::Table(table))?;
 
         // Apply the filter
-        let filtered = walk_blocks_with_filter(lua, &blocks, &filter)?;
+        let filtered = walk_blocks_with_filter(&lua, &blocks, &filter).await?;
 
         // Convert back to Lua table with Blocks metatable
-        blocks_to_lua_table(lua, &filtered)
+        blocks_to_lua_table(&lua, &filtered)
     })
 }
 

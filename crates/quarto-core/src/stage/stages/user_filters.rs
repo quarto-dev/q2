@@ -66,8 +66,7 @@ impl UserFiltersStage {
     }
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[async_trait(?Send)]
 impl PipelineStage for UserFiltersStage {
     fn name(&self) -> &str {
         match self.position {
@@ -134,14 +133,42 @@ impl PipelineStage for UserFiltersStage {
 
         let target_format = ctx.format.identifier.as_str();
 
-        let output = pampa::unified_filter::apply_filters(
+        // The Lua filter future is !Send (mlua::Lua is !Send), but this
+        // pipeline stage runs under #[async_trait] which requires Send on native.
+        // On WASM (single-threaded, ?Send), we can .await directly.
+        // On native, we bridge with block_in_place + a local tokio runtime.
+        #[cfg(not(target_arch = "wasm32"))]
+        let filter_result = {
+            let ast = doc.ast;
+            let ast_context = doc.ast_context;
+            let runtime = ctx.runtime.clone();
+            tokio::task::block_in_place(|| {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+                rt.block_on(pampa::unified_filter::apply_filters(
+                    ast,
+                    ast_context,
+                    filters,
+                    target_format,
+                    runtime,
+                ))
+                .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))
+            })
+        };
+        #[cfg(target_arch = "wasm32")]
+        let filter_result = pampa::unified_filter::apply_filters(
             doc.ast,
             doc.ast_context,
             filters,
             target_format,
             ctx.runtime.clone(),
         )
-        .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+        .await
+        .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()));
+
+        let output = filter_result?;
 
         doc.ast = output.pandoc;
         doc.ast_context = output.context;
@@ -180,6 +207,7 @@ mod tests {
 
     struct MockRuntime;
 
+    #[async_trait::async_trait]
     impl quarto_system_runtime::SystemRuntime for MockRuntime {
         fn file_read(
             &self,
@@ -285,7 +313,10 @@ mod tests {
         {
             Ok(std::collections::HashMap::new())
         }
-        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+        async fn fetch_url(
+            &self,
+            _url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
             Err(quarto_system_runtime::RuntimeError::NotSupported(
                 "mock".to_string(),
             ))

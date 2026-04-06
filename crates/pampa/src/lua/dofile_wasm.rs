@@ -132,8 +132,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_dofile_executes_and_returns_values() {
+    #[tokio::test]
+    async fn test_dofile_executes_and_returns_values() {
         let dir = TempDir::new().unwrap();
         let helper_path = dir.path().join("helper.lua");
         fs::write(&helper_path, "return 42").unwrap();
@@ -156,6 +156,7 @@ end
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
         let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+            .await
             .unwrap()
             .pandoc;
 
@@ -168,8 +169,8 @@ end
         }
     }
 
-    #[test]
-    fn test_loadfile_returns_callable_chunk() {
+    #[tokio::test]
+    async fn test_loadfile_returns_callable_chunk() {
         let dir = TempDir::new().unwrap();
         let helper_path = dir.path().join("helper.lua");
         fs::write(&helper_path, "return 99").unwrap();
@@ -193,6 +194,7 @@ end
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
         let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+            .await
             .unwrap()
             .pandoc;
 
@@ -205,8 +207,8 @@ end
         }
     }
 
-    #[test]
-    fn test_dofile_nonexistent_errors() {
+    #[tokio::test]
+    async fn test_dofile_nonexistent_errors() {
         let dir = TempDir::new().unwrap();
         let filter_path = dir.path().join("filter.lua");
         fs::write(
@@ -227,6 +229,7 @@ end
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
         let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+            .await
             .unwrap()
             .pandoc;
 
@@ -239,8 +242,8 @@ end
         }
     }
 
-    #[test]
-    fn test_loadfile_nonexistent_returns_nil_and_error() {
+    #[tokio::test]
+    async fn test_loadfile_nonexistent_returns_nil_and_error() {
         let dir = TempDir::new().unwrap();
         let filter_path = dir.path().join("filter.lua");
         fs::write(
@@ -261,6 +264,7 @@ end
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
         let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+            .await
             .unwrap()
             .pandoc;
 
@@ -273,8 +277,8 @@ end
         }
     }
 
-    #[test]
-    fn test_dofile_script_dir_stack() {
+    #[tokio::test]
+    async fn test_dofile_script_dir_stack() {
         // Extension in /ext/ calls dofile("helpers/ui.lua"), and ui.lua calls
         // quarto.utils.resolve_path("style.css") — should resolve to
         // /ext/helpers/style.css, not /ext/style.css
@@ -309,6 +313,7 @@ end
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
         let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+            .await
             .unwrap()
             .pandoc;
 

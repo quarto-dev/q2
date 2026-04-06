@@ -68,12 +68,13 @@ impl Default for TocGenerateTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for TocGenerateTransform {
     fn name(&self) -> &str {
         "toc-generate"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
         // Check if TOC auto-generation is requested.
         // Read from ast.meta which contains merged project + document metadata.
         let should_generate = match ast.meta.get("toc") {
@@ -205,14 +206,14 @@ mod tests {
         })
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = TocGenerateTransform::new();
         assert_eq!(transform.name(), "toc-generate");
     }
 
-    #[test]
-    fn test_skips_when_toc_not_enabled() {
+    #[tokio::test]
+    async fn test_skips_when_toc_not_enabled() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
@@ -229,14 +230,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should not have navigation.toc
         assert!(!ast.meta.contains_path(&["navigation", "toc"]));
     }
 
-    #[test]
-    fn test_generates_toc_when_enabled() {
+    #[tokio::test]
+    async fn test_generates_toc_when_enabled() {
         let mut ast = Pandoc {
             meta: config_map(vec![("toc", config_bool(true))]),
             blocks: vec![
@@ -254,7 +255,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have navigation.toc
         assert!(ast.meta.contains_path(&["navigation", "toc"]));
@@ -267,8 +268,8 @@ mod tests {
         assert_eq!(entries[1].get("id").unwrap().as_str(), Some("methods"));
     }
 
-    #[test]
-    fn test_generates_toc_with_string_auto() {
+    #[tokio::test]
+    async fn test_generates_toc_with_string_auto() {
         // toc: "auto" (string)
         let mut ast = Pandoc {
             meta: config_map(vec![("toc", config_str("auto"))]),
@@ -285,14 +286,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have navigation.toc
         assert!(ast.meta.contains_path(&["navigation", "toc"]));
     }
 
-    #[test]
-    fn test_skips_when_navigation_toc_exists() {
+    #[tokio::test]
+    async fn test_skips_when_navigation_toc_exists() {
         let mut ast = Pandoc {
             meta: config_map(vec![("toc", config_bool(true))]),
             blocks: vec![
@@ -312,15 +313,15 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should keep user-provided toc
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
         assert_eq!(toc.as_str(), Some("user-provided"));
     }
 
-    #[test]
-    fn test_respects_toc_depth() {
+    #[tokio::test]
+    async fn test_respects_toc_depth() {
         // toc-depth: 2 should only include h1 and h2
         let mut ast = Pandoc {
             meta: config_map(vec![
@@ -342,7 +343,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
         let entries = toc.get("entries").unwrap().as_array().unwrap();
@@ -369,8 +370,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_respects_toc_title() {
+    #[tokio::test]
+    async fn test_respects_toc_title() {
         let mut ast = Pandoc {
             meta: config_map(vec![
                 ("toc", config_bool(true)),
@@ -389,14 +390,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
         assert_eq!(toc.get("title").unwrap().as_str(), Some("Contents"));
     }
 
-    #[test]
-    fn test_skips_when_no_headings() {
+    #[tokio::test]
+    async fn test_skips_when_no_headings() {
         let mut ast = Pandoc {
             meta: config_map(vec![("toc", config_bool(true))]),
             blocks: vec![make_para("Just a paragraph."), make_para("Another one.")],
@@ -409,19 +410,19 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // No TOC should be generated if there are no headings
         assert!(!ast.meta.contains_path(&["navigation", "toc"]));
     }
 
-    #[test]
-    fn test_default_trait() {
+    #[tokio::test]
+    async fn test_default_trait() {
         let _transform: TocGenerateTransform = Default::default();
     }
 
-    #[test]
-    fn test_default_toc_title() {
+    #[tokio::test]
+    async fn test_default_toc_title() {
         // No toc-title specified - should get default
         let mut ast = Pandoc {
             meta: config_map(vec![("toc", config_bool(true))]),
@@ -438,7 +439,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocGenerateTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
         assert_eq!(

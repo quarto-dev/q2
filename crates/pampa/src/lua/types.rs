@@ -253,10 +253,12 @@ impl LuaInline {
             // Walk is called with method syntax: elem:walk { ... }
             // Lua passes (self, filter_table) to the function
             (_, "walk") => lua
-                .create_function(|lua, (ud, filter_table): (UserDataRef<LuaInline>, Table)| {
-                    let filtered = walk_inline_with_filter(lua, &ud.0, &filter_table)?;
-                    lua.create_userdata(LuaInline(filtered))
-                })?
+                .create_async_function(
+                    |lua, (ud, filter_table): (UserDataRef<LuaInline>, Table)| async move {
+                        let filtered = walk_inline_with_filter(&lua, &ud.0, &filter_table).await?;
+                        lua.create_userdata(LuaInline(filtered))
+                    },
+                )?
                 .into_lua(lua),
 
             // Unknown field
@@ -826,10 +828,12 @@ impl LuaBlock {
             // Walk is called with method syntax: elem:walk { ... }
             // Lua passes (self, filter_table) to the function
             (_, "walk") => lua
-                .create_function(|lua, (ud, filter_table): (UserDataRef<LuaBlock>, Table)| {
-                    let filtered = walk_block_with_filter(lua, &ud.0, &filter_table)?;
-                    lua.create_userdata(LuaBlock(filtered))
-                })?
+                .create_async_function(
+                    |lua, (ud, filter_table): (UserDataRef<LuaBlock>, Table)| async move {
+                        let filtered = walk_block_with_filter(&lua, &ud.0, &filter_table).await?;
+                        lua.create_userdata(LuaBlock(filtered))
+                    },
+                )?
                 .into_lua(lua),
 
             // Unknown field
@@ -1820,8 +1824,8 @@ impl FromLua for LuaBlock {
 
 /// Apply a filter to a single inline element using correct traversal
 /// This wraps the element in a list and applies the list-walking function
-pub fn walk_inline_with_filter(lua: &Lua, inline: &Inline, filter: &Table) -> Result<Inline> {
-    let filtered = walk_inlines_with_filter(lua, &[inline.clone()], filter)?;
+pub async fn walk_inline_with_filter(lua: &Lua, inline: &Inline, filter: &Table) -> Result<Inline> {
+    let filtered = walk_inlines_with_filter(lua, &[inline.clone()], filter).await?;
     Ok(filtered
         .into_iter()
         .next()
@@ -1830,13 +1834,13 @@ pub fn walk_inline_with_filter(lua: &Lua, inline: &Inline, filter: &Table) -> Re
 
 /// Apply a filter to a single block element using correct traversal
 /// This wraps the element in a list and applies the list-walking function
-pub fn walk_block_with_filter(lua: &Lua, block: &Block, filter: &Table) -> Result<Block> {
-    let filtered = walk_blocks_with_filter(lua, &[block.clone()], filter)?;
+pub async fn walk_block_with_filter(lua: &Lua, block: &Block, filter: &Table) -> Result<Block> {
+    let filtered = walk_blocks_with_filter(lua, &[block.clone()], filter).await?;
     Ok(filtered.into_iter().next().unwrap_or_else(|| block.clone()))
 }
 
 /// Apply a filter table to a list of inlines using correct two-pass or topdown traversal
-pub fn walk_inlines_with_filter(
+pub async fn walk_inlines_with_filter(
     lua: &Lua,
     inlines: &[Inline],
     filter: &Table,
@@ -1846,20 +1850,24 @@ pub fn walk_inlines_with_filter(
     };
 
     match get_walking_order(filter)? {
-        WalkingOrder::Typewise => apply_typewise_inlines(lua, filter, inlines),
-        WalkingOrder::Topdown => walk_inlines_topdown(lua, filter, inlines),
+        WalkingOrder::Typewise => apply_typewise_inlines(lua, filter, inlines).await,
+        WalkingOrder::Topdown => walk_inlines_topdown(lua, filter, inlines).await,
     }
 }
 
 /// Apply a filter table to a list of blocks using correct four-pass or topdown traversal
-pub fn walk_blocks_with_filter(lua: &Lua, blocks: &[Block], filter: &Table) -> Result<Vec<Block>> {
+pub async fn walk_blocks_with_filter(
+    lua: &Lua,
+    blocks: &[Block],
+    filter: &Table,
+) -> Result<Vec<Block>> {
     use super::filter::{
         WalkingOrder, apply_typewise_filter, get_walking_order, walk_blocks_topdown,
     };
 
     match get_walking_order(filter)? {
-        WalkingOrder::Typewise => apply_typewise_filter(lua, filter, blocks),
-        WalkingOrder::Topdown => walk_blocks_topdown(lua, filter, blocks),
+        WalkingOrder::Typewise => apply_typewise_filter(lua, filter, blocks).await,
+        WalkingOrder::Topdown => walk_blocks_topdown(lua, filter, blocks).await,
     }
 }
 

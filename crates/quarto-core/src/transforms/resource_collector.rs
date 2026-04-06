@@ -46,12 +46,13 @@ impl Default for ResourceCollectorTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for ResourceCollectorTransform {
     fn name(&self) -> &str {
         "resource-collector"
     }
 
-    fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         let base_dir = ctx.document.input.parent().unwrap_or(Path::new("."));
         let mut collector = ResourceVisitor::new(base_dir);
 
@@ -409,8 +410,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_collects_local_images() {
+    #[tokio::test]
+    async fn test_collects_local_images() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -436,14 +437,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = ResourceCollectorTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Check that the image was collected
         assert!(ctx.artifacts.get("resource:image:0").is_some());
     }
 
-    #[test]
-    fn test_skips_external_urls() {
+    #[tokio::test]
+    async fn test_skips_external_urls() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -466,14 +467,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = ResourceCollectorTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should not collect external URLs
         assert!(ctx.artifacts.get("resource:image:0").is_none());
     }
 
-    #[test]
-    fn test_skips_data_urls() {
+    #[tokio::test]
+    async fn test_skips_data_urls() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -496,14 +497,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = ResourceCollectorTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should not collect data URLs
         assert!(ctx.artifacts.get("resource:image:0").is_none());
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = ResourceCollectorTransform::new();
         assert_eq!(transform.name(), "resource-collector");
     }

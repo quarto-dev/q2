@@ -200,7 +200,7 @@ impl std::error::Error for CiteprocFilterError {}
 ///
 /// Returns the filtered document, updated context, diagnostics, and any
 /// HTML dependencies or text includes (from Lua filters only).
-pub fn apply_filter(
+pub async fn apply_filter(
     pandoc: Pandoc,
     context: ASTContext,
     filter: &FilterSpec,
@@ -230,7 +230,8 @@ pub fn apply_filter(
                 &[path.clone()],
                 target_format,
                 runtime,
-            )?;
+            )
+            .await?;
             Ok(FilterOutput {
                 pandoc: lua_output.pandoc,
                 context: lua_output.context,
@@ -274,7 +275,7 @@ pub fn apply_filter(
 /// Filters are applied in the order provided. The output of each filter
 /// becomes the input to the next. Diagnostics, HTML dependencies, and
 /// text includes are accumulated across all filter passes.
-pub fn apply_filters(
+pub async fn apply_filters(
     pandoc: Pandoc,
     context: ASTContext,
     filters: &[FilterSpec],
@@ -296,7 +297,8 @@ pub fn apply_filters(
             filter,
             target_format,
             runtime.clone(),
-        )?;
+        )
+        .await?;
         current_pandoc = output.pandoc;
         current_context = output.context;
         all_diagnostics.extend(output.diagnostics);

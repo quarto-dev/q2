@@ -69,12 +69,13 @@ impl Default for TocRenderTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for TocRenderTransform {
     fn name(&self) -> &str {
         "toc-render"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
         // Skip if already rendered (user provided pre-rendered HTML)
         if ast.meta.contains_path(&["rendered", "navigation", "toc"]) {
             return Ok(());
@@ -183,14 +184,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = TocRenderTransform::new();
         assert_eq!(transform.name(), "toc-render");
     }
 
-    #[test]
-    fn test_skips_when_no_toc_data() {
+    #[tokio::test]
+    async fn test_skips_when_no_toc_data() {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -203,14 +204,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // No rendered.navigation.toc should exist
         assert!(!ast.meta.contains_path(&["rendered", "navigation", "toc"]));
     }
 
-    #[test]
-    fn test_skips_when_already_rendered() {
+    #[tokio::test]
+    async fn test_skips_when_already_rendered() {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -237,7 +238,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should keep user-provided HTML
         let rendered = ast
@@ -247,8 +248,8 @@ mod tests {
         assert_eq!(rendered.as_str(), Some("<ul><li>Custom</li></ul>"));
     }
 
-    #[test]
-    fn test_renders_simple_toc() {
+    #[tokio::test]
+    async fn test_renders_simple_toc() {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -271,7 +272,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have rendered.navigation.toc
         assert!(ast.meta.contains_path(&["rendered", "navigation", "toc"]));
@@ -295,8 +296,8 @@ mod tests {
         assert!(html.contains("data-scroll-target=\"#intro\""));
     }
 
-    #[test]
-    fn test_renders_nested_toc() {
+    #[tokio::test]
+    async fn test_renders_nested_toc() {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -325,7 +326,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let rendered = ast
             .meta
@@ -344,8 +345,8 @@ mod tests {
         assert!(html.contains("Section B"));
     }
 
-    #[test]
-    fn test_renders_toc_with_numbers() {
+    #[tokio::test]
+    async fn test_renders_toc_with_numbers() {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -377,7 +378,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let rendered = ast
             .meta
@@ -390,8 +391,8 @@ mod tests {
         assert!(html.contains("<span class=\"toc-number\">1.1</span>"));
     }
 
-    #[test]
-    fn test_html_escape() {
+    #[tokio::test]
+    async fn test_html_escape() {
         // Test that special characters are escaped
         assert_eq!(html_escape("a & b"), "a &amp; b");
         assert_eq!(html_escape("<script>"), "&lt;script&gt;");
@@ -399,8 +400,8 @@ mod tests {
         assert_eq!(html_escape("it's"), "it&#x27;s");
     }
 
-    #[test]
-    fn test_renders_toc_escapes_special_chars() {
+    #[tokio::test]
+    async fn test_renders_toc_escapes_special_chars() {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -426,7 +427,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let rendered = ast
             .meta
@@ -441,8 +442,8 @@ mod tests {
         assert!(html.contains("intro-with-&lt;script&gt;"));
     }
 
-    #[test]
-    fn test_skips_empty_entries() {
+    #[tokio::test]
+    async fn test_skips_empty_entries() {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -462,14 +463,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should not have rendered.navigation.toc (empty entries)
         assert!(!ast.meta.contains_path(&["rendered", "navigation", "toc"]));
     }
 
-    #[test]
-    fn test_default_trait() {
+    #[tokio::test]
+    async fn test_default_trait() {
         let _transform: TocRenderTransform = Default::default();
     }
 
@@ -600,8 +601,8 @@ mod tests {
         )
     }
 
-    #[test]
-    fn test_renders_yaml_parsed_toc_simple() {
+    #[tokio::test]
+    async fn test_renders_yaml_parsed_toc_simple() {
         // Simulates user-provided YAML:
         // navigation:
         //   toc:
@@ -634,7 +635,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have rendered TOC
         assert!(ast.meta.contains_path(&["rendered", "navigation", "toc"]));
@@ -650,8 +651,8 @@ mod tests {
         assert!(html.contains("data-scroll-target=\"#tldr\""));
     }
 
-    #[test]
-    fn test_renders_yaml_parsed_toc_with_multiword_titles() {
+    #[tokio::test]
+    async fn test_renders_yaml_parsed_toc_with_multiword_titles() {
         // Simulates user-provided YAML with multi-word titles:
         // navigation:
         //   toc:
@@ -684,7 +685,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let rendered = ast
             .meta
@@ -696,8 +697,8 @@ mod tests {
         assert!(html.contains("The Details"));
     }
 
-    #[test]
-    fn test_renders_yaml_parsed_toc_with_nested_children() {
+    #[tokio::test]
+    async fn test_renders_yaml_parsed_toc_with_nested_children() {
         // Simulates user-provided YAML with nested structure:
         // navigation:
         //   toc:
@@ -735,7 +736,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let rendered = ast
             .meta
@@ -760,8 +761,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_user_provided_rendered_toc_used_directly() {
+    #[tokio::test]
+    async fn test_user_provided_rendered_toc_used_directly() {
         // Simulates user providing pre-rendered HTML:
         // rendered:
         //   navigation:
@@ -798,7 +799,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should use user-provided HTML, not render from navigation.toc
         let rendered = ast
@@ -813,8 +814,8 @@ mod tests {
         assert!(!html.contains("Introduction")); // The navigation.toc entry should NOT appear
     }
 
-    #[test]
-    fn test_yaml_parsed_toc_with_title() {
+    #[tokio::test]
+    async fn test_yaml_parsed_toc_with_title() {
         // Simulates user-provided YAML with TOC title:
         // navigation:
         //   toc:
@@ -855,7 +856,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TocRenderTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have rendered TOC
         assert!(ast.meta.contains_path(&["rendered", "navigation", "toc"]));

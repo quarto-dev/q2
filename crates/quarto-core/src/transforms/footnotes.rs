@@ -87,12 +87,13 @@ impl Default for FootnotesTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for FootnotesTransform {
     fn name(&self) -> &str {
         "footnotes"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
         let reference_location = Self::get_reference_location(&ast.meta);
 
         // For block/section placement, Pandoc handles this - no-op
@@ -658,14 +659,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = FootnotesTransform::new();
         assert_eq!(transform.name(), "footnotes");
     }
 
-    #[test]
-    fn test_single_inline_note() {
+    #[tokio::test]
+    async fn test_single_inline_note() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -691,7 +692,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have original paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);
@@ -737,8 +738,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_multiple_notes() {
+    #[tokio::test]
+    async fn test_multiple_notes() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -771,7 +772,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have 2 footnotes in the section
         if let Block::Div(div) = &ast.blocks[1] {
@@ -784,8 +785,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_note_definition_and_reference() {
+    #[tokio::test]
+    async fn test_note_definition_and_reference() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
@@ -816,7 +817,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Note definition should be removed, leaving paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);
@@ -828,8 +829,8 @@ mod tests {
         assert!(matches!(ast.blocks[1], Block::Div(_)));
     }
 
-    #[test]
-    fn test_no_footnotes() {
+    #[tokio::test]
+    async fn test_no_footnotes() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -845,14 +846,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should not add footnotes section
         assert_eq!(ast.blocks.len(), 1);
     }
 
-    #[test]
-    fn test_reference_location_parsing() {
+    #[tokio::test]
+    async fn test_reference_location_parsing() {
         assert_eq!(
             ReferenceLocation::from_str("document"),
             ReferenceLocation::Document
@@ -879,8 +880,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_nested_note_in_emphasis() {
+    #[tokio::test]
+    async fn test_nested_note_in_emphasis() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -908,14 +909,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);
     }
 
-    #[test]
-    fn test_margin_mode_no_section() {
+    #[tokio::test]
+    async fn test_margin_mode_no_section() {
         let mut ast = Pandoc {
             meta: make_meta(vec![meta_entry(
                 "reference-location",
@@ -943,7 +944,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should only have the paragraph - NO footnotes section
         assert_eq!(ast.blocks.len(), 1);
@@ -964,8 +965,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_block_section_modes_are_noop() {
+    #[tokio::test]
+    async fn test_block_section_modes_are_noop() {
         // For block and section modes, the transform should be a no-op
         // (Pandoc handles these during rendering)
 
@@ -996,7 +997,7 @@ mod tests {
             let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
             let transform = FootnotesTransform::new();
-            transform.transform(&mut ast, &mut ctx).unwrap();
+            transform.transform(&mut ast, &mut ctx).await.unwrap();
 
             // Should be unchanged - still have the Note inline
             assert_eq!(ast.blocks.len(), 1);
@@ -1010,8 +1011,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_document_mode_creates_section() {
+    #[tokio::test]
+    async fn test_document_mode_creates_section() {
         let mut ast = Pandoc {
             meta: make_meta(vec![meta_entry(
                 "reference-location",
@@ -1039,7 +1040,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);

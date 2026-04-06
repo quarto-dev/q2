@@ -290,12 +290,13 @@ impl Default for JupyterTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for JupyterTransform {
     fn name(&self) -> &str {
         "jupyter"
     }
 
-    fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         // Check if execution is enabled
         if !ctx.options.execute {
             tracing::debug!("Jupyter execution disabled, skipping");

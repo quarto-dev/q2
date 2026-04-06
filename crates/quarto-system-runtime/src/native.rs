@@ -25,6 +25,7 @@ use crate::traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind,
 };
+use reqwest;
 
 /// Native runtime with full system access.
 ///
@@ -272,23 +273,21 @@ impl SystemRuntime for NativeRuntime {
     // NETWORK
     // ═══════════════════════════════════════════════════════════════════════
 
-    fn fetch_url(&self, _url: &str) -> RuntimeResult<(Vec<u8>, String)> {
-        // Network support requires an HTTP client dependency
-        // For now, return NotSupported until we add reqwest or similar
-        Err(RuntimeError::NotSupported(
-            "Network fetch not yet implemented. Consider using pandoc.mediabag.fetch instead."
-                .to_string(),
-        ))
-
-        // Future implementation with reqwest:
-        // let response = self.http_client.get(url).send()?;
-        // let mime_type = response.headers()
-        //     .get("content-type")
-        //     .and_then(|v| v.to_str().ok())
-        //     .unwrap_or("application/octet-stream")
-        //     .to_string();
-        // let content = response.bytes()?.to_vec();
-        // Ok((content, mime_type))
+    async fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)> {
+        let client = reqwest::Client::new();
+        let response = client.get(url).send().await.map_err(|e| {
+            RuntimeError::NotSupported(format!("HTTP request failed for {url}: {e}"))
+        })?;
+        let mime_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let content = response.bytes().await.map_err(|e| {
+            RuntimeError::NotSupported(format!("Failed to read response body for {url}: {e}"))
+        })?;
+        Ok((content.to_vec(), mime_type))
     }
 
     // ═══════════════════════════════════════════════════════════════════════

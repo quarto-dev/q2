@@ -15,7 +15,7 @@ use std::path::Path;
 use tempfile::TempDir;
 
 /// Helper to run the render pipeline on a QMD string and return the output HTML.
-fn render_qmd(qmd_content: &str) -> RenderResult {
+async fn render_qmd(qmd_content: &str) -> RenderResult {
     let temp = TempDir::new().expect("Failed to create temp directory");
     let input_path = temp.path().join("test.qmd");
     let output_path = temp.path().join("test.html");
@@ -24,7 +24,7 @@ fn render_qmd(qmd_content: &str) -> RenderResult {
     fs::write(&input_path, qmd_content).expect("Failed to write QMD file");
 
     // Run render
-    let result = run_render(&input_path, &output_path);
+    let result = run_render(&input_path, &output_path).await;
 
     RenderResult {
         temp,
@@ -54,7 +54,7 @@ impl RenderResult {
 }
 
 /// Run the render pipeline using the quarto-core APIs directly.
-fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
+async fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     use quarto_core::{
         BinaryDependencies, CalloutResolveTransform, CalloutTransform, DocumentInfo, Format,
         MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
@@ -109,6 +109,7 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
     pipeline
         .execute(&mut pandoc, &mut ctx)
+        .await
         .map_err(|e| e.to_string())?;
 
     // Get output directory and stem
@@ -142,8 +143,8 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
 // Basic Document Tests
 // ============================================================================
 
-#[test]
-fn test_simple_document_renders() {
+#[tokio::test]
+async fn test_simple_document_renders() {
     let result = render_qmd(
         r#"---
 title: Hello World
@@ -151,7 +152,8 @@ title: Hello World
 
 This is a paragraph.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok(), "Render failed: {:?}", result.result);
     assert!(result.output_path.exists());
@@ -162,8 +164,8 @@ This is a paragraph.
     assert!(html.contains("This is a paragraph"));
 }
 
-#[test]
-fn test_document_with_headers() {
+#[tokio::test]
+async fn test_document_with_headers() {
     let result = render_qmd(
         r#"---
 title: Headers Test
@@ -181,7 +183,8 @@ More text.
 
 Even more text.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -194,15 +197,16 @@ Even more text.
     assert!(html.contains("Third Header"));
 }
 
-#[test]
-fn test_document_without_title() {
+#[tokio::test]
+async fn test_document_without_title() {
     let result = render_qmd(
         r#"
 # Just Content
 
 No YAML frontmatter here.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -217,8 +221,8 @@ No YAML frontmatter here.
 // Callout Tests
 // ============================================================================
 
-#[test]
-fn test_callout_note_renders() {
+#[tokio::test]
+async fn test_callout_note_renders() {
     let result = render_qmd(
         r#"---
 title: Callout Test
@@ -230,7 +234,8 @@ title: Callout Test
 This is a note callout.
 :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -241,8 +246,8 @@ This is a note callout.
     assert!(html.contains("This is a note callout"));
 }
 
-#[test]
-fn test_callout_warning_renders() {
+#[tokio::test]
+async fn test_callout_warning_renders() {
     let result = render_qmd(
         r#"---
 title: Warning Test
@@ -254,7 +259,8 @@ title: Warning Test
 Be careful here.
 :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -263,8 +269,8 @@ Be careful here.
     assert!(html.contains("Warning!"));
 }
 
-#[test]
-fn test_callout_tip_renders() {
+#[tokio::test]
+async fn test_callout_tip_renders() {
     let result = render_qmd(
         r#"---
 title: Tip Test
@@ -276,7 +282,8 @@ title: Tip Test
 Here's a helpful tip.
 :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -285,8 +292,8 @@ Here's a helpful tip.
     assert!(html.contains("Pro Tip"));
 }
 
-#[test]
-fn test_callout_important_renders() {
+#[tokio::test]
+async fn test_callout_important_renders() {
     let result = render_qmd(
         r#"---
 title: Important Test
@@ -298,7 +305,8 @@ title: Important Test
 This is important.
 :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -306,8 +314,8 @@ This is important.
     assert!(html.contains("callout-important"));
 }
 
-#[test]
-fn test_callout_caution_renders() {
+#[tokio::test]
+async fn test_callout_caution_renders() {
     let result = render_qmd(
         r#"---
 title: Caution Test
@@ -319,7 +327,8 @@ title: Caution Test
 Proceed with care.
 :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -327,8 +336,8 @@ Proceed with care.
     assert!(html.contains("callout-caution"));
 }
 
-#[test]
-fn test_callout_without_title() {
+#[tokio::test]
+async fn test_callout_without_title() {
     let result = render_qmd(
         r#"---
 title: No Title Callout
@@ -338,7 +347,8 @@ title: No Title Callout
 Just content, no header.
 :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -347,8 +357,8 @@ Just content, no header.
     assert!(html.contains("Just content, no header"));
 }
 
-#[test]
-fn test_multiple_callouts() {
+#[tokio::test]
+async fn test_multiple_callouts() {
     let result = render_qmd(
         r#"---
 title: Multiple Callouts
@@ -369,7 +379,8 @@ Second callout.
 Third callout.
 :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -386,8 +397,8 @@ Third callout.
 // Resource Tests
 // ============================================================================
 
-#[test]
-fn test_css_file_created() {
+#[tokio::test]
+async fn test_css_file_created() {
     let result = render_qmd(
         r#"---
 title: CSS Test
@@ -395,7 +406,8 @@ title: CSS Test
 
 Content here.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     assert!(
@@ -415,8 +427,8 @@ Content here.
     );
 }
 
-#[test]
-fn test_css_link_in_html() {
+#[tokio::test]
+async fn test_css_link_in_html() {
     let result = render_qmd(
         r#"---
 title: CSS Link Test
@@ -424,7 +436,8 @@ title: CSS Link Test
 
 Content.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -435,8 +448,8 @@ Content.
     );
 }
 
-#[test]
-fn test_user_css_merged() {
+#[tokio::test]
+async fn test_user_css_merged() {
     let result = render_qmd(
         r#"---
 title: User CSS Test
@@ -445,7 +458,8 @@ css: custom.css
 
 Content.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -464,8 +478,8 @@ Content.
     );
 }
 
-#[test]
-fn test_multiple_user_css() {
+#[tokio::test]
+async fn test_multiple_user_css() {
     let result = render_qmd(
         r#"---
 title: Multiple CSS Test
@@ -476,7 +490,8 @@ css:
 
 Content.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -489,8 +504,8 @@ Content.
 // Content Type Tests
 // ============================================================================
 
-#[test]
-fn test_code_blocks() {
+#[tokio::test]
+async fn test_code_blocks() {
     let result = render_qmd(
         r#"---
 title: Code Test
@@ -501,7 +516,8 @@ def hello():
     print("Hello, World!")
 ```
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -511,8 +527,8 @@ def hello():
     assert!(html.contains("def hello()"));
 }
 
-#[test]
-fn test_inline_code() {
+#[tokio::test]
+async fn test_inline_code() {
     let result = render_qmd(
         r#"---
 title: Inline Code Test
@@ -520,7 +536,8 @@ title: Inline Code Test
 
 Use the `print()` function.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -528,8 +545,8 @@ Use the `print()` function.
     assert!(html.contains("<code>print()</code>"));
 }
 
-#[test]
-fn test_lists() {
+#[tokio::test]
+async fn test_lists() {
     let result = render_qmd(
         r#"---
 title: Lists Test
@@ -543,7 +560,8 @@ title: Lists Test
 2. Second
 3. Third
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -555,8 +573,8 @@ title: Lists Test
     assert!(html.contains("First"));
 }
 
-#[test]
-fn test_blockquote() {
+#[tokio::test]
+async fn test_blockquote() {
     let result = render_qmd(
         r#"---
 title: Blockquote Test
@@ -565,7 +583,8 @@ title: Blockquote Test
 > This is a quote.
 > It spans multiple lines.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -574,8 +593,8 @@ title: Blockquote Test
     assert!(html.contains("This is a quote"));
 }
 
-#[test]
-fn test_emphasis() {
+#[tokio::test]
+async fn test_emphasis() {
     let result = render_qmd(
         r#"---
 title: Emphasis Test
@@ -583,7 +602,8 @@ title: Emphasis Test
 
 This is *italic* and **bold** text.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok(), "Render failed: {:?}", result.result);
     let html = result.html();
@@ -592,8 +612,8 @@ This is *italic* and **bold** text.
     assert!(html.contains("<strong>bold</strong>"));
 }
 
-#[test]
-fn test_links() {
+#[tokio::test]
+async fn test_links() {
     let result = render_qmd(
         r#"---
 title: Links Test
@@ -601,7 +621,8 @@ title: Links Test
 
 Check out [this link](https://example.com).
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -613,9 +634,9 @@ Check out [this link](https://example.com).
 // Edge Cases
 // ============================================================================
 
-#[test]
-fn test_empty_document() {
-    let result = render_qmd("");
+#[tokio::test]
+async fn test_empty_document() {
+    let result = render_qmd("").await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -625,8 +646,8 @@ fn test_empty_document() {
     assert!(html.contains("</body>"));
 }
 
-#[test]
-fn test_special_characters_in_title() {
+#[tokio::test]
+async fn test_special_characters_in_title() {
     let result = render_qmd(
         r#"---
 title: "Title with <special> & characters"
@@ -634,15 +655,16 @@ title: "Title with <special> & characters"
 
 Content.
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     // The title should be properly escaped or handled
     // Note: exact escaping depends on template engine behavior
 }
 
-#[test]
-fn test_unicode_content() {
+#[tokio::test]
+async fn test_unicode_content() {
     let result = render_qmd(
         r#"---
 title: Unicode Test 日本語
@@ -650,7 +672,8 @@ title: Unicode Test 日本語
 
 Hello 世界! 🎉
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -660,8 +683,8 @@ Hello 世界! 🎉
     assert!(html.contains("🎉"));
 }
 
-#[test]
-fn test_nested_callout() {
+#[tokio::test]
+async fn test_nested_callout() {
     // Nested callouts in a blockquote
     let result = render_qmd(
         r#"---
@@ -675,7 +698,8 @@ title: Nested Test
 > Inside blockquote.
 > :::
 "#,
-    );
+    )
+    .await;
 
     assert!(result.result.is_ok());
     let html = result.html();
@@ -684,8 +708,8 @@ title: Nested Test
     assert!(html.contains("callout-note"));
 }
 
-#[test]
-fn test_long_document() {
+#[tokio::test]
+async fn test_long_document() {
     // Test with a longer document to ensure no buffer issues
     let mut content = String::from("---\ntitle: Long Document\n---\n\n");
     for i in 0..100 {
@@ -695,7 +719,7 @@ fn test_long_document() {
         ));
     }
 
-    let result = render_qmd(&content);
+    let result = render_qmd(&content).await;
 
     assert!(result.result.is_ok());
     let html = result.html();

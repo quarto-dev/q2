@@ -415,7 +415,7 @@ pub trait SystemRuntime: Send + Sync {
     /// Returns (content, mime_type).
     ///
     /// Corresponds to: `pandoc.mediabag.fetch` (for URLs)
-    fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)>;
+    async fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)>;
 
     // ═══════════════════════════════════════════════════════════════════════
     // SYSTEM INFO

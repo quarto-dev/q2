@@ -236,6 +236,7 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
     impl SystemRuntime for MockRuntime {
         fn file_read(
             &self,
@@ -361,7 +362,10 @@ mod tests {
             Ok(std::collections::HashMap::new())
         }
 
-        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+        async fn fetch_url(
+            &self,
+            _url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
             Err(quarto_system_runtime::RuntimeError::NotSupported(
                 "fetch not implemented".to_string(),
             ))

@@ -26,7 +26,7 @@ fn create_test_doc(content: Vec<Inline>) -> Pandoc {
 }
 
 /// Helper to run a filter and assert success
-fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
+async fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
     let mut filter_file = NamedTempFile::new().expect("Failed to create temp file");
     filter_file
         .write_all(filter_code.as_bytes())
@@ -41,14 +41,15 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
         &[filter_file.path().to_path_buf()],
         "html",
         runtime,
-    );
+    )
+    .await;
     let output = result.expect("Filter failed");
     let (pandoc, context) = (output.pandoc, output.context);
     (pandoc, context)
 }
 
-#[test]
-fn test_list_creation_via_filter() {
+#[tokio::test]
+async fn test_list_creation_via_filter() {
     // Test that we can run a simple filter that uses List methods
     let filter_code = r#"
 function Para(elem)
@@ -79,11 +80,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_list_methods_via_filter() {
+#[tokio::test]
+async fn test_list_methods_via_filter() {
     // Create a filter that tests various List methods and returns results
     let filter_code = r#"
 local results = {}
@@ -165,11 +166,11 @@ end
         }),
     ]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_list_concat() {
+#[tokio::test]
+async fn test_list_concat() {
     // Test concatenation of lists
     let filter_code = r#"
 function Para(elem)
@@ -190,11 +191,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_inlines_walk() {
+#[tokio::test]
+async fn test_inlines_walk() {
     // Test that Inlines walk() method works
     let filter_code = r#"
 function Para(elem)
@@ -222,7 +223,7 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    let (transformed, _) = run_filter(filter_code, doc);
+    let (transformed, _) = run_filter(filter_code, doc).await;
 
     // Verify the transformation happened
     if let Block::Paragraph(para) = &transformed.blocks[0]
@@ -232,8 +233,8 @@ end
     }
 }
 
-#[test]
-fn test_blocks_walk() {
+#[tokio::test]
+async fn test_blocks_walk() {
     // Test that Blocks walk() method works via a BlockQuote filter
     // (since we can't use a Pandoc function handler directly)
     let filter_code = r#"
@@ -269,7 +270,7 @@ end
         })],
     };
 
-    let (transformed, _) = run_filter(filter_code, doc);
+    let (transformed, _) = run_filter(filter_code, doc).await;
 
     // Verify the transformation happened
     match &transformed.blocks[0] {
@@ -290,8 +291,8 @@ end
     }
 }
 
-#[test]
-fn test_list_iter() {
+#[tokio::test]
+async fn test_list_iter() {
     // Test iter() method
     let filter_code = r#"
 function Para(elem)
@@ -325,11 +326,11 @@ end
         }),
     ]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_list_tostring() {
+#[tokio::test]
+async fn test_list_tostring() {
     // Test __tostring
     let filter_code = r#"
 function Para(elem)
@@ -350,5 +351,5 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }

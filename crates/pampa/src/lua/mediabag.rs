@@ -149,49 +149,65 @@ pub fn register_pandoc_mediabag(
 
     // fetch(source) - Fetches the given source from a URL or local file
     // Returns: mime_type, contents (or nil, nil if not found)
+    //
+    // This is an async function so that URL fetches can yield the Lua coroutine
+    // while the network request resolves, rather than blocking the thread.
+    // Local file reads are synchronous and complete immediately.
     let mb = mediabag.clone();
     let rt = runtime.clone();
     mb_table.set(
         "fetch",
-        lua.create_function(move |lua, source: String| {
-            // First check if it's already in the mediabag
-            if let Some(entry) = mb.borrow().lookup(&source) {
-                return Ok((
-                    Value::String(lua.create_string(&entry.mime_type)?),
-                    Value::String(lua.create_string(&entry.content)?),
-                ));
-            }
-
-            // Check if it looks like a URL
-            if source.starts_with("http://") || source.starts_with("https://") {
-                // Fetch from URL using runtime
-                match rt.fetch_url(&source) {
-                    Ok((content, mime_type)) => {
-                        // Store in mediabag for future lookups
-                        mb.borrow_mut()
-                            .insert(source.clone(), mime_type.clone(), content.clone());
-                        Ok((
-                            Value::String(lua.create_string(&mime_type)?),
-                            Value::String(lua.create_string(&content)?),
-                        ))
-                    }
-                    Err(_) => Ok((Value::Nil, Value::Nil)),
+        lua.create_async_function(move |lua, source: String| {
+            let mb = mb.clone();
+            let rt = rt.clone();
+            async move {
+                // First check if it's already in the mediabag
+                if let Some(entry) = mb.borrow().lookup(&source) {
+                    return Ok((
+                        Value::String(lua.create_string(&entry.mime_type)?),
+                        Value::String(lua.create_string(&entry.content)?),
+                    ));
                 }
-            } else {
-                // Try to read from local file
-                match rt.file_read(Path::new(&source)) {
-                    Ok(content) => {
-                        // Guess MIME type from extension
-                        let mime_type = guess_mime_type(&source);
-                        // Store in mediabag
-                        mb.borrow_mut()
-                            .insert(source.clone(), mime_type.clone(), content.clone());
-                        Ok((
-                            Value::String(lua.create_string(&mime_type)?),
-                            Value::String(lua.create_string(&content)?),
-                        ))
+
+                // Check if it looks like a URL
+                if source.starts_with("http://") || source.starts_with("https://") {
+                    // Fetch from URL using runtime — yields the Lua coroutine
+                    // while the network request is in flight.
+                    match rt.fetch_url(&source).await {
+                        Ok((content, mime_type)) => {
+                            // Store in mediabag for future lookups
+                            mb.borrow_mut().insert(
+                                source.clone(),
+                                mime_type.clone(),
+                                content.clone(),
+                            );
+                            Ok((
+                                Value::String(lua.create_string(&mime_type)?),
+                                Value::String(lua.create_string(&content)?),
+                            ))
+                        }
+                        Err(e) => {
+                            eprintln!("mediabag.fetch failed for {}: {}", source, e);
+                            Ok((Value::Nil, Value::Nil))
+                        }
                     }
-                    Err(_) => Ok((Value::Nil, Value::Nil)),
+                } else {
+                    // Try to read from local file (synchronous, no yield needed)
+                    match rt.file_read(Path::new(&source)) {
+                        Ok(content) => {
+                            let mime_type = guess_mime_type(&source);
+                            mb.borrow_mut().insert(
+                                source.clone(),
+                                mime_type.clone(),
+                                content.clone(),
+                            );
+                            Ok((
+                                Value::String(lua.create_string(&mime_type)?),
+                                Value::String(lua.create_string(&content)?),
+                            ))
+                        }
+                        Err(_) => Ok((Value::Nil, Value::Nil)),
+                    }
                 }
             }
         })?,

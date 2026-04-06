@@ -27,8 +27,8 @@ end
     filter_path
 }
 
-#[test]
-fn test_attr_field_access() {
+#[tokio::test]
+async fn test_attr_field_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_test.lua");
     fs::write(
@@ -72,6 +72,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -88,8 +89,8 @@ end
     }
 }
 
-#[test]
-fn test_attr_constructor_defaults() {
+#[tokio::test]
+async fn test_attr_constructor_defaults() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_constructor.lua");
     fs::write(
@@ -127,6 +128,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -148,8 +150,8 @@ fn create_identity_filter(dir: &TempDir) -> std::path::PathBuf {
     filter_path
 }
 
-#[test]
-fn test_uppercase_filter() {
+#[tokio::test]
+async fn test_uppercase_filter() {
     let dir = TempDir::new().unwrap();
     let filter_path = create_uppercase_filter(&dir);
 
@@ -166,6 +168,7 @@ fn test_uppercase_filter() {
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -180,8 +183,8 @@ fn test_uppercase_filter() {
     }
 }
 
-#[test]
-fn test_identity_filter() {
+#[tokio::test]
+async fn test_identity_filter() {
     let dir = TempDir::new().unwrap();
     let filter_path = create_identity_filter(&dir);
 
@@ -198,6 +201,7 @@ fn test_identity_filter() {
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -213,8 +217,8 @@ fn test_identity_filter() {
     }
 }
 
-#[test]
-fn test_delete_filter() {
+#[tokio::test]
+async fn test_delete_filter() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("delete.lua");
     fs::write(
@@ -258,6 +262,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -279,8 +284,8 @@ end
     }
 }
 
-#[test]
-fn test_splice_filter() {
+#[tokio::test]
+async fn test_splice_filter() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("splice.lua");
     fs::write(
@@ -308,6 +313,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -332,8 +338,8 @@ end
     }
 }
 
-#[test]
-fn test_pairs_iteration() {
+#[tokio::test]
+async fn test_pairs_iteration() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("pairs_test.lua");
     fs::write(
@@ -366,6 +372,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -396,8 +403,8 @@ end
     }
 }
 
-#[test]
-fn test_walk_method() {
+#[tokio::test]
+async fn test_walk_method() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("walk_test.lua");
     fs::write(
@@ -441,6 +448,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -460,8 +468,8 @@ end
     }
 }
 
-#[test]
-fn test_clone_via_field() {
+#[tokio::test]
+async fn test_clone_via_field() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("clone_test.lua");
     fs::write(
@@ -494,6 +502,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -506,8 +515,8 @@ end
     }
 }
 
-#[test]
-fn test_walk_nested_elements() {
+#[tokio::test]
+async fn test_walk_nested_elements() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("walk_nested.lua");
     fs::write(
@@ -553,6 +562,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -579,8 +589,8 @@ end
     }
 }
 
-#[test]
-fn test_topdown_traversal() {
+#[tokio::test]
+async fn test_topdown_traversal() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("topdown_test.lua");
     fs::write(
@@ -631,6 +641,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -648,8 +659,8 @@ end
     }
 }
 
-#[test]
-fn test_filter_provenance_tracking() {
+#[tokio::test]
+async fn test_filter_provenance_tracking() {
     // Test that elements created by filters capture their source location
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("provenance_test.lua");
@@ -678,6 +689,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -716,8 +728,8 @@ end
     }
 }
 
-#[test]
-fn test_pandoc_utils_stringify_basic() {
+#[tokio::test]
+async fn test_pandoc_utils_stringify_basic() {
     // Test pandoc.utils.stringify with basic elements
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("stringify_test.lua");
@@ -756,6 +768,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -770,8 +783,8 @@ end
     }
 }
 
-#[test]
-fn test_pandoc_utils_stringify_nested() {
+#[tokio::test]
+async fn test_pandoc_utils_stringify_nested() {
     // Test stringify with nested elements (Emph containing Strong)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("stringify_nested.lua");
@@ -814,6 +827,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -828,8 +842,8 @@ end
     }
 }
 
-#[test]
-fn test_typewise_traversal_order() {
+#[tokio::test]
+async fn test_typewise_traversal_order() {
     // Test that typewise traversal processes ALL inlines before ANY blocks
     // Pandoc's typewise traversal does four separate passes:
     // 1. walkInlineSplicing - all inline elements
@@ -898,7 +912,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     // Read the order file
     let order = fs::read_to_string(&order_file).unwrap();
@@ -923,8 +939,8 @@ end
     );
 }
 
-#[test]
-fn test_generic_inline_fallback() {
+#[tokio::test]
+async fn test_generic_inline_fallback() {
     // Test that generic `Inline` filter is called when no type-specific filter exists
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inline_fallback.lua");
@@ -954,6 +970,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -966,8 +983,8 @@ end
     }
 }
 
-#[test]
-fn test_generic_block_fallback() {
+#[tokio::test]
+async fn test_generic_block_fallback() {
     // Test that generic `Block` filter is called when no type-specific filter exists
     let dir = TempDir::new().unwrap();
     let order_file = dir.path().join("order.txt");
@@ -1010,7 +1027,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
@@ -1019,8 +1038,8 @@ end
     assert_eq!(lines, vec!["Block:Para", "Block:CodeBlock"]);
 }
 
-#[test]
-fn test_type_specific_overrides_generic() {
+#[tokio::test]
+async fn test_type_specific_overrides_generic() {
     // Test that type-specific filter (Str) takes precedence over generic (Inline)
     let dir = TempDir::new().unwrap();
     let order_file = dir.path().join("order.txt");
@@ -1066,7 +1085,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
@@ -1075,8 +1096,8 @@ end
     assert_eq!(lines, vec!["Str", "Inline:Space"]);
 }
 
-#[test]
-fn test_topdown_document_level_traversal_order() {
+#[tokio::test]
+async fn test_topdown_document_level_traversal_order() {
     // Test that document-level topdown traversal processes parents before children
     // In topdown mode: Para should be visited BEFORE its Str children
     // In typewise mode: Str children are visited BEFORE Para
@@ -1131,7 +1152,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
@@ -1144,8 +1167,8 @@ end
     );
 }
 
-#[test]
-fn test_topdown_stop_signal_prevents_descent() {
+#[tokio::test]
+async fn test_topdown_stop_signal_prevents_descent() {
     // Test that returning (element, false) in topdown mode stops descent into children
     // In this test, Div returns (elem, false) which should prevent its children from being visited
     let dir = TempDir::new().unwrap();
@@ -1213,7 +1236,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
@@ -1227,8 +1252,8 @@ end
     );
 }
 
-#[test]
-fn test_topdown_blocks_filter_order() {
+#[tokio::test]
+async fn test_topdown_blocks_filter_order() {
     // Test that in topdown mode, the Blocks filter is called BEFORE individual block filters
     // This is the opposite of typewise mode where Blocks is called AFTER
     let dir = TempDir::new().unwrap();
@@ -1281,7 +1306,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
@@ -1294,8 +1321,8 @@ end
     );
 }
 
-#[test]
-fn test_elem_walk_typewise_traversal_order() {
+#[tokio::test]
+async fn test_elem_walk_typewise_traversal_order() {
     // Test that elem:walk{} uses correct four-pass traversal order
     // When walking a Div containing two paragraphs, all Str elements should be
     // processed before any Para elements.
@@ -1367,7 +1394,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
@@ -1389,8 +1418,8 @@ end
     );
 }
 
-#[test]
-fn test_elem_walk_topdown_stop_signal() {
+#[tokio::test]
+async fn test_elem_walk_topdown_stop_signal() {
     // Test that elem:walk{} with topdown correctly handles the stop signal.
     // When a filter returns (elem, false), it should NOT descend into children.
     let dir = TempDir::new().unwrap();
@@ -1436,6 +1465,7 @@ end
     let context = ASTContext::new();
 
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
 
@@ -1457,8 +1487,8 @@ end
     }
 }
 
-#[test]
-fn test_inlines_walk_typewise_order() {
+#[tokio::test]
+async fn test_inlines_walk_typewise_order() {
     // Test that Inlines:walk{} uses correct two-pass traversal order
     // All inline element filters should be applied before the Inlines filter
     let dir = TempDir::new().unwrap();
@@ -1515,7 +1545,9 @@ end
     };
     let context = ASTContext::new();
 
-    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
 
     let order = fs::read_to_string(&order_file).unwrap();
     let lines: Vec<&str> = order.lines().collect();
@@ -1534,8 +1566,8 @@ end
 // DIAGNOSTICS TESTS
 // ============================================================================
 
-#[test]
-fn test_quarto_warn_in_filter() {
+#[tokio::test]
+async fn test_quarto_warn_in_filter() {
     // Test that quarto.warn() emits diagnostics during filter execution
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("warn_test.lua");
@@ -1562,8 +1594,9 @@ end
     };
     let context = ASTContext::new();
 
-    let output =
-        apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime()).unwrap();
+    let output = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap();
     let filtered = output.pandoc;
     let diagnostics = output.diagnostics;
 
@@ -1601,8 +1634,8 @@ end
     }
 }
 
-#[test]
-fn test_quarto_error_in_filter() {
+#[tokio::test]
+async fn test_quarto_error_in_filter() {
     // Test that quarto.error() emits error diagnostics during filter execution
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("error_test.lua");
@@ -1630,6 +1663,7 @@ end
     let context = ASTContext::new();
 
     let diagnostics = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .diagnostics;
 
@@ -1646,8 +1680,8 @@ end
     );
 }
 
-#[test]
-fn test_multiple_diagnostics_from_filter() {
+#[tokio::test]
+async fn test_multiple_diagnostics_from_filter() {
     // Test that multiple warn/error calls accumulate diagnostics
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("multi_diag.lua");
@@ -1677,6 +1711,7 @@ end
     let context = ASTContext::new();
 
     let diagnostics = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .diagnostics;
 
@@ -1696,8 +1731,8 @@ end
     );
 }
 
-#[test]
-fn test_diagnostics_accumulated_across_filters() {
+#[tokio::test]
+async fn test_diagnostics_accumulated_across_filters() {
     // Test that diagnostics are accumulated when running multiple filters
     let dir = TempDir::new().unwrap();
     let filter1_path = dir.path().join("filter1.lua");
@@ -1744,6 +1779,7 @@ end
         "html",
         native_runtime(),
     )
+    .await
     .unwrap();
     let diagnostics = output.diagnostics;
 
@@ -1761,8 +1797,8 @@ end
 // Phase 1: Inline element get_field tests (types.rs coverage)
 // ========================================================================
 
-#[test]
-fn test_content_bearing_inline_access() {
+#[tokio::test]
+async fn test_content_bearing_inline_access() {
     // Tests get_field for Strong, Underline, Strikeout, Superscript, Subscript, SmallCaps
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("content_access.lua");
@@ -1819,6 +1855,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -1844,6 +1881,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -1869,6 +1907,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -1894,6 +1933,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -1919,6 +1959,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -1944,6 +1985,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -1955,8 +1997,8 @@ end
     }
 }
 
-#[test]
-fn test_quoted_field_access() {
+#[tokio::test]
+async fn test_quoted_field_access() {
     // Tests get_field for Quoted element (content and quotetype)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("quoted_access.lua");
@@ -1989,6 +2031,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2015,6 +2058,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2026,8 +2070,8 @@ end
     }
 }
 
-#[test]
-fn test_code_field_access() {
+#[tokio::test]
+async fn test_code_field_access() {
     // Tests get_field for Code element (text and attr)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("code_access.lua");
@@ -2061,6 +2105,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2074,8 +2119,8 @@ end
     }
 }
 
-#[test]
-fn test_math_field_access() {
+#[tokio::test]
+async fn test_math_field_access() {
     // Tests get_field for Math element (text and mathtype)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("math_access.lua");
@@ -2105,6 +2150,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2128,6 +2174,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2139,8 +2186,8 @@ end
     }
 }
 
-#[test]
-fn test_rawinline_field_access() {
+#[tokio::test]
+async fn test_rawinline_field_access() {
     // Tests get_field for RawInline element (text and format)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("rawinline_access.lua");
@@ -2169,6 +2216,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2180,8 +2228,8 @@ end
     }
 }
 
-#[test]
-fn test_link_field_access() {
+#[tokio::test]
+async fn test_link_field_access() {
     // Tests get_field for Link element (content, target, title, attr)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("link_access.lua");
@@ -2222,6 +2270,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2238,8 +2287,8 @@ end
     }
 }
 
-#[test]
-fn test_image_field_access() {
+#[tokio::test]
+async fn test_image_field_access() {
     // Tests get_field for Image element (content, src, title, attr)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("image_access.lua");
@@ -2276,6 +2325,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2289,8 +2339,8 @@ end
     }
 }
 
-#[test]
-fn test_note_content_access() {
+#[tokio::test]
+async fn test_note_content_access() {
     // Tests get_field for Note element (content returns blocks)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("note_access.lua");
@@ -2326,6 +2376,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2337,8 +2388,8 @@ end
     }
 }
 
-#[test]
-fn test_cite_field_access() {
+#[tokio::test]
+async fn test_cite_field_access() {
     // Tests get_field for Cite element (content and citations)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("cite_access.lua");
@@ -2381,6 +2432,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2394,8 +2446,8 @@ end
     }
 }
 
-#[test]
-fn test_criticmarkup_inline_access() {
+#[tokio::test]
+async fn test_criticmarkup_inline_access() {
     // Tests get_field for Insert, Delete, Highlight, EditComment
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("critic_access.lua");
@@ -2442,6 +2494,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2469,6 +2522,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2496,6 +2550,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2507,8 +2562,8 @@ end
     }
 }
 
-#[test]
-fn test_notereference_id_access() {
+#[tokio::test]
+async fn test_notereference_id_access() {
     // Tests get_field for NoteReference element (id)
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("noteref_access.lua");
@@ -2535,6 +2590,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2551,8 +2607,8 @@ end
 // =========================================================================
 
 /// Test setting the text field on Str elements
-#[test]
-fn test_str_text_set() {
+#[tokio::test]
+async fn test_str_text_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("str_set.lua");
     fs::write(
@@ -2578,6 +2634,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2590,8 +2647,8 @@ end
 }
 
 /// Test setting content on content-bearing inline elements (Emph, Strong, etc.)
-#[test]
-fn test_content_bearing_inline_set() {
+#[tokio::test]
+async fn test_content_bearing_inline_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("content_set.lua");
     fs::write(
@@ -2646,6 +2703,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2674,6 +2732,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2702,6 +2761,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2730,6 +2790,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2745,8 +2806,8 @@ end
 }
 
 /// Test setting fields on Span element (content and attr)
-#[test]
-fn test_span_set() {
+#[tokio::test]
+async fn test_span_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("span_set.lua");
     fs::write(
@@ -2778,6 +2839,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2796,8 +2858,8 @@ end
 }
 
 /// Test setting fields on Link element (content, target, title, attr)
-#[test]
-fn test_link_set() {
+#[tokio::test]
+async fn test_link_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("link_set.lua");
     fs::write(
@@ -2833,6 +2895,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2853,8 +2916,8 @@ end
 }
 
 /// Test setting fields on Image element (content, src, title, attr)
-#[test]
-fn test_image_set() {
+#[tokio::test]
+async fn test_image_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("image_set.lua");
     fs::write(
@@ -2890,6 +2953,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2910,8 +2974,8 @@ end
 }
 
 /// Test setting fields on Code element (text and attr)
-#[test]
-fn test_code_set() {
+#[tokio::test]
+async fn test_code_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("code_set.lua");
     fs::write(
@@ -2940,6 +3004,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2955,8 +3020,8 @@ end
 }
 
 /// Test setting fields on RawInline element (text and format)
-#[test]
-fn test_rawinline_set() {
+#[tokio::test]
+async fn test_rawinline_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("rawinline_set.lua");
     fs::write(
@@ -2984,6 +3049,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -2999,8 +3065,8 @@ end
 }
 
 /// Test setting text on Math element
-#[test]
-fn test_math_set() {
+#[tokio::test]
+async fn test_math_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("math_set.lua");
     fs::write(
@@ -3027,6 +3093,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3041,8 +3108,8 @@ end
 }
 
 /// Test setting content on Quoted element
-#[test]
-fn test_quoted_set() {
+#[tokio::test]
+async fn test_quoted_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("quoted_set.lua");
     fs::write(
@@ -3072,6 +3139,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3087,8 +3155,8 @@ end
 }
 
 /// Test setting content on Note element
-#[test]
-fn test_note_set() {
+#[tokio::test]
+async fn test_note_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("note_set.lua");
     fs::write(
@@ -3120,6 +3188,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3138,8 +3207,8 @@ end
 }
 
 /// Test setting fields on CriticMarkup inline elements (Insert, Delete, Highlight)
-#[test]
-fn test_criticmarkup_inline_set() {
+#[tokio::test]
+async fn test_criticmarkup_inline_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("critic_set.lua");
     fs::write(
@@ -3180,6 +3249,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3210,6 +3280,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3240,6 +3311,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3255,8 +3327,8 @@ end
 }
 
 /// Test setting id on NoteReference element
-#[test]
-fn test_notereference_set() {
+#[tokio::test]
+async fn test_notereference_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("noteref_set.lua");
     fs::write(
@@ -3282,6 +3354,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3297,8 +3370,8 @@ end
 
 /// Test setting identifier directly on inline elements with attr (k-hqyf)
 /// This tests the convenience accessor that should allow elem.identifier = "..."
-#[test]
-fn test_inline_identifier_convenience_accessor() {
+#[tokio::test]
+async fn test_inline_identifier_convenience_accessor() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("identifier_set.lua");
     fs::write(
@@ -3333,6 +3406,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3354,8 +3428,8 @@ end
 // =========================================================================
 
 /// Test accessing content on Plain and Para blocks
-#[test]
-fn test_plain_para_content_access() {
+#[tokio::test]
+async fn test_plain_para_content_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("plain_para_access.lua");
     fs::write(
@@ -3387,6 +3461,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3409,6 +3484,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3421,8 +3497,8 @@ end
 }
 
 /// Test accessing fields on Header blocks (level, content, identifier, classes)
-#[test]
-fn test_header_field_access() {
+#[tokio::test]
+async fn test_header_field_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("header_access.lua");
     fs::write(
@@ -3458,6 +3534,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3470,8 +3547,8 @@ end
 }
 
 /// Test accessing fields on CodeBlock (text, identifier, classes)
-#[test]
-fn test_codeblock_field_access() {
+#[tokio::test]
+async fn test_codeblock_field_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("codeblock_access.lua");
     fs::write(
@@ -3502,6 +3579,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3514,8 +3592,8 @@ end
 }
 
 /// Test accessing fields on RawBlock (text, format)
-#[test]
-fn test_rawblock_field_access() {
+#[tokio::test]
+async fn test_rawblock_field_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("rawblock_access.lua");
     fs::write(
@@ -3540,6 +3618,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3552,8 +3631,8 @@ end
 }
 
 /// Test accessing content on BlockQuote
-#[test]
-fn test_blockquote_content_access() {
+#[tokio::test]
+async fn test_blockquote_content_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("blockquote_access.lua");
     fs::write(
@@ -3586,6 +3665,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3598,8 +3678,8 @@ end
 }
 
 /// Test accessing fields on Div (content, identifier, classes)
-#[test]
-fn test_div_field_access() {
+#[tokio::test]
+async fn test_div_field_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("div_access.lua");
     fs::write(
@@ -3635,6 +3715,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3647,8 +3728,8 @@ end
 }
 
 /// Test accessing content on BulletList
-#[test]
-fn test_bulletlist_content_access() {
+#[tokio::test]
+async fn test_bulletlist_content_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("bulletlist_access.lua");
     fs::write(
@@ -3686,6 +3767,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3698,8 +3780,8 @@ end
 }
 
 /// Test accessing fields on OrderedList (content, start)
-#[test]
-fn test_orderedlist_field_access() {
+#[tokio::test]
+async fn test_orderedlist_field_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("orderedlist_access.lua");
     fs::write(
@@ -3734,6 +3816,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3750,8 +3833,8 @@ end
 // =========================================================================
 
 /// Test setting content on Plain and Para blocks
-#[test]
-fn test_plain_para_content_set() {
+#[tokio::test]
+async fn test_plain_para_content_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("plain_para_set.lua");
     fs::write(
@@ -3783,6 +3866,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3805,6 +3889,7 @@ end
         })],
     };
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3817,8 +3902,8 @@ end
 }
 
 /// Test setting fields on Header blocks (level, content, identifier)
-#[test]
-fn test_header_field_set() {
+#[tokio::test]
+async fn test_header_field_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("header_set.lua");
     fs::write(
@@ -3849,6 +3934,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3865,8 +3951,8 @@ end
 }
 
 /// Test setting fields on CodeBlock (text, identifier)
-#[test]
-fn test_codeblock_field_set() {
+#[tokio::test]
+async fn test_codeblock_field_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("codeblock_set.lua");
     fs::write(
@@ -3896,6 +3982,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3910,8 +3997,8 @@ end
 }
 
 /// Test setting fields on RawBlock (text, format)
-#[test]
-fn test_rawblock_field_set() {
+#[tokio::test]
+async fn test_rawblock_field_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("rawblock_set.lua");
     fs::write(
@@ -3936,6 +4023,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3948,8 +4036,8 @@ end
 }
 
 /// Test setting content on BlockQuote
-#[test]
-fn test_blockquote_content_set() {
+#[tokio::test]
+async fn test_blockquote_content_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("blockquote_set.lua");
     fs::write(
@@ -3978,6 +4066,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -3993,8 +4082,8 @@ end
 }
 
 /// Test setting fields on Div (content, identifier)
-#[test]
-fn test_div_field_set() {
+#[tokio::test]
+async fn test_div_field_set() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("div_set.lua");
     fs::write(
@@ -4030,6 +4119,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4054,8 +4144,8 @@ end
 // =========================================================================
 
 /// Test attr positional read access (attr[1], attr[2], attr[3])
-#[test]
-fn test_attr_positional_read() {
+#[tokio::test]
+async fn test_attr_positional_read() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_pos_read.lua");
     fs::write(
@@ -4094,6 +4184,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4108,8 +4199,8 @@ end
 }
 
 /// Test attr named read access (attr.identifier, attr.classes, attr.attributes)
-#[test]
-fn test_attr_named_read() {
+#[tokio::test]
+async fn test_attr_named_read() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_named_read.lua");
     fs::write(
@@ -4147,6 +4238,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4161,8 +4253,8 @@ end
 }
 
 /// Test whole attr replacement (elem.attr = new_attr)
-#[test]
-fn test_attr_whole_replacement() {
+#[tokio::test]
+async fn test_attr_whole_replacement() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_replacement.lua");
     fs::write(
@@ -4198,6 +4290,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4216,8 +4309,8 @@ end
 }
 
 /// Test attr:clone() method
-#[test]
-fn test_attr_clone() {
+#[tokio::test]
+async fn test_attr_clone() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_clone.lua");
     fs::write(
@@ -4254,6 +4347,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4270,8 +4364,8 @@ end
 }
 
 /// Test tostring(attr) and #attr
-#[test]
-fn test_attr_tostring_and_len() {
+#[tokio::test]
+async fn test_attr_tostring_and_len() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_tostring.lua");
     fs::write(
@@ -4309,6 +4403,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4325,8 +4420,8 @@ end
 // =========================================================================
 
 /// Test citation access via Cite element
-#[test]
-fn test_cite_citations_access() {
+#[tokio::test]
+async fn test_cite_citations_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("cite_access.lua");
     fs::write(
@@ -4366,6 +4461,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4380,8 +4476,8 @@ end
 }
 
 /// Test Figure caption access
-#[test]
-fn test_figure_caption_access() {
+#[tokio::test]
+async fn test_figure_caption_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("figure_caption.lua");
     fs::write(
@@ -4431,6 +4527,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4445,8 +4542,8 @@ end
 }
 
 /// Test attr from table (not userdata)
-#[test]
-fn test_attr_from_table() {
+#[tokio::test]
+async fn test_attr_from_table() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("attr_from_table.lua");
     fs::write(
@@ -4478,6 +4575,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4494,8 +4592,8 @@ end
 }
 
 /// Test Table attr and caption access
-#[test]
-fn test_table_fields_access() {
+#[tokio::test]
+async fn test_table_fields_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("table_access.lua");
     fs::write(
@@ -4545,6 +4643,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4559,8 +4658,8 @@ end
 }
 
 /// Test LineBlock access
-#[test]
-fn test_lineblock_content_access() {
+#[tokio::test]
+async fn test_lineblock_content_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("lineblock_access.lua");
     fs::write(
@@ -4595,6 +4694,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4609,8 +4709,8 @@ end
 }
 
 /// Test DefinitionList content access
-#[test]
-fn test_definitionlist_content_access() {
+#[tokio::test]
+async fn test_definitionlist_content_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("deflist_access.lua");
     fs::write(
@@ -4651,6 +4751,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4665,8 +4766,8 @@ end
 }
 
 /// Test OrderedList style access (note: delimiter is not implemented)
-#[test]
-fn test_orderedlist_style_access() {
+#[tokio::test]
+async fn test_orderedlist_style_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("orderedlist_style.lua");
     fs::write(
@@ -4701,6 +4802,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4719,8 +4821,8 @@ end
 // =========================================================================
 
 /// Test pairs() iteration over inline element
-#[test]
-fn test_inline_pairs_iteration() {
+#[tokio::test]
+async fn test_inline_pairs_iteration() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("pairs_inline.lua");
     fs::write(
@@ -4759,6 +4861,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4776,8 +4879,8 @@ end
 }
 
 /// Test pairs() iteration over block element
-#[test]
-fn test_block_pairs_iteration() {
+#[tokio::test]
+async fn test_block_pairs_iteration() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("pairs_block.lua");
     fs::write(
@@ -4810,6 +4913,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4827,8 +4931,8 @@ end
 }
 
 /// Test walk method on inline element
-#[test]
-fn test_inline_walk() {
+#[tokio::test]
+async fn test_inline_walk() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("walk_inline.lua");
     fs::write(
@@ -4874,6 +4978,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4888,8 +4993,8 @@ end
 }
 
 /// Test walk method on block element
-#[test]
-fn test_block_walk() {
+#[tokio::test]
+async fn test_block_walk() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("walk_block.lua");
     fs::write(
@@ -4935,6 +5040,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -4949,8 +5055,8 @@ end
 }
 
 /// Test SoftBreak and LineBreak access
-#[test]
-fn test_softbreak_linebreak_access() {
+#[tokio::test]
+async fn test_softbreak_linebreak_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("breaks.lua");
     fs::write(
@@ -4994,6 +5100,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5012,8 +5119,8 @@ end
 }
 
 /// Test HorizontalRule access
-#[test]
-fn test_horizontalrule_access() {
+#[tokio::test]
+async fn test_horizontalrule_access() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("hr.lua");
     fs::write(
@@ -5034,6 +5141,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5054,8 +5162,8 @@ end
 // ============================================================================
 
 /// Test Inlines filter on Plain block content
-#[test]
-fn test_inlines_filter_on_plain_block() {
+#[tokio::test]
+async fn test_inlines_filter_on_plain_block() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_plain.lua");
     fs::write(
@@ -5089,6 +5197,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5101,8 +5210,8 @@ end
 }
 
 /// Test Inlines filter on Header block content
-#[test]
-fn test_inlines_filter_on_header_block() {
+#[tokio::test]
+async fn test_inlines_filter_on_header_block() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_header.lua");
     fs::write(
@@ -5138,6 +5247,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5150,8 +5260,8 @@ end
 }
 
 /// Test Inlines filter on BlockQuote content (nested blocks with inlines)
-#[test]
-fn test_inlines_filter_on_blockquote() {
+#[tokio::test]
+async fn test_inlines_filter_on_blockquote() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_blockquote.lua");
     fs::write(
@@ -5187,6 +5297,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5202,8 +5313,8 @@ end
 }
 
 /// Test Inlines filter on BulletList items
-#[test]
-fn test_inlines_filter_on_bulletlist() {
+#[tokio::test]
+async fn test_inlines_filter_on_bulletlist() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_bulletlist.lua");
     fs::write(
@@ -5239,6 +5350,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5254,8 +5366,8 @@ end
 }
 
 /// Test Inlines filter on OrderedList items
-#[test]
-fn test_inlines_filter_on_orderedlist() {
+#[tokio::test]
+async fn test_inlines_filter_on_orderedlist() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_orderedlist.lua");
     fs::write(
@@ -5296,6 +5408,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5311,8 +5424,8 @@ end
 }
 
 /// Test Inlines filter on Figure content
-#[test]
-fn test_inlines_filter_on_figure() {
+#[tokio::test]
+async fn test_inlines_filter_on_figure() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_figure.lua");
     fs::write(
@@ -5361,6 +5474,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5376,8 +5490,8 @@ end
 }
 
 /// Test Inlines filter on LineBlock content
-#[test]
-fn test_inlines_filter_on_lineblock() {
+#[tokio::test]
+async fn test_inlines_filter_on_lineblock() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_lineblock.lua");
     fs::write(
@@ -5410,6 +5524,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5422,8 +5537,8 @@ end
 }
 
 /// Test Inlines filter on Div content
-#[test]
-fn test_inlines_filter_on_div() {
+#[tokio::test]
+async fn test_inlines_filter_on_div() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("inlines_div.lua");
     fs::write(
@@ -5461,6 +5576,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5481,8 +5597,8 @@ end
 // ============================================================================
 
 /// Test inline filter returning a table of inlines
-#[test]
-fn test_inline_filter_returns_table_of_inlines() {
+#[tokio::test]
+async fn test_inline_filter_returns_table_of_inlines() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("return_inline_table.lua");
     fs::write(
@@ -5508,6 +5624,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5528,8 +5645,8 @@ end
 }
 
 /// Test block filter returning a table of blocks
-#[test]
-fn test_block_filter_returns_table_of_blocks() {
+#[tokio::test]
+async fn test_block_filter_returns_table_of_blocks() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("return_block_table.lua");
     fs::write(
@@ -5558,6 +5675,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     assert_eq!(filtered.blocks.len(), 2);
@@ -5574,8 +5692,8 @@ end
 }
 
 /// Test topdown inline filter returning a table with control signal
-#[test]
-fn test_topdown_inline_returns_table_with_stop() {
+#[tokio::test]
+async fn test_topdown_inline_returns_table_with_stop() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("topdown_table_stop.lua");
     fs::write(
@@ -5607,6 +5725,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     match &filtered.blocks[0] {
@@ -5628,8 +5747,8 @@ end
 }
 
 /// Test topdown block filter returning a table with control signal
-#[test]
-fn test_topdown_block_returns_table_with_stop() {
+#[tokio::test]
+async fn test_topdown_block_returns_table_with_stop() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("topdown_block_table_stop.lua");
     fs::write(
@@ -5666,6 +5785,7 @@ end
     };
     let context = ASTContext::new();
     let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .unwrap()
         .pandoc;
     assert_eq!(filtered.blocks.len(), 2);
@@ -5685,8 +5805,8 @@ end
 // quarto.* API availability in filters
 // =========================================================================
 
-#[test]
-fn test_filter_quarto_json_available() {
+#[tokio::test]
+async fn test_filter_quarto_json_available() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("json_test.lua");
     fs::write(
@@ -5712,6 +5832,7 @@ end
     };
     let context = ASTContext::new();
     let result = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .expect("Filter should succeed")
         .pandoc;
 
@@ -5724,8 +5845,8 @@ end
     }
 }
 
-#[test]
-fn test_filter_quarto_log_available() {
+#[tokio::test]
+async fn test_filter_quarto_log_available() {
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("log_test.lua");
     fs::write(
@@ -5751,6 +5872,7 @@ end
     };
     let context = ASTContext::new();
     let result = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
         .expect("Filter should succeed")
         .pandoc;
 

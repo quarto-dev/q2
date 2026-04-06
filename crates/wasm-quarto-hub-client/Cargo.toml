@@ -32,6 +32,11 @@ include_dir = "0.7"
 base64 = "0.22"
 getrandom = { version = "0.2", features = ["js"] }
 
+# Declare this as its own workspace so cargo does not traverse up into the
+# parent monorepo workspace when building from a nested directory (e.g. a
+# git worktree inside the main repo tree).
+[workspace]
+
 [patch.crates-io]
 lua-src = { path = "../lua-src-wasm" }
 wasm-bindgen-futures = { path = "../wasm-bindgen-futures-patch" }

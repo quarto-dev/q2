@@ -266,9 +266,9 @@ impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
         self.inner.env_all()
     }
 
-    fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)> {
+    async fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)> {
         // TODO: Check policy.can_net(host)
-        self.inner.fetch_url(url)
+        self.inner.fetch_url(url).await
     }
 
     fn os_name(&self) -> &'static str {

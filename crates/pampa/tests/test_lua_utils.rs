@@ -27,7 +27,7 @@ fn create_test_doc(content: Vec<Inline>) -> Pandoc {
 }
 
 /// Helper to run a filter and assert success
-fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
+async fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
     let mut filter_file = NamedTempFile::new().expect("Failed to create temp file");
     filter_file
         .write_all(filter_code.as_bytes())
@@ -42,7 +42,8 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
         &[filter_file.path().to_path_buf()],
         "html",
         runtime,
-    );
+    )
+    .await;
     let output = result.expect("Filter failed");
     let (pandoc, context) = (output.pandoc, output.context);
     (pandoc, context)
@@ -52,8 +53,8 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
 // pandoc.utils.stringify tests
 // ============================================================================
 
-#[test]
-fn test_stringify_basic() {
+#[tokio::test]
+async fn test_stringify_basic() {
     let filter_code = r#"
 function Para(elem)
     local result = pandoc.utils.stringify(elem)
@@ -78,15 +79,15 @@ end
         }),
     ]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // pandoc.utils.blocks_to_inlines tests
 // ============================================================================
 
-#[test]
-fn test_blocks_to_inlines_basic() {
+#[tokio::test]
+async fn test_blocks_to_inlines_basic() {
     let filter_code = r#"
 function Para(elem)
     local blocks = {
@@ -109,11 +110,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_blocks_to_inlines_with_custom_separator() {
+#[tokio::test]
+async fn test_blocks_to_inlines_with_custom_separator() {
     let filter_code = r#"
 function Para(elem)
     local blocks = {
@@ -138,15 +139,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // pandoc.utils.equals tests
 // ============================================================================
 
-#[test]
-fn test_equals_same_elements() {
+#[tokio::test]
+async fn test_equals_same_elements() {
     let filter_code = r#"
 function Para(elem)
     local str1 = pandoc.Str("hello")
@@ -168,11 +169,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_equals_primitives() {
+#[tokio::test]
+async fn test_equals_primitives() {
     let filter_code = r#"
 function Para(elem)
     -- Test equals with primitive types
@@ -197,15 +198,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // pandoc.utils.type tests
 // ============================================================================
 
-#[test]
-fn test_type_inline_elements() {
+#[tokio::test]
+async fn test_type_inline_elements() {
     let filter_code = r#"
 function Para(elem)
     local str = pandoc.Str("hello")
@@ -235,11 +236,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_type_block_elements() {
+#[tokio::test]
+async fn test_type_block_elements() {
     let filter_code = r#"
 function Para(elem)
     local para = pandoc.Para{pandoc.Str("text")}
@@ -263,11 +264,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_type_primitives() {
+#[tokio::test]
+async fn test_type_primitives() {
     let filter_code = r#"
 function Para(elem)
     if pandoc.utils.type("hello") ~= "string" then
@@ -295,15 +296,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // pandoc.utils.sha1 tests
 // ============================================================================
 
-#[test]
-fn test_sha1_basic() {
+#[tokio::test]
+async fn test_sha1_basic() {
     let filter_code = r#"
 function Para(elem)
     -- SHA1 of "hello" is "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
@@ -321,11 +322,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_sha1_empty_string() {
+#[tokio::test]
+async fn test_sha1_empty_string() {
     let filter_code = r#"
 function Para(elem)
     -- SHA1 of "" is "da39a3ee5e6b4b0d3255bfef95601890afd80709"
@@ -343,7 +344,7 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
@@ -351,8 +352,8 @@ end
 // These tests match Pandoc's actual test suite from pandoc-utils.lua
 // ============================================================================
 
-#[test]
-fn test_normalize_date_day_abbrev_month_year() {
+#[tokio::test]
+async fn test_normalize_date_day_abbrev_month_year() {
     // Test case from Pandoc: '09 Nov 1989' -> '1989-11-09'
     let filter_code = r#"
 function Para(elem)
@@ -370,11 +371,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_normalize_date_us_format() {
+#[tokio::test]
+async fn test_normalize_date_us_format() {
     // Test case from Pandoc: '12/31/2017' -> '2017-12-31'
     let filter_code = r#"
 function Para(elem)
@@ -392,11 +393,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_normalize_date_iso() {
+#[tokio::test]
+async fn test_normalize_date_iso() {
     // ISO format: YYYY-MM-DD
     let filter_code = r#"
 function Para(elem)
@@ -414,11 +415,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_normalize_date_full_month_day_year() {
+#[tokio::test]
+async fn test_normalize_date_full_month_day_year() {
     // Format: "November 9, 1989"
     let filter_code = r#"
 function Para(elem)
@@ -436,11 +437,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_normalize_date_abbrev_month_dot() {
+#[tokio::test]
+async fn test_normalize_date_abbrev_month_dot() {
     // Format: "Nov. 9, 1989"
     let filter_code = r#"
 function Para(elem)
@@ -458,11 +459,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_normalize_date_compact() {
+#[tokio::test]
+async fn test_normalize_date_compact() {
     // Format: YYYYMMDD
     let filter_code = r#"
 function Para(elem)
@@ -480,11 +481,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_normalize_date_year_only() {
+#[tokio::test]
+async fn test_normalize_date_year_only() {
     // Format: YYYY (returns January 1)
     let filter_code = r#"
 function Para(elem)
@@ -502,11 +503,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_normalize_date_invalid() {
+#[tokio::test]
+async fn test_normalize_date_invalid() {
     let filter_code = r#"
 function Para(elem)
     local date = pandoc.utils.normalize_date("not a date")
@@ -523,15 +524,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // pandoc.utils.to_roman_numeral tests
 // ============================================================================
 
-#[test]
-fn test_to_roman_numeral() {
+#[tokio::test]
+async fn test_to_roman_numeral() {
     let filter_code = r#"
 function Para(elem)
     if pandoc.utils.to_roman_numeral(1) ~= "I" then
@@ -567,15 +568,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // pandoc.text module tests
 // ============================================================================
 
-#[test]
-fn test_text_lower() {
+#[tokio::test]
+async fn test_text_lower() {
     let filter_code = r#"
 function Para(elem)
     if pandoc.text.lower("HELLO") ~= "hello" then
@@ -596,11 +597,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_text_upper() {
+#[tokio::test]
+async fn test_text_upper() {
     let filter_code = r#"
 function Para(elem)
     if pandoc.text.upper("hello") ~= "HELLO" then
@@ -621,11 +622,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_text_len() {
+#[tokio::test]
+async fn test_text_len() {
     let filter_code = r#"
 function Para(elem)
     if pandoc.text.len("hello") ~= 5 then
@@ -651,11 +652,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_text_sub() {
+#[tokio::test]
+async fn test_text_sub() {
     let filter_code = r#"
 function Para(elem)
     -- Basic substring
@@ -682,11 +683,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_text_reverse() {
+#[tokio::test]
+async fn test_text_reverse() {
     let filter_code = r#"
 function Para(elem)
     if pandoc.text.reverse("hello") ~= "olleh" then
@@ -707,11 +708,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_text_global_alias() {
+#[tokio::test]
+async fn test_text_global_alias() {
     // The 'text' global should also be available (deprecated but supported)
     let filter_code = r#"
 function Para(elem)
@@ -728,15 +729,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // pandoc.json module tests
 // ============================================================================
 
-#[test]
-fn test_json_encode_basic() {
+#[tokio::test]
+async fn test_json_encode_basic() {
     let filter_code = r#"
 function Para(elem)
     local json = pandoc.json.encode({a = 1, b = "hello"})
@@ -767,11 +768,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_json_decode_basic() {
+#[tokio::test]
+async fn test_json_decode_basic() {
     let filter_code = r#"
 function Para(elem)
     local obj = pandoc.json.decode('{"a": 1, "b": "hello"}')
@@ -813,11 +814,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_json_null() {
+#[tokio::test]
+async fn test_json_null() {
     let filter_code = r#"
 function Para(elem)
     -- Check that pandoc.json.null exists
@@ -844,11 +845,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_json_roundtrip() {
+#[tokio::test]
+async fn test_json_roundtrip() {
     let filter_code = r#"
 function Para(elem)
     local original = {
@@ -884,5 +885,5 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }

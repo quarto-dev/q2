@@ -160,6 +160,29 @@ extern "C" {
     fn js_cache_clear_namespace_impl(namespace: &str) -> Result<JsValue, JsValue>;
 }
 
+// =============================================================================
+// JavaScript Interop for Network Fetch
+// =============================================================================
+//
+// The JS shim at /src/wasm-js-bridge/fetch.js calls window.fetch(url) and
+// returns a Promise<string> where the string is a JSON object:
+//   { "mimeType": "text/html", "content": "<base64-encoded bytes>" }
+//
+// Binary content is base64-encoded by the JS side to avoid complex type
+// marshalling. The Rust side decodes it with the base64 crate.
+
+#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/fetch.js")]
+extern "C" {
+    /// Fetch content from a URL.
+    ///
+    /// Returns a Promise resolving to a JSON string:
+    ///   `{ "mimeType": "<mime>", "content": "<base64-encoded body>" }`
+    ///
+    /// The Promise rejects if the request fails or the response status is not ok.
+    #[wasm_bindgen(js_name = "jsFetchUrl", catch)]
+    fn js_fetch_url_impl(url: &str) -> Result<JsValue, JsValue>;
+}
+
 /// Counter for generating unique temp directory names in WASM.
 /// SystemTime::now() is not available in WASM, so we use a simple counter.
 static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -678,12 +701,38 @@ impl SystemRuntime for WasmRuntime {
         Ok(HashMap::new())
     }
 
-    fn fetch_url(&self, _url: &str) -> RuntimeResult<(Vec<u8>, String)> {
-        // TODO: Implement using fetch() API via wasm-bindgen
-        // For now, this is not supported in the core runtime
-        Err(RuntimeError::NotSupported(
-            "WasmRuntime fetch not yet implemented - use JavaScript fetch() directly".to_string(),
-        ))
+    async fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)> {
+        let promise = js_fetch_url_impl(url).map_err(|e| {
+            RuntimeError::NotSupported(format!("Failed to call jsFetchUrl: {:?}", e))
+        })?;
+
+        let result = JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| RuntimeError::NotSupported(format!("URL fetch failed: {:?}", e)))?;
+
+        let json_str = result.as_string().ok_or_else(|| {
+            RuntimeError::NotSupported("fetch result was not a string".to_string())
+        })?;
+
+        #[derive(serde::Deserialize)]
+        struct FetchResult {
+            #[serde(rename = "mimeType")]
+            mime_type: String,
+            content: String,
+        }
+
+        let fetch_result: FetchResult = serde_json::from_str(&json_str).map_err(|e| {
+            RuntimeError::NotSupported(format!("Failed to parse fetch result JSON: {e}"))
+        })?;
+
+        use base64::Engine as _;
+        let content = base64::engine::general_purpose::STANDARD
+            .decode(&fetch_result.content)
+            .map_err(|e| {
+                RuntimeError::NotSupported(format!("Failed to base64-decode content: {e}"))
+            })?;
+
+        Ok((content, fetch_result.mime_type))
     }
 
     fn os_name(&self) -> &'static str {

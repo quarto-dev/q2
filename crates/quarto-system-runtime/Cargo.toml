@@ -12,11 +12,17 @@ description = "Runtime abstraction layer for Quarto system operations"
 async-trait.workspace = true
 # JSON serialization for JS interop
 serde_json.workspace = true
+# Serde derive for fetch_url response deserialization
+serde.workspace = true
 
 # Native-only dependencies
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # For binary lookup on PATH
 which = "8.0"
+# HTTP client for fetch_url
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# Base64 encoding/decoding for fetch_url WASM response (also used native-side for parity)
+base64.workspace = true
 # Safe temp directory creation (random names, no collisions under parallel execution)
 tempfile = "3.24"
 # SASS compilation (pure Rust, ~2x faster than dart-sass)
@@ -37,6 +43,8 @@ tokio.workspace = true
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
+# Base64 decoding for fetch_url response (content is base64-encoded by JS shim)
+base64.workspace = true
 
 [dev-dependencies]
 tempfile = "3.24"

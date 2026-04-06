@@ -106,12 +106,13 @@ impl Default for AppendixStructureTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for AppendixStructureTransform {
     fn name(&self) -> &str {
         "appendix-structure"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
         let meta = &ast.meta;
         let appendix_style = Self::get_appendix_style(meta);
         let reference_location = Self::get_reference_location(meta);
@@ -535,14 +536,14 @@ mod tests {
         })
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = AppendixStructureTransform::new();
         assert_eq!(transform.name(), "appendix-structure");
     }
 
-    #[test]
-    fn test_no_appendix_content() {
+    #[tokio::test]
+    async fn test_no_appendix_content() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -558,15 +559,15 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // No appendix should be created if no appendix content
         assert_eq!(ast.blocks.len(), 1);
         assert!(matches!(ast.blocks[0], Block::Paragraph(_)));
     }
 
-    #[test]
-    fn test_user_appendix_sections() {
+    #[tokio::test]
+    async fn test_user_appendix_sections() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
@@ -586,7 +587,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have main content + appendix container
         assert_eq!(ast.blocks.len(), 2);
@@ -601,8 +602,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_footnotes_moved_to_appendix() {
+    #[tokio::test]
+    async fn test_footnotes_moved_to_appendix() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
@@ -621,7 +622,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have main content + appendix container (footnotes moved into it)
         assert_eq!(ast.blocks.len(), 2);
@@ -642,8 +643,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_bibliography_moved_to_appendix() {
+    #[tokio::test]
+    async fn test_bibliography_moved_to_appendix() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
@@ -662,7 +663,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have main content + appendix container
         assert_eq!(ast.blocks.len(), 2);
@@ -683,8 +684,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_appendix_section_ordering() {
+    #[tokio::test]
+    async fn test_appendix_section_ordering() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
@@ -706,7 +707,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Check ordering: user appendix → bibliography → footnotes
         if let Block::Div(div) = &ast.blocks[1] {
@@ -737,8 +738,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_appendix_style_none_skips_processing() {
+    #[tokio::test]
+    async fn test_appendix_style_none_skips_processing() {
         let mut ast = Pandoc {
             meta: make_meta(vec![meta_entry(
                 "appendix-style",
@@ -760,7 +761,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Blocks should be unchanged - appendix div stays in place
         assert_eq!(ast.blocks.len(), 2);
@@ -771,8 +772,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_margin_mode_footnotes_not_moved() {
+    #[tokio::test]
+    async fn test_margin_mode_footnotes_not_moved() {
         let mut ast = Pandoc {
             meta: make_meta(vec![meta_entry(
                 "reference-location",
@@ -794,7 +795,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Footnotes should stay in place, no appendix created
         assert_eq!(ast.blocks.len(), 2);
@@ -805,8 +806,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_license_metadata_creates_section() {
+    #[tokio::test]
+    async fn test_license_metadata_creates_section() {
         let mut ast = Pandoc {
             meta: make_meta(vec![meta_entry(
                 "license",
@@ -825,7 +826,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should have main content + appendix with license section
         assert_eq!(ast.blocks.len(), 2);
@@ -844,8 +845,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_appendix_style_plain() {
+    #[tokio::test]
+    async fn test_appendix_style_plain() {
         let mut ast = Pandoc {
             meta: make_meta(vec![meta_entry(
                 "appendix-style",
@@ -867,7 +868,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = AppendixStructureTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Check that appendix container has "plain" class
         if let Block::Div(div) = &ast.blocks[1] {

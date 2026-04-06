@@ -68,12 +68,13 @@ impl Default for CalloutTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for CalloutTransform {
     fn name(&self) -> &str {
         "callout"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
         // Transform all blocks in the document
         transform_blocks(&mut ast.blocks);
         Ok(())
@@ -275,20 +276,20 @@ mod tests {
         )
     }
 
-    #[test]
-    fn test_extract_callout_type_warning() {
+    #[tokio::test]
+    async fn test_extract_callout_type_warning() {
         let attr = callout_attr("warning");
         assert_eq!(extract_callout_type(&attr), Some("warning".to_string()));
     }
 
-    #[test]
-    fn test_extract_callout_type_note() {
+    #[tokio::test]
+    async fn test_extract_callout_type_note() {
         let attr = callout_attr("note");
         assert_eq!(extract_callout_type(&attr), Some("note".to_string()));
     }
 
-    #[test]
-    fn test_extract_callout_type_unknown() {
+    #[tokio::test]
+    async fn test_extract_callout_type_unknown() {
         let attr = (
             String::new(),
             vec!["callout-unknown".to_string()],
@@ -298,8 +299,8 @@ mod tests {
         assert_eq!(extract_callout_type(&attr), None);
     }
 
-    #[test]
-    fn test_extract_callout_type_not_callout() {
+    #[tokio::test]
+    async fn test_extract_callout_type_not_callout() {
         let attr = (
             String::new(),
             vec!["panel-tabset".to_string()],
@@ -308,8 +309,8 @@ mod tests {
         assert_eq!(extract_callout_type(&attr), None);
     }
 
-    #[test]
-    fn test_convert_simple_callout() {
+    #[tokio::test]
+    async fn test_convert_simple_callout() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Div(Div {
@@ -333,7 +334,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = CalloutTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Verify the Div was converted to a Custom node
         assert_eq!(ast.blocks.len(), 1);
@@ -347,8 +348,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_convert_callout_with_title() {
+    #[tokio::test]
+    async fn test_convert_callout_with_title() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Div(Div {
@@ -384,7 +385,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = CalloutTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Verify the Custom node has title and content
         match &ast.blocks[0] {
@@ -412,8 +413,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_nested_callout_in_blockquote() {
+    #[tokio::test]
+    async fn test_nested_callout_in_blockquote() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
@@ -440,7 +441,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = CalloutTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Verify the nested Div was converted
         match &ast.blocks[0] {
@@ -455,8 +456,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = CalloutTransform::new();
         assert_eq!(transform.name(), "callout");
     }

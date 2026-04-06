@@ -80,12 +80,13 @@ impl Default for TitleBlockTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for TitleBlockTransform {
     fn name(&self) -> &str {
         "title-block"
     }
 
-    fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         // In full template mode (default for HTML), the template generates
         // the title block header. Skip adding h1 to avoid duplication.
         if !Self::should_add_h1(&ast.meta, ctx.format.is_html()) {
@@ -236,8 +237,8 @@ mod tests {
 
     // === Minimal mode tests (h1 SHOULD be added) ===
 
-    #[test]
-    fn test_minimal_mode_adds_title_header_when_missing() {
+    #[tokio::test]
+    async fn test_minimal_mode_adds_title_header_when_missing() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![
@@ -265,7 +266,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TitleBlockTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should now have 2 blocks: header + paragraph
         assert_eq!(ast.blocks.len(), 2);
@@ -283,8 +284,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_minimal_mode_does_not_add_when_h1_exists() {
+    #[tokio::test]
+    async fn test_minimal_mode_does_not_add_when_h1_exists() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![
@@ -324,7 +325,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TitleBlockTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should still have 2 blocks (no new header added)
         assert_eq!(ast.blocks.len(), 2);
@@ -339,8 +340,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_minimal_mode_does_nothing_without_title_metadata() {
+    #[tokio::test]
+    async fn test_minimal_mode_does_nothing_without_title_metadata() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![meta_entry(
@@ -365,7 +366,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TitleBlockTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should still have 1 block (no header added)
         assert_eq!(ast.blocks.len(), 1);
@@ -373,8 +374,8 @@ mod tests {
 
     // === Full mode tests (h1 should NOT be added, template handles it) ===
 
-    #[test]
-    fn test_full_mode_does_not_add_title_header() {
+    #[tokio::test]
+    async fn test_full_mode_does_not_add_title_header() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![meta_entry(
@@ -400,7 +401,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TitleBlockTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Should still have 1 block - no header added in full mode
         // because the template will render the title block
@@ -413,8 +414,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_full_mode_theme_cosmo_does_not_add_header() {
+    #[tokio::test]
+    async fn test_full_mode_theme_cosmo_does_not_add_header() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![
@@ -445,14 +446,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TitleBlockTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // No header added - Bootstrap theme = full mode
         assert_eq!(ast.blocks.len(), 1);
     }
 
-    #[test]
-    fn test_theme_none_adds_header() {
+    #[tokio::test]
+    async fn test_theme_none_adds_header() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![
@@ -483,15 +484,15 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = TitleBlockTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Header should be added in minimal mode
         assert_eq!(ast.blocks.len(), 2);
         assert!(matches!(&ast.blocks[0], Block::Header(_)));
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = TitleBlockTransform::new();
         assert_eq!(transform.name(), "title-block");
     }

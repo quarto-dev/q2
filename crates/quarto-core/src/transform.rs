@@ -61,6 +61,11 @@ use crate::render::RenderContext;
 ///
 /// Transforms must be `Send + Sync` to support potential parallel
 /// rendering of multiple documents.
+/// Note: `transform` is async to support transforms that call async Lua
+/// functions (e.g. shortcodes calling `pandoc.mediabag.fetch`).
+/// Most transforms complete synchronously — the async is zero-cost for them.
+/// The futures are `?Send` because some transforms hold `!Send` Lua state.
+#[async_trait::async_trait(?Send)]
 pub trait AstTransform: Send + Sync {
     /// Human-readable name for this transform.
     ///
@@ -77,7 +82,7 @@ pub trait AstTransform: Send + Sync {
     /// # Errors
     ///
     /// Returns an error if the transformation fails.
-    fn transform(
+    async fn transform(
         &self,
         ast: &mut quarto_pandoc_types::pandoc::Pandoc,
         ctx: &mut RenderContext,
@@ -131,14 +136,14 @@ impl TransformPipeline {
     /// # Errors
     ///
     /// Returns the first error encountered. Execution stops on error.
-    pub fn execute(
+    pub async fn execute(
         &self,
         ast: &mut quarto_pandoc_types::pandoc::Pandoc,
-        ctx: &mut RenderContext,
+        ctx: &mut RenderContext<'_>,
     ) -> Result<()> {
         for transform in &self.transforms {
             tracing::debug!(transform = transform.name(), "Running transform");
-            transform.transform(ast, ctx)?;
+            transform.transform(ast, ctx).await?;
         }
 
         Ok(())
@@ -190,12 +195,13 @@ mod tests {
         order_tracker: Arc<std::sync::Mutex<Vec<usize>>>,
     }
 
+    #[async_trait::async_trait(?Send)]
     impl AstTransform for CountingTransform {
         fn name(&self) -> &str {
             self.name
         }
 
-        fn transform(
+        async fn transform(
             &self,
             _ast: &mut quarto_pandoc_types::pandoc::Pandoc,
             _ctx: &mut RenderContext,
@@ -209,12 +215,13 @@ mod tests {
     /// A transform that fails.
     struct FailingTransform;
 
+    #[async_trait::async_trait(?Send)]
     impl AstTransform for FailingTransform {
         fn name(&self) -> &str {
             "failing"
         }
 
-        fn transform(
+        async fn transform(
             &self,
             _ast: &mut quarto_pandoc_types::pandoc::Pandoc,
             _ctx: &mut RenderContext,
@@ -256,8 +263,8 @@ mod tests {
         assert!(!pipeline.is_empty());
     }
 
-    #[test]
-    fn test_execute_transforms() {
+    #[tokio::test]
+    async fn test_execute_transforms() {
         let mut pipeline = TransformPipeline::new();
         let counter = Arc::new(AtomicUsize::new(0));
         let order = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -283,14 +290,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let mut ast = make_empty_ast();
 
-        pipeline.execute(&mut ast, &mut ctx).unwrap();
+        pipeline.execute(&mut ast, &mut ctx).await.unwrap();
 
         assert_eq!(counter.load(Ordering::SeqCst), 2);
         assert_eq!(*order.lock().unwrap(), vec![1, 2]);
     }
 
-    #[test]
-    fn test_insertion_order() {
+    #[tokio::test]
+    async fn test_insertion_order() {
         let mut pipeline = TransformPipeline::new();
         let counter = Arc::new(AtomicUsize::new(0));
         let order = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -324,14 +331,14 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let mut ast = make_empty_ast();
 
-        pipeline.execute(&mut ast, &mut ctx).unwrap();
+        pipeline.execute(&mut ast, &mut ctx).await.unwrap();
 
         // Should preserve insertion order
         assert_eq!(*order.lock().unwrap(), vec![1, 2, 3]);
     }
 
-    #[test]
-    fn test_error_stops_execution() {
+    #[tokio::test]
+    async fn test_error_stops_execution() {
         let mut pipeline = TransformPipeline::new();
         let counter = Arc::new(AtomicUsize::new(0));
         let order = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -359,7 +366,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let mut ast = make_empty_ast();
 
-        let result = pipeline.execute(&mut ast, &mut ctx);
+        let result = pipeline.execute(&mut ast, &mut ctx).await;
 
         assert!(result.is_err());
         // Only the first transform should have run

@@ -115,6 +115,13 @@ pub fn test_lua(script: &str) -> String {
     pampa::lua_wasm_test(script)
 }
 
+/// Test entry point: validates that mlua's `async` feature works on wasm32.
+/// Returns "ok:async_result" on success or "error:<msg>" on failure.
+#[wasm_bindgen]
+pub async fn test_lua_async() -> String {
+    pampa::lua_wasm_async_test().await
+}
+
 // ============================================================================
 // RESPONSE TYPES
 // ============================================================================

@@ -300,6 +300,7 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
     impl quarto_system_runtime::SystemRuntime for TestRuntime {
         fn file_read(
             &self,
@@ -410,7 +411,10 @@ mod tests {
         {
             Ok(std::collections::HashMap::new())
         }
-        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+        async fn fetch_url(
+            &self,
+            _url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
             Err(quarto_system_runtime::RuntimeError::NotSupported(
                 "test".to_string(),
             ))

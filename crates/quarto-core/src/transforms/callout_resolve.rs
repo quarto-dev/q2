@@ -67,12 +67,13 @@ impl Default for CalloutResolveTransform {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl AstTransform for CalloutResolveTransform {
     fn name(&self) -> &str {
         "callout-resolve"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
         resolve_blocks(&mut ast.blocks);
         Ok(())
     }
@@ -348,14 +349,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_transform_name() {
+    #[tokio::test]
+    async fn test_transform_name() {
         let transform = CalloutResolveTransform::new();
         assert_eq!(transform.name(), "callout-resolve");
     }
 
-    #[test]
-    fn test_resolve_simple_callout() {
+    #[tokio::test]
+    async fn test_resolve_simple_callout() {
         let mut custom = CustomNode::new("Callout", empty_attr(), dummy_source_info());
         custom.plain_data = json!({"type": "warning"});
         custom.set_slot(
@@ -381,7 +382,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = CalloutResolveTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Verify the CustomNode was converted to a Div
         assert_eq!(ast.blocks.len(), 1);
@@ -417,8 +418,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_resolve_callout_with_title() {
+    #[tokio::test]
+    async fn test_resolve_callout_with_title() {
         let mut custom = CustomNode::new("Callout", empty_attr(), dummy_source_info());
         custom.plain_data = json!({"type": "tip"});
         custom.set_slot(
@@ -451,7 +452,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = CalloutResolveTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Verify structure
         match &ast.blocks[0] {
@@ -463,8 +464,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_resolve_callout_default_title() {
+    #[tokio::test]
+    async fn test_resolve_callout_default_title() {
         let mut custom = CustomNode::new("Callout", empty_attr(), dummy_source_info());
         custom.plain_data = json!({"type": "note"});
         // No title slot - should use default
@@ -491,8 +492,8 @@ mod tests {
         panic!("Could not find default title");
     }
 
-    #[test]
-    fn test_resolve_callout_no_icon() {
+    #[tokio::test]
+    async fn test_resolve_callout_no_icon() {
         let mut custom = CustomNode::new("Callout", empty_attr(), dummy_source_info());
         custom.plain_data = json!({"type": "warning", "icon": false});
 
@@ -509,8 +510,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_resolve_nested_callout() {
+    #[tokio::test]
+    async fn test_resolve_nested_callout() {
         // Callout inside a blockquote
         let mut custom = CustomNode::new("Callout", empty_attr(), dummy_source_info());
         custom.plain_data = json!({"type": "note"});
@@ -530,7 +531,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
         let transform = CalloutResolveTransform::new();
-        transform.transform(&mut ast, &mut ctx).unwrap();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         // Verify the nested callout was resolved
         match &ast.blocks[0] {
@@ -545,8 +546,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_capitalize() {
+    #[tokio::test]
+    async fn test_capitalize() {
         assert_eq!(capitalize("note"), "Note");
         assert_eq!(capitalize("warning"), "Warning");
         assert_eq!(capitalize(""), "");

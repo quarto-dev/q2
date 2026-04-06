@@ -310,7 +310,17 @@ fn main() {
 
         let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
             std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
-        match unified_filter::apply_filters(pandoc, context, &filter_specs, &args.to, runtime) {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("failed to create tokio runtime");
+        match rt.block_on(unified_filter::apply_filters(
+            pandoc,
+            context,
+            &filter_specs,
+            &args.to,
+            runtime,
+        )) {
             Ok(output) => {
                 // Output any diagnostics from filters
                 if !output.diagnostics.is_empty() {

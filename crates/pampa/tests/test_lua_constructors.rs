@@ -26,7 +26,7 @@ fn create_test_doc(content: Vec<Inline>) -> Pandoc {
 }
 
 /// Helper to run a filter and assert success
-fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
+async fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
     let mut filter_file = NamedTempFile::new().expect("Failed to create temp file");
     filter_file
         .write_all(filter_code.as_bytes())
@@ -41,7 +41,8 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
         &[filter_file.path().to_path_buf()],
         "html",
         runtime,
-    );
+    )
+    .await;
     let output = result.expect("Filter failed");
     let (pandoc, context) = (output.pandoc, output.context);
     (pandoc, context)
@@ -51,8 +52,8 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
 // Cite and Citation constructor tests
 // ============================================================================
 
-#[test]
-fn test_cite_constructor() {
+#[tokio::test]
+async fn test_cite_constructor() {
     // Test pandoc.Cite(citations, content) constructor
     let filter_code = r#"
 function Para(elem)
@@ -91,11 +92,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_citation_constructor_all_args() {
+#[tokio::test]
+async fn test_citation_constructor_all_args() {
     // Test pandoc.Citation with all arguments
     let filter_code = r#"
 function Para(elem)
@@ -133,15 +134,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // DefinitionList constructor tests
 // ============================================================================
 
-#[test]
-fn test_definition_list_constructor() {
+#[tokio::test]
+async fn test_definition_list_constructor() {
     // Test pandoc.DefinitionList constructor
     let filter_code = r#"
 function Para(elem)
@@ -168,15 +169,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // LineBlock constructor tests
 // ============================================================================
 
-#[test]
-fn test_line_block_constructor() {
+#[tokio::test]
+async fn test_line_block_constructor() {
     // Test pandoc.LineBlock constructor
     let filter_code = r#"
 function Para(elem)
@@ -204,15 +205,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // Figure and Caption constructor tests
 // ============================================================================
 
-#[test]
-fn test_caption_constructor() {
+#[tokio::test]
+async fn test_caption_constructor() {
     // Test pandoc.Caption constructor
     let filter_code = r#"
 function Para(elem)
@@ -241,11 +242,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_figure_constructor() {
+#[tokio::test]
+async fn test_figure_constructor() {
     // Test pandoc.Figure constructor
     let filter_code = r#"
 function Para(elem)
@@ -284,15 +285,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // Table constructor tests
 // ============================================================================
 
-#[test]
-fn test_cell_constructor() {
+#[tokio::test]
+async fn test_cell_constructor() {
     // Test pandoc.Cell constructor
     let filter_code = r#"
 function Para(elem)
@@ -324,11 +325,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_row_constructor() {
+#[tokio::test]
+async fn test_row_constructor() {
     // Test pandoc.Row constructor
     let filter_code = r#"
 function Para(elem)
@@ -349,11 +350,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_table_head_constructor() {
+#[tokio::test]
+async fn test_table_head_constructor() {
     // Test pandoc.TableHead constructor
     let filter_code = r#"
 function Para(elem)
@@ -374,11 +375,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_table_body_constructor() {
+#[tokio::test]
+async fn test_table_body_constructor() {
     // Test pandoc.TableBody constructor
     let filter_code = r#"
 function Para(elem)
@@ -399,11 +400,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_table_foot_constructor() {
+#[tokio::test]
+async fn test_table_foot_constructor() {
     // Test pandoc.TableFoot constructor
     let filter_code = r#"
 function Para(elem)
@@ -424,11 +425,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_table_constructor() {
+#[tokio::test]
+async fn test_table_constructor() {
     // Test pandoc.Table constructor
     let filter_code = r#"
 function Para(elem)
@@ -469,15 +470,15 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
 // ============================================================================
 // ListAttributes constructor tests
 // ============================================================================
 
-#[test]
-fn test_list_attributes_constructor() {
+#[tokio::test]
+async fn test_list_attributes_constructor() {
     // Test pandoc.ListAttributes constructor
     let filter_code = r#"
 function Para(elem)
@@ -505,11 +506,11 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }
 
-#[test]
-fn test_ordered_list_with_list_attributes() {
+#[tokio::test]
+async fn test_ordered_list_with_list_attributes() {
     // Test that pandoc.OrderedList properly uses ListAttributes
     let filter_code = r#"
 function Para(elem)
@@ -533,5 +534,5 @@ end
         source_info: quarto_source_map::SourceInfo::default(),
     })]);
 
-    run_filter(filter_code, doc);
+    run_filter(filter_code, doc).await;
 }

@@ -106,8 +106,7 @@ fn cache_key(
     Ok(format!("{:x}", hash))
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[async_trait(?Send)]
 impl PipelineStage for CompileThemeCssStage {
     fn name(&self) -> &str {
         "compile-theme-css"
@@ -384,6 +383,7 @@ mod tests {
 
     struct MockRuntime;
 
+    #[async_trait::async_trait]
     impl quarto_system_runtime::SystemRuntime for MockRuntime {
         fn file_read(
             &self,
@@ -489,7 +489,10 @@ mod tests {
         {
             Ok(std::collections::HashMap::new())
         }
-        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+        async fn fetch_url(
+            &self,
+            _url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
             Err(quarto_system_runtime::RuntimeError::NotSupported(
                 "mock".to_string(),
             ))
@@ -797,6 +800,7 @@ mod tests {
     fn test_cache_key_custom_file_different_content() {
         // Create a runtime that returns different content for different files
         struct ContentRuntime;
+        #[async_trait::async_trait]
         impl quarto_system_runtime::SystemRuntime for ContentRuntime {
             fn file_read(
                 &self,
@@ -908,7 +912,7 @@ mod tests {
             {
                 Ok(std::collections::HashMap::new())
             }
-            fn fetch_url(
+            async fn fetch_url(
                 &self,
                 _url: &str,
             ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {

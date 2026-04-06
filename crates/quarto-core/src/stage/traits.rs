@@ -78,8 +78,7 @@ use super::error::PipelineError;
 ///     }
 /// }
 /// ```
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[async_trait(?Send)]
 pub trait PipelineStage: Send + Sync {
     /// Human-readable name for logging/debugging.
     ///
@@ -148,9 +147,7 @@ mod tests {
         input: PipelineDataKind,
         output: PipelineDataKind,
     }
-
-    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+    #[async_trait(?Send)]
     impl PipelineStage for PassthroughStage {
         fn name(&self) -> &str {
             self.name
@@ -177,9 +174,7 @@ mod tests {
     /// A stage that always fails
     #[allow(dead_code)]
     struct FailingStage;
-
-    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+    #[async_trait(?Send)]
     impl PipelineStage for FailingStage {
         fn name(&self) -> &str {
             "failing"

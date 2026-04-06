@@ -279,6 +279,7 @@ async fn test_jupyter_transform_print() {
     let transform = JupyterTransform::new();
     transform
         .transform(&mut ast, &mut ctx)
+        .await
         .expect("Transform failed");
 
     // The code block should be replaced with output
@@ -343,6 +344,7 @@ async fn test_jupyter_transform_expression() {
     let transform = JupyterTransform::new();
     transform
         .transform(&mut ast, &mut ctx)
+        .await
         .expect("Transform failed");
 
     // Verify we got some output
@@ -389,6 +391,7 @@ async fn test_daemon_persistence() {
     let transform = JupyterTransform::new();
     transform
         .transform(&mut ast1, &mut ctx1)
+        .await
         .expect("First transform failed");
 
     // Create second AST - read the variable
@@ -403,6 +406,7 @@ async fn test_daemon_persistence() {
     // Run second transform - should reuse kernel and see the variable
     transform
         .transform(&mut ast2, &mut ctx2)
+        .await
         .expect("Second transform failed");
 
     // Verify the second transform got the variable value
@@ -554,6 +558,7 @@ async fn test_jupyter_transform_inline_expression() {
     let transform = JupyterTransform::new();
     transform
         .transform(&mut ast, &mut ctx)
+        .await
         .expect("Transform failed");
 
     // The paragraph should now contain the result "4" instead of the Code inline

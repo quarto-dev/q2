@@ -87,8 +87,7 @@ impl Default for AstTransformsStage {
     }
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[async_trait(?Send)]
 impl PipelineStage for AstTransformsStage {
     fn name(&self) -> &str {
         "ast-transforms"
@@ -158,7 +157,7 @@ impl PipelineStage for AstTransformsStage {
         render_ctx.includes = std::mem::take(&mut ctx.includes);
 
         // Execute the transform pipeline
-        let result = pipeline.execute(&mut doc.ast, &mut render_ctx);
+        let result = pipeline.execute(&mut doc.ast, &mut render_ctx).await;
 
         // Transfer mutable state back to StageContext
         ctx.artifacts = render_ctx.artifacts;
@@ -191,6 +190,7 @@ mod tests {
     // Mock runtime for testing
     struct MockRuntime;
 
+    #[async_trait::async_trait]
     impl quarto_system_runtime::SystemRuntime for MockRuntime {
         fn file_read(
             &self,
@@ -296,7 +296,10 @@ mod tests {
         {
             Ok(std::collections::HashMap::new())
         }
-        fn fetch_url(&self, _url: &str) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+        async fn fetch_url(
+            &self,
+            _url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
             Err(quarto_system_runtime::RuntimeError::NotSupported(
                 "mock".to_string(),
             ))
