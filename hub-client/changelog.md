@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-04-06
 
+- [`373aa83a`](https://github.com/quarto-dev/q2/commits/373aa83a): Add async Lua execution with fetch_url support and JS fetch shim for WASM
 - [`5cb7a672`](https://github.com/quarto-dev/q2/commits/5cb7a672): Fix stale closure preventing new projects from being added to synced project set
 
 ### 2026-04-02
