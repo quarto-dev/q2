@@ -67,30 +67,33 @@ export function postProcessIframe(
     }
   });
 
-  // Inline VFS-backed scripts so the iframe can execute them.
-  // The iframe can't fetch relative src paths like "libs/kbd/kbd.js",
-  // so we read the content from VFS and replace with an inline script.
-  // After inlining, we re-fire DOMContentLoaded since many extension
-  // scripts (e.g., kbd.js) register listeners for that event, and it
-  // has already fired by the time the post-processor runs.
-  let didInlineScripts = false;
-  doc.querySelectorAll('script[src]').forEach((script) => {
-    const src = script.getAttribute('src');
-    if (src && (src.startsWith('/.quarto/') || src.startsWith('libs/'))) {
-      const result = vfsReadFile(src);
-      if (result.success && result.content) {
-        const inline = doc.createElement('script');
-        inline.textContent = result.content;
-        script.parentNode?.appendChild(inline);
-        script.remove();
-        didInlineScripts = true;
-      }
-    }
-  });
-
-  if (didInlineScripts) {
-    doc.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
-  }
+  // DISABLED: Script inlining in the preview iframe is disabled until we
+  // determine a safe way to allow script execution in the sandboxed iframe.
+  // The iframe sandbox does not include allow-scripts, so even if scripts
+  // were inlined they would not execute. Extension JS (kbd.js, video.min.js)
+  // works in native renders where the browser loads <script src="..."> normally.
+  //
+  // To re-enable, uncomment the block below AND add allow-scripts to the
+  // sandbox attribute in DoubleBufferedIframe.tsx and MorphIframe.tsx.
+  //
+  // let didInlineScripts = false;
+  // doc.querySelectorAll('script[src]').forEach((script) => {
+  //   const src = script.getAttribute('src');
+  //   if (src && (src.startsWith('/.quarto/') || src.startsWith('libs/'))) {
+  //     const result = vfsReadFile(src);
+  //     if (result.success && result.content) {
+  //       const inline = doc.createElement('script');
+  //       inline.textContent = result.content;
+  //       script.parentNode?.appendChild(inline);
+  //       script.remove();
+  //       didInlineScripts = true;
+  //     }
+  //   }
+  // });
+  //
+  // if (didInlineScripts) {
+  //   doc.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
+  // }
 
   // Replace image sources with data URIs
   doc.querySelectorAll('img').forEach((img) => {

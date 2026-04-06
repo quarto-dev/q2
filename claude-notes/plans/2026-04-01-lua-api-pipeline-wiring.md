@@ -1,6 +1,6 @@
 # Plan B: Pipeline Wiring + Template (quarto-core crate)
 
-## Status: Complete
+## Status: Complete (+ Phase 8 pullback for WASM script safety)
 
 ## Prerequisites
 
@@ -501,3 +501,47 @@ New `css:*` and `js:*` artifacts will be picked up automatically.
 | `crates/quarto-core/src/stage/stages/apply_template.rs` | Collect artifact paths, pass includes to template |
 | `crates/quarto-core/src/render_to_file.rs` | Write all `css:*`/`js:*` artifacts to output dir |
 | Smoke test fixtures | New: integration tests for deps, includes, is_format |
+| `hub-client/src/utils/iframePostProcessor.ts` | Phase 8: comment out script inlining |
+| `hub-client/src/components/render/DoubleBufferedIframe.tsx` | Phase 8: revert allow-scripts (separate revert commit) |
+| `hub-client/src/components/render/MorphIframe.tsx` | Phase 8: revert allow-scripts (separate revert commit) |
+
+---
+
+## Phase 8: Disable WASM script execution (pullback)
+
+**Context**: The JS injection pipeline works end-to-end for native renders:
+Lua `add_html_dependency` → artifact storage → template `<script>` tags →
+files written to `{stem}_files/libs/`. This is fine and stays enabled.
+
+However, for the WASM/hub-client preview iframe, executing extension JS
+requires two things that were added prematurely:
+1. Script inlining in `iframePostProcessor.ts` (reads JS from VFS,
+   creates inline `<script>` elements, dispatches synthetic DOMContentLoaded)
+2. `allow-scripts` in the iframe sandbox attribute
+
+Until we determine a safe way to run extension scripts in the sandboxed
+iframe, both are disabled. Extensions with JS dependencies (kbd, video)
+will render their HTML structure but JS won't execute in the hub-client
+preview. They continue to work correctly in native renders.
+
+### Changes
+
+- [x] **8.1** Revert commit `0c426798` ("Allow script execution in
+  preview iframe sandbox") — restores `sandbox="allow-same-origin
+  allow-popups"` without `allow-scripts` on both `DoubleBufferedIframe`
+  and `MorphIframe`. Done as a separate `git revert` commit for
+  traceability.
+
+- [x] **8.2** Comment out (not remove) the script inlining block in
+  `iframePostProcessor.ts`. The comment explains why it's disabled and
+  what to re-enable (the block itself + allow-scripts on the iframes).
+  CSS inlining via data URIs is unaffected — CSS does not execute code.
+
+### What stays enabled
+
+- Template `$for(scripts)$` loop — emits `<script src="...">` in HTML
+- `js:*` artifact collection in `ApplyTemplateStage`
+- `render_to_file` writing JS artifacts to `{stem}_files/libs/`
+- WASM artifact→VFS loop (writes JS files, they just aren't inlined)
+- `add_html_dependency` Lua API (stores artifacts normally)
+- kbd, video, and all other built-in extensions
