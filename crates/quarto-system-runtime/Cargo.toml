@@ -20,7 +20,7 @@ serde.workspace = true
 # For binary lookup on PATH
 which = "8.0"
 # HTTP client for fetch_url
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"] }
 # Base64 encoding/decoding for fetch_url WASM response (also used native-side for parity)
 base64.workspace = true
 # Safe temp directory creation (random names, no collisions under parallel execution)

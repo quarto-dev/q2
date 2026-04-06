@@ -44,7 +44,7 @@ fn register_quarto_base64(lua: &Lua, quarto: &Table) -> Result<()> {
     let base64_table = lua.create_table()?;
     base64_table.set(
         "encode",
-        lua.create_function(|_, data: String| Ok(BASE64_STANDARD.encode(data.as_bytes())))?,
+        lua.create_function(|_, data: mlua::String| Ok(BASE64_STANDARD.encode(data.as_bytes())))?,
     )?;
     quarto.set("base64", base64_table)?;
     Ok(())

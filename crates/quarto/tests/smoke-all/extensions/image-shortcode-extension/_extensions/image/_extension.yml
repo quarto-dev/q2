@@ -1,0 +1,5 @@
+title: Image Shortcode Extension
+author: Test
+contributes:
+  shortcodes:
+    - image.lua

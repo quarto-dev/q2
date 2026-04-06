@@ -1,0 +1,12 @@
+---
+title: Image Shortcode Extension Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["data:image/png;base64,", "<img"]
+---
+
+{{< image test-image.png >}}

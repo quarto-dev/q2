@@ -274,8 +274,13 @@ impl SystemRuntime for NativeRuntime {
     // ═══════════════════════════════════════════════════════════════════════
 
     async fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)> {
-        let client = reqwest::Client::new();
-        let response = client.get(url).send().await.map_err(|e| {
+        // Use reqwest::blocking rather than the async client. The native
+        // render pipeline is driven by pollster::block_on (render_to_file.rs,
+        // pipeline.rs tests) which provides no tokio reactor — async reqwest
+        // panics with "there is no reactor running". Blocking is appropriate:
+        // Lua filter execution already occupies a dedicated thread, and
+        // fetch_url is only called when Lua explicitly requests a URL.
+        let response = reqwest::blocking::get(url).map_err(|e| {
             RuntimeError::NotSupported(format!("HTTP request failed for {url}: {e}"))
         })?;
         let mime_type = response
@@ -284,7 +289,7 @@ impl SystemRuntime for NativeRuntime {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("application/octet-stream")
             .to_string();
-        let content = response.bytes().await.map_err(|e| {
+        let content = response.bytes().map_err(|e| {
             RuntimeError::NotSupported(format!("Failed to read response body for {url}: {e}"))
         })?;
         Ok((content.to_vec(), mime_type))
