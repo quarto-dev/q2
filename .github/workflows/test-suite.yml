@@ -179,3 +179,42 @@ jobs:
         run: cargo nextest run --tests --cargo-profile ci
         env:
           RUSTFLAGS: "-D warnings"
+
+  wasm-tests:
+    name: WASM Tests
+    runs-on: ubuntu-latest
+    # Override rust-toolchain.toml so the rustup proxy doesn't auto-install the
+    # prebuilt wasm32-unknown-unknown target. We need -Zbuild-std to rebuild
+    # core from source, and the prebuilt sysroot causes E0152 (duplicate lang
+    # item). The production WASM build avoids this because wasm-quarto-hub-client
+    # is excluded from the workspace and gets an isolated target/ directory.
+    env:
+      RUSTUP_TOOLCHAIN: nightly
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Rust nightly with rust-src
+        run: rustup toolchain install nightly --component rust-src --profile minimal
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+          platform: x64
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-wasm-tests
+
+      - name: Install wasm-bindgen-cli
+        run: cargo xtask dev-setup
+
+      - name: Run WASM tests
+        run: |
+          CC_wasm32_unknown_unknown=clang \
+          CFLAGS_wasm32_unknown_unknown="-isystem ${{ github.workspace }}/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
+          cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
+            --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort

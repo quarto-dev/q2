@@ -10,13 +10,19 @@ keywords.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Bins require terminal-support so they are skipped when building WASM tests
+# (which use --no-default-features --features lua-filter). Without this, cargo
+# builds bins alongside integration tests (rust-lang/cargo#12980) and they fail
+# to compile for wasm32 due to native-only dependencies (tokio, NativeRuntime).
 [[bin]]
 name = "pampa"
 path = "src/main.rs"
+required-features = ["terminal-support"]
 
 [[bin]]
 name = "ast-reconcile"
 path = "src/bin/ast_reconcile.rs"
+required-features = ["terminal-support"]
 
 [package.metadata]
 cargo-fuzz = true
@@ -79,10 +85,19 @@ base64 = "0.22"
 tokio = { workspace = true }
 
 [dev-dependencies]
+quarto-util.workspace = true
+
+# Native-only dev-dependencies (proptest pulls in getrandom which doesn't
+# compile for wasm32-unknown-unknown; insta/tempfile/tokio are native-only too)
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 insta = { version = "1.46", features = ["json", "redactions"] }
 proptest = "1.10"
 tempfile = "3.24"
 tokio = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+mlua = { version = "0.11", features = ["lua54", "vendored", "serialize"] }
+wasm-bindgen-test = "0.3"
 
 [lints]
 workspace = true

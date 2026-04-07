@@ -226,6 +226,193 @@ On Windows, skip WASM tests — this is consistent with the WASM build being ski
 On macOS/Linux with LLVM installed, contributors modifying WASM-specific code can run
 them locally.
 
+## dofile_wasm interaction (discovered during CI)
+
+Removing the cfg proxy exposed a hidden coupling: `register_wasm_dofile` (called only on
+WASM) overrides Lua's built-in `dofile` to push/pop the script-dir stack, enabling
+`quarto.utils.resolve_path()` to resolve relative to the dofile'd script's directory.
+The native path uses the C Lua `dofile` which doesn't interact with the stack.
+
+The `test_dofile_script_dir_stack` test in `dofile_wasm.rs` was passing on main because
+the `cfg(any(wasm32, test))` proxy caused `register_wasm_dofile` to run in native tests.
+After removing the proxy, native tests get the C `dofile` and the test fails.
+
+**Research finding:** Neither Pandoc nor Quarto CLI (TypeScript) provide script-dir tracking
+for raw `dofile()`. Pandoc uses `PANDOC_SCRIPT_FILE` (set once, never updated). Quarto CLI
+has an internal `scriptFile` stack used for shortcodes/wrapped filters, but raw `dofile()`
+uses standard Lua CWD-relative resolution.
+
+**Resolution:** The dofile script-dir tracking is a WASM-only feature (needed because
+WASM's dofile is fully reimplemented via SystemRuntime). The failing test should be gated
+on `wasm32` or moved to `wasm_lua.rs`. A follow-up issue tracks adding this feature to
+native as an improvement over both Pandoc and Quarto CLI behavior.
+
+## wasm-bindgen-cli install method (reverted)
+
+Migrating `ts-test-suite.yml` from `cargo install wasm-bindgen-cli --version 0.2.108` to
+`cargo xtask dev-setup` caused all hub-client `.wasm.test.ts` tests to fail with an
+`externref` type mismatch in the compiled WASM module. Main uses the hardcoded install
+and passes. The difference is that `cargo xtask dev-setup` adds `--locked` to the install.
+
+Reverted in #109 — the TS Test Suite keeps the hardcoded install. The `test-suite.yml`
+WASM Tests job still uses `cargo xtask dev-setup` (it installs `wasm-bindgen-test-runner`,
+not the production `wasm-bindgen` CLI used by `build-wasm.js`).
+
+Tracked as `bd-jakt` for investigation.
+
+## WASM test CI build configuration (discovered during CI)
+
+The WASM Tests CI job failed with two independent build errors. Both stem from
+differences between how the production WASM build (`npm run build:all`) and the
+new WASM test build are configured.
+
+### Bug 1: Duplicate `core` lang item (E0152)
+
+**Symptom:** `error[E0152]: duplicate lang item in crate core: sized` — two copies of
+`libcore` are linked.
+
+**Root cause:** The CI toolchain setup installs both the prebuilt `wasm32-unknown-unknown`
+target (via `targets: wasm32-unknown-unknown`) AND uses `-Zbuild-std=std,panic_unwind`.
+`-Zbuild-std` rebuilds the entire std dependency chain (`core` → `alloc` → `std`) from
+source. The prebuilt target already ships a compiled `core`. Rust sees two definitions
+of every lang item and refuses to link.
+
+This is a known conflict:
+- rust-lang/cargo#10200 (duplicate use of std core with -Z build-std)
+- rust-lang/rust#69090 (nightly regression with -Z build-std for wasm32)
+
+**Why the production build works:** `ts-test-suite.yml` sets up the toolchain as
+`dtolnay/rust-toolchain@nightly` with NO `targets:` — it does not install the prebuilt
+wasm32 target. The `-Zbuild-std` comes from `crates/wasm-quarto-hub-client/.cargo/config.toml`
+and rebuilds everything from `rust-src` (included by default in nightly).
+
+**Fix:** Removing `targets:` from the CI toolchain step is necessary but not sufficient.
+The repo's `rust-toolchain.toml` specifies `targets = ["wasm32-unknown-unknown"]`, which
+rustup applies automatically. The production build avoids the conflict because
+`wasm-quarto-hub-client` is excluded from the workspace and gets an isolated `target/`
+directory. The WASM test runs within the workspace, where the conflict manifests.
+
+The CI job must explicitly remove the prebuilt target before running tests:
+```yaml
+- name: Remove prebuilt wasm32 target (conflicts with -Zbuild-std)
+  run: rustup target remove wasm32-unknown-unknown
+```
+
+### Bug 2: Bin targets compiled for wasm32
+
+**Symptom:** `error[E0433]: cannot find NativeRuntime` and `cannot find tokio` in
+`pampa/src/main.rs` — the `pampa` and `ast-reconcile` binaries are being compiled for
+wasm32, where native-only types don't exist.
+
+**Root cause:** When running integration tests, Cargo automatically builds the package's
+binary targets so tests can access them via `CARGO_BIN_EXE_<name>`. The `--test wasm_lua`
+flag selects which test to run, but Cargo still builds all bin targets. This is documented
+Cargo behavior (rust-lang/cargo#12980).
+
+**Why the production build doesn't hit this:** `npm run build:all` runs `cargo build` on
+`wasm-quarto-hub-client` (which has no `[[bin]]` targets), not on `pampa`.
+
+**Fix:** Add `required-features = ["terminal-support"]` to both `[[bin]]` targets in
+`crates/pampa/Cargo.toml`. The WASM test command uses `--no-default-features --features lua-filter`,
+so `terminal-support` is absent and the bins are silently skipped. Normal builds use default
+features (which include `terminal-support`), so nothing changes for development or CI test suite.
+
+### Key insight: two different `-Zbuild-std` paths
+
+The repo has two independent WASM build configurations:
+
+| Aspect | Production build | WASM tests |
+|--------|-----------------|------------|
+| Crate | `wasm-quarto-hub-client` | `pampa` (test target) |
+| Cargo cwd | `crates/wasm-quarto-hub-client/` | repo root |
+| Config | crate-local `.cargo/config.toml` | root `.cargo/config.toml` |
+| `-Zbuild-std` | via `[unstable]` in crate config | explicit CLI flag |
+| Build mode | `--release` | debug (default) |
+| Prebuilt target | not installed | was installed (bug) |
+| `-fno-builtin` | not needed (release) | needed (debug) |
+
+Both use `-Zbuild-std=std,panic_unwind` but through different mechanisms.
+The WASM test path must match the production path's approach of NOT installing
+the prebuilt target.
+
+## CI toolchain simplification (2026-04-13)
+
+### Removing dtolnay/rust-toolchain action
+
+All CI workflows used `dtolnay/rust-toolchain@nightly` to set up the Rust toolchain.
+This is redundant — `rust-toolchain.toml` already specifies the full configuration
+(nightly channel, components, targets), and `rustup` reads it natively via proxied
+`cargo` commands.
+
+Replaced in all workflows with:
+```yaml
+- name: Set up Rust
+  run: rustup show active-toolchain
+```
+
+This triggers auto-install from `rust-toolchain.toml` and shows the resolved toolchain.
+
+### RUSTUP_TOOLCHAIN for WASM tests (supersedes Bug 1 fix)
+
+The original fix for Bug 1 (E0152 duplicate core) was `rustup target remove
+wasm32-unknown-unknown`. This failed because the rustup proxy reads
+`rust-toolchain.toml` and auto-reinstalls the target on the next `cargo` command.
+
+The correct fix: set `RUSTUP_TOOLCHAIN=nightly` as a job-level env var. This
+bypasses `rust-toolchain.toml` entirely, preventing the target from ever being
+installed. The job uses explicit `rustup toolchain install nightly --component
+rust-src --profile minimal` instead of relying on `rust-toolchain.toml`.
+
+### panic_abort in -Zbuild-std
+
+The test binary (not the production library build) needs `panic_abort` in the
+`-Zbuild-std` list. The WASM test command is:
+```bash
+cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
+  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort
+```
+
+The production build (`wasm-quarto-hub-client`) only needs `std,panic_unwind` because
+it builds a library, not a test binary with its own main/harness.
+
+## wasm-c-shim: shared C stdlib stubs (2026-04-13)
+
+### Problem
+
+The WASM integration tests (filter execution, synthetic io/os verification) link
+`pampa` for wasm32, which pulls in tree-sitter and Lua — both C libraries that
+reference libc symbols (`calloc`, `fprintf`, `snprintf`, `abort`, etc.). On
+`wasm32-unknown-unknown` there is no libc; these symbols must be provided by
+Rust `#[no_mangle]` shim functions.
+
+The production build works because `wasm-quarto-hub-client/src/c_shim.rs` provides
+~980 lines of these shims. The WASM test only builds `pampa` and doesn't include
+that crate, so the linker can't resolve the symbols.
+
+### Solution
+
+Extract `c_shim.rs` into a new `crates/wasm-c-shim/` crate:
+
+- **Workspace member** (not excluded — it compiles for both native and wasm32,
+  but the `#[no_mangle]` exports are gated on `target_arch = "wasm32"`)
+- **Dependency of `wasm-quarto-hub-client`** (replacing the inline `c_shim` module)
+- **Dev-dependency of `pampa`** (gated on `target_arch = "wasm32"`)
+
+The test file imports `wasm_c_shim` to pull the shim symbols into the link:
+```rust
+// Pull in C stdlib shims for wasm32 (calloc, fprintf, snprintf, etc.)
+// These are needed by tree-sitter and Lua's C code on wasm32-unknown-unknown.
+extern crate wasm_c_shim;
+```
+
+### Why not alternatives
+
+- **Include via `#[path]`**: Brittle, the file uses `pub` items and module-level statics
+  that could conflict. Can't be tested independently.
+- **Drop integration tests**: Leaves a gap — core tests verify the restricted VM
+  registers synthetic io/os, but only integration tests verify they actually work
+  when called from Lua during filter execution on real wasm32.
+
 ## Out of scope
 
 - Migrating wasm-pack usage (no longer needed — only stale crate used it)

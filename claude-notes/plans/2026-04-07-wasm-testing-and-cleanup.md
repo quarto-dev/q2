@@ -1003,6 +1003,94 @@ EOF
 
 ---
 
+## Phase 6a: CI Fixes (added during PR review)
+
+Fixes discovered after CI ran for the first time.
+
+### Task 27: Fix WASM sysroot path in CI
+
+The `cc` crate runs clang from `OUT_DIR`, not the repo root, so relative `-isystem` paths
+don't resolve. Use `$PWD` in local docs and `${{ github.workspace }}` in CI.
+
+- [x] Update `.github/workflows/test-suite.yml` — absolute path via `${{ github.workspace }}`
+- [x] Update `dev-docs/wasm.md` — `$PWD` in local run instructions
+- [x] Update `crates/pampa/tests/wasm_lua.rs` — `$PWD` in doc comment
+- [x] Update `crates/pampa/CLAUDE.md` — `$PWD` in WASM test instructions
+- [x] Document why `-fno-builtin` is needed for tests but not production (debug vs release)
+
+### Task 28: Gate wasm-incompatible dev-dependencies
+
+`proptest` pulls in `getrandom 0.3.4` which doesn't compile for `wasm32-unknown-unknown`.
+This was never an issue before because pampa dev-deps were never compiled for wasm32.
+
+- [x] Move `proptest`, `insta`, `tempfile`, `tokio` to `cfg(not(target_arch = "wasm32"))` dev-deps
+- [x] Verify native test compilation still works
+
+### Task 29: Handle dofile behavioral difference
+
+Removing the cfg proxy exposed that `register_wasm_dofile` adds script-dir stack tracking
+to `dofile()` on WASM, but native C `dofile` doesn't interact with the stack. Neither
+Pandoc nor Quarto CLI tracks script dirs for raw `dofile()`.
+
+- [x] Mark `test_dofile_script_dir_stack` as `#[ignore]` on non-wasm32 targets
+- [x] Document finding in design spec (`claude-notes/designs/2026-04-03-wasm-testing-and-cleanup.md`)
+- [x] Create GitHub issue #112 for team discussion on whether to align behavior
+- [x] Create beads issue `bd-dvra` with local tracking
+
+## Phase 6b: CI Fixes Round 2 (2026-04-13)
+
+Fixes discovered after the E0152 sysroot conflict was resolved.
+
+### Task 30: Replace dtolnay/rust-toolchain with rustup
+
+The `dtolnay/rust-toolchain@nightly` action is redundant — `rust-toolchain.toml`
+already specifies everything. Replace with `rustup show active-toolchain` (triggers
+auto-install from `rust-toolchain.toml`).
+
+- [x] Replace action in `test-suite.yml` (main test-suite job)
+- [x] Replace action in `hub-client-e2e.yml`
+- [x] Replace action in `ts-test-suite.yml`
+- [x] Validate all YAML files
+
+### Task 31: Fix WASM test sysroot conflict via RUSTUP_TOOLCHAIN
+
+The `rustup target remove` approach failed because the rustup proxy reads
+`rust-toolchain.toml` and auto-reinstalls the target on the next `cargo` command.
+
+- [x] Set `RUSTUP_TOOLCHAIN: nightly` as job-level env in wasm-tests job
+- [x] Replace `dtolnay/rust-toolchain@nightly` with `rustup toolchain install nightly --component rust-src --profile minimal`
+- [x] Remove the `rustup target remove` step (no longer needed)
+
+### Task 32: Fix WASM test compilation errors
+
+Tests were written before CI could reach the compilation stage (E0152 always hit first).
+
+- [x] Add `.await` to async `apply_lua_filters` calls (became async in e537fb80)
+- [x] Use `FilterOutput` struct field access instead of tuple destructuring
+- [x] Add `panic_abort` to `-Zbuild-std` in CI and docs
+
+### Task 33: Extract wasm-c-shim crate
+
+The WASM integration tests link `pampa` for wasm32, pulling in tree-sitter and Lua
+(C libraries) that need libc symbols (`calloc`, `fprintf`, `snprintf`, `abort`, etc.).
+These are currently provided by `wasm-quarto-hub-client/src/c_shim.rs` but the test
+doesn't include that crate.
+
+- [ ] Create `crates/wasm-c-shim/` with `Cargo.toml` and `src/lib.rs`
+- [ ] Move `c_shim.rs` content from `wasm-quarto-hub-client` to new crate
+- [ ] Gate `#[no_mangle]` exports on `#[cfg(target_arch = "wasm32")]`
+- [ ] Add `wasm-c-shim` as dependency of `wasm-quarto-hub-client` (replace inline module)
+- [ ] Add `wasm-c-shim` as dev-dependency of `pampa` (wasm32 only)
+- [ ] Add `extern crate wasm_c_shim;` to `wasm_lua.rs`
+- [ ] Verify native tests still pass (`cargo nextest run --workspace`)
+- [ ] Verify production WASM build still works (ask Chris to run `npm run build:all`)
+- [ ] Update `dev-docs/wasm.md` to document the shared shim crate
+
+### Task 34: Update documentation for CI changes
+
+- [x] Update `dev-docs/wasm.md` — RUSTUP_TOOLCHAIN approach for sysroot conflict
+- [ ] Update design spec — CI simplification and wasm-c-shim sections (this update)
+
 ## Phase 6: Final Verification
 
 ### Task 25: Full workspace verification

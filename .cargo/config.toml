@@ -6,3 +6,6 @@
 xtask = "run --package xtask --"
 dev-setup = "xtask dev-setup"
 create-worktree = "xtask create-worktree"
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"
