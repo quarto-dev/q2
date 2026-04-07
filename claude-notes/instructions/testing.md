@@ -12,12 +12,13 @@ Native tests (`cargo nextest run`) use `Lua::new()` with the full C stdlib on al
 This is the standard Lua environment — tests can use `io.open`, `os.time`, and all standard
 library functions.
 
-WASM-specific code paths (restricted Lua stdlib, synthetic io/os modules) are tested
-separately on the real `wasm32-unknown-unknown` target in CI. See `dev-docs/wasm.md` for
-the WASM architecture and build details.
+WASM-specific code paths (restricted Lua stdlib, synthetic io/os modules) are tested by
+dedicated smoke tests in `crates/pampa/tests/wasm_lua.rs` that run on the real
+`wasm32-unknown-unknown` target in CI. See `crates/pampa/CLAUDE.md` for details on when
+to add WASM tests.
 
 **Never add `test` to the `#[cfg(target_arch = "wasm32")]` guard.** This was a prior pattern
-that caused Windows test failures. WASM coverage is provided by dedicated WASM tests in CI.
+that caused Windows test failures. WASM coverage is provided by the real WASM tests in CI.
 
 ## End-to-End Testing for WASM Features
 

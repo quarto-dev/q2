@@ -13,3 +13,14 @@ Correct pattern:
 #[cfg(not(target_arch = "wasm32"))]
 // Native code (full Lua stdlib via Lua::new())
 ```
+
+## Verify WASM tests when editing WASM code
+
+When modifying any of these files, update `crates/pampa/tests/wasm_lua.rs`:
+- `crates/pampa/src/lua/filter.rs` (cfg(target_arch = "wasm32") blocks)
+- `crates/pampa/src/lua/shortcode.rs` (cfg(target_arch = "wasm32") blocks)
+- `crates/pampa/src/lua/io_wasm.rs`
+- `crates/pampa/src/lua/os_wasm.rs`
+
+WASM tests can't run locally on Windows — they run in Linux CI.
+See `dev-docs/wasm.md` for the local run command (Linux/macOS).
