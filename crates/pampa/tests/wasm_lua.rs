@@ -20,7 +20,7 @@
 //!   --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 //! ```
 
-#![cfg(target_arch = "wasm32")]
+#![cfg(all(target_arch = "wasm32", feature = "lua-filter"))]
 
 use wasm_bindgen_test::*;
 

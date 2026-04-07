@@ -36,8 +36,9 @@ This project uses `cargo build` + `wasm-bindgen` CLI directly because:
 via the `cc` crate. When targeting wasm32, this requires Clang with wasm32 support:
 
 ```bash
-# Set by build-wasm.js automatically for production builds.
-# For manual builds or tests:
+# Production builds: build-wasm.js sets CC and CFLAGS automatically
+# (with -isystem <wasm-sysroot> only).
+# For WASM tests, -fno-builtin is also needed:
 export CC_wasm32_unknown_unknown=clang
 export CFLAGS_wasm32_unknown_unknown="-isystem crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin"
 ```
@@ -55,7 +56,8 @@ with the full C stdlib. These run on all platforms including Windows.
 `wasm32-unknown-unknown` target. They verify the WASM-specific Lua VM setup:
 - Restricted stdlib creation (`Lua::new_with()`)
 - Synthetic `io`/`os` module registration
-- Filter and shortcode execution through the WASM code path
+- Filter execution through the WASM code path
+- Shortcode engine initialization on WASM
 - Error handling (`panic_unwind` works correctly)
 
 Run locally (Linux/macOS with LLVM):
