@@ -129,3 +129,38 @@ jobs:
         run: cargo nextest run
         env:
           RUSTFLAGS: "-D warnings"
+
+  wasm-tests:
+    name: WASM Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+          platform: x64
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-wasm-tests
+
+      - name: Install wasm-bindgen-cli
+        run: cargo xtask dev-setup
+
+      - name: Run WASM tests
+        run: |
+          CC_wasm32_unknown_unknown=clang \
+          CFLAGS_wasm32_unknown_unknown="-isystem crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
+          cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
+            --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
