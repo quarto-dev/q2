@@ -5,3 +5,6 @@
 # See crates/xtask/src/main.rs for available commands
 xtask = "run --package xtask --"
 dev-setup = "xtask dev-setup"
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"
