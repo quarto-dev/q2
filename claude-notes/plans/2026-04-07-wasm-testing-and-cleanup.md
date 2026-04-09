@@ -1003,6 +1003,40 @@ EOF
 
 ---
 
+## Phase 6a: CI Fixes (added during PR review)
+
+Fixes discovered after CI ran for the first time.
+
+### Task 27: Fix WASM sysroot path in CI
+
+The `cc` crate runs clang from `OUT_DIR`, not the repo root, so relative `-isystem` paths
+don't resolve. Use `$PWD` in local docs and `${{ github.workspace }}` in CI.
+
+- [x] Update `.github/workflows/test-suite.yml` — absolute path via `${{ github.workspace }}`
+- [x] Update `dev-docs/wasm.md` — `$PWD` in local run instructions
+- [x] Update `crates/pampa/tests/wasm_lua.rs` — `$PWD` in doc comment
+- [x] Update `crates/pampa/CLAUDE.md` — `$PWD` in WASM test instructions
+- [x] Document why `-fno-builtin` is needed for tests but not production (debug vs release)
+
+### Task 28: Gate wasm-incompatible dev-dependencies
+
+`proptest` pulls in `getrandom 0.3.4` which doesn't compile for `wasm32-unknown-unknown`.
+This was never an issue before because pampa dev-deps were never compiled for wasm32.
+
+- [x] Move `proptest`, `insta`, `tempfile`, `tokio` to `cfg(not(target_arch = "wasm32"))` dev-deps
+- [x] Verify native test compilation still works
+
+### Task 29: Handle dofile behavioral difference
+
+Removing the cfg proxy exposed that `register_wasm_dofile` adds script-dir stack tracking
+to `dofile()` on WASM, but native C `dofile` doesn't interact with the stack. Neither
+Pandoc nor Quarto CLI tracks script dirs for raw `dofile()`.
+
+- [x] Mark `test_dofile_script_dir_stack` as `#[ignore]` on non-wasm32 targets
+- [x] Document finding in design spec (`claude-notes/designs/2026-04-03-wasm-testing-and-cleanup.md`)
+- [x] Create GitHub issue #112 for team discussion on whether to align behavior
+- [x] Create beads issue `bd-dvra` with local tracking
+
 ## Phase 6: Final Verification
 
 ### Task 25: Full workspace verification
