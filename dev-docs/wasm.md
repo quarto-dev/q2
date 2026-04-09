@@ -36,12 +36,14 @@ This project uses `cargo build` + `wasm-bindgen` CLI directly because:
 via the `cc` crate. When targeting wasm32, this requires Clang with wasm32 support:
 
 ```bash
-# Production builds: build-wasm.js sets CC and CFLAGS automatically
-# (with -isystem <wasm-sysroot> only).
-# For WASM tests, -fno-builtin is also needed:
 export CC_wasm32_unknown_unknown=clang
 export CFLAGS_wasm32_unknown_unknown="-isystem crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin"
 ```
+
+Production builds (`build-wasm.js`) only set `-isystem <wasm-sysroot>`. WASM tests
+additionally need `-fno-builtin` because they compile in debug mode, where Clang emits
+`__builtin_*` intrinsic calls (e.g. `memcpy`, `memset`) that don't exist in the stub
+sysroot. Release builds inline or eliminate these calls, so the flag isn't needed there.
 
 ## Testing
 
