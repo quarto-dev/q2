@@ -226,6 +226,27 @@ On Windows, skip WASM tests — this is consistent with the WASM build being ski
 On macOS/Linux with LLVM installed, contributors modifying WASM-specific code can run
 them locally.
 
+## dofile_wasm interaction (discovered during CI)
+
+Removing the cfg proxy exposed a hidden coupling: `register_wasm_dofile` (called only on
+WASM) overrides Lua's built-in `dofile` to push/pop the script-dir stack, enabling
+`quarto.utils.resolve_path()` to resolve relative to the dofile'd script's directory.
+The native path uses the C Lua `dofile` which doesn't interact with the stack.
+
+The `test_dofile_script_dir_stack` test in `dofile_wasm.rs` was passing on main because
+the `cfg(any(wasm32, test))` proxy caused `register_wasm_dofile` to run in native tests.
+After removing the proxy, native tests get the C `dofile` and the test fails.
+
+**Research finding:** Neither Pandoc nor Quarto CLI (TypeScript) provide script-dir tracking
+for raw `dofile()`. Pandoc uses `PANDOC_SCRIPT_FILE` (set once, never updated). Quarto CLI
+has an internal `scriptFile` stack used for shortcodes/wrapped filters, but raw `dofile()`
+uses standard Lua CWD-relative resolution.
+
+**Resolution:** The dofile script-dir tracking is a WASM-only feature (needed because
+WASM's dofile is fully reimplemented via SystemRuntime). The failing test should be gated
+on `wasm32` or moved to `wasm_lua.rs`. A follow-up issue tracks adding this feature to
+native as an improvement over both Pandoc and Quarto CLI behavior.
+
 ## Out of scope
 
 - Migrating wasm-pack usage (no longer needed — only stale crate used it)
