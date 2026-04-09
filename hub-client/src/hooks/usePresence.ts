@@ -314,6 +314,8 @@ export function usePresence(
               anticipatingEditRef.current.add(user.peerId);
             }
 
+            const prevCursor = state?.cursor;
+
             // New presence update — adopt the authoritative offset
             cursorToRender = user.cursor;
             if (state) {
@@ -322,6 +324,18 @@ export function usePresence(
             } else {
               state = { cursor: user.cursor, lastPresenceCursor: user.cursor };
               peerStateRef.current.set(user.peerId, state);
+            }
+
+            // If a small forward move would place the cursor on a different
+            // line, the content change likely hasn't arrived yet and the
+            // offset maps to the wrong line.  Render at the old position;
+            // the content change will trigger a correct re-render.
+            if (prevCursor !== undefined &&
+                cursorDelta > 0 && cursorDelta <= 2 &&
+                cursorToRender <= docLength && prevCursor <= docLength &&
+                model.getPositionAt(cursorToRender).lineNumber !==
+                model.getPositionAt(prevCursor).lineNumber) {
+              cursorToRender = prevCursor;
             }
           } else {
             // No new update — use the OT-shifted value
