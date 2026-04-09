@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Fix mtimes for build caching
       - name: Restore file modification times
@@ -39,7 +39,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Set up Clang
-        uses: egor-tensin/setup-clang@v1
+        uses: egor-tensin/setup-clang@v2
         with:
           version: latest
 
@@ -61,7 +61,7 @@ jobs:
 
       # Node.js and dependencies
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -129,7 +129,7 @@ jobs:
 
       # Upload test artifacts on failure
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
