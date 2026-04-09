@@ -247,6 +247,19 @@ WASM's dofile is fully reimplemented via SystemRuntime). The failing test should
 on `wasm32` or moved to `wasm_lua.rs`. A follow-up issue tracks adding this feature to
 native as an improvement over both Pandoc and Quarto CLI behavior.
 
+## wasm-bindgen-cli install method (reverted)
+
+Migrating `ts-test-suite.yml` from `cargo install wasm-bindgen-cli --version 0.2.108` to
+`cargo xtask dev-setup` caused all hub-client `.wasm.test.ts` tests to fail with an
+`externref` type mismatch in the compiled WASM module. Main uses the hardcoded install
+and passes. The difference is that `cargo xtask dev-setup` adds `--locked` to the install.
+
+Reverted in #109 — the TS Test Suite keeps the hardcoded install. The `test-suite.yml`
+WASM Tests job still uses `cargo xtask dev-setup` (it installs `wasm-bindgen-test-runner`,
+not the production `wasm-bindgen` CLI used by `build-wasm.js`).
+
+Tracked as `bd-jakt` for investigation.
+
 ## Out of scope
 
 - Migrating wasm-pack usage (no longer needed — only stale crate used it)
