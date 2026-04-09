@@ -37,7 +37,7 @@ via the `cc` crate. When targeting wasm32, this requires Clang with wasm32 suppo
 
 ```bash
 export CC_wasm32_unknown_unknown=clang
-export CFLAGS_wasm32_unknown_unknown="-isystem crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin"
+export CFLAGS_wasm32_unknown_unknown="-isystem $PWD/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin"
 ```
 
 Production builds (`build-wasm.js`) only set `-isystem <wasm-sysroot>`. WASM tests
@@ -65,7 +65,7 @@ with the full C stdlib. These run on all platforms including Windows.
 Run locally (Linux/macOS with LLVM):
 ```bash
 CC_wasm32_unknown_unknown=clang \
-CFLAGS_wasm32_unknown_unknown="-isystem crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
+CFLAGS_wasm32_unknown_unknown="-isystem $PWD/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
 cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
   --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
