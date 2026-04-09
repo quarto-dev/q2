@@ -73,9 +73,13 @@ base64 = "0.22"
 tokio = { workspace = true }
 
 [dev-dependencies]
+quarto-util.workspace = true
+
+# Native-only dev-dependencies (proptest pulls in getrandom which doesn't
+# compile for wasm32-unknown-unknown; insta/tempfile/tokio are native-only too)
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 insta = { version = "1.46", features = ["json", "redactions"] }
 proptest = "1.10"
-quarto-util.workspace = true
 tempfile = "3.24"
 tokio = { workspace = true }
 
