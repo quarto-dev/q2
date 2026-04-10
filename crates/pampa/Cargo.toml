@@ -10,13 +10,19 @@ keywords.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Bins require terminal-support so they are skipped when building WASM tests
+# (which use --no-default-features --features lua-filter). Without this, cargo
+# builds bins alongside integration tests (rust-lang/cargo#12980) and they fail
+# to compile for wasm32 due to native-only dependencies (tokio, NativeRuntime).
 [[bin]]
 name = "pampa"
 path = "src/main.rs"
+required-features = ["terminal-support"]
 
 [[bin]]
 name = "ast-reconcile"
 path = "src/bin/ast_reconcile.rs"
+required-features = ["terminal-support"]
 
 [package.metadata]
 cargo-fuzz = true

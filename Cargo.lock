@@ -2948,7 +2948,6 @@ dependencies = [
  "tokio",
  "tree-sitter",
  "tree-sitter-qmd",
- "wasm-bindgen",
  "wasm-bindgen-test",
  "yaml-rust2",
 ]

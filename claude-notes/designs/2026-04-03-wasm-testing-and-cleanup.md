@@ -260,6 +260,72 @@ not the production `wasm-bindgen` CLI used by `build-wasm.js`).
 
 Tracked as `bd-jakt` for investigation.
 
+## WASM test CI build configuration (discovered during CI)
+
+The WASM Tests CI job failed with two independent build errors. Both stem from
+differences between how the production WASM build (`npm run build:all`) and the
+new WASM test build are configured.
+
+### Bug 1: Duplicate `core` lang item (E0152)
+
+**Symptom:** `error[E0152]: duplicate lang item in crate core: sized` — two copies of
+`libcore` are linked.
+
+**Root cause:** The CI toolchain setup installs both the prebuilt `wasm32-unknown-unknown`
+target (via `targets: wasm32-unknown-unknown`) AND uses `-Zbuild-std=std,panic_unwind`.
+`-Zbuild-std` rebuilds the entire std dependency chain (`core` → `alloc` → `std`) from
+source. The prebuilt target already ships a compiled `core`. Rust sees two definitions
+of every lang item and refuses to link.
+
+This is a known conflict:
+- rust-lang/cargo#10200 (duplicate use of std core with -Z build-std)
+- rust-lang/rust#69090 (nightly regression with -Z build-std for wasm32)
+
+**Why the production build works:** `ts-test-suite.yml` sets up the toolchain as
+`dtolnay/rust-toolchain@nightly` with NO `targets:` — it does not install the prebuilt
+wasm32 target. The `-Zbuild-std` comes from `crates/wasm-quarto-hub-client/.cargo/config.toml`
+and rebuilds everything from `rust-src` (included by default in nightly).
+
+**Fix:** Remove `targets: wasm32-unknown-unknown` from the WASM Tests CI toolchain setup.
+Only `components: rust-src` is needed when using `-Zbuild-std`.
+
+### Bug 2: Bin targets compiled for wasm32
+
+**Symptom:** `error[E0433]: cannot find NativeRuntime` and `cannot find tokio` in
+`pampa/src/main.rs` — the `pampa` and `ast-reconcile` binaries are being compiled for
+wasm32, where native-only types don't exist.
+
+**Root cause:** When running integration tests, Cargo automatically builds the package's
+binary targets so tests can access them via `CARGO_BIN_EXE_<name>`. The `--test wasm_lua`
+flag selects which test to run, but Cargo still builds all bin targets. This is documented
+Cargo behavior (rust-lang/cargo#12980).
+
+**Why the production build doesn't hit this:** `npm run build:all` runs `cargo build` on
+`wasm-quarto-hub-client` (which has no `[[bin]]` targets), not on `pampa`.
+
+**Fix:** Add `required-features = ["terminal-support"]` to both `[[bin]]` targets in
+`crates/pampa/Cargo.toml`. The WASM test command uses `--no-default-features --features lua-filter`,
+so `terminal-support` is absent and the bins are silently skipped. Normal builds use default
+features (which include `terminal-support`), so nothing changes for development or CI test suite.
+
+### Key insight: two different `-Zbuild-std` paths
+
+The repo has two independent WASM build configurations:
+
+| Aspect | Production build | WASM tests |
+|--------|-----------------|------------|
+| Crate | `wasm-quarto-hub-client` | `pampa` (test target) |
+| Cargo cwd | `crates/wasm-quarto-hub-client/` | repo root |
+| Config | crate-local `.cargo/config.toml` | root `.cargo/config.toml` |
+| `-Zbuild-std` | via `[unstable]` in crate config | explicit CLI flag |
+| Build mode | `--release` | debug (default) |
+| Prebuilt target | not installed | was installed (bug) |
+| `-fno-builtin` | not needed (release) | needed (debug) |
+
+Both use `-Zbuild-std=std,panic_unwind` but through different mechanisms.
+The WASM test path must match the production path's approach of NOT installing
+the prebuilt target.
+
 ## Out of scope
 
 - Migrating wasm-pack usage (no longer needed — only stale crate used it)

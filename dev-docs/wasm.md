@@ -70,9 +70,19 @@ cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
   --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
 
-**Important:** You must use `--test wasm_lua` to select only the WASM test file.
-Running `cargo test -p pampa --target wasm32` without `--test` will fail because
-native tests can't compile for wasm32.
+**Important notes:**
+
+- You must use `--test wasm_lua` to select only the WASM test file.
+  Running `cargo test -p pampa --target wasm32` without `--test` will fail because
+  native tests can't compile for wasm32.
+- Do NOT install the prebuilt `wasm32-unknown-unknown` target (via `rustup target add`)
+  when using `-Zbuild-std`. The `-Zbuild-std` flag rebuilds `core`/`alloc`/`std` from
+  source; having the prebuilt target installed simultaneously causes a duplicate `core`
+  lang item error (E0152). Only the `rust-src` component is needed.
+- The pampa `[[bin]]` targets (`pampa`, `ast-reconcile`) use `required-features` to
+  prevent compilation when running WASM tests. Cargo builds bin targets alongside
+  integration tests by default (rust-lang/cargo#12980); the `required-features` gate
+  ensures they are skipped when `--no-default-features --features lua-filter` is used.
 
 WASM tests are **not** part of `cargo xtask verify` — they require nightly + Clang with
 wasm32 support, which is Linux/macOS only. They run in the `wasm-tests` CI job.
