@@ -143,6 +143,16 @@ jobs:
         with:
           components: rust-src
 
+      # rust-toolchain.toml installs the prebuilt wasm32-unknown-unknown target
+      # (needed for the production WASM build). But -Zbuild-std rebuilds core
+      # from source, and having the prebuilt core simultaneously causes E0152
+      # (duplicate lang item). The production build avoids this because
+      # wasm-quarto-hub-client is excluded from the workspace and gets an
+      # isolated target/ directory. Our test runs within the workspace, so
+      # we must remove the prebuilt target.
+      - name: Remove prebuilt wasm32 target (conflicts with -Zbuild-std)
+        run: rustup target remove wasm32-unknown-unknown
+
       - name: Set up Clang
         uses: egor-tensin/setup-clang@v1
         with:

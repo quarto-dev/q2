@@ -75,10 +75,13 @@ cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
 - You must use `--test wasm_lua` to select only the WASM test file.
   Running `cargo test -p pampa --target wasm32` without `--test` will fail because
   native tests can't compile for wasm32.
-- Do NOT install the prebuilt `wasm32-unknown-unknown` target (via `rustup target add`)
-  when using `-Zbuild-std`. The `-Zbuild-std` flag rebuilds `core`/`alloc`/`std` from
-  source; having the prebuilt target installed simultaneously causes a duplicate `core`
-  lang item error (E0152). Only the `rust-src` component is needed.
+- The prebuilt `wasm32-unknown-unknown` target (installed by `rust-toolchain.toml`)
+  conflicts with `-Zbuild-std` when building within the workspace — both produce a
+  `core` crate, causing E0152 (duplicate lang item). The production build avoids this
+  because `wasm-quarto-hub-client` is excluded from the workspace. For WASM tests,
+  the CI job removes the prebuilt target with `rustup target remove wasm32-unknown-unknown`
+  before running tests. Locally, you may need to do the same and re-add it afterward
+  (`rustup target add wasm32-unknown-unknown`) if you also run the production build.
 - The pampa `[[bin]]` targets (`pampa`, `ast-reconcile`) use `required-features` to
   prevent compilation when running WASM tests. Cargo builds bin targets alongside
   integration tests by default (rust-lang/cargo#12980); the `required-features` gate

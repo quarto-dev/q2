@@ -286,8 +286,17 @@ This is a known conflict:
 wasm32 target. The `-Zbuild-std` comes from `crates/wasm-quarto-hub-client/.cargo/config.toml`
 and rebuilds everything from `rust-src` (included by default in nightly).
 
-**Fix:** Remove `targets: wasm32-unknown-unknown` from the WASM Tests CI toolchain setup.
-Only `components: rust-src` is needed when using `-Zbuild-std`.
+**Fix:** Removing `targets:` from the CI toolchain step is necessary but not sufficient.
+The repo's `rust-toolchain.toml` specifies `targets = ["wasm32-unknown-unknown"]`, which
+rustup applies automatically. The production build avoids the conflict because
+`wasm-quarto-hub-client` is excluded from the workspace and gets an isolated `target/`
+directory. The WASM test runs within the workspace, where the conflict manifests.
+
+The CI job must explicitly remove the prebuilt target before running tests:
+```yaml
+- name: Remove prebuilt wasm32 target (conflicts with -Zbuild-std)
+  run: rustup target remove wasm32-unknown-unknown
+```
 
 ### Bug 2: Bin targets compiled for wasm32
 
