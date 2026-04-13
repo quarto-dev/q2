@@ -6,20 +6,18 @@
 - When choosing hex colors for CSS test assertions (`ensureCssRegexMatches`), use **non-condensable** 6-digit hex values. CSS minifiers shorten `#RRGGBB` to `#RGB` when each pair is a repeated digit (e.g., `#cc5500` → `#c50`). Break at least one pair to prevent this: `#cc5501` instead of `#cc5500`.
 - Do not write tests that expect known-bad inputs. Instead, add a failing test, and create a beads task to handle the problem.
 
-## WASM-Restricted Stdlib for Lua Tests
+## Native vs WASM Lua Testing
 
-Shortcode and filter tests always run against the WASM-restricted Lua stdlib
-(`StdLib::COROUTINE | TABLE | STRING | UTF8 | MATH`), even on native CI. This is
-enforced via `#[cfg(any(target_arch = "wasm32", test))]` guards in `shortcode.rs`
-and `filter.rs`.
+Native tests (`cargo nextest run`) use `Lua::new()` with the full C stdlib on all platforms.
+This is the standard Lua environment — tests can use `io.open`, `os.time`, and all standard
+library functions.
 
-This means tests cannot use Lua standard libraries that are unavailable in WASM
-(`package`, `debug`, or the real C-backed `io`/`os`). Instead, synthetic `io` and
-`os` tables are registered from Rust, backed by the `SystemRuntime` abstraction.
+WASM-specific code paths (restricted Lua stdlib, synthetic io/os modules) are tested
+separately on the real `wasm32-unknown-unknown` target in CI. See `dev-docs/wasm.md` for
+the WASM architecture and build details.
 
-If a test needs file I/O, use `io.open()` (which goes through the runtime) or
-`pandoc.system.read_file()` / `pandoc.system.write_file()`. These work identically
-in tests and WASM because they both go through the runtime abstraction.
+**Never add `test` to the `#[cfg(target_arch = "wasm32")]` guard.** This was a prior pattern
+that caused Windows test failures. WASM coverage is provided by dedicated WASM tests in CI.
 
 ## End-to-End Testing for WASM Features
 

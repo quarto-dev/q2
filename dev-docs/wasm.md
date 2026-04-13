@@ -1,29 +1,46 @@
-## Wasm builds
+# WASM Architecture
 
+## Overview
+
+The `wasm-quarto-hub-client` crate builds the Quarto rendering engine (pampa + quarto-core)
+as a WASM module for use in the hub-client web application. It targets
+`wasm32-unknown-unknown` and uses `-Zbuild-std=std,panic_unwind` to rebuild the standard
+library (required for Lua error handling via setjmp/longjmp → panic/catch_unwind).
+
+## Build
+
+The WASM module is built via `hub-client/scripts/build-wasm.js`, which runs:
+1. `cargo build --target wasm32-unknown-unknown -Zbuild-std=std,panic_unwind`
+2. `wasm-bindgen` CLI to generate JS glue code
+
+From hub-client:
+```bash
+npm run build:all    # Full build including WASM
 ```
-cd crates/wasm-qmd-parser
 
-# To work around this error, because Apple Clang doesn't work with wasm32-unknown-unknown?
-# I believe this is not required on a Linux machine.
-# Requires `brew install llvm`.
-# https://github.com/briansmith/ring/issues/1824
-# error: unable to create target: 'No available targets are compatible with triple "wasm32-unknown-unknown"'
-export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+This project does **not** use wasm-pack (deprecated, rustwasm sunset Sep 2025).
+The `wasm-bindgen-cli` version is pinned to match `Cargo.lock` and installed via
+`cargo xtask dev-setup`.
 
-# To tell rustc to include our C shims located in `wasm-sysroot`, which we eventually compile into the project
-# with `c_shim.rs`.
-# https://github.com/tree-sitter/tree-sitter/discussions/1550#discussioncomment-8445285
-#
-# It also seems like we need to define HAVE_ENDIAN_H to tell tree-sitter we have `endian.h`
-# as it doesn't seem to pick up on that automatically?
-# https://github.com/tree-sitter/tree-sitter/blob/0be215e152d58351d2691484b4398ceff041f2fb/lib/src/portable/endian.h#L18
-export CFLAGS_wasm32_unknown_unknown="-I$(pwd)/wasm-sysroot -Wbad-function-cast -Wcast-function-type -fno-builtin -DHAVE_ENDIAN_H"
+## C Toolchain
 
-# To just build the wasm-qmd-parser crate
-# cargo build --target wasm32-unknown-unknown
+Building for `wasm32-unknown-unknown` requires Clang with wasm32 support. The `cc` crate
+invokes Clang to compile C dependencies (tree-sitter, Lua). Environment variables:
 
-# To build the wasm-pack bundle
-# Note that you'll need `opt-level = "s"` in your `profile.dev` cargo profile
-# otherwise you can get a "too many locals" error.
-wasm-pack build --target web --dev
+```bash
+CC_wasm32_unknown_unknown=clang
+CFLAGS_wasm32_unknown_unknown="-isystem <path>/wasm-sysroot -fno-builtin"
 ```
+
+The wasm-sysroot at `crates/wasm-quarto-hub-client/wasm-sysroot/` provides minimal C
+headers. The `-fno-builtin` flag is needed because debug-mode builds emit `__builtin_*`
+intrinsic calls not present in the stub sysroot.
+
+## Native vs WASM Testing
+
+Native tests (`cargo nextest run`) use `Lua::new()` with the full C stdlib on all platforms.
+WASM-specific code paths use `#[cfg(target_arch = "wasm32")]` guards — never
+`#[cfg(any(target_arch = "wasm32", test))]` (see `.claude/rules/wasm.md`).
+
+Hub-client integration tests (`npm run test:ci`) exercise the compiled WASM module through
+the JavaScript API.

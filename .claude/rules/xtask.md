@@ -19,9 +19,15 @@ paths:
 
 | Command | Alias | Purpose |
 |---------|-------|---------|
-| `cargo xtask dev-setup` | `cargo dev-setup` | Install required dev tools (cargo-nextest, wasm-pack) |
+| `cargo xtask dev-setup` | `cargo dev-setup` | Install required dev tools (cargo-nextest, wasm-bindgen-cli) |
 | `cargo xtask lint` | — | Run custom lint checks |
 | `cargo xtask verify` | — | Full project verification (build + tests for Rust and hub-client) |
+
+## Dev tool version pinning
+
+Dev tools whose versions must match Cargo.lock (e.g., `wasm-bindgen-cli`) are installed
+via `cargo xtask dev-setup`, which reads the locked version automatically. Never hardcode
+these versions in CI workflows or documentation — always use `cargo xtask dev-setup`.
 
 ## Adding a new subcommand
 
