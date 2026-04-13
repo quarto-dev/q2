@@ -67,7 +67,7 @@ Run locally (Linux/macOS with LLVM):
 CC_wasm32_unknown_unknown=clang \
 CFLAGS_wasm32_unknown_unknown="-isystem $PWD/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
 cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
-  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
+  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort
 ```
 
 **Important notes:**

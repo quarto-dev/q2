@@ -17,7 +17,7 @@
 //! CC_wasm32_unknown_unknown=clang \
 //! CFLAGS_wasm32_unknown_unknown="-isystem $PWD/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
 //! cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
-//!   --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
+//!   --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort
 //! ```
 
 #![cfg(all(target_arch = "wasm32", feature = "lua-filter"))]
@@ -56,7 +56,7 @@ fn restricted_lua_vm_creation() {
 /// Run a Lua filter through the real WASM code path: restricted VM + synthetic
 /// io/os + filter execution. Uses WasmRuntime with a filter file in the VFS.
 #[wasm_bindgen_test]
-fn filter_execution_wasm() {
+async fn filter_execution_wasm() {
     use pampa::lua::apply_lua_filters;
     use pampa::lua::runtime::{VirtualFileSystem, WasmRuntime};
     use pampa::pandoc::{ASTContext, Block, Inline, Pandoc, Paragraph, Str};
@@ -97,6 +97,7 @@ end
         "html",
         runtime,
     )
+    .await
     .expect("filter execution failed");
 
     assert!(
@@ -138,7 +139,7 @@ fn shortcode_engine_init_wasm() {
 // ============================================================================
 
 /// Verify that Lua errors produce Err results rather than WASM traps.
-/// This validates that -Zbuild-std=std,panic_unwind is working correctly.
+/// This validates that -Zbuild-std=std,panic_unwind,panic_abort is working correctly.
 #[wasm_bindgen_test]
 fn lua_error_handling() {
     use mlua::{Lua, StdLib};
@@ -164,7 +165,7 @@ fn lua_error_handling() {
 /// Verify that the synthetic io module (io.open, io.type) is registered when
 /// filters execute on wasm32. Uses a filter that asserts these globals exist.
 #[wasm_bindgen_test]
-fn synthetic_io_available_in_filters() {
+async fn synthetic_io_available_in_filters() {
     use pampa::lua::apply_lua_filters;
     use pampa::lua::runtime::{VirtualFileSystem, WasmRuntime};
     use pampa::pandoc::{ASTContext, Block, Inline, Pandoc, Paragraph, Str};
@@ -205,6 +206,7 @@ end
         "html",
         runtime,
     )
+    .await
     .expect("filter with io checks failed — synthetic io may not be registered");
 
     assert!(
@@ -220,7 +222,7 @@ end
 /// Verify that the synthetic os module (os.time, os.clock, os.difftime) is
 /// registered when filters execute on wasm32.
 #[wasm_bindgen_test]
-fn synthetic_os_available_in_filters() {
+async fn synthetic_os_available_in_filters() {
     use pampa::lua::apply_lua_filters;
     use pampa::lua::runtime::{VirtualFileSystem, WasmRuntime};
     use pampa::pandoc::{ASTContext, Block, Inline, Pandoc, Paragraph, Str};
@@ -262,6 +264,7 @@ end
         "html",
         runtime,
     )
+    .await
     .expect("filter with os checks failed — synthetic os may not be registered");
 
     assert!(
