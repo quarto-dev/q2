@@ -11,6 +11,14 @@
 //! Used by:
 //! - `wasm-quarto-hub-client` (production WASM build)
 //! - `pampa` dev-dependencies (WASM integration tests)
+//!
+//! # Edition note
+//!
+//! This crate uses edition 2021 (not the workspace default of 2024). Edition
+//! 2024 requires explicit `unsafe {}` blocks inside `unsafe fn` bodies. Since
+//! nearly every line in the shims dereferences raw pointers, this would add
+//! `unsafe {}` wrappers to ~65 call sites with no safety benefit — the functions
+//! are all `unsafe extern "C"` FFI entry points.
 
 #![cfg_attr(target_arch = "wasm32", feature(c_variadic))]
 

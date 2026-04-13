@@ -2,7 +2,10 @@
 name = "wasm-c-shim"
 publish = false
 authors.workspace = true
-edition.workspace = true
+# Edition 2021: this crate is mostly unsafe extern "C" FFI shims where nearly
+# every line dereferences raw pointers. Edition 2024 requires explicit unsafe {}
+# blocks inside unsafe fn, which would add noise without safety benefit here.
+edition = "2021"
 license.workspace = true
 description = "C stdlib shims for wasm32-unknown-unknown (no libc)"
 

@@ -45,6 +45,20 @@ additionally need `-fno-builtin` because they compile in debug mode, where Clang
 `__builtin_*` intrinsic calls (e.g. `memcpy`, `memset`) that don't exist in the stub
 sysroot. Release builds inline or eliminate these calls, so the flag isn't needed there.
 
+### C stdlib shims (`wasm-c-shim`)
+
+`wasm32-unknown-unknown` has no libc. C libraries (tree-sitter, Lua) that reference
+standard symbols (`malloc`, `fprintf`, `snprintf`, `abort`, etc.) need Rust-provided
+`#[no_mangle]` shim functions at link time.
+
+These shims live in `crates/wasm-c-shim/`, a workspace member that is a no-op on native
+targets (all exports gated on `cfg(target_arch = "wasm32")`). Both `wasm-quarto-hub-client`
+(production) and `pampa` WASM tests (dev-dependency) link against it.
+
+**Edition note:** `wasm-c-shim` uses edition 2021, not the workspace default of 2024.
+Edition 2024 requires explicit `unsafe {}` blocks inside `unsafe fn`, which would add
+noise to ~65 FFI shim functions with no safety benefit.
+
 ## Testing
 
 ### Native tests (all platforms)
