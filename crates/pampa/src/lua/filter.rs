@@ -132,7 +132,7 @@ pub async fn apply_lua_filter(
     // Create Lua state
     // On WASM, we can't load all libraries (no package/io/os/debug support),
     // so use a restricted set. On native, load everything for full compatibility.
-    #[cfg(any(target_arch = "wasm32", test))]
+    #[cfg(target_arch = "wasm32")]
     let lua = {
         use mlua::StdLib;
         let libs = StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH;
@@ -143,7 +143,7 @@ pub async fn apply_lua_filter(
         super::dofile_wasm::register_wasm_dofile(&lua, runtime.clone())?;
         lua
     };
-    #[cfg(not(any(target_arch = "wasm32", test)))]
+    #[cfg(not(target_arch = "wasm32"))]
     let lua = Lua::new();
 
     // Create mediabag for storing media items
