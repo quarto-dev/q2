@@ -1,0 +1,10 @@
+[package]
+name = "wasm-c-shim"
+publish = false
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "C stdlib shims for wasm32-unknown-unknown (no libc)"
+
+[lints]
+workspace = true

@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pampa = { path = "../pampa", default-features = false, features = ["lua-filter"] }
+wasm-c-shim = { path = "../wasm-c-shim" }
 quarto-ast-reconcile = { path = "../quarto-ast-reconcile" }
 quarto-core = { path = "../quarto-core" }
 quarto-error-reporting = { path = "../quarto-error-reporting" }

@@ -2949,6 +2949,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-qmd",
  "wasm-bindgen-test",
+ "wasm-c-shim",
  "yaml-rust2",
 ]
 
@@ -5735,6 +5736,10 @@ name = "wasm-bindgen-test-shared"
 version = "0.2.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8145dd1593bf0fb137dbfa85b8be79ec560a447298955877804640e40c2d6ea"
+
+[[package]]
+name = "wasm-c-shim"
+version = "0.0.0"
 
 [[package]]
 name = "wasm-encoder"
