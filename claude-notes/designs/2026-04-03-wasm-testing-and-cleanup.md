@@ -335,6 +335,84 @@ Both use `-Zbuild-std=std,panic_unwind` but through different mechanisms.
 The WASM test path must match the production path's approach of NOT installing
 the prebuilt target.
 
+## CI toolchain simplification (2026-04-13)
+
+### Removing dtolnay/rust-toolchain action
+
+All CI workflows used `dtolnay/rust-toolchain@nightly` to set up the Rust toolchain.
+This is redundant — `rust-toolchain.toml` already specifies the full configuration
+(nightly channel, components, targets), and `rustup` reads it natively via proxied
+`cargo` commands.
+
+Replaced in all workflows with:
+```yaml
+- name: Set up Rust
+  run: rustup show active-toolchain
+```
+
+This triggers auto-install from `rust-toolchain.toml` and shows the resolved toolchain.
+
+### RUSTUP_TOOLCHAIN for WASM tests (supersedes Bug 1 fix)
+
+The original fix for Bug 1 (E0152 duplicate core) was `rustup target remove
+wasm32-unknown-unknown`. This failed because the rustup proxy reads
+`rust-toolchain.toml` and auto-reinstalls the target on the next `cargo` command.
+
+The correct fix: set `RUSTUP_TOOLCHAIN=nightly` as a job-level env var. This
+bypasses `rust-toolchain.toml` entirely, preventing the target from ever being
+installed. The job uses explicit `rustup toolchain install nightly --component
+rust-src --profile minimal` instead of relying on `rust-toolchain.toml`.
+
+### panic_abort in -Zbuild-std
+
+The test binary (not the production library build) needs `panic_abort` in the
+`-Zbuild-std` list. The WASM test command is:
+```bash
+cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
+  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort
+```
+
+The production build (`wasm-quarto-hub-client`) only needs `std,panic_unwind` because
+it builds a library, not a test binary with its own main/harness.
+
+## wasm-c-shim: shared C stdlib stubs (2026-04-13)
+
+### Problem
+
+The WASM integration tests (filter execution, synthetic io/os verification) link
+`pampa` for wasm32, which pulls in tree-sitter and Lua — both C libraries that
+reference libc symbols (`calloc`, `fprintf`, `snprintf`, `abort`, etc.). On
+`wasm32-unknown-unknown` there is no libc; these symbols must be provided by
+Rust `#[no_mangle]` shim functions.
+
+The production build works because `wasm-quarto-hub-client/src/c_shim.rs` provides
+~980 lines of these shims. The WASM test only builds `pampa` and doesn't include
+that crate, so the linker can't resolve the symbols.
+
+### Solution
+
+Extract `c_shim.rs` into a new `crates/wasm-c-shim/` crate:
+
+- **Workspace member** (not excluded — it compiles for both native and wasm32,
+  but the `#[no_mangle]` exports are gated on `target_arch = "wasm32"`)
+- **Dependency of `wasm-quarto-hub-client`** (replacing the inline `c_shim` module)
+- **Dev-dependency of `pampa`** (gated on `target_arch = "wasm32"`)
+
+The test file imports `wasm_c_shim` to pull the shim symbols into the link:
+```rust
+// Pull in C stdlib shims for wasm32 (calloc, fprintf, snprintf, etc.)
+// These are needed by tree-sitter and Lua's C code on wasm32-unknown-unknown.
+extern crate wasm_c_shim;
+```
+
+### Why not alternatives
+
+- **Include via `#[path]`**: Brittle, the file uses `pub` items and module-level statics
+  that could conflict. Can't be tested independently.
+- **Drop integration tests**: Leaves a gap — core tests verify the restricted VM
+  registers synthetic io/os, but only integration tests verify they actually work
+  when called from Lua during filter execution on real wasm32.
+
 ## Out of scope
 
 - Migrating wasm-pack usage (no longer needed — only stale crate used it)
