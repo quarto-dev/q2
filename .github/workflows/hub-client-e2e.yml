@@ -46,9 +46,6 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install wasm-pack
-        run: cargo install wasm-pack
-
       # tree-sitter for grammar builds
       - name: Set up tree-sitter CLI
         run: |
