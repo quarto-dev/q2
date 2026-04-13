@@ -90,7 +90,7 @@ end
     };
     let context = ASTContext::new();
 
-    let (filtered, _, diagnostics) = apply_lua_filters(
+    let output = apply_lua_filters(
         pandoc,
         context,
         &[PathBuf::from("/project/uppercase.lua")],
@@ -101,12 +101,13 @@ end
     .expect("filter execution failed");
 
     assert!(
-        diagnostics.is_empty(),
-        "unexpected diagnostics: {diagnostics:?}"
+        output.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        output.diagnostics
     );
 
     // Verify the filter uppercased the text
-    match &filtered.blocks[0] {
+    match &output.pandoc.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => assert_eq!(s.text, "HELLO"),
             other => panic!("Expected Str, got {other:?}"),
@@ -199,7 +200,7 @@ end
         })],
     };
 
-    let (_, _, diagnostics) = apply_lua_filters(
+    let output = apply_lua_filters(
         pandoc,
         ASTContext::new(),
         &[PathBuf::from("/project/check_io.lua")],
@@ -210,8 +211,9 @@ end
     .expect("filter with io checks failed — synthetic io may not be registered");
 
     assert!(
-        diagnostics.is_empty(),
-        "unexpected diagnostics: {diagnostics:?}"
+        output.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        output.diagnostics
     );
 }
 
@@ -257,7 +259,7 @@ end
         })],
     };
 
-    let (_, _, diagnostics) = apply_lua_filters(
+    let output = apply_lua_filters(
         pandoc,
         ASTContext::new(),
         &[PathBuf::from("/project/check_os.lua")],
@@ -268,7 +270,8 @@ end
     .expect("filter with os checks failed — synthetic os may not be registered");
 
     assert!(
-        diagnostics.is_empty(),
-        "unexpected diagnostics: {diagnostics:?}"
+        output.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        output.diagnostics
     );
 }
