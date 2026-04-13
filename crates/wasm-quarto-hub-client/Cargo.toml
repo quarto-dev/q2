@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pampa = { path = "../pampa", default-features = false, features = ["lua-filter"] }
+wasm-c-shim = { path = "../wasm-c-shim" }
 quarto-ast-reconcile = { path = "../quarto-ast-reconcile" }
 quarto-core = { path = "../quarto-core" }
 # NOTE: `quarto-error-catalog` is intentionally NOT a dependency here — the WASM

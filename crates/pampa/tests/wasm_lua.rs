@@ -22,6 +22,10 @@
 
 #![cfg(all(target_arch = "wasm32", feature = "lua-filter"))]
 
+// Link the C stdlib shims (malloc, fprintf, snprintf, etc.) needed by
+// tree-sitter and Lua on wasm32-unknown-unknown.
+extern crate wasm_c_shim;
+
 use wasm_bindgen_test::*;
 
 // ============================================================================
