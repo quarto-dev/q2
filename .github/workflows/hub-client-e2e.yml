@@ -32,11 +32,9 @@ jobs:
             [ "$time" != "@0" ] && touch -d "$time" "$file" 2>/dev/null || true
           done
 
-      # Rust toolchain for WASM build
-      - name: Set up Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: wasm32-unknown-unknown
+      # Install toolchain from rust-toolchain.toml (nightly + components + targets)
+      - name: Set up Rust
+        run: rustup show active-toolchain
 
       - name: Set up Clang
         uses: egor-tensin/setup-clang@v2

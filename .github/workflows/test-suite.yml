@@ -46,13 +46,9 @@ jobs:
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
 
-      # Consistent Rust setup for both platforms
-      - name: Set up Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Output rust version
-        shell: bash
-        run: rustup --version
+      # Install toolchain from rust-toolchain.toml (nightly + components + targets)
+      - name: Set up Rust
+        run: rustup show active-toolchain
 
       # Cache Rust AFTER toolchain is set up
       - name: Cache Rust dependencies
