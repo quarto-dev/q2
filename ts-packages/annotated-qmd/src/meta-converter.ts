@@ -31,23 +31,21 @@ function isMetaValueArray(c: unknown): c is JsonMetaValue[] {
  * Converts metadata from quarto-markdown-pandoc JSON to AnnotatedParse
  */
 export class MetadataConverter {
+  private sourceReconstructor: SourceInfoReconstructor;
+  private metaTopLevelKeySources?: Record<string, number>;
+
   constructor(
-    private sourceReconstructor: SourceInfoReconstructor,
-    private metaTopLevelKeySources?: Record<string, number>
-  ) {}
+    sourceReconstructor: SourceInfoReconstructor,
+    metaTopLevelKeySources?: Record<string, number>
+  ) {
+    this.sourceReconstructor = sourceReconstructor;
+    this.metaTopLevelKeySources = metaTopLevelKeySources;
+  }
 
   /**
    * Convert top-level metadata object to AnnotatedParse
    */
   convertMeta(jsonMeta: Record<string, JsonMetaValue>): AnnotatedParse {
-    // Create a synthetic MetaMap for the top-level metadata
-    const entries: MetaMapEntry[] = Object.entries(jsonMeta).map(([key, value]) => ({
-      key,
-      // Use metaTopLevelKeySources if available, otherwise fall back to value's source
-      key_source: this.metaTopLevelKeySources?.[key] ?? value.s,
-      value
-    }));
-
     // Find the overall range by getting min/max offsets
     // Must use getSourceLocation() to get RESOLVED top-level coordinates,
     // not getOffsets() which returns LOCAL coordinates from the pool

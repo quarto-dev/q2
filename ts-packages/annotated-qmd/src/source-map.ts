@@ -5,7 +5,8 @@
  * into MappedString objects from @quarto/mapped-string.
  */
 
-import { MappedString, asMappedString, mappedConcat, mappedSubstring } from '@quarto/mapped-string';
+import type { MappedString } from '@quarto/mapped-string';
+import { asMappedString, mappedConcat, mappedSubstring } from '@quarto/mapped-string';
 import type { SerializableSourceInfo, SourceContext, SourceInfoErrorHandler } from './types.js';
 
 export type { SerializableSourceInfo, SourceContext, SourceInfoErrorHandler };
@@ -42,7 +43,6 @@ const defaultErrorHandler: SourceInfoErrorHandler = (msg: string, id?: number) =
  */
 export class SourceInfoReconstructor {
   private pool: SerializableSourceInfo[];
-  private sourceContext: SourceContext;
   private errorHandler: SourceInfoErrorHandler;
   private resolvedCache = new Map<number, ResolvedSource>();
   private mappedStringCache = new Map<number, MappedString>();
@@ -54,7 +54,6 @@ export class SourceInfoReconstructor {
     errorHandler?: SourceInfoErrorHandler
   ) {
     this.pool = pool;
-    this.sourceContext = sourceContext;
     this.errorHandler = errorHandler || defaultErrorHandler;
 
     // Create top-level MappedStrings for all files
@@ -243,7 +242,7 @@ export class SourceInfoReconstructor {
 
     // Build MappedString array from pieces
     const mappedPieces: MappedString[] = [];
-    for (const [pieceId, offset, length] of pieces) {
+    for (const [pieceId, _offset, length] of pieces) {
       const pieceMapped = this.toMappedString(pieceId);
       // Extract first 'length' characters from this piece
       // Note: 'offset' is offset_in_concat (where piece goes in final string),

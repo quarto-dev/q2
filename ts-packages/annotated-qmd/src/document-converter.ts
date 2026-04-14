@@ -8,13 +8,11 @@
 
 import type {
   AnnotatedParse,
-  JsonMetaValue,
   RustQmdJson,
   Annotated_Block,
   Annotated_Inline
 } from './types.js';
 import type { SourceInfoReconstructor } from './source-map.js';
-import { asMappedString } from '@quarto/mapped-string';
 import { InlineConverter } from './inline-converter.js';
 import { BlockConverter } from './block-converter.js';
 import { MetadataConverter } from './meta-converter.js';
@@ -23,14 +21,16 @@ import { MetadataConverter } from './meta-converter.js';
  * Converts complete Pandoc documents from quarto-markdown-pandoc
  */
 export class DocumentConverter {
+  private sourceReconstructor: SourceInfoReconstructor;
   private inlineConverter: InlineConverter;
   private blockConverter: BlockConverter;
   private metadataConverter: MetadataConverter;
 
   constructor(
-    private sourceReconstructor: SourceInfoReconstructor,
+    sourceReconstructor: SourceInfoReconstructor,
     metaTopLevelKeySources?: Record<string, number>
   ) {
+    this.sourceReconstructor = sourceReconstructor;
     this.inlineConverter = new InlineConverter(sourceReconstructor);
     this.blockConverter = new BlockConverter(sourceReconstructor);
     this.metadataConverter = new MetadataConverter(

@@ -175,8 +175,6 @@ export {
 import { SourceInfoReconstructor } from './source-map.js';
 import { MetadataConverter } from './meta-converter.js';
 import { DocumentConverter } from './document-converter.js';
-import { BlockConverter } from './block-converter.js';
-import { InlineConverter } from './inline-converter.js';
 import type { RustQmdJson, AnnotatedParse, Annotated_Block, Annotated_Inline } from './types.js';
 import type { SourceInfoErrorHandler } from './source-map.js';
 

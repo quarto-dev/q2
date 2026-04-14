@@ -12,11 +12,14 @@ import type { SourceInfoReconstructor } from './source-map.js';
  * Converts Inline AST nodes from quarto-markdown-pandoc to AnnotatedParse
  */
 export class InlineConverter {
+  private sourceReconstructor: SourceInfoReconstructor;
   private blockConverter?: { convertBlock: (block: any) => AnnotatedParse };
 
   constructor(
-    private sourceReconstructor: SourceInfoReconstructor
-  ) {}
+    sourceReconstructor: SourceInfoReconstructor
+  ) {
+    this.sourceReconstructor = sourceReconstructor;
+  }
 
   /**
    * Set the block converter for handling Note elements with block content

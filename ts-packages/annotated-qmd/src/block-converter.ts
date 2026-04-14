@@ -13,11 +13,13 @@ import { InlineConverter } from './inline-converter.js';
  * Converts Block AST nodes from quarto-markdown-pandoc to AnnotatedParse
  */
 export class BlockConverter {
+  private sourceReconstructor: SourceInfoReconstructor;
   private inlineConverter: InlineConverter;
 
   constructor(
-    private sourceReconstructor: SourceInfoReconstructor
+    sourceReconstructor: SourceInfoReconstructor
   ) {
+    this.sourceReconstructor = sourceReconstructor;
     this.inlineConverter = new InlineConverter(sourceReconstructor);
     // Wire the converters together to handle Note elements with block content
     this.inlineConverter.setBlockConverter(this);
