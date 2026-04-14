@@ -19,7 +19,7 @@ The AST already carries source location info (`s` field on each node, referencin
 - [x] Confirm `path` structure (field name + index) matches plan assumptions
 - [x] Document any deviations from expected patch format
 
-**Key finding**: Patches use `insert` + `del` actions (NOT `splice`). `insert` has `values: string[]` (array of individual chars), `del` has `length: number`. Path is `[fieldName, charIndex]`.
+**Spike caveat**: The spike used the old `am.Text` API which produces `insert`/`del` patches. Real documents use `splice`/`del`/`put` — see Deviation #1 above.
 
 ### Phase 0: Tests
 
@@ -65,10 +65,10 @@ The AST already carries source location info (`s` field on each node, referencin
 
 ### Verification
 
-- [x] `npm run build:all` — pre-existing failure in ts-packages/annotated-qmd (not from our changes); no errors in src/
+- [x] `npm run build:all` passes from hub-client (after annotated-qmd fixes in `c6200953`)
 - [x] `npm run test:ci` passes from hub-client — 453 unit + 12 integration + 52 WASM = 517 tests pass
-- [ ] Manual test: two users editing, AST nodes colored by author
-- [ ] Manual test: hover tooltip shows "Edited by {name}, {time}"
+- [x] Manual test: AST nodes colored by author in q2-debug view
+- [x] Manual test: hover tooltip shows "{name}, {time}"
 - [ ] Manual test: offline/local editing renders without attribution (no regression)
 
 ---
@@ -212,25 +212,29 @@ This reduces work from O(full_history) to O(new_changes) on every edit — typic
 
 #### Patch application (shared by both paths)
 
-`Patch` is a union of 8 types (`put`, `del`, `splice`, `inc`, `insert`, `mark`, `unmark`, `conflict`). For text attribution, process only:
+**UPDATED** — actual patch shapes differ from the original plan's spike findings. See Deviation #1.
 
-- **`splice`**: `path[path.length - 1]` is the insertion index, `value` is the inserted text. **Insert** new `CharAttribution` entries at that index:
+For text attribution, process three patch types:
+
+- **`splice`**: `{ action: 'splice', path: ['text', index], value: string }` — **Insert** `value.length` new `CharAttribution` entries at `index`:
   ```typescript
-  const idx = patch.path[patch.path.length - 1] as number;
-  const newEntries = Array(patch.value.length).fill({ actor, time });
+  const idx = patch.path[1] as number;
+  const newEntries = new Array(patch.value.length).fill({ actor, time });
   entries.splice(idx, 0, ...newEntries);
   ```
-- **`del`**: `path[path.length - 1]` is the deletion index, `length` is the character count. **Remove** entries from the array:
+- **`del`**: `{ action: 'del', path: ['text', index], length: number }` — **Remove** `length` entries at `index`:
   ```typescript
-  const idx = patch.path[patch.path.length - 1] as number;
+  const idx = patch.path[1] as number;
   entries.splice(idx, patch.length ?? 1);
   ```
+- **`put`**: `{ action: 'put', path: ['text'], value: string }` — **Replace all** entries (field-level initialization or full replacement):
+  ```typescript
+  entries.length = 0;
+  for (let i = 0; i < patch.value.length; i++) entries.push({ actor, time });
+  ```
 - Skip patches where `path[0]` doesn't match the text field name (e.g., `"text"`)
-- The position is encoded as the **last element** of the `path` array (`Prop = string | number`)
 
-**Ordering**: Patches within a single diff must be applied in order. For incremental updates the prior `entries` array is mutated in place — insertion indices account for preceding patches within the same diff.
-
-**Note on `diff()` usage**: This is the first use of `diff()` in this codebase. Existing code (`replay.ts`) uses `view()` for full document reconstruction; `diffToMonacoEdits.ts` uses the `fast-diff` string library. A spike/prototype validating actual patch shapes for this project's document model is recommended as Phase 0.5 before building the full attribution service.
+**Ordering**: Patches within a single diff must be applied in order.
 
 **Exported API surface** for `attribution.ts`:
 ```typescript
@@ -359,7 +363,7 @@ Per-node `s` is accessed via type assertion `(node as { s?: number }).s` — the
 
 **Visual styling**:
 - Text color: actor's cursor color (from `attr.color`)
-- On hover: native `title` attribute — "Edited by {name}, {relative_time}"
+- On hover: native `title` attribute — "{name}, {relative_time}"
 - When attribution is null: render exactly as today (no regression)
 
 ### Graceful Degradation
@@ -390,12 +394,12 @@ Per-node `s` is accessed via type assertion `(node as { s?: number }).s` — the
   - **Incremental usage**: history is append-only under normal operation — new entries appear at the end. `processedHistoryIndex` marks the boundary between already-applied and new entries. If Automerge compacts history (rare), the list may shrink, which is detected by `processedHistoryIndex > history.length`.
 - `handle.metadata(changeHash)` → `DecodedChange | undefined` (contains `{ time: number, actor: string, ... }`)
   - **Heads → hash extraction**: `const changeHash = Array.isArray(heads) ? heads[0] : heads` (see `replay.ts:79`)
-- `diff(doc, before: Heads, after: Heads)` → `Patch[]` — import from `@automerge/automerge`
+- `diff(doc, before: Heads, after: Heads)` → `Patch[]` — import from `@automerge/automerge` (**must be a direct dependency of hub-client** — see Deviation #2)
   - `decodeHeads(urlHeads)` from `@automerge/automerge-repo` converts `UrlHeads` → `Heads` (see `replay.ts:63`)
-  - `Patch` is a union of 8 types; for text only `splice` and `del` are relevant
-  - Position is the **last element** of `patch.path` (e.g., `["text", 5]` → index 5)
-  - **First usage of `diff()` in this codebase** — validate patch shapes in a spike
+  - For text: `splice` (insert), `del` (delete), `put` (field init) — see Deviation #1 for actual shapes
+  - Position is `patch.path[1]` for splice/del; `put` has no index (field-level)
   - **Incremental usage**: `diff(doc, map.processedHeads, newHeads)` gives only the patches since last update
+  - **Timestamps**: `handle.metadata(hash).time` is in **seconds** (not ms) — see Deviation #4
 - `view(doc, heads)` → reconstruct document at any point (used by `replay.ts`)
 - `getFileHandle(path)` exposed via `automergeSync.ts:260`
 - `getActorId()` exposed via `automergeSync.ts:252`
@@ -429,6 +433,8 @@ Per-node `s` is accessed via type assertion `(node as { s?: number }).s` — the
 | `ts-packages/annotated-qmd/test/document-converter.test.ts` | Reference: createSourceContext() conversion pattern (lines 38-45) |
 | `ts-packages/quarto-sync-client/src/replay.ts` | Reference: existing history traversal pattern |
 | `hub-client/src/services/storage/utils.ts` | Reference: color palette + generateColorFromId |
+| `hub-client/package.json` | Added `@automerge/automerge` direct dependency (Deviation #2) |
+| `ts-packages/annotated-qmd/src/*.ts` | Fixed strict-tsconfig compatibility (Deviation #3) |
 
 ## Verification
 
@@ -436,6 +442,6 @@ Per-node `s` is accessed via type assertion `(node as { s?: number }).s` — the
 2. **Test**: `npm run test:ci` from hub-client
 3. **Manual**: Open hub-client in browser with `format: q2-debug`, edit text as two different users, verify:
    - Each AST node's text is colored with the editor's cursor color
-   - Hovering shows "Edited by {name}, {time}" tooltip
+   - Hovering shows "{name}, {time}" tooltip
    - Nodes edited by different users show different colors
    - Offline/local editing renders without attribution (no regression)
