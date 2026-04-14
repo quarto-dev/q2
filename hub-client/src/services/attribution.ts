@@ -55,10 +55,10 @@ export const CHUNK_SIZE = 50;
 // Internal: patch application
 // ---------------------------------------------------------------------------
 
-interface InsertPatch {
-  action: 'insert';
+interface SplicePatch {
+  action: 'splice';
   path: [string, number];
-  values: string[];
+  value: string;
 }
 
 interface DelPatch {
@@ -67,18 +67,34 @@ interface DelPatch {
   length?: number;
 }
 
-type TextPatch = InsertPatch | DelPatch;
+interface PutPatch {
+  action: 'put';
+  path: [string];
+  value: string;
+}
+
+type TextPatch = SplicePatch | DelPatch | PutPatch;
 
 function isTextPatch(patch: unknown, textFieldName: string): patch is TextPatch {
   const p = patch as { action?: string; path?: unknown[] };
   if (!p || !Array.isArray(p.path) || p.path[0] !== textFieldName) return false;
-  return p.action === 'insert' || p.action === 'del';
+  return p.action === 'splice' || p.action === 'del' || p.action === 'put';
 }
 
 function applyPatch(entries: CharAttribution[], patch: TextPatch, attribution: CharAttribution): void {
-  const idx = patch.path[1];
-  if (patch.action === 'insert') {
-    const newEntries = new Array<CharAttribution>(patch.values.length).fill(attribution);
+  if (patch.action === 'put') {
+    // Field-level put: replace all entries (e.g., initial text set)
+    const text = typeof patch.value === 'string' ? patch.value : '';
+    entries.length = 0;
+    for (let i = 0; i < text.length; i++) {
+      entries.push(attribution);
+    }
+    return;
+  }
+
+  const idx = patch.path[1] as number;
+  if (patch.action === 'splice') {
+    const newEntries = new Array<CharAttribution>(patch.value.length).fill(attribution);
     entries.splice(idx, 0, ...newEntries);
   } else {
     // del
@@ -128,6 +144,8 @@ export async function buildAttributionMap(
   const viewable = handle as unknown as ViewableHandle;
   const history = viewable.history();
 
+  console.log('[attribution:build] history:', history ? history.length + ' entries' : 'undefined');
+
   if (!history) return null;
 
   if (history.length === 0) {
@@ -162,6 +180,7 @@ export async function buildAttributionMap(
       const decodedCurr = decodeHeads(currHeads as Parameters<typeof decodeHeads>[0]);
       let patches: unknown[];
 
+      try {
       if (prevHeads === null) {
         patches = diff(
           viewable.doc() as Parameters<typeof diff>[0],
@@ -175,6 +194,14 @@ export async function buildAttributionMap(
           decodedPrev as unknown as Heads,
           decodedCurr as unknown as Heads,
         );
+      }
+      } catch (err) {
+        console.error('[attribution:build] diff() failed at history entry', i, err);
+        throw err;
+      }
+
+      if (i < 3 && patches.length > 0) {
+        console.log('[attribution:build] Entry', i, 'patches:', JSON.stringify(patches.slice(0, 3)));
       }
 
       for (const patch of patches) {

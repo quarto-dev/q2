@@ -29,6 +29,7 @@
     "bootstrap-test-fixtures": "npx tsx e2e/scripts/regenerate-fixtures.ts"
   },
   "dependencies": {
+    "@automerge/automerge": "^2.2.9",
     "@automerge/automerge-repo": "^2.5.1",
     "@automerge/automerge-repo-network-websocket": "^2.5.1",
     "@automerge/automerge-repo-react-hooks": "2.5.1",

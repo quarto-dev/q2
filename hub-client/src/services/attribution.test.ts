@@ -29,9 +29,9 @@ import type { AttributionMap, CharAttribution } from './attribution';
 // ---------------------------------------------------------------------------
 
 interface MockPatch {
-  action: 'insert' | 'del';
-  path: [string, number];
-  values?: string[];
+  action: 'splice' | 'del' | 'put';
+  path: [string, number] | [string];
+  value?: string;
   length?: number;
 }
 
@@ -131,19 +131,19 @@ describe('buildAttributionMap — full build', () => {
         heads: ['h1'],
         actor: 'actor1',
         time: 1000,
-        patches: [{ action: 'insert', path: ['text', 0], values: ['h', 'e'] }],
+        patches: [{ action: 'splice', path: ['text', 0], value: 'he' }],
       },
       {
         heads: ['h2'],
         actor: 'actor2',
         time: 2000,
-        patches: [{ action: 'insert', path: ['text', 2], values: ['l', 'l', 'o'] }],
+        patches: [{ action: 'splice', path: ['text', 2], value: 'llo' }],
       },
       {
         heads: ['h3'],
         actor: 'actor1',
         time: 3000,
-        patches: [{ action: 'insert', path: ['text', 5], values: [' ', 'w'] }],
+        patches: [{ action: 'splice', path: ['text', 5], value: ' w' }],
       },
     ];
 
@@ -176,13 +176,13 @@ describe('buildAttributionMap — full build', () => {
         heads: ['h1'],
         actor: 'actor1',
         time: 1000,
-        patches: [{ action: 'insert', path: ['text', 0], values: ['a'] }],
+        patches: [{ action: 'splice', path: ['text', 0], value: 'a' }],
       },
       {
         heads: ['h2'],
         actor: 'actor2',
         time: 2000,
-        patches: [{ action: 'insert', path: ['text', 1], values: ['b'] }],
+        patches: [{ action: 'splice', path: ['text', 1], value: 'b' }],
       },
     ];
 
@@ -229,9 +229,9 @@ describe('buildAttributionMap — full build', () => {
         actor: 'actor1',
         time: 1000,
         patches: [
-          { action: 'insert', path: ['text', 0], values: ['a', 'b'] },
+          { action: 'splice', path: ['text', 0], value: 'ab' },
           // This patch targets a different field — should be ignored
-          { action: 'insert', path: ['other', 0], values: ['x'] } as any,
+          { action: 'splice', path: ['other', 0], value: 'x' } as any,
         ],
       },
     ];
@@ -268,7 +268,7 @@ describe('updateAttributionMap — incremental update', () => {
       heads: ['h2'],
       actor: 'actor2',
       time: 2000,
-      patches: [{ action: 'insert', path: ['text', 2], values: ['c', 'd'] }],
+      patches: [{ action: 'splice', path: ['text', 2], value: 'cd' }],
     };
 
     const handle = createMockHandle([
@@ -340,7 +340,7 @@ describe('updateAttributionMap — incremental update', () => {
       time: 2000,
       patches: [
         { action: 'del', path: ['text', 2], length: 3 },
-        { action: 'insert', path: ['text', 2], values: ['y'] },
+        { action: 'splice', path: ['text', 2], value: 'y' },
       ],
     };
 
@@ -370,7 +370,7 @@ describe('updateAttributionMap — incremental update', () => {
       heads: ['h2'],
       actor: 'actor2',
       time: 2000,
-      patches: [{ action: 'insert', path: ['text', 1], values: ['b'] }],
+      patches: [{ action: 'splice', path: ['text', 1], value: 'b' }],
     };
 
     const handle = createMockHandle([
@@ -418,7 +418,7 @@ describe('buildAttributionMap — chunked processing', () => {
         heads: [`h${i}`],
         actor: `actor${i % 2}`,
         time: 1000 + i,
-        patches: [{ action: 'insert', path: ['text', i], values: [String.fromCharCode(97 + (i % 26))] }],
+        patches: [{ action: 'splice', path: ['text', i], value: String.fromCharCode(97 + (i % 26)) }],
       });
     }
 
@@ -442,7 +442,7 @@ describe('buildAttributionMap — chunked processing', () => {
         heads: ['h1'],
         actor: 'actor1',
         time: 1000,
-        patches: [{ action: 'insert', path: ['text', 0], values: ['a'] }],
+        patches: [{ action: 'splice', path: ['text', 0], value: 'a' }],
       },
     ];
 
@@ -465,7 +465,7 @@ describe('buildAttributionMap — chunked processing', () => {
         heads: [`h${i}`],
         actor: 'actor1',
         time: 1000 + i,
-        patches: [{ action: 'insert', path: ['text', i], values: ['a'] }],
+        patches: [{ action: 'splice', path: ['text', i], value: 'a' }],
       });
     }
 

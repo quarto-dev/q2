@@ -544,7 +544,11 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
     const astContext = ast.astContext;
 
     const nodeAttributionValue = useMemo(() => {
-        if (!astContext || !attributionCtx) return null;
+        if (!astContext || !attributionCtx) {
+            if (!astContext) console.warn('[ast-debug] No astContext in AST JSON');
+            if (!attributionCtx) console.warn('[ast-debug] No attribution context (hook returned null)');
+            return null;
+        }
 
         try {
             // Populate files[0].content from the Automerge source text
@@ -573,7 +577,8 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
                         attributionCtx.identities,
                     ),
             };
-        } catch {
+        } catch (err) {
+            console.error('[ast-debug] Failed to build NodeAttribution:', err);
             return null;
         }
     }, [astContext, attributionCtx]);
@@ -614,7 +619,9 @@ export const componentRegistry: Record<string, (props: any) => React.ReactNode> 
 /** Format a timestamp as a relative time string */
 function formatRelativeTime(timestamp: number): string {
     const now = Date.now();
-    const diffMs = now - timestamp;
+    // Automerge timestamps may be in seconds — normalize to ms
+    const tsMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+    const diffMs = now - tsMs;
     const diffSec = Math.floor(diffMs / 1000);
     if (diffSec < 60) return 'just now';
     const diffMin = Math.floor(diffSec / 60);
@@ -647,7 +654,7 @@ const Node = ({
         const attr = attributionCtx.getNodeAttribution(sourceInfoId);
         if (attr) {
             attributionStyle = { color: attr.color };
-            attributionTitle = `Edited by ${attr.name}, ${formatRelativeTime(attr.time)}`;
+            attributionTitle = `${attr.name}, ${formatRelativeTime(attr.time)}`;
         }
     }
 

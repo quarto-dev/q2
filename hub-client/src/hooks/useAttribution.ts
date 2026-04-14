@@ -79,22 +79,28 @@ export function useAttribution(
 
     const handle = getFileHandle(path);
     if (!handle) {
+      console.warn('[attribution] No file handle for', path);
       setResult(null);
       mapRef.current = null;
       return;
     }
 
+    console.log('[attribution] Starting build for', path);
     buildAttributionMap(handle, 'text', controller.signal).then(map => {
       if (controller.signal.aborted) return;
 
       if (map) {
+        console.log('[attribution] Build complete:', map.entries.length, 'chars,', map.processedHistoryIndex, 'history entries');
         const byteToChar = buildByteToCharMap(sourceTextRef.current);
         mapRef.current = map;
         setResult({ attributionMap: map, byteToCharMap: byteToChar });
       } else {
+        console.warn('[attribution] Build returned null');
         mapRef.current = null;
         setResult(null);
       }
+    }).catch(err => {
+      console.error('[attribution] Build failed:', err);
     });
   }, []);
 
