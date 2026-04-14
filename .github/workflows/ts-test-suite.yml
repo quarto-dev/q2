@@ -119,9 +119,13 @@ jobs:
         run: brew install llvm
         shell: bash
 
+      # wasm-bindgen-cli must match the wasm-bindgen version in Cargo.lock
       - name: Install wasm-bindgen-cli
         shell: bash
-        run: cargo install wasm-bindgen-cli --version 0.2.108
+        run: |
+          VERSION=$(grep -A1 'name = "wasm-bindgen"' crates/wasm-quarto-hub-client/Cargo.lock | grep version | head -1 | sed 's/.*"\(.*\)"/\1/')
+          echo "Installing wasm-bindgen-cli $VERSION"
+          cargo install wasm-bindgen-cli --locked --version "$VERSION"
 
       - name: Build WASM module
         shell: bash
