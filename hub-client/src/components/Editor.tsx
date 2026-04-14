@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
@@ -365,8 +365,20 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // effect's setContent(automergeContent) always produces a state change.
   const displayContent = replayState.isActive ? replayState.currentContent : content;
 
-  // Per-node attribution for q2-debug AST view
-  const attribution = useAttribution(currentFile?.path ?? null, identities ?? {}, displayContent);
+  // Per-node attribution for q2-debug AST view (opt-in via `attribution: true` in YAML metadata)
+  const attributionEnabled = useMemo(() => {
+    if (currentFormat !== 'q2-debug' || !astJson) return false;
+    try {
+      const ast = JSON.parse(astJson);
+      const val = ast?.meta?.attribution;
+      // MetaBool: { t: "MetaBool", c: true }
+      if (val?.t === 'MetaBool') return val.c === true;
+      // MetaString: { t: "MetaString", c: "true" }
+      if (val?.t === 'MetaString') return val.c === 'true';
+      return false;
+    } catch { return false; }
+  }, [currentFormat, astJson]);
+  const attribution = useAttribution(attributionEnabled ? (currentFile?.path ?? null) : null, identities ?? {}, displayContent);
   const attributionContextValue = attribution ? {
     attributionMap: attribution.attributionMap,
     byteToCharMap: attribution.byteToCharMap,
