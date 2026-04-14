@@ -1,8 +1,19 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
+import type { NodeAttribution } from '../../services/attribution';
+import type { SerializableSourceInfo, RustFileInfo } from '@quarto/pandoc-types';
+import { SourceInfoReconstructor } from '@quarto/annotated-qmd';
+import type { SourceContext } from '@quarto/pandoc-types';
+import { AttributionContext } from '../../hooks/useAttribution';
+import { getNodeAttribution, buildByteToCharMap } from '../../services/attribution';
 
 // Context for unified component registry
 const RegistryContext = createContext<{
     registry: Record<string, (props: any) => React.ReactNode>;
+} | null>(null);
+
+// Context for per-node attribution queries
+export const NodeAttributionContext = createContext<{
+    getNodeAttribution: (sourceInfoId: number) => NodeAttribution | null;
 } | null>(null);
 
 /**
@@ -12,6 +23,10 @@ export interface PandocAST {
     'pandoc-api-version': [number, number, number];
     meta: Record<string, unknown>;
     blocks: BlockNode[];
+    astContext?: {
+        sourceInfoPool: SerializableSourceInfo[];
+        files: RustFileInfo[];
+    };
 }
 
 export type ParaBlock = { t: 'Para'; c: InlineNode[] };
@@ -523,15 +538,64 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
     ast: PandocAST;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
-}) => (
-    <div className="pandoc-content-debug" style={{ padding: '20px', fontSize: '16px' }}>
-        {renderChildren({
-            node: ast as any,
-            setLocalAst: setAst as any,
-            onNavigateToDocument
-        })}
-    </div>
-);
+}) => {
+    // Extract attribution context and build getNodeAttribution closure
+    const attributionCtx = useContext(AttributionContext);
+    const astContext = ast.astContext;
+
+    const nodeAttributionValue = useMemo(() => {
+        if (!astContext || !attributionCtx) return null;
+
+        try {
+            // Populate files[0].content from the Automerge source text
+            const sourceContext: SourceContext = {
+                files: astContext.files.map((f, idx) => ({
+                    id: idx,
+                    path: f.name,
+                    content: idx === 0 ? attributionCtx.sourceText : (f.content ?? ''),
+                })),
+            };
+
+            const reconstructor = new SourceInfoReconstructor(
+                astContext.sourceInfoPool,
+                sourceContext,
+            );
+
+            const byteToChar = buildByteToCharMap(attributionCtx.sourceText);
+
+            return {
+                getNodeAttribution: (sourceInfoId: number) =>
+                    getNodeAttribution(
+                        sourceInfoId,
+                        reconstructor,
+                        attributionCtx.attributionMap,
+                        byteToChar,
+                        attributionCtx.identities,
+                    ),
+            };
+        } catch {
+            return null;
+        }
+    }, [astContext, attributionCtx]);
+
+    const tree = (
+        <div className="pandoc-content-debug" style={{ padding: '20px', fontSize: '16px' }}>
+            {renderChildren({
+                node: ast as any,
+                setLocalAst: setAst as any,
+                onNavigateToDocument
+            })}
+        </div>
+    );
+
+    // Only wrap with NodeAttributionContext if we built one internally.
+    // Otherwise, allow any external provider to pass through.
+    return nodeAttributionValue ? (
+        <NodeAttributionContext.Provider value={nodeAttributionValue}>
+            {tree}
+        </NodeAttributionContext.Provider>
+    ) : tree;
+};
 
 /**
  * Unified Registry combining all Block and Inline components, plus Block and Inline wrappers
@@ -547,6 +611,20 @@ export const componentRegistry: Record<string, (props: any) => React.ReactNode> 
 /**
  * Unified Node component that delegates to Block or Inline based on type
  */
+/** Format a timestamp as a relative time string */
+function formatRelativeTime(timestamp: number): string {
+    const now = Date.now();
+    const diffMs = now - timestamp;
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    return `${diffDay}d ago`;
+}
+
 const Node = ({
     node,
     onNavigateToDocument,
@@ -558,6 +636,20 @@ const Node = ({
 }) => {
     const registries = useContext(RegistryContext);
     const registry = registries?.registry ?? componentRegistry;
+    const attributionCtx = useContext(NodeAttributionContext);
+
+    // Extract per-node attribution styling
+    const sourceInfoId = (node as { s?: number }).s;
+    let attributionStyle: React.CSSProperties | undefined;
+    let attributionTitle: string | undefined;
+
+    if (sourceInfoId != null && attributionCtx) {
+        const attr = attributionCtx.getNodeAttribution(sourceInfoId);
+        if (attr) {
+            attributionStyle = { color: attr.color };
+            attributionTitle = `Edited by ${attr.name}, ${formatRelativeTime(attr.time)}`;
+        }
+    }
 
     // Check if it's a Block type by looking at common block tags
     const blockTypes = ['Para', 'Plain', 'Header', 'CodeBlock', 'BulletList', 'OrderedList', 'BlockQuote', 'Div', 'HorizontalRule', 'RawBlock', 'Figure'];
@@ -568,20 +660,24 @@ const Node = ({
         if (!BlockComponent) {
             return <div style={blockStyle}><strong>Block wrapper not registered</strong></div>;
         }
-        return <BlockComponent
-            node={node as BlockNode}
-            onNavigateToDocument={onNavigateToDocument}
-            setLocalAst={setLocalAst as (newBlock: BlockNode) => void}
-        />;
+        return <div style={attributionStyle} title={attributionTitle}>
+            <BlockComponent
+                node={node as BlockNode}
+                onNavigateToDocument={onNavigateToDocument}
+                setLocalAst={setLocalAst as (newBlock: BlockNode) => void}
+            />
+        </div>;
     } else {
         const InlineComponent = registry['Inline'];
         if (!InlineComponent) {
             return <span style={inlineStyle}><strong>Inline wrapper not registered</strong></span>;
         }
-        return <InlineComponent
-            node={node as InlineNode}
-            onNavigateToDocument={onNavigateToDocument}
-            setLocalAst={setLocalAst as (newInline: InlineNode) => void}
-        />;
+        return <span style={attributionStyle} title={attributionTitle}>
+            <InlineComponent
+                node={node as InlineNode}
+                onNavigateToDocument={onNavigateToDocument}
+                setLocalAst={setLocalAst as (newInline: InlineNode) => void}
+            />
+        </span>;
     }
 };

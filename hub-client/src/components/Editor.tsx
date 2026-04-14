@@ -24,6 +24,7 @@ import { useIntelligence } from '../hooks/useIntelligence';
 import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
 import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { useReplayMode } from '../hooks/useReplayMode';
+import { useAttribution, AttributionContext } from '../hooks/useAttribution';
 import { useAutomergeSync } from '../hooks/useAutomergeSync';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
@@ -363,6 +364,15 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // untouched during replay so that when replay exits, the Automerge sync
   // effect's setContent(automergeContent) always produces a state change.
   const displayContent = replayState.isActive ? replayState.currentContent : content;
+
+  // Per-node attribution for q2-debug AST view
+  const attribution = useAttribution(currentFile?.path ?? null, identities ?? {}, displayContent);
+  const attributionContextValue = attribution ? {
+    attributionMap: attribution.attributionMap,
+    byteToCharMap: attribution.byteToCharMap,
+    identities: identities ?? {},
+    sourceText: displayContent,
+  } : null;
 
   // When replay content changes, update Monaco and VFS for display.
   // Writing to VFS ensures the preview renderer sees historical content.
@@ -1032,27 +1042,29 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               ✕
             </button>
           )}
-          <PreviewRouter
-            content={displayContent}
-            currentFile={currentFile}
-            files={files}
-            fileContents={fileContents}
-            scrollSyncEnabled={scrollSyncEnabled}
-            editorRef={editorRef}
-            editorReady={editorReady}
-            editorHasFocusRef={editorHasFocusRef}
-            onFileChange={handlePreviewFileChange}
-            onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
-            onDiagnosticsChange={handleDiagnosticsChange}
-            onWasmStatusChange={handleWasmStatusChange}
-            onRegisterScrollToLine={handleRegisterScrollToLine}
-            onRegisterSetScrollRatio={handleRegisterSetScrollRatio}
-            onAstChange={handleAstChange}
-            currentSlideIndex={currentSlideIndex}
-            onSlideChange={handleSlideChange}
-            onFormatChange={handleFormatChange}
-            onContentRewrite={handleContentRewrite}
-          />
+          <AttributionContext.Provider value={attributionContextValue}>
+            <PreviewRouter
+              content={displayContent}
+              currentFile={currentFile}
+              files={files}
+              fileContents={fileContents}
+              scrollSyncEnabled={scrollSyncEnabled}
+              editorRef={editorRef}
+              editorReady={editorReady}
+              editorHasFocusRef={editorHasFocusRef}
+              onFileChange={handlePreviewFileChange}
+              onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
+              onDiagnosticsChange={handleDiagnosticsChange}
+              onWasmStatusChange={handleWasmStatusChange}
+              onRegisterScrollToLine={handleRegisterScrollToLine}
+              onRegisterSetScrollRatio={handleRegisterSetScrollRatio}
+              onAstChange={handleAstChange}
+              currentSlideIndex={currentSlideIndex}
+              onSlideChange={handleSlideChange}
+              onFormatChange={handleFormatChange}
+              onContentRewrite={handleContentRewrite}
+            />
+          </AttributionContext.Provider>
         </div>
       </main>
 
