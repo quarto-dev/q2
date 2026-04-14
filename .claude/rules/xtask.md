@@ -25,9 +25,10 @@ paths:
 
 ## Dev tool version pinning
 
-Dev tools whose versions must match Cargo.lock (e.g., `wasm-bindgen-cli`) are installed
-via `cargo xtask dev-setup`, which reads the locked version automatically. Never hardcode
-these versions in CI workflows or documentation — always use `cargo xtask dev-setup`.
+Dev tools whose versions must match Cargo.lock (e.g., `wasm-bindgen-cli`) are pinned in
+`crates/xtask/src/dev_setup.rs`. When updating `wasm-bindgen` in Cargo.lock, also update
+the pinned version in `dev_setup.rs` to match. CI workflows extract the version directly
+from `crates/wasm-quarto-hub-client/Cargo.lock` to avoid duplication.
 
 ## Adding a new subcommand
 

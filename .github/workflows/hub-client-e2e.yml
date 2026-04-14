@@ -70,6 +70,12 @@ jobs:
       - name: Build TypeScript packages
         run: npm run build
 
+      # wasm-bindgen-cli must match the wasm-bindgen version in Cargo.lock
+      - name: Install wasm-bindgen-cli
+        run: |
+          VERSION=$(grep -A1 'name = "wasm-bindgen"' crates/wasm-quarto-hub-client/Cargo.lock | grep version | sed 's/.*"\(.*\)"/\1/')
+          cargo install wasm-bindgen-cli --locked --version "$VERSION"
+
       # Build WASM module
       - name: Build WASM
         run: |
