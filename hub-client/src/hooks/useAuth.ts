@@ -11,6 +11,9 @@
  * The new credential is sent to POST /auth/refresh which validates it and
  * sets a fresh cookie. If silent refresh fails, auth is cleared at expiry.
  *
+ * Visibility-aware refresh: if a background tab's timers were throttled
+ * and the cookie expired, attempts a One Tap refresh before logging out.
+ *
  * During refresh, a 401 from /auth/me is handled gracefully: the hook
  * shows a loading state (not the login screen) while the refresh is
  * in progress.
@@ -56,6 +59,9 @@ export function useAuth() {
     return () => { cancelled = true; };
   }, []);
 
+  const cookieExpired = () =>
+    cookieSetAt.current > 0 && Date.now() >= cookieSetAt.current + COOKIE_MAX_AGE_MS;
+
   // One Tap: disabled until refreshEnabled is set. When enabled with
   // auto_select, it silently returns a credential if the user has an
   // active Google session — no UI shown.
@@ -67,30 +73,33 @@ export function useAuth() {
             if (me) {
               setAuth(me);
               cookieSetAt.current = Date.now();
+            } else if (cookieExpired()) {
+              setAuth(null);
             }
           })
           .catch(() => {
-            // Refresh failed — let hard expiry handle it.
+            if (cookieExpired()) setAuth(null);
           })
           .finally(() => {
             isRefreshing.current = false;
           });
       } else {
         isRefreshing.current = false;
+        if (cookieExpired()) setAuth(null);
       }
       setRefreshEnabled(false);
     },
     onError: () => {
       isRefreshing.current = false;
       setRefreshEnabled(false);
+      if (cookieExpired()) setAuth(null);
     },
     auto_select: true,
     disabled: !refreshEnabled,
   });
 
-  // When the tab becomes visible again, check if the cookie is still valid.
-  // Browsers throttle/suspend setTimeout in background tabs, so the refresh
-  // and expiry timers may not fire before the cookie actually expires.
+  // On visibility change, verify the cookie. If expired, try One Tap
+  // refresh before logging out (timers may not have fired in background).
   useEffect(() => {
     if (!auth) return;
 
@@ -105,7 +114,9 @@ export function useAuth() {
             cookieSetAt.current = Date.now();
             setAuth(me);
           } else {
-            setAuth(null);
+            // Cookie expired — try One Tap refresh before logging out.
+            isRefreshing.current = true;
+            setRefreshEnabled(true);
           }
         })
         .catch(() => {

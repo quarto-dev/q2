@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 
 // Track the One Tap callback so tests can invoke it manually.
 let oneTapCallbacks: {
@@ -167,6 +167,103 @@ describe('useAuth', () => {
         expect(result.current.auth).toEqual(refreshedUser),
       );
       expect(mockRefreshToken).toHaveBeenCalledWith('fresh.jwt.token');
+    });
+  });
+
+  // ── Visibility-triggered refresh (fake timers) ────────────
+
+  describe('visibility-triggered refresh', () => {
+    beforeEach(() => {
+      // Unmount hooks from previous tests so their visibilitychange
+      // listeners don't interfere with ours.
+      cleanup();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('attempts One Tap refresh when tab becomes visible with expired cookie', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const refreshedUser = { email: 'a@b.com', name: 'Refreshed', picture: null };
+      mockFetchAuthMe.mockResolvedValueOnce(user); // mount
+
+      const { result } = renderHook(() => useAuth());
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Next /auth/me returns null (cookie expired)
+      mockFetchAuthMe.mockResolvedValueOnce(null);
+      mockRefreshToken.mockResolvedValue(refreshedUser);
+
+      // Dispatch the event, then flush async handler + React updates separately.
+      document.dispatchEvent(new Event('visibilitychange'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // One Tap should be enabled for refresh
+      expect(oneTapCallbacks.disabled).toBe(false);
+
+      // Simulate One Tap returning a fresh credential
+      await act(async () => {
+        oneTapCallbacks.onSuccess?.({ credential: 'fresh.jwt' });
+      });
+
+      await vi.waitFor(() => expect(result.current.auth).toEqual(refreshedUser));
+    });
+
+    it('clears auth when One Tap fails after visibility-triggered refresh', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValueOnce(user); // mount
+
+      const { result } = renderHook(() => useAuth());
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Jump Date.now() past cookie lifetime (simulates long idle)
+      vi.setSystemTime(Date.now() + 3600 * 1000 + 1000);
+
+      // Next /auth/me returns null (cookie expired)
+      mockFetchAuthMe.mockResolvedValueOnce(null);
+
+      document.dispatchEvent(new Event('visibilitychange'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Simulate One Tap failing (no active Google session)
+      await act(async () => {
+        oneTapCallbacks.onError?.();
+      });
+
+      await vi.waitFor(() => expect(result.current.auth).toBeNull());
+    });
+
+    it('clears auth when refreshToken returns null after visibility-triggered refresh', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValueOnce(user); // mount
+
+      const { result } = renderHook(() => useAuth());
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Jump Date.now() past cookie lifetime (simulates long idle)
+      vi.setSystemTime(Date.now() + 3600 * 1000 + 1000);
+
+      // Next /auth/me returns null (cookie expired)
+      mockFetchAuthMe.mockResolvedValueOnce(null);
+
+      document.dispatchEvent(new Event('visibilitychange'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // One Tap returns a credential, but server rejects it
+      mockRefreshToken.mockResolvedValue(null);
+      await act(async () => {
+        oneTapCallbacks.onSuccess?.({ credential: 'rejected.jwt' });
+      });
+
+      await vi.waitFor(() => expect(result.current.auth).toBeNull());
     });
   });
 
