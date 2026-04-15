@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useRef, useState, useCallback, useMemo } from 'react';
 import type { NodeAttribution } from '../../services/attribution';
 import type { SerializableSourceInfo, RustFileInfo } from '@quarto/pandoc-types';
 import { SourceInfoReconstructor } from '@quarto/annotated-qmd';
 import type { SourceContext } from '@quarto/pandoc-types';
 import { AttributionContext } from '../../hooks/useAttribution';
-import { getNodeAttribution, buildByteToCharMap } from '../../services/attribution';
+import { getNodeAttribution } from '../../services/attribution';
 
 // Context for unified component registry
 const RegistryContext = createContext<{
@@ -561,30 +561,94 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
                 sourceContext,
             );
 
-            const byteToChar = buildByteToCharMap(attributionCtx.sourceText);
+            // Use byteToCharMap from context (already computed in useAttribution hook)
+            const byteToChar = attributionCtx.byteToCharMap;
+
+            // Cache node attribution results — invalidated automatically when
+            // this useMemo recomputes (new astContext or attributionCtx)
+            const cache = new Map<number, NodeAttribution | null>();
 
             return {
-                getNodeAttribution: (sourceInfoId: number) =>
-                    getNodeAttribution(
+                getNodeAttribution: (sourceInfoId: number) => {
+                    const cached = cache.get(sourceInfoId);
+                    if (cached !== undefined) return cached;
+                    const result = getNodeAttribution(
                         sourceInfoId,
                         reconstructor,
                         attributionCtx.attributionMap,
                         byteToChar,
                         attributionCtx.identities,
-                    ),
+                    );
+                    cache.set(sourceInfoId, result);
+                    return result;
+                },
             };
         } catch {
             return null;
         }
     }, [astContext, attributionCtx]);
 
+    // Use internally-computed value, falling back to any externally-provided context
+    const externalNodeAttr = useContext(NodeAttributionContext);
+    const effectiveNodeAttr = nodeAttributionValue ?? externalNodeAttr;
+
+    // Ref to avoid stale closures in event handlers
+    const effectiveNodeAttrRef = useRef(effectiveNodeAttr);
+    effectiveNodeAttrRef.current = effectiveNodeAttr;
+
+    // Hover state for the single floating attribution badge
+    const [hoveredAttr, setHoveredAttr] = useState<{
+        attr: NodeAttribution;
+        rect: DOMRect;
+    } | null>(null);
+
+    // Event-delegated hover: one handler on the container instead of N on each node
+    const handleMouseOver = useCallback((e: React.MouseEvent) => {
+        const ctx = effectiveNodeAttrRef.current;
+        if (!ctx) return;
+        const target = e.target as HTMLElement;
+        const wrap = target.closest('.q2-attr-wrap[data-sid]') as HTMLElement | null;
+        if (!wrap) {
+            setHoveredAttr(null);
+            return;
+        }
+        const sid = Number(wrap.getAttribute('data-sid'));
+        if (Number.isNaN(sid)) return;
+        const attr = ctx.getNodeAttribution(sid);
+        if (attr) {
+            setHoveredAttr({ attr, rect: wrap.getBoundingClientRect() });
+        }
+    }, []);
+
+    const handleMouseOut = useCallback((e: React.MouseEvent) => {
+        const related = e.relatedTarget as HTMLElement | null;
+        if (!related?.closest?.('.q2-attr-wrap[data-sid]')) {
+            setHoveredAttr(null);
+        }
+    }, []);
+
     const tree = (
-        <div className="pandoc-content-debug" style={{ padding: '20px', fontSize: '16px' }}>
+        <div
+            className="pandoc-content-debug"
+            style={{ padding: '20px', fontSize: '16px' }}
+            onMouseOver={effectiveNodeAttr ? handleMouseOver : undefined}
+            onMouseOut={effectiveNodeAttr ? handleMouseOut : undefined}
+        >
             {renderChildren({
                 node: ast as any,
                 setLocalAst: setAst as any,
                 onNavigateToDocument
             })}
+            {hoveredAttr && (
+                <AttributionBadge
+                    attr={hoveredAttr.attr}
+                    style={{
+                        position: 'fixed',
+                        top: hoveredAttr.rect.bottom + 2,
+                        left: hoveredAttr.rect.left,
+                    }}
+                />
+            )}
         </div>
     );
 
@@ -595,7 +659,9 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
             <style>{attributionStyles}</style>
             {tree}
         </NodeAttributionContext.Provider>
-    ) : tree;
+    ) : (
+        effectiveNodeAttr ? <><style>{attributionStyles}</style>{tree}</> : tree
+    );
 };
 
 /**
@@ -629,9 +695,13 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 /** Styled tooltip that appears on hover, colored to match the author */
-function AttributionBadge({ attr }: { attr: { name: string; time: number; color: string } }) {
+function AttributionBadge({ attr, style }: {
+    attr: { name: string; time: number; color: string };
+    style?: React.CSSProperties;
+}) {
     return <span className="q2-attr-badge" style={{
         '--attr-color': attr.color,
+        ...style,
     } as React.CSSProperties}>
         <span className="q2-attr-badge-dot" style={{ backgroundColor: attr.color }} />
         {attr.name} <span className="q2-attr-badge-time">{formatRelativeTime(attr.time)}</span>
@@ -642,10 +712,7 @@ function AttributionBadge({ attr }: { attr: { name: string; time: number; color:
 const attributionStyles = `
     .q2-attr-wrap { position: relative; }
     .q2-attr-badge {
-        display: none;
-        position: absolute;
-        bottom: -20px;
-        left: 0;
+        display: inline-block;
         z-index: 10;
         font-size: 10px;
         line-height: 1;
@@ -670,7 +737,6 @@ const attributionStyles = `
         font-weight: 400;
         opacity: 0.7;
     }
-    .q2-attr-wrap:hover > .q2-attr-badge { display: inline-block; }
 `;
 
 const Node = ({
@@ -701,8 +767,11 @@ const Node = ({
         if (!BlockComponent) {
             return <div style={blockStyle}><strong>Block wrapper not registered</strong></div>;
         }
-        return <div className={attr ? 'q2-attr-wrap' : undefined} style={attr ? { color: attr.color } : undefined}>
-            {attr && <AttributionBadge attr={attr} />}
+        return <div
+            className={attr ? 'q2-attr-wrap' : undefined}
+            data-sid={attr ? sourceInfoId : undefined}
+            style={attr ? { color: attr.color } : undefined}
+        >
             <BlockComponent
                 node={node as BlockNode}
                 onNavigateToDocument={onNavigateToDocument}
@@ -714,8 +783,11 @@ const Node = ({
         if (!InlineComponent) {
             return <span style={inlineStyle}><strong>Inline wrapper not registered</strong></span>;
         }
-        return <span className={attr ? 'q2-attr-wrap' : undefined} style={attr ? { color: attr.color } : undefined}>
-            {attr && <AttributionBadge attr={attr} />}
+        return <span
+            className={attr ? 'q2-attr-wrap' : undefined}
+            data-sid={attr ? sourceInfoId : undefined}
+            style={attr ? { color: attr.color } : undefined}
+        >
             <InlineComponent
                 node={node as InlineNode}
                 onNavigateToDocument={onNavigateToDocument}
