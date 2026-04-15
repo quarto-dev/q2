@@ -592,6 +592,7 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
     // Otherwise, allow any external provider to pass through.
     return nodeAttributionValue ? (
         <NodeAttributionContext.Provider value={nodeAttributionValue}>
+            <style>{attributionStyles}</style>
             {tree}
         </NodeAttributionContext.Provider>
     ) : tree;
@@ -627,6 +628,51 @@ function formatRelativeTime(timestamp: number): string {
     return `${diffDay}d ago`;
 }
 
+/** Styled tooltip that appears on hover, colored to match the author */
+function AttributionBadge({ attr }: { attr: { name: string; time: number; color: string } }) {
+    return <span className="q2-attr-badge" style={{
+        '--attr-color': attr.color,
+    } as React.CSSProperties}>
+        <span className="q2-attr-badge-dot" style={{ backgroundColor: attr.color }} />
+        {attr.name} <span className="q2-attr-badge-time">{formatRelativeTime(attr.time)}</span>
+    </span>;
+}
+
+/** Hover styles for attribution badges — rendered once per AstRenderer */
+const attributionStyles = `
+    .q2-attr-wrap { position: relative; }
+    .q2-attr-badge {
+        display: none;
+        position: absolute;
+        bottom: -20px;
+        left: 0;
+        z-index: 10;
+        font-size: 10px;
+        line-height: 1;
+        white-space: nowrap;
+        padding: 2px 6px;
+        border-radius: 3px;
+        background: #fff;
+        border: 1px solid var(--attr-color);
+        color: var(--attr-color);
+        font-weight: 600;
+        pointer-events: none;
+    }
+    .q2-attr-badge-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        margin-right: 3px;
+        vertical-align: middle;
+    }
+    .q2-attr-badge-time {
+        font-weight: 400;
+        opacity: 0.7;
+    }
+    .q2-attr-wrap:hover > .q2-attr-badge { display: inline-block; }
+`;
+
 const Node = ({
     node,
     onNavigateToDocument,
@@ -640,18 +686,11 @@ const Node = ({
     const registry = registries?.registry ?? componentRegistry;
     const attributionCtx = useContext(NodeAttributionContext);
 
-    // Extract per-node attribution styling
+    // Resolve attribution for this node
     const sourceInfoId = (node as { s?: number }).s;
-    let attributionStyle: React.CSSProperties | undefined;
-    let attributionTitle: string | undefined;
-
-    if (sourceInfoId != null && attributionCtx) {
-        const attr = attributionCtx.getNodeAttribution(sourceInfoId);
-        if (attr) {
-            attributionStyle = { color: attr.color };
-            attributionTitle = `${attr.name}, ${formatRelativeTime(attr.time)}`;
-        }
-    }
+    const attr = (sourceInfoId != null && attributionCtx)
+        ? attributionCtx.getNodeAttribution(sourceInfoId)
+        : null;
 
     // Check if it's a Block type by looking at common block tags
     const blockTypes = ['Para', 'Plain', 'Header', 'CodeBlock', 'BulletList', 'OrderedList', 'BlockQuote', 'Div', 'HorizontalRule', 'RawBlock', 'Figure'];
@@ -662,7 +701,8 @@ const Node = ({
         if (!BlockComponent) {
             return <div style={blockStyle}><strong>Block wrapper not registered</strong></div>;
         }
-        return <div style={attributionStyle} title={attributionTitle}>
+        return <div className={attr ? 'q2-attr-wrap' : undefined} style={attr ? { color: attr.color } : undefined}>
+            {attr && <AttributionBadge attr={attr} />}
             <BlockComponent
                 node={node as BlockNode}
                 onNavigateToDocument={onNavigateToDocument}
@@ -674,7 +714,8 @@ const Node = ({
         if (!InlineComponent) {
             return <span style={inlineStyle}><strong>Inline wrapper not registered</strong></span>;
         }
-        return <span style={attributionStyle} title={attributionTitle}>
+        return <span className={attr ? 'q2-attr-wrap' : undefined} style={attr ? { color: attr.color } : undefined}>
+            {attr && <AttributionBadge attr={attr} />}
             <InlineComponent
                 node={node as InlineNode}
                 onNavigateToDocument={onNavigateToDocument}

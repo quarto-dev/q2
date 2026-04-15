@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { Ast } from './ReactAstDebugRenderer';
 import type { PandocAST } from './ReactAstDebugRenderer';
 import { NodeAttributionContext } from './ReactAstDebugRenderer';
@@ -30,8 +30,8 @@ function makeAstJson(opts?: { sourceInfoId?: number }): string {
 }
 
 describe('Node rendering with attribution', () => {
-  it('renders with attribution color and title tooltip when context is provided', () => {
-    const mockGetNodeAttribution = (sourceInfoId: number): NodeAttribution | null => ({
+  it('renders colored badge with author name on attributed nodes', () => {
+    const mockGetNodeAttribution = (_sourceInfoId: number): NodeAttribution | null => ({
       actor: 'actor1',
       time: 1700000000000,
       color: '#E91E63',
@@ -42,36 +42,40 @@ describe('Node rendering with attribution', () => {
 
     const { container } = render(
       <NodeAttributionContext.Provider value={{ getNodeAttribution: mockGetNodeAttribution }}>
-        <Ast
-          astJson={astJson}
-          setAst={() => {}}
-        />
+        <Ast astJson={astJson} setAst={() => {}} />
       </NodeAttributionContext.Provider>
     );
 
-    // Find the Str node's span — it should have the attribution color
-    const strSpan = container.querySelector('[title]');
-    expect(strSpan).not.toBeNull();
-    expect(strSpan!.getAttribute('title')).toContain('Alice');
-    expect((strSpan as HTMLElement).style.color).toBe('rgb(233, 30, 99)'); // #E91E63
+    // Badge element should exist with author name
+    const badge = container.querySelector('.q2-attr-badge');
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain('Alice');
+
+    // Wrapper should have the attribution color
+    const wrapper = container.querySelector('.q2-attr-wrap');
+    expect(wrapper).not.toBeNull();
+    expect((wrapper as HTMLElement).style.color).toBe('rgb(233, 30, 99)'); // #E91E63
   });
 
-  it('renders identically to current behavior when attribution context is null', () => {
+  it('renders without badge when attribution context is null', () => {
     const astJson = makeAstJson({ sourceInfoId: 42 });
 
-    const { container: withoutCtx } = render(
+    const { container } = render(
       <Ast astJson={astJson} setAst={() => {}} />
     );
 
-    // Should render without any attribution styling — no title attribute on Str
-    const strSpans = withoutCtx.querySelectorAll('span');
-    const strSpan = Array.from(strSpans).find(s => s.textContent?.includes('hello'));
+    // No badge or attribution wrapper
+    expect(container.querySelector('.q2-attr-badge')).toBeNull();
+    expect(container.querySelector('.q2-attr-wrap')).toBeNull();
+
+    // Str still renders
+    const strSpan = Array.from(container.querySelectorAll('span')).find(
+      s => s.textContent?.includes('hello'),
+    );
     expect(strSpan).toBeTruthy();
-    // No title attribute when no attribution context
-    expect(strSpan!.hasAttribute('title')).toBe(false);
   });
 
-  it('renders without attribution styling when node has no s field', () => {
+  it('renders without badge when node has no s field', () => {
     const mockGetNodeAttribution = (_id: number): NodeAttribution | null => ({
       actor: 'actor1',
       time: 1700000000000,
@@ -79,7 +83,7 @@ describe('Node rendering with attribution', () => {
       name: 'Alice',
     });
 
-    // No sourceInfoId set on the Str node
+    // No sourceInfoId on the Str node
     const astJson = makeAstJson();
 
     const { container } = render(
@@ -88,10 +92,7 @@ describe('Node rendering with attribution', () => {
       </NodeAttributionContext.Provider>
     );
 
-    // Str span should render but without attribution (no title)
-    const strSpans = container.querySelectorAll('span');
-    const strSpan = Array.from(strSpans).find(s => s.textContent?.includes('hello'));
-    expect(strSpan).toBeTruthy();
-    expect(strSpan!.hasAttribute('title')).toBe(false);
+    // No badge since node has no source info
+    expect(container.querySelector('.q2-attr-badge')).toBeNull();
   });
 });
