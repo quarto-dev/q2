@@ -378,7 +378,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       return false;
     } catch { return false; }
   }, [currentFormat, astJson]);
-  const attribution = useAttribution(attributionEnabled ? (currentFile?.path ?? null) : null, identities ?? {}, displayContent);
+  const attribution = useAttribution(attributionEnabled ? (currentFile?.path ?? null) : null, displayContent);
   const attributionContextValue = attribution ? {
     attributionMap: attribution.attributionMap,
     byteToCharMap: attribution.byteToCharMap,

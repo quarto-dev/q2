@@ -39,11 +39,6 @@ const mockUpdateAttributionMap = vi.mocked(updateAttributionMap);
 const mockBuildByteToCharMap = vi.mocked(buildByteToCharMap);
 const mockGetFileHandle = vi.mocked(getFileHandle);
 
-const TEST_IDENTITIES = {
-  actor1: { name: 'Alice', color: '#E91E63' },
-  actor2: { name: 'Bob', color: '#2196F3' },
-};
-
 function createMockMap(overrides?: Partial<AttributionMap>): AttributionMap {
   return {
     entries: [{ actor: 'actor1', time: 1000 }],
@@ -68,7 +63,7 @@ describe('useAttribution', () => {
     mockGetFileHandle.mockReturnValue(null);
 
     const { result } = renderHook(() =>
-      useAttribution('index.qmd', TEST_IDENTITIES, 'hello')
+      useAttribution('index.qmd', 'hello')
     );
 
     expect(result.current).toBeNull();
@@ -86,7 +81,7 @@ describe('useAttribution', () => {
     );
 
     const { result } = renderHook(() =>
-      useAttribution('index.qmd', TEST_IDENTITIES, 'hello')
+      useAttribution('index.qmd', 'hello')
     );
 
     // Initially null while building
@@ -112,7 +107,7 @@ describe('useAttribution', () => {
     mockUpdateAttributionMap.mockReturnValue(updatedMap);
 
     const { result, rerender } = renderHook(
-      ({ text }) => useAttribution('index.qmd', TEST_IDENTITIES, text),
+      ({ text }) => useAttribution('index.qmd', text),
       { initialProps: { text: 'hello' } },
     );
 
@@ -146,7 +141,7 @@ describe('useAttribution', () => {
     });
 
     const { result, rerender } = renderHook(
-      ({ text }) => useAttribution('index.qmd', TEST_IDENTITIES, text),
+      ({ text }) => useAttribution('index.qmd', text),
       { initialProps: { text: 'hello' } },
     );
 
@@ -183,7 +178,7 @@ describe('useAttribution', () => {
       .mockResolvedValueOnce(createMockMap({ processedHistoryIndex: 2 }));
 
     const { result, rerender } = renderHook(
-      ({ path }) => useAttribution(path, TEST_IDENTITIES, 'hello'),
+      ({ path }) => useAttribution(path, 'hello'),
       { initialProps: { path: 'file1.qmd' } },
     );
 
@@ -217,7 +212,7 @@ describe('useAttribution', () => {
     mockBuildAttributionMap.mockReturnValue(new Promise(() => {})); // never resolves
 
     const { unmount } = renderHook(() =>
-      useAttribution('index.qmd', TEST_IDENTITIES, 'hello')
+      useAttribution('index.qmd', 'hello')
     );
 
     expect(mockBuildAttributionMap).toHaveBeenCalledTimes(1);

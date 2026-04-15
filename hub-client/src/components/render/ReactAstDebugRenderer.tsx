@@ -544,11 +544,7 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
     const astContext = ast.astContext;
 
     const nodeAttributionValue = useMemo(() => {
-        if (!astContext || !attributionCtx) {
-            if (!astContext) console.warn('[ast-debug] No astContext in AST JSON');
-            if (!attributionCtx) console.warn('[ast-debug] No attribution context (hook returned null)');
-            return null;
-        }
+        if (!astContext || !attributionCtx) return null;
 
         try {
             // Populate files[0].content from the Automerge source text
@@ -577,8 +573,7 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
                         attributionCtx.identities,
                     ),
             };
-        } catch (err) {
-            console.error('[ast-debug] Failed to build NodeAttribution:', err);
+        } catch {
             return null;
         }
     }, [astContext, attributionCtx]);

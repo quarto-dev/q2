@@ -144,8 +144,6 @@ export async function buildAttributionMap(
   const viewable = handle as unknown as ViewableHandle;
   const history = viewable.history();
 
-  console.log('[attribution:build] history:', history ? history.length + ' entries' : 'undefined');
-
   if (!history) return null;
 
   if (history.length === 0) {
@@ -180,7 +178,6 @@ export async function buildAttributionMap(
       const decodedCurr = decodeHeads(currHeads as Parameters<typeof decodeHeads>[0]);
       let patches: unknown[];
 
-      try {
       if (prevHeads === null) {
         patches = diff(
           viewable.doc() as Parameters<typeof diff>[0],
@@ -194,14 +191,6 @@ export async function buildAttributionMap(
           decodedPrev as unknown as Heads,
           decodedCurr as unknown as Heads,
         );
-      }
-      } catch (err) {
-        console.error('[attribution:build] diff() failed at history entry', i, err);
-        throw err;
-      }
-
-      if (i < 3 && patches.length > 0) {
-        console.log('[attribution:build] Entry', i, 'patches:', JSON.stringify(patches.slice(0, 3)));
       }
 
       for (const patch of patches) {
