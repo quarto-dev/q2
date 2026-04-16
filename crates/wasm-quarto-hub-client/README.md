@@ -119,4 +119,4 @@ node hub-client/scripts/build-wasm.js
 
 ### Build Script
 
-Always use the build script in `hub-client/scripts/build-wasm.js` rather than running `wasm-pack` directly. The script sets the required `CFLAGS_wasm32_unknown_unknown` environment variable to include the wasm-sysroot headers.
+Always use the build script in `hub-client/scripts/build-wasm.js` rather than running `cargo build` directly. The script sets the required `CFLAGS_wasm32_unknown_unknown` environment variable to include the wasm-sysroot headers and runs `wasm-bindgen` post-processing.
