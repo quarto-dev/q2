@@ -15,11 +15,17 @@ import { usePreference } from '../../hooks/usePreference';
 interface SettingsTabProps {
   scrollSyncEnabled: boolean;
   onScrollSyncChange: (enabled: boolean) => void;
+  attributionEnabled: boolean;
+  onAttributionChange: (enabled: boolean) => void;
+  currentFormat: string;
 }
 
 export default function SettingsTab({
   scrollSyncEnabled,
   onScrollSyncChange,
+  attributionEnabled,
+  onAttributionChange,
+  currentFormat,
 }: SettingsTabProps) {
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
   const [isCapturing, setIsCapturing] = useState(false);
@@ -93,6 +99,19 @@ export default function SettingsTab({
             Show errors as a small indicator instead of expanded panel
           </span>
         </label>
+        {currentFormat === 'q2-debug' && (
+          <label className="setting-toggle">
+            <input
+              type="checkbox"
+              checked={attributionEnabled}
+              onChange={(e) => onAttributionChange(e.target.checked)}
+            />
+            <span className="setting-name">Authorship</span>
+            <span className="setting-description">
+              Highlight who wrote each part of the document
+            </span>
+          </label>
+        )}
         <div style={{ marginTop: '16px' }}>
           <button
             className="screenshot-button"

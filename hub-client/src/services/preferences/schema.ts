@@ -9,6 +9,7 @@ export const UserPreferencesSchema = z.object({
   version: z.literal(1),
   scrollSyncEnabled: z.boolean(),
   errorOverlayCollapsed: z.boolean(),
+  attributionEnabled: z.boolean(),
   colorScheme: ColorSchemeSchema,
 });
 
@@ -23,6 +24,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   version: 1,
   scrollSyncEnabled: true,
   errorOverlayCollapsed: true, // collapsed by default
+  attributionEnabled: false,
   colorScheme: 'auto',
 };
 
