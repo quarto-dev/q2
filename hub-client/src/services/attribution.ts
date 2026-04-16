@@ -358,6 +358,6 @@ export function getNodeAttribution(
     actor: mostRecent.actor,
     time: mostRecent.time,
     color: identity?.color ?? '#888888',
-    name: identity?.name ?? mostRecent.actor,
+    name: identity?.name ?? mostRecent.actor.slice(0, 8),
   };
 }
