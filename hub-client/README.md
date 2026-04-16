@@ -6,7 +6,7 @@ Web frontend for Quarto Hub - a collaborative document editor using Quarto's WAS
 
 - Node.js 18+
 - Rust toolchain with `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
-- `wasm-bindgen-cli` (`cargo install wasm-bindgen-cli`)
+- `wasm-bindgen-cli` (run `cargo dev-setup` to install the correct version)
 - LLVM (macOS only: `brew install llvm`)
 
 ## Development
