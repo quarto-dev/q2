@@ -5,10 +5,10 @@ members = [
 ]
 default-members = ["crates/*", "crates/experiments/reconcile-viewer"]
 # Excluded crates require special build toolchains or targets:
-# - WASM crates: require --target wasm32-unknown-unknown and -Zbuild-std (see dev-docs/wasm.md)
+# - WASM crates: build with wasm-pack or --target wasm32-unknown-unknown
 # - pampa/fuzz: requires nightly Rust + libfuzzer-sys (Linux/macOS only), run via `cargo fuzz`
 # crates/experiments is a container directory, not a crate, so we exclude it from crates/* matching.
-exclude = ["crates/wasm-quarto-hub-client", "crates/experiments", "crates/pampa/fuzz"]
+exclude = ["crates/wasm-quarto-hub-client", "crates/wasm-qmd-parser", "crates/experiments", "crates/pampa/fuzz"]
 resolver = "2"
 
 [workspace.package]
@@ -82,6 +82,9 @@ path = "./crates/tree-sitter-qmd"
 
 [workspace.dependencies.tree-sitter-sexpr]
 path = "./crates/tree-sitter-sexpr"
+
+[workspace.dependencies.wasm-qmd-parser]
+path = "./crates/wasm-qmd-parser"
 
 [workspace.dependencies.pampa]
 path = "./crates/pampa"
@@ -247,6 +250,6 @@ lua-src = { path = "crates/lua-src-wasm" }
 # Profiles must be set at the workspace level
 [profile.dev]
 # Tell `rustc` to optimize for small code size to
-# work around "too many locals" error in WASM builds
+# work around "too many locals" error from wasm-pack
 # https://github.com/wasm-bindgen/wasm-bindgen/issues/3451#issuecomment-1562982835
 opt-level = "s"
