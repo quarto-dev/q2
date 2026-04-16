@@ -120,12 +120,18 @@ jobs:
         shell: bash
 
       # wasm-bindgen-cli must match the wasm-bindgen version in Cargo.lock
-      - name: Install wasm-bindgen-cli
+      # Use pre-built binary via taiki-e/install-action (faster, avoids transitive dep issues)
+      - name: Detect wasm-bindgen version
+        id: wb-version
         shell: bash
         run: |
           VERSION=$(grep -A1 'name = "wasm-bindgen"' crates/wasm-quarto-hub-client/Cargo.lock | grep version | head -1 | sed 's/.*"\(.*\)"/\1/')
-          echo "Installing wasm-bindgen-cli $VERSION"
-          cargo install wasm-bindgen-cli --locked --version "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wb-version.outputs.version }}
 
       - name: Build WASM module
         shell: bash
