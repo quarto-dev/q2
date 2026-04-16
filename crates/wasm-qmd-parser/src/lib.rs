@@ -6,9 +6,9 @@
  * since it was last maintained. See README.md for context.
  */
 
-// C stdlib stubs for wasm32 are now provided by the shared wasm-c-shim crate.
-// When this crate is revived, add wasm-c-shim as a dependency instead of
-// maintaining a local c_shim module.
+// C stdlib stubs for wasm32 live in wasm-quarto-hub-client/src/c_shim.rs.
+// When this crate is revived, extract the c_shim into a shared crate or
+// copy it here.
 
 mod utils;
 

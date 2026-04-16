@@ -36,15 +36,6 @@ The wasm-sysroot at `crates/wasm-quarto-hub-client/wasm-sysroot/` provides minim
 headers. The `-fno-builtin` flag is needed because debug-mode builds emit `__builtin_*`
 intrinsic calls not present in the stub sysroot.
 
-## Native vs WASM Testing
-
-Native tests (`cargo nextest run`) use `Lua::new()` with the full C stdlib on all platforms.
-WASM-specific code paths use `#[cfg(target_arch = "wasm32")]` guards — never
-`#[cfg(any(target_arch = "wasm32", test))]` (see `.claude/rules/wasm.md`).
-
-Hub-client integration tests (`npm run test:ci`) exercise the compiled WASM module through
-the JavaScript API.
-
 ## wasm-qmd-parser (dormant)
 
 A lightweight WASM wrapper around `pampa` only, without the full `quarto-core` rendering

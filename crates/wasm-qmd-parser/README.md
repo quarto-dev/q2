@@ -9,8 +9,8 @@ stack), this crate exposes only the parser — smaller output, faster load times
 
 ## History
 
-Originally built with `wasm-pack` and its own C stdlib shim. The C shim has
-since moved to the shared `wasm-c-shim` crate, and the build toolchain has
+Originally built with `wasm-pack` and its own C stdlib shim. The C shim now
+lives in `wasm-quarto-hub-client/src/c_shim.rs`, and the build toolchain has
 shifted to `cargo build` + `wasm-bindgen` CLI (see `dev-docs/wasm.md`).
 
 The crate will need updates before it can build again — the `pampa` API has
