@@ -1,18 +1,16 @@
 /*
  * dofile_wasm.rs
  *
- * Override `dofile` and `loadfile` globals for WASM and test environments.
+ * Override `dofile` and `loadfile` globals for WASM environments.
  *
  * On native, the C `fopen`-based implementations from mlua's base library
  * work fine. On WASM, `fopen` returns null (from `c_shim.rs`), so we need
  * Rust implementations backed by SystemRuntime.
  *
- * `dofile` pushes the loaded file's directory onto the script-dir stack
- * before execution and pops after, so that nested `resolve_path` calls
- * resolve against the loaded file's directory.
- *
- * `loadfile` does NOT push/pop — it returns an unexecuted chunk. The
- * script dir at execution time determines path resolution.
+ * These overrides handle file I/O only. They do NOT modify the script-dir
+ * stack — path resolution during execution uses whatever script dir was
+ * set by the caller (filter.rs or shortcode.rs), matching native Lua and
+ * Pandoc/TS Quarto behavior.
  */
 
 use std::path::Path;
@@ -20,7 +18,7 @@ use std::sync::Arc;
 
 use mlua::{Lua, MultiValue, Result, Value};
 
-use super::quarto_api::{current_script_dir, pop_script_dir, push_script_dir};
+use super::quarto_api::current_script_dir;
 use super::runtime::SystemRuntime;
 
 /// Resolve a path for dofile/loadfile in the restricted environment.
@@ -46,7 +44,7 @@ fn resolve_dofile_path(lua: &Lua, path: &str) -> Result<String> {
 
 /// Register `dofile` and `loadfile` overrides for the restricted Lua environment.
 pub fn register_wasm_dofile(lua: &Lua, runtime: Arc<dyn SystemRuntime>) -> Result<()> {
-    // dofile(path) — read, compile, push script dir, execute, pop, return results
+    // dofile(path) — read, compile, execute, return results
     let rt = runtime.clone();
     lua.globals().set(
         "dofile",
@@ -57,21 +55,7 @@ pub fn register_wasm_dofile(lua: &Lua, runtime: Arc<dyn SystemRuntime>) -> Resul
                 mlua::Error::runtime(format!("dofile: cannot read '{}': {}", path, e))
             })?;
 
-            let chunk = lua.load(&content).set_name(&path);
-
-            // Push the loaded file's directory onto the script-dir stack
-            let file_dir = Path::new(&resolved)
-                .parent()
-                .unwrap_or(Path::new(""))
-                .to_string_lossy()
-                .to_string();
-            push_script_dir(lua, &file_dir)?;
-
-            let result = chunk.eval::<MultiValue>();
-
-            pop_script_dir(lua)?;
-
-            result
+            lua.load(&content).set_name(&path).eval::<MultiValue>()
         })?,
     )?;
 
@@ -111,7 +95,6 @@ mod tests {
     use crate::pandoc::ASTContext;
     use crate::pandoc::*;
     use std::fs;
-    use std::path::Path;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -271,68 +254,6 @@ end
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
                 Inline::Str(s) => assert_eq!(s.text, "nil-plus-error"),
-                other => panic!("Expected Str, got {:?}", other),
-            },
-            other => panic!("Expected Paragraph, got {:?}", other),
-        }
-    }
-
-    // This test requires register_wasm_dofile (which pushes/pops the script-dir
-    // stack around dofile calls). On native, the C Lua dofile doesn't interact
-    // with the stack, so resolve_path resolves against the top-level filter dir.
-    // The WASM dofile reimplementation provides this feature; adding it to native
-    // is tracked as a follow-up improvement.
-    #[tokio::test]
-    #[cfg_attr(not(target_arch = "wasm32"), ignore)]
-    async fn test_dofile_script_dir_stack() {
-        // Extension in /ext/ calls dofile("helpers/ui.lua"), and ui.lua calls
-        // quarto.utils.resolve_path("style.css") — should resolve to
-        // /ext/helpers/style.css, not /ext/style.css
-        let dir = TempDir::new().unwrap();
-
-        // Create helpers subdirectory
-        let helpers_dir = dir.path().join("helpers");
-        fs::create_dir(&helpers_dir).unwrap();
-
-        let helper_path = helpers_dir.join("ui.lua");
-        fs::write(
-            &helper_path,
-            r#"return quarto.utils.resolve_path("style.css")"#,
-        )
-        .unwrap();
-
-        let filter_path = dir.path().join("filter.lua");
-        fs::write(
-            &filter_path,
-            &format!(
-                r#"
-local resolved = dofile("{}")
-function Str(elem)
-    return pandoc.Str(resolved)
-end
-"#,
-                helper_path.to_string_lossy().replace('\\', "/")
-            ),
-        )
-        .unwrap();
-
-        let pandoc = empty_pandoc();
-        let context = ASTContext::new();
-        let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
-            .await
-            .unwrap()
-            .pandoc;
-
-        match &filtered.blocks[0] {
-            Block::Paragraph(p) => match &p.content[0] {
-                Inline::Str(s) => {
-                    let expected = helpers_dir.join("style.css").to_string_lossy().to_string();
-                    assert_eq!(
-                        quarto_util::to_forward_slashes(Path::new(&s.text)),
-                        quarto_util::to_forward_slashes(Path::new(&expected)),
-                        "resolve_path inside dofile'd helper should resolve against helper's dir"
-                    );
-                }
                 other => panic!("Expected Str, got {:?}", other),
             },
             other => panic!("Expected Paragraph, got {:?}", other),

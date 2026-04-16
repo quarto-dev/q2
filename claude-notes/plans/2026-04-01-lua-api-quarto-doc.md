@@ -152,43 +152,31 @@ executing script file, tracked via the script-dir stack.
   - `shortcode.rs`: push the handler's script dir before each handler
     call, pop after
 
-- [x] **2.2** In the restricted Lua setup path
-  (`#[cfg(any(target_arch = "wasm32", test))]`) in both `filter.rs`
-  and `shortcode.rs`, after registering synthetic io/os, overwrite
-  `dofile` and `loadfile` globals with Rust functions that:
-  - Read the file via `runtime.file_read_string()` (need string
-    content for Lua source)
-  - **Push** the loaded file's directory onto the script-dir stack
-    before execution, **pop** after (so that nested `resolve_path`
-    calls resolve against the loaded file's directory)
+- [x] **2.2** On WASM (`#[cfg(target_arch = "wasm32")]`), overwrite
+  `dofile` and `loadfile` globals with Rust functions that read files
+  via `runtime.file_read_string()` (since C `fopen` returns null on
+  WASM). These overrides handle file I/O only — they do NOT modify
+  the script-dir stack, matching native Lua and Pandoc/TS Quarto
+  behavior.
   - Compile via `lua.load(content).set_name(filename)`
   - For `dofile`: execute immediately and return all results
   - For `loadfile`: return the compiled chunk without executing
-    (no stack push/pop — the chunk hasn't run yet; the caller may
-    run it later)
   - On error, `loadfile` returns `(nil, error_message)` matching Lua
     semantics; `dofile` propagates the error
 
-  The native code path is left alone — C `fopen` works fine there and
-  we don't need to force all file access through `SystemRuntime` on
-  native.
+  The native code path is left alone — C `fopen` works fine there.
 
   **Path resolution for dofile/loadfile**: resolve relative paths
   against the current script dir (top of stack), matching
   `resolve_path` behavior. If the stack is empty, use the path as-is.
-  In the restricted env (WASM/test), also apply the `/project/` prefix
-  for paths that aren't absolute, matching `io_wasm.rs` conventions.
+  On WASM, also apply the `/project/` prefix for paths that aren't
+  absolute, matching `io_wasm.rs` conventions.
 
 - [x] **2.3** Unit tests:
   - `dofile("path/to/script.lua")` executes and returns values
   - `loadfile("path/to/script.lua")` returns a callable chunk
   - `dofile` with nonexistent file returns an error
   - `loadfile` with nonexistent file returns `(nil, error_message)`
-  - Test in both filter and shortcode contexts
-  - **Script-dir stack test**: extension in `/ext/` calls
-    `dofile("/ext/helpers/ui.lua")`, and `ui.lua` calls
-    `quarto.utils.resolve_path("style.css")` — should resolve to
-    `/ext/helpers/style.css`, not `/ext/style.css`
 
 ### Phase 3: `quarto.doc` namespace
 
@@ -392,17 +380,19 @@ queries fall through to exact match only.
 TS Quarto maintains a Lua-side stack of script file paths
 (`scriptFile = {}`) via `_quarto.withScriptFile(file, callback)`. The
 `scriptDir()` function returns the directory of the topmost entry.
-This is needed because extensions can `dofile()` helpers from
-subdirectories, and those helpers may register dependencies with
-relative paths that should resolve against their own directory.
+This is used for resolving relative paths in `add_html_dependency`
+and `resolve_path`.
 
 Our previous flat `_quarto_script_dir` global would resolve all paths
-against the outermost script's directory, which is wrong when a helper
-in a subdirectory registers a dependency.
+against the outermost script's directory, which is wrong when nested
+script execution changes the active directory.
 
 We implement the stack in Lua (matching TS Quarto) with push/pop
-functions callable from both Lua and Rust. The `dofile` override
-pushes the loaded file's directory before execution and pops after.
+functions callable from both Lua and Rust. The stack is managed by
+`filter.rs` (push at filter setup, pop after) and `shortcode.rs`
+(push/pop around each handler call). `dofile` does NOT push/pop —
+it uses whatever script dir the caller set, matching native Lua and
+Pandoc/TS Quarto behavior.
 
 ### `add_html_dependency` field support
 
@@ -413,21 +403,16 @@ we emit a "not yet supported" diagnostic via `quarto.warn()` so the
 user knows the field was ignored. For completely unknown fields, we
 error — this catches typos and prevents silent data loss.
 
-### `dofile`/`loadfile` — restricted env only
+### `dofile`/`loadfile` — WASM file I/O only
 
 On native, the C `fopen`-based implementations work fine. We only
-overwrite in the restricted Lua environment (`#[cfg(any(target_arch =
-"wasm32", test))]`) where C file I/O doesn't work. This matches the
-pattern used for `io.open` (in `io_wasm.rs`) and `os.*` (in
-`os_wasm.rs`).
+overwrite on WASM (`#[cfg(target_arch = "wasm32")]`) where C file I/O
+doesn't work. This matches the pattern used for `io.open` (in
+`io_wasm.rs`) and `os.*` (in `os_wasm.rs`).
 
-Note: `loadfile` does NOT push/pop the script-dir stack — it returns
-an unexecuted chunk. The stack push/pop happens when `dofile` executes
-the chunk. If the user calls `loadfile` then manually executes the
-chunk, paths will resolve against whatever script dir is current at
-execution time — this matches TS Quarto's behavior (only
-`withScriptFile` manages the stack, and only `dofile`-like paths use
-it).
+The overrides handle file I/O only — they do not modify the script-dir
+stack, matching native Lua and Pandoc/TS Quarto behavior. Neither
+Pandoc nor TS Quarto provides script-dir tracking for raw `dofile()`.
 
 ### Return type unchanged in Plan A
 
