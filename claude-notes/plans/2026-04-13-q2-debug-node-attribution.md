@@ -63,6 +63,21 @@ The AST already carries source location info (`s` field on each node, referencin
 - [x] `ReactAstDebugRenderer.tsx` — in `Node`, consume `NodeAttributionContext`, apply color + title tooltip
 - [x] All Phase 3 tests pass (green) — 3 tests
 
+### Phase 4: Decouple Attribution Interface from Automerge Internals
+
+Refactor so that the consumer-facing interface carries only source-agnostic `CharAttribution[]` entries, not the full Automerge-specific `AttributionMap` (which includes `processedHeads` and `processedHistoryIndex` bookkeeping). This enables swapping the attribution data source (e.g., to git blame) without changing any consumer code.
+
+- [x] `getNodeAttribution()` takes `entries: CharAttribution[]` instead of `attributionMap: AttributionMap`
+- [x] `AttributionContext` shape: `entries: CharAttribution[]` instead of `attributionMap: AttributionMap`
+- [x] `UseAttributionResult` type: `entries: CharAttribution[]` instead of `attributionMap: AttributionMap`
+- [x] `useAttribution` hook internally retains `AttributionMap` for incremental updates but only surfaces `.entries` to consumers
+- [x] `Editor.tsx` context value: `entries: attribution.entries`
+- [x] `ReactAstDebugRenderer.tsx`: reads `attributionCtx.entries`
+- [x] Tests updated: service tests pass `CharAttribution[]` directly; hook tests assert on `.entries`
+- [x] All 453 tests pass, TypeScript type-checks cleanly
+
+**Rationale**: The `processedHeads` and `processedHistoryIndex` fields are Automerge incremental-update bookkeeping — they only matter inside the hook, never to consumers. With this refactor, a future git blame provider only needs to produce `{ entries: CharAttribution[], byteToCharMap: number[] }` (the same hook return shape), and everything downstream works unchanged.
+
 ### Verification
 
 - [x] `npm run build:all` passes from hub-client (after annotated-qmd fixes in `c6200953`)
@@ -254,7 +269,7 @@ export function updateAttributionMap(
 export function getNodeAttribution(
   sourceInfoId: number,
   reconstructor: SourceInfoReconstructor,
-  attributionMap: AttributionMap,
+  entries: CharAttribution[],       // source-agnostic (Phase 4 refactor)
   byteToCharMap: number[],
   identities: Record<string, ActorIdentity>,
 ): NodeAttribution | null;
@@ -284,7 +299,7 @@ const sourceContext: SourceContext = {
 
 **IMPORTANT — `content` is NOT in the WASM output**: The Rust JSON writer (`crates/pampa/src/writers/json.rs:66-72`) serializes `FileEntryJson` with only `{ line_breaks?, name, total_length? }` — no `content` field. The `SourceInfoReconstructor` constructor **throws** if `file.content` is null/undefined (`ts-packages/annotated-qmd/src/source-map.ts:63-67`). Before constructing the reconstructor, the QMD source text must be injected into `astContext.files[0].content`. This text is the same Automerge document content that was passed to the WASM parser. The `Ast` component must receive this text (via `AttributionContext` or as a prop) to populate the field.
 
-**Query function**: `getNodeAttribution(sourceInfoId, reconstructor, attributionMap, byteToCharMap, identities) -> NodeAttribution | null` — calls `reconstructor.getSourceLocation(sourceInfoId)` to get `{ fileId, start, end }` in top-level byte coordinates, converts to char range via `byteToCharMap`, finds the most recent `{ actor, time }` in that range, resolves identity.
+**Query function**: `getNodeAttribution(sourceInfoId, reconstructor, entries, byteToCharMap, identities) -> NodeAttribution | null` — calls `reconstructor.getSourceLocation(sourceInfoId)` to get `{ fileId, start, end }` in top-level byte coordinates, converts to char range via `byteToCharMap`, finds the most recent `{ actor, time }` in the `CharAttribution[]` entries for that range, resolves identity.
 
 ### Phase 2: React Hook + Context
 
@@ -296,25 +311,27 @@ Hook `useAttribution(filePath, identities)` that:
 3. **Cancellation on file switch**: When `filePath` changes, the hook aborts the in-flight build (if any) via `abortController.abort()`, resets state to `null`, and starts a fresh build for the new file.
 4. **Cancellation on unmount**: Cleanup function aborts any in-flight build.
 5. **Fallback to full rebuild**: If `updateAttributionMap` detects history compaction (stored index exceeds history length) or `diff()` fails, it throws a `HistoryCompactedError`. The hook catches this and starts a new async `buildAttributionMap` (returning `null` in the interim until it completes).
-6. Returns `{ attributionMap, byteToCharMap }` or `null`
+6. Returns `{ entries, byteToCharMap }` or `null` (entries is `CharAttribution[]`, extracted from the internal `AttributionMap`)
 
 **Ref stability**: The hook stores the `AttributionMap` in a `useRef` alongside the React state setter, so the debounced callback always operates on the latest map without needing the state value in its closure (avoids stale-closure bugs with rapid edits).
 
 **Context definition** (in the same file or a shared types file):
 ```typescript
 export const AttributionContext = createContext<{
-  attributionMap: AttributionMap;
+  entries: CharAttribution[];   // source-agnostic per-character attribution
   byteToCharMap: number[];
   identities: Record<string, ActorIdentity>;
   sourceText: string;  // QMD text from Automerge doc, needed to populate astContext.files[].content
 } | null>(null);
 ```
 
+**Design note (Phase 4 refactor)**: The context deliberately exposes `entries: CharAttribution[]` instead of the full `AttributionMap`. The Automerge-specific bookkeeping (`processedHeads`, `processedHistoryIndex`) stays internal to the hook. This allows a future git blame provider to produce the same context shape without any consumer changes.
+
 ### Phase 3: Wire Context in Editor, Extract + Render in Ast
 
 **Attribution data flows via context**, avoiding prop drilling through PreviewRouter, ReactPreview, and ReactRenderer:
 
-- [ ] `Editor.tsx` — call `useAttribution(currentFile?.path, identities)`, wrap preview area with `AttributionContext.Provider` passing `{ attributionMap, byteToCharMap, identities, sourceText }` where `sourceText` is the current Automerge document content (already available as the text passed to the preview pipeline)
+- [ ] `Editor.tsx` — call `useAttribution(currentFile?.path, identities)`, wrap preview area with `AttributionContext.Provider` passing `{ entries, byteToCharMap, identities, sourceText }` where `sourceText` is the current Automerge document content (already available as the text passed to the preview pipeline)
 
 The `astJson` string flowing through `ReactPreview → ReactRenderer → Ast` is already the full `RustQmdJson` — it contains `astContext` and per-node `s` fields at runtime. No upstream component needs to extract or thread this data.
 

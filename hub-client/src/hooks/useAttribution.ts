@@ -13,7 +13,7 @@ import {
   buildByteToCharMap,
   HistoryCompactedError,
 } from '../services/attribution';
-import type { AttributionMap } from '../services/attribution';
+import type { AttributionMap, CharAttribution } from '../services/attribution';
 import { getFileHandle } from '../services/automergeSync';
 import type { ActorIdentity } from '../services/automergeSync';
 
@@ -22,7 +22,7 @@ import type { ActorIdentity } from '../services/automergeSync';
 // ---------------------------------------------------------------------------
 
 export const AttributionContext = createContext<{
-  attributionMap: AttributionMap;
+  entries: CharAttribution[];
   byteToCharMap: number[];
   identities: Record<string, ActorIdentity>;
   sourceText: string;
@@ -33,7 +33,7 @@ export const AttributionContext = createContext<{
 // ---------------------------------------------------------------------------
 
 interface UseAttributionResult {
-  attributionMap: AttributionMap;
+  entries: CharAttribution[];
   byteToCharMap: number[];
 }
 
@@ -89,7 +89,7 @@ export function useAttribution(
       if (map) {
         const byteToChar = buildByteToCharMap(sourceTextRef.current);
         mapRef.current = map;
-        setResult({ attributionMap: map, byteToCharMap: byteToChar });
+        setResult({ entries: map.entries, byteToCharMap: byteToChar });
       } else {
         mapRef.current = null;
         setResult(null);
@@ -137,7 +137,7 @@ export function useAttribution(
         const updatedMap = updateAttributionMap(mapRef.current, handle, 'text');
         const byteToChar = buildByteToCharMap(sourceText);
         mapRef.current = updatedMap;
-        setResult({ attributionMap: updatedMap, byteToCharMap: byteToChar });
+        setResult({ entries: updatedMap.entries, byteToCharMap: byteToChar });
       } catch (err) {
         if (err instanceof HistoryCompactedError) {
           // History was compacted — need a full rebuild

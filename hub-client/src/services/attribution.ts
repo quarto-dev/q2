@@ -318,7 +318,7 @@ export function buildByteToCharMap(text: string): number[] {
 export function getNodeAttribution(
   sourceInfoId: number,
   reconstructor: SourceInfoReconstructor,
-  attributionMap: AttributionMap,
+  entries: CharAttribution[],
   byteToCharMap: number[],
   identities: Record<string, ActorIdentity>,
 ): NodeAttribution | null {
@@ -337,7 +337,6 @@ export function getNodeAttribution(
   if (charStart === undefined || charEnd === undefined) return null;
 
   // Find the most recent attribution in this range
-  const entries = attributionMap.entries;
   if (entries.length === 0) return null;
 
   // Clamp range to entries bounds

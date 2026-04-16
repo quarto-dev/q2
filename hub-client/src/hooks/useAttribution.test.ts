@@ -95,7 +95,7 @@ describe('useAttribution', () => {
 
     // Now should have the map
     expect(result.current).not.toBeNull();
-    expect(result.current!.attributionMap).toBe(mockMap);
+    expect(result.current!.entries).toBe(mockMap.entries);
   });
 
   it('calls updateAttributionMap on sourceText change when map exists', async () => {
@@ -163,7 +163,7 @@ describe('useAttribution', () => {
     // Wait for rebuild
     await act(async () => {});
 
-    expect(result.current!.attributionMap).toBe(freshMap);
+    expect(result.current!.entries).toBe(freshMap.entries);
   });
 
   it('aborts in-flight build and starts fresh on filePath change', async () => {
@@ -203,7 +203,8 @@ describe('useAttribution', () => {
     await act(async () => {});
 
     expect(result.current).not.toBeNull();
-    expect(result.current!.attributionMap.processedHistoryIndex).toBe(2);
+    expect(result.current).not.toBeNull();
+    expect(result.current!.entries).toHaveLength(1);
   });
 
   it('aborts in-flight build on unmount', async () => {

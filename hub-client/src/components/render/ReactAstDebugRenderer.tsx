@@ -575,7 +575,7 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
                     const result = getNodeAttribution(
                         sourceInfoId,
                         reconstructor,
-                        attributionCtx.attributionMap,
+                        attributionCtx.entries,
                         byteToChar,
                         attributionCtx.identities,
                     );

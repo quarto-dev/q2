@@ -510,17 +510,13 @@ describe('getNodeAttribution', () => {
   }
 
   it('resolves source info to node attribution with correct identity', () => {
-    const map: AttributionMap = {
-      entries: [
-        { actor: 'actor1', time: 1000 },
-        { actor: 'actor1', time: 1000 },
-        { actor: 'actor2', time: 2000 },
-        { actor: 'actor2', time: 2000 },
-        { actor: 'actor2', time: 2000 },
-      ],
-      processedHeads: ['h2'],
-      processedHistoryIndex: 2,
-    };
+    const entries: CharAttribution[] = [
+      { actor: 'actor1', time: 1000 },
+      { actor: 'actor1', time: 1000 },
+      { actor: 'actor2', time: 2000 },
+      { actor: 'actor2', time: 2000 },
+      { actor: 'actor2', time: 2000 },
+    ];
 
     // Source info ID 5 → file 0, bytes 2-5 → chars 2-5 (ASCII)
     const reconstructor = createMockReconstructor({ fileId: 0, start: 2, end: 5 });
@@ -529,7 +525,7 @@ describe('getNodeAttribution', () => {
       actor2: { name: 'Bob', color: '#2196F3' },
     };
 
-    const result = getNodeAttribution(5, reconstructor as any, map, byteToCharMap, identities);
+    const result = getNodeAttribution(5, reconstructor as any, entries, byteToCharMap, identities);
 
     expect(result).not.toBeNull();
     expect(result!.actor).toBe('actor2');
@@ -539,36 +535,28 @@ describe('getNodeAttribution', () => {
   });
 
   it('returns null for invalid source info ID (reconstructor throws)', () => {
-    const map: AttributionMap = {
-      entries: [{ actor: 'actor1', time: 1000 }],
-      processedHeads: ['h1'],
-      processedHistoryIndex: 1,
-    };
+    const entries: CharAttribution[] = [{ actor: 'actor1', time: 1000 }];
 
     const reconstructor = createMockReconstructor(null);
     const byteToCharMap = [0];
     const identities: Record<string, ActorIdentity> = {};
 
-    const result = getNodeAttribution(999, reconstructor as any, map, byteToCharMap, identities);
+    const result = getNodeAttribution(999, reconstructor as any, entries, byteToCharMap, identities);
 
     expect(result).toBeNull();
   });
 
   it('returns null when identities map is empty', () => {
-    const map: AttributionMap = {
-      entries: [
-        { actor: 'actor1', time: 1000 },
-        { actor: 'actor1', time: 1000 },
-      ],
-      processedHeads: ['h1'],
-      processedHistoryIndex: 1,
-    };
+    const entries: CharAttribution[] = [
+      { actor: 'actor1', time: 1000 },
+      { actor: 'actor1', time: 1000 },
+    ];
 
     const reconstructor = createMockReconstructor({ fileId: 0, start: 0, end: 2 });
     const byteToCharMap = [0, 1, 2]; // 2 bytes + end boundary
     const identities: Record<string, ActorIdentity> = {};
 
-    const result = getNodeAttribution(0, reconstructor as any, map, byteToCharMap, identities);
+    const result = getNodeAttribution(0, reconstructor as any, entries, byteToCharMap, identities);
 
     // Should still return attribution even without identity — uses fallback
     // The actor is known, but identity may not have name/color
@@ -577,32 +565,24 @@ describe('getNodeAttribution', () => {
     expect(result!.actor).toBe('actor1');
   });
 
-  it('returns null when attribution map is null-like (empty entries for range)', () => {
-    const map: AttributionMap = {
-      entries: [], // empty
-      processedHeads: ['h1'],
-      processedHistoryIndex: 1,
-    };
+  it('returns null when entries array is empty', () => {
+    const entries: CharAttribution[] = [];
 
     const reconstructor = createMockReconstructor({ fileId: 0, start: 0, end: 5 });
     const byteToCharMap = [0, 1, 2, 3, 4];
     const identities: Record<string, ActorIdentity> = {};
 
-    const result = getNodeAttribution(0, reconstructor as any, map, byteToCharMap, identities);
+    const result = getNodeAttribution(0, reconstructor as any, entries, byteToCharMap, identities);
 
     expect(result).toBeNull();
   });
 
   it('finds most recent attribution in the byte range', () => {
-    const map: AttributionMap = {
-      entries: [
-        { actor: 'actor1', time: 1000 },
-        { actor: 'actor2', time: 3000 }, // most recent
-        { actor: 'actor1', time: 2000 },
-      ],
-      processedHeads: ['h3'],
-      processedHistoryIndex: 3,
-    };
+    const entries: CharAttribution[] = [
+      { actor: 'actor1', time: 1000 },
+      { actor: 'actor2', time: 3000 }, // most recent
+      { actor: 'actor1', time: 2000 },
+    ];
 
     const reconstructor = createMockReconstructor({ fileId: 0, start: 0, end: 3 });
     const byteToCharMap = [0, 1, 2, 3]; // 3 bytes + end boundary
@@ -610,7 +590,7 @@ describe('getNodeAttribution', () => {
       actor2: { name: 'Bob', color: '#E91E63' },
     };
 
-    const result = getNodeAttribution(0, reconstructor as any, map, byteToCharMap, identities);
+    const result = getNodeAttribution(0, reconstructor as any, entries, byteToCharMap, identities);
 
     expect(result).not.toBeNull();
     // Most recent is actor2 at time 3000
