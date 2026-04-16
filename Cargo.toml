@@ -83,9 +83,6 @@ path = "./crates/tree-sitter-qmd"
 [workspace.dependencies.tree-sitter-sexpr]
 path = "./crates/tree-sitter-sexpr"
 
-[workspace.dependencies.wasm-qmd-parser]
-path = "./crates/wasm-qmd-parser"
-
 [workspace.dependencies.pampa]
 path = "./crates/pampa"
 default-features = false

@@ -1,6 +1,9 @@
 /*
  * lib.rs
  * Copyright (c) 2025 Posit, PBC
+ *
+ * DORMANT: This crate does not currently build. The pampa API has evolved
+ * since it was last maintained. See README.md for context.
  */
 
 // C stdlib stubs for wasm32 are now provided by the shared wasm-c-shim crate.
