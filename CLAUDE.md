@@ -228,11 +228,12 @@ When fixing ANY bug:
 - `quarto-treesitter-ast`: generic tree-sitter AST traversal utilities
 
 **WASM:**
-- `wasm-qmd-parser`: WASM module with entry points from `pampa` (see [crates/wasm-qmd-parser/CLAUDE.md](crates/wasm-qmd-parser/CLAUDE.md) for build instructions)
+- `wasm-quarto-hub-client`: WASM client for hub-client (see [crates/wasm-quarto-hub-client/README.md](crates/wasm-quarto-hub-client/README.md) for build instructions)
+- `wasm-qmd-parser`: lightweight parsing-only WASM wrapper around `pampa` (dormant — kept for future use)
 
 ### `hub-client/` - Quarto Hub web client
 
-A React/TypeScript web application for collaborative editing of Quarto projects. Uses Automerge for real-time sync and the WASM build of `wasm-qmd-parser` for live preview rendering.
+A React/TypeScript web application for collaborative editing of Quarto projects. Uses Automerge for real-time sync and the WASM build of `wasm-quarto-hub-client` for live preview rendering.
 
 **Key directories:**
 - `src/components/` - React components (Editor, FileSidebar, tabs, etc.)
@@ -266,7 +267,8 @@ All VFS file paths use the `/project/` prefix. When resolving file paths in WASM
 
 - `pampa` is the core Quarto engine crate
 - `quarto-core` handles higher-level orchestration
-- `wasm-quarto-hub-client` is the WASM client (NOT wasm-qmd-parser)
+- `wasm-quarto-hub-client` is the active WASM client for hub-client
+- `wasm-qmd-parser` is dormant — a lightweight parsing-only WASM wrapper kept for future use
 - Always check `git diff` for uncommitted changes before starting work on a continuation session
 
 ## hub-client Commit Instructions

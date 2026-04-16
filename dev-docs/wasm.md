@@ -44,3 +44,10 @@ WASM-specific code paths use `#[cfg(target_arch = "wasm32")]` guards — never
 
 Hub-client integration tests (`npm run test:ci`) exercise the compiled WASM module through
 the JavaScript API.
+
+## wasm-qmd-parser (dormant)
+
+A lightweight WASM wrapper around `pampa` only, without the full `quarto-core` rendering
+stack. Currently dormant — the crate skeleton is kept for future use as a smaller, faster
+WASM module for contexts that only need parsing (not full document rendering). It will need
+updates to match the current `pampa` API before it can build again.
