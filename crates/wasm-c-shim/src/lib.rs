@@ -24,3 +24,12 @@
 
 #[cfg(target_arch = "wasm32")]
 mod shim;
+
+/// Marker payload for panics raised by `rust_lua_throw` (the WASM replacement
+/// for Lua's `LUAI_THROW`). Each Lua error inside `lua_pcall` produces one
+/// such panic, which `rust_lua_protected_call` catches microseconds later.
+///
+/// Hosts that install a custom panic hook (e.g. wasm-quarto-hub-client) can
+/// downcast to this type to filter expected Lua control-flow panics out of
+/// console.error logs without suppressing real Rust panics.
+pub struct LuaThrow;

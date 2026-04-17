@@ -3408,6 +3408,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-c-shim"
+version = "0.0.0"
+
+[[package]]
 name = "wasm-quarto-hub-client"
 version = "0.1.0"
 dependencies = [
@@ -3430,6 +3434,7 @@ dependencies = [
  "serde_yaml",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-c-shim",
  "web-sys",
  "yaml-rust2",
 ]
