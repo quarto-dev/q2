@@ -19,7 +19,7 @@ quarto-lsp-core = { path = "../quarto-lsp-core" }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-sass = { path = "../quarto-sass" }
 quarto-source-map = { path = "../quarto-source-map" }
-quarto-system-runtime = { path = "../quarto-system-runtime" }
+quarto-system-runtime = { path = "../quarto-system-runtime", features = ["js-bridge"] }
 quarto-project-create = { path = "../quarto-project-create" }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

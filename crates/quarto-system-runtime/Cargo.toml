@@ -7,6 +7,17 @@ license.workspace = true
 repository.workspace = true
 description = "Runtime abstraction layer for Quarto system operations"
 
+[features]
+# Enables wasm-bindgen `raw_module` imports of the JS bridge files at
+# /src/wasm-js-bridge/{template,sass,cache,fetch}.js.
+#
+# Hub-client provides those JS modules at runtime via Vite. Off-by-default
+# because non-hub-client wasm32 binaries (e.g. wasm-bindgen-test runs of
+# pampa) have no bridge to require — Node.js fails to resolve the absolute
+# paths at module load. With the feature off, the impls return errors.
+default = []
+js-bridge = []
+
 [dependencies]
 # Async methods in traits
 async-trait.workspace = true
