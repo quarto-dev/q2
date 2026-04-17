@@ -12,15 +12,7 @@
 #[cfg(target_arch = "wasm32")]
 extern crate wasm_c_shim;
 
-/// Sentinel panic payload raised by `c_shim::rust_lua_throw`.
-///
-/// On wasm32 Lua's `LUAI_THROW` macro cannot use `setjmp`/`longjmp`, so
-/// it is rewired to raise a Rust panic that `rust_lua_protected_call`
-/// catches via `catch_unwind`. This happens on every Lua runtime error —
-/// including ones caught by `pcall` — so the panic is expected control
-/// flow. The `init()` panic hook filters panics carrying this payload
-/// so they do not spam `console.error` with stack traces.
-pub struct LuaThrow;
+use wasm_c_shim::LuaThrow;
 
 use std::cell::RefCell;
 use std::path::Path;

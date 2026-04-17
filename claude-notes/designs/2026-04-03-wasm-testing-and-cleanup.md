@@ -413,6 +413,91 @@ extern crate wasm_c_shim;
   registers synthetic io/os, but only integration tests verify they actually work
   when called from Lua during filter execution on real wasm32.
 
+## JS bridge isolation and panic strategy (2026-04-17)
+
+After Phase 4 landed, the `wasm-tests` CI job failed at the
+`wasm-bindgen-test-runner` step (Node.js execution) before any test body
+ran, with `MODULE_NOT_FOUND` for `/src/wasm-js-bridge/cache.js`. Two
+distinct issues were uncovered, both originating in production code that
+had never previously been exercised on the wasm32 test path.
+
+### Finding 1: `raw_module` extern blocks load unconditionally
+
+`crates/quarto-system-runtime/src/wasm.rs` declares four
+`#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/{template,sass,cache,fetch}.js")]`
+extern blocks. Hub-client serves these JS files at runtime through Vite,
+and `wasm-bindgen` generates `require()` calls for each one in the JS
+shim it produces. The `require()` happens at module-load time regardless
+of whether the test ever calls into JavaScript, so any wasm32 binary
+that links `quarto-system-runtime` cannot load under Node.js — the
+absolute paths don't resolve on disk.
+
+The pampa wasm tests pull in `quarto-system-runtime` transitively
+(`WasmRuntime`, `LuaShortcodeEngine`), so the failure surfaced as soon
+as Phase 3 tests reached the runner step. Production never tripped this
+because the only wasm32 consumer (`wasm-quarto-hub-client`) runs in a
+browser where Vite resolves the paths.
+
+**Fix:** add a `js-bridge` Cargo feature to `quarto-system-runtime`,
+default off. Gate the four extern blocks behind the feature, and provide
+stub modules that return `Err(JsValue::from_str("js-bridge feature not enabled"))`
+or `false` when off so the `SystemRuntime` impl still compiles.
+`wasm-quarto-hub-client/Cargo.toml` opts in via
+`features = ["js-bridge"]`. Pampa's wasm test build does not, so the
+`require()` calls disappear from the generated shim.
+
+### Finding 2: workspace wasm32 builds inherit `panic = "abort"`
+
+With Finding 1 resolved, the test runner loaded the module successfully
+and reached the test bodies — at which point all six tests failed in
+`wasm-c-shim::rust_lua_throw` with the wasm error `RuntimeError: unreachable`.
+
+The `wasm-c-shim` crate replaces Lua's `setjmp`/`longjmp` with
+`panic!()`/`catch_unwind` (since wasm32 has no native unwinding). For
+this substitution to work, the binary's panic strategy must be `unwind`,
+not the wasm32 default of `abort`. Under `panic=abort`, `panic!()`
+lowers directly to the wasm `unreachable` instruction and `catch_unwind`
+becomes a compile-time no-op that always returns `Ok` — so the first
+Lua throw during mlua's protected init aborts the module.
+
+The CI command's `-Zbuild-std=std,panic_unwind,panic_abort` only ensures
+the unwind runtime is *available* in std; it does not change the
+binary's panic strategy. Three additional flags are required:
+`-C panic=unwind`, `-C target-feature=+exception-handling`, and
+`-Zwasm-c-abi=spec`. `wasm-quarto-hub-client/.cargo/config.toml` already
+sets all three, but that config lives in an isolated workspace and never
+reaches builds invoked from the workspace root. Production never tripped
+this because hub-client builds always use the local config.
+
+**Fix:** mirror the rustflags into the workspace-root `.cargo/config.toml`
+under `[target.wasm32-unknown-unknown]`. `[unstable] build-std` is
+deliberately *not* added to the workspace config — it is not target-scoped,
+so adding it would force `build-std` for every native invocation from the
+root. The `-Zbuild-std` flag stays on the test command (and in CI).
+
+### Finding 3: `LuaThrow` marker placement (rebase artifact)
+
+While this branch was open, main landed `Suppress noisy 'lua error' panic
+stack traces in WASM console` (commit `675c22d2`), which introduced a
+`LuaThrow` marker struct in `wasm-quarto-hub-client/src/lib.rs` and
+changed `rust_lua_throw` from `panic!("lua error")` to
+`std::panic::panic_any(crate::LuaThrow)`. Hub-client's panic hook
+downcasts to `LuaThrow` to filter expected control-flow panics out of
+console.error.
+
+When this branch's "Extract C stdlib shims into shared wasm-c-shim crate"
+commit was rebased onto that change, `crate::LuaThrow` no longer
+resolved — the shim moved out of `wasm-quarto-hub-client`, so `crate::`
+points elsewhere.
+
+**Fix:** the marker belongs in `wasm-c-shim` (where the panic
+originates), not in the hub-client (where the hook lives). Moved the
+`pub struct LuaThrow;` definition into `crates/wasm-c-shim/src/lib.rs`
+and have `wasm-quarto-hub-client/src/lib.rs` import it via
+`use wasm_c_shim::LuaThrow;`. Behavior is preserved; the dependency
+direction is now consistent (hub-client depends on the shim, not
+vice-versa).
+
 ## Out of scope
 
 - Migrating wasm-pack usage (no longer needed — only stale crate used it)

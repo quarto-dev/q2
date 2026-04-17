@@ -27,7 +27,7 @@ quarto-lsp-core = { path = "../quarto-lsp-core" }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-sass = { path = "../quarto-sass" }
 quarto-source-map = "0.1.0"
-quarto-system-runtime = { path = "../quarto-system-runtime" }
+quarto-system-runtime = { path = "../quarto-system-runtime", features = ["js-bridge"] }
 quarto-project-create = { path = "../quarto-project-create" }
 quarto-trace = { path = "../quarto-trace" }
 flate2 = "1.1"

@@ -55,9 +55,62 @@ These shims live in `crates/wasm-c-shim/`, a workspace member that is a no-op on
 targets (all exports gated on `cfg(target_arch = "wasm32")`). Both `wasm-quarto-hub-client`
 (production) and `pampa` WASM tests (dev-dependency) link against it.
 
+The crate also replaces Lua's `LUAI_THROW`/`LUAI_TRY` macros (normally `setjmp`/`longjmp`)
+with `panic!()` / `catch_unwind`, since wasm32 has no native unwinding. The panic payload
+is `wasm_c_shim::LuaThrow`, a public marker type. Hosts that install a custom panic hook
+(e.g. `wasm-quarto-hub-client`'s `init()`) can downcast to `LuaThrow` to filter expected
+Lua control-flow panics out of `console.error` without suppressing real Rust panics.
+
 **Edition note:** `wasm-c-shim` uses edition 2021, not the workspace default of 2024.
 Edition 2024 requires explicit `unsafe {}` blocks inside `unsafe fn`, which would add
 noise to ~65 FFI shim functions with no safety benefit.
+
+### Wasm32 panic strategy and rustflags
+
+The `wasm-c-shim` `panic`/`catch_unwind` substitution only works when the binary's panic
+strategy is `unwind`. The wasm32-unknown-unknown default is `abort`, under which `panic!()`
+lowers to the wasm `unreachable` instruction and `catch_unwind` becomes a compile-time
+no-op — meaning the first Lua throw during mlua initialization aborts the whole module.
+
+Three flags must be set on every wasm32 build that touches `wasm-c-shim`:
+
+```
+-C target-feature=+bulk-memory,+exception-handling
+-C panic=unwind
+-Zwasm-c-abi=spec
+```
+
+These live in two `.cargo/config.toml` files so they apply both to the production build
+and to wasm32 invocations from the workspace root:
+
+- `crates/wasm-quarto-hub-client/.cargo/config.toml` — used when `build-wasm.js` builds
+  the production cdylib from the isolated hub-client workspace.
+- `.cargo/config.toml` (workspace root) — used by `cargo test --target wasm32-unknown-unknown`
+  invocations from the monorepo root, including the `pampa wasm_lua` tests.
+
+`[unstable] build-std` is **not** in the workspace-root config because the `[unstable]` table
+is not target-scoped — adding it would force `build-std` for every native invocation. The
+`-Zbuild-std` flag stays on the test command and in CI.
+
+### JS bridge feature gate (`quarto-system-runtime`)
+
+`quarto-system-runtime/src/wasm.rs` declares four
+`#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/{template,sass,cache,fetch}.js")]`
+extern blocks. Hub-client serves these JS modules at runtime through Vite, but
+`wasm-bindgen` generates unconditional `require()` calls for the absolute paths in the
+JS shim it produces. Under Node.js (where `wasm-bindgen-test-runner` runs), the paths do
+not resolve and module load fails with `MODULE_NOT_FOUND`.
+
+To keep test wasm builds loadable, the four extern blocks are gated behind a
+`js-bridge` Cargo feature on `quarto-system-runtime` (default off). When the feature
+is off, stub modules return `Err(JsValue::from_str("js-bridge feature not enabled"))` or
+`false`, preserving the `SystemRuntime` impl. `wasm-quarto-hub-client/Cargo.toml` opts in:
+
+```toml
+quarto-system-runtime = { path = "../quarto-system-runtime", features = ["js-bridge"] }
+```
+
+Pampa's wasm test build does not, so the `require()` calls disappear from the generated shim.
 
 ## Testing
 
@@ -81,8 +134,16 @@ Run locally (Linux/macOS with LLVM):
 CC_wasm32_unknown_unknown=clang \
 CFLAGS_wasm32_unknown_unknown="-isystem $PWD/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
 cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
-  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort
+  --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
 ```
+
+The `-C panic=unwind`, `+exception-handling`, and `-Zwasm-c-abi=spec` flags are picked up
+automatically from the workspace-root `.cargo/config.toml` — see "Wasm32 panic strategy
+and rustflags" above. Only `panic_unwind` is needed in `-Zbuild-std` because the binary
+uses the unwind strategy; `panic_abort` is unused.
+
+On macOS, Apple's bundled clang does not include the wasm32 target. Use Homebrew LLVM
+instead: `CC_wasm32_unknown_unknown=/opt/homebrew/opt/llvm/bin/clang`.
 
 **Important notes:**
 

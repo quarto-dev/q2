@@ -1144,3 +1144,74 @@ br sync --flush-only
 git add .beads/
 git commit -m "Sync beads: close bd-itj9 WASM testing and cleanup"
 ```
+
+---
+
+## Phase 7: Post-CI follow-up findings (2026-04-17)
+
+After Phase 4's CI job started executing, two production-side issues
+surfaced in the test path that did not affect the production wasm32
+build. Both fixes landed on this branch; design rationale in the design
+spec section "JS bridge isolation and panic strategy (2026-04-17)".
+
+### Task 27: Feature-gate JS bridge in `quarto-system-runtime`
+
+- [x] Add `js-bridge` Cargo feature (default off) to
+  `crates/quarto-system-runtime/Cargo.toml`.
+- [x] Gate the four `#[wasm_bindgen(raw_module = ...)]` extern blocks in
+  `crates/quarto-system-runtime/src/wasm.rs` behind
+  `#[cfg(feature = "js-bridge")]`.
+- [x] Provide stub modules under `#[cfg(not(feature = "js-bridge"))]`
+  that return `Err(JsValue::from_str("js-bridge feature not enabled"))`
+  or `false`, matching the original signatures so the `SystemRuntime`
+  impl still compiles.
+- [x] Opt in from `crates/wasm-quarto-hub-client/Cargo.toml`:
+  `quarto-system-runtime = { ..., features = ["js-bridge"] }`.
+
+Without this gate, `wasm-bindgen-test-runner` (Node.js) fails to load
+the module with `MODULE_NOT_FOUND` for `/src/wasm-js-bridge/cache.js`,
+since the absolute paths only resolve under Vite.
+
+### Task 28: Set `panic=unwind` for workspace wasm32 builds
+
+- [x] Add to `[target.wasm32-unknown-unknown]` in workspace
+  `.cargo/config.toml`:
+  ```toml
+  rustflags = [
+      "-C", "target-feature=+bulk-memory,+exception-handling",
+      "-C", "panic=unwind",
+      "-Zwasm-c-abi=spec",
+  ]
+  ```
+- [x] Do **not** add `[unstable] build-std` to the workspace config —
+  the `[unstable]` table is not target-scoped, so it would force
+  build-std on every native invocation. `-Zbuild-std` stays on the test
+  command and in CI.
+
+Without these flags the binary inherits the wasm32 default of
+`panic=abort`, which makes `wasm-c-shim::rust_lua_protected_call`'s
+`catch_unwind` a no-op. The first Lua throw during mlua initialization
+then aborts the wasm module rather than being caught.
+
+### Task 29: Move `LuaThrow` into `wasm-c-shim` (rebase resolution)
+
+- [x] Move `pub struct LuaThrow;` from
+  `crates/wasm-quarto-hub-client/src/lib.rs` into
+  `crates/wasm-c-shim/src/lib.rs` (where the panic actually originates).
+- [x] Update `crates/wasm-quarto-hub-client/src/lib.rs` to
+  `use wasm_c_shim::LuaThrow;` for its panic-suppression hook.
+
+The marker struct was introduced on main while this branch was open
+(`Suppress noisy 'lua error' panic stack traces in WASM console`). After
+rebase, `crate::LuaThrow` in the extracted shim no longer resolved.
+
+### Task 30: Local test verification
+
+- [x] All 6 `pampa wasm_lua` tests pass on `wasm32-unknown-unknown`
+  via `wasm-bindgen-test-runner` / Node.js.
+- [x] `cargo check --workspace` clean (native).
+- [x] `cargo check --target wasm32-unknown-unknown` clean for
+  `wasm-quarto-hub-client`.
+
+Note: `cargo xtask verify` was not re-run locally — these changes
+should be exercised by the existing `wasm-tests` CI job once pushed.
