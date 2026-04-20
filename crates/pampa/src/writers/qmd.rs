@@ -2045,3 +2045,68 @@ fn write_impl<T: std::io::Write>(
     }
     Ok(())
 }
+
+/// Serialize a Pandoc AST to QMD bytes and return source provenance.
+///
+/// The returned `SourceInfo::Concat` maps byte ranges in the output to the
+/// `source_info` of the AST nodes that produced them. The pieces tile the
+/// entire output with no gaps: YAML frontmatter is one piece, and each
+/// top-level block (including its preceding blank-line separator) is one piece.
+///
+/// Use `source_info.map_offset(byte_offset, &source_context)` to resolve a
+/// position in the serialized text back to the original source file and line.
+pub fn write_with_source_info(
+    pandoc: &Pandoc,
+) -> Result<(Vec<u8>, quarto_source_map::SourceInfo), Vec<quarto_error_reporting::DiagnosticMessage>>
+{
+    let mut ctx = QmdWriterContext::new();
+    let mut buf = Vec::new();
+
+    let source_info = match write_impl_tracked(pandoc, &mut buf, &mut ctx) {
+        Ok(si) => si,
+        Err(e) => {
+            return Err(vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write QMD output: {}", e))
+                    .build(),
+            ]);
+        }
+    };
+
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
+
+    Ok((buf, source_info))
+}
+
+/// Like `write_impl` but tracks which AST node produced each byte range.
+fn write_impl_tracked(
+    pandoc: &Pandoc,
+    buf: &mut Vec<u8>,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<quarto_source_map::SourceInfo> {
+    let mut pieces: Vec<(quarto_source_map::SourceInfo, usize)> = Vec::new();
+
+    // Track YAML frontmatter as a single piece
+    let meta_start = buf.len();
+    let mut need_newline = write_config_value_meta(&pandoc.meta, buf, ctx)?;
+    let meta_len = buf.len() - meta_start;
+    if meta_len > 0 {
+        pieces.push((pandoc.meta.source_info.clone(), meta_len));
+    }
+
+    // Track each block — include preceding blank line in measurement
+    for block in &pandoc.blocks {
+        let start = buf.len();
+        if need_newline {
+            writeln!(buf)?;
+        }
+        write_block(block, buf, ctx)?;
+        pieces.push((block.source_info().clone(), buf.len() - start));
+        need_newline = true;
+    }
+
+    Ok(quarto_source_map::SourceInfo::concat(pieces))
+}
