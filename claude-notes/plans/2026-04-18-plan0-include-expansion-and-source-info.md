@@ -61,15 +61,20 @@ remapping is deferred as an open question.
 
 ```
 Current:
-  Parse → MetadataMerge → EngineExec → CompileThemeCss →
+  Parse → MetadataMerge → PreEngineSugaring → EngineExec → CompileThemeCss →
     UserFilters(pre) → AstTransforms(ALL shortcodes) → UserFilters(post) →
     RenderHtmlBody → ApplyTemplate
 
 After Plan 0:
-  Parse → MetadataMerge → IncludeExpansion(NEW) → EngineExec → CompileThemeCss →
-    UserFilters(pre) → AstTransforms(non-include shortcodes) → UserFilters(post) →
-    RenderHtmlBody → ApplyTemplate
+  Parse → MetadataMerge → IncludeExpansion(NEW) → PreEngineSugaring → EngineExec →
+    CompileThemeCss → UserFilters(pre) → AstTransforms(non-include shortcodes) →
+    UserFilters(post) → RenderHtmlBody → ApplyTemplate
 ```
+
+**Ordering rationale:** `IncludeExpansion` must run before `PreEngineSugaring`
+because included files may contain cross-references that `PreEngineSugaring`
+needs to index (it seeds `RefTypeRegistry` and builds `CrossrefIndex`). Both
+must run before `EngineExec`.
 
 **Note on non-QMD files:** Plan 1b restructures the pipeline entry point so
 that `claimsFile` (engine detection Phase 1) runs before `ParseDocument`.
@@ -80,17 +85,58 @@ SourceInfo) applies equally regardless of whether the input started as QMD
 or was converted from another format — by the time include expansion runs,
 the AST is the same either way.
 
-## Phase order
+## Prerequisites
 
-Phase 0A → Phase 0B → Phase 0C
+### Prerequisite: `Block::source_info()` and `Inline::source_info()` accessors
 
-Phase 0A (include expansion) and Phase 0B (QMD writer SourceInfo) are
-independent in implementation but Phase 0C (wiring + integration tests)
-depends on both.
+Every `Block` variant's inner struct has `pub source_info: SourceInfo`, but
+there is no enum-level accessor. The codebase has **4 independent copies** of
+a `get_block_source_info` / `block_source_info` free function scattered
+across pampa (`writers/incremental.rs`, `pandoc/treesitter.rs`,
+`pandoc/treesitter_utils/postprocess.rs`, `lua/diagnostics.rs`) plus one
+in a test file (`tests/incremental_writer_investigation.rs`). A similar
+`get_inline_source_info` exists in `lua/diagnostics.rs`.
+
+**Action (separate commit before Phase 0A/0B):**
+1. Add `impl Block { pub fn source_info(&self) -> &SourceInfo }` in
+   `quarto-pandoc-types/src/block.rs` — match on all variants. Every
+   variant's inner struct has a `source_info` field, so this always
+   returns a reference.
+2. **Restructure `Inline::Attr`** to include a `source_info: SourceInfo`
+   field. Currently `Inline::Attr(Attr, AttrSourceInfo)` is a tuple
+   variant where `Attr` is `(String, Vec<String>, LinkedHashMap<...>)` —
+   it has no `SourceInfo`. `AttrSourceInfo` tracks per-component source
+   locations and has a `combined()` method that merges them into a single
+   `SourceInfo`. Add a precomputed `source_info: SourceInfo` field
+   (computed from `AttrSourceInfo::combined()` at construction time).
+   Update all `Inline::Attr` construction sites.
+3. Add `impl Inline { pub fn source_info(&self) -> &SourceInfo }` in
+   `quarto-pandoc-types/src/inline.rs` — match on all variants. With the
+   `Attr` restructuring, every variant now has a `source_info` field to
+   borrow from, giving both enums the uniform `-> &SourceInfo` API.
+4. Replace all 4+ duplicate free functions with calls to the new methods.
+5. Run `cargo nextest run --workspace` to verify no regressions.
+
+This is a standalone cleanup that Phase 0B (QMD writer tracking) and
+Phase 0A (AST walking) both benefit from.
+
+## Commit order
+
+Four commits, in this order:
+
+1. **Prerequisite** — `Inline::Attr` restructure + `source_info()` accessors + dedup
+2. **Phase 0B** — QMD writer `write_with_source_info` + its unit tests
+3. **Phase 0C wiring** — `ExecutionContext` fields + `serialize_ast_to_qmd` update + single-file SourceInfo tests
+4. **Phase 0A** — Include expansion stage + all include tests (unit tests, integration tests, and tests that verify SourceInfo through include boundaries)
+
+Phases 0B and 0C are include-independent SourceInfo infrastructure. They
+land first so that when Phase 0A adds include expansion, the full
+SourceInfo chain (include → QMD writer → ExecutionContext → map_offset)
+can be tested end-to-end in the same commit.
 
 ## Work Items
 
-### Phase 0A: Include shortcode expansion stage
+### Phase 0A: Include shortcode expansion stage (commit 4)
 
 New pipeline stage that resolves `include` shortcodes in the AST before
 engine execution.
@@ -107,24 +153,47 @@ handling from scratch.
   Implements `PipelineStage`. Input/output: `DocumentAst`.
 
 - [ ] Implement AST walking to find include shortcodes:
-  - Walk all blocks looking for `Inline::Shortcode` nodes where `name == "include"`
-  - Include shortcodes can appear as:
-    - Inline: `{{< include file.qmd >}}`
-    - Block-level: a `Paragraph` containing only the shortcode (common case)
+  - Walk all blocks looking for `Paragraph` nodes whose sole inline content
+    is an `Inline::Shortcode` where `name == "include"`
+  - **Block-level only:** Quarto 1 only expands includes that occupy an
+    entire line (`isBlockShortcode` in `parse-shortcode.ts` uses regex
+    `^\s*{{< ... >}}\s*$`). The AST-level equivalent is: the shortcode is
+    the only child of a `Paragraph`. If an include shortcode appears inline
+    among other inlines (e.g., `text {{< include f.qmd >}} more`), leave it
+    in place — `ShortcodeResolveTransform` will encounter it later and can
+    warn or pass it through. This matches Quarto 1 behavior where inline
+    includes are silently not expanded.
   - Extract the file path from the shortcode's first positional argument
 
-- [ ] Implement include resolution:
+- [ ] Implement include resolution using the **parse-then-remap pattern**
+  (same approach as `EngineExecutionStage` at engine_execution.rs:267-311):
+
   1. Resolve the included file path relative to the including file's directory
-  2. Read the included file
-  3. Register it in `SourceContext` (so its `FileId` is available for SourceInfo)
-  4. Parse it with pampa (`readers::qmd::read`) with source tracking enabled,
-     passing the `FileId` so AST nodes get `SourceInfo::Original` pointing
-     to the included file
-  5. Replace the shortcode node with the parsed AST nodes:
-     - If block-level (paragraph containing only the shortcode): replace the
-       paragraph with the included blocks
-     - If inline: splice the included content inline (or wrap in a Span)
-  6. Merge the included file's `AstContext` into the main document's
+  2. Read the included file via `ctx.runtime.file_read(&path)` — use the
+     `SystemRuntime` trait (not `std::fs::read`) so this works in WASM contexts
+  3. Parse the included file with pampa (`readers::qmd::read`). This creates
+     a fresh `ASTContext` where the included file is `FileId(0)`.
+  4. **Remap FileIds**: The main document already uses `FileId(0)` (and
+     possibly higher for earlier includes). Register the included file in
+     the main document's `ast_context.source_context` to get a new `FileId`
+     (e.g., `FileId(N)`). Then call `remap_file_ids` on the parsed AST to
+     shift `FileId(0) → FileId(N)`. Use the existing
+     `quarto_ast_reconcile::remap_file_ids` or the `SourceInfo::remap_file_ids`
+     method.
+  5. **Register in BOTH SourceContexts on DocumentAst** (they serve different
+     purposes and both need the included file):
+     - `doc_ast.ast_context.source_context` — carry over the `FileInformation`
+       from the parsed file's `ASTContext` (needed for `map_offset` line/column
+       resolution). Use `add_file_with_info` if `FileInformation` is available,
+       otherwise `add_file`.
+     - `doc_ast.source_context` — register with `add_file(path, Some(content))`
+       so ariadne can render error snippets from included files.
+     - Both registrations must use the same `FileId(N)`.
+  6. Merge the included file's `ast_context.filenames` into the main document's
+     `ast_context.filenames`.
+  7. Replace the `Paragraph` containing the shortcode with the included
+     file's blocks (after stripping the included file's YAML frontmatter —
+     i.e., take `parsed.blocks` and discard `parsed.meta`)
 
 - [ ] Handle recursive includes:
   - After splicing, re-walk the newly inserted nodes for more include shortcodes
@@ -140,13 +209,16 @@ handling from scratch.
 
 - [ ] Wire into pipeline in `pipeline.rs`:
   - Insert `IncludeExpansionStage` between `MetadataMergeStage` and
-    `EngineExecutionStage`
+    `PreEngineSugaringStage` (before `EngineExecutionStage`). Include
+    expansion must precede PreEngineSugaring because included files may
+    contain cross-references that need indexing.
   - `ShortcodeResolveTransform` in `AstTransforms` continues to handle
     `meta`, `var`, `env`, Lua shortcodes — it simply won't encounter any
     include shortcodes (they're already resolved)
 
 - [ ] Tests:
-  - Unit test: simple include — shortcode node replaced by included content
+  - Unit test: simple include — paragraph with shortcode replaced by included
+    file's blocks
   - Unit test: recursive include — file A includes file B which includes file C
   - Unit test: circular include — A includes B includes A → error diagnostic
   - Unit test: missing file → error diagnostic, not panic
@@ -156,11 +228,21 @@ handling from scratch.
     in CodeBlock.text, not a Shortcode node)
   - Unit test: block-level include (paragraph with only the shortcode) →
     included blocks replace the paragraph
-  - Unit test: included file with YAML frontmatter → frontmatter stripped
+  - Unit test: inline include (shortcode among other inlines in a paragraph)
+    → shortcode is NOT expanded, left in place for ShortcodeResolveTransform
+    (matches Quarto 1 behavior where only whole-line includes are expanded)
+  - Unit test: included file with YAML frontmatter → frontmatter stripped,
+    only body blocks spliced
   - Integration test: document with `{{< include >}}` containing a code cell
     → after include expansion, the code cell's CodeBlock is present in the AST
+  - Integration test (end-to-end SourceInfo through includes): full pipeline
+    with include → engine receives text → SourceInfo maps byte offset in
+    engine input back to included file
+  - Integration test: verify `map_offset` works for a code block from an
+    included file (offset in serialized QMD → correct file + line in the
+    included source)
 
-### Phase 0B: QMD writer produces SourceInfo
+### Phase 0B: QMD writer produces SourceInfo (commit 2)
 
 Extend the QMD writer to build a `SourceInfo::Concat` that maps byte ranges
 in the serialized output to the `source_info` of the AST nodes that produced
@@ -171,46 +253,114 @@ expansion at the text level (producing a MappedString directly). In q2,
 include expansion happens at the AST level, and the engine receives
 serialized QMD — so the serializer must construct the provenance.
 
-- [ ] Change `serialize_ast_to_qmd` return type:
+- [ ] Add `write_with_source_info` to pampa's QMD writer:
+  ```rust
+  // New public API — owns buffer, returns bytes + SourceInfo
+  pub fn write_with_source_info(
+      pandoc: &Pandoc,
+  ) -> Result<(Vec<u8>, SourceInfo), Vec<DiagnosticMessage>>
+  ```
+  The existing `write(&Pandoc, &mut impl Write)` is unchanged. All ~19
+  other callsites are unaffected.
+
+  The new function owns a `Vec<u8>` internally so it can read `buf.len()`
+  at block boundaries. It calls a `write_impl_tracked` variant of the
+  15-line top-level loop that records `buf.len()` before/after each
+  `write_block` call. The entire `write_block` → `write_inline` → 40
+  internal helper tree is shared and untouched.
+
+- [ ] Track provenance for the **entire output** with no gaps:
+
+  The Concat must tile the full output buffer so that `SourceInfo::concat()`
+  (which computes cumulative `offset_in_concat` values) produces correct
+  offsets. Any gap would shift all subsequent pieces, causing lookups by
+  engine-reported byte offsets to land in the wrong piece.
+
+  `write_impl_tracked` works as follows:
+
+  ```rust
+  let mut pieces = Vec::new();
+
+  // Track YAML frontmatter as a single piece
+  let meta_start = buf.len();
+  let mut need_newline = write_config_value_meta(&pandoc.meta, buf, ctx)?;
+  let meta_len = buf.len() - meta_start;
+  if meta_len > 0 {
+      pieces.push((pandoc.meta.source_info.clone(), meta_len));
+  }
+
+  // Track each block — include preceding blank line in measurement
+  for block in &pandoc.blocks {
+      let start = buf.len();
+      if need_newline { writeln!(buf)?; }
+      write_block(block, buf, ctx)?;
+      pieces.push((block.source_info().clone(), buf.len() - start));
+      need_newline = true;
+  }
+
+  Ok(SourceInfo::concat(pieces))
+  ```
+
+  By measuring each block from **before** the separating blank line, the
+  pieces tile the entire buffer with no gaps. The blank line between blocks
+  is attributed to the following block (at worst one line off within a
+  block, which is acceptable). YAML frontmatter is tracked via
+  `pandoc.meta.source_info`.
+
+  **Known limitation:** After `MetadataMergeStage`, `pandoc.meta.source_info`
+  may be `SourceInfo::default()` due to a pre-existing bug in
+  `MergedConfig::materialize()` that drops map container source_info
+  (tracked as `bd-2mxo`). This means byte offsets landing in the YAML
+  frontmatter region of the serialized QMD will resolve to "origin unknown"
+  rather than pointing to the actual frontmatter location. Individual
+  metadata scalar values retain their source_info, but the container does
+  not. Fixing this is orthogonal to Plan 0.
+
+  Per-top-level-block is sufficient for the engine use case: engine errors
+  report line numbers, lines fall within blocks, and blocks carry SourceInfo
+  pointing to their origin file (including through include boundaries).
+  Finer granularity (per-inline) can be added later if needed by
+  instrumenting the internal write functions.
+
+  **Accuracy note:** Code block content is written verbatim
+  (`write!(buf, "{}", codeblock.text)`), so within-block byte offsets for
+  code are exact. Only fencing/attribute formatting may differ from the
+  original source, making within-block mapping approximate by at most a
+  few bytes of fence overhead. For engine error reporting (which targets
+  code lines, not fence lines), this is negligible.
+
+- [ ] Handle blocks with `SourceInfo::default()` (no provenance):
+  record a Concat piece with default SourceInfo. `map_offset` through
+  default SourceInfo resolves to `FileId(0)` offset 0 — callers should
+  treat unexpected locations as "origin unknown."
+
+- [ ] The wrapper `serialize_ast_to_qmd` in `engine_execution.rs` calls the
+  new API and returns `(String, SourceInfo)`:
   ```rust
   fn serialize_ast_to_qmd(ast: &Pandoc) -> Result<(String, SourceInfo), PipelineError>
   ```
 
-- [ ] Modify the QMD writer to track provenance as it writes:
-  - Maintain a `Vec<SourcePiece>` accumulator
-  - Before writing each AST node, record the current buffer offset
-  - After writing, record the end offset and associate with the node's
-    `source_info`
-  - Build `SourceInfo::Concat { pieces }` from the accumulated pieces
-
-  The granularity should be at the block/inline level — each `CodeBlock`,
-  `Paragraph`, `Header`, `Str`, etc. contributes a piece. Whitespace
-  between blocks (blank lines, indentation) that doesn't come from a
-  specific AST node can use `SourceInfo::default()`.
-
-- [ ] Handle the case where AST nodes have `SourceInfo::default()` (no
-  provenance): the corresponding Concat piece just has a default SourceInfo.
-  This is fine — it means "this part of the serialized text has no known
-  origin." Error mapping through such a piece returns `None`, which is the
-  correct answer.
-
 - [ ] Tests:
   - Unit test: serialize a simple AST, verify the returned SourceInfo is a
-    Concat with pieces covering the full output length
-  - Unit test: given a byte offset in the serialized output, `map_offset`
+    Concat with pieces covering the **entire** output (frontmatter + blocks)
+  - Unit test: given a byte offset in a block's region, `map_offset`
     resolves to the correct original file and position
-  - Unit test: AST with nodes from two different files (simulating include
-    expansion) → SourceInfo maps to the correct file for each region
-  - Unit test: byte offset in whitespace between blocks → `map_offset`
-    returns `None` (no provenance for filler whitespace)
+  - Unit test: given a byte offset in the YAML frontmatter region,
+    `map_offset` resolves to the frontmatter's source location (note:
+    after metadata merge, `meta.source_info` may be default due to
+    `bd-2mxo` — test with a pre-merge AST or a manually constructed
+    meta with real source_info)
+  - Unit test: AST with blocks from two different files (simulating include
+    expansion) → SourceInfo maps to the correct file for each block
+  - Unit test: Concat piece lengths sum to total buffer length (no gaps)
   - Unit test: round-trip accuracy — parse a file, serialize, pick a code
     block's offset in serialized text, verify it maps back to approximately
     the right location in the original file
 
-### Phase 0C: SourceInfo in ExecutionContext + integration
+### Phase 0C: SourceInfo in ExecutionContext (commit 3)
 
-Wire the QMD writer's SourceInfo into the engine interface and write
-integration tests for the full chain.
+Wire the QMD writer's SourceInfo into the engine interface. Include-
+dependent integration tests are deferred to Phase 0A's commit.
 
 - [ ] Add `source_info` field to `ExecutionContext`:
   ```rust
@@ -233,20 +383,33 @@ integration tests for the full chain.
   }
   ```
 
-- [ ] Also add `source_context` to `ExecutionContext` (or make it available
-  through `StageContext`): `map_offset` requires a `&SourceContext` to
-  resolve `FileId`s to paths and compute line/column. The engine (or q2's
-  error handling) needs access to both.
+- [ ] Add `source_context: Arc<SourceContext>` to `ExecutionContext`:
+  `map_offset` requires a `&SourceContext` to resolve `FileId`s to paths
+  and compute line/column. The engine (or q2's error handling) needs both
+  `source_info` and `source_context`.
 
-  Evaluate whether to:
-  - Add `source_context: Arc<SourceContext>` to `ExecutionContext`
-  - Pass it separately when needed
-  - Keep it on `StageContext` and let the error handling code access it there
+  **Decision:** Clone into `Arc` at `ExecutionContext` construction.
+  `DocumentAst.source_context` remains owned (`SourceContext`, not
+  `Arc<SourceContext>`) — the include expansion stage needs to mutate it
+  (register included files), and it's simpler to keep it owned during the
+  mutable pipeline phases. At `EngineExecutionStage` time, the context is
+  finalized (all includes resolved), so we clone into `Arc` once:
+  `Arc::new(doc_ast.source_context.clone())`. This is a one-time clone per
+  pipeline run, not a hot path.
+
+  No changes to `DocumentAst`'s field types. No migration of downstream
+  consumers.
+
+  For TsEngine (subprocess engines), `TsEngine::execute()` extracts the
+  serialized source map entries from `source_info` for the protocol —
+  the full SourceContext stays Rust-side.
 
 - [ ] Update `EngineExecutionStage::run()`:
   - `serialize_ast_to_qmd` now returns `(String, SourceInfo)`
   - Pass the `SourceInfo` into `ExecutionContext` when constructing it
-  - Pass the `SourceContext` from `DocumentAst` similarly
+  - Clone `DocumentAst.source_context` into `Arc::new(...)` and pass to
+    `ExecutionContext` (one-time clone; context is finalized after include
+    expansion)
 
 - [ ] Update `ExecutionContext::new()` to accept SourceInfo (with a default
   of `SourceInfo::default()` for backward compatibility in tests)
@@ -255,18 +418,15 @@ integration tests for the full chain.
   in `ExecutionContext`, not a separate parameter. Existing engine
   implementations don't need to change.
 
-- [ ] Tests — thorough coverage of SourceInfo even though no engine uses it:
+- [ ] Tests (single-file, no includes — include-dependent tests are in 0A):
   - Unit test: `ExecutionContext` with SourceInfo — construct, verify field
     accessible
   - Unit test: `EngineExecutionStage` populates SourceInfo from QMD writer
-  - Integration test: full pipeline with include → engine receives text →
-    SourceInfo maps byte offset in engine input back to included file
   - Integration test: document WITHOUT includes → SourceInfo maps back to
     the original file
   - Integration test: verify `map_offset` works for offsets at:
     - Start of the engine input
     - A code block in the middle
-    - A code block from an included file
     - End of the engine input
   - Integration test: simulate engine error reporting — given a line number
     in the serialized QMD, convert to byte offset, call `map_offset`, verify
@@ -353,6 +513,11 @@ on raw markdown). q2 does it at the AST level because:
 
 ### SourceInfo chain
 
+The QMD writer's Concat tiles the **entire** serialized output with no
+gaps — frontmatter is tracked via `pandoc.meta.source_info`, each block
+is tracked via `block.source_info()`, and inter-block whitespace is
+included in each block's measured range.
+
 ```
 byte offset in serialized QMD (what the engine receives)
   → QMD writer's Concat piece → AST node's source_info
@@ -365,6 +530,61 @@ For nodes from the main document, the chain is shorter:
 byte offset → Concat piece → Original(FileId for main.qmd, byte range)
   → file path, line, column
 ```
+
+For offsets in YAML frontmatter:
+```
+byte offset → Concat piece (frontmatter) → meta.source_info
+  → Original(FileId for main.qmd, frontmatter byte range)
+    → file path, line, column
+```
+**Note:** Due to `bd-2mxo`, `meta.source_info` is currently
+`SourceInfo::default()` after metadata merge, so this chain resolves
+to "origin unknown" until that bug is fixed.
+
+### Dual SourceContext in DocumentAst
+
+`DocumentAst` has two separate `SourceContext` fields:
+
+1. **`ast_context.source_context`** — created by pampa's reader. Contains
+   `FileInformation` (line break indices) that `map_offset()` needs for
+   byte-offset → line/column conversion. This is what AST nodes' `FileId`s
+   resolve against.
+
+2. **`source_context` (top-level field)** — created by `ParseDocumentStage`.
+   Contains file content strings (via `add_file(path, Some(content))`).
+   Used by ariadne for rendering error snippets with source context.
+
+This separation is semi-intentional: different layers own different contexts.
+`SourceContext.add_file(path, Some(content))` stores **both** content and
+`FileInformation`, so a single entry can serve both purposes — but the two
+contexts are separate objects created at different times.
+
+**For include expansion:** each included file must be registered in **both**
+contexts with the same `FileId`, so that:
+- `map_offset` can resolve AST nodes from included files (needs #1)
+- Error messages can show source snippets from included files (needs #2)
+
+Unifying the two `SourceContext`s is desirable long-term but out of scope
+for Plan 0.
+
+### Parse-then-remap pattern for multi-file merging
+
+When parsing an included file, `pampa::readers::qmd::read` always creates
+a fresh `ASTContext` where the file is `FileId(0)`. To merge into the main
+document (which already uses `FileId(0)` for the main file), we use the
+**parse-then-remap** pattern established by `EngineExecutionStage`
+(engine_execution.rs:267-311):
+
+1. Parse the included file → gets its own `FileId(0)`
+2. Register in the main `SourceContext` → gets new `FileId(N)`
+3. Call `remap_file_ids` on the parsed AST → `FileId(0)` becomes `FileId(N)`
+4. Merge filenames lists
+5. Splice remapped blocks into main AST
+
+This pattern requires no changes to pampa's reader API. The reader always
+starts fresh; the caller remaps and merges. This is the standard approach
+throughout the codebase — `quarto_ast_reconcile::remap_file_ids` provides
+the shared utility for walking and remapping.
 
 ### No changes to ShortcodeResolveTransform
 

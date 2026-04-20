@@ -404,7 +404,7 @@ fn walk_inline(
                 }
             }
         }
-        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_, _) => {
+        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {
             // Quarto extensions - no children to walk
         }
         Inline::Insert(ins) => {

@@ -44,7 +44,7 @@ fn inlines_to_plain_text(inlines: &[Inline]) -> String {
             Inline::Math(m) => text.push_str(&m.text),
             Inline::RawInline(_) => {} // Skip raw content
             Inline::Shortcode(_) => {} // Skip shortcodes
-            Inline::Attr(_, _) => {}   // Skip attribute nodes
+            Inline::Attr(_) => {}      // Skip attribute nodes
             Inline::Insert(i) => text.push_str(&inlines_to_plain_text(&i.content)),
             Inline::Delete(_) => {} // Skip deleted content
             Inline::Highlight(h) => text.push_str(&inlines_to_plain_text(&h.content)),

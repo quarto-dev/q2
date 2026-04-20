@@ -99,7 +99,7 @@ fn validate_list_table_div(div: &Div) -> ListTableValidation {
     let Block::BulletList(rows_list) = last_block else {
         return ListTableValidation::Invalid {
             reason: "list-table div's last block must be a bullet list (the rows)".to_string(),
-            location: get_block_source_info(last_block),
+            location: last_block.source_info().clone(),
         };
     };
 
@@ -110,7 +110,7 @@ fn validate_list_table_div(div: &Div) -> ListTableValidation {
             let location = if row_blocks.is_empty() {
                 rows_list.source_info.clone()
             } else {
-                get_block_source_info(&row_blocks[0])
+                row_blocks[0].source_info().clone()
             };
             return ListTableValidation::Invalid {
                 reason: format!(
@@ -129,37 +129,12 @@ fn validate_list_table_div(div: &Div) -> ListTableValidation {
                     "row {} in list-table must contain a bullet list of cells",
                     row_idx + 1
                 ),
-                location: get_block_source_info(&row_blocks[0]),
+                location: row_blocks[0].source_info().clone(),
             };
         };
     }
 
     ListTableValidation::Valid
-}
-
-/// Helper to get the source info from a Block
-fn get_block_source_info(block: &Block) -> SourceInfo {
-    match block {
-        Block::Plain(b) => b.source_info.clone(),
-        Block::Paragraph(b) => b.source_info.clone(),
-        Block::LineBlock(b) => b.source_info.clone(),
-        Block::CodeBlock(b) => b.source_info.clone(),
-        Block::RawBlock(b) => b.source_info.clone(),
-        Block::BlockQuote(b) => b.source_info.clone(),
-        Block::OrderedList(b) => b.source_info.clone(),
-        Block::BulletList(b) => b.source_info.clone(),
-        Block::DefinitionList(b) => b.source_info.clone(),
-        Block::Header(b) => b.source_info.clone(),
-        Block::HorizontalRule(b) => b.source_info.clone(),
-        Block::Table(b) => b.source_info.clone(),
-        Block::Figure(b) => b.source_info.clone(),
-        Block::Div(b) => b.source_info.clone(),
-        Block::BlockMetadata(b) => b.source_info.clone(),
-        Block::CaptionBlock(b) => b.source_info.clone(),
-        Block::NoteDefinitionPara(b) => b.source_info.clone(),
-        Block::NoteDefinitionFencedBlock(b) => b.source_info.clone(),
-        Block::Custom(b) => b.source_info.clone(),
-    }
 }
 
 /// Parse alignment string ("l,c,r,d") into a vector of Alignment
@@ -402,7 +377,7 @@ fn transform_list_table_div(div: Div) -> Block {
             let cell_source_info = if cell_blocks.is_empty() {
                 row_source_info.clone()
             } else {
-                get_block_source_info(&cell_blocks[0])
+                cell_blocks[0].source_info().clone()
             };
 
             cells.push(Cell {
@@ -869,7 +844,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 let is_last_attr = header
                     .content
                     .last()
-                    .is_some_and(|v| matches!(v, Inline::Attr(_, _)));
+                    .is_some_and(|v| matches!(v, Inline::Attr(_)));
                 if !is_last_attr {
                     let mut attr = header.attr.clone();
                     if attr.0.is_empty() {
@@ -897,11 +872,11 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         Unchanged(header)
                     }
                 } else {
-                    let Some(Inline::Attr(attr, attr_source)) = header.content.pop() else {
+                    let Some(Inline::Attr(inline_attr)) = header.content.pop() else {
                         panic!("shouldn't happen, header should have an attribute at this point");
                     };
-                    header.attr = attr;
-                    header.attr_source = attr_source;
+                    header.attr = inline_attr.attr;
+                    header.attr_source = inline_attr.attr_source;
                     header.content = trim_inlines(header.content).0;
                     FilterResult(vec![Block::Header(header)], true)
                 }
@@ -1267,22 +1242,28 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         let attr_idx = if has_space { i + 2 } else { i + 1 };
 
                         if attr_idx < break_cleaned.len()
-                            && let Inline::Attr(attr, attr_source) = &break_cleaned[attr_idx]
+                            && let Inline::Attr(inline_attr) = &break_cleaned[attr_idx]
                         {
                             // Found Math + (Space?) + Attr pattern
                             // Wrap Math in a Span with the attribute
                             let mut classes = vec!["quarto-math-with-attribute".to_string()];
-                            classes.extend(attr.1.clone());
+                            classes.extend(inline_attr.attr.1.clone());
 
                             math_processed.push(Inline::Span(Span {
-                                attr: (attr.0.clone(), classes, attr.2.clone()),
+                                attr: (
+                                    inline_attr.attr.0.clone(),
+                                    classes,
+                                    inline_attr.attr.2.clone(),
+                                ),
                                 content: vec![Inline::Math(math.clone())],
-                                source_info: if let Some(attr_overall) = attr_source.combine_all() {
+                                source_info: if let Some(attr_overall) =
+                                    inline_attr.attr_source.combine_all()
+                                {
                                     math.source_info.combine(&attr_overall)
                                 } else {
                                     math.source_info.clone()
                                 },
-                                attr_source: attr_source.clone(),
+                                attr_source: inline_attr.attr_source.clone(),
                             }));
 
                             // Skip the Math, optional Space, and Attr
@@ -1481,9 +1462,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 crate::pandoc::attr::AttrSourceInfo,
                             > = None;
 
-                            if let Some(Inline::Attr(attr, attr_source)) = caption_content.last() {
-                                caption_attr = Some(attr.clone());
-                                caption_attr_source = Some(attr_source.clone());
+                            if let Some(Inline::Attr(inline_attr)) = caption_content.last() {
+                                caption_attr = Some(inline_attr.attr.clone());
+                                caption_attr_source = Some(inline_attr.attr_source.clone());
                                 caption_content.pop(); // Remove the Attr from caption content
 
                                 // Trim trailing space before the attribute

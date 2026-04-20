@@ -858,7 +858,7 @@ fn write_inline<W: Write>(
             write!(ctx, "</span>")?;
         }
         // Quarto extensions - render as raw HTML or skip
-        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_, _) => {
+        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {
             // These should not appear in final output
         }
         Inline::Insert(ins) => {

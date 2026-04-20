@@ -360,8 +360,8 @@ fn compute_inline_hash_inner(inline: &Inline, cache: &mut HashCache<'_>) -> u64 
         Inline::NoteReference(nr) => {
             nr.id.hash(&mut hasher);
         }
-        Inline::Attr(attr, _attr_source) => {
-            hash_attr(attr, &mut hasher);
+        Inline::Attr(a) => {
+            hash_attr(&a.attr, &mut hasher);
         }
         Inline::Insert(i) => {
             hash_attr(&i.attr, &mut hasher);
@@ -641,7 +641,7 @@ pub fn structural_eq_inline(a: &Inline, b: &Inline) -> bool {
                 && a.keyword_args == b.keyword_args
         }
         (Inline::NoteReference(a), Inline::NoteReference(b)) => a.id == b.id,
-        (Inline::Attr(a, _), Inline::Attr(b, _)) => attr_eq(a, b),
+        (Inline::Attr(a), Inline::Attr(b)) => attr_eq(&a.attr, &b.attr),
         (Inline::Insert(a), Inline::Insert(b)) => {
             attr_eq(&a.attr, &b.attr) && structural_eq_inlines(&a.content, &b.content)
         }

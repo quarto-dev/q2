@@ -148,7 +148,7 @@ fn inline_type_name(inline: &Inline) -> &'static str {
         Inline::Span(_) => "Span",
         Inline::Shortcode(_) => "Shortcode",
         Inline::NoteReference(_) => "NoteReference",
-        Inline::Attr(_, _) => "Attr",
+        Inline::Attr(_) => "Attr",
         Inline::Insert(_) => "Insert",
         Inline::Delete(_) => "Delete",
         Inline::Highlight(_) => "Highlight",

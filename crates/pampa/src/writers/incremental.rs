@@ -16,7 +16,6 @@ use quarto_ast_reconcile::types::{
 };
 use quarto_ast_reconcile::{structural_eq_blocks, structural_eq_inlines};
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValueKind};
-use quarto_source_map::SourceInfo;
 use std::ops::Range;
 
 use super::qmd;
@@ -447,33 +446,8 @@ fn ensure_trailing_newline<'a>(
 
 /// Extract the byte range (start..end) from a Block's source_info.
 fn block_source_span(block: &Block) -> Range<usize> {
-    let si = block_source_info(block);
+    let si = block.source_info();
     si.start_offset()..si.end_offset()
-}
-
-/// Extract the SourceInfo from a Block.
-fn block_source_info(block: &Block) -> &SourceInfo {
-    match block {
-        Block::Paragraph(p) => &p.source_info,
-        Block::Header(h) => &h.source_info,
-        Block::CodeBlock(cb) => &cb.source_info,
-        Block::BlockQuote(bq) => &bq.source_info,
-        Block::BulletList(bl) => &bl.source_info,
-        Block::OrderedList(ol) => &ol.source_info,
-        Block::Div(d) => &d.source_info,
-        Block::HorizontalRule(hr) => &hr.source_info,
-        Block::Table(t) => &t.source_info,
-        Block::RawBlock(rb) => &rb.source_info,
-        Block::Plain(p) => &p.source_info,
-        Block::LineBlock(lb) => &lb.source_info,
-        Block::DefinitionList(dl) => &dl.source_info,
-        Block::Figure(f) => &f.source_info,
-        Block::BlockMetadata(m) => &m.source_info,
-        Block::NoteDefinitionPara(nd) => &nd.source_info,
-        Block::NoteDefinitionFencedBlock(nd) => &nd.source_info,
-        Block::CaptionBlock(cb) => &cb.source_info,
-        Block::Custom(cn) => &cn.source_info,
-    }
 }
 
 /// Write a single block to a string using the standard QMD writer.
@@ -817,59 +791,15 @@ pub fn inline_children(inline: &Inline) -> &[Inline] {
         | Inline::RawInline(_)
         | Inline::Shortcode(_)
         | Inline::NoteReference(_)
-        | Inline::Attr(_, _)
+        | Inline::Attr(_)
         | Inline::Note(_) // Note contains Blocks, not Inlines
         | Inline::Custom(_) => &[],
     }
 }
 
-/// Extract the SourceInfo from an Inline.
-pub fn inline_source_info(inline: &Inline) -> &SourceInfo {
-    match inline {
-        Inline::Str(s) => &s.source_info,
-        Inline::Emph(e) => &e.source_info,
-        Inline::Strong(s) => &s.source_info,
-        Inline::Underline(u) => &u.source_info,
-        Inline::Strikeout(s) => &s.source_info,
-        Inline::Superscript(s) => &s.source_info,
-        Inline::Subscript(s) => &s.source_info,
-        Inline::SmallCaps(s) => &s.source_info,
-        Inline::Quoted(q) => &q.source_info,
-        Inline::Cite(c) => &c.source_info,
-        Inline::Code(c) => &c.source_info,
-        Inline::Space(s) => &s.source_info,
-        Inline::SoftBreak(s) => &s.source_info,
-        Inline::LineBreak(l) => &l.source_info,
-        Inline::Math(m) => &m.source_info,
-        Inline::RawInline(r) => &r.source_info,
-        Inline::Link(l) => &l.source_info,
-        Inline::Image(i) => &i.source_info,
-        Inline::Note(n) => &n.source_info,
-        Inline::Span(s) => &s.source_info,
-        Inline::Shortcode(sc) => &sc.source_info,
-        Inline::NoteReference(nr) => &nr.source_info,
-        Inline::Attr(_, attr_si) => {
-            // Attr inlines don't have a single source_info like other inlines.
-            // Use the id source if available, otherwise return a static default.
-            if let Some(ref id_si) = attr_si.id {
-                id_si
-            } else {
-                static DUMMY: std::sync::LazyLock<SourceInfo> =
-                    std::sync::LazyLock::new(SourceInfo::default);
-                &DUMMY
-            }
-        }
-        Inline::Insert(i) => &i.source_info,
-        Inline::Delete(d) => &d.source_info,
-        Inline::Highlight(h) => &h.source_info,
-        Inline::EditComment(e) => &e.source_info,
-        Inline::Custom(c) => &c.source_info,
-    }
-}
-
 /// Extract the byte range (start..end) from an Inline's source_info.
 pub fn inline_source_span(inline: &Inline) -> Range<usize> {
-    let si = inline_source_info(inline);
+    let si = inline.source_info();
     si.start_offset()..si.end_offset()
 }
 

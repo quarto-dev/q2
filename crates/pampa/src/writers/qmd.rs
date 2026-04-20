@@ -1792,7 +1792,7 @@ fn write_inline(
         crate::pandoc::Inline::Delete(node) => write_delete(node, buf, ctx),
         crate::pandoc::Inline::Insert(node) => write_insert(node, buf, ctx),
         crate::pandoc::Inline::Shortcode(node) => write_shortcode(node, buf, ctx),
-        crate::pandoc::Inline::Attr(node, _) => write_attr(node, buf, ctx),
+        crate::pandoc::Inline::Attr(node) => write_attr(&node.attr, buf, ctx),
         crate::pandoc::Inline::NoteReference(node) => write_notereference(node, buf, ctx),
         crate::pandoc::Inline::Note(node) => write_note(node, buf, ctx),
         crate::pandoc::Inline::RawInline(node) => write_rawinline(node, buf, ctx),

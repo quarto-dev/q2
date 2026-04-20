@@ -1329,7 +1329,7 @@ fn write_inline<T: Write + ?Sized>(
         Inline::NoteReference(_) => {
             // Ignore note references
         }
-        Inline::Attr(_, _) => {
+        Inline::Attr(_) => {
             // Ignore standalone attributes
         }
         Inline::Insert(insert) => {

@@ -1021,7 +1021,7 @@ fn recurse_inline<'a>(
             | Inline::RawInline(_)
             | Inline::Shortcode(_)
             | Inline::NoteReference(_)
-            | Inline::Attr(_, _) => {}
+            | Inline::Attr(_) => {}
         }
     })
 }

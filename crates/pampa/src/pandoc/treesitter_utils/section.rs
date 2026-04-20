@@ -65,11 +65,11 @@ pub fn process_section(
                     caption_source_info = caption_block.source_info.clone();
 
                     // Extract Inline::Attr if present at the end
-                    if let Some(crate::pandoc::inline::Inline::Attr(attr, attr_source)) =
+                    if let Some(crate::pandoc::inline::Inline::Attr(inline_attr)) =
                         caption_inlines.last()
                     {
-                        caption_attr = Some(attr.clone());
-                        caption_attr_source = Some(attr_source.clone());
+                        caption_attr = Some(inline_attr.attr.clone());
+                        caption_attr_source = Some(inline_attr.attr_source.clone());
                         caption_inlines.pop();
 
                         // Trim trailing space before the attribute
