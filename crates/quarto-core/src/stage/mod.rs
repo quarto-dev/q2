@@ -109,8 +109,8 @@ pub use traits::PipelineStage;
 pub use stages::CodeHighlightStage;
 pub use stages::{
     ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, EngineExecutionStage,
-    MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage, RenderHtmlBodyStage,
-    UserFiltersStage,
+    IncludeExpansionStage, MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, UserFiltersStage,
 };
 
 // Re-export the trace_event macro

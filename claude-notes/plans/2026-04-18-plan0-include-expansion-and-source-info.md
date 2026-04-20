@@ -146,13 +146,13 @@ existing `ShortcodeResolveTransform` handles `meta` (built-in Rust handler)
 and Lua-based shortcodes, but not `include`. This phase implements include
 handling from scratch.
 
-- [ ] Create `crates/quarto-core/src/stage/stages/include_expansion.rs`:
+- [x] Create `crates/quarto-core/src/stage/stages/include_expansion.rs`:
   ```rust
   pub struct IncludeExpansionStage;
   ```
   Implements `PipelineStage`. Input/output: `DocumentAst`.
 
-- [ ] Implement AST walking to find include shortcodes:
+- [x] Implement AST walking to find include shortcodes:
   - Walk all blocks looking for `Paragraph` nodes whose sole inline content
     is an `Inline::Shortcode` where `name == "include"`
   - **Block-level only:** Quarto 1 only expands includes that occupy an
@@ -165,7 +165,7 @@ handling from scratch.
     includes are silently not expanded.
   - Extract the file path from the shortcode's first positional argument
 
-- [ ] Implement include resolution using the **parse-then-remap pattern**
+- [x] Implement include resolution using the **parse-then-remap pattern**
   (same approach as `EngineExecutionStage` at engine_execution.rs:267-311):
 
   1. Resolve the included file path relative to the including file's directory
@@ -195,19 +195,19 @@ handling from scratch.
      file's blocks (after stripping the included file's YAML frontmatter —
      i.e., take `parsed.blocks` and discard `parsed.meta`)
 
-- [ ] Handle recursive includes:
+- [x] Handle recursive includes:
   - After splicing, re-walk the newly inserted nodes for more include shortcodes
   - Maintain a set of files currently being included (detect circular includes)
   - Error on circular includes with a clear diagnostic
 
-- [ ] Handle edge cases:
+- [x] Handle edge cases:
   - Missing included file → diagnostic error (not a panic)
   - Include path outside project directory → warning
   - Include of a file with YAML frontmatter: Quarto 1 strips the frontmatter
     of included files. Match this behavior. (The included file's YAML is
     parsed but discarded; only its body content is spliced.)
 
-- [ ] Wire into pipeline in `pipeline.rs`:
+- [x] Wire into pipeline in `pipeline.rs`:
   - Insert `IncludeExpansionStage` between `MetadataMergeStage` and
     `PreEngineSugaringStage` (before `EngineExecutionStage`). Include
     expansion must precede PreEngineSugaring because included files may
@@ -216,7 +216,7 @@ handling from scratch.
     `meta`, `var`, `env`, Lua shortcodes — it simply won't encounter any
     include shortcodes (they're already resolved)
 
-- [ ] Tests:
+- [x] Tests:
   - Unit test: simple include — paragraph with shortcode replaced by included
     file's blocks
   - Unit test: recursive include — file A includes file B which includes file C
@@ -253,7 +253,7 @@ expansion at the text level (producing a MappedString directly). In q2,
 include expansion happens at the AST level, and the engine receives
 serialized QMD — so the serializer must construct the provenance.
 
-- [ ] Add `write_with_source_info` to pampa's QMD writer:
+- [x] Add `write_with_source_info` to pampa's QMD writer:
   ```rust
   // New public API — owns buffer, returns bytes + SourceInfo
   pub fn write_with_source_info(
@@ -269,7 +269,7 @@ serialized QMD — so the serializer must construct the provenance.
   `write_block` call. The entire `write_block` → `write_inline` → 40
   internal helper tree is shared and untouched.
 
-- [ ] Track provenance for the **entire output** with no gaps:
+- [x] Track provenance for the **entire output** with no gaps:
 
   The Concat must tile the full output buffer so that `SourceInfo::concat()`
   (which computes cumulative `offset_in_concat` values) produces correct
@@ -329,18 +329,18 @@ serialized QMD — so the serializer must construct the provenance.
   few bytes of fence overhead. For engine error reporting (which targets
   code lines, not fence lines), this is negligible.
 
-- [ ] Handle blocks with `SourceInfo::default()` (no provenance):
+- [x] Handle blocks with `SourceInfo::default()` (no provenance):
   record a Concat piece with default SourceInfo. `map_offset` through
   default SourceInfo resolves to `FileId(0)` offset 0 — callers should
   treat unexpected locations as "origin unknown."
 
-- [ ] The wrapper `serialize_ast_to_qmd` in `engine_execution.rs` calls the
+- [x] The wrapper `serialize_ast_to_qmd` in `engine_execution.rs` calls the
   new API and returns `(String, SourceInfo)`:
   ```rust
   fn serialize_ast_to_qmd(ast: &Pandoc) -> Result<(String, SourceInfo), PipelineError>
   ```
 
-- [ ] Tests:
+- [x] Tests:
   - Unit test: serialize a simple AST, verify the returned SourceInfo is a
     Concat with pieces covering the **entire** output (frontmatter + blocks)
   - Unit test: given a byte offset in a block's region, `map_offset`
@@ -362,7 +362,7 @@ serialized QMD — so the serializer must construct the provenance.
 Wire the QMD writer's SourceInfo into the engine interface. Include-
 dependent integration tests are deferred to Phase 0A's commit.
 
-- [ ] Add `source_info` field to `ExecutionContext`:
+- [x] Add `source_info` field to `ExecutionContext`:
   ```rust
   pub struct ExecutionContext {
       // ... existing fields ...
@@ -383,7 +383,7 @@ dependent integration tests are deferred to Phase 0A's commit.
   }
   ```
 
-- [ ] Add `source_context: Arc<SourceContext>` to `ExecutionContext`:
+- [x] Add `source_context: Arc<SourceContext>` to `ExecutionContext`:
   `map_offset` requires a `&SourceContext` to resolve `FileId`s to paths
   and compute line/column. The engine (or q2's error handling) needs both
   `source_info` and `source_context`.
@@ -404,21 +404,21 @@ dependent integration tests are deferred to Phase 0A's commit.
   serialized source map entries from `source_info` for the protocol —
   the full SourceContext stays Rust-side.
 
-- [ ] Update `EngineExecutionStage::run()`:
+- [x] Update `EngineExecutionStage::run()`:
   - `serialize_ast_to_qmd` now returns `(String, SourceInfo)`
   - Pass the `SourceInfo` into `ExecutionContext` when constructing it
   - Clone `DocumentAst.source_context` into `Arc::new(...)` and pass to
     `ExecutionContext` (one-time clone; context is finalized after include
     expansion)
 
-- [ ] Update `ExecutionContext::new()` to accept SourceInfo (with a default
+- [x] Update `ExecutionContext::new()` to accept SourceInfo (with a default
   of `SourceInfo::default()` for backward compatibility in tests)
 
-- [ ] **Do NOT change the `ExecutionEngine` trait signature.** SourceInfo is
+- [x] **Do NOT change the `ExecutionEngine` trait signature.** SourceInfo is
   in `ExecutionContext`, not a separate parameter. Existing engine
   implementations don't need to change.
 
-- [ ] Tests (single-file, no includes — include-dependent tests are in 0A):
+- [x] Tests (single-file, no includes — include-dependent tests are in 0A):
   - Unit test: `ExecutionContext` with SourceInfo — construct, verify field
     accessible
   - Unit test: `EngineExecutionStage` populates SourceInfo from QMD writer
@@ -602,13 +602,13 @@ remapping in the future.
 
 ## Success Criteria
 
-- [ ] Include shortcodes resolved before engine execution
-- [ ] Recursive includes work; circular includes produce clear error
-- [ ] Included code cells are visible to the engine (the whole point)
-- [ ] QMD writer produces SourceInfo mapping serialized text to AST nodes
-- [ ] SourceInfo in ExecutionContext maps engine input back to original files
-- [ ] `map_offset` resolves through include boundaries to correct file + line
-- [ ] All existing tests pass (no regressions)
-- [ ] Thorough unit tests for SourceInfo chain, even though no engine uses it
-- [ ] `cargo nextest run --workspace` passes
-- [ ] Error remapping responsibility documented as open question
+- [x] Include shortcodes resolved before engine execution
+- [x] Recursive includes work; circular includes produce clear error
+- [x] Included code cells are visible to the engine (the whole point)
+- [x] QMD writer produces SourceInfo mapping serialized text to AST nodes
+- [x] SourceInfo in ExecutionContext maps engine input back to original files
+- [x] `map_offset` resolves through include boundaries to correct file + line
+- [x] All existing tests pass (no regressions)
+- [x] Thorough unit tests for SourceInfo chain, even though no engine uses it
+- [x] `cargo nextest run --workspace` passes
+- [x] Error remapping responsibility documented as open question

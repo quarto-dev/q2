@@ -56,8 +56,9 @@ use crate::stage::CodeHighlightStage;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, EngineExecutionStage,
-    LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
-    PreEngineSugaringStage, RenderHtmlBodyStage, StageContext, UserFiltersStage,
+    IncludeExpansionStage, LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline,
+    PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, StageContext,
+    UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -155,6 +156,7 @@ pub fn build_html_pipeline_stages_with_apply_config(
     let mut stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(EngineExecutionStage::new()),
         Box::new(CompileThemeCssStage::new()),
@@ -227,6 +229,7 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         Box::new(ParseDocumentStage::new()),
         // No EngineExecutionStage - code cells pass through as-is
         Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(CompileThemeCssStage::new()),
         Box::new(UserFiltersStage::pre()),
@@ -347,6 +350,7 @@ pub fn build_analysis_pipeline() -> Pipeline {
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(AstTransformsStage::with_pipeline(
             build_analysis_transform_pipeline(),
@@ -931,32 +935,34 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 11);
+        assert_eq!(stages.len(), 12);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
-        assert_eq!(stages[2].name(), "pre-engine-sugaring");
-        assert_eq!(stages[3].name(), "engine-execution");
-        assert_eq!(stages[4].name(), "compile-theme-css");
-        assert_eq!(stages[5].name(), "user-filters-pre");
-        assert_eq!(stages[6].name(), "ast-transforms");
-        assert_eq!(stages[7].name(), "user-filters-post");
-        assert_eq!(stages[8].name(), "code-highlight");
-        assert_eq!(stages[9].name(), "render-html-body");
-        assert_eq!(stages[10].name(), "apply-template");
+        assert_eq!(stages[2].name(), "include-expansion");
+        assert_eq!(stages[3].name(), "pre-engine-sugaring");
+        assert_eq!(stages[4].name(), "engine-execution");
+        assert_eq!(stages[5].name(), "compile-theme-css");
+        assert_eq!(stages[6].name(), "user-filters-pre");
+        assert_eq!(stages[7].name(), "ast-transforms");
+        assert_eq!(stages[8].name(), "user-filters-post");
+        assert_eq!(stages[9].name(), "code-highlight");
+        assert_eq!(stages[10].name(), "render-html-body");
+        assert_eq!(stages[11].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 11);
+        assert_eq!(pipeline.len(), 12);
     }
 
     #[test]
     fn test_build_wasm_html_pipeline() {
         let pipeline = build_wasm_html_pipeline();
-        // WASM pipeline has 10 stages (no engine execution, but otherwise
-        // the same as the native HTML pipeline).
-        assert_eq!(pipeline.len(), 10);
+        // WASM pipeline has 11 stages (no engine execution, but otherwise
+        // the same as the native HTML pipeline: includes include-expansion
+        // and code-highlight).
+        assert_eq!(pipeline.len(), 11);
     }
 
     #[test]
@@ -964,8 +970,8 @@ mod tests {
         use crate::stage::PipelineDataKind;
 
         let pipeline = build_analysis_pipeline();
-        // Parse + MetadataMerge + PreEngineSugaring + AstTransforms(analysis subset)
-        assert_eq!(pipeline.len(), 4);
+        // Parse + MetadataMerge + IncludeExpansion + PreEngineSugaring + AstTransforms(analysis subset)
+        assert_eq!(pipeline.len(), 5);
         assert_eq!(pipeline.expected_input(), PipelineDataKind::LoadedSource);
         assert_eq!(pipeline.expected_output(), PipelineDataKind::DocumentAst);
     }
