@@ -246,6 +246,62 @@ describe('buildAttributionMap — full build', () => {
     // Only 'a','b' from the 'text' field — 'x' from 'other' is excluded
     expect(result!.entries).toHaveLength(2);
   });
+
+  // Regression: bulk inserts above V8's argument-spread limit (~118K chars)
+  // used to throw "RangeError: Maximum call stack size exceeded" from the
+  // `entries.splice(idx, 0, ...newEntries)` expansion in applyPatch. Phase A
+  // bench found the overflow threshold at ~118,750 chars.
+  it('handles a single bulk insert larger than V8 argument-spread limit', async () => {
+    const N = 200_000;
+    const entries: MockHistoryEntry[] = [{
+      heads: ['h1'],
+      actor: 'actor1',
+      time: 1000,
+      patches: [{ action: 'splice', path: ['text', 0], value: 'x'.repeat(N) }],
+    }];
+
+    const handle = createMockHandle(entries);
+    mockDiff.mockImplementation(createMockDiff(entries));
+
+    const result = await buildAttributionMap(handle as any, 'text');
+
+    expect(result).not.toBeNull();
+    expect(result!.entries).toHaveLength(N);
+    expect(result!.entries[0]).toEqual({ actor: 'actor1', time: 1000 });
+    expect(result!.entries[N - 1]).toEqual({ actor: 'actor1', time: 1000 });
+  });
+
+  it('handles a large bulk insert at mid-doc offset', async () => {
+    const N = 200_000;
+    const entries: MockHistoryEntry[] = [
+      {
+        heads: ['h1'],
+        actor: 'actor1',
+        time: 1000,
+        patches: [{ action: 'splice', path: ['text', 0], value: 'prefix' }],
+      },
+      {
+        heads: ['h2'],
+        actor: 'actor2',
+        time: 2000,
+        patches: [{ action: 'splice', path: ['text', 3], value: 'x'.repeat(N) }],
+      },
+    ];
+
+    const handle = createMockHandle(entries);
+    mockDiff.mockImplementation(createMockDiff(entries));
+
+    const result = await buildAttributionMap(handle as any, 'text');
+
+    expect(result).not.toBeNull();
+    expect(result!.entries).toHaveLength(6 + N);
+    expect(result!.entries[0]).toEqual({ actor: 'actor1', time: 1000 });  // 'p'
+    expect(result!.entries[2]).toEqual({ actor: 'actor1', time: 1000 });  // 'e'
+    expect(result!.entries[3]).toEqual({ actor: 'actor2', time: 2000 });  // bulk start
+    expect(result!.entries[N + 2]).toEqual({ actor: 'actor2', time: 2000 }); // bulk end
+    expect(result!.entries[N + 3]).toEqual({ actor: 'actor1', time: 1000 }); // 'f' of prefix
+    expect(result!.entries[N + 5]).toEqual({ actor: 'actor1', time: 1000 }); // 'x' of prefix
+  });
 });
 
 // ===========================================================================

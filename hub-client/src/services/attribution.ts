@@ -112,13 +112,21 @@ function applyPatch(entries: CharAttribution[], patch: TextPatch, attribution: C
 
   const idx = patch.path[1] as number;
   if (patch.action === 'splice') {
-    const newEntries = new Array<CharAttribution>(patch.value.length).fill(attribution);
-    entries.splice(idx, 0, ...newEntries);
+    // Splice spread overflows V8's argument stack at ~118K elements; chunk
+    // to stay under the limit while keeping splice's PACKED fast path.
+    const k = patch.value.length;
+    for (let off = 0; off < k; off += SPLICE_CHUNK_MAX) {
+      const chunk = Math.min(SPLICE_CHUNK_MAX, k - off);
+      const newEntries = new Array<CharAttribution>(chunk).fill(attribution);
+      entries.splice(idx + off, 0, ...newEntries);
+    }
   } else {
     // del
     entries.splice(idx, patch.length ?? 1);
   }
 }
+
+const SPLICE_CHUNK_MAX = 10_000;
 
 // ---------------------------------------------------------------------------
 // Internal: history entry metadata extraction
