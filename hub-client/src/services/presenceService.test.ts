@@ -499,4 +499,35 @@ describe('presenceService — Automerge cursor wire format', () => {
     expect(typeof msg.cursor).toBe('string');
     expect(A.getCursorPosition(doc, ['text'], msg.cursor!)).toBe(0);
   });
+
+  it('reads the post-edit doc when a content change is applied before the cursor broadcast', async () => {
+    // Regression guard for the Monaco/Automerge ordering contract: Monaco
+    // fires onDidChangeModelContent synchronously before
+    // onDidChangeCursorSelection, and the former's handler applies a
+    // synchronous splice to the Automerge doc. By the time
+    // broadcastPresence calls handle.doc(), the post-edit state must be
+    // what it sees — otherwise the cursor string encodes a pre-edit offset
+    // and every receiver resolves it to the wrong char.
+    //
+    // We pick a scenario where pre-edit vs post-edit reads yield
+    // *distinguishable* cursor strings: inserting "XY" at offset 2 in
+    // "hello" and broadcasting cursor offset 3 (between X and Y). With
+    // post-edit read, the cursor anchors to 'Y' (a new op) → resolves to
+    // 3. With pre-edit read, it anchors to 'l' (offset 3 in "hello") →
+    // resolves to 4 in the post-edit doc, a different position.
+    await initPresence();
+    const preEdit = A.from({ text: 'hello' });
+    let current = preEdit;
+    const broadcast = vi.fn();
+    installHandle({ broadcast, doc: () => current });
+
+    current = A.change(A.clone(preEdit), (d) => A.splice(d, ['text'], 2, 0, 'XY'));
+    updatePresence(3, null);
+    flushBroadcast();
+
+    const msg = broadcast.mock.calls[0][0] as { cursor: string | null };
+    // Resolves to 3 on a separate receiver doc that has synced the same
+    // post-edit state. If we read pre-edit, this would be 4.
+    expect(A.getCursorPosition(current, ['text'], msg.cursor!)).toBe(3);
+  });
 });
