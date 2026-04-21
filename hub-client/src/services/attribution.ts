@@ -147,12 +147,14 @@ export function extractChangeHash(heads: unknown): string | null {
 // Idle callback wrapper
 // ---------------------------------------------------------------------------
 
-export function waitForIdle(): Promise<void> {
+export function waitForIdle(timeout = 100): Promise<void> {
   return new Promise<void>(resolve => {
     if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(() => resolve());
+      // `timeout` forces the callback to fire even when the main thread is
+      // busy — without it, cold-start attribution can be starved for
+      // hundreds of ms while React is mounting.
+      requestIdleCallback(() => resolve(), { timeout });
     } else {
-      // Fallback for environments without requestIdleCallback
       setTimeout(resolve, 0);
     }
   });
