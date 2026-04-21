@@ -7,6 +7,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { next as A } from '@automerge/automerge';
+import type { Doc } from '@automerge/automerge';
 import {
   initPresence,
   cleanupPresence,
@@ -34,7 +36,8 @@ vi.mock('./userSettings', () => ({
   }),
 }));
 
-// Mock the automergeSync module
+// Mock the automergeSync module. Tests that need a live handle install one
+// into state.currentHandle directly via `_getStateForTesting`.
 vi.mock('./automergeSync', () => ({
   getFileHandle: vi.fn().mockReturnValue(null),
 }));
@@ -184,7 +187,7 @@ describe('presenceService', () => {
         userName: 'User 1',
         userColor: '#ff0000',
         filePath: 'file1.qmd',
-        cursor: 10,
+        cursor: 'cursor-stub',
         selection: null,
         lastSeen: Date.now(),
       });
@@ -264,7 +267,8 @@ describe('presenceService', () => {
     });
 
     it('should return remote presences when present', () => {
-      // Manually add remote presence for testing
+      // Manually add remote presence for testing. Cursor/selection values
+      // here are opaque Automerge cursor strings — see PresenceState docs.
       const state = _getStateForTesting();
       state.remotePresences.set('peer-1', {
         peerId: 'peer-1',
@@ -272,15 +276,15 @@ describe('presenceService', () => {
         userName: 'Alice',
         userColor: '#ff0000',
         filePath: 'index.qmd',
-        cursor: 42,
-        selection: { start: 40, end: 45 },
+        cursor: 'cursor-42',
+        selection: { start: 'cursor-40', end: 'cursor-45' },
         lastSeen: Date.now(),
       });
 
       const presences = getRemotePresences();
       expect(presences).toHaveLength(1);
       expect(presences[0].userName).toBe('Alice');
-      expect(presences[0].cursor).toBe(42);
+      expect(presences[0].cursor).toBe('cursor-42');
     });
   });
 
@@ -302,7 +306,7 @@ describe('presenceService', () => {
         userName: 'Stale User',
         userColor: '#cccccc',
         filePath: 'index.qmd',
-        cursor: 0,
+        cursor: 'cursor-stub',
         selection: null,
         lastSeen: Date.now() - 2000, // 2 seconds ago (stale)
       });
@@ -323,7 +327,7 @@ describe('presenceService', () => {
         userName: 'Fresh User',
         userColor: '#00ff00',
         filePath: 'index.qmd',
-        cursor: 10,
+        cursor: 'cursor-stub',
         selection: null,
         lastSeen: Date.now(),
       });
@@ -361,5 +365,138 @@ describe('presenceService', () => {
 
       expect(peerId1).not.toBe(peerId2);
     });
+  });
+});
+
+// ===========================================================================
+// Broadcast wire format: Automerge cursor strings
+// ===========================================================================
+
+/**
+ * Stub DocHandle sufficient for broadcastPresence's needs: `doc()` returning
+ * a text doc, `broadcast` capturing the outgoing message.
+ */
+function createStubHandle(doc: Doc<{ text: string }>, opts: { docThrows?: boolean } = {}) {
+  const broadcast = vi.fn();
+  return {
+    broadcast,
+    doc: () => {
+      if (opts.docThrows) throw new Error('handle unavailable');
+      return doc;
+    },
+  };
+}
+
+/**
+ * Install a stub handle into presence state. `setCurrentFile` goes through
+ * `getFileHandle`; here we poke the state directly so the test can control
+ * exactly which doc the broadcast sees.
+ */
+function installHandle(handle: { broadcast: ReturnType<typeof vi.fn> }) {
+  const state = _getStateForTesting();
+  (state as { currentHandle: unknown }).currentHandle = handle;
+  (state as { currentFilePath: string }).currentFilePath = 'test.qmd';
+  return handle;
+}
+
+/** Flush the throttled broadcast timer so tests can inspect the message. */
+function flushBroadcast() {
+  // broadcastThrottleMs defaults to 50; advance well past it.
+  vi.advanceTimersByTime(100);
+}
+
+describe('presenceService — Automerge cursor wire format', () => {
+  beforeEach(() => {
+    _resetForTesting();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanupPresence();
+    vi.useRealTimers();
+  });
+
+  it('broadcasts cursor as an Automerge cursor string that resolves back to the original offset', async () => {
+    await initPresence();
+    const doc = A.from({ text: 'hello world' });
+    const handle = installHandle(createStubHandle(doc));
+
+    updatePresence(5, null);
+    flushBroadcast();
+
+    expect(handle.broadcast).toHaveBeenCalledTimes(1);
+    const msg = handle.broadcast.mock.calls[0][0] as { cursor: string | null };
+    expect(typeof msg.cursor).toBe('string');
+    expect(A.getCursorPosition(doc, ['text'], msg.cursor!)).toBe(5);
+  });
+
+  it('broadcasts selection as {start, end} cursor strings that resolve back to the range', async () => {
+    await initPresence();
+    const doc = A.from({ text: 'hello world' });
+    const handle = installHandle(createStubHandle(doc));
+
+    updatePresence(2, { start: 2, end: 7 });
+    flushBroadcast();
+
+    const msg = handle.broadcast.mock.calls[0][0] as {
+      selection: { start: string; end: string } | null;
+    };
+    expect(msg.selection).not.toBeNull();
+    expect(A.getCursorPosition(doc, ['text'], msg.selection!.start)).toBe(2);
+    expect(A.getCursorPosition(doc, ['text'], msg.selection!.end)).toBe(7);
+  });
+
+  it('broadcasts null cursor and null selection through as null', async () => {
+    await initPresence();
+    const doc = A.from({ text: 'hello' });
+    const handle = installHandle(createStubHandle(doc));
+
+    updatePresence(null, null);
+    flushBroadcast();
+
+    expect(handle.broadcast).toHaveBeenCalledTimes(1);
+    const msg = handle.broadcast.mock.calls[0][0] as {
+      cursor: string | null;
+      selection: unknown;
+    };
+    expect(msg.cursor).toBeNull();
+    expect(msg.selection).toBeNull();
+  });
+
+  it('does not broadcast when no handle is available', async () => {
+    await initPresence();
+    // No installHandle — state.currentHandle stays null.
+    updatePresence(5, null);
+    flushBroadcast();
+
+    const state = _getStateForTesting();
+    expect(state.localCursor).toBe(5);
+    // We have no handle to assert on; the test is primarily asserting no
+    // exception escaped broadcastPresence (reached this line at all).
+    expect(true).toBe(true);
+  });
+
+  it('does not broadcast (and does not throw) when handle.doc() throws', async () => {
+    await initPresence();
+    const doc = A.from({ text: 'hello' });
+    const handle = installHandle(createStubHandle(doc, { docThrows: true }));
+
+    updatePresence(5, null);
+    flushBroadcast();
+
+    expect(handle.broadcast).not.toHaveBeenCalled();
+  });
+
+  it('handles an empty text doc: getCursor on offset 0 resolves back to 0', async () => {
+    await initPresence();
+    const doc = A.from({ text: '' });
+    const handle = installHandle(createStubHandle(doc));
+
+    updatePresence(0, null);
+    flushBroadcast();
+
+    const msg = handle.broadcast.mock.calls[0][0] as { cursor: string | null };
+    expect(typeof msg.cursor).toBe('string');
+    expect(A.getCursorPosition(doc, ['text'], msg.cursor!)).toBe(0);
   });
 });

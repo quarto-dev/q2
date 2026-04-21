@@ -4,12 +4,17 @@
  * React hook for integrating presence features with the Monaco editor.
  * Handles cursor tracking, remote cursor rendering, and presence state management.
  *
- * Uses Monaco's native decoration APIs instead of external libraries for compatibility
- * with @monaco-editor/react's CDN-loaded Monaco instance.
+ * Remote cursor positions arrive as Automerge cursor strings (see
+ * `presenceService.ts`) and are resolved to numeric Monaco offsets against
+ * the current local doc on every render. Automerge cursors are anchored
+ * to specific ops in the text sequence, so they track their logical
+ * position through concurrent and local edits without needing hand-rolled
+ * operational transformation on the receiver.
  */
 
 import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import type * as Monaco from 'monaco-editor';
+import { next as A } from '@automerge/automerge';
 import {
   initPresence,
   cleanupPresence,
@@ -20,6 +25,7 @@ import {
   getLocalPeerId,
   type PresenceState,
 } from '../services/presenceService';
+import { getFileHandle } from '../services/automergeSync';
 
 /**
  * Options for the usePresence hook.
@@ -106,37 +112,6 @@ function ensureUserCursorStyle(peerId: string, color: string, userName: string):
 }
 
 /**
- * Shift a character offset to account for a single edit.
- * Offsets after the edit move by delta; offsets inside the replaced range
- * clamp to the end of the replacement text; offsets before are unchanged.
- */
-function transformOffset(
-  offset: number,
-  editStart: number,
-  oldEnd: number,
-  newEnd: number,
-  delta: number,
-): number {
-  if (offset >= oldEnd) return offset + delta;
-  if (offset > editStart) return newEnd;
-  return offset;
-}
-
-/**
- * Per-peer OT state for remote cursor/selection tracking.
- */
-interface PeerCursorState {
-  /** OT-adjusted cursor offset */
-  cursor: number;
-  /** Last raw cursor value from the presence network */
-  lastPresenceCursor: number;
-  /** OT-adjusted selection range (absent if peer has no selection) */
-  selection?: { start: number; end: number };
-  /** Last raw selection from the presence network */
-  lastPresenceSelection?: { start: number; end: number };
-}
-
-/**
  * Remove a user's cursor styles when they leave.
  */
 function removeUserCursorStyle(peerId: string): void {
@@ -172,23 +147,14 @@ export function usePresence(
   // Track decoration IDs for cleanup
   const decorationIdsRef = useRef<string[]>([]);
 
-  // Track if we've initialized
-  const initializedRef = useRef(false);
-
-  // Track model version to re-render decorations when content changes.
-  // Decorations are recreated from character offsets on each render, so we
-  // must re-render after every content change to keep them in sync.
+  // Track model version to re-resolve Automerge cursors against the
+  // updated doc after every content change. The stored cursor strings
+  // don't change, but their resolved offsets do once local or remote
+  // edits land in the Automerge doc — we need a re-render to pick up
+  // the new offsets. Remote edits reach this path via
+  // `immediateFileChangeCallback` in `automergeSync.ts`, which applies
+  // diffs to Monaco and triggers `onDidChangeContent`.
   const [modelVersion, setModelVersion] = useState(0);
-
-  // Per-peer OT state: adjusted offsets and last raw presence values.
-  // Between presence updates, content edits shift `cursor`/`selection` so
-  // decorations stay at the correct logical position.  `lastPresence*`
-  // fields detect genuinely new presence updates vs. OT drift.
-  const peerStateRef = useRef<Map<string, PeerCursorState>>(new Map());
-
-  // Peers whose cursor already reflects an edit whose content change hasn't
-  // arrived yet.  The OT handler skips these once to avoid double-shifting.
-  const anticipatingEditRef = useRef<Set<string>>(new Set());
 
   // Track which peerIds have active styles, for cleanup
   const activePeerStylesRef = useRef<Set<string>>(new Set());
@@ -202,13 +168,10 @@ export function usePresence(
   useEffect(() => {
     if (!enabled) return;
 
-    initPresence().then(() => {
-      initializedRef.current = true;
-    });
+    initPresence();
 
     return () => {
       cleanupPresence();
-      initializedRef.current = false;
     };
   }, [enabled]);
 
@@ -229,40 +192,16 @@ export function usePresence(
     return unsubscribe;
   }, [enabled]);
 
-  // Transform remote cursor/selection offsets on every content change (OT).
-  // Each edit shifts offsets that fall after it, and clamps offsets inside
-  // the deleted range to the end of the replacement text.  This keeps
-  // decorations at their correct logical positions between presence updates.
+  // Bump modelVersion on every content change so the render effect
+  // re-resolves Automerge cursors against the updated doc state. This
+  // replaces the hand-rolled OT loop that previously lived here.
   useEffect(() => {
     if (!editor) return;
 
     const model = editor.getModel();
     if (!model) return;
 
-    const disposable = model.onDidChangeContent((e) => {
-      // Peers whose presence arrived before this content change already have
-      // post-edit offsets — skip OT for them for this entire event.
-      const skip = new Set(anticipatingEditRef.current);
-      anticipatingEditRef.current.clear();
-
-      for (const change of e.changes) {
-        const editStart = change.rangeOffset;
-        const oldEnd = editStart + change.rangeLength;
-        const newEnd = editStart + change.text.length;
-        const delta = change.text.length - change.rangeLength;
-
-        for (const [peerId, state] of peerStateRef.current) {
-          if (skip.has(peerId)) continue;
-          state.cursor = transformOffset(state.cursor, editStart, oldEnd, newEnd, delta);
-          if (state.selection) {
-            state.selection = {
-              start: transformOffset(state.selection.start, editStart, oldEnd, newEnd, delta),
-              end: transformOffset(state.selection.end, editStart, oldEnd, newEnd, delta),
-            };
-          }
-        }
-      }
-
+    const disposable = model.onDidChangeContent(() => {
       setModelVersion((v) => v + 1);
     });
 
@@ -270,24 +209,34 @@ export function usePresence(
   }, [editor]);
 
   // Render remote cursors and selections using Monaco decorations.
-  // useLayoutEffect ensures decorations are updated before the browser paints,
-  // preventing flicker from Monaco's auto-shifted decorations being visible.
+  // useLayoutEffect ensures decorations update before the browser paints,
+  // preventing visible shifting of auto-adjusted Monaco decorations.
   useLayoutEffect(() => {
     if (!editor || !enabled) return;
 
     const model = editor.getModel();
     if (!model) return;
 
+    // Automerge cursor strings are resolved against the current local
+    // Automerge doc. If we don't have a handle yet (file not synced) or
+    // the handle can't produce a doc (deleted/unavailable), we can't
+    // place decorations — bail out and wait for the next render, which
+    // will fire when remoteUsers or modelVersion changes.
+    const handle = currentFilePath ? getFileHandle(currentFilePath) : null;
+    let doc: A.Doc<{ text: string }> | null = null;
+    try {
+      doc = handle ? (handle.doc() as A.Doc<{ text: string }>) : null;
+    } catch {
+      doc = null;
+    }
+    if (!doc) return;
+
     const localPeerId = getLocalPeerId();
-
-    // Build new decorations
-    const newDecorations: Monaco.editor.IModelDeltaDecoration[] = [];
-
     const docLength = model.getValueLength();
     const currentPeerIds = new Set<string>();
+    const newDecorations: Monaco.editor.IModelDeltaDecoration[] = [];
 
     for (const user of remoteUsers) {
-      // Skip our own presence
       if (user.peerId === localPeerId) continue;
 
       const safePeerId = sanitizePeerId(user.peerId);
@@ -295,126 +244,64 @@ export function usePresence(
       ensureUserCursorStyle(safePeerId, user.userColor, user.userName);
       activePeerStylesRef.current.add(safePeerId);
 
-      // --- Cursor decoration (OT-adjusted) ---
+      // --- Cursor decoration ---
       if (user.cursor !== null) {
+        let cursorOffset: number;
         try {
-          let state = peerStateRef.current.get(user.peerId);
-          const isNewPresence = !state || state.lastPresenceCursor !== user.cursor;
-
-          let cursorToRender: number;
-          if (isNewPresence) {
-            // If OT hasn't shifted the cursor since the previous presence
-            // update, the corresponding content change hasn't arrived yet.
-            // Only anticipate for small forward movements (typing); large
-            // jumps or backward moves are navigation and won't produce a
-            // matching content change.
-            const cursorDelta = user.cursor - (state?.lastPresenceCursor ?? user.cursor);
-            if (state && state.cursor === state.lastPresenceCursor &&
-                cursorDelta > 0 && cursorDelta <= 2) {
-              anticipatingEditRef.current.add(user.peerId);
-            }
-
-            const prevCursor = state?.cursor;
-
-            // New presence update — adopt the authoritative offset
-            cursorToRender = user.cursor;
-            if (state) {
-              state.cursor = user.cursor;
-              state.lastPresenceCursor = user.cursor;
-            } else {
-              state = { cursor: user.cursor, lastPresenceCursor: user.cursor };
-              peerStateRef.current.set(user.peerId, state);
-            }
-
-            // If a small forward move would place the cursor on a different
-            // line, the content change likely hasn't arrived yet and the
-            // offset maps to the wrong line.  Render at the old position;
-            // the content change will trigger a correct re-render.
-            if (prevCursor !== undefined &&
-                cursorDelta > 0 && cursorDelta <= 2 &&
-                cursorToRender <= docLength && prevCursor <= docLength &&
-                model.getPositionAt(cursorToRender).lineNumber !==
-                model.getPositionAt(prevCursor).lineNumber) {
-              cursorToRender = prevCursor;
-            }
-          } else {
-            // No new update — use the OT-shifted value
-            cursorToRender = state!.cursor;
-          }
-
-          if (cursorToRender < 0 || cursorToRender > docLength) {
-            continue;
-          }
-
-          const position = model.getPositionAt(cursorToRender);
-          newDecorations.push({
-            range: {
-              startLineNumber: position.lineNumber,
-              startColumn: position.column,
-              endLineNumber: position.lineNumber,
-              endColumn: position.column,
-            },
-            options: {
-              className: `presence-cursor-${safePeerId}`,
-              hoverMessage: { value: user.userName },
-              stickiness: 1, // NeverGrowsWhenTypingAtEdges
-            },
-          });
+          cursorOffset = A.getCursorPosition(doc, ['text'], user.cursor);
         } catch {
-          // Ignore invalid positions
+          // Cursor references an op we haven't synced yet — skip this
+          // render; the next onDidChangeContent after the op arrives
+          // will re-run and resolve successfully.
+          continue;
         }
-      } else {
-        peerStateRef.current.delete(user.peerId);
+
+        if (cursorOffset < 0 || cursorOffset > docLength) continue;
+
+        const position = model.getPositionAt(cursorOffset);
+        newDecorations.push({
+          range: {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          },
+          options: {
+            className: `presence-cursor-${safePeerId}`,
+            hoverMessage: { value: user.userName },
+            stickiness: 1, // NeverGrowsWhenTypingAtEdges
+          },
+        });
       }
 
-      // --- Selection decoration (OT-adjusted) ---
+      // --- Selection decoration ---
       if (user.selection && user.selection.start !== user.selection.end) {
+        let startOffset: number;
+        let endOffset: number;
         try {
-          const state = peerStateRef.current.get(user.peerId);
-          if (!state) continue;
-
-          const lastSel = state.lastPresenceSelection;
-          const isNewSel = !lastSel ||
-            lastSel.start !== user.selection.start ||
-            lastSel.end !== user.selection.end;
-
-          let selToRender: { start: number; end: number };
-          if (isNewSel) {
-            selToRender = user.selection;
-            state.selection = { ...user.selection };
-            state.lastPresenceSelection = { ...user.selection };
-          } else {
-            selToRender = state.selection ?? user.selection;
-          }
-
-          if (selToRender.end > docLength) {
-            continue;
-          }
-
-          const startPos = model.getPositionAt(selToRender.start);
-          const endPos = model.getPositionAt(selToRender.end);
-          newDecorations.push({
-            range: {
-              startLineNumber: startPos.lineNumber,
-              startColumn: startPos.column,
-              endLineNumber: endPos.lineNumber,
-              endColumn: endPos.column,
-            },
-            options: {
-              className: `presence-selection-${safePeerId}`,
-              hoverMessage: { value: `${user.userName}'s selection` },
-              stickiness: 1,
-            },
-          });
+          startOffset = A.getCursorPosition(doc, ['text'], user.selection.start);
+          endOffset = A.getCursorPosition(doc, ['text'], user.selection.end);
         } catch {
-          // Ignore invalid positions
+          continue;
         }
-      } else {
-        const state = peerStateRef.current.get(user.peerId);
-        if (state) {
-          delete state.selection;
-          delete state.lastPresenceSelection;
-        }
+        if (startOffset === endOffset) continue;
+        if (endOffset > docLength || startOffset < 0) continue;
+
+        const startPos = model.getPositionAt(startOffset);
+        const endPos = model.getPositionAt(endOffset);
+        newDecorations.push({
+          range: {
+            startLineNumber: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLineNumber: endPos.lineNumber,
+            endColumn: endPos.column,
+          },
+          options: {
+            className: `presence-selection-${safePeerId}`,
+            hoverMessage: { value: `${user.userName}'s selection` },
+            stickiness: 1,
+          },
+        });
       }
     }
 
@@ -438,15 +325,12 @@ export function usePresence(
         editor.deltaDecorations(decorationIdsRef.current, []);
         decorationIdsRef.current = [];
       }
-      // Clean up all injected style elements
       for (const peerId of activePeerStylesRef.current) {
         removeUserCursorStyle(peerId);
       }
       activePeerStylesRef.current.clear();
     };
-  // modelVersion triggers a re-render after every content change so that
-  // OT-adjusted offsets are used to reposition decorations.
-  }, [editor, enabled, remoteUsers, modelVersion]);
+  }, [editor, enabled, remoteUsers, modelVersion, currentFilePath]);
 
   // Track local cursor/selection changes
   useEffect(() => {
@@ -462,10 +346,8 @@ export function usePresence(
         return;
       }
 
-      // Convert Monaco position to offset
       const cursorOffset = model.getOffsetAt(selection.getPosition());
 
-      // Check if there's a selection (not just cursor)
       let selectionRange: { start: number; end: number } | null = null;
       if (!selection.isEmpty()) {
         const startOffset = model.getOffsetAt(selection.getStartPosition());
@@ -476,7 +358,6 @@ export function usePresence(
       updatePresence(cursorOffset, selectionRange);
     };
 
-    // Subscribe to cursor/selection changes
     const disposable = editor.onDidChangeCursorSelection(handleCursorChange);
 
     // Send initial position
@@ -487,7 +368,6 @@ export function usePresence(
     };
   }, [editor, enabled, currentFilePath]);
 
-  // Memoized refresh function
   const handleRefreshIdentity = useCallback(async () => {
     await refreshIdentity();
   }, []);

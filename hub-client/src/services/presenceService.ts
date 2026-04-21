@@ -6,12 +6,19 @@
  */
 
 import type { DocHandle, DocHandleEphemeralMessagePayload } from '@automerge/automerge-repo';
+import { next as A } from '@automerge/automerge';
 import { getFileHandle } from './automergeSync';
 import { getUserIdentity } from './userSettings';
 import type { UserSettings } from './storage/types';
 
 /**
  * Presence state for a remote user.
+ *
+ * `cursor` and `selection` carry Automerge cursor strings
+ * (see `A.getCursor` / `A.getCursorPosition`) — opaque tokens anchored to
+ * the current file's `['text']` sequence. The receiver resolves them to
+ * numeric offsets against its own local doc; this is what keeps remote
+ * cursors stable under concurrent edits without hand-rolled OT.
  */
 export interface PresenceState {
   peerId: string;
@@ -19,13 +26,14 @@ export interface PresenceState {
   userName: string;
   userColor: string;
   filePath: string;
-  cursor: number | null;
-  selection: { start: number; end: number } | null;
+  cursor: string | null;
+  selection: { start: string; end: string } | null;
   lastSeen: number;
 }
 
 /**
- * Presence message broadcast via ephemeral messaging.
+ * Presence message broadcast via ephemeral messaging. Same wire shape as
+ * {@link PresenceState}'s cursor fields — see PresenceState doc comment.
  */
 interface PresenceMessage {
   type: 'presence';
@@ -33,8 +41,8 @@ interface PresenceMessage {
   userId: string;
   userName: string;
   userColor: string;
-  cursor: number | null;
-  selection: { start: number; end: number } | null;
+  cursor: string | null;
+  selection: { start: string; end: string } | null;
 }
 
 /**
@@ -376,14 +384,35 @@ function broadcastPresence(): void {
     return;
   }
 
+  // Convert the raw editor offsets we've been accumulating into Automerge
+  // cursors, anchored to the current doc's `['text']` sequence. `doc()`
+  // throws on deleted/unavailable handles; a throw here during a 50 ms
+  // throttled tick should be a silent skip, not a crash.
+  let cursor: string | null = null;
+  let selection: { start: string; end: string } | null = null;
+  try {
+    const doc = state.currentHandle.doc();
+    if (state.localCursor !== null) {
+      cursor = A.getCursor(doc, ['text'], state.localCursor);
+    }
+    if (state.localSelection !== null) {
+      selection = {
+        start: A.getCursor(doc, ['text'], state.localSelection.start),
+        end: A.getCursor(doc, ['text'], state.localSelection.end),
+      };
+    }
+  } catch {
+    return;
+  }
+
   const message: PresenceMessage = {
     type: 'presence',
     peerId: state.peerId,
     userId: state.identity.userId,
     userName: state.identity.userName,
     userColor: state.identity.userColor,
-    cursor: state.localCursor,
-    selection: state.localSelection,
+    cursor,
+    selection,
   };
 
   state.currentHandle.broadcast(message);

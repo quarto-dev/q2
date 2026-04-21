@@ -203,11 +203,19 @@ script (node REPL + `A.getCursor`/`getCursorPosition` on `A.from({text:
   insertions-at-that-offset push the cursor forward (the cursor stays on
   the logical character). This is the behaviour we want for carets and
   for the **start** of a selection — no need to pass `move` explicitly.
-- **Selection end**: pass `move: 'before'`. With the default `'after'`,
-  inserts at the end boundary would be swept into the selection ("the
-  selection grows to include chars I just typed at its edge"), which is
-  surprising UX. `'before'` anchors to the character *just before* the
-  end boundary, so inserts at the boundary stay *outside* the selection.
+- **Selection end**: the plan originally called for `move: 'before'` to
+  prevent the selection from growing when a char is inserted at the end
+  boundary. **A re-probe against the pinned `@automerge/automerge` 2.2.9
+  during implementation showed this does not work as documented in that
+  version**: `'before'` and `'after'` produce different cursor strings
+  (`N@…` vs `-N@…`) but resolve to *identical* positions after both
+  single-doc insertions and merged concurrent insertions. The `'before'`
+  bias is a no-op in the current binding. If a future Automerge upgrade
+  fixes this, the Phase 5 probe fixture will catch the change and we can
+  revisit; for now, use the default `'after'` for both selection
+  boundaries. The observable consequence is that inserts at the end
+  boundary grow a remote peer's selection — the OT path today has no
+  boundary-aware logic either, so this is not a regression.
 - **Selection collapsed** (`start === end`): treat as cursor-only, same as
   today.
 - **Peer on a file we don't have the doc for yet**: can't resolve; drop the
@@ -289,10 +297,10 @@ File: `hub-client/src/services/presenceService.test.ts` (extend).
       `updatePresence(5, null)`; assert the ephemeral message's `cursor`
       field is a string whose `A.getCursorPosition` resolves back to 5.
 - [ ] **Test: selection carries start+end cursor strings** that resolve
-      back to the original range. Assert `selection.end` was created
-      with `move: 'before'` by appending a character at the original
-      end-offset and confirming the resolved end does *not* move past
-      the appended character.
+      back to the original range. (The originally-planned assertion about
+      `move: 'before'` preventing the end from growing on boundary inserts
+      was dropped — the `move` parameter is a no-op in Automerge 2.2.9.
+      See "Design sketch → Edge cases → Selection end".)
 - [ ] **Test: null cursor/selection pass through as null**.
 - [ ] **Test: broadcast is a no-op if the handle is unavailable** — we
       can't make a cursor without a doc; skip the broadcast rather than
@@ -356,8 +364,10 @@ in the *same* commit.
 - [ ] Update `broadcastPresence` to call `A.getCursor` with the current
       handle's `doc()` (not `docSync()` — deprecated in
       `@automerge/automerge-repo` 2.5.1) before sending. Use default
-      `move: 'after'` for the caret and for `selection.start`; use
-      `move: 'before'` for `selection.end`.
+      `move: 'after'` for all cursors (caret, selection.start,
+      selection.end). The `move: 'before'` call originally planned for
+      selection.end was dropped — see "Design sketch → Edge cases →
+      Selection end" for the re-probe finding.
 - [ ] Handle both the handle-unavailable and doc-unavailable cases: skip
       the broadcast when `state.currentHandle` is null (as today) *and*
       wrap the `handle.doc()` call in `try/catch` — per
