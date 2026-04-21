@@ -74,12 +74,15 @@ export function useAttribution(
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Clear any stale attribution up-front. Without this, a previous file's
+    // `source` (with its own byteToChar map baked in) briefly renders
+    // against the new file's AST on re-navigation, which flashes colors on
+    // the first block before the new build lands.
+    setResult(null);
+    mapRef.current = null;
+
     const handle = getFileHandle(path);
-    if (!handle) {
-      setResult(null);
-      mapRef.current = null;
-      return;
-    }
+    if (!handle) return;
 
     buildRunListAttribution(handle, 'text', controller.signal).then(map => {
       if (controller.signal.aborted) return;

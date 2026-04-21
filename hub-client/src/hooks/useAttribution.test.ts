@@ -225,6 +225,42 @@ describe('useAttribution', () => {
     expect(result.current!.source).toBeDefined();
   });
 
+  it('clears stale source when filePath changes, before new build resolves', async () => {
+    const firstMap = createMockMap();
+    const handle = { __mock: true };
+    mockGetFileHandle.mockReturnValue(handle as any);
+
+    let resolveSecond: (map: RunListAttribution | null) => void;
+    mockBuildRunListAttribution
+      .mockResolvedValueOnce(firstMap)
+      .mockReturnValueOnce(
+        new Promise(resolve => { resolveSecond = resolve as any; })
+      );
+
+    const { result, rerender } = renderHook(
+      ({ path }) => useAttribution(path, 'hello'),
+      { initialProps: { path: 'file1.qmd' } },
+    );
+
+    // Let the first build complete
+    await act(async () => {});
+    expect(result.current).not.toBeNull();
+
+    // Switch to a different file — the second build is still pending
+    rerender({ path: 'file2.qmd' });
+
+    // The stale source from file1 must NOT be visible while file2 is building.
+    // Otherwise the AST of file2 would render briefly attributed against
+    // file1's runs/byteToChar map — visibly jarring on re-navigation.
+    expect(result.current).toBeNull();
+
+    // Complete the second build — attribution reappears.
+    await act(async () => {
+      resolveSecond!(createMockMap({ processedHistoryIndex: 2 }));
+    });
+    expect(result.current).not.toBeNull();
+  });
+
   it('aborts in-flight build on unmount', async () => {
     const handle = { __mock: true };
     mockGetFileHandle.mockReturnValue(handle as any);

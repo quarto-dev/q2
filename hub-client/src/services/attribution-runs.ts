@@ -201,13 +201,12 @@ export async function buildRunListAttribution(
   let lastHeads: unknown[] = [];
 
   for (let chunkStart = 0; chunkStart < history.length; chunkStart += CHUNK_SIZE) {
-    // Skip the yield before the first chunk — the main thread is usually
-    // already busy at cold-start and yielding immediately only adds latency
-    // to time-to-first-paint.
-    if (chunkStart > 0) {
-      await waitForIdle();
-      if (signal?.aborted) return null;
-    }
+    // Yield before every chunk, including the first. The hook returns null
+    // until the build resolves, so nothing about attribution is visible to
+    // the user yet — we can afford to let the document's initial paint
+    // complete on an idle tick before starting CPU work.
+    await waitForIdle();
+    if (signal?.aborted) return null;
 
     const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, history.length);
     for (let i = chunkStart; i < chunkEnd; i++) {

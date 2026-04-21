@@ -242,6 +242,38 @@ describe('buildRunListAttribution', () => {
     expect(result!.runs).toHaveLength(1);
     expect(result!.runs[0]).toEqual({ start: 0, end: N, actor: 'a1', time: 1000 });
   });
+
+  it('yields to the event loop before touching history', async () => {
+    // The hook renders the document without attribution during the build;
+    // the build must yield first so the initial paint isn't blocked by
+    // the first chunk's CPU work.
+    const entries: MockHistoryEntry[] = [{
+      heads: ['h1'], actor: 'a1', time: 1000,
+      patches: [{ action: 'splice', path: ['text', 0], value: 'x' }],
+    }];
+    const handle = createMockHandle(entries);
+    mockDiff.mockImplementation(createMockDiff(entries));
+
+    let idleCalls = 0;
+    let metadataCalledBeforeIdle = false;
+    const originalMetadata = handle.metadata;
+    handle.metadata = vi.fn((hash: string) => {
+      if (idleCalls === 0) metadataCalledBeforeIdle = true;
+      return originalMetadata(hash);
+    });
+
+    // @ts-expect-error -- mock global
+    globalThis.requestIdleCallback = (cb: IdleRequestCallback) => {
+      idleCalls++;
+      cb({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+      return idleCalls;
+    };
+
+    await buildRunListAttribution(handle as never, 'text');
+
+    expect(idleCalls).toBeGreaterThan(0);
+    expect(metadataCalledBeforeIdle).toBe(false);
+  });
 });
 
 describe('updateRunListAttribution', () => {
