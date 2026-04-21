@@ -1,19 +1,15 @@
-import React, { createContext, useContext, useRef, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useRef, useState, useCallback } from 'react';
 import type { NodeAttribution } from '../../services/attribution';
-import type { SerializableSourceInfo, RustFileInfo } from '@quarto/pandoc-types';
-import { SourceInfoReconstructor } from '@quarto/annotated-qmd';
-import type { SourceContext } from '@quarto/pandoc-types';
-import { AttributionContext } from '../../hooks/useAttribution';
-import { getNodeAttribution } from '../../services/attribution';
+import {
+    AttributionContext,
+    NodeAttributionContext,
+    useNodeAttributionResolver,
+} from '../../hooks/useAttribution';
+import type { AstAttributionContext } from '../../hooks/useAttribution';
 
 // Context for unified component registry
 const RegistryContext = createContext<{
     registry: Record<string, (props: any) => React.ReactNode>;
-} | null>(null);
-
-// Context for per-node attribution queries
-export const NodeAttributionContext = createContext<{
-    getNodeAttribution: (sourceInfoId: number) => NodeAttribution | null;
 } | null>(null);
 
 /**
@@ -23,10 +19,7 @@ export interface PandocAST {
     'pandoc-api-version': [number, number, number];
     meta: Record<string, unknown>;
     blocks: BlockNode[];
-    astContext?: {
-        sourceInfoPool: SerializableSourceInfo[];
-        files: RustFileInfo[];
-    };
+    astContext?: AstAttributionContext;
 }
 
 export type ParaBlock = { t: 'Para'; c: InlineNode[] };
@@ -539,50 +532,8 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
 }) => {
-    // Extract attribution context and build getNodeAttribution closure
     const attributionCtx = useContext(AttributionContext);
-    const astContext = ast.astContext;
-
-    const nodeAttributionValue = useMemo(() => {
-        if (!astContext || !attributionCtx) return null;
-
-        try {
-            // Populate files[0].content from the Automerge source text
-            const sourceContext: SourceContext = {
-                files: astContext.files.map((f, idx) => ({
-                    id: idx,
-                    path: f.name,
-                    content: idx === 0 ? attributionCtx.sourceText : (f.content ?? ''),
-                })),
-            };
-
-            const reconstructor = new SourceInfoReconstructor(
-                astContext.sourceInfoPool,
-                sourceContext,
-            );
-
-            // Cache node attribution results — invalidated automatically when
-            // this useMemo recomputes (new astContext or attributionCtx)
-            const cache = new Map<number, NodeAttribution | null>();
-
-            return {
-                getNodeAttribution: (sourceInfoId: number) => {
-                    const cached = cache.get(sourceInfoId);
-                    if (cached !== undefined) return cached;
-                    const result = getNodeAttribution(
-                        sourceInfoId,
-                        reconstructor,
-                        attributionCtx.source,
-                        attributionCtx.identities,
-                    );
-                    cache.set(sourceInfoId, result);
-                    return result;
-                },
-            };
-        } catch {
-            return null;
-        }
-    }, [astContext, attributionCtx]);
+    const nodeAttributionValue = useNodeAttributionResolver(ast.astContext, attributionCtx);
 
     // Use internally-computed value, falling back to any externally-provided context
     const externalNodeAttr = useContext(NodeAttributionContext);

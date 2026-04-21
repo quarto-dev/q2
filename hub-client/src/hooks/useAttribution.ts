@@ -5,9 +5,9 @@
  * on mount and refreshes it incrementally on edits.
  */
 
-import { useState, useEffect, useRef, useCallback, createContext } from 'react';
-import { buildByteToCharMap, HistoryCompactedError } from '../services/attribution';
-import type { AttributionSource } from '../services/attribution';
+import { useState, useEffect, useRef, useCallback, useMemo, createContext } from 'react';
+import { buildByteToCharMap, getNodeAttribution, HistoryCompactedError } from '../services/attribution';
+import type { AttributionSource, NodeAttribution } from '../services/attribution';
 import {
   buildRunListAttribution,
   updateRunListAttribution,
@@ -16,16 +16,84 @@ import {
 import type { RunListAttribution } from '../services/attribution-runs';
 import { getFileHandle } from '../services/automergeSync';
 import type { ActorIdentity } from '../services/automergeSync';
+import type { SerializableSourceInfo, RustFileInfo, SourceContext } from '@quarto/pandoc-types';
+import { SourceInfoReconstructor } from '@quarto/annotated-qmd';
 
 // ---------------------------------------------------------------------------
 // Context — shared with the Ast component tree
 // ---------------------------------------------------------------------------
 
-export const AttributionContext = createContext<{
+export interface AttributionValue {
   source: AttributionSource;
   identities: Record<string, ActorIdentity>;
   sourceText: string;
-} | null>(null);
+}
+
+export const AttributionContext = createContext<AttributionValue | null>(null);
+
+/** Resolver produced by `useNodeAttributionResolver` — what a render subtree consumes. */
+export interface NodeAttributionResolver {
+  getNodeAttribution: (sourceInfoId: number) => NodeAttribution | null;
+}
+
+export const NodeAttributionContext = createContext<NodeAttributionResolver | null>(null);
+
+/** Shape of the `astContext` field on a parsed AST. */
+export interface AstAttributionContext {
+  sourceInfoPool: SerializableSourceInfo[];
+  files: RustFileInfo[];
+}
+
+/**
+ * Build a memoized per-render resolver that maps a `sourceInfoId` to
+ * `NodeAttribution`. Encapsulates `SourceInfoReconstructor` construction
+ * (including the `files[0].content` injection required because WASM JSON
+ * omits file content), and caches results within a single `useMemo` lifetime.
+ *
+ * Returns `null` when either input is missing or the reconstructor throws.
+ */
+export function useNodeAttributionResolver(
+  astContext: AstAttributionContext | null | undefined,
+  attributionCtx: AttributionValue | null,
+): NodeAttributionResolver | null {
+  return useMemo(() => {
+    if (!astContext || !attributionCtx) return null;
+
+    try {
+      const sourceContext: SourceContext = {
+        files: astContext.files.map((f, idx) => ({
+          id: idx,
+          path: f.name,
+          content: idx === 0 ? attributionCtx.sourceText : (f.content ?? ''),
+        })),
+      };
+
+      const reconstructor = new SourceInfoReconstructor(
+        astContext.sourceInfoPool,
+        sourceContext,
+      );
+
+      const cache = new Map<number, NodeAttribution | null>();
+
+      return {
+        getNodeAttribution: (sourceInfoId: number) => {
+          const cached = cache.get(sourceInfoId);
+          if (cached !== undefined) return cached;
+          const result = getNodeAttribution(
+            sourceInfoId,
+            reconstructor,
+            attributionCtx.source,
+            attributionCtx.identities,
+          );
+          cache.set(sourceInfoId, result);
+          return result;
+        },
+      };
+    } catch {
+      return null;
+    }
+  }, [astContext, attributionCtx]);
+}
 
 // ---------------------------------------------------------------------------
 // Hook return type

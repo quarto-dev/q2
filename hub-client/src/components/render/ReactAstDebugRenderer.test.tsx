@@ -11,7 +11,7 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
 import { Ast } from './ReactAstDebugRenderer';
 import type { PandocAST } from './ReactAstDebugRenderer';
-import { NodeAttributionContext } from './ReactAstDebugRenderer';
+import { NodeAttributionContext } from '../../hooks/useAttribution';
 import type { NodeAttribution } from '../../services/attribution';
 
 /** Helper to build minimal AST JSON with a single Str node */
