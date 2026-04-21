@@ -258,22 +258,22 @@ File: `hub-client/src/hooks/usePresence.test.ts` (new).
 These tests exercise the hook against a mocked Monaco editor + mocked
 Automerge doc and assert on the decoration positions the hook would apply.
 
-- [ ] **Test: deletion in an earlier paragraph does not shift a remote
+- [x] **Test: deletion in an earlier paragraph does not shift a remote
       cursor in a later paragraph** — the original #9 regression. Set up a
       three-paragraph document, place a remote cursor in paragraph 3,
       delete two characters from paragraph 1 locally, assert the remote
       cursor's resolved offset decreases by 2 (i.e., it tracks the same
       logical character).
-- [ ] **Test: local insertion before a remote cursor shifts it forward**
+- [x] **Test: local insertion before a remote cursor shifts it forward**
       by the inserted length.
-- [ ] **Test: local deletion across a remote cursor clamps it to the end
+- [x] **Test: local deletion across a remote cursor clamps it to the end
       of the replacement text**.
-- [ ] **Test: remote cursor arrives before its corresponding content
+- [x] **Test: remote cursor arrives before its corresponding content
       change** — the race that `anticipatingEditRef` guards today. Simulate
       a presence update that anticipates a 1-char insertion, then deliver
       the content change, and assert the cursor ends at the right offset
       without double-shift.
-- [ ] **Test: remote cursor at end-of-line, presence before content
+- [x] **Test: remote cursor at end-of-line, presence before content
       change** — the scenario PR #110 (3bd3ebc0) fixed with the same-line
       guard. Simulate a peer typing a character at EOL, deliver the
       presence update (with post-edit offset) before the content change,
@@ -291,40 +291,40 @@ issue first.
 
 File: `hub-client/src/services/presenceService.test.ts` (extend).
 
-- [ ] **Test: broadcast carries cursor as an Automerge cursor string, not
+- [x] **Test: broadcast carries cursor as an Automerge cursor string, not
       a number**. Mock `getFileHandle` to return a fake handle with
       `doc()` returning a doc with a known `['text']`; call
       `updatePresence(5, null)`; assert the ephemeral message's `cursor`
       field is a string whose `A.getCursorPosition` resolves back to 5.
-- [ ] **Test: selection carries start+end cursor strings** that resolve
+- [x] **Test: selection carries start+end cursor strings** that resolve
       back to the original range. (The originally-planned assertion about
       `move: 'before'` preventing the end from growing on boundary inserts
       was dropped — the `move` parameter is a no-op in Automerge 2.2.9.
       See "Design sketch → Edge cases → Selection end".)
-- [ ] **Test: null cursor/selection pass through as null**.
-- [ ] **Test: broadcast is a no-op if the handle is unavailable** — we
+- [x] **Test: null cursor/selection pass through as null**.
+- [x] **Test: broadcast is a no-op if the handle is unavailable** — we
       can't make a cursor without a doc; skip the broadcast rather than
       crash (matches today's behaviour when `state.currentHandle` is
       null).
-- [ ] **Test: broadcast is a no-op if `handle.doc()` throws** — mock a
+- [x] **Test: broadcast is a no-op if `handle.doc()` throws** — mock a
       handle whose `doc()` throws (simulating the deleted/unavailable
       case flagged in `DocHandle.d.ts`); assert `broadcast` is not
       called and no exception escapes `broadcastPresence`.
-- [ ] **Test: incoming ephemeral messages store cursor strings unchanged**
+- [x] **Test: incoming ephemeral messages store cursor strings unchanged**
       in `remotePresences`.
 
 ### Phase 3 tests — end-to-end race scenarios
 
 Extend Phase 1 tests to verify the new implementation:
 
-- [ ] **Test: presence-before-content-change no longer needs anticipation**.
+- [x] **Test: presence-before-content-change no longer needs anticipation**.
       Receive a presence message whose cursor string references an op
       not yet present in our doc; assert that `getCursorPosition` throws
       `RangeError` and the hook skips the decoration for this render
       (no crash, no other peers' decorations affected). Then apply the
       content change and assert the cursor resolves to the intended
       offset on the next render.
-- [ ] **Test: two concurrent remote edits** — two peers insert into the
+- [x] **Test: two concurrent remote edits** — two peers insert into the
       same paragraph. Assert a third peer's cursor, anchored after the
       insertions, ends at the correct offset regardless of merge order.
       This was not testable under OT because the OT code assumed a single
@@ -334,13 +334,13 @@ Extend Phase 1 tests to verify the new implementation:
 
 ### Phase 1 — characterise current behaviour
 
-- [ ] Create `hub-client/src/hooks/usePresence.test.ts` with a minimal
+- [x] Create `hub-client/src/hooks/usePresence.test.ts` with a minimal
       Monaco + Automerge test harness (mock `@monaco-editor/react`, use a
       real Automerge doc for fidelity).
-- [ ] Write the five Phase-1 tests above (four PR #94 tests plus the
+- [x] Write the five Phase-1 tests above (four PR #94 tests plus the
       PR #110 EOL regression test) and verify they pass on the current
       OT implementation.
-- [ ] Commit as "test: cover OT cursor tracking race cases before refactor".
+- [x] Commit as "test: cover OT cursor tracking race cases before refactor".
 
 ### Phase 2 — presenceService wire-format change + usePresence.ts rewrite
 
@@ -354,21 +354,21 @@ the work items are ordered so the code compiles continuously: update
 the types and broadcast path, then immediately delete the OT machinery
 in the *same* commit.
 
-- [ ] Change `PresenceMessage.cursor` to `string | null` and
+- [x] Change `PresenceMessage.cursor` to `string | null` and
       `PresenceMessage.selection` to `{ start: string; end: string } | null`.
-- [ ] Change `PresenceState.cursor` to `string | null` and
+- [x] Change `PresenceState.cursor` to `string | null` and
       `PresenceState.selection` to `{ start: string; end: string } | null`
       (same types as the wire — the service stores what it received).
       Update all consumers to reflect the new types; numeric resolution
       moves into `usePresence.ts` in Phase 3.
-- [ ] Update `broadcastPresence` to call `A.getCursor` with the current
+- [x] Update `broadcastPresence` to call `A.getCursor` with the current
       handle's `doc()` (not `docSync()` — deprecated in
       `@automerge/automerge-repo` 2.5.1) before sending. Use default
       `move: 'after'` for all cursors (caret, selection.start,
       selection.end). The `move: 'before'` call originally planned for
       selection.end was dropped — see "Design sketch → Edge cases →
       Selection end" for the re-probe finding.
-- [ ] Handle both the handle-unavailable and doc-unavailable cases: skip
+- [x] Handle both the handle-unavailable and doc-unavailable cases: skip
       the broadcast when `state.currentHandle` is null (as today) *and*
       wrap the `handle.doc()` call in `try/catch` — per
       `node_modules/@automerge/automerge-repo/dist/DocHandle.d.ts:76`,
@@ -378,22 +378,22 @@ in the *same* commit.
       in a 50 ms-throttled broadcaster. Empty doc is not a special
       case: `A.getCursor(doc, ['text'], 0)` on empty text returns the
       end sentinel per the probe script — verify at test time.
-- [ ] Write and pass the Phase-2 tests.
-- [ ] Continue immediately into Phase 3 in the same commit — do *not*
+- [x] Write and pass the Phase-2 tests.
+- [x] Continue immediately into Phase 3 in the same commit — do *not*
       commit wire-format changes in isolation (see phase-merge note
       above).
 
 ### Phase 3 — usePresence.ts simplification (same commit as Phase 2)
 
-- [ ] Delete `transformOffset`, `PeerCursorState`, `peerStateRef`,
+- [x] Delete `transformOffset`, `PeerCursorState`, `peerStateRef`,
       `anticipatingEditRef`, the `onDidChangeContent` OT effect, and the
       same-line guard.
-- [ ] Keep the `modelVersion` state + `onDidChangeContent` bump (still
+- [x] Keep the `modelVersion` state + `onDidChangeContent` bump (still
       needed — see "Design sketch → Receiver path") but slim the effect
       down to only the bump, no OT loop. Update the comment to reflect
       the new role ("re-resolve Automerge cursors against the updated
       doc").
-- [ ] Add `import { getFileHandle } from '../services/automergeSync'`
+- [x] Add `import { getFileHandle } from '../services/automergeSync'`
       (new coupling — see "Design sketch → Receiver path → New
       coupling"). In the render effect, obtain the doc via
       `getFileHandle(currentFilePath)?.doc()`. Wrap the `doc()` call in
@@ -402,15 +402,15 @@ in the *same* commit.
       effect for every peer, not just the unsynced one. On throw, bail
       out of this render (no decorations applied); the next content
       change or `remoteUsers` update re-runs the effect.
-- [ ] In the render effect, call `A.getCursorPosition(doc, ['text'],
+- [x] In the render effect, call `A.getCursorPosition(doc, ['text'],
       cursor)` for each peer's stored cursor/selection strings and place
       Monaco decorations from the resolved offsets. Wrap each call in
       `try/catch (RangeError)` and `continue` on throw — an unsynced
       cursor should drop the decoration for this render, not crash the
       effect or block other peers' decorations.
-- [ ] Add Phase-3 tests and verify them pass.
-- [ ] Verify Phase-1 tests still pass under the new implementation.
-- [ ] Commit as "refactor(presence): replace OT offset tracking with
+- [x] Add Phase-3 tests and verify them pass.
+- [x] Verify Phase-1 tests still pass under the new implementation.
+- [x] Commit as "refactor(presence): replace OT offset tracking with
       Automerge cursors (fixes #113)".
 
 ### Phase 4 — sender-side ordering regression test
@@ -422,21 +422,21 @@ before cursor-selection changes, and the content path through
 synchronous. This phase locks that invariant in with a test so a future
 refactor can't quietly break it.
 
-- [ ] Add a test in `hub-client/src/services/presenceService.test.ts`
+- [x] Add a test in `hub-client/src/services/presenceService.test.ts`
       that drives a synthetic Monaco edit (via the mocked editor +
       `handleEditorChange` path) immediately followed by a cursor
       broadcast, and asserts the broadcast cursor string resolves to
       the post-edit offset on a separate receiver doc. If the sender
       read pre-edit state, the cursor would resolve to a stale offset
       and the test would fail.
-- [ ] Commit as "test(presence): lock in sender-side cursor ordering".
+- [x] Commit as "test(presence): lock in sender-side cursor ordering".
 
 ### Phase 5 — verification and changelog
 
-- [ ] Run `cd hub-client && npm run build:all` (per CLAUDE.md this is
+- [x] Run `cd hub-client && npm run build:all` (per CLAUDE.md this is
       stricter than vitest + tsc --noEmit).
-- [ ] Run `cd hub-client && npm run test:ci`.
-- [ ] Run `cargo xtask verify --skip-rust-tests` to confirm the
+- [x] Run `cd hub-client && npm run test:ci`.
+- [x] Run `cargo xtask verify --skip-rust-tests` to confirm the
       hub-client build and tests pass in the xtask harness. (We skip
       Rust tests because this is a pure TS change — `quarto-sync-client`
       is a TypeScript package under `ts-packages/`, not a Rust crate, so
@@ -471,7 +471,7 @@ refactor can't quietly break it.
       heuristic. Do not add this speculatively — it's a small amount of
       state that's easy to get wrong, and the plan's whole point is to
       delete such state.
-- [ ] Commit the Automerge cursor-semantics probe script as an
+- [x] Commit the Automerge cursor-semantics probe script as an
       executable fixture at
       `hub-client/src/services/automergeCursor.probe.test.ts` (a vitest
       file that asserts the edge-case behaviours enumerated in "Design
@@ -479,7 +479,7 @@ refactor can't quietly break it.
       bias, selection-end `'before'` bias). This pins the behaviour to
       our pinned `@automerge/automerge` version and makes future
       upgrades catchable via CI.
-- [ ] Two-commit workflow for `hub-client/changelog.md`: first commit the
+- [x] Two-commit workflow for `hub-client/changelog.md`: first commit the
       refactor, then a second commit adding a changelog entry with the
       refactor's hash under today's date header.
 
