@@ -27,8 +27,9 @@ Automerge Document (full edit history)
   ③ AttributionContext — carries { source, identities, sourceText }
         │
         ▼
-  ④ AstRenderer — builds SourceInfoReconstructor, binds getNodeAttribution
-     against the source, caches per-render
+  ④ useNodeAttributionResolver (hooks/useAttribution.ts) — builds
+     SourceInfoReconstructor, binds getNodeAttribution against the source,
+     caches per-render; provides via NodeAttributionContext
         │
         ▼
   ⑤ Node component — reads `node.s`, colors by author, provides hover data
@@ -75,6 +76,8 @@ Manages lifecycle:
 
 Uses `useRef` for the current `RunListAttribution` state to avoid stale closures in the debounced callback. The public return type is `{ source: AttributionSource } | null` — Automerge-specific bookkeeping (`processedHeads`, `processedHistoryIndex`) is kept private to the ref. Also exports `AttributionContext`, which carries `{ source, identities, sourceText }` down the component tree.
 
+The module also exports **`NodeAttributionContext`** (the resolved-resolver context, previously defined inside the debug renderer) and **`useNodeAttributionResolver(astContext, attributionCtx)`** — a memoized hook that constructs a `SourceInfoReconstructor` (including the `files[0].content` injection required because the WASM JSON output omits file content), wraps the 4-arg service-level `getNodeAttribution` with a per-render `Map<number, NodeAttribution | null>` cache, and returns `{ getNodeAttribution } | null`. Collapses what used to be ~40 lines of `useMemo` in `AstRenderer` to one call; any non-debug renderer with an `astContext` can opt in by calling the hook and wrapping its subtree in `NodeAttributionContext.Provider`.
+
 ### 3. Editor integration (`hub-client/src/components/Editor.tsx`)
 
 1. Reads the user preference via `usePreference('attributionEnabled')` and gates on `currentFormat === 'q2-debug'`. (An earlier iteration used a `attribution: true` YAML metadata flag; that was replaced in `3ab292ab` to make the setting per-user, not per-document.)
@@ -87,10 +90,11 @@ Uses `useRef` for the current `RunListAttribution` state to avoid stale closures
 The `AstRenderer` component (registered as the `"Ast"` entry in the component registry):
 
 1. **Reads `AttributionContext`** from the provider above.
-2. **Constructs a `SourceInfoReconstructor`** from the AST's `astContext` (source info pool + file metadata), injecting the current Automerge document text as `files[0].content` because the WASM JSON output doesn't serialize file content.
-3. **Creates a cached `getNodeAttribution` closure** — wraps the service function with a `Map<number, NodeAttribution | null>`. The cache is invalidated automatically when the `useMemo` recomputes (new AST or new attribution context).
-4. **Provides via `NodeAttributionContext`** — a narrower context exposing only the `getNodeAttribution` function.
-5. **Event-delegated hover handling** — a single `onMouseOver`/`onMouseOut` on the container walks up to the nearest `.q2-attr-wrap[data-sid]`, reads the source info ID, calls `getNodeAttribution`, and sets a `hoveredAttr` state with `getBoundingClientRect()`. One floating `AttributionBadge` renders on that state — no hidden per-node badges (optimization landed in `e41cccc6`).
+2. **Calls `useNodeAttributionResolver(ast.astContext, attributionCtx)`** (see section 2) — one line, returns `{ getNodeAttribution } | null`. The reconstructor + `files[0].content` injection + per-render cache all live in the hook.
+3. **Provides via `NodeAttributionContext`** — the same context the hook module exports; `AstRenderer` installs the provider only when the resolver is non-null, otherwise any outer provider passes through.
+4. **Event-delegated hover handling** — a single `onMouseOver`/`onMouseOut` on the container walks up to the nearest `.q2-attr-wrap[data-sid]`, reads the source info ID, calls `getNodeAttribution`, and sets a `hoveredAttr` state with `getBoundingClientRect()`. One floating `AttributionBadge` renders on that state — no hidden per-node badges (optimization landed in `e41cccc6`).
+
+Historical note: steps 2–3 used to be a ~40-line `useMemo` inside `AstRenderer`, and `NodeAttributionContext` was defined in this file. Extracted into `hooks/useAttribution.ts` so non-debug renderers can reuse them.
 
 The **`Node` component** reads `sourceInfoId` from `node.s`, calls `getNodeAttribution(sourceInfoId)`, and if attributed wraps the node in a `<div>` or `<span>` with `className="q2-attr-wrap"`, `data-sid={sourceInfoId}`, and `style={{ color: attr.color }}`.
 
@@ -119,6 +123,8 @@ Minor tweaks to fix build issues under hub-client's stricter TypeScript config: 
 8. **Run-length encoding as the default producer** (`3265de11`) — Automerge history is replayed into a sorted `AttributionRun[]` rather than a per-char `CharAttribution[]`. Realistic batched workloads see 4× faster updates, 5× faster queries, 20× smaller storage, and arbitrary-size bulk inserts don't need the splice-chunking workaround. Numbers below.
 
 9. **Cold-start latency tuning** — The hook returns `null` until the build resolves, so the document renders with no attribution visible and re-renders once the map is ready. Given that, `buildRunListAttribution` now yields via `waitForIdle()` before *every* chunk including the first, letting the initial paint settle before attribution CPU work begins. `waitForIdle` still passes `{ timeout: 100 }` so subsequent chunks aren't starved during sustained activity. An earlier iteration (`d880d643`) skipped the first yield to reduce time-to-attribution, but that made the first chunk block the post-mount paint — reverted in favour of prioritizing initial load over fast attribution. A progressive-rendering variant was tried and reverted — partial runs describe an intermediate text state whose byte positions don't align with the current AST, so intermediate paints could briefly show attribution against the wrong bytes.
+
+10. **Resolver-hook extraction** (`8d377ae2`) — `useNodeAttributionResolver(astContext, attributionCtx)` and `NodeAttributionContext` live in `hooks/useAttribution.ts` alongside `AttributionContext`, not inside `ReactAstDebugRenderer.tsx`. Motivated by the observation that a non-debug renderer that wanted attribution would have had to duplicate `SourceInfoReconstructor` construction, the `files[0].content` injection, the per-render cache, and a provider wrap — ~50 lines per new consumer. After extraction, opting in is ~3 lines (hook call + provider). No runtime behavior change: the `useMemo` has the same deps (`[astContext, attributionCtx]`), same cache lifetime, same reconstructor-per-pair semantics. Net +~20 LOC in the plumbing; pays off on the first non-debug consumer (likely candidate: the regular `ReactAstRenderer` if attribution moves beyond debug).
 
 ## Performance results
 
@@ -169,3 +175,4 @@ Reopen if users report slow cold-start, we ship multi-MB documents, or a new pro
 | `3265de11` | Switch attribution producer to run-length encoding (add bench harness) |
 | `2992f4b4` | Extract git-blame `AttributionSource` adapter into production module |
 | `d880d643` | Reduce attribution cold-start latency (skip first idle-wait, add `rIC` timeout) |
+| `8d377ae2` | Extract `useNodeAttributionResolver` + lift `NodeAttributionContext` into `hooks/useAttribution.ts` |
