@@ -14,6 +14,7 @@ vi.mock('../services/attribution', () => ({
   buildAttributionMap: vi.fn(),
   updateAttributionMap: vi.fn(),
   buildByteToCharMap: vi.fn(),
+  makeCharArraySource: vi.fn(),
   HistoryCompactedError: class HistoryCompactedError extends Error {
     constructor() { super('History compacted'); this.name = 'HistoryCompactedError'; }
   },
@@ -29,15 +30,21 @@ import {
   buildAttributionMap,
   updateAttributionMap,
   buildByteToCharMap,
+  makeCharArraySource,
   HistoryCompactedError,
 } from '../services/attribution';
 import { getFileHandle } from '../services/automergeSync';
-import type { AttributionMap } from '../services/attribution';
+import type { AttributionMap, AttributionSource } from '../services/attribution';
 
 const mockBuildAttributionMap = vi.mocked(buildAttributionMap);
 const mockUpdateAttributionMap = vi.mocked(updateAttributionMap);
 const mockBuildByteToCharMap = vi.mocked(buildByteToCharMap);
+const mockMakeCharArraySource = vi.mocked(makeCharArraySource);
 const mockGetFileHandle = vi.mocked(getFileHandle);
+
+function makeStubSource(tag: string): AttributionSource {
+  return { queryByteRange: vi.fn(() => ({ actor: tag, time: 0 })) };
+}
 
 function createMockMap(overrides?: Partial<AttributionMap>): AttributionMap {
   return {
@@ -53,6 +60,10 @@ describe('useAttribution', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockBuildByteToCharMap.mockReturnValue([0, 1]);
+    // Default: return a fresh tagged source per call so tests can distinguish
+    // the initial-build source from the post-update source.
+    let callIdx = 0;
+    mockMakeCharArraySource.mockImplementation(() => makeStubSource(`src${callIdx++}`));
   });
 
   afterEach(() => {
@@ -93,9 +104,10 @@ describe('useAttribution', () => {
       resolvePromise!(mockMap);
     });
 
-    // Now should have the map
+    // Now should have a source built from the map's entries
     expect(result.current).not.toBeNull();
-    expect(result.current!.entries).toBe(mockMap.entries);
+    expect(mockMakeCharArraySource).toHaveBeenCalledWith(mockMap.entries, [0, 1]);
+    expect(result.current!.source).toBe(mockMakeCharArraySource.mock.results[0]!.value);
   });
 
   it('calls updateAttributionMap on sourceText change when map exists', async () => {
@@ -163,7 +175,12 @@ describe('useAttribution', () => {
     // Wait for rebuild
     await act(async () => {});
 
-    expect(result.current!.entries).toBe(freshMap.entries);
+    // After the rebuild, makeCharArraySource is called with freshMap.entries.
+    // The result's `source` should be whatever that last call returned.
+    const calls = mockMakeCharArraySource.mock.calls;
+    expect(calls[calls.length - 1][0]).toBe(freshMap.entries);
+    const results = mockMakeCharArraySource.mock.results;
+    expect(result.current!.source).toBe(results[results.length - 1]!.value);
   });
 
   it('aborts in-flight build and starts fresh on filePath change', async () => {
@@ -203,8 +220,7 @@ describe('useAttribution', () => {
     await act(async () => {});
 
     expect(result.current).not.toBeNull();
-    expect(result.current).not.toBeNull();
-    expect(result.current!.entries).toHaveLength(1);
+    expect(result.current!.source).toBeDefined();
   });
 
   it('aborts in-flight build on unmount', async () => {

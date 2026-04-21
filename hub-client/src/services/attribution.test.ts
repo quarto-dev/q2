@@ -19,6 +19,7 @@ import {
   updateAttributionMap,
   getNodeAttribution,
   buildByteToCharMap,
+  makeCharArraySource,
   HistoryCompactedError,
   CHUNK_SIZE,
 } from './attribution';
@@ -521,11 +522,12 @@ describe('getNodeAttribution', () => {
     // Source info ID 5 → file 0, bytes 2-5 → chars 2-5 (ASCII)
     const reconstructor = createMockReconstructor({ fileId: 0, start: 2, end: 5 });
     const byteToCharMap = [0, 1, 2, 3, 4, 5]; // ASCII: byte offset === char index (+ end boundary)
+    const source = makeCharArraySource(entries, byteToCharMap);
     const identities: Record<string, ActorIdentity> = {
       actor2: { name: 'Bob', color: '#2196F3' },
     };
 
-    const result = getNodeAttribution(5, reconstructor as any, entries, byteToCharMap, identities);
+    const result = getNodeAttribution(5, reconstructor as any, source, identities);
 
     expect(result).not.toBeNull();
     expect(result!.actor).toBe('actor2');
@@ -538,10 +540,10 @@ describe('getNodeAttribution', () => {
     const entries: CharAttribution[] = [{ actor: 'actor1', time: 1000 }];
 
     const reconstructor = createMockReconstructor(null);
-    const byteToCharMap = [0];
+    const source = makeCharArraySource(entries, [0]);
     const identities: Record<string, ActorIdentity> = {};
 
-    const result = getNodeAttribution(999, reconstructor as any, entries, byteToCharMap, identities);
+    const result = getNodeAttribution(999, reconstructor as any, source, identities);
 
     expect(result).toBeNull();
   });
@@ -554,9 +556,10 @@ describe('getNodeAttribution', () => {
 
     const reconstructor = createMockReconstructor({ fileId: 0, start: 0, end: 2 });
     const byteToCharMap = [0, 1, 2]; // 2 bytes + end boundary
+    const source = makeCharArraySource(entries, byteToCharMap);
     const identities: Record<string, ActorIdentity> = {};
 
-    const result = getNodeAttribution(0, reconstructor as any, entries, byteToCharMap, identities);
+    const result = getNodeAttribution(0, reconstructor as any, source, identities);
 
     // Should still return attribution even without identity — uses fallback
     // The actor is known, but identity may not have name/color
@@ -569,10 +572,10 @@ describe('getNodeAttribution', () => {
     const entries: CharAttribution[] = [];
 
     const reconstructor = createMockReconstructor({ fileId: 0, start: 0, end: 5 });
-    const byteToCharMap = [0, 1, 2, 3, 4];
+    const source = makeCharArraySource(entries, [0, 1, 2, 3, 4]);
     const identities: Record<string, ActorIdentity> = {};
 
-    const result = getNodeAttribution(0, reconstructor as any, entries, byteToCharMap, identities);
+    const result = getNodeAttribution(0, reconstructor as any, source, identities);
 
     expect(result).toBeNull();
   });
@@ -586,11 +589,12 @@ describe('getNodeAttribution', () => {
 
     const reconstructor = createMockReconstructor({ fileId: 0, start: 0, end: 3 });
     const byteToCharMap = [0, 1, 2, 3]; // 3 bytes + end boundary
+    const source = makeCharArraySource(entries, byteToCharMap);
     const identities: Record<string, ActorIdentity> = {
       actor2: { name: 'Bob', color: '#E91E63' },
     };
 
-    const result = getNodeAttribution(0, reconstructor as any, entries, byteToCharMap, identities);
+    const result = getNodeAttribution(0, reconstructor as any, source, identities);
 
     expect(result).not.toBeNull();
     // Most recent is actor2 at time 3000

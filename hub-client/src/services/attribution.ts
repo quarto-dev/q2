@@ -41,6 +41,24 @@ export interface NodeAttribution {
   name: string;
 }
 
+/**
+ * Consumer-facing attribution surface. A producer (Automerge history replay,
+ * git blame, LSP, etc.) exposes one of these; consumers query by byte range
+ * without knowing the underlying representation.
+ */
+export interface AttributionSource {
+  /**
+   * Return the most recent (actor, time) in the byte range [byteStart,
+   * byteEnd) of the given file, or null if the range is empty, out of
+   * bounds, or has no attributable characters.
+   */
+  queryByteRange(
+    fileId: number,
+    byteStart: number,
+    byteEnd: number,
+  ): { actor: string; time: number } | null;
+}
+
 export class HistoryCompactedError extends Error {
   constructor() {
     super('History has been compacted — full rebuild required');
@@ -312,17 +330,49 @@ export function buildByteToCharMap(text: string): number[] {
 }
 
 // ---------------------------------------------------------------------------
+// makeCharArraySource — adapter from per-char entries to AttributionSource
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap a flat `CharAttribution[]` (the representation the Automerge producer
+ * builds) as an `AttributionSource`. The scan over the char range stays O(N)
+ * — this factory is a shape adapter, not an optimization. Other producers
+ * (run lists, segment trees) can implement `AttributionSource` directly.
+ */
+export function makeCharArraySource(
+  entries: CharAttribution[],
+  byteToCharMap: number[],
+): AttributionSource {
+  return {
+    queryByteRange(_fileId, byteStart, byteEnd) {
+      const charStart = byteToCharMap[byteStart];
+      const charEnd = byteToCharMap[byteEnd];
+      if (charStart === undefined || charEnd === undefined) return null;
+      if (entries.length === 0) return null;
+
+      const s = Math.max(0, charStart);
+      const e = Math.min(entries.length, charEnd);
+      if (s >= e) return null;
+
+      let best = entries[s];
+      for (let i = s + 1; i < e; i++) {
+        if (entries[i].time > best.time) best = entries[i];
+      }
+      return { actor: best.actor, time: best.time };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // getNodeAttribution — resolve source info to attribution
 // ---------------------------------------------------------------------------
 
 export function getNodeAttribution(
   sourceInfoId: number,
   reconstructor: SourceInfoReconstructor,
-  entries: CharAttribution[],
-  byteToCharMap: number[],
+  source: AttributionSource,
   identities: Record<string, ActorIdentity>,
 ): NodeAttribution | null {
-  // Resolve source info to file-level byte range
   let location: { fileId: number; start: number; end: number };
   try {
     location = reconstructor.getSourceLocation(sourceInfoId);
@@ -330,33 +380,14 @@ export function getNodeAttribution(
     return null;
   }
 
-  // Convert byte range to char range
-  const charStart = byteToCharMap[location.start];
-  const charEnd = byteToCharMap[location.end];
+  const result = source.queryByteRange(location.fileId, location.start, location.end);
+  if (!result) return null;
 
-  if (charStart === undefined || charEnd === undefined) return null;
-
-  // Find the most recent attribution in this range
-  if (entries.length === 0) return null;
-
-  // Clamp range to entries bounds
-  const start = Math.max(0, charStart);
-  const end = Math.min(entries.length, charEnd);
-  if (start >= end) return null;
-
-  let mostRecent = entries[start];
-  for (let i = start + 1; i < end; i++) {
-    if (entries[i].time > mostRecent.time) {
-      mostRecent = entries[i];
-    }
-  }
-
-  const identity = identities[mostRecent.actor];
-
+  const identity = identities[result.actor];
   return {
-    actor: mostRecent.actor,
-    time: mostRecent.time,
+    actor: result.actor,
+    time: result.time,
     color: identity?.color ?? '#888888',
-    name: identity?.name ?? mostRecent.actor.slice(0, 8),
+    name: identity?.name ?? result.actor.slice(0, 8),
   };
 }

@@ -11,9 +11,10 @@ import {
   buildAttributionMap,
   updateAttributionMap,
   buildByteToCharMap,
+  makeCharArraySource,
   HistoryCompactedError,
 } from '../services/attribution';
-import type { AttributionMap, CharAttribution } from '../services/attribution';
+import type { AttributionMap, AttributionSource } from '../services/attribution';
 import { getFileHandle } from '../services/automergeSync';
 import type { ActorIdentity } from '../services/automergeSync';
 
@@ -22,8 +23,7 @@ import type { ActorIdentity } from '../services/automergeSync';
 // ---------------------------------------------------------------------------
 
 export const AttributionContext = createContext<{
-  entries: CharAttribution[];
-  byteToCharMap: number[];
+  source: AttributionSource;
   identities: Record<string, ActorIdentity>;
   sourceText: string;
 } | null>(null);
@@ -33,8 +33,7 @@ export const AttributionContext = createContext<{
 // ---------------------------------------------------------------------------
 
 interface UseAttributionResult {
-  entries: CharAttribution[];
-  byteToCharMap: number[];
+  source: AttributionSource;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +88,7 @@ export function useAttribution(
       if (map) {
         const byteToChar = buildByteToCharMap(sourceTextRef.current);
         mapRef.current = map;
-        setResult({ entries: map.entries, byteToCharMap: byteToChar });
+        setResult({ source: makeCharArraySource(map.entries, byteToChar) });
       } else {
         mapRef.current = null;
         setResult(null);
@@ -137,7 +136,7 @@ export function useAttribution(
         const updatedMap = updateAttributionMap(mapRef.current, handle, 'text');
         const byteToChar = buildByteToCharMap(sourceText);
         mapRef.current = updatedMap;
-        setResult({ entries: updatedMap.entries, byteToCharMap: byteToChar });
+        setResult({ source: makeCharArraySource(updatedMap.entries, byteToChar) });
       } catch (err) {
         if (err instanceof HistoryCompactedError) {
           // History was compacted — need a full rebuild

@@ -561,9 +561,6 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
                 sourceContext,
             );
 
-            // Use byteToCharMap from context (already computed in useAttribution hook)
-            const byteToChar = attributionCtx.byteToCharMap;
-
             // Cache node attribution results — invalidated automatically when
             // this useMemo recomputes (new astContext or attributionCtx)
             const cache = new Map<number, NodeAttribution | null>();
@@ -575,8 +572,7 @@ const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
                     const result = getNodeAttribution(
                         sourceInfoId,
                         reconstructor,
-                        attributionCtx.entries,
-                        byteToChar,
+                        attributionCtx.source,
                         attributionCtx.identities,
                     );
                     cache.set(sourceInfoId, result);

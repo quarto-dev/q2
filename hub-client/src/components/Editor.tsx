@@ -370,8 +370,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const attributionEnabled = currentFormat === 'q2-debug' && attributionPref;
   const attribution = useAttribution(attributionEnabled ? (currentFile?.path ?? null) : null, displayContent);
   const attributionContextValue = attribution ? {
-    entries: attribution.entries,
-    byteToCharMap: attribution.byteToCharMap,
+    source: attribution.source,
     identities: identities ?? {},
     sourceText: displayContent,
   } : null;
