@@ -91,9 +91,9 @@ interface PutPatch {
   value: string;
 }
 
-type TextPatch = SplicePatch | DelPatch | PutPatch;
+export type TextPatch = SplicePatch | DelPatch | PutPatch;
 
-function isTextPatch(patch: unknown, textFieldName: string): patch is TextPatch {
+export function isTextPatch(patch: unknown, textFieldName: string): patch is TextPatch {
   const p = patch as { action?: string; path?: unknown[] };
   if (!p || !Array.isArray(p.path) || p.path[0] !== textFieldName) return false;
   return p.action === 'splice' || p.action === 'del' || p.action === 'put';
@@ -132,13 +132,13 @@ const SPLICE_CHUNK_MAX = 10_000;
 // Internal: history entry metadata extraction
 // ---------------------------------------------------------------------------
 
-interface ViewableHandle {
+export interface ViewableHandle {
   history(): unknown[] | undefined;
   metadata(change?: string): { time?: number; actor?: string } | undefined;
   doc(): unknown;
 }
 
-function extractChangeHash(heads: unknown): string | null {
+export function extractChangeHash(heads: unknown): string | null {
   const h = Array.isArray(heads) ? heads[0] : heads;
   return typeof h === 'string' ? h : null;
 }
@@ -147,7 +147,7 @@ function extractChangeHash(heads: unknown): string | null {
 // Idle callback wrapper
 // ---------------------------------------------------------------------------
 
-function waitForIdle(): Promise<void> {
+export function waitForIdle(): Promise<void> {
   return new Promise<void>(resolve => {
     if (typeof requestIdleCallback === 'function') {
       requestIdleCallback(() => resolve());

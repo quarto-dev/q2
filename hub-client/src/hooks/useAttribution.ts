@@ -1,20 +1,19 @@
 /**
  * React hook for per-character attribution from Automerge history.
  *
- * Provides an AttributionMap (per-character actor + timestamp) for the
- * current document, built asynchronously on mount and updated incrementally
- * on edits.
+ * Builds a run-list attribution map (see attribution-runs.ts) asynchronously
+ * on mount and refreshes it incrementally on edits.
  */
 
 import { useState, useEffect, useRef, useCallback, createContext } from 'react';
+import { buildByteToCharMap, HistoryCompactedError } from '../services/attribution';
+import type { AttributionSource } from '../services/attribution';
 import {
-  buildAttributionMap,
-  updateAttributionMap,
-  buildByteToCharMap,
-  makeCharArraySource,
-  HistoryCompactedError,
-} from '../services/attribution';
-import type { AttributionMap, AttributionSource } from '../services/attribution';
+  buildRunListAttribution,
+  updateRunListAttribution,
+  makeRunListSource,
+} from '../services/attribution-runs';
+import type { RunListAttribution } from '../services/attribution-runs';
 import { getFileHandle } from '../services/automergeSync';
 import type { ActorIdentity } from '../services/automergeSync';
 
@@ -52,8 +51,8 @@ export function useAttribution(
 ): UseAttributionResult | null {
   const [result, setResult] = useState<UseAttributionResult | null>(null);
 
-  // Ref to hold the latest map — avoids stale closures in debounced callbacks
-  const mapRef = useRef<AttributionMap | null>(null);
+  // Ref to hold the latest run list — avoids stale closures in debounced callbacks
+  const mapRef = useRef<RunListAttribution | null>(null);
 
   // Abort controller for cancelling in-flight builds
   const abortRef = useRef<AbortController | null>(null);
@@ -82,13 +81,13 @@ export function useAttribution(
       return;
     }
 
-    buildAttributionMap(handle, 'text', controller.signal).then(map => {
+    buildRunListAttribution(handle, 'text', controller.signal).then(map => {
       if (controller.signal.aborted) return;
 
       if (map) {
         const byteToChar = buildByteToCharMap(sourceTextRef.current);
         mapRef.current = map;
-        setResult({ source: makeCharArraySource(map.entries, byteToChar) });
+        setResult({ source: makeRunListSource(map.runs, byteToChar) });
       } else {
         mapRef.current = null;
         setResult(null);
@@ -133,10 +132,10 @@ export function useAttribution(
       if (!handle || !mapRef.current) return;
 
       try {
-        const updatedMap = updateAttributionMap(mapRef.current, handle, 'text');
+        const updatedMap = updateRunListAttribution(mapRef.current, handle, 'text');
         const byteToChar = buildByteToCharMap(sourceText);
         mapRef.current = updatedMap;
-        setResult({ source: makeCharArraySource(updatedMap.entries, byteToChar) });
+        setResult({ source: makeRunListSource(updatedMap.runs, byteToChar) });
       } catch (err) {
         if (err instanceof HistoryCompactedError) {
           // History was compacted — need a full rebuild
