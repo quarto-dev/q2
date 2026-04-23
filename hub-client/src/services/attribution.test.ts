@@ -468,9 +468,10 @@ describe('updateAttributionMap — incremental update', () => {
 
 describe('buildAttributionMap — chunked processing', () => {
   it('processes large history in chunks via requestIdleCallback', async () => {
-    // Create 120 history entries, each inserting one character
+    // Create CHUNK_SIZE+20 history entries to force more than one chunk.
+    const N = CHUNK_SIZE + 20;
     const entries: MockHistoryEntry[] = [];
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < N; i++) {
       entries.push({
         heads: [`h${i}`],
         actor: `actor${i % 2}`,
@@ -485,11 +486,9 @@ describe('buildAttributionMap — chunked processing', () => {
     const result = await buildAttributionMap(handle as any, 'text');
 
     expect(result).not.toBeNull();
-    expect(result!.entries).toHaveLength(120);
-    // requestIdleCallback should have been called for chunking
-    // 120 entries / CHUNK_SIZE chunks, plus potentially the initial call
+    expect(result!.entries).toHaveLength(N);
     expect(mockRequestIdleCallback.mock.calls.length).toBeGreaterThanOrEqual(
-      Math.ceil(120 / CHUNK_SIZE)
+      Math.ceil(N / CHUNK_SIZE),
     );
   });
 
@@ -507,7 +506,7 @@ describe('buildAttributionMap — chunked processing', () => {
     mockDiff.mockImplementation(createMockDiff(entries));
 
     const controller = new AbortController();
-    controller.abort(); // Abort before calling
+    controller.abort();
 
     const result = await buildAttributionMap(handle as any, 'text', controller.signal);
 
@@ -515,7 +514,6 @@ describe('buildAttributionMap — chunked processing', () => {
   });
 
   it('returns null when signal is aborted between chunks', async () => {
-    // Create enough entries to span multiple chunks
     const entries: MockHistoryEntry[] = [];
     for (let i = 0; i < CHUNK_SIZE + 10; i++) {
       entries.push({
@@ -531,12 +529,10 @@ describe('buildAttributionMap — chunked processing', () => {
 
     const controller = new AbortController();
 
-    // Abort after the first chunk's requestIdleCallback fires
     let callCount = 0;
     mockRequestIdleCallback.mockImplementation((cb: IdleRequestCallback) => {
       callCount++;
       if (callCount === 1) {
-        // Let first chunk complete, then abort
         cb({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
         controller.abort();
       } else {

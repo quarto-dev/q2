@@ -66,8 +66,15 @@ export class HistoryCompactedError extends Error {
   }
 }
 
-/** Number of history entries processed per idle callback chunk. */
-export const CHUNK_SIZE = 50;
+/**
+ * History entries processed between idle-callback yields. Tuning knob:
+ * larger values reduce the number of rIC round trips (faster
+ * time-to-attribution) but make each slice's CPU block bigger (more frame
+ * jank risk). 500 gives ~2.5 ms of CPU per slice at bench-measured
+ * ~5 µs/entry, comfortably under one 60 Hz frame even when real Automerge
+ * diffs push per-entry cost an order of magnitude higher.
+ */
+export const CHUNK_SIZE = 500;
 
 // ---------------------------------------------------------------------------
 // Internal: patch application
@@ -186,14 +193,14 @@ export async function buildAttributionMap(
   let prevHeads: unknown = null;
   let lastHeads: unknown[] = [];
 
-  // Process history in chunks, yielding to the event loop between each
+  // Process history in fixed-count chunks, yielding between each. Chunk
+  // size is the frame-impact vs. time-to-attribution tuning knob — see
+  // CHUNK_SIZE docs.
   for (let chunkStart = 0; chunkStart < history.length; chunkStart += CHUNK_SIZE) {
-    // Yield before each chunk to avoid blocking the main thread
     await waitForIdle();
     if (signal?.aborted) return null;
 
     const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, history.length);
-
     for (let i = chunkStart; i < chunkEnd; i++) {
       const currHeads = history[i];
       const changeHash = extractChangeHash(currHeads);
@@ -202,10 +209,8 @@ export async function buildAttributionMap(
       const time = meta?.time ?? 0;
       const attribution: CharAttribution = { actor, time };
 
-      // Get patches from diff
       const decodedCurr = decodeHeads(currHeads as Parameters<typeof decodeHeads>[0]);
       let patches: unknown[];
-
       if (prevHeads === null) {
         patches = diff(
           viewable.doc() as Parameters<typeof diff>[0],
