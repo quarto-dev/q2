@@ -343,6 +343,10 @@ aggressive strategies (dependency tracking across files) are follow-ups.
 
 ### Phase 0 — Foundations (snapshot contract, resumability, naming)
 
+Sub-plan: `claude-notes/plans/2026-04-23-websites-phase-0.md`
+(beads `bd-f3jc`). Contract doc (to be written during
+implementation): `claude-notes/designs/document-profile-contract.md`.
+
 Deliverables:
 - Final names for `DocumentProfile`, `ProjectType`, and the snapshot stage.
 - `DocumentProfile` type (in `quarto-core` or a new `quarto-project` crate —
@@ -353,6 +357,13 @@ Deliverables:
   fixture and clones cleanly.
 - Documentation in `CLAUDE.md` or `claude-notes/` describing the contract:
   "what is guaranteed present in a profile and under what conditions".
+
+Cross-cutting invariant from Phase 0 that later phases must respect:
+**no code added for the website epic may branch on "is this a
+project?"** — a bare file is a single-file project rooted at its
+directory, and the project-relative / output-relative math works
+uniformly. See Phase-0 sub-plan §"Project root invariant" for detail.
+This inverts a recurring Q1 bug source.
 
 ### Phase 1 — Project orchestration
 
