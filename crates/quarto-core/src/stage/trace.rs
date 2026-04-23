@@ -383,6 +383,15 @@ fn serialize_pipeline_data(data: &PipelineData) -> serde_json::Value {
                 "warnings_count": doc.warnings.len(),
             })
         }
+        PipelineData::AtProfile(bundle) => {
+            let ast_json = serialize_pandoc_ast(&bundle.ast.ast, &bundle.ast.ast_context);
+            serde_json::json!({
+                "path": bundle.ast.path.display().to_string(),
+                "ast": ast_json,
+                "warnings_count": bundle.ast.warnings.len(),
+                "profile": &bundle.profile,
+            })
+        }
         PipelineData::ExecutedDocument(doc) => serde_json::json!({
             "path": doc.path.display().to_string(),
             "markdown_length": doc.markdown.len(),
@@ -456,6 +465,12 @@ fn pipeline_data_summary(data: &PipelineData) -> String {
             "DocumentAst({}, {} blocks)",
             doc.path.display(),
             doc.ast.blocks.len()
+        ),
+        PipelineData::AtProfile(bundle) => format!(
+            "AtProfile({}, {} blocks, profile_v{})",
+            bundle.ast.path.display(),
+            bundle.ast.ast.blocks.len(),
+            bundle.profile.profile_version,
         ),
         PipelineData::ExecutedDocument(doc) => format!(
             "ExecutedDocument({}, {} chars, {} supporting files)",

@@ -13,9 +13,10 @@
 //! 1. [`LoadedSource`] - Raw file content with detected source type
 //! 2. [`DocumentSource`] - Markdown content with metadata (after conversion)
 //! 3. [`DocumentAst`] - Parsed Pandoc AST ready for transformation
-//! 4. [`ExecutedDocument`] - Result after engine execution (Jupyter, Knitr)
-//! 5. [`RenderedOutput`] - Rendered output (HTML, LaTeX) before relocation
-//! 6. [`FinalOutput`] - Final output after relocation (for SSG slug support)
+//! 4. [`DocumentAtProfile`] - AST plus static snapshot at the profile checkpoint
+//! 5. [`ExecutedDocument`] - Result after engine execution (Jupyter, Knitr)
+//! 6. [`RenderedOutput`] - Rendered output (HTML, LaTeX) before relocation
+//! 7. [`FinalOutput`] - Final output after relocation (for SSG slug support)
 
 use std::path::PathBuf;
 
@@ -24,6 +25,7 @@ use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceContext;
 
+use crate::document_profile::DocumentProfile;
 use crate::format::Format;
 
 /// Type tag for pipeline data variants.
@@ -38,6 +40,9 @@ pub enum PipelineDataKind {
     DocumentSource,
     /// Parsed Pandoc AST
     DocumentAst,
+    /// Pipeline paused at the profile checkpoint: AST plus extracted
+    /// [`DocumentProfile`]. See `claude-notes/designs/document-profile-contract.md`.
+    AtProfile,
     /// Result after engine execution
     ExecutedDocument,
     /// Rendered output before relocation
@@ -52,6 +57,7 @@ impl std::fmt::Display for PipelineDataKind {
             PipelineDataKind::LoadedSource => write!(f, "LoadedSource"),
             PipelineDataKind::DocumentSource => write!(f, "DocumentSource"),
             PipelineDataKind::DocumentAst => write!(f, "DocumentAst"),
+            PipelineDataKind::AtProfile => write!(f, "AtProfile"),
             PipelineDataKind::ExecutedDocument => write!(f, "ExecutedDocument"),
             PipelineDataKind::RenderedOutput => write!(f, "RenderedOutput"),
             PipelineDataKind::FinalOutput => write!(f, "FinalOutput"),
@@ -74,6 +80,12 @@ pub enum PipelineData {
     /// Parsed AST ready for transformation
     DocumentAst(DocumentAst),
 
+    /// Pipeline paused at the profile checkpoint. Carries the
+    /// extracted [`DocumentProfile`] plus the `DocumentAst` from
+    /// which subsequent stages resume. See the profile contract
+    /// at `claude-notes/designs/document-profile-contract.md`.
+    AtProfile(DocumentAtProfile),
+
     /// Result after engine execution (future: Jupyter, Knitr)
     ExecutedDocument(ExecutedDocument),
 
@@ -91,6 +103,7 @@ impl PipelineData {
             Self::LoadedSource(_) => PipelineDataKind::LoadedSource,
             Self::DocumentSource(_) => PipelineDataKind::DocumentSource,
             Self::DocumentAst(_) => PipelineDataKind::DocumentAst,
+            Self::AtProfile(_) => PipelineDataKind::AtProfile,
             Self::ExecutedDocument(_) => PipelineDataKind::ExecutedDocument,
             Self::RenderedOutput(_) => PipelineDataKind::RenderedOutput,
             Self::FinalOutput(_) => PipelineDataKind::FinalOutput,
@@ -117,6 +130,14 @@ impl PipelineData {
     pub fn into_document_ast(self) -> Option<DocumentAst> {
         match self {
             Self::DocumentAst(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    /// Try to extract DocumentAtProfile from this data.
+    pub fn into_at_profile(self) -> Option<DocumentAtProfile> {
+        match self {
+            Self::AtProfile(p) => Some(p),
             _ => None,
         }
     }
@@ -285,7 +306,11 @@ impl DocumentSource {
 ///
 /// Note: `ast_context` is mutable throughout the pipeline because
 /// AST transforms may create new objects that need source info tracking.
-#[derive(Debug)]
+///
+/// `Clone` is implemented so the pipeline can take a snapshot at the
+/// profile checkpoint (see [`DocumentAtProfile`]) and resume from it
+/// later. All inner fields are already `Clone`.
+#[derive(Debug, Clone)]
 pub struct DocumentAst {
     /// Path to the source file
     pub path: PathBuf,
@@ -297,6 +322,30 @@ pub struct DocumentAst {
     pub source_context: SourceContext,
     /// Warnings collected during parsing
     pub warnings: Vec<DiagnosticMessage>,
+}
+
+/// Pipeline state at the profile checkpoint.
+///
+/// Holds the extracted [`DocumentProfile`] plus the [`DocumentAst`]
+/// from which subsequent stages resume. This variant exists purely to
+/// expose the profile to project-level orchestration while keeping the
+/// per-file pipeline compositional.
+///
+/// The Phase-0 pipeline wraps at [`DocumentProfileStage`] and unwraps
+/// immediately afterward at [`UnwrapProfileStage`] so downstream stages
+/// keep their existing `DocumentAst` signatures. Phase 1's two-pass
+/// orchestration will consume the `AtProfile` variant directly to
+/// build the project-wide [`ProjectIndex`].
+///
+/// [`DocumentProfileStage`]: crate::stage::stages::DocumentProfileStage
+/// [`UnwrapProfileStage`]: crate::stage::stages::UnwrapProfileStage
+#[derive(Debug, Clone)]
+pub struct DocumentAtProfile {
+    /// Static snapshot extracted at the checkpoint.
+    pub profile: DocumentProfile,
+    /// The AST the checkpoint was extracted from. Subsequent stages
+    /// read this and continue rendering.
+    pub ast: DocumentAst,
 }
 
 /// Result of engine execution (future: Jupyter, Knitr).

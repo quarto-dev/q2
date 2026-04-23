@@ -39,6 +39,7 @@
 pub mod artifact;
 pub mod crossref;
 pub mod dependency;
+pub mod document_profile;
 pub mod engine;
 pub mod error;
 pub mod extension;

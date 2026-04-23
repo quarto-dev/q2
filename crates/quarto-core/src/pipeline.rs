@@ -55,9 +55,10 @@ use crate::render::RenderContext;
 use crate::stage::CodeHighlightStage;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, EngineExecutionStage,
-    LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
-    PreEngineSugaringStage, RenderHtmlBodyStage, StageContext, UserFiltersStage,
+    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
+    EngineExecutionStage, LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline,
+    PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, StageContext,
+    UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -125,14 +126,17 @@ pub struct AstOutput {
 /// This creates stages for:
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
-/// 3. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
-/// 4. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 5. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
-/// 6. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 7. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 8. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
-/// 9. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 10. `ApplyTemplateStage` - Apply HTML template
+/// 3. `DocumentProfileStage` - Extract the static profile at the checkpoint
+/// 4. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 5. `PreEngineSugaringStage` - Seed crossref registry / desugar shorthand
+/// 6. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
+/// 7. `CompileThemeCssStage` - Compile theme CSS from merged metadata
+/// 8. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 9. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 10. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 11. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
+/// 12. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 13. `ApplyTemplateStage` - Apply HTML template
 pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
     build_html_pipeline_stages_with_apply_config(None)
 }
@@ -155,6 +159,10 @@ pub fn build_html_pipeline_stages_with_apply_config(
     let mut stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+        // Profile checkpoint: post-merge, pre-mutation. See
+        // `claude-notes/designs/document-profile-contract.md`.
+        Box::new(DocumentProfileStage::new()),
+        Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(EngineExecutionStage::new()),
         Box::new(CompileThemeCssStage::new()),
@@ -207,12 +215,14 @@ pub fn build_html_pipeline() -> Pipeline {
 /// Stages:
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
-/// 3. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 4. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
-/// 5. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
-/// 6. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 7. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 8. `ApplyTemplateStage` - Apply HTML template
+/// 3. `DocumentProfileStage` - Extract the static profile at the checkpoint
+/// 4. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 5. `CompileThemeCssStage` - Compile theme CSS from merged metadata
+/// 6. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 7. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
+/// 8. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 9. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 10. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -227,6 +237,11 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         Box::new(ParseDocumentStage::new()),
         // No EngineExecutionStage - code cells pass through as-is
         Box::new(MetadataMergeStage::new()),
+        // Profile checkpoint: post-merge, pre-mutation. Hub-client
+        // Phase 9 will intercept this variant to build project-wide
+        // nav state.
+        Box::new(DocumentProfileStage::new()),
+        Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(CompileThemeCssStage::new()),
         Box::new(UserFiltersStage::pre()),
@@ -931,32 +946,36 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 11);
+        assert_eq!(stages.len(), 13);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
-        assert_eq!(stages[2].name(), "pre-engine-sugaring");
-        assert_eq!(stages[3].name(), "engine-execution");
-        assert_eq!(stages[4].name(), "compile-theme-css");
-        assert_eq!(stages[5].name(), "user-filters-pre");
-        assert_eq!(stages[6].name(), "ast-transforms");
-        assert_eq!(stages[7].name(), "user-filters-post");
-        assert_eq!(stages[8].name(), "code-highlight");
-        assert_eq!(stages[9].name(), "render-html-body");
-        assert_eq!(stages[10].name(), "apply-template");
+        // Profile checkpoint (Phase 0 website epic, bd-f3jc).
+        assert_eq!(stages[2].name(), "document-profile");
+        assert_eq!(stages[3].name(), "unwrap-profile");
+        assert_eq!(stages[4].name(), "pre-engine-sugaring");
+        assert_eq!(stages[5].name(), "engine-execution");
+        assert_eq!(stages[6].name(), "compile-theme-css");
+        assert_eq!(stages[7].name(), "user-filters-pre");
+        assert_eq!(stages[8].name(), "ast-transforms");
+        assert_eq!(stages[9].name(), "user-filters-post");
+        assert_eq!(stages[10].name(), "code-highlight");
+        assert_eq!(stages[11].name(), "render-html-body");
+        assert_eq!(stages[12].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 11);
+        assert_eq!(pipeline.len(), 13);
     }
 
     #[test]
     fn test_build_wasm_html_pipeline() {
         let pipeline = build_wasm_html_pipeline();
-        // WASM pipeline has 10 stages (no engine execution, but otherwise
-        // the same as the native HTML pipeline).
-        assert_eq!(pipeline.len(), 10);
+        // WASM pipeline has 12 stages (no engine execution, but otherwise
+        // the same as the native HTML pipeline — including the profile
+        // checkpoint).
+        assert_eq!(pipeline.len(), 12);
     }
 
     #[test]

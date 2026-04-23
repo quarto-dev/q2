@@ -95,8 +95,8 @@ mod traits;
 // Re-export public types
 pub use context::StageContext;
 pub use data::{
-    DocumentAst, DocumentSource, ExecutedDocument, FinalOutput, LoadedSource, PandocIncludes,
-    PipelineData, PipelineDataKind, RenderedOutput, SourceType,
+    DocumentAst, DocumentAtProfile, DocumentSource, ExecutedDocument, FinalOutput, LoadedSource,
+    PandocIncludes, PipelineData, PipelineDataKind, RenderedOutput, SourceType,
 };
 pub use error::{PipelineError, PipelineValidationError};
 pub use observer::{EventLevel, NoopObserver, PipelineObserver, TracingObserver};
@@ -108,9 +108,9 @@ pub use traits::PipelineStage;
 // Re-export concrete stages for convenience
 pub use stages::CodeHighlightStage;
 pub use stages::{
-    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, EngineExecutionStage,
-    MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage, RenderHtmlBodyStage,
-    UserFiltersStage,
+    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
+    EngineExecutionStage, MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, UnwrapProfileStage, UserFiltersStage,
 };
 
 // Re-export the trace_event macro
