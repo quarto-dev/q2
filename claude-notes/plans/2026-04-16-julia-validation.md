@@ -9,13 +9,13 @@
 
 End-to-end validation of the TypeScript engine extension system using the Julia engine from Quarto 1. Take the real `julia-engine.ts`, set it up as a q2 extension, and render documents with Julia code cells.
 
-This plan is primarily integration debugging. If Plans 1a, 1b, 2, and 3 are solid and the echo engine test from Plan 1b Phase 3 passes, most of the infrastructure works. This plan surfaces the gaps specific to a real-world engine extension.
+This plan is primarily integration debugging. If Plans 1a, 1b, 1c, 2, and 3 are solid and the echo engine test from Plan 1c Phase 3 passes, most of the infrastructure works. This plan surfaces the gaps specific to a real-world engine extension.
 
 ## Prerequisites
 
-- [ ] Plans 1a and 1b complete: subprocess infrastructure works, echo engine passes
-- [ ] Plan 2 complete: `@quarto/markdown` and QuartoAPI namespaces implemented
-- [ ] Plan 3 complete: `@quarto/jupyter` with `toMarkdown` working
+- [ ] Plans 1a, 1b, and 1c complete: Rust subprocess infrastructure + Deno harness + extension integration, echo engine passes
+- [ ] Plan 2 complete: `@quarto/api` package with text/markdown/format/path/system/console/crypto subpaths, all QuartoAPI namespaces except `jupyter` wired in
+- [ ] Plan 3 complete: `@quarto/api/jupyter` with `toMarkdown` working and wired into engine-host
 - [ ] Julia installed on the test machine (`julia` in PATH)
 
 ## Work Items
@@ -76,7 +76,7 @@ The simplest possible Julia document.
 - [ ] Run through q2's render pipeline. Use `cargo run -- render <file.qmd>` (the `quarto` crate at `crates/quarto/` is the main CLI binary). Check existing smoke tests in `crates/quarto/tests/` for how integration tests invoke rendering programmatically.
 - [ ] Debug the first failure. Common failure checklist:
   - [ ] Extension not discovered → `_extension.yml` parsing issue
-  - [ ] Deno subprocess won't start → Deno not in PATH, or engine-host.ts issue
+  - [ ] Deno subprocess won't start → Deno not in PATH, or engine-host-deno bundle issue
   - [ ] Engine module fails to load → import resolution, transpilation issue
   - [ ] `engine.init()` fails → QuartoAPI construction issue
   - [ ] `engine.launch()` fails → EngineProjectContext mismatch
@@ -170,7 +170,7 @@ The subprocess architecture helps debugging — you can run the Deno engine-host
 ```bash
 # Run engine-host manually for debugging
 echo '{"type":"init","enginePath":"./julia-engine.ts","context":{...}}' | \
-  deno run --allow-all ts-packages/quarto-engine-host/src/host.ts
+  deno run --allow-all ts-packages/quarto-engine-host-deno/src/host.ts
 ```
 
 You can also add `console.error()` statements in the engine or harness and see them on stderr.

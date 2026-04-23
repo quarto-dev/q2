@@ -1,17 +1,58 @@
-# Plan 3: @quarto/jupyter
+# Plan 3: @quarto/api/jupyter
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
-**Depends on:** Phases 3A-3D and 3F are independent. Phase 3E (wiring into engine-host) requires Plan 1a Phase 5 to have created the `@quarto/engine-host` package.
+**Depends on:** Plan 2 Phase 2A (package skeleton). Phases 3A-3D and 3F otherwise independent. Phase 3E (wiring into engine-host) requires Plan 1b to have created the `@quarto/engine-host-deno` package.
 **Blocks:** Plan 4 (Julia Validation)
 **Estimated sessions:** 2-3
 
 ## Overview
 
-Create the `@quarto/jupyter` TypeScript package — a clean implementation of Jupyter notebook → markdown conversion and related utilities. This is the `quarto.jupyter` namespace of the QuartoAPI.
+Populate the `jupyter/` subpath of `@quarto/api` — a clean implementation of
+Jupyter notebook → markdown conversion and related utilities. This is the
+`quarto.jupyter` namespace of the QuartoAPI.
 
-The Julia engine calls 7 methods from this namespace. The core function `toMarkdown()` is the single most complex piece of the entire engine extension project (~1300 lines of logic), but it's conceptually straightforward: walk notebook cells, format outputs as markdown, handle figures and HTML preservation.
+The Julia engine calls 7 methods from this namespace. The core function
+`toMarkdown()` is the single most complex piece of the entire engine
+extension project (~1300 lines of logic), but it's conceptually
+straightforward: walk notebook cells, format outputs as markdown, handle
+figures and HTML preservation.
 
-**Reference:** The Quarto 1 implementations to study are in `~/src/quarto-cli/src/core/jupyter/` (a separate repository — quarto-dev/quarto-cli). Key files: `jupyter.ts` (main toMarkdown), `display-data.ts`, `tags.ts`, `labels.ts`, `preserve.ts`, `widgets.ts`, `types.ts`.
+**Reference:** The Quarto 1 implementations to study are in
+`~/src/quarto-cli/src/core/jupyter/` (a separate repository —
+quarto-dev/quarto-cli). Key files: `jupyter.ts` (main toMarkdown),
+`display-data.ts`, `tags.ts`, `labels.ts`, `preserve.ts`, `widgets.ts`,
+`types.ts`.
+
+## Package location
+
+All files under `ts-packages/quarto-api/src/jupyter/`. No separate
+`package.json` — `jupyter/` is a subpath of the single `@quarto/api`
+package created in Plan 2A. Consumers import via
+`@quarto/api/jupyter`.
+
+## Platform dependencies
+
+Three `jupyter/` pieces touch the filesystem and therefore take a
+`PlatformHost` (see Plan 2's `PlatformHost` section):
+
+| Function | Needs host for |
+|---|---|
+| `jupyterToMarkdown(nb, opts)` | Writing figure image files (base64 decode → `host.fs.writeFileSync`) |
+| `isPercentScript(file, exts)` | Reading the file to check for `# %%` markers |
+| `percentScriptToMarkdown(file)` | Reading the source file |
+
+The other three methods (`assets`, `resultIncludes`, `resultEngineDependencies`)
+are pure — no host. Plus all the internal supporting modules
+(`display-data`, `tags`, `labels`, `preserve`, `widgets`, `pandoc-id`,
+`cell-options`) are pure.
+
+Public shape: `src/jupyter/index.ts` exports a single factory
+`createJupyter(host: PlatformHost)` that returns the full namespace
+(all six public methods). Host-free methods are still implemented as pure
+exports internally — the factory just wraps them. This matches the
+`createPath` / `createSystem` / `createMappedStringFromFile` pattern in
+Plan 2: one entry point per subpath, consistent wiring in
+`@quarto/engine-host-deno`.
 
 ## What the Julia engine calls
 
@@ -28,18 +69,11 @@ The Julia engine calls 7 methods from this namespace. The core function `toMarkd
 
 ### Phase 3A: Types and foundation
 
-- [ ] Create `ts-packages/quarto-jupyter/package.json`:
-  ```json
-  {
-    "name": "@quarto/jupyter",
-    "version": "0.1.0",
-    "type": "module",
-    "main": "src/index.ts",
-    "dependencies": { "yaml": "^2.0.0" }
-  }
-  ```
+- [ ] Confirm `@quarto/api` package skeleton from Plan 2A is in place. If
+  Plan 2A hasn't landed, create the minimal package scaffolding first
+  (`package.json`, `tsconfig.json`, `exports` map including `./jupyter`).
 
-- [ ] Create `src/types.ts` — Jupyter notebook types:
+- [ ] Create `src/jupyter/types.ts` — Jupyter notebook types:
   ```typescript
   interface JupyterNotebook {
       nbformat: number;
@@ -68,54 +102,58 @@ The Julia engine calls 7 methods from this namespace. The core function `toMarkd
   ```
   Reference: Quarto 1's `src/core/jupyter/types.ts`
 
-- [ ] Create `src/constants.ts` — MIME type constants, cell option keys, etc.
-  Reference: Quarto 1's `src/config/constants.ts` (just the subset we need)
+- [ ] Create `src/jupyter/constants.ts` — MIME type constants, cell option
+  keys, etc. Reference: Quarto 1's `src/config/constants.ts` (just the
+  subset we need).
 
 ### Phase 3B: Supporting modules
 
 Small, focused modules that `toMarkdown` depends on. Each is self-contained.
 
-- [ ] Create `src/display-data.ts` — MIME bundle dispatch:
+- [ ] Create `src/jupyter/display-data.ts` — MIME bundle dispatch:
   - `displayDataMimeType(output, options)` — select best MIME type from bundle
   - `displayDataIsImage(output)`, `displayDataIsTextPlain(output)`, etc.
   - MIME priority order: text/html > image/svg+xml > image/png > image/jpeg > text/markdown > text/latex > text/plain
   - Reference: Quarto 1's `src/core/jupyter/display-data.ts`
   - ~150 lines
 
-- [ ] Create `src/tags.ts` — cell visibility logic:
+- [ ] Create `src/jupyter/tags.ts` — cell visibility logic:
   - `hideCell(options)`, `hideCode(options)`, `hideOutput(options)`, `hideWarnings(options)`
   - `includeCell(cell, options)`, `includeCode(cell, options)`, `includeOutput(cell, options)`
   - Based on cell-level `echo`, `include`, `output`, `warning` options
   - Reference: Quarto 1's `src/core/jupyter/tags.ts`
   - ~100 lines
 
-- [ ] Create `src/labels.ts` — cell label and caption handling:
+- [ ] Create `src/jupyter/labels.ts` — cell label and caption handling:
   - `cellLabel(cell)` — extract label from cell metadata or options
   - `cellLabelClass(label)` — generate CSS class from label
   - `resolveCaptions(cell)` — extract fig-cap, tbl-cap, etc.
   - Reference: Quarto 1's `src/core/jupyter/labels.ts`
   - ~100 lines
 
-- [ ] Create `src/preserve.ts` — HTML preservation:
+- [ ] Create `src/jupyter/preserve.ts` — HTML preservation:
   - `removeAndPreserveHtml(output)` — replace raw HTML with placeholder UUIDs
   - Returns `{ output: string, preserved: Record<string, string> }`
   - Used to protect HTML from Pandoc's markdown processing
   - Reference: Quarto 1's `src/core/jupyter/preserve.ts`
   - ~80 lines
 
-- [ ] Create `src/widgets.ts` — Jupyter widget dependency extraction:
+- [ ] Create `src/jupyter/widgets.ts` — Jupyter widget dependency extraction:
   - `widgetDependencies(outputs)` — find widget state in output MIME bundles
   - `widgetDependencyIncludes(deps, tempDir)` — generate script tags for widgets
   - Reference: Quarto 1's `src/core/jupyter/widgets.ts`
   - ~100 lines
 
-- [ ] Create `src/pandoc-id.ts` — identifier generation:
+- [ ] Create `src/jupyter/pandoc-id.ts` — identifier generation:
   - `pandocAutoIdentifier(text)` — generate Pandoc-style IDs from heading text
   - Pure string manipulation, no dependencies
   - Reference: Quarto 1's `src/core/pandoc/pandoc-id.ts`
+  - Note: lives under `jupyter/` for now because jupyter is the only
+    consumer. If other consumers emerge, promote to a top-level `pandoc/`
+    subpath — cheap move, cheap rename.
   - ~50 lines
 
-- [ ] Create `src/cell-options.ts` — simplified cell options parsing:
+- [ ] Create `src/jupyter/cell-options.ts` — simplified cell options parsing:
   - Parse YAML from code cell comments (`#| key: value` lines)
   - Use `yaml` package directly (no schema validation)
   - Extract cell-level execution options
@@ -124,9 +162,10 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
 
 ### Phase 3C: Core toMarkdown function
 
-The main conversion function. Takes a `JupyterNotebook` and options, returns markdown string.
+The main conversion function. Takes a `JupyterNotebook` and options, returns
+markdown string.
 
-- [ ] Create `src/to-markdown.ts`:
+- [ ] Create `src/jupyter/to-markdown.ts`:
   ```typescript
   export interface JupyterToMarkdownOptions {
       language: string;           // e.g., "julia", "python"
@@ -180,7 +219,11 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns mar
   - **error output**: format traceback, strip ANSI codes
 
 - [ ] Implement figure handling:
-  - Write image data to `assets.figuresDir`
+  - Write image data to `assets.figuresDir` via `host.fs.writeFileSync`
+    (base64 decode for PNG/JPEG, write as bytes; SVG written as text).
+    The host is captured via the `createJupyter(host)` factory closure —
+    `to-markdown.ts` itself takes `host` as a parameter on the internal
+    implementation function.
   - Generate filename from cell label or counter
   - Emit markdown image reference with optional caption, width/height
   - Handle `fig-format` option (request specific format from kernel)
@@ -201,16 +244,23 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns mar
 
 The simpler methods that the Julia engine also calls.
 
-- [ ] Create `src/percent-script.ts`:
-  - `isPercentScript(file, extensions?)` — check if file has `# %%` markers and matching extension
-  - `percentScriptToMarkdown(file)` — convert percent-format script to markdown:
+- [ ] Create `src/jupyter/percent-script.ts` — host-dependent (reads files):
+  - Internal functions take `host: PlatformHost` as first parameter:
+    ```typescript
+    export function isPercentScript(host: PlatformHost, file: string, exts?: string[]): boolean;
+    export function percentScriptToMarkdown(host: PlatformHost, file: string): string;
+    ```
+  - `isPercentScript` — check extension + read file + look for `# %%` markers
+  - `percentScriptToMarkdown` — read file + convert percent-format to markdown:
     - `# %%` → code cell boundaries
     - `# %% [markdown]` → markdown cells
     - Other content → code cells
+  - The public `createJupyter(host)` factory binds `host` so callers see the
+    natural 1-arg / 2-arg signatures.
   - Reference: Quarto 1's `src/core/jupyter/percent.ts`
   - ~80 lines
 
-- [ ] Create `src/assets.ts`:
+- [ ] Create `src/jupyter/assets.ts`:
   - `assets(input, to?)` — compute figure directory paths:
     ```typescript
     function assets(input: string, to?: string): JupyterAssets {
@@ -222,37 +272,66 @@ The simpler methods that the Julia engine also calls.
     ```
   - ~30 lines
 
-- [ ] Create `src/result-helpers.ts`:
+- [ ] Create `src/jupyter/result-helpers.ts`:
   - `resultIncludes(tempDir, deps?)` — extract pandoc includes from widget deps
   - `resultEngineDependencies(deps?)` — pass-through or wrap engine deps
   - ~40 lines
 
-- [ ] Create `src/index.ts` — re-export everything
+- [ ] Create `src/jupyter/index.ts` — exports the `createJupyter(host)`
+  factory plus all public types (`JupyterNotebook`, `JupyterCell`,
+  `JupyterToMarkdownOptions`, `JupyterToMarkdownResult`, …). Internal
+  functions remain accessible via relative paths inside `@quarto/api` for
+  tests and callers that want to pass their own host.
+
+  ```typescript
+  // src/jupyter/index.ts
+  import type { PlatformHost } from "../platform.ts";
+  import { jupyterToMarkdown as _toMarkdown } from "./to-markdown.ts";
+  import { isPercentScript as _isPercent, percentScriptToMarkdown as _percentMd }
+      from "./percent-script.ts";
+  import { assets } from "./assets.ts";
+  import { resultIncludes, resultEngineDependencies } from "./result-helpers.ts";
+
+  export function createJupyter(host: PlatformHost) {
+      return {
+          toMarkdown: (nb, opts) => _toMarkdown(host, nb, opts),
+          isPercentScript: (file, exts) => _isPercent(host, file, exts),
+          percentScriptToMarkdown: (file) => _percentMd(host, file),
+          assets,                         // pure, no host
+          resultIncludes,                 // pure, no host
+          resultEngineDependencies,       // pure, no host
+      };
+  }
+  export type { /* public types */ };
+  ```
 
 ### Phase 3E: Integration with engine-host
 
-Wire `@quarto/jupyter` into the `quarto.jupyter` namespace in `@quarto/engine-host`.
+Wire `@quarto/api/jupyter` into the `quarto.jupyter` namespace in
+`@quarto/engine-host-deno`.
 
-- [ ] Update `@quarto/engine-host/src/quarto-api.ts`:
+- [ ] Update `@quarto/engine-host-deno/src/quarto-api.ts` to call the
+  `createJupyter` factory with the same `denoHost` used for the other
+  namespaces in Plan 2C:
   ```typescript
-  import { jupyterToMarkdown, isPercentScript, ... } from "@quarto/jupyter";
+  import { createJupyter } from "@quarto/api/jupyter";
+  import { denoHost } from "./deno-host.ts";
 
   function buildJupyterNamespace(context: EngineHostContext) {
-      return {
-          toMarkdown: (nb, opts) => jupyterToMarkdown(nb, opts),
-          isPercentScript: (file, exts) => isPercentScript(file, exts),
-          percentScriptToMarkdown: (file) => percentScriptToMarkdown(file),
-          assets: (input, to) => assets(input, to),
-          resultIncludes: (dir, deps) => resultIncludes(dir, deps),
-          resultEngineDependencies: (deps) => resultEngineDependencies(deps),
-      };
+      return createJupyter(denoHost);
   }
   ```
-- [ ] Add `@quarto/jupyter` as dependency of `@quarto/engine-host`
+  The factory returns the six-method namespace object directly; the
+  engine-host layer just forwards it. Any context-dependent wrappers
+  (e.g. resolving `context.tempDir` for `resultIncludes`) can be
+  composed around the factory output.
+- [ ] `@quarto/api` is already a dependency of `@quarto/engine-host-deno`
+  (added in Plan 2C) — no new dependency needed.
 
 ### Phase 3F: Testing
 
-Check existing ts-packages for the test runner convention (likely Vitest or Deno test). Run `npm install` from the repo root after creating the package.
+Check existing ts-packages for the test runner convention (likely Vitest).
+Run `npm install` from the repo root if the package structure changed.
 
 - [ ] Unit tests for each supporting module (display-data, tags, labels, preserve, widgets)
 - [ ] Unit tests for cell options parsing
@@ -274,7 +353,17 @@ Key simplifications in our rewrite:
 4. **No MappedString provenance** — just plain strings with filenames
 5. **Flattened options types** — `JupyterToMarkdownOptions` instead of pulling in `ExecuteOptions` → `Format` → `ProjectContext` → ...
 
-These simplifications mean ~1300 lines of clean code vs. ~5000+ lines of tangled Quarto 1 code with 30+ transitive dependencies.
+These simplifications mean ~1300 lines of clean code vs. ~5000+ lines of
+tangled Quarto 1 code with 30+ transitive dependencies.
+
+### Dependency on `@quarto/api/text` or `@quarto/api/markdown`
+
+If `jupyter/` needs text helpers (e.g., `lines`, `pandocAutoIdentifier`) or
+markdown parsing, it imports them directly from the sibling subpath (e.g.,
+`import { lines } from "../text/text.ts"`). Since both live in the same
+`@quarto/api` package, there's no cross-package version coordination — they
+are released together. If internal relative imports become noisy, we can
+use the package's own exports map inside the package (`@quarto/api/text`).
 
 ### Accuracy target
 
@@ -289,21 +378,41 @@ Edge cases where we may differ:
 - Complex widget dependency chains
 - ANSI color preservation in output (we strip, Quarto 1 converts to HTML spans)
 
+### Portability constraints
+
+Same rules as Plan 2 (see "Portability constraints" in that plan):
+
+1. No q2-specific imports from `jupyter/`.
+2. **No `Deno.*` or `node:*` references inside `jupyter/`.** All I/O goes
+   through the `PlatformHost` passed to `createJupyter(host)`. The three
+   FS-touching functions (`toMarkdown`'s figure writes, `isPercentScript`,
+   `percentScriptToMarkdown`) call `host.fs.*` explicitly; the rest of
+   `jupyter/` is pure.
+3. No dependency on `@quarto/engine-host-deno` (dependency runs the other direction).
+4. Same package can later run under `@quarto/engine-host-wasm` with a
+   VFS-backed host — no changes to `jupyter/` required, only a different
+   `PlatformHost` implementation plugged in at the engine-host layer.
+
 ### Future: Quarto 1 adoption
 
-This package is designed to be importable by Quarto 1, replacing:
+`@quarto/api/jupyter` is designed to be importable by Quarto 1, replacing:
 - `src/core/jupyter/jupyter.ts` (the `jupyterToMarkdown` function)
 - `src/core/jupyter/display-data.ts`, `tags.ts`, `labels.ts`, `preserve.ts`, `widgets.ts`
 - Parts of `src/core/jupyter/jupyter-shared.ts`
 
-The API signatures are compatible. Quarto 1 would need to adapt its options types to match our flattened `JupyterToMarkdownOptions`.
+The API signatures are compatible. Quarto 1 would need to adapt its options
+types to match our flattened `JupyterToMarkdownOptions`.
 
 ## Success Criteria
 
-- [ ] `@quarto/jupyter` package with all 7 methods the Julia engine uses
+- [ ] `@quarto/api/jupyter` populated with all 6 methods the Julia engine uses,
+  exposed via `createJupyter(host)` factory
+- [ ] No `Deno.*` or `node:*` references inside `@quarto/api/jupyter`
 - [ ] `toMarkdown` correctly converts notebooks with code, markdown, and raw cells
-- [ ] Image outputs write files to disk and emit correct markdown references
+- [ ] Image outputs write files to disk (via `host.fs.writeFileSync`) and emit
+  correct markdown references
 - [ ] HTML outputs use preservation markers
 - [ ] Error outputs format tracebacks readably
-- [ ] All tests pass
-- [ ] Integrated into `@quarto/engine-host`'s QuartoAPI
+- [ ] All tests pass (unit tests can pass a mock host with in-memory FS)
+- [ ] Integrated into `@quarto/engine-host-deno`'s QuartoAPI via
+  `createJupyter(denoHost)` in `buildJupyterNamespace`

@@ -76,7 +76,7 @@ because included files may contain cross-references that `PreEngineSugaring`
 needs to index (it seeds `RefTypeRegistry` and builds `CrossrefIndex`). Both
 must run before `EngineExec`.
 
-**Note on non-QMD files:** Plan 1b restructures the pipeline entry point so
+**Note on non-QMD files:** Plan 1c restructures the pipeline entry point so
 that `claimsFile` (engine detection Phase 1) runs before `ParseDocument`.
 If an engine claims a non-QMD file (e.g., `.jl` percent script), the engine
 converts it to QMD text via `markdownForFile`, and that text enters the
@@ -487,7 +487,7 @@ reconstruction) for the crossing.
 Percent-script conversion (`.jl` files with `# %%` markers → QMD) is
 engine-specific: different engines check different file extensions and use
 different comment syntaxes. In q2, the engine handles this via `claimsFile`
-+ `markdownForFile` in the pre-parse detection flow (see Plan 1b Phase 2).
++ `markdownForFile` in the pre-parse detection flow (see Plan 1c Phase 2).
 
 q2 does not need to know about percent or spin script formats. The engine
 converts its file format to QMD, q2 parses the QMD, and the pipeline
@@ -498,7 +498,7 @@ filename).
 
 Built-in engines do not currently implement `claims_file` or
 `markdown_for_file`. Adding percent/spin script support to built-in
-engines is documented as future work in Plan 1b.
+engines is documented as future work in Plan 1c.
 
 ### Why AST-level, not text-level
 

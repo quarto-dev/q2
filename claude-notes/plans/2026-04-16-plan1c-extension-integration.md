@@ -1,17 +1,21 @@
-# Plan 1b: Extension Integration & End-to-End
+# Plan 1c: Extension Integration & End-to-End
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
-**Depends on:** Plan 1a (Protocol & Core Infrastructure)
+**Depends on:** Plan 1a (Rust core: protocol, subprocess, trait, `TsEngine`)
+and Plan 1b (Deno harness: `@quarto/engine-host-deno`). Phases 1-2 of this
+plan could technically start from Plan 1a alone (no subprocesses spawned),
+but Phase 3 (echo engine E2E test) requires both.
 **Blocks:** Plan 4 (Julia Validation)
 **Estimated sessions:** 1-2
 
 ## Overview
 
-Wire the TS engine infrastructure from Plan 1a into the extension system and
-detection pipeline. Parse engine contributions from `_extension.yml`, build TS
-extensions with `deno bundle`, migrate the `EngineRegistry` into `StageContext`,
-rewrite engine detection with the 4-phase algorithm, and validate end-to-end with
-an echo engine integration test.
+Wire the TS engine infrastructure from Plans 1a and 1b into the extension
+system and detection pipeline. Parse engine contributions from
+`_extension.yml`, build TS extensions with `deno bundle`, migrate the
+`EngineRegistry` into `StageContext`, rewrite engine detection with the
+4-phase algorithm, and validate end-to-end with an echo engine integration
+test.
 
 ## Phase order
 
@@ -27,24 +31,32 @@ Following Quarto 1's approach: engine extensions are **built** (bundled from TS 
 
 - [ ] Add `engines` field to the `Contributes` struct in `crates/quarto-core/src/extension/types.rs`:
   ```rust
-  /// Engine contributions (paths to TS engine modules).
+  /// Engine contributions: paths to TS engine modules or engine name
+  /// strings for reordering.
   pub engines: Vec<EngineContribution>,
   ```
   And define:
   ```rust
   /// An engine contributed by an extension.
   #[derive(Debug, Clone)]
-  pub struct EngineContribution {
-      /// Absolute path to the engine module (.ts source or .js bundle).
-      pub path: PathBuf,
+  pub enum EngineContribution {
+      /// An external engine module (.ts source or .js bundle).
+      /// Absolute path (resolved during read_extension).
+      External { path: PathBuf },
+      /// A bare engine name string — reordering hint that moves a
+      /// previously registered engine to higher priority.
+      Reorder { name: String },
   }
   ```
-  Note: Quarto 1's schema also allows bare strings (engine names for reordering),
-  but those are ordering hints handled in `_quarto.yml` `engines:`, not contributions.
-  Extension `contributes.engines` entries always have a `path`.
+  This matches Quarto 1's schema exactly: `contributes.engines` accepts both
+  objects with a `path` property (creating new engines) and bare strings
+  (reordering hints). In `resolveEngines()`, string entries are added to the
+  ordering list while object entries are dynamically imported and registered.
 
 - [ ] Add `engines` parsing in `parse_contributes()` in `crates/quarto-core/src/extension/read.rs`:
-  - Handle array of objects with `path` key (resolve to absolute paths relative to ext_dir)
+  - Handle array of strings (reordering hints → `EngineContribution::Reorder`)
+    and objects with `path` key (resolve to absolute paths relative to ext_dir
+    → `EngineContribution::External`)
   - Include `engines` in the "at least one sub-field" validation check
   - This supersedes Phase 8 of the extensions grand plan
     (`claude-notes/plans/2026-03-16-extensions-grand-plan.md`)
@@ -53,9 +65,19 @@ Following Quarto 1's approach: engine extensions are **built** (bundled from TS 
   ```yaml
   contributes:
     engines:
-      - path: julia-engine.js
+      - path: julia-engine.js   # object form: new engine
+      - jupyter                  # string form: reordering hint
   ```
-  **Quarto 1 reference:** The extension schema (in `src/resources/schema/extension.yml`) defines engines as an array of either strings (engine names for reordering) or objects with a `path` property. The Julia engine's `_extension.yml` uses `- path: julia-engine.js` (pointing to the pre-built bundle). The engine's name comes from the module's `name` property at runtime, not from the YAML.
+  **Quarto 1 reference:** The extension schema (in `src/resources/schema/extension.yml`)
+  defines engines as an array of either strings (engine names for reordering) or
+  objects with a `path` property. Both forms are allowed in both `_extension.yml`
+  and `_quarto.yml` (identical schema). In practice, `_extension.yml` mostly uses
+  the object form to contribute new engines, while `_quarto.yml` uses strings to
+  reorder. But extensions may also reorder engines if needed.
+
+  The Julia engine's `_extension.yml` uses `- path: julia-engine.js` (pointing to
+  the pre-built bundle). The engine's name comes from the module's `name` property
+  at runtime, not from the YAML.
 
   In q2, the `path` can point to either the `.ts` source (build step produces `.js`) or a pre-built `.js` bundle. Discovery queries (claimsLanguage, claimsFile) are handled dynamically by the subprocess.
 - [ ] Implement engine extension build step:
@@ -73,7 +95,10 @@ Following Quarto 1's approach: engine extensions are **built** (bundled from TS 
   **Quarto 1 reference:** `resolveEngineExtensions()` in `src/project/project-context.ts` discovers extensions with `contributes.engines`, merges them into `projectConfig.engines`. Then `resolveEngines()` in `src/execute/engine.ts` imports and registers them.
 - [ ] For each discovered engine:
   1. Check if a bundled `.js` exists (built output)
-  2. If not, check if the `.ts` source exists and auto-build it (or error with instructions)
+  2. If not, error with a clear message: "Engine extension '{name}' has no
+     bundled .js file. Run `quarto build-ts-extension` in the extension
+     directory to build it." No auto-building — matching Quarto 1's contract
+     where extension authors build/bundle and check in the .js artifact.
   3. Create a `TsEngine` instance pointing to the bundled `.js`
   4. Register it in the `EngineRegistry`
 - [ ] Support `_quarto.yml` `engines:` list for ordering. Following Quarto 1's model:
@@ -141,11 +166,33 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   `new()`). Move it to `StageContext` where it's built during `StageContext::new()`:
   1. Start with `EngineRegistry::new()` (built-in engines)
   2. Scan `ctx.extensions` for engine contributions (`contributes.engines`)
-  3. For each `EngineContribution`, create a `TsEngine` and `registry.register()` it
-  4. Store as `ctx.registry: EngineRegistry`
+  3. For each `EngineContribution::External`, create a `TsEngine` and `registry.register()` it
+  4. For each `EngineContribution::Reorder`, add to the engine ordering list
+  5. Apply ordering: user-specified engines first, then remaining registered engines
+  6. Store as `ctx.registry: EngineRegistry`
   `EngineExecutionStage` becomes stateless — its `run()` reads `ctx.registry`.
   Remove the `registry` field from `EngineExecutionStage`; the `with_registry()`
   test constructor is replaced by tests that build a `StageContext` with a custom registry.
+
+- [ ] **Add `claimed_engine_name: Option<String>` to `StageContext`.**
+  Set by the pre-parse stage (below) when an engine claims a file via `claimsFile`.
+  Read by `EngineExecutionStage` — if set, look up by name in registry, skip
+  Phases 2-4 detection.
+
+- [ ] **Create `EngineClaimsFileStage`** — a new `LoadedSource → LoadedSource` pipeline
+  stage inserted before `ParseDocumentStage` in `build_html_pipeline_stages()`.
+  This stage:
+  1. Gets the file extension from `LoadedSource.path`
+  2. For each engine in `ctx.registry` (in order), calls `claims_file(file, ext)`
+  3. If an engine claims the file, calls `markdown_for_file(file)` to get QMD text
+  4. Replaces `LoadedSource.content` with the QMD bytes and `source_type` with `Qmd`
+  5. Stores `ctx.claimed_engine_name = Some(engine.name().to_string())`
+  6. Converts the returned `TsMappedStringWithMap.source_map` entries to a
+     `SourceInfo::Concat` for source provenance tracking
+  7. If no engine claims the file, passes through unchanged (the common case for `.qmd`)
+  For TS engines, this lazily spawns the Deno subprocess on first `claimsFile` query.
+  **WASM note:** A future plan will need to include this stage in the WASM pipeline
+  (built-in engines may eventually claim `.ipynb` etc. without Deno).
 
 - [ ] **Remove the `KNOWN_ENGINES` constant** from `detection.rs`. Currently hardcoded
   as `["markdown", "knitr", "jupyter"]`. With extension engines, the set of known
@@ -154,17 +201,22 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   with a query against the registry's engine names: `registry.engine_names()`.
 
 - [ ] Implement 4-phase detection (new function or refactor of `detect_engine()`).
-  New signature: `detect_engine(metadata, registry, ast) → DetectedEngine`
-  (takes the registry and parsed AST, not just metadata).
+  New signature: `detect_engine(metadata, registry, ast, claimed: Option<&str>) → DetectedEngine`
+  (takes the registry, parsed AST, and optional pre-claimed engine name).
+  If `claimed` is `Some(name)`, skip all phases and look up directly by name (set by
+  `EngineClaimsFileStage` via `ctx.claimed_engine_name`).
   1. **Phase 1 — File extension claims**: For each engine in registry order, call
      `claims_file(file, ext)`. First engine to claim wins. Used for `.ipynb` → jupyter,
-     `.rmd` → knitr.
+     `.rmd` → knitr. (Note: for the pre-parse flow, this already ran in
+     `EngineClaimsFileStage` and the result is in `claimed`. This phase is still
+     needed for cases where the file extension maps to a built-in engine that
+     doesn't need `markdownForFile`, e.g., `.ipynb` → jupyter.)
   2. **Phase 2 — YAML declaration**: Check explicit `engine:` key in frontmatter
      (existing logic). Also check engine-name top-level keys — scan
      `registry.engine_names()` instead of `KNOWN_ENGINES`. Skip phases 3-4.
   3. **Phase 3 — Language scanning**: Extract languages + first classes from code blocks
      using the **parsed AST** (not regex — q2 has pampa for this). For each language,
-     call each engine's `claims_language(language, first_class)`. Highest `Option<u32>`
+     call each engine's `claims_language(language, first_class)`. Highest `Option<i32>`
      score wins. Engine iteration order breaks ties (user-specified engines first).
   4. **Phase 4 — Fallback**: If unclaimed computational languages exist (not handler
      languages like `ojs`), default to Jupyter (it may have a kernel). If no
@@ -240,7 +292,7 @@ Note: The **engine-host harness** is built with esbuild (matching existing q2 pa
 
 This means the Deno subprocess invocation is simple:
 ```bash
-deno run --allow-all <engine-host.js>
+deno run --allow-all <engine-host-deno.js>
 ```
 
 No `--import-map` flag needed at runtime.
@@ -268,10 +320,14 @@ but is a natural follow-on.
 ## Success Criteria
 
 - [ ] Extension discovery finds engine extensions in `_extensions/`
+- [ ] Both string (reordering) and object (new engine) forms parsed from `contributes.engines`
 - [ ] `_quarto.yml` `engines:` list controls engine ordering
 - [ ] `EngineRegistry` lives in `StageContext`, populated with extension engines
 - [ ] `KNOWN_ENGINES` constant removed; detection uses registry dynamically
+- [ ] `EngineClaimsFileStage` runs before `ParseDocumentStage`, claims non-QMD files
+- [ ] `claimed_engine_name` propagates from pre-parse stage to `EngineExecutionStage`
 - [ ] 4-phase engine detection works: file extension → YAML → language scan → Jupyter fallback (unclaimed langs) / markdown (no code)
 - [ ] Echo engine integration test passes end-to-end
-- [ ] Tests requiring Deno are skipped if Deno is absent (same pattern as pandoc)
+- [ ] Tests requiring Deno are skipped if Deno is absent (runtime `has_deno()`
+  check with early return, matching the pandoc test pattern)
 - [ ] All existing tests pass (no regressions)

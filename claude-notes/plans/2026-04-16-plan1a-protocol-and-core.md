@@ -1,26 +1,33 @@
-# Plan 1a: Protocol & Core Infrastructure
+# Plan 1a: Protocol & Rust Core Infrastructure
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plan 0 (SourceInfo in ExecutionContext, source_map serialization format)
-**Blocks:** Plan 1b, Plan 2 (QuartoAPI needs engine-host), Plan 3 (jupyter needs engine-host)
-**Estimated sessions:** 2-3
+**Blocks:** Plan 1b (Deno harness — needs the frozen JSON protocol schema from
+Phase 1), Plan 1c (extension integration — needs `TsEngine` + trait extensions),
+Plans 2 and 3 (via Plan 1b).
+**Estimated sessions:** 1-2
 
 ## Overview
 
-Build the core infrastructure for TypeScript engine extensions: the JSON protocol
-types, Deno subprocess management, `ExecutionEngine` trait extensions, the `TsEngine`
-struct, and the Deno-side engine-host harness.
+Build the Rust-side infrastructure for TypeScript engine extensions: the
+JSON protocol types, Deno subprocess management, `ExecutionEngine` trait
+extensions, and the `TsEngine` struct.
 
-This plan delivers a working Rust↔Deno communication layer. After this plan, you can
-spawn a Deno subprocess, send it protocol messages covering the full
-`ExecutionEngineInstance` lifecycle, and receive typed responses. Plan 1b wires this
-into the extension system and detection pipeline.
+The Deno-side harness (`@quarto/engine-host-deno`) is Plan 1b — a separate
+plan because once the JSON protocol schema is frozen (Phase 1 below), the
+Rust-side work and the Deno-side harness are independent.
+
+After this plan plus Plan 1b, you can spawn a Deno subprocess, send it
+protocol messages covering the full `ExecutionEngineInstance` lifecycle,
+and receive typed responses. Plan 1c wires this into the extension system
+and detection pipeline.
 
 ## Phase order
 
-Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
+Phase 1 → Phase 2 → Phase 3 → Phase 4
 
-Phase 5 (Deno harness) is independent of Phases 3-4 and can be done in parallel.
+Phase 1 freezes the JSON protocol schema. Plan 1b can begin in parallel
+with Phases 2-4 once Phase 1 is done.
 
 ## Work Items
 
@@ -35,12 +42,11 @@ Define the message types used between Rust and Deno. Both sides need matching de
   **Design principle (from Plan 0 discussion):** q2 owns the rendering
   pipeline — parsing, include expansion, AST serialization. The engine
   owns file-format-specific knowledge (percent scripts, spin scripts)
-  and code execution. Methods where q2 already does the work
-  (`target`, `partitionedMarkdown`) are NOT in the protocol — q2
-  constructs the equivalent data from its AST and sends it in
-  `TsExecuteOptions`. `markdownForFile` IS in the protocol because
-  the engine knows how to read its own file formats (e.g., Julia
-  percent scripts → QMD).
+  and code execution. `markdownForFile` and `partitionedMarkdown` are
+  in the protocol because the engine knows how to read its own file
+  formats and may run filters (ipynb-filters) before partitioning.
+  `target()` is harness-internal — q2 constructs execution targets
+  from its AST natively.
 
   ```rust
   // Rust → Deno messages
@@ -65,6 +71,18 @@ Define the message types used between Rust and Deno. Both sides need matching de
       // For QMD files, q2 handles parsing directly — this is never called.
       #[serde(rename = "markdownForFile")]
       MarkdownForFile { file: String },
+
+      // === Optional instance methods ===
+      // partitionedMarkdown: partition file into yaml/heading/body.
+      // Also on the Rust ExecutionEngine trait (Jupyter needs it for
+      // ipynb-filters). TsEngine forwards to subprocess.
+      #[serde(rename = "partitionedMarkdown")]
+      PartitionedMarkdown { file: String, format: Option<TsFormatInfo> },
+      // Note: target() is harness-internal, not a protocol message.
+      // The harness checks if the engine implements target(), calls it
+      // if so, and uses the result (including the opaque `data` cookie)
+      // to build the ExecutionTarget for execute(). All on the Deno side —
+      // q2 never sees target() results or the engine cookie.
 
       // === Execute ===
       #[serde(rename = "execute")]
@@ -99,13 +117,19 @@ Define the message types used between Rust and Deno. Both sides need matching de
       #[serde(rename = "error")]
       Error { message: String, stack: Option<String> },
 
-      // === Discovery ===
-      #[serde(rename = "claimsResult")]
-      ClaimsResult { result: Option<u32> },
+      // === Discovery (separate response types) ===
+      #[serde(rename = "claimsLanguageResult")]
+      ClaimsLanguageResult { result: Option<i32> },
+      #[serde(rename = "claimsFileResult")]
+      ClaimsFileResult { result: bool },
 
       // === File conversion ===
       #[serde(rename = "markdownForFileResult")]
-      MarkdownForFileResult { result: TsMappedString },
+      MarkdownForFileResult { result: TsMappedStringWithMap },
+
+      // === Optional instance methods ===
+      #[serde(rename = "partitionedMarkdownResult")]
+      PartitionedMarkdownResult { result: TsPartitionedMarkdown },
 
       // === Execute ===
       #[serde(rename = "executeResult")]
@@ -136,8 +160,8 @@ Define the message types used between Rust and Deno. Both sides need matching de
   | Method | Protocol message | Notes |
   |--------|-----------------|-------|
   | `markdownForFile(file)` | `MarkdownForFile` → `MarkdownForFileResult` | Non-QMD files only (percent scripts, etc.). For QMD files, q2 handles parsing directly. |
-  | `target(file, quiet, md)` | **Not in protocol** | q2 constructs equivalent data from its AST; sent as fields in `TsExecuteOptions`. Engine-host harness builds the `ExecutionTarget` the engine expects. |
-  | `partitionedMarkdown(file, fmt)` | **Not in protocol** | q2 already has the full AST — richer than a partition. Not needed. |
+  | `target(file, quiet, md)` | **Harness-internal** | Not a protocol message or Rust trait method. The harness checks if the TS engine implements `target()`, calls it if so, uses the result (including opaque `data` cookie) to build `ExecutionTarget` for `execute()`. All Deno-side — q2 never sees target() results. If engine doesn't implement it, harness constructs from `TsExecuteOptions` fields. |
+  | `partitionedMarkdown(file, fmt)` | `PartitionedMarkdown` → `PartitionedMarkdownResult` | **Optional, also on Rust `ExecutionEngine` trait.** Needed for ipynb-filter YAML harvest and project indexing. Default impl: `partition(markdown_for_file(file).value)`. Jupyter overrides for ipynb-filter support. See [ipynb-filters research plan](2026-04-23-ipynb-filters-and-engine-partitioning.md). |
   | `filterFormat(src, opts, fmt)` | `FilterFormat` → `FilterFormatResult` | Optional; format typed as `TsFormatInfo` |
   | `execute(options)` | `Execute` → `ExecuteResult` | Core execution |
   | `executeTargetSkipped(tgt, fmt)` | `ExecuteTargetSkipped` → `ExecuteTargetSkippedResult` | Notification, void return |
@@ -147,7 +171,11 @@ Define the message types used between Rust and Deno. Both sides need matching de
   | `intermediateFiles(input)` | `IntermediateFiles` → `IntermediateFilesResult` | File list query |
   | `run(options)` | **Not included** | Interactive mode — fundamentally different (long-running, not request/response). Defer to a future plan. |
   | `postRender(file)` | `PostRender` → `PostRenderResult` | Post-render hook |
-- [ ] Define `EngineHostContext` struct (see grand plan for fields)
+- [ ] Define `EngineHostContext` struct. This is a q2 invention (Quarto 1 engines
+  run in-process and don't need serialized context). It carries only static/global
+  and project-level information — per-document and per-format info arrives in
+  per-call messages like `TsExecuteOptions`. See the Protocol Data Types appendix
+  for the full struct definition.
 - [ ] Define protocol data types — all strongly typed, no `serde_json::Value`.
   Every field that crosses the protocol boundary has a defined Rust type.
   See the **Protocol Data Types** appendix at the end of this file for the full
@@ -158,20 +186,23 @@ Define the message types used between Rust and Deno. Both sides need matching de
 
   **Message envelope tests** (verify `type` tag and camelCase field names):
   - Test each `ToEngine` variant: `Init`, `Shutdown`, `ClaimsLanguage`, `ClaimsFile`,
-    `MarkdownForFile`, `Execute`, `Dependencies`, `Postprocess`, `PostRender`,
-    `CanKeepSource`, `IntermediateFiles`, `FilterFormat`, `ExecuteTargetSkipped`
-  - Test each `FromEngine` variant: `Ready`, `Error`, `ClaimsResult`,
-    `MarkdownForFileResult`, `ExecuteResult`, `DependenciesResult`,
-    `PostprocessResult`, `PostRenderResult`, `CanKeepSourceResult`,
-    `IntermediateFilesResult`, `FilterFormatResult`, `ExecuteTargetSkippedResult`
+    `MarkdownForFile`, `PartitionedMarkdown`, `Execute`, `Dependencies`,
+    `Postprocess`, `PostRender`, `CanKeepSource`, `IntermediateFiles`,
+    `FilterFormat`, `ExecuteTargetSkipped`
+  - Test each `FromEngine` variant: `Ready`, `Error`, `ClaimsLanguageResult`,
+    `ClaimsFileResult`, `MarkdownForFileResult`, `PartitionedMarkdownResult`,
+    `ExecuteResult`, `DependenciesResult`, `PostprocessResult`,
+    `PostRenderResult`, `CanKeepSourceResult`, `IntermediateFilesResult`,
+    `FilterFormatResult`, `ExecuteTargetSkippedResult`
 
   **Data type round-trip tests:**
   - `EngineMeta` — all fields populated
-  - `TsMappedString` — with and without file_name
+  - `EngineHostContext` — with and without project_dir
+  - `TsMappedStringWithMap` — with and without file_name, with source_map entries
   - `TsSourceMapEntry` — verify serialization of byte-range pieces
-  - `TsFormatInfo` — full format with all sub-structs populated
-  - `TsFormatExecute` — test `TsDaemonOption` (bool vs number), `TsEchoOption`
-    (bool vs "fenced"), `TsOutputOption` (bool vs "all"/"asis")
+  - `TsFormatInfo` — with categorized HashMap sections populated
+  - `TsFormatIdentifier` — all fields
+  - `TsPartitionedMarkdown` — all fields populated, with and without yaml/heading
   - `TsExecutionTarget` — with nested `TsMappedString` and `TsMetadataValue` map
   - `TsMetadataValue` — each variant (String, Bool, Number, Array, Map, Null)
   - `TsExecuteOptions` — verify metadata map and source_map serialization
@@ -233,18 +264,20 @@ Define the message types used between Rust and Deno. Both sides need matching de
   }
   ```
 
-  `TsFormatInfo` (defined in the protocol data types appendix) carries all format
-  fields the engine reads: `execute.daemon`, `execute.fig_format`, `pandoc.to`,
-  `render.keep_hidden`, etc. The Deno harness maps `TsFormatInfo` to Quarto 1's
-  `Format` interface so the engine sees familiar field names.
+  `TsFormatInfo` (defined in the protocol data types appendix) uses categorized
+  `HashMap<String, TsMetadataValue>` sections (execute, render, pandoc, metadata).
+  q2 constructs this by extracting keys from the merged `ConfigValue` metadata
+  using Quarto 1's key classification lists (kExecuteDefaultsKeys, etc.). The Deno
+  harness maps `TsFormatInfo` to Quarto 1's `Format` interface so the engine sees
+  familiar field names — the mapping is trivial since the section structure already
+  matches. Any new config key automatically flows through without protocol changes.
 
-  Fields traced from the Julia engine:
-  - `options.format.pandoc.to` — output format
-  - `options.format.execute[kExecuteDaemon]` — daemon mode
-  - `options.format.execute[kExecuteDaemonRestart]` — restart daemon
-  - `options.format.execute[kFigFormat]`, `[kFigDpi]` — figure options
-  - `options.format.render[kKeepHidden]`, `[kFigPos]` — render options
-  - `options.format.render[kIpynbProduceSourceNotebook]` — notebook mode
+  Fields used by the Julia engine (our validation target):
+  - `format.execute["daemon"]`, `["fig-format"]`, `["fig-dpi"]`
+  - `format.render["keep-hidden"]`, `["fig-pos"]`, `["produce-source-notebook"]`
+  - `format.pandoc["to"]`
+  - The whole `format.execute` map (passed to `jupyter.toMarkdown`)
+  - The whole `format.pandoc` map (passed to format detection helpers)
   
   See `~/src/quarto-cli/src/resources/extension-subtrees/julia-engine/src/julia-engine.ts`.
 
@@ -269,7 +302,7 @@ Spawn and manage the Deno subprocess.
   ```
   The `EngineProcess` is **long-lived** — spawned once when the engine is first needed during a project render, then reused for all discovery queries and execution calls. It is shut down at the end of the project render (or when the engine is no longer needed).
 
-- [ ] Spawn Deno with: `deno run --allow-all <engine-host.js>`
+- [ ] Spawn Deno with: `deno run --allow-all <engine-host-deno.js>`
   - `--allow-all` because engine extensions need file/net/process access
   - Consider more granular permissions later
 - [ ] Handle Deno not being installed: check PATH, clear error message
@@ -294,7 +327,7 @@ extensions) to participate in the same claiming system and execution pipeline.
 - [ ] Add **discovery methods** to `ExecutionEngine` trait with defaults:
   ```rust
   fn valid_extensions(&self) -> Vec<String> { Vec::new() }
-  fn claims_language(&self, _language: &str, _first_class: Option<&str>) -> Option<u32> { None }
+  fn claims_language(&self, _language: &str, _first_class: Option<&str>) -> Option<i32> { None }
   fn claims_file(&self, _file: &str, _ext: &str) -> bool { false }
   ```
 
@@ -310,12 +343,29 @@ extensions) to participate in the same claiming system and execution pipeline.
   }
   ```
 
-  **Removed from Quarto 1's interface** (q2 handles these natively):
-  - `target()` — q2 constructs execution target data from its AST and
-    sends it in `TsExecuteOptions`. The engine-host harness builds the
-    `ExecutionTarget` object the engine expects.
-  - `partitionedMarkdown()` — q2 already has the full AST, which is
-    richer than a YAML/heading/body partition. Not needed.
+  **Not on Rust trait** (protocol-only for TS engines):
+  - `target()` — q2 constructs execution target data from its AST. TS
+    engines may implement it for Quarto 1 API compat (transient notebooks,
+    kernelspec). The harness builds the `ExecutionTarget` from
+    `TsExecuteOptions` fields when the engine doesn't implement it.
+
+- [ ] Add **partitioned markdown method** with default:
+  ```rust
+  /// Partition a file's markdown into yaml/heading/body.
+  /// Intended default: calls markdown_for_file then partitions the result.
+  /// Jupyter will override to run ipynb-filters when format is provided.
+  /// See ipynb-filters research plan for full details.
+  fn partitioned_markdown(&self, _file: &Path, _format: Option<&TsFormatInfo>)
+      -> Result<PartitionedMarkdown, ExecutionError> {
+      todo!("partition_markdown not yet implemented — see ipynb-filters research plan R2")
+  }
+  ```
+  The default impl uses `todo!()` because the `partition_markdown()` utility
+  function is deferred to the ipynb-filters research plan (R2). No callers
+  exist yet in q2's pipeline. `TsEngine` never hits this default — it
+  forwards to the subprocess if the engine reports `has_partitioned_markdown`,
+  and falls back to the harness-side `partition(markdownForFile(file).value)`
+  otherwise.
 
 - [ ] Add **post-execute lifecycle methods** with defaults:
   ```rust
@@ -351,7 +401,7 @@ extensions) to participate in the same claiming system and execution pipeline.
   protocol changes.
 
 - [ ] Implement on built-in engines:
-  - **JupyterEngine**: `valid_extensions() → [".ipynb"]`, `claims_file` for `.ipynb` and percent scripts. No `claims_language` overrides (returns `None` for all languages, matching Quarto 1 where Python also relied on the Phase 4 fallback). The only Quarto 1 change: no longer claims "julia" explicitly, removing the priority conflict with the Julia extension. Jupyter still handles all unclaimed computational languages via the Phase 4 fallback.
+  - **JupyterEngine**: `valid_extensions() → [".ipynb"]`, `claims_file` for `.ipynb` and percent scripts. No `claims_language` overrides (returns `None` for all languages, matching Quarto 1 where Python also relied on the Phase 4 fallback). **Deliberate q2 interface change:** Jupyter no longer claims "julia" explicitly (Quarto 1 did this as a backward-compatibility hack), removing the priority conflict with the Julia extension. Jupyter still handles all unclaimed computational languages via the Phase 4 fallback, so `{julia}` blocks without the Julia extension still work via Jupyter's kernel.
   - **KnitrEngine**: `claims_language("r") → Some(1)`, `valid_extensions() → [".rmd", ".rmarkdown"]`, `claims_file` for `.rmd`/`.rmarkdown`
   - **MarkdownEngine**: returns defaults (claims nothing)
   - Built-in engines use the default implementations for the lifecycle methods
@@ -369,7 +419,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the subproces
   pub struct TsEngine {
       name: String,
       bundle_path: PathBuf,         // Path to the bundled .js file (built from .ts source)
-      engine_host_path: PathBuf,    // Path to engine-host.js bundle
+      engine_host_path: PathBuf,    // Path to engine-host-deno.js bundle
       process: Option<EngineProcess>, // Long-lived subprocess, lazily spawned
       engine_meta: Option<EngineMeta>, // Cached after init
   }
@@ -392,14 +442,18 @@ The Rust struct that implements `ExecutionEngine` by delegating to the subproces
 
   **Discovery methods (defined in Phase 3 above):**
   - `valid_extensions()` → from `EngineMeta` (no subprocess call, cached from init)
-  - `claims_language(language, first_class)` → send `ClaimsLanguage`, recv `ClaimsResult`
-  - `claims_file(file, ext)` → send `ClaimsFile`, recv `ClaimsResult`
+  - `claims_language(language, first_class)` → send `ClaimsLanguage`, recv `ClaimsLanguageResult`. Harness converts JS `false` → `null`, `true` → `1`, number → `Math.trunc()` to `i32`. Negative values allowed (meaning "I'll take this if no one else will").
+  - `claims_file(file, ext)` → send `ClaimsFile`, recv `ClaimsFileResult`
   - Cache `claims_language` results: deterministic, so cache `(language, first_class) → result`
 
   **File conversion (defined in Phase 3 above):**
   - `markdown_for_file(file)` → send `MarkdownForFile`, recv `MarkdownForFileResult`.
     Called only for non-QMD files claimed via `claims_file`. For QMD input, this
     method is never called — q2 handles parsing directly.
+  - `partitioned_markdown(file, format)` → send `PartitionedMarkdown`, recv
+    `PartitionedMarkdownResult` if engine reports `has_partitioned_markdown`.
+    Otherwise, use the Rust-side default (which is `todo!()` for now —
+    no callers exist yet in q2's pipeline).
 
   **Post-execute lifecycle methods (defined in Phase 3 above):**
   - `filter_format(source, options, format)` → send `FilterFormat`, recv result. Optional — default impl returns format unchanged.
@@ -417,98 +471,14 @@ The Rust struct that implements `ExecutionEngine` by delegating to the subproces
     as knitr/jupyter). Re-export `TsEngine` from `engine/mod.rs`.
 - [ ] Use `Mutex<Option<EngineProcess>>` for interior mutability so `TsEngine`
     satisfies `Send + Sync` while allowing `&self` methods to access the subprocess.
-- [ ] Write test with a mock engine (echo engine — see Plan 1b Phase 3)
-
-### Phase 5: @quarto/engine-host package (Deno side)
-
-The TypeScript harness that runs inside the Deno subprocess.
-
-**Build model:** Following the existing `quarto-system-runtime` pattern (see `crates/quarto-system-runtime/js/`):
-1. Source lives in `ts-packages/quarto-engine-host/src/`
-2. **esbuild** bundles it into a single `dist/engine-host.js` (checked into git)
-3. Rust embeds it via `include_str!("../../ts-packages/quarto-engine-host/dist/engine-host.js")`
-   in `ts_process.rs` (behind `#[cfg(not(target_arch = "wasm32"))]` with the rest of the module)
-4. At runtime, writes the embedded JS to a temp file and runs `deno run --allow-all <tempfile>`
-5. Only developers editing the TS harness need to rebuild (via `npm run build` in the package)
-
-- [ ] Create `ts-packages/quarto-engine-host/package.json`:
-  ```json
-  {
-    "name": "@quarto/engine-host",
-    "version": "0.1.0",
-    "type": "module",
-    "main": "src/host.ts",
-    "scripts": {
-      "build": "node esbuild.config.mjs"
-    }
-  }
-  ```
-- [ ] Create `esbuild.config.mjs` — bundle `src/host.ts` → `dist/engine-host.js`.
-    Use `platform: "neutral"` and `format: "esm"` (NOT the `platform: "browser"` /
-    `format: "iife"` pattern from `quarto-system-runtime` — that targets QuickJS via
-    Boa, while engine-host targets Deno which runs ES modules and has its own globals
-    like `Deno.stdout`, `Deno.Command`)
-- [ ] Create `src/host.ts` — main loop:
-  ```typescript
-  // Redirect stdout so engine code can't accidentally corrupt the protocol
-  const protocolOut = Deno.stdout;
-  // Read JSON messages from stdin, dispatch, write responses to protocolOut
-  ```
-  - Read lines from stdin, parse as JSON, dispatch by `type` field
-  - Write JSON response + newline to protocol stdout
-  - Handle errors gracefully (catch, send error message, don't crash)
-  - **Must dispatch all message types** from the protocol:
-    - `init` → load engine, call `engine.init(quartoAPI)`, call `engine.launch(context)`, return `ready`
-    - `claimsLanguage` / `claimsFile` → call discovery methods on loaded engine
-    - `markdownForFile` → call `instance.markdownForFile(file)` (non-QMD files only)
-    - `execute` → construct `ExecutionTarget` from `TsExecuteOptions` fields
-      (source_path, input text wrapped as MappedString, pre-extracted metadata),
-      construct `Format` from `TsFormatInfo`, call `instance.execute(options)`
-    - `filterFormat` → call `instance.filterFormat(source, options, format)` if implemented
-    - `executeTargetSkipped` → call `instance.executeTargetSkipped(target, format)` if implemented
-    - `dependencies` → call `instance.dependencies(options)`
-    - `postprocess` → call `instance.postprocess(options)`
-    - `postRender` → call `instance.postRender(file)` if implemented
-    - `canKeepSource` → call `instance.canKeepSource(target)` if implemented
-    - `intermediateFiles` → call `instance.intermediateFiles(input)` if implemented
-    - `shutdown` → clean up, exit
-  - The harness constructs `ExecutionTarget` from data q2 provides — it does
-    NOT call `instance.target()` or `instance.partitionedMarkdown()`. q2 owns
-    parsing and AST processing; the harness bridges q2's data to the shapes
-    the engine expects.
-  - **MappedString reconstruction from source_map:** The harness constructs
-    a proper `MappedString` (with working `.map()` provenance) from the
-    `source_map` byte-range entries in `TsExecuteOptions`. This is a
-    serialized form of q2's `SourceInfo::Concat` — same concept as Quarto 1's
-    in-process MappedString, just crossing a protocol boundary.
-    Implementation:
-    1. For each unique file in `source_map`, lazily read the file and
-       create a base `MappedString` with `.fileName` set (cached).
-    2. The main MappedString's `.map(index)` binary-searches the pieces
-       to find which piece contains the index, computes the offset in
-       the original file (`piece.fileOffset + (index - piece.start)`),
-       and returns `{ index: offset, originalString: baseForFile }`.
-    3. This gives character-level accuracy — engines like Julia that
-       call `line.map(0, true)` in `buildSourceRanges()` get correct
-       original file + position, even through include boundaries.
-  - For optional methods (`filterFormat`, `executeTargetSkipped`, `canKeepSource`,
-    `intermediateFiles`, `postRender`, `run`): if the engine doesn't implement them,
-    return sensible defaults (pass-through format, true, empty list, void)
-
-- [ ] Create `src/engine-loader.ts`:
-  - Dynamically import the engine module: `await import(toFileUrl(path))`
-  - Validate it has a default export with `name`, `claimsLanguage`, `launch`
-  - Return the `ExecutionEngineDiscovery` object
-
-- [ ] Create `src/quarto-api.ts` — stub implementation:
-  - Build a `QuartoAPI` object from `EngineHostContext`
-  - For now, implement only the trivial namespaces (path, format, system, console, crypto)
-  - `quarto.markdownRegex` and `quarto.jupyter` return stubs that throw "not yet implemented"
-  - Plans 2 and 3 will provide the real implementations
-
-- [ ] Create `src/types.ts` — protocol message type definitions (must match Rust)
-- [ ] Build the bundle and check `dist/engine-host.js` into git
-- [ ] Add a CI check (or xtask lint) that verifies the checked-in bundle is up to date
+    `Mutex` (not `RwLock`) is correct since every operation needs exclusive access
+    (both reads and writes go through the same stdin/stdout handles). The subprocess
+    is inherently single-threaded — the protocol is request-response over a single
+    channel. If two threads try to call `execute()` concurrently, the Mutex serializes
+    them. This matches Quarto 1's behavior (engines process one file at a time).
+- [ ] Write test with a mock engine (echo engine — see Plan 1c Phase 3).
+    A stub Deno harness is sufficient for smoke-testing the Rust side in
+    isolation; the full harness is Plan 1b.
 
 ## Design Notes
 
@@ -520,36 +490,55 @@ This is necessary for efficient discovery — a project scan may call `claimsLan
 
 The lifecycle is managed by the project render orchestration layer, not by individual `execute()` calls. The `TsEngine` struct holds an `Option<EngineProcess>` that is populated on first use and cleared on shutdown.
 
-### Stderr handling
+### Stderr handling (Rust side)
 
-The subprocess's stderr is forwarded to q2's logging. The engine-host harness prefixes log lines with level markers so q2 can parse them:
-```
-[INFO] Checking Julia installation...
-[WARN] Julia server connection slow
-[ERROR] Julia process crashed
-```
+The subprocess's stderr is forwarded to q2's logging. The harness
+(Plan 1b) writes level-prefixed log lines (`[INFO]`, `[WARN]`, `[ERROR]`);
+the Rust side parses those prefixes and routes to the appropriate log
+level. Unprefixed stderr lines are logged at INFO.
 
-Unprefixed stderr lines (from the engine itself or from Deno) are logged at INFO level.
+### Error categories and handling
 
-### Error categories
+Following Quarto 1's approach: **errors propagate up, render fails, user sees the
+message.** No silent recovery, no engine removal from the registry on failure.
 
-1. **Deno not found** — `is_available()` returns false, engine skipped with warning
-2. **Engine module load failure** — `Ready` never received, get `Error` instead
-3. **Execution failure** — `Error` message during execution
-4. **Process crash** — EOF on stdout, child process exited unexpectedly
-5. **Timeout** — execution exceeds configured limit
+1. **Deno not found** — `is_available()` returns false before any subprocess call.
+   Clear error: "Deno is required for the {name} engine extension but was not found
+   in PATH." Render fails.
+2. **Engine module load failure** — Subprocess starts but `init` message gets back an
+   `Error` response instead of `Ready`. Fatal for this engine. Forward the TS-side
+   error message (import failure, missing exports) to the user. Render fails.
+3. **Discovery errors** — `claimsLanguage`/`claimsFile` throw inside the engine.
+   Subprocess sends `Error` response. Propagate as `ExecutionError`. Render fails.
+4. **Execution failure** — `Error` response during execution. Forward the message and
+   optional stack trace. Matches Quarto 1 behavior.
+5. **Process crash** — EOF on stdout, child process exited unexpectedly. No Quarto 1
+   equivalent (in-process engines can't crash independently). Generate an
+   `ExecutionError` with the exit code and any stderr output captured so far.
+6. **Timeout** — Execution exceeds configured limit. Kill the subprocess, report
+   timeout error. (Quarto 1's Julia engine handles timeouts internally; in q2, the
+   Rust side enforces the timeout since it controls the subprocess.)
+7. **Malformed protocol** — Subprocess sends invalid JSON or unexpected message type.
+   This is a bug in the engine-host or engine, not a user error. Report clearly with
+   the raw message content for debugging.
 
-### Where is engine-host.js at runtime?
+### Stdout/stderr contract (Rust side)
 
-The engine-host harness is bundled into a single `.js` file using **esbuild**.
+**Stdout is exclusively for JSON protocol messages**, one per line. On
+the Rust side, if a line from stdout fails to parse as JSON, report a
+clear error: "Engine wrote non-protocol output to stdout. Engine
+extensions must use stderr for diagnostics." See Plan 1b for the
+corresponding harness-side contract (`console.*` overrides, stdout
+redirection, etc.).
 
-**Build pipeline:**
-1. `ts-packages/quarto-engine-host/esbuild.config.mjs` bundles `src/host.ts` → `dist/engine-host.js`
-2. The bundle is checked into git (like `quarto-system-runtime/js/dist/ejs-bundle.js`)
-3. `include_str!("../../ts-packages/quarto-engine-host/dist/engine-host.js")` embeds it in the q2 binary
-4. At runtime, write the embedded string to a temp file, run `deno run --allow-all <tempfile>`
+### Bundle embedding
 
-The engine-host bundle includes `@quarto/markdown`, `@quarto/jupyter`, and all QuartoAPI implementations — a single self-contained `.js` file. Only developers editing the TS harness code need to rebuild it.
+The harness bundle (produced by Plan 1b) is embedded in the q2 binary via
+`include_str!("../../ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js")`
+in `ts_process.rs`, gated behind `#[cfg(not(target_arch = "wasm32"))]`.
+At runtime, the embedded string is written to a temp file and executed
+with `deno run --allow-all <tempfile>`. Bundle-size considerations and
+build pipeline details are in Plan 1b.
 
 ## Success Criteria
 
@@ -558,10 +547,13 @@ The engine-host bundle includes `@quarto/markdown`, `@quarto/jupyter`, and all Q
 - [ ] Built-in engines (knitr, jupyter) implement `claims_language` and `claims_file`
 - [ ] Protocol carries full `TsExecuteResult` (includes, preserve, postProcess, engineDependencies, pandoc)
 - [ ] Deno-not-installed case produces a clear error message
-- [ ] Tests requiring Deno are skipped if Deno is absent (same pattern as pandoc)
+- [ ] Tests requiring Deno are skipped if Deno is absent. Use the same pattern
+  as pandoc tests: a runtime `has_deno()` helper that checks PATH, and tests
+  that need Deno call it and return early (effectively skipping) if absent.
+  No `#[ignore]` attribute — tests run but gracefully degrade.
 - [ ] All existing tests pass (no regressions)
 - [ ] All protocol message types have serialization round-trip tests
-- [ ] Engine-host harness dispatches all message types
+- [ ] (Harness dispatching is Plan 1b's success criterion, not this plan's)
 
 ## Appendix: Protocol Data Types
 
@@ -575,15 +567,49 @@ struct EngineMeta {
     can_freeze: bool,
     generates_figures: bool,
     valid_extensions: Vec<String>,
+    has_partitioned_markdown: bool,  // engine implements partitionedMarkdown()
+    // Note: target() is harness-internal — the harness detects it by
+    // checking the loaded engine module directly, no EngineMeta flag needed.
 }
 
-// Used in MarkdownForFileResult (non-QMD file conversion).
-// NOT the primary source mapping mechanism — that's TsSourceMapEntry
-// in TsExecuteOptions, which the harness reconstructs into a proper
-// MappedString with .map() provenance.
+// === Engine host context (sent once at init) ===
+//
+// q2 invention — Quarto 1 engines run in-process and don't need this.
+// Carries only static/global and project-level info. Per-document and
+// per-format info arrives in per-call messages (TsExecuteOptions, etc.).
+struct EngineHostContext {
+    // Project info (→ EngineProjectContext for launch())
+    project_dir: Option<String>,
+    is_single_file: bool,
+
+    // Paths for QuartoAPI construction
+    resource_dir: String,         // q2's bundled resources
+    runtime_dir: String,          // q2's runtime directory
+    pandoc_path: String,          // absolute path to pandoc binary
+
+    // System info for QuartoAPI
+    is_interactive_session: bool,
+    running_in_ci: bool,
+    quarto_version: String,
+}
+
+// Simple string with optional file attribution. Used in protocol messages
+// where source provenance tracking is not needed (e.g., TsExecutionTarget.markdown
+// in query messages like CanKeepSource, Dependencies).
 struct TsMappedString {
     value: String,
     file_name: Option<String>,
+}
+
+// Extended form used in MarkdownForFileResult (non-QMD file conversion).
+// Includes source_map so that positions in the generated QMD can be
+// traced back to the original file (e.g., .jl percent script).
+// The Rust side converts source_map entries to SourceInfo::Concat
+// and attaches it to the parsed AST.
+struct TsMappedStringWithMap {
+    value: String,
+    file_name: Option<String>,
+    source_map: Vec<TsSourceMapEntry>,
 }
 
 struct TsPandocIncludes {
@@ -599,58 +625,26 @@ struct TsPandocAttr {
 }
 
 // === Format info ===
-
+//
+// Uses categorized HashMaps rather than per-field structs. q2 extracts
+// the merged ConfigValue into sections using Quarto 1's key lists
+// (kExecuteDefaultsKeys, kRenderDefaultsKeys, kPandocDefaultsKeys).
+// This matches Quarto 1's nested Format shape so the harness mapping
+// is trivial, doesn't require per-field extraction in Rust, and
+// automatically forwards any config key — if a future engine reads
+// an obscure field like `execute.plotly-connected`, it just works.
 struct TsFormatInfo {
     identifier: TsFormatIdentifier,
-    render: TsFormatRender,
-    execute: TsFormatExecute,
-    pandoc: TsFormatPandoc,
-    metadata: HashMap<String, TsMetadataValue>,
+    execute: HashMap<String, TsMetadataValue>,   // execute.* keys
+    render: HashMap<String, TsMetadataValue>,    // render.* keys
+    pandoc: HashMap<String, TsMetadataValue>,    // pandoc.* keys
+    metadata: HashMap<String, TsMetadataValue>,  // everything else
 }
 
 struct TsFormatIdentifier {
     base_format: String,
     target_format: String,
     display_name: String,
-}
-
-struct TsFormatExecute {
-    fig_width: Option<f64>,
-    fig_height: Option<f64>,
-    fig_format: Option<String>,
-    fig_dpi: Option<u32>,
-    cache: Option<bool>,
-    daemon: Option<TsDaemonOption>,
-    daemon_restart: Option<bool>,
-    enabled: Option<bool>,
-    echo: Option<TsEchoOption>,
-    eval: Option<bool>,
-    output: Option<TsOutputOption>,
-    warning: Option<bool>,
-    error: Option<bool>,
-    include: Option<bool>,
-}
-
-#[serde(untagged)]
-enum TsDaemonOption { Bool(bool), Timeout(u32) }
-
-#[serde(untagged)]
-enum TsEchoOption { Bool(bool), Fenced(String) }
-
-#[serde(untagged)]
-enum TsOutputOption { Bool(bool), Mode(String) }
-
-struct TsFormatRender {
-    keep_hidden: Option<bool>,
-    fig_pos: Option<String>,
-    ipynb_produce_source_notebook: Option<bool>,
-    output_ext: Option<String>,
-}
-
-struct TsFormatPandoc {
-    from: Option<String>,
-    to: Option<String>,
-    writer: Option<String>,
 }
 
 // === Execution target ===
@@ -675,16 +669,43 @@ enum TsMetadataValue {
 // === Source map (Plan 0 → Plan 1a bridge) ===
 
 // Byte-range entry from q2's flattened SourceInfo::Concat.
-// Used in TsExecuteOptions.source_map.
+// Used in both directions:
+// - Rust→Deno: TsExecuteOptions.source_map (maps QMD text to originals)
+// - Deno→Rust: TsMappedStringWithMap.source_map (maps markdownForFile
+//   output back to the original non-QMD file)
+//
+// Flattening is done on the Rust side for Rust→Deno:
+// - SourceInfo::Original → resolve FileId to path via SourceContext
+// - SourceInfo::Substring → walk parent chain to Original
+// - SourceInfo::FilterProvenance → emit with empty file string (sentinel)
+// - SourceInfo::Concat (nested) → flatten recursively
+//
+// On the Deno side for Deno→Rust (markdownForFile):
+// - Walk the MappedString output, call .map() to find contiguous ranges
+//   mapping to the same file with sequential offsets, emit entries
+//
+// The `file` field is a path string (not numeric ID) — IDs are resolved
+// on the Rust side since the Deno process doesn't have SourceContext.
 struct TsSourceMapEntry {
     start: usize,          // byte offset in serialized QMD
     length: usize,         // byte length of this piece
-    file: String,          // original source file path
+    file: String,          // original source file path (empty = unmappable)
     file_offset: usize,    // byte offset in the original file
 }
 
-// TsPartitionedMarkdown removed — q2 has the full AST,
-// partitionedMarkdown() is not in the protocol.
+// === Optional instance method results ===
+
+// Returned from partitionedMarkdown() — file split into parts.
+// Also on the Rust ExecutionEngine trait (Jupyter needs it for ipynb-filters).
+// target() is harness-internal — its result type lives only in the TS harness.
+struct TsPartitionedMarkdown {
+    yaml: Option<HashMap<String, TsMetadataValue>>,
+    heading_text: Option<String>,
+    heading_attr: Option<TsPandocAttr>,
+    contains_refs: bool,
+    markdown: String,
+    src_markdown_no_yaml: String,
+}
 
 // === Execute result ===
 
@@ -773,10 +794,14 @@ typed so that (a) unit tests can construct values without raw JSON strings,
 (b) the Rust compiler catches field mismatches, and (c) the Deno-side
 `types.ts` has a clear schema to match against.
 
-`TsFormatInfo.metadata` uses `HashMap<String, TsMetadataValue>` — these are
-arbitrary user metadata keys that engines may read. The `TsMetadataValue` enum
-covers all JSON value types so nothing is lost, but it's still a proper Rust type
-rather than raw `serde_json::Value`.
+`TsFormatInfo` uses categorized `HashMap<String, TsMetadataValue>` sections
+(execute, render, pandoc, metadata) rather than per-field structs. This matches
+Quarto 1's nested `Format` shape, automatically forwards any config key, and
+avoids maintaining a Rust struct with 100+ optional fields. q2 extracts keys
+from the merged `ConfigValue` metadata into the correct section using Quarto 1's
+key classification lists. The `TsMetadataValue` enum covers all JSON value
+types so nothing is lost, but it's still a proper Rust type rather than raw
+`serde_json::Value`.
 
 `TsExecuteResult` maps to q2's `ExecuteResult`. Fields `preserve`,
 `engine_dependencies`, and `pandoc` must also be added to q2's `ExecuteResult`
@@ -785,5 +810,5 @@ struct (currently only has `includes` and `needs_postprocess`).
 **Type mapping to q2:**
 - `TsPandocIncludes` ↔ q2's `PandocIncludes` (simple field rename)
 - `TsMetadataValue` ↔ q2's `ConfigValue` (convert at the boundary)
-- `TsFormatInfo` is protocol-only; q2 constructs it from its own config types
+- `TsFormatInfo` is protocol-only; q2 constructs it from its merged metadata
 - `TsWidgetDependency` is new — will need a q2-side type when widget support is built

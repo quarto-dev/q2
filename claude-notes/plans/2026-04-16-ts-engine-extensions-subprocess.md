@@ -8,7 +8,7 @@ Implement TypeScript engine extensions in q2 using a **Deno subprocess** archite
 
 **Validation target:** The Julia engine extension from Quarto 1 (`julia-engine.ts`).
 
-**Key design choice:** Subprocess over embedded Deno. This eliminates the need to add deno ext crates (deno_fs, deno_process, deno_net, deno_crypto, etc.) to q2's binary. The engine extension runs in a full Deno environment — all standard APIs available, all Deno standard library modules importable, TypeScript transpilation handled by Deno natively. The QuartoAPI is implemented primarily in TypeScript (using Deno's own APIs), with q2-specific context passed as a JSON blob at initialization.
+**Key design choice:** Subprocess over embedded Deno. This eliminates the need to add deno ext crates (deno_fs, deno_process, deno_net, deno_crypto, etc.) to q2's binary. The engine extension runs in a full Deno environment — all standard APIs available, all Deno standard library modules importable, TypeScript transpilation handled by Deno natively. The QuartoAPI is implemented in TypeScript in a platform-agnostic `@quarto/api` package; platform I/O goes through a `PlatformHost` interface, with the Deno-specific host (`@quarto/engine-host-deno`) providing the `denoHost` that calls `Deno.readTextFileSync`, `Deno.Command`, etc. A future `@quarto/engine-host-wasm` can provide a VFS-backed host for in-browser hosting without changes to `@quarto/api`.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ Implement TypeScript engine extensions in q2 using a **Deno subprocess** archite
 ```
 q2 (Rust)                              engine-host (Deno subprocess)
 ─────────                              ─────────────────────────────
-spawn deno engine-host.ts ──────────→  start, read init message
+spawn deno engine-host-deno.js ─────→  start, read init message
                                        
 send: { type: "init",        ──────→  load engine module
         enginePath: "...",             call engine.init(quartoAPI)
@@ -27,8 +27,8 @@ recv: { type: "ready",       ←──────  engine loaded, ready for que
 
 send: { type: "claimsLanguage", ───→  call engine.claimsLanguage("julia")
         language: "julia" }
-recv: { type: "claimsResult", ←─────  return result
-        result: true }
+recv: { type: "claimsLanguageResult", ←── return result (true→1, false→null)
+        result: 1 }
 
 send: { type: "execute",     ──────→  call engine.launch(ctx).execute(opts)
         options: { ... } }
@@ -50,31 +50,29 @@ q2 repo
 │       └── ts_process.rs         ← Deno process management
 │
 ├── ts-packages/                  ← npm workspace (already exists)
-│   ├── quarto-engine-host/       ← NEW: Deno-side harness
+│   ├── quarto-engine-host-deno/  ← NEW: Deno subprocess harness (q2 native binary)
 │   │   ├── src/
 │   │   │   ├── host.ts           ← stdin/stdout protocol handler
-│   │   │   ├── quarto-api.ts     ← QuartoAPI construction from context
+│   │   │   ├── deno-host.ts      ← PlatformHost impl (Deno.* APIs)
+│   │   │   ├── quarto-api.ts     ← QuartoAPI assembly from @quarto/api + denoHost
+│   │   │   ├── mapped-source.ts  ← MappedString rehydration from source_map
 │   │   │   └── engine-loader.ts  ← dynamic import + validation
 │   │   └── package.json
 │   │
-│   ├── quarto-markdown/          ← NEW: clean markdown utilities
-│   │   ├── src/
-│   │   │   ├── extract-yaml.ts
-│   │   │   ├── partition.ts
-│   │   │   ├── languages.ts
-│   │   │   └── break-quarto-md.ts
-│   │   └── package.json
+│   ├── (quarto-engine-host-wasm/ ← FUTURE, out of scope: browser harness for hub-client)
 │   │
-│   └── quarto-jupyter/           ← NEW: clean notebook processing
-│       ├── src/
-│       │   ├── to-markdown.ts
-│       │   ├── types.ts
-│       │   ├── display-data.ts
-│       │   ├── tags.ts
-│       │   ├── labels.ts
-│       │   ├── preserve.ts
-│       │   └── ...
-│       └── package.json
+│   └── quarto-api/               ← NEW: shared QuartoAPI implementations
+│       ├── package.json          ← single package, subpath exports
+│       └── src/
+│           ├── platform.ts       ← PlatformHost interface (no impls)
+│           ├── text/             ← MappedString + text utilities
+│           ├── markdown/         ← extractYaml, partition, getLanguages, breakQuartoMd
+│           ├── jupyter/          ← notebook → markdown + helpers (Plan 3)
+│           ├── format/           ← isHtmlCompatible, isLatexOutput, …
+│           ├── path/             ← dirAndStem, isQmdFile, createPath(host)
+│           ├── system/           ← createSystem(host): execProcess, tempContext, …
+│           ├── console/          ← info, warning, error, withSpinner
+│           └── crypto/           ← md5Hash
 │
 └── quarto-cli (reference only, at ~/src/quarto-cli)
     └── packages/quarto-types/    ← existing, pure .d.ts, use as-is
@@ -121,11 +119,12 @@ All messages are JSON objects, one per line on stdin/stdout. Each has a `type` f
 // Initialization response
 { type: "ready", engineMeta: { name, canFreeze, generatesFigures, validExtensions } }
 
-// Discovery responses — returns false (no claim), true (priority 1), or number (custom priority)
-{ type: "claimsResult", result: false | true | number }
+// Discovery responses (separate types for language vs file claims)
+{ type: "claimsLanguageResult", result: number | null }  // null=no claim, 1=default, negative=low priority. Harness converts: false→null, true→1, number→Math.trunc() to i32
+{ type: "claimsFileResult", result: boolean }
 
-// File conversion response
-{ type: "markdownForFileResult", result: { value: string, fileName?: string } }
+// File conversion response (includes source_map for provenance back to original file)
+{ type: "markdownForFileResult", result: { value: string, fileName?: string, sourceMap: TsSourceMapEntry[] } }
 
 // Execution response
 { type: "executeResult", result: TsExecuteResult }
@@ -145,9 +144,18 @@ All messages are JSON objects, one per line on stdin/stdout. Each has a `type` f
 { type: "error", message: string, stack?: string }
 ```
 
-**Not in protocol** (q2 handles natively):
-- `target()` — harness constructs `ExecutionTarget` from `TsExecuteOptions`
-- `partitionedMarkdown()` — q2 has the full AST
+**Optional protocol message:**
+- `partitionedMarkdown()` — **also on Rust `ExecutionEngine` trait** (Jupyter
+  needs it for ipynb-filters). Default impl: `partition(markdownForFile(file).value)`.
+  See [ipynb-filters research plan](2026-04-23-ipynb-filters-and-engine-partitioning.md).
+
+**Harness-internal** (not protocol messages):
+- `target()` — the harness checks if the TS engine implements it, calls it
+  if so, uses the result (including opaque `data` cookie like kernelspec) to
+  build `ExecutionTarget` for `execute()`. All Deno-side. Falls back to
+  constructing from `TsExecuteOptions` fields.
+
+**Not in protocol:**
 - `run()` — interactive mode, deferred to future plan
 
 See Plan 1a for the full protocol type definitions and rationale.
@@ -191,49 +199,66 @@ calls `target()` or `partitionedMarkdown()`. See Plan 1a for details.
 
 ### EngineHostContext (sent once at init)
 
+This is a q2 invention — Quarto 1 engines run in-process and don't need serialized
+context. `EngineHostContext` carries only static/global and project-level info.
+Per-document and per-format info arrives in per-call messages (`TsExecuteOptions`, etc.).
+
+In Quarto 1, `QuartoAPI` is a global singleton with mostly stateless utility
+functions (format helpers take `Format` as parameter, not global state). The
+`EngineProjectContext` passed to `launch()` carries project dir and config.
+`EngineHostContext` combines the bootstrap info for both.
+
 ```typescript
 interface EngineHostContext {
-  // Paths that the QuartoAPI needs
+  // Project info (→ EngineProjectContext for launch())
   projectDir?: string;
-  tempDir: string;
-  sourceFile: string;
+  isSingleFile: boolean;
+
+  // Paths for QuartoAPI construction (q2-specific, can't be derived by Deno)
   resourceDir: string;    // q2's bundled resources
   runtimeDir: string;     // q2's runtime directory
+  pandocPath: string;     // absolute path to pandoc binary
 
-  // Format info
-  format: {
-    pandocTo: string;       // e.g., "html", "pdf", "revealjs"
-  };
-
-  // System info
+  // System info for QuartoAPI (q2 is source of truth)
   isInteractiveSession: boolean;
   runningInCI: boolean;
   quartoVersion: string;
-  pandocPath: string;         // absolute path to pandoc binary
 }
 ```
 
-Most QuartoAPI methods are implemented in TypeScript using this context + Deno's own APIs. No callbacks to Rust needed.
+Most QuartoAPI methods are implemented in TypeScript using `context` + the platform host. No callbacks to Rust needed.
 
 ## QuartoAPI Implementation Strategy
 
 ### Implemented in TypeScript (no Rust callbacks)
 
-| Namespace | How |
-|-----------|-----|
-| `quarto.path` | Use `context.resourceDir`, `context.runtimeDir` + Deno's `Deno.realPathSync()` etc. |
-| `quarto.format` | Compute from `context.format.pandocTo` string in TS. Methods accept optional `Format` parameter for API compat. |
-| `quarto.system` | `isInteractiveSession`/`runningInCI` from context. `execProcess` via `Deno.Command`. `pandoc` via `Deno.Command` with pandoc binary. |
-| `quarto.console` | Write to stderr with level prefixes |
-| `quarto.crypto` | `crypto.subtle.digest("MD5", ...)` or a small npm dep |
-| `quarto.mappedString` | Harness reconstructs `MappedString` with `.map()` provenance from `source_map` byte-range entries in `TsExecuteOptions` (serialized `SourceInfo`). `fromFile`/`fromString` also available for engine's own use. |
-| `quarto.markdownRegex` | From `@quarto/markdown` package (new clean implementations) |
-| `quarto.jupyter` | From `@quarto/jupyter` package (new clean implementations) |
-| `quarto.text` | Small utility functions, straightforward TS |
+Implementations live in `@quarto/api` subpaths. Platform I/O is factored
+through `PlatformHost` (see Plan 2) so the same package works under
+`@quarto/engine-host-deno` today and `@quarto/engine-host-wasm` later.
+
+| Namespace | Source | Host use |
+|-----------|--------|----------|
+| `quarto.path` | `@quarto/api/path` — pure string helpers + `createPath(host)` | `host.realPath` for `absolute()`; otherwise none. Engine-host-deno layer adds `runtime(subdir)` / `resource(...parts)` closures over `context.runtimeDir` / `context.resourceDir`. |
+| `quarto.format` | `@quarto/api/format` — pure computation from `format.pandoc.to` | None. Format info arrives per-call in `TsExecuteOptions.format`, not at init time. Matches Quarto 1 (stateless). |
+| `quarto.system` | `@quarto/api/system` — `createSystem(host)` | `host.process.exec` for `execProcess`; `host.fs` for `tempContext`. Throws "not available" in environments where `host.process` is undefined. Engine-host-deno wraps `execProcess` with a `pandoc(args, stdin?)` convenience that uses `context.pandocPath`. |
+| `quarto.console` | `@quarto/api/console` — pure, writes to stderr with level prefixes | None. |
+| `quarto.crypto` | `@quarto/api/crypto` — `md5Hash` via Web Crypto (`crypto.subtle.digest`) or small pure-JS dep | None. Works in Deno, browser, Node. |
+| `quarto.mappedString` | `@quarto/api/text` (same module as `quarto.text`). `fromFile` routed through `createMappedStringFromFile(host)`. | `host.fs.readTextFileSync` for `fromFile`. For `options.target.markdown`, engine-host-deno's `mapped-source.ts` rehydrates a `MappedString` with `.map()` provenance from the `source_map` byte-range entries in `TsExecuteOptions`. |
+| `quarto.markdownRegex` | `@quarto/api/markdown` — clean reimplementations | None. Pure parsing. |
+| `quarto.jupyter` | `@quarto/api/jupyter` — `createJupyter(host)` (Plan 3) | `host.fs.writeFileSync` for figure image writes; `host.fs.readTextFileSync` for `isPercentScript` / `percentScriptToMarkdown`. The rest of the jupyter conversion logic is pure. |
+| `quarto.text` | `@quarto/api/text` — pure string utilities | None. |
 
 ### What's NOT needed from Rust
 
-None of the QuartoAPI methods call back to Rust. All context flows one way (Rust → Deno at init time). This keeps the protocol simple and unidirectional during execution.
+None of the QuartoAPI methods call back to Rust. All context flows one way
+(Rust → Deno at init time, per-call options on each execute). This keeps
+the protocol simple and unidirectional during execution.
+
+### What's NOT in `@quarto/api` itself
+
+No references to `Deno.*` or `node:*`. Those live in the platform-specific
+host implementations (`@quarto/engine-host-deno/src/deno-host.ts` today,
+`@quarto/engine-host-wasm/src/wasm-host.ts` in the future).
 
 ## Quarto 1 API Compatibility
 
@@ -246,63 +271,129 @@ Engine extensions may need minor adaptation to work with q2. The Julia engine is
 
 ## New TypeScript Packages
 
-### @quarto/markdown
+### @quarto/api
 
-Clean reimplementations of markdown utilities. No dependency on Quarto 1 internals.
+A single shared package holding clean reimplementations of every QuartoAPI
+namespace's underlying logic. Organized as subpaths rather than sibling
+packages — one `package.json`, one version, one dep list, `exports` map for
+targeted imports. Designed to be portable: consumable today by
+`@quarto/engine-host-deno`, and in the future by Quarto 1 itself.
 
-- `extractYaml(markdown)` — YAML front matter extraction using `yaml` package
-- `partition(markdown)` — split into yaml / heading / body
-- `getLanguages(markdown)` — extract language specifiers from code blocks (pure regex)
-- `breakQuartoMd(markdown)` — split into code/markdown cells (simplified, no YAML schema validation)
+Subpaths:
 
-Dependencies: `yaml` (js-yaml). No tree-sitter, no schema validation.
+- `@quarto/api/text` — `MappedString` (type + impl), `asMappedString`,
+  `mappedSubstring`, `mappedConcat`, `mappedLines`, `mappedNormalizeNewlines`,
+  `mappedIndexToLineCol`, `mappedStringFromFile`, plus plain-text utilities
+  (`lines`, `trimEmptyLines`, `asYamlText`, `postProcessRestorePreservedHtml`).
+  Powers both `quarto.text` and `quarto.mappedString` on the runtime API surface.
+- `@quarto/api/markdown` — `extractYaml`, `partition`, `pandocAttrParseText`,
+  `getLanguages`, `breakQuartoMd`. Powers `quarto.markdownRegex`.
+- `@quarto/api/jupyter` — `jupyterToMarkdown`, `isPercentScript`,
+  `percentScriptToMarkdown`, `assets`, `resultIncludes`,
+  `resultEngineDependencies`, plus supporting modules (display-data, tags,
+  labels, preserve, widgets, pandoc-id, cell-options). Powers `quarto.jupyter`.
+  Subject of Plan 3.
+- `@quarto/api/format` — `isHtmlCompatible`, `isLatexOutput`, `isMarkdownOutput`,
+  `isIpynbOutput`, etc. Pure computation from `pandoc.to` strings.
+- `@quarto/api/path` — `dirAndStem`, `isQmdFile`, `toForwardSlashes`,
+  `inputFilesDir` as pure exports; `createPath(host)` for host-dependent
+  `absolute()`.
+- `@quarto/api/system` — `createSystem(host)` returning `execProcess`,
+  `tempContext`, `onCleanup`, `isInteractiveSession`, `runningInCI`. All
+  I/O goes through the platform host — in Deno, `host.process.exec` wraps
+  `Deno.Command`; in a future WASM host, `execProcess` throws "not available".
+- `@quarto/api/console` — `info`, `warning`, `error`, `withSpinner` (stderr writers).
+- `@quarto/api/crypto` — `md5Hash`.
 
-### @quarto/jupyter
+**Runtime-platform expectations:** `@quarto/api` itself contains **no**
+references to `Deno.*`, `node:*`, or other platform-specific APIs. All I/O
+(file read/write, subprocess execution, path canonicalization) goes through
+a small `PlatformHost` interface that the consumer plugs in. This lets the
+same `@quarto/api` package serve two environments:
 
-Clean reimplementation of Jupyter notebook → markdown conversion. Inspired by Quarto 1's `core/jupyter/` but written as standalone modules without the tangled dependencies.
+- `@quarto/engine-host-deno` — the Deno subprocess harness delivered by
+  Plan 1a. Provides a `denoHost` that calls `Deno.readTextFileSync`,
+  `Deno.Command`, etc.
+- `@quarto/engine-host-wasm` — **future work**, not part of these plans —
+  the in-browser harness for hub-client. Would provide a `wasmHost` backed
+  by q2's VFS (`vfsReadFile`, `vfsAddFile`, …). Subprocess-dependent
+  QuartoAPI methods (`quarto.system.execProcess`, `quarto.system.pandoc`)
+  would throw "not available in this environment".
 
-Core function: `jupyterToMarkdown(notebook, options)` — walks notebook cells, formats outputs as markdown, handles figures, HTML preservation, widget dependencies.
+See Plan 2 for the `PlatformHost` interface definition and which submodules
+are pure vs. host-dependent.
 
-Supporting modules: types, display-data (MIME dispatch), tags (cell visibility), labels (captions), preserve (HTML protection), output formatting.
+**Bootstrap:** No registry pattern. `@quarto/engine-host-deno` imports the
+submodules directly and builds the `QuartoAPI` object as plain nested
+record — the QuartoAPI registry/singleton infrastructure from Quarto 1
+(`src/core/api/registry.ts`, `register.ts`) is **not** being ported.
+Implementations only.
 
-Dependencies: `yaml`. No deno-dom, no tree-sitter, no Quarto 1 internal imports.
+Dependencies: `yaml` (used by `markdown` and `jupyter` for YAML parsing).
 
-### @quarto/engine-host
+### @quarto/engine-host-deno
 
-The Deno-side subprocess harness. Reads JSON messages from stdin, dispatches to the loaded engine module, writes responses to stdout.
+The Deno-side subprocess harness — q2-specific glue for the native binary,
+never shared with Q1. Reads JSON messages from stdin, dispatches to the
+loaded engine module, writes responses to stdout. Named `-deno` explicitly
+to make room for a future `@quarto/engine-host-wasm` sibling.
 
 - `host.ts` — main loop: read messages, dispatch, write responses
-- `quarto-api.ts` — constructs the `QuartoAPI` object from `EngineHostContext`
-- `engine-loader.ts` — dynamically imports the engine TS module, validates it exports `ExecutionEngineDiscovery`
+- `deno-host.ts` — the `PlatformHost` implementation backed by Deno APIs
+  (`Deno.readTextFileSync`, `Deno.Command`, `Deno.realPathSync`, etc.)
+- `quarto-api.ts` — imports `@quarto/api/*` submodules, threads `denoHost`
+  through the host-taking factories, assembles the `QuartoAPI` object from
+  `EngineHostContext`. Wires both `quarto.text` and `quarto.mappedString`
+  from the same `@quarto/api/text` module.
+- `mapped-source.ts` — rehydrates a `MappedString` from the `source_map`
+  byte-range entries in `TsExecuteOptions`. Uses a base-per-file cache so
+  multiple pieces sharing a source file share one base `MappedString`
+  object. q2-specific (needed because `source_map` crossed the protocol
+  boundary as data, not in-memory references).
+- `engine-loader.ts` — dynamically imports the engine TS module, validates
+  it exports `ExecutionEngineDiscovery`.
 
-Dependencies: `@quarto/markdown`, `@quarto/jupyter`, `@quarto/types`.
+Dependencies: `@quarto/api`, `@quarto/types`.
+
+### @quarto/engine-host-wasm (future, out of scope)
+
+The in-browser equivalent for hub-client. Would provide a `wasmHost`
+backed by q2's VFS JS bindings and run inside a Web Worker (or equivalent
+sandbox — the mechanism is an open design question). Not part of Plans 1-4.
+Called out here to fix the naming and to document that the `PlatformHost`
+abstraction in Plan 2 is what enables it without rework to `@quarto/api`.
 
 ## Sub-Plans
 
 | Plan | Sessions | Dependencies | Can start |
 |------|----------|-------------|-----------|
 | [Plan 0: Include Expansion & SourceInfo](2026-04-18-plan0-include-expansion-and-source-info.md) | 2-3 | Nothing | Now |
-| [Plan 1a: Protocol & Core](2026-04-16-plan1a-protocol-and-core.md) | 2-3 | Plan 0 | After Plan 0 |
-| [Plan 1b: Extension Integration](2026-04-16-plan1b-extension-integration.md) | 1-2 | Plan 1a | After Plan 1a |
-| [Plan 2: @quarto/markdown + QuartoAPI](2026-04-16-quarto-markdown-and-api.md) | 1-2 | Nothing | Now (parallel with Plan 0) |
-| [Plan 3: @quarto/jupyter](2026-04-16-quarto-jupyter.md) | 2-3 | Nothing | Now (parallel with Plan 0) |
-| [Plan 4: Julia Validation](2026-04-16-julia-validation.md) | 1-2 | Plans 1a, 1b, 2, 3 | After all others |
+| [Plan 1a: Protocol & Rust Core](2026-04-16-plan1a-protocol-and-core.md) | 1-2 | Plan 0 | After Plan 0 |
+| [Plan 1b: @quarto/engine-host-deno (Deno harness)](2026-04-16-plan1b-engine-host-deno.md) | 1 | Plan 1a Phase 1 (protocol schema) | After Plan 1a Phase 1 |
+| [Plan 1c: Extension Integration & E2E](2026-04-16-plan1c-extension-integration.md) | 1-2 | Plans 1a, 1b | After Plans 1a + 1b |
+| [Plan 2: @quarto/api (text, markdown, utilities) + QuartoAPI assembly](2026-04-16-quarto-markdown-and-api.md) | 1-2 | Nothing | Now (parallel with Plan 0) |
+| [Plan 3: @quarto/api/jupyter](2026-04-16-quarto-jupyter.md) | 2-3 | Plan 2A (package skeleton) | After Plan 2A |
+| [Plan 4: Julia Validation](2026-04-16-julia-validation.md) | 1-2 | Plans 1a, 1b, 1c, 2, 3 | After all others |
 | **Total** | **9-15** | | |
 
 ### Dependency graph
 
 ```
-Plan 0 (Include Expansion & SourceInfo) ─┐
-    │                                     │
-Plan 1a (Protocol & Core) ──────────────┐│
-    │                                    ││
-Plan 1b (Extension Integration) ────────┤│
-                                         ││
-Plan 2 (@quarto/markdown + QuartoAPI) ──┼┼──→ Plan 4 (Julia Validation)
-                                         ││
-Plan 3 (@quarto/jupyter) ───────────────┘│
-                                          │
-(Plan 0 blocks Plan 1a; Plans 2 & 3 are independent of Plan 0)
+Plan 0 (Include Expansion & SourceInfo)
+    │
+    ▼
+Plan 1a (Protocol & Rust Core)
+    │      │
+    │      └─(Phase 1: protocol schema frozen)─→ Plan 1b (@quarto/engine-host-deno)
+    │                                                │
+    └────────────────────┬───────────────────────────┘
+                         ▼
+                   Plan 1c (Extension Integration & E2E)
+                         │
+                         │
+Plan 2 (@quarto/api: text, markdown, utilities) ─┐
+                         │                        ├──→ Plan 4 (Julia Validation)
+Plan 3 (@quarto/api/jupyter) ────────────────────┘
 ```
 
 **Plan 0** is a prerequisite for the TS engine protocol design. It delivers
@@ -312,31 +403,42 @@ Plans 2 and 3 (TypeScript packages) can proceed in parallel since they don't
 touch the Rust engine interface. Plan 1a depends on Plan 0 because the
 protocol types must account for source mapping decisions made in Plan 0.
 
-**Plan 1a** delivers the protocol types, subprocess management, `ExecutionEngine`
-trait extensions, `TsEngine` struct, and the Deno engine-host harness.
+**Plan 1a** delivers the Rust-side infrastructure: protocol types,
+subprocess management, `ExecutionEngine` trait extensions, `TsEngine` struct.
 
-**Plan 1b** wires this into the extension system: `_extension.yml` engine parsing,
-`deno bundle` build step, registry migration to `StageContext`, 4-phase detection
-rewrite, and the echo engine end-to-end test.
+**Plan 1b** is the Deno-side harness (`@quarto/engine-host-deno` package):
+esbuild bundle, `host.ts` main loop, `deno-host.ts` PlatformHost impl,
+`mapped-source.ts` MappedString rehydration, `quarto-api.ts` stub,
+`engine-loader.ts`. Gated only on Plan 1a Phase 1 (the frozen JSON schema);
+otherwise runs in parallel with 1a Phases 2-4.
 
-Plans 2 and 3 depend on Plan 1a (they need the engine-host harness from Phase 5),
-NOT on Plan 1b. Plan 4 depends on everything including 1b.
+**Plan 1c** wires 1a + 1b into the extension system: `_extension.yml`
+engine parsing, `deno bundle` build step, registry migration to
+`StageContext`, 4-phase detection rewrite, and the echo engine end-to-end
+test (which exercises the full stack).
 
-Plans 1a, 2, and 3 each have a **standalone core** that is independent:
-- Plan 1a: Rust subprocess infra + engine-host harness (Phases 1-5)
-- Plan 2: `@quarto/markdown` package + types (Phases 2A, 2B, 2D)
-- Plan 3: `@quarto/jupyter` package (Phases 3A-3D, 3F)
+Plans 1a, 1b, 2, and 3 each have a **standalone core** that is independent:
+- Plan 1a: Rust infrastructure (Phases 1-4)
+- Plan 1b: Deno harness package (Phases 1-4 of 1b, its own numbering)
+- Plan 2: `@quarto/api` package skeleton + `text/` and `markdown/` subpaths + types (Phases 2A, 2B, 2D)
+- Plan 3: `@quarto/api/jupyter` subpath (Phases 3A-3D, 3F)
 
-However, each plan has **integration phases** that depend on Plan 1a's engine-host:
-- Plan 1b Phase 3 (echo engine test) needs minimal types from Plan 2D
-- Plan 2C (wire QuartoAPI namespaces into engine-host) needs Plan 1a Phase 5
-- Plan 3E (wire jupyter into engine-host) needs Plan 1a Phase 5
+Plan 3 depends on Plan 2 creating the `@quarto/api` package (package.json,
+exports map, tsconfig); after that, `jupyter/` is just another subdirectory.
+
+**Integration phases** that depend on Plan 1b's engine-host package:
+- Plan 1c Phase 3 (echo engine E2E test) needs Plan 1b fully working plus
+  minimal types from Plan 2D
+- Plan 2C (wire QuartoAPI namespaces into engine-host) replaces Plan 1b's stubs
+- Plan 3E (wire jupyter into engine-host) replaces Plan 1b's jupyter stub
 
 Plan 4 integrates everything and depends on all plans being complete.
 
 ### Critical path
 
-With parallel execution: Plan 0 (2-3 sessions) → Plan 1a (2-3 sessions, parallel with 2/3) → Plan 1b (1-2 sessions) → Plan 4 (1-2 sessions) = **6-10 sessions elapsed**.
+With parallel execution: Plan 0 (2-3 sessions) → Plan 1a Phase 1 (schema
+freeze) → Plans 1a Phases 2-4, 1b, 2, and 3 in parallel → Plan 1c (1-2
+sessions) → Plan 4 (1-2 sessions) = **6-10 sessions elapsed**.
 
 ## Key File Paths (q2)
 
@@ -384,7 +486,7 @@ Following Quarto 1's approach, engine extensions go through a **build step** bef
 
 2. **Runtime:** The Deno subprocess loads the bundled `.js` file via dynamic `import()`. No import map or TS transpilation needed at execution time.
 
-The `@quarto/engine-host` harness is also bundled into a single `.js` file that includes `@quarto/markdown`, `@quarto/jupyter`, and all QuartoAPI implementations. This bundle is built using **esbuild** (matching the existing `quarto-system-runtime` pattern), checked into git at `ts-packages/quarto-engine-host/dist/engine-host.js`, and embedded in the q2 binary via `include_str!()`. At runtime, the embedded JS is written to a temp file and executed with `deno run --allow-all`.
+The `@quarto/engine-host-deno` harness is also bundled into a single `.js` file that includes `@quarto/api` (all subpaths) and the harness glue. This bundle is built using **esbuild** (matching the existing `quarto-system-runtime` pattern), checked into git at `ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js`, and embedded in the q2 binary via `include_str!()`. At runtime, the embedded JS is written to a temp file and executed with `deno run --allow-all`.
 
 q2 provides:
 - `resources/extension-build/import-map.json` — import map for building extensions
@@ -442,9 +544,10 @@ pub trait ExecutionEngine: Send + Sync {
 
     /// Whether this engine claims a language.
     /// Returns None (no claim), or Some(priority) where higher wins.
+    /// Negative values mean "I'll take this if no one else will."
     /// `first_class` is the first CSS class from code block attributes
     /// (e.g., "marimo" from `{python .marimo}`).
-    fn claims_language(&self, _language: &str, _first_class: Option<&str>) -> Option<u32> { None }
+    fn claims_language(&self, _language: &str, _first_class: Option<&str>) -> Option<i32> { None }
 
     /// Whether this engine claims a file by extension.
     fn claims_file(&self, _file: &str, _ext: &str) -> bool { false }
@@ -452,7 +555,7 @@ pub trait ExecutionEngine: Send + Sync {
 ```
 
 Built-in engines implement these directly:
-- **Jupyter**: `claims_file(".ipynb") → true`. No `claims_language` overrides — Jupyter does not explicitly claim any language via Phase 3. Instead, it acts as the Phase 4 fallback for all unclaimed computational languages (matching Quarto 1, where Python also falls through to the Phase 4 Jupyter fallback). The only Quarto 1 change: Jupyter no longer claims "julia" explicitly, removing the priority conflict with the Julia extension.
+- **Jupyter**: `claims_file(".ipynb") → true`. No `claims_language` overrides — Jupyter does not explicitly claim any language via Phase 3. Instead, it acts as the Phase 4 fallback for all unclaimed computational languages (matching Quarto 1, where Python also falls through to the Phase 4 Jupyter fallback). **Deliberate q2 interface change:** Jupyter no longer claims "julia" explicitly (Quarto 1 did this as a backward-compatibility hack), removing the priority conflict with the Julia extension.
 - **Knitr**: `claims_language("r") → Some(1)`, `claims_file(".rmd") → true`
 - **Markdown**: returns defaults (claims nothing)
 - **TsEngine**: forwards queries to the Deno subprocess
