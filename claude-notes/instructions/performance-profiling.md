@@ -168,6 +168,132 @@ come up. Prefer this over adding subcommands to the user-facing
 `quarto` CLI, because these drivers should not appear as user
 features.
 
+### Profiling hub-client TypeScript code
+
+When the hotspot lives in `hub-client/src/` (attribution, presence,
+render pipeline, etc.) rather than in Rust, the playbook still applies
+but the toolchain is different. Use Node's built-in CPU profiler on a
+standalone driver — **not vitest**.
+
+**Two gotchas that will eat your session if you don't know them:**
+
+1. `NODE_OPTIONS=--cpu-prof npm run bench` appears to work but only
+   profiles the npm and vitest orchestration processes. Vitest's fork
+   pool drops the flag, so the actual worker writes no profile. Don't
+   waste time trying to plumb `execArgv` through `poolOptions.forks`
+   either — the result is still empty. Run the driver directly with
+   `node --cpu-prof` and skip vitest entirely.
+2. Any production code that yields via `requestIdleCallback` will show
+   ~99 % `(idle)` in the profile because Node falls back to
+   `setTimeout(0)` per yield. Override it at the top of the driver
+   before importing the code under test:
+
+   ```js
+   globalThis.requestIdleCallback = (cb) => {
+     cb({ didTimeout: false, timeRemaining: () => 50 });
+     return 0;
+   };
+   ```
+
+   Seen in attribution profiling (2026-04-23): vitest reported ~1 s per
+   1M-char build, actual CPU was 15 ms — the other 985 ms was
+   `setTimeout(0)` round trips. Profiling without the override
+   measures the scheduler, not your code.
+
+**Standalone driver template.** Place under `/tmp/<target>-perf/` or
+similar — these are throwaway per-session, like the Rust native-proxy
+fixtures. The pieces:
+
+- **Shim files** for any external packages you need to stub. Each shim
+  is a normal ESM module that exports the subset of the API the code
+  under test imports, with hooks the driver controls:
+
+  ```js
+  // shim-someDep.mjs
+  let impl = () => [];
+  export function setImpl(fn) { impl = fn; }
+  export function someApiFn(...args) { return impl(...args); }
+  ```
+
+- **Resolve hook** that redirects the package specifier to the shim:
+
+  ```js
+  // resolve-hook.mjs
+  import { fileURLToPath } from 'node:url';
+  import { dirname, join } from 'node:path';
+  const here = dirname(fileURLToPath(import.meta.url));
+  const shim = 'file://' + join(here, 'shim-someDep.mjs');
+  export async function resolve(specifier, context, next) {
+    if (specifier === '@scope/some-dep') {
+      return { url: shim, shortCircuit: true, format: 'module' };
+    }
+    return next(specifier, context);
+  }
+  ```
+
+- **Register bootstrap** that installs the hook on startup:
+
+  ```js
+  // register.mjs
+  import { register } from 'node:module';
+  register('./resolve-hook.mjs', import.meta.url);
+  ```
+
+- **Driver** that dynamically imports the code under test (it has to
+  be dynamic, not static, so the register hook is in place first):
+
+  ```js
+  // driver.mjs
+  globalThis.requestIdleCallback = (cb) => { cb({ didTimeout: false, timeRemaining: () => 50 }); return 0; };
+  const mod = await import(new URL('../../hub-client/src/services/<module>.ts', import.meta.url).href);
+  const shim = await import('./shim-someDep.mjs');
+  shim.setImpl(/* mock that returns workload patches */);
+  // ... call mod.hotFunction() in a timed loop over scaled fixtures
+  ```
+
+**Invocation:**
+
+```bash
+node \
+  --cpu-prof --cpu-prof-dir=/tmp/q2-ts-perf --cpu-prof-interval=200 \
+  --enable-source-maps \
+  --import tsx/esm \
+  --import /path/to/register.mjs \
+  /path/to/driver.mjs
+```
+
+`tsx/esm` (already hoisted at repo-root `node_modules/`) is what lets
+Node load `.ts` files directly. `--cpu-prof-interval=200` (µs) is a
+finer default than Node's 1 ms — useful because the actual work after
+removing the yield overhead is often only tens of ms per iteration.
+
+**Analysis:** `hub-client/scripts/perf/analyze-cpuprofile.mjs` is the
+TS counterpart of `crates/perf-harness/scripts/analyze_profile.py`.
+Reads a `.cpuprofile`, prints a top-N self-time table and
+bucketed-by-origin totals. Add `--include <substring>` once per code
+area of interest:
+
+```bash
+node hub-client/scripts/perf/analyze-cpuprofile.mjs \
+  /tmp/q2-ts-perf/CPU.*.0.001.cpuprofile --top 30 \
+  --include /src/services/<module>
+```
+
+**Caveats:**
+
+- Node writes one `.cpuprofile` per process/thread. Main-thread output
+  ends in `.0.001.cpuprofile`; tsx's loader worker writes a `.1.002`
+  sibling you can ignore.
+- Frame line numbers often show as `:1` because V8's profile doesn't
+  pick up tsx's source maps. Function names are accurate; for precise
+  line-level hotspots, pre-transpile to `.js` with inline maps and
+  profile that.
+- This is a *native proxy* in the Rust-playbook sense, with the same
+  limitation: anything you shim (e.g. `@automerge/automerge`'s `diff`)
+  disappears from the profile. Design your workload accordingly — if
+  the real bottleneck is inside the shimmed dep, you'll need a
+  browser profile to see it.
+
 ### 4. Read the numbers before designing the fix
 
 Put the numbers in a table with expected shapes next to them. If you
