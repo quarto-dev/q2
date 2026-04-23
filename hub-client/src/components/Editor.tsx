@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
@@ -369,11 +369,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const [attributionPref, setAttributionPref] = usePreference('attributionEnabled');
   const attributionEnabled = currentFormat === 'q2-debug' && attributionPref;
   const attribution = useAttribution(attributionEnabled ? (currentFile?.path ?? null) : null, displayContent);
-  const attributionContextValue = attribution ? {
-    source: attribution.source,
-    identities: identities ?? {},
-    sourceText: displayContent,
-  } : null;
+  const attributionContextValue = useMemo(
+    () => attribution ? {
+      source: attribution.source,
+      identities: identities ?? {},
+      sourceText: displayContent,
+    } : null,
+    [attribution, identities, displayContent],
+  );
 
   // When replay content changes, update Monaco and VFS for display.
   // Writing to VFS ensures the preview renderer sees historical content.
