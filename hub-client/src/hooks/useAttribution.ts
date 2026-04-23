@@ -193,11 +193,6 @@ export function useAttribution(
   useEffect(() => {
     if (!filePath || !mapRef.current) return;
 
-    // Clear any pending debounce
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
     debounceRef.current = setTimeout(() => {
       const handle = getFileHandle(filePath);
       if (!handle || !mapRef.current) return;
