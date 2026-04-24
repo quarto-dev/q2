@@ -94,6 +94,11 @@ impl AstTransform for SidebarGenerateTransform {
 
         if let Some(index) = ctx.project_index.as_deref() {
             expand_auto(&mut resolved, index, &mut local_diags);
+            // Enrich hand-written bare-path entries (e.g. `- about.qmd`)
+            // with the referenced document's title when no `text:`
+            // was supplied. Format-agnostic: fills in `text`, never
+            // touches `href`.
+            enrich_text_from_index(&mut resolved.contents, index);
             // Active-state: does the current page appear in this
             // sidebar's resolved contents? If so, mark and expand.
             let _ = resolve_active_state(&mut resolved, &page_source);
@@ -110,6 +115,58 @@ impl AstTransform for SidebarGenerateTransform {
             .insert_path(&["navigation", "sidebar"], resolved.to_config_value());
 
         Ok(())
+    }
+}
+
+/// Fill in `text` on any sidebar entry that carries only an `href`
+/// (the common "bare path" YAML shorthand: `- about.qmd`).
+/// Looks up the referenced profile by source path and uses its title
+/// as the displayed text. Format-agnostic: only writes `text`.
+fn enrich_text_from_index(
+    entries: &mut [quarto_navigation::SidebarEntry],
+    index: &crate::project::index::ProjectIndex,
+) {
+    use quarto_navigation::SidebarEntry;
+    use quarto_pandoc_types::config_value::ConfigValue;
+    use quarto_source_map::SourceInfo;
+
+    for entry in entries.iter_mut() {
+        match entry {
+            SidebarEntry::Link { item, .. } => {
+                if item.text.is_some() {
+                    continue;
+                }
+                let Some(href) = item.href.as_deref() else {
+                    continue;
+                };
+                // Only pull title for project-local paths.
+                if let Some(profile) = index.lookup_by_source(std::path::Path::new(href)) {
+                    if let Some(title) = &profile.title {
+                        item.text = Some(ConfigValue::new_string(title, SourceInfo::default()));
+                    }
+                }
+            }
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                // If the section has an href and no text, pull the
+                // index profile's title.
+                if text.is_none() {
+                    if let Some(h) = href.as_deref() {
+                        if let Some(profile) = index.lookup_by_source(std::path::Path::new(h)) {
+                            if let Some(title) = &profile.title {
+                                *text = Some(ConfigValue::new_string(title, SourceInfo::default()));
+                            }
+                        }
+                    }
+                }
+                enrich_text_from_index(contents, index);
+            }
+            SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
+        }
     }
 }
 
@@ -341,5 +398,62 @@ mod tests {
                 href
             );
         }
+    }
+
+    /// Bare-path entries (`- about.qmd`, no `text:`) get their text
+    /// filled in from the referenced profile's title. This keeps the
+    /// rewrite in Render format-agnostic while still giving users
+    /// readable sidebars from the common shorthand.
+    #[tokio::test]
+    async fn sidebar_generate_enriches_missing_text_from_index() {
+        let sidebar_cv = config_map(vec![(
+            "contents",
+            arr(vec![s("index.qmd"), s("about.qmd")]),
+        )]);
+        let meta = config_map(vec![("website", config_map(vec![("sidebar", sidebar_cv)]))]);
+        let index = Arc::new(ProjectIndex::new(vec![
+            make_profile("index.qmd", "Home"),
+            make_profile("about.qmd", "About Us"),
+        ]));
+        let (out, _diags) = run_transform_with(meta, Some(index), "about.qmd").await;
+        let stored = out.get_path(&["navigation", "sidebar"]).unwrap();
+        let contents = stored.get("contents").and_then(|v| v.as_array()).unwrap();
+        for entry in contents {
+            let text = entry
+                .get("text")
+                .and_then(|v| v.as_plain_text())
+                .expect("bare-path entry should gain a text field from the profile title");
+            assert!(
+                text == "Home" || text == "About Us",
+                "unexpected enriched text: {}",
+                text
+            );
+        }
+    }
+
+    /// If the user supplied their own `text:`, the enrichment pass
+    /// does not clobber it.
+    #[tokio::test]
+    async fn sidebar_generate_does_not_clobber_explicit_text() {
+        let sidebar_cv = config_map(vec![(
+            "contents",
+            arr(vec![config_map(vec![
+                ("href", s("about.qmd")),
+                ("text", s("User Text")),
+            ])]),
+        )]);
+        let meta = config_map(vec![("website", config_map(vec![("sidebar", sidebar_cv)]))]);
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "about.qmd",
+            "Profile Title",
+        )]));
+        let (out, _diags) = run_transform_with(meta, Some(index), "about.qmd").await;
+        let stored = out.get_path(&["navigation", "sidebar"]).unwrap();
+        let contents = stored.get("contents").and_then(|v| v.as_array()).unwrap();
+        let text = contents[0]
+            .get("text")
+            .and_then(|v| v.as_plain_text())
+            .unwrap();
+        assert_eq!(text, "User Text");
     }
 }

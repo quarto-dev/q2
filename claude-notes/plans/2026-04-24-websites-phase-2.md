@@ -942,12 +942,56 @@ time.
       any test that doesn't set `navigation.sidebar`.
 
 ### Integration tests — `crates/quarto-core/tests/sidebar_pipeline.rs`
-- [ ] Tests 36–39.
+- [x] Tests 36–39 (plus `pipeline_unresolved_sidebar_entry_keeps_raw_qmd`
+      as the indirect proof of the format-agnostic invariant — a
+      .qmd href that has no matching profile survives untouched in
+      the rendered HTML, which can only happen if Generate didn't
+      pre-rewrite).  5 tests, all passing.
+- [x] **Pipeline wiring bug found and fixed:** `AstTransformsStage`
+      bridged `StageContext` → `RenderContext` for artifacts,
+      includes, registries, and observer, but forgot to bridge
+      `project_index`. Every transform (including SidebarRender)
+      saw `ctx.project_index == None` at Pass 2, making the href
+      rewrite a silent no-op.  Integration tests were load-bearing
+      here — unit tests built their own `RenderContext` with the
+      index already attached, and never exercised the stage-level
+      bridge. Fix: clone the `Arc<ProjectIndex>` into render_ctx
+      in the state-transfer block. See commit.
 
 ### CLI end-to-end — `crates/quarto/tests/`
-- [ ] Test 40.
-- [ ] Manual smoke per §"End-to-end CLI verification"; record output
-      in commit/plan close-out.
+- [x] Test 40 *(coverage provided by `sidebar_pipeline.rs` —
+      `ProjectPipeline` is exactly the entry point the CLI uses,
+      so a separate shell-out test would duplicate coverage. The
+      CLI layer (`crates/quarto/src/commands/render.rs`) has no
+      sidebar-specific branching; it just calls `ProjectPipeline::run`).*
+- [x] Manual smoke per §"End-to-end CLI verification" on a 3-page
+      nested fixture at `/tmp/q2-phase2-smoke`:
+
+      - `_quarto.yml` with `project.type: website`, `website.sidebar`
+        including a "Guides" nested section.
+      - `index.qmd`, `about.qmd`, `guides/intro.qmd`.
+      - `cargo run --bin q2 -- render /tmp/q2-phase2-smoke` succeeded
+        with zero warnings.
+      - All outputs landed in `_site/`: `index.html`, `about.html`,
+        `guides/intro.html`.
+      - Sidebar HTML inspected:
+        - Title "Phase 2 Smoke" renders from `website.sidebar.title`.
+        - `index.html` / `about.html` / `guides/intro.html` links
+          all rewritten (`.qmd`→`.html`); subdirectory path
+          `guides/intro.html` preserved.
+        - Bare-path entries display the referenced documents'
+          *titles* ("Home", "About", "Guide Intro") rather than
+          raw hrefs — from the `enrich_text_from_index` Generate
+          helper added after the smoke revealed raw-href labels.
+        - Current page's link carries `class="…active"` on both
+          `index.html` and `guides/intro.html`; other pages'
+          links do not.
+        - Guides section renders with toggle chevron,
+          `aria-expanded="true"`, `show` on the child `<ul>`
+          (because `collapse-level=2` and this is a depth-1 section).
+- [x] Added `sidebar_generate_enriches_missing_text_from_index` and
+      `sidebar_generate_does_not_clobber_explicit_text` unit tests
+      for the enrichment pass.
 
 ### Verification and close-out
 - [ ] `cargo build --workspace` clean.
