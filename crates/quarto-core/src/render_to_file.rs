@@ -70,6 +70,7 @@ use crate::Result;
 use crate::error::QuartoError;
 use crate::format::Format;
 use crate::pipeline::{HtmlRenderConfig, RenderOutput, render_qmd_to_html};
+use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext};
 use crate::resources;
@@ -121,7 +122,7 @@ pub fn render_to_file(
     options: &RenderToFileOptions,
     runtime: Arc<dyn SystemRuntime>,
 ) -> Result<RenderToFileResult> {
-    render_document_to_file(input_path, format, options, None, runtime)
+    render_document_to_file(input_path, format, options, None, runtime, None)
 }
 
 /// Render a QMD document to a file (advanced API).
@@ -157,6 +158,7 @@ pub fn render_document_to_file(
     options: &RenderToFileOptions,
     project: Option<&ProjectContext>,
     runtime: Arc<dyn SystemRuntime>,
+    project_index: Option<Arc<ProjectIndex>>,
 ) -> Result<RenderToFileResult> {
     debug!("Rendering: {}", input_path.display());
 
@@ -179,9 +181,14 @@ pub fn render_document_to_file(
         }
     };
 
-    // Determine output paths
+    // Determine output paths. If the options don't specify an
+    // explicit output path / dir, fall back to the project's
+    // `output-dir` (e.g. websites render into `_site/`). Single-file
+    // and default-kind projects leave `output_dir == dir`, preserving
+    // the pre-Phase-1 "beside the input" behavior.
+    let effective_options = apply_project_output_dir_to_options(options, project, input_path);
     let (output_path, output_dir, output_stem) =
-        determine_output_paths(input_path, format, options)?;
+        determine_output_paths(input_path, format, &effective_options)?;
 
     // Create output directory
     runtime.dir_create(&output_dir, true).map_err(|e| {
@@ -201,6 +208,9 @@ pub fn render_document_to_file(
     let render_format = format_from_name(format)?;
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, &doc_info, &render_format, &binaries);
+    if let Some(index) = project_index {
+        ctx.project_index = Some(index);
+    }
 
     // Configure the pipeline with CSS paths and resource prefix.
     // The resource prefix (e.g., "doc_files/") ensures extension dependency
@@ -286,6 +296,35 @@ pub fn render_document_to_file(
         resources_dir: resource_paths.resource_dir,
         render_output,
     })
+}
+
+/// When `options` has no explicit `output_path` / `output_dir`, fall
+/// back to the project's output dir so e.g. `_site/index.html` is
+/// produced rather than `index.html` beside the input.
+///
+/// Preserves the input's subdirectory under `project_dir` so
+/// `docs/api.qmd` in a website project renders to `_site/docs/api.html`.
+fn apply_project_output_dir_to_options(
+    options: &RenderToFileOptions,
+    project: &ProjectContext,
+    input_path: &Path,
+) -> RenderToFileOptions {
+    if options.output_path.is_some() || options.output_dir.is_some() {
+        return options.clone();
+    }
+    if project.output_dir == project.dir {
+        return options.clone();
+    }
+    let relative = input_path
+        .strip_prefix(&project.dir)
+        .ok()
+        .and_then(|r| r.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default();
+    let resolved = project.output_dir.join(relative);
+    let mut next = options.clone();
+    next.output_dir = Some(resolved);
+    next
 }
 
 /// Determine output paths from input path and options.
@@ -493,7 +532,7 @@ Content.
 
         // Render with pre-discovered project
         let result =
-            render_document_to_file(&input_path, "html", &options, Some(&project), runtime)
+            render_document_to_file(&input_path, "html", &options, Some(&project), runtime, None)
                 .unwrap();
 
         assert!(result.output_path.exists());

@@ -22,6 +22,7 @@ use quarto_system_runtime::SystemRuntime;
 use crate::artifact::ArtifactStore;
 use crate::crossref::{CrossrefIndex, RefTypeRegistry};
 use crate::format::Format;
+use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::stage::{NoopObserver, PandocIncludes, PipelineObserver};
 
@@ -122,6 +123,16 @@ pub struct RenderContext<'a> {
     /// Bridged to/from `StageContext` by `AstTransformsStage`.
     pub crossref_index: Option<CrossrefIndex>,
 
+    /// Project-wide index of Pass-1 profiles.
+    ///
+    /// Populated by
+    /// [`ProjectPipeline`](crate::project::orchestrator::ProjectPipeline)
+    /// before each file's Pass-2 render, transferred into
+    /// [`StageContext::project_index`](crate::stage::StageContext) by
+    /// [`run_pipeline`](crate::pipeline::run_pipeline). `None` for
+    /// standalone renders.
+    pub project_index: Option<Arc<ProjectIndex>>,
+
     /// Observer for pipeline tracing.
     ///
     /// Bridged from `StageContext` by `AstTransformsStage` so that
@@ -174,9 +185,20 @@ impl<'a> RenderContext<'a> {
             diagnostics: Vec::new(),
             ref_type_registry: None,
             crossref_index: None,
+            project_index: None,
             observer: Arc::new(NoopObserver),
             user_grammar_provider: None,
         }
+    }
+
+    /// Attach a project-wide [`ProjectIndex`] to this context.
+    ///
+    /// Called by
+    /// [`ProjectPipeline`](crate::project::orchestrator::ProjectPipeline)
+    /// before each file's Pass-2 render.
+    pub fn with_project_index(mut self, index: Arc<ProjectIndex>) -> Self {
+        self.project_index = Some(index);
+        self
     }
 
     /// Create with custom options

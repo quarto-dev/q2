@@ -20,9 +20,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tracing::info;
 
-use quarto_core::{
-    Format, ProjectContext, QuartoError, RenderToFileOptions, render_document_to_file,
-};
+use quarto_core::project::orchestrator::{ProjectPipeline, project_type_for};
+use quarto_core::{Format, ProjectContext, QuartoError, RenderToFileOptions};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 /// Arguments for the render command
@@ -80,7 +79,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Discover project context (once for all files)
-    let project = ProjectContext::discover(&input_path, &runtime)
+    let mut project = ProjectContext::discover(&input_path, &runtime)
         .context("Failed to discover project context")?;
 
     if !args.quiet {
@@ -111,30 +110,45 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         ))
     };
 
-    // Render each file in the project
-    for doc_info in &project.files {
-        // Use the shared render function
-        let result = match render_document_to_file(
-            &doc_info.input,
-            format_str,
-            &options,
-            Some(&project),
-            runtime_arc.clone(),
-        ) {
-            Ok(result) => result,
-            Err(QuartoError::Parse(parse_error)) => {
-                // Parse errors have rich ariadne formatting with their own "Error:" prefix.
-                // Print directly to avoid anyhow adding a duplicate prefix.
-                eprintln!("{}", parse_error);
-                std::process::exit(1);
-            }
-            Err(e) => return Err(anyhow::anyhow!("{}", e)),
-        };
+    // Dispatch through the two-pass project driver. Single-file and
+    // loose-directory renders go through `DefaultProjectType`, whose
+    // `pre_render` / `post_render` are no-ops — the observable
+    // behavior is identical to the pre-Phase-1 per-file loop.
+    let project_type = project_type_for(&project);
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        format.clone(),
+        format_str,
+        &options,
+        runtime_arc.clone(),
+    );
 
-        // Report diagnostics with full ariadne-style source context
+    let summary = match pollster::block_on(pipeline.run()) {
+        Ok(s) => s,
+        Err(QuartoError::Parse(parse_error)) => {
+            // Parse errors have rich ariadne formatting with their own "Error:" prefix.
+            // Print directly to avoid anyhow adding a duplicate prefix.
+            eprintln!("{}", parse_error);
+            std::process::exit(1);
+        }
+        Err(e) => return Err(anyhow::anyhow!("{}", e)),
+    };
+
+    for failure in &summary.pass1_failures {
+        eprintln!(
+            "warning: profile-pass skipped {}: {}",
+            failure.input.display(),
+            failure.error
+        );
+    }
+    for failure in &summary.pass2_failures {
+        eprintln!("error: {}: {}", failure.input.display(), failure.error);
+    }
+
+    for result in &summary.outputs {
         if !args.quiet && !result.render_output.diagnostics.is_empty() {
             for diagnostic in &result.render_output.diagnostics {
-                // Use the source context for rich error rendering with source snippets
                 eprintln!(
                     "{}",
                     diagnostic.to_text(Some(&result.render_output.source_context))
@@ -145,6 +159,10 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         if !args.quiet {
             info!("Output: {}", result.output_path.display());
         }
+    }
+
+    if !summary.pass2_failures.is_empty() {
+        std::process::exit(1);
     }
 
     Ok(())

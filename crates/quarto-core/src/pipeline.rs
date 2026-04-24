@@ -392,6 +392,10 @@ pub async fn run_pipeline(
     // Transfer user-grammar provider (browser path sets this; native CLI
     // leaves it None and falls back to `CodeHighlightStage`'s disk scan).
     stage_ctx.user_grammar_provider = ctx.user_grammar_provider.take();
+    // Transfer the project index (set by ProjectPipeline::pass_two).
+    // Cloning the `Arc` is cheap and keeps the RenderContext usable
+    // after the stage context is built.
+    stage_ctx.project_index = ctx.project_index.clone();
 
     // Create input from content
     let input = PipelineData::LoadedSource(LoadedSource::new(

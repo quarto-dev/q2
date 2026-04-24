@@ -30,6 +30,7 @@ use crate::artifact::ArtifactStore;
 use crate::crossref::{CrossrefIndex, RefTypeRegistry};
 use crate::extension::Extension;
 use crate::format::Format;
+use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
 
 /// Owned context passed to all pipeline stages.
@@ -101,6 +102,18 @@ pub struct StageContext {
     /// Cancellation token for graceful shutdown (Ctrl+C)
     pub cancellation: Cancellation,
 
+    /// Project-wide index of Pass-1 [`DocumentProfile`]s.
+    ///
+    /// Populated by
+    /// [`ProjectPipeline::pass_two`](crate::project::orchestrator::ProjectPipeline)
+    /// before each file's Pass-2 run. `None` for standalone renders
+    /// and for Pass-1 runs themselves. Phase-1 does not read this
+    /// anywhere; Phase-2+ stages (sidebar generate, cross-doc link
+    /// rewriting) consume it.
+    ///
+    /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
+    pub project_index: Option<Arc<ProjectIndex>>,
+
     /// Optional provider of user-defined tree-sitter grammars, consulted
     /// by `CodeHighlightStage` before falling back to the built-in
     /// registry. Set by the top-level render entry points:
@@ -158,6 +171,7 @@ impl StageContext {
             diagnostics: Vec::new(),
             ref_type_registry: None,
             crossref_index: None,
+            project_index: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
             user_grammar_provider: None,

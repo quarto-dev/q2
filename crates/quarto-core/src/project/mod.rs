@@ -1,11 +1,11 @@
 /*
- * project.rs
- * Copyright (c) 2025 Posit, PBC
+ * project/mod.rs
+ * Copyright (c) 2025-2026 Posit, PBC
  *
- * Project context for Quarto rendering.
+ * Project context and orchestration for Quarto rendering.
  */
 
-//! Project context management.
+//! Project context and orchestration.
 //!
 //! A project context represents either:
 //! - A Quarto project (with `_quarto.yml`)
@@ -16,6 +16,16 @@
 //! - Parsed configuration
 //! - List of input files
 //! - Output directory resolution
+//!
+//! Submodules:
+//! - [`index`]: cross-document index built from Pass-1 profiles.
+//! - [`orchestrator`]: the [`orchestrator::ProjectType`] trait and the
+//!   [`orchestrator::ProjectPipeline`] two-pass driver.
+//! - [`discovery`]: multi-file project file-list expansion.
+
+pub mod discovery;
+pub mod index;
+pub mod orchestrator;
 
 use std::path::{Path, PathBuf};
 
@@ -24,6 +34,24 @@ use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
+
+/// Default output directory for a project when `project.output-dir`
+/// is unset.
+///
+/// - **Website** projects default to `dir/_site` — this matches Q1
+///   and means file discovery naturally excludes previously-rendered
+///   output (see discovery rule §"excludes the output directory").
+/// - All other projects (default / book / manuscript) emit beside
+///   the project root. Phase-1 book / manuscript land in default
+///   since they fall back to `DefaultProjectType` (see
+///   `crate::project::orchestrator::project_type_for`). Their real
+///   defaults will be set when those project kinds are implemented.
+fn default_output_dir(dir: &Path, config: Option<&ProjectConfig>) -> PathBuf {
+    match config.map(|c| c.project_kind) {
+        Some(ProjectKind::Website) => dir.join("_site"),
+        _ => dir.to_path_buf(),
+    }
+}
 
 /// Find and parse all `_metadata.yml` files between project root and document directory.
 ///
@@ -418,14 +446,28 @@ impl ProjectContext {
         let output_dir = config
             .as_ref()
             .and_then(|c| c.output_dir.as_ref())
-            .map_or_else(|| dir.clone(), |o| dir.join(o));
+            .map_or_else(
+                || default_output_dir(&dir, config.as_ref()),
+                |o| dir.join(o),
+            );
 
         // Build file list
         let files = if let Some(input) = input_file {
             vec![DocumentInfo::from_path(input)]
         } else {
-            // TODO: Discover files based on project configuration
-            Vec::new()
+            // Multi-file project: walk the project directory, honoring
+            // `project.render` globs if provided.
+            let render_patterns = config
+                .as_ref()
+                .map(|c| c.render_patterns.clone())
+                .unwrap_or_default();
+            let discovery_cfg = discovery::DiscoveryConfig {
+                project_dir: &dir,
+                output_dir: &output_dir,
+                render_patterns: &render_patterns,
+            };
+            let paths = discovery::discover_project_files(&discovery_cfg, runtime)?;
+            paths.into_iter().map(DocumentInfo::from_path).collect()
         };
 
         Ok(Self {
