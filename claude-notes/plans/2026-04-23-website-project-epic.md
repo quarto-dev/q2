@@ -602,6 +602,16 @@ relevant design work starts.
   the Q1 layout is a `FULL_HTML_TEMPLATE` restructuring task — not
   sidebar-feature work — and is tracked as a separate follow-up so
   Phase 2 stays scoped to feature implementation.
+- **DocumentProfile should record its include set.** Surfaced while
+  merging the `IncludeExpansionStage` from `main` ahead of the
+  `DocumentProfile` checkpoint (`bd-xfwx`). After the merge, a
+  profile can reflect content spliced in from `{{< include … >}}`
+  children; the profile therefore *depends on* those child files
+  but carries no record of them. For Phase 8 (incremental
+  rebuilds) and for eventual `freeze`, the cache-key computation
+  needs to invalidate a parent's cached profile when any
+  (transitive) include changes. Tracked as `bd-r82e`; not a
+  blocker for Phases 4–7.
 
 ## Follow-up beads report (running log)
 
