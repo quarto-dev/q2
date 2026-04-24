@@ -363,25 +363,51 @@ push-approval gate.
 
 ### Phase D — Follow-ups and handoff
 
-- [ ] **D0. `br sync --flush-only`** in the main repo (not the
+- [x] **D0. `br sync --flush-only`** in the main repo (not the
       worktree); `git add .beads/ && git commit -m "sync beads"`.
-- [ ] **D1. Update the epic plan file**
+      *Partial:* `bd-xfwx` closed in the local beads DB (via
+      `br --no-auto-import close bd-xfwx --reason …`). A standard
+      `br sync --flush-only` is blocked by a pre-existing prefix
+      config issue: the jsonl contains both `bd-`-prefixed and
+      123 `k-`-prefixed issues, and `br sync` (post-rebuild) rejects
+      with "Prefix mismatch at line 124: expected 'bd', found issue
+      'k-02o9'". A `--force` flush was attempted but would have
+      deleted `bd-2mxo` and `bd-tjbr` (present in the committed
+      jsonl but absent from the local DB). Reverted the jsonl to
+      its post-merge state to preserve those two issues; the DB's
+      knowledge of `bd-xfwx:closed` is therefore unflushed.
+      Follow-up: fix the beads prefix config (or import the k-
+      prefixed issues into the DB) before the next sync.
+- [x] **D1. Update the epic plan file**
       (`claude-notes/plans/2026-04-23-website-project-epic.md`) §Work
       items with a note that this merge landed and the checkpoint
       contract now includes post-expansion content. Reference this
       plan.
-- [ ] **D2. File a follow-up beads issue** if the regression tests
+      *Done:* added an "Interphase merge" work item entry between
+      Phase 3 and Phase 4 pointing at `bd-xfwx` + follow-up
+      `bd-r82e`. Also added a §Epic-wide follow-ups bullet for
+      `bd-r82e` during the pre-merge prep commit.
+- [x] **D2. File a follow-up beads issue** if the regression tests
       surface that the profile contract should gain a field (e.g.
       "is this document an include target of any other document in
       the project?" — a question that becomes meaningful once
       project orchestration inspects profiles). Only file if
       actually needed; don't pre-file speculatively.
+      *Done during pre-merge prep:* `bd-r82e` filed for the
+      `DocumentProfile.includes: Vec<…>` field needed for Phase-8
+      incremental-rebuild cache invalidation. Not a blocker for
+      Phases 4-7.
 - [ ] **D3. Propose push to the user.** Do not push without explicit
       approval. `git push origin feature/websites` only after the
       user says yes.
+      *Pending user approval.* Feature branch is at
+      `c3bcfb76 bd-xfwx: merge main into feature/websites`, local
+      only.
 - [ ] **D4. Delete the worktree** once the merge is on
       `feature/websites` proper:
       `git worktree remove .worktrees/include-merge`.
+      *Deferred until after push approval, in case the plan file
+      needs further edits in the same worktree.*
 
 ## Test strategy (recap)
 
