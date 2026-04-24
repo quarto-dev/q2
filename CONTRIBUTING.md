@@ -35,6 +35,14 @@ brew install llvm
 
 This only needs to be done once. The build scripts locate it automatically in the standard Homebrew paths (`/opt/homebrew/opt/llvm` on Apple Silicon, `/usr/local/opt/llvm` on Intel).
 
+### cmake (required for `cargo build --workspace`)
+
+The `quarto-highlight` crate enables the `wasm` feature on `tree-sitter`, which pulls in `wasmtime-c-api-impl` as a transitive dependency. Its `build.rs` shells out to `cmake`, so `cmake` must be on `PATH` for any full workspace build. Any modern version works. `cargo dev-setup` checks this and warns if needed.
+
+- **Windows**: `scoop install cmake` (or `winget install Kitware.CMake`)
+- **macOS**: `brew install cmake` (bundled alongside `brew install llvm` above if you installed it for WASM)
+- **Linux**: `apt install cmake` (Debian/Ubuntu) or `dnf install cmake` (Fedora/RHEL)
+
 ### Pandoc 3.6+ (optional)
 
 Four tests in the `pampa` crate compare output against Pandoc. These tests require Pandoc 3.6 or later and will fail when Pandoc is missing or too old. `cargo dev-setup` checks this and warns if needed.
