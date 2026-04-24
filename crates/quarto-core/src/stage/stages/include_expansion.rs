@@ -95,7 +95,7 @@ fn expand_includes_in_blocks(
             // Check for circular includes
             if include_stack.contains(&canonical) {
                 ctx.diagnostics.push(
-                    quarto_error_reporting::DiagnosticMessageBuilder::error("Circular include")
+                    quarto_error_reporting::DiagnosticMessageBuilder::warning("Circular include")
                         .with_code("Q-5-1")
                         .with_location(doc.ast.blocks[i].source_info().clone())
                         .problem(format!(
@@ -114,7 +114,7 @@ fn expand_includes_in_blocks(
                 Ok(bytes) => bytes,
                 Err(e) => {
                     ctx.diagnostics.push(
-                        quarto_error_reporting::DiagnosticMessageBuilder::error(
+                        quarto_error_reporting::DiagnosticMessageBuilder::warning(
                             "Include file not found",
                         )
                         .with_code("Q-5-2")

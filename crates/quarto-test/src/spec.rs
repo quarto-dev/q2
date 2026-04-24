@@ -191,6 +191,11 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
                     assertions.push(Box::new(ShouldError::new()));
                 }
                 "printsMessage" => {
+                    // Matches Q1 semantics (tests/smoke/smoke-all.test.ts:
+                    // resolveTestSpecs): printsMessage alone does NOT suppress
+                    // the default noErrorsOrWarnings. Fixtures that expect
+                    // messages pair printsMessage with an explicit
+                    // noErrors / noErrorsOrWarnings / shouldError.
                     // Support both single object and array of printsMessage checks
                     if let Some(arr) = assertion_value.as_sequence() {
                         for item in arr {
