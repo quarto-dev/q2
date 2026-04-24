@@ -4,6 +4,8 @@ import * as ReactAstDebugRendererModule from '../components/render/ReactAstDebug
 import { Deck, Slide } from '@revealjs/react';
 import 'reveal.js/reveal.css';
 import 'reveal.js/theme/white.css';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 // EXPERIMENTAL functionality for custom render components
 
@@ -18,6 +20,7 @@ export async function transpileAndImportTSX(tsxCode: string): Promise<Record<str
     (window as any).React = React;
     (window as any).__REACT_AST_DEBUG_RENDERER__ = ReactAstDebugRendererModule;
     (window as any).RevealReact = { Deck, Slide };
+    (window as any).katex = katex;
 
     // Transpile TSX to JS
     const result = transform(tsxCode, {

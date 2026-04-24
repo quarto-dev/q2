@@ -247,12 +247,16 @@ push-approval gate.
 
 ### Phase B — Perform the merge
 
-- [ ] **B0. Fetch** latest `main` (no working-tree mutation beyond
+- [x] **B0. Fetch** latest `main` (no working-tree mutation beyond
       the fetch).
-- [ ] **B1. From the worktree**, run `git merge --no-ff --no-commit
+      *Done:* `git fetch origin main` → FETCH_HEAD at `349148ae`.
+- [x] **B1. From the worktree**, run `git merge --no-ff --no-commit
       main` to produce a merge commit buffer with conflicts surfaced
       but nothing yet recorded.
-- [ ] **B2. Resolve conflicts** file-by-file, using the merge-target
+      *Done:* two conflicts reported, in `pipeline.rs` and
+      `stage/mod.rs`. `stage/stages/mod.rs` and `.beads/issues.jsonl`
+      auto-merged.
+- [x] **B2. Resolve conflicts** file-by-file, using the merge-target
       pipeline order from the §Goal section. Specifically:
         - `pipeline.rs`: imports union; doc comments renumbered for
           the final order; three builder functions each get both
@@ -279,13 +283,15 @@ push-approval gate.
           files that main substantially rewrote (e.g. TS-engine
           plans) and the `feature/websites` version for website-epic
           plans.
-- [ ] **B3. Do not commit yet.** Leave the merge in-progress; move
+- [x] **B3. Do not commit yet.** Leave the merge in-progress; move
       to Phase C to verify before committing.
+      *Done:* merge left in-progress until C0-C3 passed.
 
 ### Phase C — Verification
 
-- [ ] **C0. `cargo build --workspace`** — compiles cleanly.
-- [ ] **C1. `cargo nextest run --workspace`** — all tests pass.
+- [x] **C0. `cargo build --workspace`** — compiles cleanly.
+      *Done:* 2m 30s, exit 0.
+- [x] **C1. `cargo nextest run --workspace`** — all tests pass.
       Special attention to:
         - The new regression test from A1 (must now pass — this is
           the green half of the TDD cycle).
@@ -300,17 +306,42 @@ push-approval gate.
         - Phase-2 sidebar / Phase-3 navbar/footer project-integration
           tests (they read the profile; adding headings via include
           must not break them).
-- [ ] **C2. `cargo xtask verify`** — full workspace + hub-client
+      *Done:* 7750 tests, 0 failed, 195 skipped. Focused re-run of
+      `document_profile_pipeline` confirmed:
+      `profile_sees_heading_from_included_file` and
+      `include_expansion_precedes_document_profile` both PASS
+      (the TDD GREEN); Phase-0
+      `pipeline_at_profile_to_end_produces_expected_html`
+      (clone-and-resume byte-identical invariant) still PASSes.
+- [x] **C2. `cargo xtask verify`** — full workspace + hub-client
       build + hub-client tests. Required because `quarto-core` is on
       the conflict path.
-- [ ] **C3. End-to-end CLI smoke** per the CLAUDE.md
-      end-to-end-verification rule. Take `crates/quarto/tests/smoke-all/includes/basic/basic.qmd`
-      (freshly arrived from `main`), render it via
-      `cargo run --bin quarto -- render crates/quarto/tests/smoke-all/includes/basic/basic.qmd`,
-      and visually confirm the child content appears in the output
-      HTML. Also use `-v` if diagnostics need inspection. Record the
-      exact invocation and a snippet of output in the session
-      transcript.
+      *Done:* `cargo xtask verify --skip-rust-tests` (since C1
+      already covered Rust). Initially failed on a pre-existing
+      nightly-rustc issue (`VaList::next_arg` rename from
+      `f866c65e` required a rustc newer than local `1.94.0-nightly
+      2026-01-14`). After `rustup update nightly` →
+      `1.97.0-nightly 2026-04-23` and a root `npm install` (fresh
+      worktree had no `node_modules/`), verify reported
+      **"All verification steps passed!"**
+- [x] **C3. End-to-end CLI smoke** per the CLAUDE.md
+      end-to-end-verification rule.
+      *Done:* `cargo run --bin q2 -- render
+      crates/quarto/tests/smoke-all/includes/basic/basic.qmd`
+      produced `basic.html` (782 bytes). Inspected — the rendered
+      HTML contains the three expected paragraphs in order:
+      ```
+      <p>Parent content before include.</p>
+      <p>This line contains BASIC-CHILD-MARKER-XYZ from the included file.</p>
+      <p>Parent content after include.</p>
+      ```
+      confirming `{{< include _child.qmd >}}` was resolved during
+      render (and, by construction of the pipeline order,
+      *before* the profile checkpoint). Build artifacts (`basic.html`,
+      `basic_files/`) removed after inspection; not staged.
+      (Plan note: CLI binary is `q2`, not `quarto` — the earlier
+      draft of this step said `--bin quarto`, corrected at execution
+      time.)
 - [ ] **C4. Finalize the merge commit.** `git commit` (the merge
       buffer is still in progress). Use a descriptive message along
       the lines of:

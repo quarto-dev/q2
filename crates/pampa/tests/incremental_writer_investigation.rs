@@ -13,7 +13,6 @@
 
 use pampa::pandoc::Block;
 use pampa::readers;
-use quarto_source_map::SourceInfo;
 
 // =============================================================================
 // Helpers
@@ -33,33 +32,8 @@ fn parse_qmd(input: &str) -> pampa::pandoc::Pandoc {
 
 /// Extract the source span (start_offset, end_offset) from a Block's source_info.
 fn block_span(block: &Block) -> (usize, usize) {
-    let si = block_source_info(block);
+    let si = block.source_info();
     (si.start_offset(), si.end_offset())
-}
-
-/// Extract the SourceInfo from a Block.
-fn block_source_info(block: &Block) -> &SourceInfo {
-    match block {
-        Block::Paragraph(p) => &p.source_info,
-        Block::Header(h) => &h.source_info,
-        Block::CodeBlock(cb) => &cb.source_info,
-        Block::BlockQuote(bq) => &bq.source_info,
-        Block::BulletList(bl) => &bl.source_info,
-        Block::OrderedList(ol) => &ol.source_info,
-        Block::Div(d) => &d.source_info,
-        Block::HorizontalRule(hr) => &hr.source_info,
-        Block::Table(t) => &t.source_info,
-        Block::RawBlock(rb) => &rb.source_info,
-        Block::Plain(p) => &p.source_info,
-        Block::LineBlock(lb) => &lb.source_info,
-        Block::DefinitionList(dl) => &dl.source_info,
-        Block::Figure(f) => &f.source_info,
-        Block::BlockMetadata(m) => &m.source_info,
-        Block::NoteDefinitionPara(nd) => &nd.source_info,
-        Block::NoteDefinitionFencedBlock(nd) => &nd.source_info,
-        Block::CaptionBlock(cb) => &cb.source_info,
-        Block::Custom(cn) => &cn.source_info,
-    }
 }
 
 /// Extract the text that a block's source span covers in the original input.

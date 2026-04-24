@@ -46,7 +46,9 @@ pub fn process_caption(
 
     // If we found an attribute, append it as Inline::Attr
     if let Some((attr, attr_source)) = caption_attr {
-        caption_inlines.push(crate::pandoc::inline::Inline::Attr(attr, attr_source));
+        caption_inlines.push(crate::pandoc::inline::Inline::Attr(
+            crate::pandoc::inline::InlineAttr::new(attr, attr_source),
+        ));
     }
 
     PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(CaptionBlock {

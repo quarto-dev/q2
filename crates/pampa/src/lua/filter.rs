@@ -688,7 +688,7 @@ fn inline_tag(inline: &Inline) -> &'static str {
         Inline::Span(_) => "Span",
         Inline::Shortcode(_) => "Shortcode",
         Inline::NoteReference(_) => "NoteReference",
-        Inline::Attr(_, _) => "Attr",
+        Inline::Attr(_) => "Attr",
         Inline::Insert(_) => "Insert",
         Inline::Delete(_) => "Delete",
         Inline::Highlight(_) => "Highlight",
@@ -969,7 +969,7 @@ fn walk_inline_children_for_element_filters<'a>(
             | Inline::Cite(_)
             | Inline::Shortcode(_)
             | Inline::NoteReference(_)
-            | Inline::Attr(_, _)
+            | Inline::Attr(_)
             | Inline::Insert(_)
             | Inline::Delete(_)
             | Inline::Highlight(_)
@@ -1711,7 +1711,7 @@ fn walk_inline_children_topdown<'a>(
             | Inline::Cite(_)
             | Inline::Shortcode(_)
             | Inline::NoteReference(_)
-            | Inline::Attr(_, _)
+            | Inline::Attr(_)
             | Inline::Custom(_) => Ok(inline.clone()),
         }
     })
@@ -2046,7 +2046,7 @@ mod unit_tests {
     fn test_inline_tag_all_variants() {
         use crate::pandoc::custom::CustomNode;
         use crate::pandoc::inline::*;
-        use crate::pandoc::{AttrSourceInfo, Inline, TargetSourceInfo};
+        use crate::pandoc::{AttrSourceInfo, Inline, InlineAttr, TargetSourceInfo};
         use hashlink::LinkedHashMap;
         use quarto_source_map::SourceInfo;
         use std::collections::HashMap;
@@ -2226,10 +2226,10 @@ mod unit_tests {
             "NoteReference"
         );
         assert_eq!(
-            inline_tag(&Inline::Attr(
+            inline_tag(&Inline::Attr(InlineAttr::new(
                 (String::new(), vec![], LinkedHashMap::new()),
                 AttrSourceInfo::empty()
-            )),
+            ))),
             "Attr"
         );
         assert_eq!(

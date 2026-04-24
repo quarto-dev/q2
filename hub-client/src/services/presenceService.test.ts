@@ -4,6 +4,8 @@
  * These tests verify the presence service's behavior for real-time
  * collaborative editing features: cursor tracking, selections, and
  * presence state management.
+ *
+ * @vitest-environment jsdom
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -23,6 +25,7 @@ import {
   _resetForTesting,
   _getStateForTesting,
 } from './presenceService';
+import { setVisibility, resetVisibility, fireWindowFocus } from '../test-utils/visibility';
 
 // Mock the userSettings module
 vi.mock('./userSettings', () => ({
@@ -41,6 +44,9 @@ vi.mock('./userSettings', () => ({
 vi.mock('./automergeSync', () => ({
   getFileHandle: vi.fn().mockReturnValue(null),
 }));
+
+import { getFileHandle } from './automergeSync';
+const mockGetFileHandle = vi.mocked(getFileHandle);
 
 describe('presenceService', () => {
   beforeEach(() => {
@@ -529,5 +535,215 @@ describe('presenceService — Automerge cursor wire format', () => {
     // Resolves to 3 on a separate receiver doc that has synced the same
     // post-edit state. If we read pre-edit, this would be 4.
     expect(A.getCursorPosition(current, ['text'], msg.cursor!)).toBe(3);
+  });
+});
+
+// ===========================================================================
+// Visibility gating
+//
+// Backgrounded tabs queue ephemeral presence messages. On refocus they drain
+// and each one triggers a subscriber notification that recomputes Monaco
+// decorations — the user perceives this as remote cursors sweeping through
+// intermediate positions. The gate suppresses per-message subscriber
+// notifications while hidden (data still lands in `remotePresences`) and
+// flushes a single coalesced notification on visibilitychange→visible (or
+// window focus, for browsers that skip visibilitychange). See
+// claude-notes/plans/2026-04-24-hub-client-visibility-gating.md.
+// ===========================================================================
+
+type PresenceEphemeralMessage =
+  | {
+      type: 'presence';
+      peerId: string;
+      userId: string;
+      userName: string;
+      userColor: string;
+      cursor: string | null;
+      selection: { start: string; end: string } | null;
+    }
+  | { type: 'leave'; peerId: string };
+
+type EphemeralHandler = (payload: { message: PresenceEphemeralMessage }) => void;
+
+/** Standard presence message shape used in tests. */
+function presenceMsg(peerId: string, userName: string): PresenceEphemeralMessage {
+  return {
+    type: 'presence',
+    peerId,
+    userId: `user-${peerId}`,
+    userName,
+    userColor: '#ff0000',
+    cursor: `cursor-${peerId}`,
+    selection: null,
+  };
+}
+
+describe('presenceService — visibility gating', () => {
+  // Captured by stub handle.on() so tests can invoke the service's
+  // registered ephemeral-message handler as if a real message arrived.
+  let capturedHandler: EphemeralHandler | null = null;
+
+  function makeStubHandle() {
+    return {
+      broadcast: vi.fn(),
+      doc: () => A.from({ text: '' }),
+      on: vi.fn((event: string, fn: unknown) => {
+        if (event === 'ephemeral-message') capturedHandler = fn as EphemeralHandler;
+      }),
+      off: vi.fn((event: string, fn: unknown) => {
+        if (event === 'ephemeral-message' && capturedHandler === fn) {
+          capturedHandler = null;
+        }
+      }),
+    };
+  }
+
+  function deliver(msg: PresenceEphemeralMessage) {
+    if (!capturedHandler) throw new Error('ephemeral handler not captured');
+    capturedHandler({ message: msg });
+  }
+
+  beforeEach(async () => {
+    _resetForTesting();
+    capturedHandler = null;
+    await initPresence();
+    // Install stub via the normal setCurrentFile → getFileHandle path so
+    // the service's own startListening does the `.on('ephemeral-message', ...)`
+    // wire-up. Peer id of deliver()'d messages must differ from our local
+    // peer id — handleEphemeralMessage ignores self-loops.
+    const stub = makeStubHandle();
+    mockGetFileHandle.mockReturnValue(stub as never);
+    setCurrentFile('test.qmd');
+  });
+
+  afterEach(() => {
+    cleanupPresence();
+    resetVisibility();
+    vi.restoreAllMocks();
+    mockGetFileHandle.mockReturnValue(null);
+    capturedHandler = null;
+  });
+
+  it('baseline: visible → N messages → N subscriber invocations', () => {
+    const cb = vi.fn();
+    onPresenceChange(cb);
+    cb.mockClear();
+
+    deliver(presenceMsg('peer-1', 'Alice'));
+    deliver(presenceMsg('peer-2', 'Bob'));
+    deliver(presenceMsg('peer-3', 'Carol'));
+
+    expect(cb).toHaveBeenCalledTimes(3);
+  });
+
+  it('hidden: N ephemeral messages produce zero subscriber invocations but data lands', () => {
+    const cb = vi.fn();
+    onPresenceChange(cb);
+    cb.mockClear();
+
+    setVisibility('hidden');
+    deliver(presenceMsg('peer-1', 'Alice'));
+    deliver(presenceMsg('peer-2', 'Bob'));
+    deliver(presenceMsg('peer-3', 'Carol'));
+
+    expect(cb).not.toHaveBeenCalled();
+    expect(getRemotePresences()).toHaveLength(3);
+  });
+
+  it('flush on visible: one subscriber invocation with coalesced snapshot', () => {
+    const cb = vi.fn();
+    onPresenceChange(cb);
+    cb.mockClear();
+
+    setVisibility('hidden');
+    deliver(presenceMsg('peer-1', 'Alice'));
+    deliver(presenceMsg('peer-2', 'Bob'));
+    cb.mockClear();
+
+    setVisibility('visible');
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    const snapshot = cb.mock.calls[0][0] as Array<{ userName: string }>;
+    expect(snapshot.map((p) => p.userName).sort()).toEqual(['Alice', 'Bob']);
+  });
+
+  it('flush on visible: second hide→visible with no updates emits no notifications', () => {
+    const cb = vi.fn();
+    onPresenceChange(cb);
+
+    setVisibility('hidden');
+    deliver(presenceMsg('peer-1', 'Alice'));
+    setVisibility('visible');
+    cb.mockClear();
+
+    setVisibility('hidden');
+    setVisibility('visible');
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('leave messages during hidden: still mutate map and are included in the flush', () => {
+    const cb = vi.fn();
+    onPresenceChange(cb);
+
+    deliver(presenceMsg('peer-1', 'Alice'));
+    deliver(presenceMsg('peer-2', 'Bob'));
+    cb.mockClear();
+
+    setVisibility('hidden');
+    deliver({ type: 'leave', peerId: 'peer-1' });
+    expect(getRemotePresences().map((p) => p.peerId)).toEqual(['peer-2']);
+    expect(cb).not.toHaveBeenCalled();
+
+    setVisibility('visible');
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    const snapshot = cb.mock.calls[0][0] as Array<{ peerId: string }>;
+    expect(snapshot.map((p) => p.peerId)).toEqual(['peer-2']);
+  });
+
+  it('cleanup: cleanupPresence removes visibilitychange and focus listeners', () => {
+    const docRemove = vi.spyOn(document, 'removeEventListener');
+    const winRemove = vi.spyOn(window, 'removeEventListener');
+
+    cleanupPresence();
+
+    const visCall = docRemove.mock.calls.find((c) => c[0] === 'visibilitychange');
+    const focusCall = winRemove.mock.calls.find((c) => c[0] === 'focus');
+    expect(visCall).toBeDefined();
+    expect(focusCall).toBeDefined();
+  });
+
+  it('focus-only flush: window focus while still hidden triggers one coalesced notification', () => {
+    const cb = vi.fn();
+    onPresenceChange(cb);
+
+    setVisibility('hidden');
+    deliver(presenceMsg('peer-1', 'Alice'));
+    deliver(presenceMsg('peer-2', 'Bob'));
+    cb.mockClear();
+
+    fireWindowFocus();
+
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // Subsequent focus with nothing pending is a no-op.
+    cb.mockClear();
+    fireWindowFocus();
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('idempotent double-fire: visibilitychange + focus emits exactly one notification', () => {
+    const cb = vi.fn();
+    onPresenceChange(cb);
+
+    setVisibility('hidden');
+    deliver(presenceMsg('peer-1', 'Alice'));
+    cb.mockClear();
+
+    setVisibility('visible');
+    fireWindowFocus();
+
+    expect(cb).toHaveBeenCalledTimes(1);
   });
 });

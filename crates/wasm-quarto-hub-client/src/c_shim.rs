@@ -314,31 +314,31 @@ struct VaListSource<'a, 'b>(&'a mut std::ffi::VaList<'b>);
 
 impl<'a, 'b> wasm_printf_fmt::VaArgSource for VaListSource<'a, 'b> {
     unsafe fn next_i32(&mut self) -> i32 {
-        unsafe { self.0.arg::<i32>() }
+        unsafe { self.0.next_arg::<i32>() }
     }
     unsafe fn next_u32(&mut self) -> u32 {
-        unsafe { self.0.arg::<u32>() }
+        unsafe { self.0.next_arg::<u32>() }
     }
     unsafe fn next_i64(&mut self) -> i64 {
-        unsafe { self.0.arg::<i64>() }
+        unsafe { self.0.next_arg::<i64>() }
     }
     unsafe fn next_u64(&mut self) -> u64 {
-        unsafe { self.0.arg::<u64>() }
+        unsafe { self.0.next_arg::<u64>() }
     }
     unsafe fn next_isize(&mut self) -> isize {
-        unsafe { self.0.arg::<isize>() }
+        unsafe { self.0.next_arg::<isize>() }
     }
     unsafe fn next_usize(&mut self) -> usize {
-        unsafe { self.0.arg::<usize>() }
+        unsafe { self.0.next_arg::<usize>() }
     }
     unsafe fn next_f64(&mut self) -> f64 {
-        unsafe { self.0.arg::<f64>() }
+        unsafe { self.0.next_arg::<f64>() }
     }
     unsafe fn next_cstr(&mut self) -> *const c_char {
-        unsafe { self.0.arg::<*const c_char>() }
+        unsafe { self.0.next_arg::<*const c_char>() }
     }
     unsafe fn next_voidp(&mut self) -> *const c_void {
-        unsafe { self.0.arg::<*const c_void>() }
+        unsafe { self.0.next_arg::<*const c_void>() }
     }
 }
 

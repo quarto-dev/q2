@@ -189,7 +189,7 @@ impl PipelineStage for EngineExecutionStage {
         }
 
         // Step 4: Serialize AST to QMD for engine execution
-        let qmd = serialize_ast_to_qmd(&doc_ast.ast)?;
+        let (qmd, qmd_source_info) = serialize_ast_to_qmd(&doc_ast.ast)?;
 
         trace_event!(
             ctx,
@@ -199,6 +199,8 @@ impl PipelineStage for EngineExecutionStage {
         );
 
         // Step 5: Prepare execution context
+        // Clone source_context into Arc — it's finalized after include expansion.
+        let source_context = std::sync::Arc::new(doc_ast.source_context.clone());
         let exec_context = ExecutionContext::new(
             ctx.temp_dir.clone(),
             ctx.project.dir.clone(),
@@ -210,7 +212,8 @@ impl PipelineStage for EngineExecutionStage {
         } else {
             Some(ctx.project.dir.clone())
         })
-        .with_engine_config(detected.config.clone());
+        .with_engine_config(detected.config.clone())
+        .with_source_info(qmd_source_info, source_context);
 
         // Step 6: Execute the engine
         trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
@@ -357,18 +360,20 @@ fn intermediate_filename(source_path: &std::path::Path) -> String {
 /// Uses pampa's QMD writer which preserves code cell attributes.
 fn serialize_ast_to_qmd(
     ast: &quarto_pandoc_types::pandoc::Pandoc,
-) -> Result<String, PipelineError> {
-    let mut buffer = Vec::new();
-    pampa::writers::qmd::write(ast, &mut buffer).map_err(|diagnostics| {
-        PipelineError::stage_error_with_diagnostics("engine-execution", diagnostics)
-    })?;
+) -> Result<(String, quarto_source_map::SourceInfo), PipelineError> {
+    let (buffer, source_info) =
+        pampa::writers::qmd::write_with_source_info(ast).map_err(|diagnostics| {
+            PipelineError::stage_error_with_diagnostics("engine-execution", diagnostics)
+        })?;
 
-    String::from_utf8(buffer).map_err(|e| {
+    let text = String::from_utf8(buffer).map_err(|e| {
         PipelineError::stage_error(
             "engine-execution",
             format!("QMD serialization produced invalid UTF-8: {}", e),
         )
-    })
+    })?;
+
+    Ok((text, source_info))
 }
 
 #[cfg(test)]
@@ -665,12 +670,17 @@ mod tests {
         let content = b"---\ntitle: Test\n---\n\n# Hello\n\nWorld";
         let doc_ast = parse_qmd_to_ast(content, "test.qmd");
 
-        let qmd = serialize_ast_to_qmd(&doc_ast.ast).unwrap();
+        let (qmd, source_info) = serialize_ast_to_qmd(&doc_ast.ast).unwrap();
 
         // Should contain the title
         assert!(qmd.contains("title"));
         // Should contain the heading
         assert!(qmd.contains("Hello"));
+        // Should have source provenance
+        assert!(
+            matches!(source_info, quarto_source_map::SourceInfo::Concat { .. }),
+            "Expected Concat SourceInfo from serialization"
+        );
         // Should contain the paragraph
         assert!(qmd.contains("World"));
     }
@@ -924,5 +934,110 @@ mod tests {
         assert_eq!(ctx.includes.include_before[0], "<div>before</div>");
         assert_eq!(ctx.includes.include_after.len(), 1);
         assert_eq!(ctx.includes.include_after[0], "<div>after</div>");
+    }
+
+    // === Phase 0C: SourceInfo in ExecutionContext tests ===
+
+    #[test]
+    fn test_execution_context_has_source_info() {
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/project"),
+            PathBuf::from("/project/doc.qmd"),
+            "html",
+        );
+        // Default source_info should be SourceInfo::default()
+        assert_eq!(ctx.source_info, quarto_source_map::SourceInfo::default());
+    }
+
+    #[test]
+    fn test_execution_context_with_source_info() {
+        let si = quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), 0, 100);
+        let mut sc = quarto_source_map::SourceContext::new();
+        sc.add_file("test.qmd".to_string(), Some("content".to_string()));
+        let sc = std::sync::Arc::new(sc);
+
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/project"),
+            PathBuf::from("/project/doc.qmd"),
+            "html",
+        )
+        .with_source_info(si.clone(), sc.clone());
+
+        assert_eq!(ctx.source_info, si);
+        assert!(
+            ctx.source_context
+                .get_file(quarto_source_map::FileId(0))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn test_serialize_ast_to_qmd_produces_source_info() {
+        let content = b"# Title\n\nSome body text\n\n```python\nprint('hello')\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "test.qmd");
+
+        let (qmd, source_info) = serialize_ast_to_qmd(&doc_ast.ast).unwrap();
+
+        // SourceInfo should be Concat
+        let pieces = match &source_info {
+            quarto_source_map::SourceInfo::Concat { pieces } => pieces,
+            other => panic!("Expected Concat, got {:?}", other),
+        };
+
+        // Piece lengths should sum to qmd length
+        let total: usize = pieces.iter().map(|p| p.length).sum();
+        assert_eq!(total, qmd.len());
+
+        // Should have pieces for the blocks
+        assert!(
+            pieces.len() >= 2,
+            "Expected at least 2 pieces (heading + body)"
+        );
+    }
+
+    #[test]
+    fn test_source_info_map_offset_single_file() {
+        let input = b"# Title\n\nBody text here\n";
+        let doc_ast = parse_qmd_to_ast(input, "test.qmd");
+
+        let (qmd, source_info) = serialize_ast_to_qmd(&doc_ast.ast).unwrap();
+
+        // Build a SourceContext from the doc_ast's ast_context
+        let source_context = &doc_ast.ast_context.source_context;
+
+        // Find "Body" in the serialized output
+        let body_pos = qmd.find("Body").expect("should find Body in output");
+        let mapped = source_info.map_offset(body_pos, source_context);
+        assert!(
+            mapped.is_some(),
+            "map_offset should resolve for a body text offset"
+        );
+        let mapped = mapped.unwrap();
+        assert_eq!(
+            mapped.file_id,
+            quarto_source_map::FileId(0),
+            "Should map to the main file"
+        );
+    }
+
+    #[test]
+    fn test_source_info_map_offset_start_and_end() {
+        let input = b"# Title\n\nBody";
+        let doc_ast = parse_qmd_to_ast(input, "test.qmd");
+
+        let (qmd, source_info) = serialize_ast_to_qmd(&doc_ast.ast).unwrap();
+        let source_context = &doc_ast.ast_context.source_context;
+
+        // Start of output
+        let mapped_start = source_info.map_offset(0, source_context);
+        assert!(mapped_start.is_some(), "Start of output should resolve");
+
+        // End of output (last valid byte)
+        if !qmd.is_empty() {
+            let mapped_end = source_info.map_offset(qmd.len() - 1, source_context);
+            assert!(mapped_end.is_some(), "End of output should resolve");
+        }
     }
 }

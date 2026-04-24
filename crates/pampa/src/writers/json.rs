@@ -763,12 +763,12 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
             let attr = (String::new(), vec!["footnote-ref".to_string()], attr_hash);
             node_with_source("Span", Some(json!([write_attr(&attr), []])), &note_ref.source_info, ctx)
         }
-        Inline::Attr(_attr, attr_source) => {
+        Inline::Attr(inline_attr) => {
             // Defensive: Standalone attributes should not reach JSON writer
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Standalone attribute not supported in JSON format")
                     .with_code("Q-3-32")
-                    .with_location(attr_source.id.clone().unwrap_or_default())
+                    .with_location(inline_attr.attr_source.id.clone().unwrap_or_default())
                     .problem("Cannot render standalone attributes in JSON format")
                     .add_detail("Standalone attributes should be attached to elements during parsing")
                     .add_hint("This may indicate a parsing issue or unsupported syntax")
@@ -2617,13 +2617,13 @@ fn stream_write_inline<W: io::Write>(
                 },
             )
         }
-        Inline::Attr(_attr, attr_source) => {
+        Inline::Attr(inline_attr) => {
             ctx.errors.push(
                 DiagnosticMessageBuilder::error(
                     "Standalone attribute not supported in JSON format",
                 )
                 .with_code("Q-3-32")
-                .with_location(attr_source.id.clone().unwrap_or_default())
+                .with_location(inline_attr.attr_source.id.clone().unwrap_or_default())
                 .problem("Cannot render standalone attributes in JSON format")
                 .add_detail("Standalone attributes should be attached to elements during parsing")
                 .add_hint("This may indicate a parsing issue or unsupported syntax")

@@ -1,0 +1,16 @@
+---
+title: Basic Include Expansion
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["BASIC-CHILD-MARKER-XYZ"]
+---
+
+Parent content before include.
+
+{{< include _child.qmd >}}
+
+Parent content after include.

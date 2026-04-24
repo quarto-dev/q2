@@ -327,7 +327,7 @@ fn get_inline_type_name(inline: &Inline) -> String {
         Inline::Cite(_) => "Cite".to_string(),
         Inline::Shortcode(_) => "Shortcode".to_string(),
         Inline::NoteReference(_) => "NoteReference".to_string(),
-        Inline::Attr(_, _) => "Attr".to_string(),
+        Inline::Attr(_) => "Attr".to_string(),
         Inline::Insert(_) => "Insert".to_string(),
         Inline::Delete(_) => "Delete".to_string(),
         Inline::Highlight(_) => "Highlight".to_string(),
@@ -794,7 +794,7 @@ fn stringify_inline(inline: &Inline) -> String {
         // Additional inline types
         Inline::Shortcode(_) => String::new(),
         Inline::NoteReference(_) => String::new(),
-        Inline::Attr(_, _) => String::new(),
+        Inline::Attr(_) => String::new(),
         Inline::Insert(i) => stringify_inlines(&i.content),
         Inline::Delete(d) => stringify_inlines(&d.content),
         Inline::Highlight(h) => stringify_inlines(&h.content),

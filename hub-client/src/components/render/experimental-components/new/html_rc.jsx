@@ -1,3 +1,6 @@
+const React = window.React;
+const { memo } = React;
+
 const {
   renderChildren,
   renderNode
@@ -41,8 +44,8 @@ export const CodeBlock = (args) => {
   const [[id, classes, attrs], code] = args.node.c;
 
   const props = {
-    id: id || undefined,
-    className: classes.length > 0 ? classes.join(' ') : undefined,
+    id,
+    className: classes.join(' '),
   };
 
   attrs.forEach(([key, value]) => {
@@ -88,7 +91,7 @@ export const Div = (args) => {
 
 export const HorizontalRule = () => <hr />;
 
-export const RawBlock = (args) => {
+export const RawBlock = memo((args) => {
   const [format, content] = args.node.c;
 
   // Only render HTML raw blocks
@@ -98,7 +101,12 @@ export const RawBlock = (args) => {
 
   // For other formats, render as preformatted text
   return <pre className={`raw-${format}`}>{content}</pre>;
-};
+}, (prevArgs, nextArgs) => {
+  // Custom comparison: only re-render if the content actually changed
+  const [prevFormat, prevContent] = prevArgs.node.c;
+  const [nextFormat, nextContent] = nextArgs.node.c;
+  return prevFormat === nextFormat && prevContent === nextContent;
+});
 
 export const Figure = (args) => {
   const [[id, classes, attrs], [, captionBlocks]] = args.node.c;
@@ -159,8 +167,9 @@ export const Code = ({ node }) => {
   const [[id, classes, attrs], code] = node.c;
 
   const props = {
-    id: id || undefined,
-    className: classes.length > 0 ? classes.join(' ') : undefined,
+    id,
+    style: { background: 'rgb(245, 245, 245)' },
+    className: classes.join(' '),
   };
 
   attrs.forEach(([key, value]) => {

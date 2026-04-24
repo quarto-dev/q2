@@ -1,0 +1,4 @@
+```{python}
+# code-marker-from-child
+print('hello from the included cell')
+```

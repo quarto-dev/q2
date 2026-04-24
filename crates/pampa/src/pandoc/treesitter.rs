@@ -47,8 +47,8 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Emph, Inline, LineBreak, Link, Math, MathType, Note, NoteReference, QuoteType, RawInline,
-    SoftBreak, Space, Str, Strikeout, Strong, Subscript, Superscript,
+    Emph, Inline, InlineAttr, LineBreak, Link, Math, MathType, Note, NoteReference, QuoteType,
+    RawInline, SoftBreak, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{node_location, node_source_info_with_context};
@@ -70,30 +70,6 @@ fn parse_anchor_shorthand(text: &str) -> Option<&str> {
         return None;
     }
     Some(inner)
-}
-
-fn get_block_source_info(block: &Block) -> &quarto_source_map::SourceInfo {
-    match block {
-        Block::Plain(b) => &b.source_info,
-        Block::Paragraph(b) => &b.source_info,
-        Block::LineBlock(b) => &b.source_info,
-        Block::CodeBlock(b) => &b.source_info,
-        Block::RawBlock(b) => &b.source_info,
-        Block::BlockQuote(b) => &b.source_info,
-        Block::OrderedList(b) => &b.source_info,
-        Block::BulletList(b) => &b.source_info,
-        Block::DefinitionList(b) => &b.source_info,
-        Block::Header(b) => &b.source_info,
-        Block::HorizontalRule(b) => &b.source_info,
-        Block::Table(b) => &b.source_info,
-        Block::Figure(b) => &b.source_info,
-        Block::Div(b) => &b.source_info,
-        Block::BlockMetadata(b) => &b.source_info,
-        Block::NoteDefinitionPara(b) => &b.source_info,
-        Block::NoteDefinitionFencedBlock(b) => &b.source_info,
-        Block::CaptionBlock(b) => &b.source_info,
-        Block::Custom(b) => &b.source_info,
-    }
 }
 
 fn process_list(
@@ -175,7 +151,7 @@ fn process_list(
             // but we do it in case we want to use it later
             last_para_end_row = None;
             last_item_end_row = blocks.last().and_then(|b| {
-                let source_info = get_block_source_info(b);
+                let source_info = b.source_info();
                 source_info
                     .map_offset(source_info.length(), &context.source_context)
                     .map(|mapped| mapped.location.row)
@@ -220,7 +196,7 @@ fn process_list(
             last_para_end_row = None;
         }
         last_item_end_row = blocks.last().and_then(|b| {
-            let source_info = get_block_source_info(b);
+            let source_info = b.source_info();
             source_info
                 .map_offset(source_info.length(), &context.source_context)
                 .map(|mapped| mapped.location.row)
@@ -427,7 +403,7 @@ fn process_native_inline<T: Write>(
         // see tests/cursed/002.qmd for why this cannot be parsed directly in
         // the block grammar.
         PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
-            Inline::Attr(attr, attr_source)
+            Inline::Attr(InlineAttr::new(attr, attr_source))
         }
         PandocNativeIntermediate::IntermediateUnknown(range) => {
             writeln!(

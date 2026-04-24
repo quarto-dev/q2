@@ -1,0 +1,13 @@
+---
+title: Missing Include
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: default
+      printsMessage:
+        level: WARN
+        regex: "Include file not found"
+---
+
+{{< include does-not-exist.qmd >}}

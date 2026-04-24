@@ -2169,7 +2169,7 @@ fn inline_to_markdown_string(inline: &quarto_pandoc_types::Inline, result: &mut 
         // Quarto extensions - render content or ignore
         Inline::Shortcode(_) => {}
         Inline::NoteReference(_) => {}
-        Inline::Attr(_, _) => {}
+        Inline::Attr(_) => {}
         Inline::Insert(i) => {
             for child in &i.content {
                 inline_to_markdown_string(child, result);
@@ -5150,7 +5150,7 @@ fn render_inline_to_csl_html_with_ctx(
         // Quarto-specific types
         Inline::Shortcode(_)
         | Inline::NoteReference(_)
-        | Inline::Attr(_, _)
+        | Inline::Attr(_)
         | Inline::Insert(_)
         | Inline::Delete(_)
         | Inline::Highlight(_)

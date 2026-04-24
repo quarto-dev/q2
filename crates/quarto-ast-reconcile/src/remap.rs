@@ -337,8 +337,9 @@ where
             remap_source_info(&mut i.source_info, map);
         }
         Inline::NoteReference(i) => remap_source_info(&mut i.source_info, map),
-        Inline::Attr(_attr, attr_source) => {
-            remap_attr_source(attr_source, map);
+        Inline::Attr(a) => {
+            remap_attr_source(&mut a.attr_source, map);
+            remap_source_info(&mut a.source_info, map);
         }
         Inline::Insert(i) => {
             for c in &mut i.content {

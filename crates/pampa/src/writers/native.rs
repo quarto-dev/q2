@@ -381,7 +381,7 @@ fn write_inline<T: std::io::Write>(
             );
             // Skip this inline
         }
-        Inline::Attr(_attr, attr_source) => {
+        Inline::Attr(inline_attr) => {
             // Extension error - standalone attributes not supported in native format
             let mut builder = quarto_error_reporting::DiagnosticMessageBuilder::error(
                 "Standalone attributes not supported in native format",
@@ -390,7 +390,7 @@ fn write_inline<T: std::io::Write>(
             .problem("Cannot render standalone attribute in native format");
 
             // Add location if available from attr id
-            if let Some(ref source_info) = attr_source.id {
+            if let Some(ref source_info) = inline_attr.attr_source.id {
                 builder = builder.with_location(source_info.clone());
             }
 

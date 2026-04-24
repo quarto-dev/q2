@@ -109,6 +109,13 @@ interface PresenceServiceState {
 
   // Event listener cleanup
   messageHandler: ((payload: DocHandleEphemeralMessagePayload<unknown>) => void) | null;
+  visibilityHandler: (() => void) | null;
+  focusHandler: (() => void) | null;
+
+  // Visibility gate: set while hidden by `notifySubscribers`; flushed by
+  // the visibilitychange/focus handlers. See
+  // claude-notes/plans/2026-04-24-hub-client-visibility-gating.md.
+  pendingNotify: boolean;
 
   // Configuration
   config: PresenceConfig;
@@ -127,6 +134,9 @@ const state: PresenceServiceState = {
   cleanupInterval: null,
   subscribers: new Set(),
   messageHandler: null,
+  visibilityHandler: null,
+  focusHandler: null,
+  pendingNotify: false,
   config: DEFAULT_CONFIG,
 };
 
@@ -148,6 +158,13 @@ export async function initPresence(config?: Partial<PresenceConfig>): Promise<vo
     clearInterval(state.cleanupInterval);
   }
   state.cleanupInterval = setInterval(cleanupStalePresences, state.config.cleanupIntervalMs);
+
+  // Attach visibility + focus listeners. Both flush via the same
+  // idempotent helper, so double-firing is harmless. `focus` covers the
+  // documented cases where visibilitychange doesn't fire (Chrome/Edge
+  // DevTools "Emulate a focused page"; Firefox macOS Cmd-H → Cmd-Tab;
+  // headless Chrome on tab switch; Brave/Chrome on HTTP with DevTools).
+  attachVisibilityListeners();
 }
 
 /**
@@ -162,6 +179,9 @@ export function cleanupPresence(): void {
 
   // Stop listening to current handle
   stopListening();
+
+  // Detach visibility + focus listeners
+  detachVisibilityListeners();
 
   // Clear cleanup interval
   if (state.cleanupInterval) {
@@ -181,6 +201,7 @@ export function cleanupPresence(): void {
   state.remotePresences.clear();
   state.localCursor = null;
   state.localSelection = null;
+  state.pendingNotify = false;
 
   // Notify subscribers
   notifySubscribers();
@@ -449,9 +470,58 @@ function cleanupStalePresences(): void {
 }
 
 function notifySubscribers(): void {
+  // Visibility gate: while the tab is hidden, flag a pending notify and
+  // coalesce to a single callback fire on visibilitychange → visible (or
+  // window focus). Data stays fresh in `remotePresences` — only the
+  // subscriber invocation is deferred, which is what drives the Monaco
+  // decoration recompute in `usePresence`.
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    state.pendingNotify = true;
+    return;
+  }
+  doNotifySubscribers();
+}
+
+function doNotifySubscribers(): void {
   const presences = getRemotePresences();
   for (const callback of state.subscribers) {
     callback(presences);
+  }
+}
+
+function flushPendingNotify(): void {
+  if (!state.pendingNotify) return;
+  state.pendingNotify = false;
+  doNotifySubscribers();
+}
+
+function attachVisibilityListeners(): void {
+  if (typeof document === 'undefined') return;
+
+  // Re-attach cleanly even if initPresence is called twice (tests do this).
+  detachVisibilityListeners();
+
+  state.visibilityHandler = () => {
+    if (document.visibilityState === 'visible') {
+      flushPendingNotify();
+    }
+  };
+  state.focusHandler = () => {
+    flushPendingNotify();
+  };
+  document.addEventListener('visibilitychange', state.visibilityHandler);
+  window.addEventListener('focus', state.focusHandler);
+}
+
+function detachVisibilityListeners(): void {
+  if (typeof document === 'undefined') return;
+  if (state.visibilityHandler) {
+    document.removeEventListener('visibilitychange', state.visibilityHandler);
+    state.visibilityHandler = null;
+  }
+  if (state.focusHandler) {
+    window.removeEventListener('focus', state.focusHandler);
+    state.focusHandler = null;
   }
 }
 
@@ -485,6 +555,9 @@ export function _resetForTesting(): void {
   state.cleanupInterval = null;
   state.subscribers = new Set();
   state.messageHandler = null;
+  state.visibilityHandler = null;
+  state.focusHandler = null;
+  state.pendingNotify = false;
   state.config = { ...DEFAULT_CONFIG };
 }
 

@@ -1,0 +1,13 @@
+---
+title: Circular Include
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: default
+      printsMessage:
+        level: WARN
+        regex: "Circular include"
+---
+
+{{< include _loop.qmd >}}

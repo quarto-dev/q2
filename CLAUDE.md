@@ -30,7 +30,7 @@ Always follow TDD workflow: write/update tests BEFORE implementing features. Whe
 1. Stage and commit changes as needed
 2. **Verify the full workspace compiles cleanly** (`cargo build --workspace`)
 3. **Verify the full workspace tests pass** (`cargo nextest run --workspace`)
-4. **For changes to quarto-core or quarto-pandoc-types**: Run `cargo xtask verify` to ensure hub-client/WASM builds work
+4. **Run `cargo xtask verify`** — at minimum `cargo xtask verify --skip-hub-build` for Rust-only changes; full `cargo xtask verify` when the WASM leg could be affected (any change under `quarto-core`, `quarto-pandoc-types`, or anything else hub-client depends on). This is the step that matches CI's `-D warnings` strictness; plain `cargo build` / `cargo nextest` from steps 2 and 3 do not.
 5. Ask the user for permission before pushing
 6. Only push after receiving explicit approval
 

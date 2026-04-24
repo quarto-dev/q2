@@ -8,8 +8,10 @@
 //! Execution context and result types for engines.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use quarto_pandoc_types::ConfigValue;
+use quarto_source_map::{SourceContext, SourceInfo};
 
 use crate::stage::PandocIncludes;
 
@@ -51,6 +53,24 @@ pub struct ExecutionContext {
     /// For example, for `engine: { jupyter: { kernel: python3 } }`,
     /// this would contain the `{ kernel: python3 }` map.
     pub engine_config: Option<ConfigValue>,
+
+    /// Source provenance for the input text.
+    ///
+    /// Maps byte offsets in the engine's input `&str` back to original source
+    /// files (possibly through include expansion boundaries).
+    ///
+    /// Use `source_info.map_offset(byte_offset, &source_context)` to resolve
+    /// a position in the engine's input text to the original file, line, and
+    /// column.
+    pub source_info: SourceInfo,
+
+    /// Source context for resolving `FileId`s in `source_info`.
+    ///
+    /// Contains file paths and content needed by `map_offset()` to convert
+    /// byte offsets to file/line/column locations. Shared via `Arc` because
+    /// the context is finalized after include expansion and doesn't change
+    /// during engine execution.
+    pub source_context: Arc<SourceContext>,
 }
 
 impl ExecutionContext {
@@ -69,6 +89,8 @@ impl ExecutionContext {
             format: format.into(),
             quiet: false,
             engine_config: None,
+            source_info: SourceInfo::default(),
+            source_context: Arc::new(SourceContext::new()),
         }
     }
 
@@ -87,6 +109,17 @@ impl ExecutionContext {
     /// Set engine configuration.
     pub fn with_engine_config(mut self, config: Option<ConfigValue>) -> Self {
         self.engine_config = config;
+        self
+    }
+
+    /// Set source provenance and context for the engine's input text.
+    pub fn with_source_info(
+        mut self,
+        source_info: SourceInfo,
+        source_context: Arc<SourceContext>,
+    ) -> Self {
+        self.source_info = source_info;
+        self.source_context = source_context;
         self
     }
 }

@@ -80,7 +80,7 @@ impl LuaInline {
             Inline::Span(_) => "Span",
             Inline::Shortcode(_) => "Shortcode",
             Inline::NoteReference(_) => "NoteReference",
-            Inline::Attr(_, _) => "Attr",
+            Inline::Attr(_) => "Attr",
             Inline::Insert(_) => "Insert",
             Inline::Delete(_) => "Delete",
             Inline::Highlight(_) => "Highlight",
@@ -166,7 +166,7 @@ impl LuaInline {
                 "walk",
             ],
             Inline::NoteReference(_) => &["tag", "id", "clone", "walk"],
-            Inline::Shortcode(_) | Inline::Attr(_, _) => &["tag", "clone", "walk"],
+            Inline::Shortcode(_) | Inline::Attr(_) => &["tag", "clone", "walk"],
             // Custom nodes are not exposed to Lua filters yet
             Inline::Custom(_) => &["tag", "clone"],
         }
@@ -2855,10 +2855,10 @@ mod tests {
 
     #[test]
     fn test_lua_inline_tag_name_attr() {
-        let inline = Inline::Attr(
+        let inline = Inline::Attr(crate::pandoc::inline::InlineAttr::new(
             (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_si(),
-        );
+        ));
         assert_eq!(LuaInline::new(inline).tag_name(), "Attr");
     }
 

@@ -447,14 +447,18 @@ shortcode processing pipeline. Includes block-level shortcode support and a new
 
 **Goal**: Extensions can provide custom execution engines.
 
-- [ ] Parse `contributes.engines` from extensions
-- [ ] Register engines in the engine execution stage
-- [ ] Support external engine paths
-- [ ] Tests
+**Status**: Superseded by the TypeScript Engine Extensions grand plan:
+`claude-notes/plans/2026-04-16-ts-engine-extensions-subprocess.md`
 
-**Open questions**:
-- What engines does q2 currently support?
-- How is the engine selection mechanism implemented?
+That plan covers engine extension parsing (adding `engines` to `Contributes`),
+subprocess-based execution via Deno, engine discovery/claiming, and registration.
+Plan 1 Phase 1D within it handles the `_extension.yml` parsing and `EngineRegistry`
+integration that was originally scoped here.
+
+**Answered open questions**:
+- q2 currently supports markdown, knitr, and jupyter engines (all built-in)
+- Engine selection uses metadata-based detection (`detect_engine()` in `detection.rs`);
+  the TS engine plan adds a 4-phase claiming algorithm (file ext → YAML → language scan → fallback)
 
 ### Phase 9: Embedded Extensions
 

@@ -72,6 +72,13 @@ export function useAutomergeSync({
   const applyingRemoteRef = useRef(false);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
+  // Latest remote content deferred while the tab is hidden — flushed as one
+  // edit on visibilitychange→visible (or window focus). See plan
+  // claude-notes/plans/2026-04-24-hub-client-visibility-gating.md. Keyed on
+  // the active file only because hub-client opens at most one editor at a
+  // time; if that ever changes this would need to become a Map by path.
+  const pendingRemoteContentRef = useRef<string | null>(null);
+
   // Keep a ref to currentFile so the stable handleEditorChange callback
   // always reads the latest value without needing it as a dependency.
   const currentFileRef = useRef(currentFile);
@@ -90,6 +97,28 @@ export function useAutomergeSync({
   useEffect(() => {
     if (!currentFile) return;
 
+    // Idempotent: reads-and-clears the stash ref so double-firing (both
+    // visibilitychange and focus) is a no-op on the second call.
+    const flushPendingRemote = () => {
+      const pending = pendingRemoteContentRef.current;
+      if (pending === null) return;
+      pendingRemoteContentRef.current = null;
+
+      const editor = editorRef.current;
+      const model = editor?.getModel();
+      if (!editor || !model) return;
+
+      const monacoContent = model.getValue();
+      if (monacoContent === pending) return;
+
+      const edits = diffToMonacoEdits(monacoContent, pending);
+      if (edits.length > 0) {
+        applyingRemoteRef.current = true;
+        editor.executeEdits('remote-sync', edits);
+        applyingRemoteRef.current = false;
+      }
+    };
+
     const handleImmediateSync = (path: string, newContent: string) => {
       if (path !== currentFile.path) return;
       if (replayActiveRef.current) return;
@@ -101,6 +130,16 @@ export function useAutomergeSync({
       const monacoContent = model.getValue();
       if (monacoContent === newContent) return; // Local change — already in sync
 
+      // Visibility gate: while the tab is hidden, stash the latest content
+      // and defer the Monaco edit until visibility returns. React state
+      // still advances so Preview (and any other content consumer) stays
+      // current; only the Monaco edit is coalesced.
+      if (document.visibilityState === 'hidden') {
+        pendingRemoteContentRef.current = newContent;
+        setContent(newContent);
+        return;
+      }
+
       const edits = diffToMonacoEdits(monacoContent, newContent);
       if (edits.length > 0) {
         applyingRemoteRef.current = true;
@@ -110,8 +149,32 @@ export function useAutomergeSync({
       setContent(newContent);
     };
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        flushPendingRemote();
+      }
+    };
+
     setImmediateFileChangeCallback(handleImmediateSync);
-    return () => setImmediateFileChangeCallback(null);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    // `focus` is a belt-and-braces for documented cases where
+    // `visibilitychange` doesn't fire on a tab becoming active
+    // (Chrome/Edge DevTools "Emulate a focused page"; Firefox macOS
+    // Cmd-H → Cmd-Tab restore; headless Chrome on tab switch;
+    // Brave/Chrome on HTTP with DevTools open). The flush is idempotent,
+    // so double-firing is harmless.
+    window.addEventListener('focus', flushPendingRemote);
+
+    return () => {
+      setImmediateFileChangeCallback(null);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', flushPendingRemote);
+      // Discard any pending content on unmount or file switch; the
+      // reconciliation effect below reads live Automerge content on every
+      // file switch, so both the new file and any later revisit of the
+      // old file catch up from source rather than from a stale diff.
+      pendingRemoteContentRef.current = null;
+    };
   }, [currentFile, replayIsActive]);
 
   // ── Reconciliation on mount / file switch ─────────────────────────────
