@@ -552,8 +552,13 @@ resources website). See `bd-tr81` for its own plan.
 These will be filed as `br` sub-issues under the epic. They mirror the
 phases above.
 
-- [ ] **Phase 0:** Foundations (snapshot type, checkpoint, naming).
+- [x] **Phase 0:** Foundations (snapshot type, checkpoint, naming).
+      Closed `bd-f3jc` (commit `e8674612` on `feature/websites`).
+      Sub-plan: `claude-notes/plans/2026-04-23-websites-phase-0.md`.
+      Contract: `claude-notes/designs/document-profile-contract.md`.
 - [ ] **Phase 1:** `ProjectType` trait + orchestration.
+      Sub-plan: `claude-notes/plans/2026-04-23-websites-phase-1.md`
+      (design approved 2026-04-23; implementation pending).
 - [ ] **Phase 2:** Sidebar data model, generate, render, template.
 - [ ] **Phase 3:** Navbar / footer project integration.
 - [ ] **Phase 4:** Page navigation (prev/next).
@@ -567,3 +572,24 @@ Documentation is tracked separately as `bd-tr81`.
 
 Each phase will get its own `claude-notes/plans/YYYY-MM-DD-*.md` sub-plan
 before implementation begins.
+
+## Follow-up beads report (running log)
+
+Each phase will accumulate follow-up `bd` issues — deferred work
+discovered while scoping or implementing that phase. To keep the
+follow-up surface visible in one place, **the final close-out task
+of the epic is to produce a single report** listing every `bd` issue
+created in service of the website epic and its current status
+(open / closed / reassigned). The report should link each issue to
+its originating sub-plan so reviewers can trace why each was
+deferred.
+
+Running log (update as phases close; cross-link from each sub-plan
+when it files an issue):
+
+- **Phase 0 (`bd-f3jc`, closed).** No follow-ups filed at close-out.
+- **Phase 1 (`bd-w5os`, in design).** Anticipated follow-ups listed
+  in the Phase-1 sub-plan §"Decisions log" / "Follow-up beads"
+  section; actual issue IDs to be appended here at Phase-1
+  close-out.
+- Phases 2–9: TBD.
