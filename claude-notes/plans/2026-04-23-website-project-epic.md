@@ -556,9 +556,10 @@ phases above.
       Closed `bd-f3jc` (commit `e8674612` on `feature/websites`).
       Sub-plan: `claude-notes/plans/2026-04-23-websites-phase-0.md`.
       Contract: `claude-notes/designs/document-profile-contract.md`.
-- [ ] **Phase 1:** `ProjectType` trait + orchestration.
-      Sub-plan: `claude-notes/plans/2026-04-23-websites-phase-1.md`
-      (design approved 2026-04-23; implementation pending).
+- [x] **Phase 1:** `ProjectType` trait + orchestration.
+      Closed `bd-w5os` (commits `5bd92a4a` rename + `c00ee7eb`
+      orchestration on `feature/websites`).
+      Sub-plan: `claude-notes/plans/2026-04-23-websites-phase-1.md`.
 - [ ] **Phase 2:** Sidebar data model, generate, render, template.
 - [ ] **Phase 3:** Navbar / footer project integration.
 - [ ] **Phase 4:** Page navigation (prev/next).
@@ -588,8 +589,16 @@ Running log (update as phases close; cross-link from each sub-plan
 when it files an issue):
 
 - **Phase 0 (`bd-f3jc`, closed).** No follow-ups filed at close-out.
-- **Phase 1 (`bd-w5os`, in design).** Anticipated follow-ups listed
-  in the Phase-1 sub-plan §"Decisions log" / "Follow-up beads"
-  section; actual issue IDs to be appended here at Phase-1
-  close-out.
+- **Phase 1 (`bd-w5os`, closed).** Follow-ups filed at close-out:
+  - `bd-ee4z` — Pass-2 resumption from cached `AtProfile`
+    (optimization; v1 re-runs the head pipeline).
+  - `bd-7tvb` — `.quartoignore` support in file discovery.
+  - `bd-k9i1` — `project.resources` support for non-renderable
+    site resources.
+  - `bd-mlj6` — conditional render lists / `_quarto-<profile>.yml`
+    config profiles.
+  - `bd-xxul` — non-`.qmd` input extensions (.md / .ipynb / .Rmd)
+    in project discovery.
+  - `bd-pdwr` — parallel per-file rendering via rayon +
+    pollster-per-worker.
 - Phases 2–9: TBD.
