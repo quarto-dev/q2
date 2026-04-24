@@ -560,7 +560,9 @@ phases above.
       Closed `bd-w5os` (commits `5bd92a4a` rename + `c00ee7eb`
       orchestration on `feature/websites`).
       Sub-plan: `claude-notes/plans/2026-04-23-websites-phase-1.md`.
-- [ ] **Phase 2:** Sidebar data model, generate, render, template.
+- [x] **Phase 2:** Sidebar data model, generate, render, template.
+      Closed `bd-9svl` on `feature/websites`.
+      Sub-plan: `claude-notes/plans/2026-04-24-websites-phase-2.md`.
 - [ ] **Phase 3:** Navbar / footer project integration.
 - [ ] **Phase 4:** Page navigation (prev/next).
 - [ ] **Phase 5:** Scoped artifact store + `site_libs/`.
@@ -626,4 +628,21 @@ when it files an issue):
     in project discovery.
   - `bd-pdwr` — parallel per-file rendering via rayon +
     pollster-per-worker.
-- Phases 2–9: TBD.
+- **Phase 2 (`bd-9svl`, closed).** Follow-ups filed at close-out:
+  - `bd-6cme` — Sidebar search integration (depends on search epic).
+  - `bd-fod3` — Sidebar tools: reader-mode, dark-toggle, etc.
+  - `bd-ht0n` — Sidebar logo / subtitle / header / footer rendering.
+  - `bd-49ar` — Sidebar collapse/expand JS (rides with Phase 5).
+  - `bd-w0o9` — Draft-mode include/visible/exclude option.
+  - `bd-l6f0` — Honor explicit `expanded: true` through active
+    resolution.
+  - `bd-81x4` — Multi-sidebar ambiguity diagnostic.
+  - `bd-tfy0` — Deep-directory auto-sidebar grouping (N-level).
+  - `bd-2quy` — Audit `StageContext` ↔ `RenderContext` bridge
+    completeness. (Phase 2 surfaced a missing `project_index`
+    field; a structural guard would prevent recurrence.)
+  - `bd-n9dr` — *(epic-wide)* Unify nav config placement across
+    features (`navbar` vs `website.sidebar` vs `site-sidebar`).
+  - `bd-4g6g` — *(epic-wide)* Move sidebar to Q1 template
+    position (sidebar-left, TOC-right).
+- Phases 3–9: TBD.

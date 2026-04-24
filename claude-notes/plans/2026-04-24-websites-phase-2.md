@@ -994,20 +994,16 @@ time.
       for the enrichment pass.
 
 ### Verification and close-out
-- [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace` — all green. Flag any
-      snapshot diffs per CLAUDE.md.
-- [ ] `cargo xtask lint` passes.
-- [ ] `cargo xtask verify` (full) — because this phase touches
-      `quarto-core`, `quarto-navigation`, and `DocumentProfile`.
-- [ ] File follow-up bd issues for: (a) sidebar search integration,
-      (b) sidebar tools (reader/dark/etc.), (c) sidebar logo /
-      subtitle / header / footer slots, (d) collapse-toggle JS
-      plumbing (rides with Phase 5 site_libs), (e) draft-mode
-      visible/include option, (f) `expanded: true` explicit YAML
-      override (already parsed but active-state currently overrides
-      unconditionally).
-- [ ] `br close <phase-2-id> --reason …`.
+- [x] `cargo build --workspace` clean.
+- [x] `cargo nextest run --workspace` — all green (7739 tests).
+      No snapshot drift.
+- [x] `cargo xtask lint` passes (618 files checked).
+- [x] `cargo xtask verify --skip-hub-tests` end-to-end green:
+      Rust build + tests, hub-client build (including WASM),
+      trace-viewer tests. (hub-client tests skipped to save CI
+      time; this phase doesn't touch `hub-client/src/`.)
+- [x] Follow-up bd issues filed: see §"Follow-up beads".
+- [x] `br close bd-9svl …` — closed.
 - [ ] `br sync --flush-only && git add .beads/ && git commit`.
 - [ ] Ask user permission before pushing.
 
@@ -1106,31 +1102,37 @@ later phases don't forget them:
    `FULL_HTML_TEMPLATE` (and touching any layout-sensitive tests);
    separate task.
 
-## Follow-up beads (to be filed at close-out)
+## Follow-up beads (filed at close-out)
 
-Epic-wide (see §"Epic-level follow-ups"):
+Epic-wide (also recorded in the parent epic plan §"Epic-wide
+follow-ups"):
 
-- **Unify nav config placement** (`navbar` vs `website.sidebar` vs
-  `site-sidebar` override-key). Single epic-level bd; touches navbar,
-  sidebar, future footer-project-config, and probably `site-url` /
-  `title-prefix` plumbing in Phase 7.
-- **Move sidebar to Q1 template position** (sidebar-left,
-  TOC-right). Template-restructuring task; separate from the sidebar
-  data-model work.
+- `bd-n9dr` — Unify nav config placement across features
+  (`navbar` top-level vs `website.sidebar` nested vs
+  `site-sidebar` top-level).
+- `bd-4g6g` — Move sidebar to Q1 template position (sidebar-left,
+  TOC-right). Template restructuring task, separate from
+  sidebar feature work.
 
 Phase-local:
 
-- Sidebar search integration (depends on search epic).
-- Sidebar tools: reader-mode, dark-toggle, etc.
-- Sidebar logo / subtitle / header / footer rendering.
-- Collapse-toggle JS (ride with Phase 5 site_libs).
-- Draft-mode include/exclude option.
-- Explicit `expanded: true` in YAML respected through active-state
-  resolution (Phase 2 currently lets active-state always override).
-- Memoize sidebar-per-page resolution in `ProjectIndex` if auto
-  expansion shows up as a perf hotspot on larger projects.
-- Sidebar-for-page diagnostic when a page appears in multiple
-  sidebars without an explicit `site-sidebar` override.
+- `bd-6cme` — Sidebar search integration (depends on search epic).
+- `bd-fod3` — Sidebar tools: reader-mode, dark-toggle, etc.
+- `bd-ht0n` — Sidebar logo / subtitle / header / footer rendering.
+- `bd-49ar` — Collapse-toggle JS (ride with Phase 5 site_libs).
+- `bd-w0o9` — Draft-mode include/visible/exclude option.
+- `bd-l6f0` — Honor explicit `expanded: true` through active-state
+  resolution without letting `expanded: false` block the
+  auto-expand-ancestors behavior.
+- `bd-81x4` — Multi-sidebar ambiguity diagnostic when a page
+  matches more than one sidebar's containment.
+- `bd-tfy0` — Deep-directory auto-sidebar grouping (N-level
+  recursive; today's 1-level is fine for shallow hierarchies but
+  flattens deeper paths).
+- `bd-2quy` — Audit `StageContext` ↔ `RenderContext` bridge
+  completeness. Phase 2 surfaced one missing field (`project_index`);
+  a structural guard (test that compares the field sets, or a
+  derive macro) would prevent recurrence.
 
 ## Epic-level impact
 
