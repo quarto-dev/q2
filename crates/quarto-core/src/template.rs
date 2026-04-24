@@ -122,6 +122,7 @@ $endfor$
 /// - `$rendered.navigation.toc$` - Rendered TOC HTML (if toc: true)
 /// - `$navigation.toc.title$` - TOC title (if set)
 /// - `$rendered.navigation.navbar$` - Rendered navbar HTML (if navbar: set)
+/// - `$rendered.navigation.sidebar$` - Rendered sidebar HTML (if website.sidebar: set)
 /// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
 const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
@@ -166,6 +167,11 @@ $include-before$
 $endfor$
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-$page-layout$">
+$if(rendered.navigation.sidebar)$
+<div id="quarto-sidebar-container" class="sidebar-column">
+$rendered.navigation.sidebar$
+</div>
+$endif$
 $if(rendered.navigation.toc)$
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
 <nav id="TOC" role="doc-toc" class="toc-active">

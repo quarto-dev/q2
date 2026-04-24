@@ -55,6 +55,7 @@ produced.
 | `authors` | Flat list of plain-text names, extracted from either the `author` or `authors` key. Supports scalar, array-of-strings, array-of-maps with a `name` key, and a single map with a `name` key. Structured author metadata (affiliation, email, ORCID, …) is deliberately dropped — a dedicated author-model design is a separate epic. |
 | `categories`, `keywords` | Arrays of plain-text strings. A single scalar value is lifted into a one-element list. |
 | `draft` | Boolean. Defaults to `false` when the key is missing or non-boolean. |
+| `order` | `Option<i32>` sort key from `order:` frontmatter. `None` when the key is absent or non-integer. Consumed by Phase-2's auto-sidebar sort (`claude-notes/plans/2026-04-24-websites-phase-2.md`). Added v1-additive (no version bump). |
 | `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. |
 
 ## Non-guarantees (explicit)
@@ -163,3 +164,7 @@ Phase 1 replaces that with a real consumer.
   `source_path`, `output_href`, `format_id`, `title`, `subtitle`,
   `description`, `authors`, `date`, `categories`, `keywords`,
   `image`, `draft`, `outline`. (`bd-f3jc`)
+- **2026-04-24 — v1-additive.** Added `order: Option<i32>` field
+  from `order:` frontmatter, consumed by Phase-2 auto-sidebar sort.
+  `#[serde(default)]` so v1-serialized profiles still deserialize.
+  No `profile_version` bump. (`bd-9svl`)

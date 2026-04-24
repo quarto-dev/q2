@@ -80,6 +80,14 @@ pub struct DocumentProfile {
     pub image: Option<String>,
     pub draft: bool,
 
+    /// Author-supplied sort key from `order:` frontmatter. Consumed by
+    /// Phase-2 auto-sidebar expansion to order sibling entries. `None`
+    /// when the key is absent or non-integer. Additive on top of
+    /// v1 (see the contract doc's change log); an older v1 consumer
+    /// silently ignores it, so `profile_version` is not bumped.
+    #[serde(default)]
+    pub order: Option<i32>,
+
     /// Heading outline. Always un-numbered: `TocEntry::number` is
     /// `None` on every entry. Consumers needing numbered outlines
     /// must read them from the post-render AST, not from the profile.
@@ -128,6 +136,10 @@ impl DocumentProfile {
             keywords: extract_string_list(meta, "keywords"),
             image: plain_text_field(meta, "image"),
             draft: meta.get("draft").and_then(|v| v.as_bool()).unwrap_or(false),
+            order: meta
+                .get("order")
+                .and_then(|v| v.as_int())
+                .and_then(|i| i32::try_from(i).ok()),
             outline,
         }
     }
@@ -357,6 +369,32 @@ Body.
         );
         assert_eq!(profile.image.as_deref(), Some("cover.png"));
         assert!(profile.draft);
+    }
+
+    #[test]
+    fn profile_extract_carries_order_when_present() {
+        // `order:` is used by Phase-2's auto-sidebar sort. The field is
+        // additive on DocumentProfile; Phase-2 is the first consumer.
+        let ast = parse_qmd("---\ntitle: Ordered\norder: 3\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("o.qmd"), "o.html", "html");
+        assert_eq!(profile.order, Some(3));
+    }
+
+    #[test]
+    fn profile_extract_order_absent_is_none() {
+        let ast = parse_qmd("---\ntitle: No order\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("x.qmd"), "x.html", "html");
+        assert_eq!(profile.order, None);
+    }
+
+    #[test]
+    fn profile_extract_rejects_non_integer_order() {
+        // A string `order:` is not a valid sort key; the profile drops it
+        // rather than guessing.  (A diagnostic would be nice; that's a
+        // follow-up that belongs in the metadata-validator, not here.)
+        let ast = parse_qmd("---\ntitle: Bad order\norder: \"abc\"\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("bad.qmd"), "bad.html", "html");
+        assert_eq!(profile.order, None);
     }
 
     #[test]

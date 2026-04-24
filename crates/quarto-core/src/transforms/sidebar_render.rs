@@ -1,0 +1,529 @@
+/*
+ * sidebar_render.rs
+ * Copyright (c) 2026 Posit, PBC
+ */
+
+//! HTML rendering transform for the sidebar.
+//!
+//! Reads the resolved `navigation.sidebar` (populated by
+//! [`SidebarGenerateTransform`](super::SidebarGenerateTransform) or
+//! a user override), rewrites any project-relative `.qmd` hrefs to
+//! their output hrefs via the [`ProjectIndex`], and emits the result
+//! as HTML at `rendered.navigation.sidebar` for the template to
+//! inject.
+//!
+//! This transform **is** format-specific — it's the stage where the
+//! format-agnostic `Sidebar` is committed to HTML output. See
+//! `claude-notes/plans/2026-04-24-websites-phase-2.md` §Decision 7/8.
+//!
+//! ## Skip conditions
+//!
+//! - `sidebar: false` at the document level.
+//! - `rendered.navigation.sidebar` already populated (user
+//!   pre-rendered HTML).
+//! - `navigation.sidebar` absent.
+
+use std::path::Path;
+
+use quarto_error_reporting::DiagnosticMessage;
+use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html};
+use quarto_pandoc_types::config_value::ConfigValue;
+use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_source_map::SourceInfo;
+
+use crate::Result;
+use crate::project::index::ProjectIndex;
+use crate::render::RenderContext;
+use crate::transform::AstTransform;
+use crate::transforms::is_feature_disabled;
+
+pub struct SidebarRenderTransform;
+
+impl SidebarRenderTransform {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for SidebarRenderTransform {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl AstTransform for SidebarRenderTransform {
+    fn name(&self) -> &str {
+        "sidebar-render"
+    }
+
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+        if is_feature_disabled(&ast.meta, "sidebar") {
+            return Ok(());
+        }
+        if ast
+            .meta
+            .contains_path(&["rendered", "navigation", "sidebar"])
+        {
+            return Ok(());
+        }
+
+        let Some(sidebar_cv) = ast.meta.get_path(&["navigation", "sidebar"]) else {
+            return Ok(());
+        };
+
+        let mut sidebar = Sidebar::from_config_value(sidebar_cv);
+        let sidebar_id = sidebar.id.clone();
+
+        // Rewrite hrefs in-place via ProjectIndex. Diagnostics land in
+        // `ctx.diagnostics` via a local buffer that we swap in/out
+        // so the helpers can push without a borrow cycle.
+        let mut local_diags = std::mem::take(&mut ctx.diagnostics);
+        rewrite_hrefs(
+            &mut sidebar.contents,
+            ctx.project_index.as_deref(),
+            sidebar_id.as_deref(),
+            &mut local_diags,
+        );
+        ctx.diagnostics = local_diags;
+
+        let html = sidebar_to_html(&sidebar);
+
+        ast.meta.insert_path(
+            &["rendered", "navigation", "sidebar"],
+            ConfigValue::new_string(&html, SourceInfo::default()),
+        );
+
+        Ok(())
+    }
+}
+
+/// Walk the sidebar, rewriting each entry's href from source-path to
+/// output-href via the project index.
+fn rewrite_hrefs(
+    entries: &mut [SidebarEntry],
+    index: Option<&ProjectIndex>,
+    sidebar_id: Option<&str>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    for entry in entries.iter_mut() {
+        match entry {
+            SidebarEntry::Link { item, .. } => {
+                if let Some(href) = item.href.as_mut() {
+                    *href = resolve_href_for_html(href, index, sidebar_id, diagnostics);
+                }
+            }
+            SidebarEntry::Section { href, contents, .. } => {
+                if let Some(h) = href.as_mut() {
+                    *h = resolve_href_for_html(h, index, sidebar_id, diagnostics);
+                }
+                rewrite_hrefs(contents, index, sidebar_id, diagnostics);
+            }
+            SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
+        }
+    }
+}
+
+/// Resolve an href for HTML output.
+///
+/// - External URLs and anchors pass through unchanged.
+/// - Project-relative source paths are rewritten to their output href
+///   via [`ProjectIndex::lookup_by_source`].
+/// - Source-path-shaped misses (`*.qmd` with no matching profile)
+///   emit a warning diagnostic naming the sidebar; the raw href is
+///   preserved (it'll render as a dangling link).
+fn resolve_href_for_html(
+    raw: &str,
+    index: Option<&ProjectIndex>,
+    sidebar_id: Option<&str>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> String {
+    if is_external(raw) || raw.starts_with('#') {
+        return raw.to_string();
+    }
+    // Strip fragment / query so we can look up just the path. Preserve
+    // and re-append afterwards.
+    let (path_part, tail) = match raw.find(|c| c == '#' || c == '?') {
+        Some(i) => (&raw[..i], &raw[i..]),
+        None => (raw, ""),
+    };
+
+    if let Some(idx) = index {
+        if let Some(profile) = idx.lookup_by_source(Path::new(path_part)) {
+            return format!("{}{}", profile.output_href, tail);
+        }
+    }
+
+    // Looks like a source path but didn't resolve: diagnostic.
+    if path_part.ends_with(".qmd") {
+        let sidebar_tag = sidebar_id
+            .map(|id| format!(" '{}'", id))
+            .unwrap_or_default();
+        diagnostics.push(DiagnosticMessage::warning(format!(
+            "Sidebar{} references unknown document '{}'",
+            sidebar_tag, path_part
+        )));
+    }
+
+    raw.to_string()
+}
+
+fn is_external(href: &str) -> bool {
+    // Match Q1's cheap heuristic: anything with a scheme + `:` is
+    // external. We additionally treat protocol-relative `//…` as
+    // external since those bypass the project.
+    href.starts_with("http://")
+        || href.starts_with("https://")
+        || href.starts_with("mailto:")
+        || href.starts_with("tel:")
+        || href.starts_with("ftp://")
+        || href.starts_with("//")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document_profile::{DOCUMENT_PROFILE_VERSION, DocumentProfile};
+    use crate::format::Format;
+    use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+    use crate::render::BinaryDependencies;
+    use pampa::toc::TocEntry;
+    use quarto_navigation::{NavigationItem, Sidebar, SidebarEntry};
+    use quarto_pandoc_types::ConfigMapEntry;
+    use quarto_pandoc_types::config_value::ConfigValue;
+    use quarto_source_map::SourceInfo;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    fn config_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        let map_entries: Vec<ConfigMapEntry> = entries
+            .into_iter()
+            .map(|(k, v)| ConfigMapEntry {
+                key: k.to_string(),
+                key_source: SourceInfo::default(),
+                value: v,
+            })
+            .collect();
+        ConfigValue::new_map(map_entries, SourceInfo::default())
+    }
+
+    fn s(x: &str) -> ConfigValue {
+        ConfigValue::new_string(x, SourceInfo::default())
+    }
+
+    fn b(x: bool) -> ConfigValue {
+        ConfigValue::new_bool(x, SourceInfo::default())
+    }
+
+    fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {
+        DocumentProfile {
+            profile_version: DOCUMENT_PROFILE_VERSION,
+            source_path: PathBuf::from(source),
+            output_href: output_href.to_string(),
+            format_id: "html".to_string(),
+            title: Some(title.to_string()),
+            subtitle: None,
+            description: None,
+            authors: Vec::new(),
+            date: None,
+            categories: Vec::new(),
+            keywords: Vec::new(),
+            image: None,
+            draft: false,
+            order: None,
+            outline: Vec::<TocEntry>::new(),
+        }
+    }
+
+    fn make_project() -> ProjectContext {
+        ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: false,
+            files: vec![DocumentInfo::from_path("/project/about.qmd")],
+            output_dir: PathBuf::from("/project/_site"),
+        }
+    }
+
+    /// Build a minimal `navigation.sidebar` ConfigValue holding a list
+    /// of links with the given hrefs.
+    fn sidebar_with_links(hrefs: &[&str]) -> ConfigValue {
+        let entries: Vec<ConfigValue> = hrefs.iter().map(|h| s(h)).collect();
+        config_map(vec![(
+            "contents",
+            ConfigValue::new_array(entries, SourceInfo::default()),
+        )])
+    }
+
+    async fn run_render(
+        meta: ConfigValue,
+        index: Option<Arc<ProjectIndex>>,
+    ) -> (ConfigValue, Vec<DiagnosticMessage>) {
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/about.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        if let Some(idx) = index {
+            ctx = ctx.with_project_index(idx);
+        }
+        SidebarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        (ast.meta, ctx.diagnostics)
+    }
+
+    /// Test 28 — .qmd leaf href gets rewritten to the profile's
+    /// output href.
+    #[tokio::test]
+    async fn render_rewrites_qmd_hrefs_to_output_href() {
+        let meta = ConfigValue::default();
+        let mut meta = meta;
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["about.qmd"]),
+        );
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+        let (out, diags) = run_render(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("href=\"about.html\""),
+            "expected rewritten href; got: {}",
+            html
+        );
+        assert!(!html.contains("href=\"about.qmd\""));
+        assert!(
+            diags.is_empty(),
+            "no diagnostics expected; got: {:?}",
+            diags
+        );
+    }
+
+    /// Test 28a — subdirectory-scoped source paths are rewritten
+    /// preserving the subdirectory structure.
+    #[tokio::test]
+    async fn render_rewrites_nested_qmd_hrefs() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["docs/api.qmd"]),
+        );
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "docs/api.qmd",
+            "docs/api.html",
+            "API",
+        )]));
+        let (out, _) = run_render(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"docs/api.html\""), "html: {}", html);
+    }
+
+    /// Test 28b — external URLs pass through untouched.
+    #[tokio::test]
+    async fn render_passes_external_urls_through_unchanged() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["https://example.com"]),
+        );
+        let index = Arc::new(ProjectIndex::new(vec![]));
+        let (out, diags) = run_render(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"https://example.com\""));
+        assert!(diags.is_empty());
+    }
+
+    /// Test 28c — fragment anchors pass through untouched (and no
+    /// diagnostic).
+    #[tokio::test]
+    async fn render_passes_fragment_anchors_unchanged() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["#section"]),
+        );
+        let (out, diags) = run_render(meta, None).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"#section\""));
+        assert!(diags.is_empty());
+    }
+
+    /// Test 29 — a missing .qmd reference emits a diagnostic; the
+    /// href is preserved (dangling link, for transparency).
+    #[tokio::test]
+    async fn render_qmd_href_lookup_miss_emits_diagnostic() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["missing.qmd"]),
+        );
+        let index = Arc::new(ProjectIndex::new(vec![]));
+        let (out, diags) = run_render(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"missing.qmd\""));
+        assert_eq!(diags.len(), 1);
+        assert!(
+            diags[0].title.contains("missing.qmd"),
+            "warning should name the missing doc; got: {:?}",
+            diags[0]
+        );
+    }
+
+    /// Test 29a — no `ProjectIndex` just passes hrefs through. Raw
+    /// external URLs still render; no diagnostics for them.
+    #[tokio::test]
+    async fn render_works_without_project_index() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["https://example.com", "#foo"]),
+        );
+        let (out, diags) = run_render(meta, None).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"https://example.com\""));
+        assert!(html.contains("href=\"#foo\""));
+        assert!(diags.is_empty());
+    }
+
+    /// Test 34 — no `navigation.sidebar` means no `rendered.navigation.sidebar`.
+    #[tokio::test]
+    async fn sidebar_render_skips_when_missing() {
+        let meta = ConfigValue::default();
+        let (out, _) = run_render(meta, None).await;
+        assert!(!out.contains_path(&["rendered", "navigation", "sidebar"]));
+    }
+
+    /// Test 35 — end-to-end: `navigation.sidebar` produces HTML at
+    /// `rendered.navigation.sidebar`.
+    #[tokio::test]
+    async fn sidebar_render_produces_html() {
+        let mut meta = ConfigValue::default();
+        let sb = Sidebar {
+            contents: vec![SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("about.qmd".to_string()),
+                    text: Some(s("About")),
+                    ..NavigationItem::default()
+                },
+                active: true,
+            }],
+            ..Sidebar::with_defaults()
+        };
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+        let (out, _) = run_render(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("<nav id=\"quarto-sidebar\""));
+        assert!(html.contains("href=\"about.html\""));
+        assert!(html.contains("sidebar-link active"));
+    }
+
+    /// `sidebar: false` at document level suppresses render.
+    #[tokio::test]
+    async fn sidebar_render_skips_when_feature_disabled() {
+        let mut meta = config_map(vec![("sidebar", b(false))]);
+        let sb = Sidebar {
+            contents: vec![SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("a.qmd".to_string()),
+                    text: Some(s("A")),
+                    ..NavigationItem::default()
+                },
+                active: false,
+            }],
+            ..Sidebar::with_defaults()
+        };
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let (out, _) = run_render(meta, None).await;
+        assert!(!out.contains_path(&["rendered", "navigation", "sidebar"]));
+    }
+
+    /// A pre-populated `rendered.navigation.sidebar` survives.
+    #[tokio::test]
+    async fn sidebar_render_honors_user_override() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["about.qmd"]),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "sidebar"],
+            s("<nav>User-provided</nav>"),
+        );
+        let (out, _) = run_render(meta, None).await;
+        let rendered = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap();
+        assert_eq!(
+            rendered.as_plain_text().as_deref(),
+            Some("<nav>User-provided</nav>")
+        );
+    }
+
+    /// Query strings survive rewrite.
+    #[tokio::test]
+    async fn render_preserves_query_and_fragment_after_rewrite() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["about.qmd#bio"]),
+        );
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+        let (out, _) = run_render(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("href=\"about.html#bio\""),
+            "expected fragment preserved; got: {}",
+            html
+        );
+    }
+}

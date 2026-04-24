@@ -111,6 +111,7 @@ mod tests {
             keywords: Vec::new(),
             image: None,
             draft: false,
+            order: None,
             outline: Vec::<TocEntry>::new(),
         }
     }

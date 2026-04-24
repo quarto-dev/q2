@@ -25,6 +25,7 @@ use quarto_pandoc_types::inline::{Inline, Inlines};
 use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::NavigationItem;
 use crate::navbar::{Navbar, NavbarTitle};
+use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle};
 
 /// Render a complete navbar element.
 ///
@@ -166,6 +167,61 @@ pub fn page_footer_to_html(footer: &PageFooter) -> String {
     html
 }
 
+/// Render a complete sidebar element.
+///
+/// Emits `<nav id="quarto-sidebar" class="sidebar sidebar-…">…</nav>`
+/// using Bootstrap 5-compatible class names that match Quarto 1's
+/// vocabulary so Q1 CSS (`resources/scss/`) styles the result without
+/// modification.
+///
+/// The caller is responsible for having rewritten `.qmd`-valued hrefs
+/// to their format-specific output hrefs before calling this function
+/// — see `SidebarRenderTransform` in `quarto-core`. This keeps
+/// `quarto-navigation` format-agnostic (see
+/// `claude-notes/plans/2026-04-24-websites-phase-2.md` §Decision 7/8).
+///
+/// Phase 2 emits structurally-correct collapse markup (`data-bs-*`
+/// attributes, `aria-expanded`), but the actual JS glue lives in
+/// Phase 5 (`site_libs/`); until then the chevrons are inert.
+pub fn sidebar_to_html(sidebar: &Sidebar) -> String {
+    let mut html = String::new();
+
+    let style_class = match sidebar.style {
+        SidebarStyle::Docked => "sidebar-docked",
+        SidebarStyle::Floating => "sidebar-floating",
+    };
+
+    html.push_str(&format!(
+        "<nav id=\"quarto-sidebar\" class=\"sidebar sidebar-navigation {}\" \
+         role=\"doc-toc\">\n",
+        style_class
+    ));
+
+    // Title header — only emitted if a title is present. Subtitle is
+    // parsed but not rendered in Phase 2 (follow-up).
+    if let Some(ref title_cv) = sidebar.title {
+        html.push_str("  <div class=\"sidebar-header\">\n");
+        html.push_str(&format!(
+            "    <div class=\"sidebar-title\">{}</div>\n",
+            render_text(title_cv)
+        ));
+        html.push_str("  </div>\n");
+    }
+
+    if !sidebar.contents.is_empty() {
+        html.push_str("  <div class=\"sidebar-menu-container\">\n");
+        html.push_str("    <ul class=\"list-unstyled mt-1\">\n");
+        for (idx, entry) in sidebar.contents.iter().enumerate() {
+            render_sidebar_entry(&mut html, entry, 1, &[idx], sidebar.collapse_level);
+        }
+        html.push_str("    </ul>\n");
+        html.push_str("  </div>\n");
+    }
+
+    html.push_str("</nav>\n");
+    html
+}
+
 // --- Private helpers ---------------------------------------------------------
 
 fn render_brand(navbar: &Navbar, fallback: Option<&str>) -> Option<String> {
@@ -282,6 +338,199 @@ fn render_item_label(item: &NavigationItem) -> String {
 
 fn render_icon(icon: &str) -> String {
     format!("<i class=\"bi bi-{}\"></i>", escape_attr(icon))
+}
+
+/// Render one sidebar entry. `path` is the 0-based tree-path used to
+/// derive stable section anchors for the Bootstrap collapse targets.
+fn render_sidebar_entry(
+    html: &mut String,
+    entry: &SidebarEntry,
+    depth: u32,
+    path: &[usize],
+    collapse_level: u32,
+) {
+    match entry {
+        SidebarEntry::Link { item, active } => {
+            render_sidebar_leaf(html, item, *active, depth);
+        }
+        SidebarEntry::Section {
+            text,
+            href,
+            id,
+            contents,
+            expanded,
+        } => {
+            render_sidebar_section(
+                html,
+                text.as_ref(),
+                href.as_deref(),
+                id.as_deref(),
+                contents,
+                *expanded,
+                depth,
+                path,
+                collapse_level,
+            );
+        }
+        SidebarEntry::Separator => {
+            html.push_str("      <li class=\"px-0\"><hr class=\"sidebar-divider\"></li>\n");
+        }
+        SidebarEntry::Heading(text) => {
+            html.push_str(&format!(
+                "      <li class=\"sidebar-item\"><span class=\"menu-text\">{}</span></li>\n",
+                render_text(text)
+            ));
+        }
+        SidebarEntry::Auto(_) => {
+            // Auto entries should have been expanded by the Generate
+            // step. If one survived to Render it's a bug upstream;
+            // skip it silently rather than emit bogus HTML.
+        }
+    }
+}
+
+fn render_sidebar_leaf(html: &mut String, item: &NavigationItem, active: bool, _depth: u32) {
+    let mut link_classes = String::from("sidebar-item-text sidebar-link");
+    if active {
+        link_classes.push_str(" active");
+    }
+    let label = render_sidebar_item_label(item);
+    let href = item.href.as_deref().unwrap_or("#");
+    let mut extra_attrs = Vec::new();
+    if let Some(ref label) = item.aria_label {
+        extra_attrs.push(format!("aria-label=\"{}\"", escape_attr(label)));
+    }
+    if let Some(ref rel) = item.rel {
+        extra_attrs.push(format!("rel=\"{}\"", escape_attr(rel)));
+    }
+    if let Some(ref target) = item.target {
+        extra_attrs.push(format!("target=\"{}\"", escape_attr(target)));
+    }
+    let extras = if extra_attrs.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", extra_attrs.join(" "))
+    };
+    html.push_str("      <li class=\"sidebar-item\">\n");
+    html.push_str("        <div class=\"sidebar-item-container\">\n");
+    html.push_str(&format!(
+        "          <a href=\"{}\" class=\"{}\"{}>{}</a>\n",
+        escape_attr(href),
+        link_classes,
+        extras,
+        label
+    ));
+    html.push_str("        </div>\n");
+    html.push_str("      </li>\n");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_sidebar_section(
+    html: &mut String,
+    text: Option<&ConfigValue>,
+    href: Option<&str>,
+    explicit_id: Option<&str>,
+    contents: &[SidebarEntry],
+    expanded: bool,
+    depth: u32,
+    path: &[usize],
+    collapse_level: u32,
+) {
+    let section_id = explicit_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| default_section_id(path));
+    let label = text.map(render_text).unwrap_or_default();
+    // A section is collapsed by default when its depth is at or below
+    // the user's `collapse-level`, unless `expanded: true` was set
+    // (either by YAML or by the active-state expander).
+    let is_collapsed = !expanded && (depth as u32) >= collapse_level;
+
+    html.push_str("      <li class=\"sidebar-item sidebar-item-section\">\n");
+    html.push_str("        <div class=\"sidebar-item-container\">\n");
+
+    // Header row: either a link (if href) or a data-toggle anchor.
+    if let Some(href) = href {
+        html.push_str(&format!(
+            "          <a href=\"{}\" class=\"sidebar-item-text sidebar-link\">{}</a>\n",
+            escape_attr(href),
+            label
+        ));
+    } else {
+        let collapsed_class = if is_collapsed { " collapsed" } else { "" };
+        html.push_str(&format!(
+            "          <a class=\"sidebar-item-text sidebar-link text-start{}\" \
+             data-bs-toggle=\"collapse\" data-bs-target=\"#{}\" role=\"navigation\" \
+             aria-expanded=\"{}\">{}</a>\n",
+            collapsed_class,
+            escape_attr(&section_id),
+            if is_collapsed { "false" } else { "true" },
+            label
+        ));
+    }
+
+    // Toggle chevron (always emitted so the user has a click target
+    // for the collapse; inert in Phase 2, interactive in Phase 5).
+    let collapsed_class = if is_collapsed { " collapsed" } else { "" };
+    html.push_str(&format!(
+        "          <a class=\"sidebar-item-toggle text-start{}\" \
+         data-bs-toggle=\"collapse\" data-bs-target=\"#{}\" role=\"navigation\" \
+         aria-expanded=\"{}\" aria-label=\"Toggle section\">\n",
+        collapsed_class,
+        escape_attr(&section_id),
+        if is_collapsed { "false" } else { "true" }
+    ));
+    html.push_str("            <i class=\"bi bi-chevron-right ms-2\"></i>\n");
+    html.push_str("          </a>\n");
+    html.push_str("        </div>\n");
+
+    // Children.
+    let show_class = if is_collapsed { "" } else { " show" };
+    html.push_str(&format!(
+        "        <ul id=\"{}\" class=\"collapse list-unstyled sidebar-section depth{}{}\">\n",
+        escape_attr(&section_id),
+        depth,
+        show_class
+    ));
+    for (child_idx, child) in contents.iter().enumerate() {
+        let mut child_path = path.to_vec();
+        child_path.push(child_idx);
+        render_sidebar_entry(html, child, depth + 1, &child_path, collapse_level);
+    }
+    html.push_str("        </ul>\n");
+    html.push_str("      </li>\n");
+}
+
+fn render_sidebar_item_label(item: &NavigationItem) -> String {
+    let mut parts = Vec::new();
+    if let Some(ref icon) = item.icon {
+        parts.push(render_icon(icon));
+    }
+    if let Some(ref text_cv) = item.text {
+        parts.push(format!(
+            "<span class=\"menu-text\">{}</span>",
+            render_text(text_cv)
+        ));
+    } else if let Some(ref href) = item.href {
+        // Fall back to the href when no text is given (rare). Q1
+        // shows the filename stem; we show the raw href for
+        // simplicity. Users who care write `text:`.
+        parts.push(format!(
+            "<span class=\"menu-text\">{}</span>",
+            escape_html(href)
+        ));
+    }
+    parts.join(" ")
+}
+
+/// Stable anchor id for a nameless section. Uses the tree path so the
+/// same section in the same sidebar always maps to the same id.
+fn default_section_id(path: &[usize]) -> String {
+    let mut s = String::from("quarto-sidebar-section");
+    for p in path {
+        s.push('-');
+        s.push_str(&p.to_string());
+    }
+    s
 }
 
 fn link_attrs(item: &NavigationItem) -> Vec<String> {
@@ -871,5 +1120,267 @@ mod tests {
         let out = inlines_to_html(&inlines);
         assert!(out.contains("<a href=\"https://example.com\">site</a>"));
         assert!(out.contains("<code>x &amp; y</code>"));
+    }
+
+    // --- Sidebar rendering tests (Phase 2) ------------------------------
+
+    use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle};
+
+    fn link(href: &str, text: &str) -> SidebarEntry {
+        SidebarEntry::Link {
+            item: NavigationItem {
+                href: Some(href.to_string()),
+                text: Some(s(text)),
+                ..NavigationItem::default()
+            },
+            active: false,
+        }
+    }
+
+    fn active_link(href: &str, text: &str) -> SidebarEntry {
+        SidebarEntry::Link {
+            item: NavigationItem {
+                href: Some(href.to_string()),
+                text: Some(s(text)),
+                ..NavigationItem::default()
+            },
+            active: true,
+        }
+    }
+
+    /// Test 8 — a two-entry manual sidebar emits matching Q1 class
+    /// vocabulary.
+    #[test]
+    fn sidebar_render_minimal_manual() {
+        let sb = Sidebar {
+            contents: vec![link("index.html", "Home"), link("about.html", "About")],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(html.contains("<nav id=\"quarto-sidebar\""));
+        assert!(html.contains("class=\"sidebar sidebar-navigation sidebar-floating\""));
+        assert!(html.contains("<div class=\"sidebar-menu-container\">"));
+        assert!(html.contains("<ul class=\"list-unstyled mt-1\">"));
+        assert!(html.contains("class=\"sidebar-item\""));
+        assert!(html.contains("class=\"sidebar-item-container\""));
+        assert!(html.contains("class=\"sidebar-item-text sidebar-link\""));
+        assert!(html.contains("href=\"index.html\""));
+        assert!(html.contains(">Home<"));
+        assert!(html.contains("href=\"about.html\""));
+    }
+
+    /// Test 9 — a collapsed section has `aria-expanded="false"` and
+    /// no `show` class on the `<ul>`.
+    #[test]
+    fn sidebar_render_nested_section_collapsed() {
+        let sb = Sidebar {
+            collapse_level: 1,
+            contents: vec![SidebarEntry::Section {
+                text: Some(s("Docs")),
+                href: None,
+                id: None,
+                contents: vec![link("start.html", "Start")],
+                expanded: false,
+            }],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(html.contains("sidebar-item-section"));
+        assert!(html.contains("aria-expanded=\"false\""));
+        assert!(
+            !html.contains("class=\"collapse list-unstyled sidebar-section depth1 show\""),
+            "collapsed section should not have 'show' on ul; html: {}",
+            html
+        );
+        assert!(html.contains("class=\"collapse list-unstyled sidebar-section depth1\""));
+    }
+
+    /// Test 10 — an expanded section has `aria-expanded="true"` and
+    /// `show` on the `<ul>`.
+    #[test]
+    fn sidebar_render_nested_section_expanded() {
+        let sb = Sidebar {
+            collapse_level: 1,
+            contents: vec![SidebarEntry::Section {
+                text: Some(s("Docs")),
+                href: None,
+                id: None,
+                contents: vec![link("start.html", "Start")],
+                expanded: true,
+            }],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(html.contains("aria-expanded=\"true\""));
+        assert!(html.contains("class=\"collapse list-unstyled sidebar-section depth1 show\""));
+    }
+
+    /// Test 11 — active leaf has the `active` class on its anchor.
+    #[test]
+    fn sidebar_render_active_leaf() {
+        let sb = Sidebar {
+            contents: vec![
+                link("index.html", "Home"),
+                active_link("about.html", "About"),
+            ],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        // The active leaf must have the `active` class.
+        assert!(
+            html.contains("href=\"about.html\" class=\"sidebar-item-text sidebar-link active\""),
+            "active link should have active class; html: {}",
+            html
+        );
+        // The non-active leaf must not.
+        assert!(
+            html.contains("href=\"index.html\" class=\"sidebar-item-text sidebar-link\""),
+            "non-active link should render without active class; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"index.html\" class=\"sidebar-item-text sidebar-link active\""),
+            "non-active link must not carry active class; html: {}",
+            html
+        );
+    }
+
+    /// Test 12 — separator renders as `<hr class="sidebar-divider">`.
+    #[test]
+    fn sidebar_render_separator() {
+        let sb = Sidebar {
+            contents: vec![
+                link("a.html", "A"),
+                SidebarEntry::Separator,
+                link("b.html", "B"),
+            ],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(html.contains("<hr class=\"sidebar-divider\">"));
+    }
+
+    /// Test 13 — heading (text-only) renders as plain text without
+    /// an anchor.
+    #[test]
+    fn sidebar_render_heading_plain_text() {
+        let sb = Sidebar {
+            contents: vec![SidebarEntry::Heading(s("Label"))],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(
+            html.contains("<span class=\"menu-text\">Label</span>"),
+            "heading should render as menu-text span; html: {}",
+            html
+        );
+        // Heading must not be wrapped in an anchor.
+        // Find the index of "Label" and check the surrounding area.
+        let label_idx = html.find("Label").unwrap();
+        let pre = &html[..label_idx];
+        // The last `<` before "Label" must be the `<span>`, not an `<a>`.
+        let last_tag_open = pre.rfind('<').unwrap();
+        let last_tag_slice = &pre[last_tag_open..];
+        assert!(
+            last_tag_slice.starts_with("<span"),
+            "heading should not be wrapped in <a>; got: {}",
+            last_tag_slice
+        );
+    }
+
+    /// `style: docked` is reflected in the class list.
+    #[test]
+    fn sidebar_render_style_docked_reflected_in_class() {
+        let sb = Sidebar {
+            style: SidebarStyle::Docked,
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(html.contains("sidebar-docked"));
+        assert!(!html.contains("sidebar-floating"));
+    }
+
+    /// Section with an `href:` renders a real link in the header row
+    /// (no `data-bs-toggle` on the header anchor), with the toggle
+    /// chevron separately handling collapse.
+    #[test]
+    fn sidebar_render_section_with_href_renders_link_header() {
+        let sb = Sidebar {
+            contents: vec![SidebarEntry::Section {
+                text: Some(s("Guides")),
+                href: Some("guides/index.html".to_string()),
+                id: None,
+                contents: vec![link("guides/a.html", "A")],
+                expanded: true,
+            }],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        // Header anchor points at the href and is NOT a toggle.
+        assert!(
+            html.contains("href=\"guides/index.html\" class=\"sidebar-item-text sidebar-link\"")
+        );
+        // The chevron/toggle anchor is still present for the children.
+        assert!(html.contains("sidebar-item-toggle"));
+    }
+
+    /// Active-state ancestor expansion is rendered correctly: an
+    /// expanded section shows its children even if collapse-level
+    /// would normally hide them.
+    #[test]
+    fn sidebar_render_active_ancestor_section_is_expanded() {
+        let sb = Sidebar {
+            collapse_level: 1,
+            contents: vec![SidebarEntry::Section {
+                text: Some(s("Docs")),
+                href: None,
+                id: None,
+                contents: vec![active_link("guide.html", "Guide")],
+                expanded: true, // set by active-state expansion
+            }],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(html.contains("sidebar-section depth1 show"));
+        assert!(html.contains("sidebar-link active"));
+    }
+
+    /// Separators emitted in the correct list position (between items).
+    #[test]
+    fn sidebar_render_separator_between_items_matches_q1_shape() {
+        let sb = Sidebar {
+            contents: vec![
+                link("a.html", "A"),
+                SidebarEntry::Separator,
+                link("b.html", "B"),
+            ],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        let a_pos = html.find(">A<").unwrap();
+        let sep_pos = html.find("sidebar-divider").unwrap();
+        let b_pos = html.find(">B<").unwrap();
+        assert!(a_pos < sep_pos && sep_pos < b_pos);
+    }
+
+    /// Auto entries that slip through to Render (a bug upstream) are
+    /// silently dropped rather than crashing.
+    #[test]
+    fn sidebar_render_auto_is_dropped_if_not_expanded() {
+        use crate::sidebar::AutoSpec;
+        let sb = Sidebar {
+            contents: vec![
+                link("a.html", "A"),
+                SidebarEntry::Auto(AutoSpec::All),
+                link("b.html", "B"),
+            ],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        // Still contains the real links.
+        assert!(html.contains(">A<"));
+        assert!(html.contains(">B<"));
+        // No auto artifact leaks out.
+        assert!(!html.contains("auto"));
     }
 }

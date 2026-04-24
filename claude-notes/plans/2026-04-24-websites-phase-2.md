@@ -847,68 +847,99 @@ Per CLAUDE.md §"End-to-end verification before declaring success":
 - [ ] Commit directly on `feature/websites` (Phase 1 precedent).
 
 ### Profile extension
-- [ ] Add `order: Option<i32>` to `DocumentProfile`; extract in
+- [x] Add `order: Option<i32>` to `DocumentProfile`; extract in
       `DocumentProfileStage`. Update
       `claude-notes/designs/document-profile-contract.md` change log.
-- [ ] Unit test: profile carries `order` when frontmatter provides it.
+      (Extraction lives on the shared `DocumentProfile::extract`
+      helper, which the stage delegates to — one call site, covered.)
+- [x] Unit tests: profile carries `order` when frontmatter provides
+      it; `None` when absent; non-integer `order:` is dropped.
 
 ### Data model — `quarto-navigation`
-- [ ] Create `sidebar.rs` with `Sidebar`, `SidebarEntry`,
+- [x] Create `sidebar.rs` with `Sidebar`, `SidebarEntry`,
       `SidebarStyle`, `AutoSpec` types.
-- [ ] Implement `Sidebar::from_config_value` / `parse_list_from_config`.
-- [ ] Implement `Sidebar::to_config_value`.
-- [ ] Write unit tests 1–7; run; confirm fail. Implement to pass.
+- [x] Implement `Sidebar::from_config_value` / `parse_list_from_config`.
+- [x] Implement `Sidebar::to_config_value`.
+- [x] Write unit tests 1–7; run; confirm fail. Implement to pass.
+      Added a few extra tests for `collapse-level`, `style: docked`,
+      the `contents: auto` shorthand, the `text`-only Heading shape,
+      and short-dash strings. 13 tests total, all passing.
 
 ### HTML rendering — `quarto-navigation::render_html`
-- [ ] Add `sidebar_to_html(&Sidebar) -> String`.
-- [ ] Write unit tests 8–13; run; confirm fail. Implement to pass.
-- [ ] Add snapshot tests for three canonical shapes.
+- [x] Add `sidebar_to_html(&Sidebar) -> String`.
+- [x] Write unit tests 8–13; run; confirm fail. Implement to pass.
+      Added 5 additional tests for style-docked, section-with-href,
+      active-ancestor expansion, separator positioning, and stray-auto
+      defensive handling. 11 tests total, all passing.
+- [ ] Add snapshot tests for three canonical shapes.  *(Deferred —
+      inline string asserts cover the vocabulary more cheaply and
+      the website template is expected to churn; decision logged in
+      Phase 2 plan Open Questions #6.)*
 
 ### Sidebar-for-page + active state — `quarto-navigation`
 
-Both are format-agnostic and operate on source paths.
+Both are format-agnostic and operate on source paths (forward-slash
+strings; callers normalize `PathBuf` before calling).
 
-- [ ] Add `sidebar_for_page(&[Sidebar], Option<&ProjectIndex>,
-      page_source: &Path, meta: &ConfigValue) -> Option<&Sidebar>`.
-- [ ] Add `resolve_active_state(&mut Sidebar, self_source: &Path)`
-      (source-path keyed; no HTML assumption).
-- [ ] Tests 14–18, 26–27, 27a.
+- [x] Add `sidebar_for_page(&[Sidebar], page_source: &str,
+      meta: &ConfigValue) -> Option<&Sidebar>`.  Signature takes
+      `&str` rather than `&Path` / `Option<&ProjectIndex>` because
+      the helper is a pure source-path comparison — the caller
+      (Generate transform) already has the project-relative source
+      in forward-slash form.
+- [x] Add `resolve_active_state(&mut Sidebar, self_source: &str)
+      -> bool` (source-path keyed; no HTML assumption). Returns true
+      if any entry matched, so the caller can emit a "page not in
+      sidebar" diagnostic if desired.
+- [x] Tests 14–18 (+ 2 extras: `website.sidebar-id` alternative
+      key, unknown-id fall-through), 26–27, 27a, + section-header
+      match. 11 tests added; 81 navigation-crate tests total pass.
 
 ### Auto expansion — `quarto-core/src/transforms/sidebar_auto.rs`
-- [ ] Implement `expand_auto(&mut Sidebar, &ProjectIndex,
-      &mut Diagnostics)`.
-- [ ] Tests 19–25.
+- [x] Implement `expand_auto(&mut Sidebar, &ProjectIndex,
+      &mut Vec<DiagnosticMessage>)` plus `strip_auto` (no-index path).
+      Grouping implemented as 1-level directory sections (top-level
+      files flat; subdirs grouped into Sections with optional index
+      header-href). Deeper nesting is a follow-up.
+- [x] Tests 19–25 + `auto_paths_is_union_flat` and
+      `expand_auto_recurses_into_sections`. 10 tests, all passing.
 
 ### Generate transform — `quarto-core/src/transforms/sidebar_generate.rs`
 
 Format-agnostic. Hrefs stay as source paths at this step.
 
-- [ ] Implement `SidebarGenerateTransform` following the flow in
+- [x] Implement `SidebarGenerateTransform` following the flow in
       §"Generate transform flow".
-- [ ] Wire into `build_transform_pipeline` between
+- [x] Wire into `build_transform_pipeline` between
       `NavbarGenerateTransform` and `FooterGenerateTransform`.
-- [ ] Tests 30–33 (`skips_when_feature_disabled`,
-      `skips_when_absent`, `honors_user_override`,
-      `produces_resolved_tree`).
+- [x] Tests 30–33 + `drops_auto_without_index` and
+      `keeps_qmd_paths` (the format-agnostic invariant).
+      6 Generate tests, all passing. 1047 quarto-core tests still pass.
 
 ### Render transform — `quarto-core/src/transforms/sidebar_render.rs`
 
 HTML-specific. Rewrites `.qmd` source paths to `output_href` at emit
 time.
 
-- [ ] Implement `SidebarRenderTransform` including
+- [x] Implement `SidebarRenderTransform` including
       `resolve_href_for_html` helper per §"Render transform".
-- [ ] Wire into `build_transform_pipeline` between
+- [x] Wire into `build_transform_pipeline` between
       `NavbarRenderTransform` and `FooterRenderTransform`.
-- [ ] Tests 28–29a (href rewriting), 34–35 (skip conditions + basic
-      render).
+- [x] Tests 28–29a (href rewriting), 34–35 (skip conditions + basic
+      render) plus `sidebar_render_skips_when_feature_disabled`,
+      `sidebar_render_honors_user_override`, and
+      `render_preserves_query_and_fragment_after_rewrite` (edge case
+      for query strings / fragment preservation).
+      11 Render tests, all passing. 1058 quarto-core tests pass.
 
 ### Template slot — `crates/quarto-core/src/template.rs`
-- [ ] Add conditional `$if(rendered.navigation.sidebar)$…$endif$`
-      block inside `FULL_HTML_TEMPLATE`.
-- [ ] Do NOT touch `crates/pampa/resources/templates/html/main.html`.
-- [ ] Verify existing rendered-HTML snapshot tests still pass (no
-      diff expected when `navigation.sidebar` absent).
+- [x] Add conditional `$if(rendered.navigation.sidebar)$…$endif$`
+      block inside `FULL_HTML_TEMPLATE`, placed *before* the TOC
+      column (Decision 4 — minimum-churn slot for Phase 2).
+- [x] Did NOT touch `crates/pampa/resources/templates/html/main.html`.
+- [x] Full-workspace tests pass (7739 passed, no snapshot drift),
+      confirming the conditional template addition is a no-op for
+      any test that doesn't set `navigation.sidebar`.
 
 ### Integration tests — `crates/quarto-core/tests/sidebar_pipeline.rs`
 - [ ] Tests 36–39.

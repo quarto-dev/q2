@@ -67,8 +67,8 @@ use crate::transforms::{
     FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
     FootnotesTransform, MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
     ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform,
-    TocRenderTransform,
+    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
+    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -560,10 +560,12 @@ pub async fn render_qmd_to_html(
 ///
 /// 9. `TocGenerateTransform` - Generate TOC from headers (if `toc: true`)
 /// 10. `NavbarGenerateTransform` - Resolve `navbar:` YAML into `navigation.navbar`
-/// 11. `FooterGenerateTransform` - Resolve `page-footer:` YAML into `navigation.footer`
-/// 12. `TocRenderTransform` - Render TOC to HTML for template insertion
-/// 13. `NavbarRenderTransform` - Render navbar to HTML for template insertion
-/// 14. `FooterRenderTransform` - Render page footer to HTML for template insertion
+/// 11. `SidebarGenerateTransform` - Resolve `website.sidebar:` into `navigation.sidebar`
+/// 12. `FooterGenerateTransform` - Resolve `page-footer:` YAML into `navigation.footer`
+/// 13. `TocRenderTransform` - Render TOC to HTML for template insertion
+/// 14. `NavbarRenderTransform` - Render navbar to HTML for template insertion
+/// 15. `SidebarRenderTransform` - Render sidebar to HTML (w/ .qmd→.html rewrite)
+/// 16. `FooterRenderTransform` - Render page footer to HTML for template insertion
 ///
 /// ## Finalization Phase
 /// 15. `AppendixStructureTransform` - Consolidate appendix content into container
@@ -609,9 +611,11 @@ pub fn build_transform_pipeline(
     // available; navbar/footer generates only read top-level metadata.
     pipeline.push(Box::new(TocGenerateTransform::new()));
     pipeline.push(Box::new(NavbarGenerateTransform::new()));
+    pipeline.push(Box::new(SidebarGenerateTransform::new()));
     pipeline.push(Box::new(FooterGenerateTransform::new()));
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
+    pipeline.push(Box::new(SidebarRenderTransform::new()));
     pipeline.push(Box::new(FooterRenderTransform::new()));
 
     // === FINALIZATION PHASE ===
