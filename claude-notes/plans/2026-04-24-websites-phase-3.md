@@ -948,21 +948,61 @@ reasons (see Phase 2 Decision 6).
       workspace-wide.
 
 ### Integration tests
-- [ ] `navbar_footer_pipeline.rs` with tests 45–50.
+- [x] `navbar_footer_pipeline.rs` created with tests 45–50.
+      6 tests, all passing on first run. Drives the real
+      `ProjectPipeline` end-to-end via the same helper shape as
+      `sidebar_pipeline.rs` (temp dir, `ProjectContext::discover`,
+      `ProjectPipeline::run`). Covers:
+      * navbar rendering + active-item highlighting per page
+      * dropdown menu href rewriting + dropdown active class
+      * page-footer rendering + footer-item href rewriting
+      * active-class cross-contamination guard
+      * format-agnostic invariant spot check (`.qmd` paths survive
+        Generate, Render rewrites them, active class survives)
+      * single-doc-in-project regression (doc-level frontmatter
+        navbar still works; doesn't spill into siblings)
 
 ### CLI end-to-end + regression
-- [ ] Smoke fixture at `/tmp/q2-phase3-smoke/` with three pages.
-- [ ] Record observed HTML in commit message / close-out.
-- [ ] Re-run Phase 2 smoke; assert no regression.
+- [x] Smoke fixture at `/tmp/q2-phase3-smoke/` with three pages,
+      top-level `navbar:` (with dropdown) and `page-footer:` (with
+      icon + copyright), and `website.title` set. Rendered clean.
+      Observed HTML per page (quoted here for close-out review,
+      per CLAUDE.md §End-to-end verification):
+      * **index.html**:
+        - Brand uses site title: `<a class="navbar-brand" href="/">Q2 Phase 3 Smoke</a>`
+        - `<a href="index.html" class="nav-link active">Home</a>` (active)
+        - `<a href="about.html" class="nav-link">About</a>` (rewritten, not active)
+        - Dropdown `Docs` with `<a href="guides/intro.html" class="dropdown-item">Guide Intro</a>` (enriched text from profile)
+        - `<footer class="footer">` with left `© 2026 Quarto`, right github icon link (`<i class="bi bi-github">`)
+      * **about.html**: same navbar structure, active class flipped
+        to `About` only (`href="about.html" class="nav-link active"`).
+      * **guides/intro.html**: dropdown leaf active
+        (`<a href="guides/intro.html" class="dropdown-item active">`);
+        dropdown ancestor stays inactive (Decision 5 — matches Q1).
+- [x] Revealjs/standalone single-doc smoke at
+      `/tmp/q2-phase3-revealjs-smoke/deck.qmd` with top-level
+      `page-footer: "© 2026 Standalone"`. Rendered clean without any
+      `website:` namespacing; the UX story Decision 1 hinged on is
+      intact. Footer HTML contains the literal copyright text in
+      `nav-footer-center`.
+- [x] Phase 2 sidebar smoke re-run at `/tmp/q2-phase2-smoke/`. Output
+      includes `<nav id="quarto-sidebar">`, active class on the
+      current page's `sidebar-link`, nested-section expansion. No
+      regression from the Phase 2/Phase 3 refactor.
 
 ### Verification and close-out
-- [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace` — all green.
-- [ ] `cargo xtask lint` passes.
-- [ ] `cargo xtask verify --skip-hub-tests` end-to-end green.
-- [ ] File follow-up bd issues (see §"Follow-up beads").
-- [ ] `br close` the Phase 3 issue.
-- [ ] `br sync --flush-only && git add .beads/ && git commit`.
+- [x] `cargo build --workspace` clean.
+- [x] `cargo nextest run --workspace` — 7801 tests pass, 195 skipped
+      (gained 6 integration + 30 unit tests over the 7795 Phase 2
+      baseline).
+- [x] `cargo xtask lint` passes (622 files checked).
+- [x] `cargo xtask verify --skip-hub-tests` end-to-end green — Rust
+      build + tests, hub-client build (including WASM), trace-viewer
+      tests.
+- [x] Filed follow-ups: `bd-jfyl`, `bd-jbml`, `bd-bwwv`, `bd-9m8p`,
+      `bd-15dw`. Description of epic-wide `bd-n9dr` refreshed.
+- [x] `br close bd-fqyg`.
+- [x] `br sync --flush-only && git add .beads/ claude-notes/ crates/ && git commit`.
 - [ ] Ask user permission before pushing.
 
 ## Risks and mitigations
@@ -1026,22 +1066,26 @@ reasons (see Phase 2 Decision 6).
 - No book or manuscript types.
 - No navbar "search" button wired up — stays a stub.
 
-## Follow-up beads (to be filed at close-out)
+## Follow-up beads (filed at close-out)
 
-Tentative — surface as the phase proceeds:
+- `bd-jfyl` — Footer `Text` region project-link rewriting (depends on
+  body-link Phase 6's contract).
+- `bd-jbml` — `itemHasNavTarget`-style index-forgiveness (Q1 treats
+  `about/` and `about/index.html` as equivalent). Phase 3 uses strict
+  source-path equality; revisit if a real site hits the edge case.
+- `bd-bwwv` — Navbar sub-row (book-style sub-navbar), epic-excluded
+  for MVP.
+- `bd-9m8p` — `navbar.pinned` behavior (sticky-on-scroll JS); rides
+  with Phase 5 (`site_libs/` ships the JS).
+- `bd-15dw` — Text-enrichment tie-breaker: if an item supplies `icon`
+  but no `text`, should we still enrich `text` from the profile title?
+  Phase 3 says no (`icon`-only items are intentional); confirmed.
 
-- Footer `Text` region project-link rewriting (does `"See [docs](docs.qmd)"`
-  in a string region get rewritten to `.html`? — depends on body-link
-  phase 6's contract).
-- Navbar sub-row (book-style sub-navbar) — epic-excluded for MVP.
-- `navbar.pinned` behavior (sticky nav on scroll) — ride with Phase 5
-  (`site_libs/` ships the JS).
-- Text-enrichment tie-breaker: if an item supplies `icon` but no
-  `text`, should we still enrich `text` from the profile title? Phase 3
-  says no (`icon`-only items are intentional).
-- `itemHasNavTarget`-style index-forgiveness (Q1 treats `about/` and
-  `about/index.html` as equivalent). Phase 3 uses strict source-path
-  equality; revisit if a real site hits the edge case.
+Epic-wide follow-up (description refreshed in Phase 3):
+
+- `bd-n9dr` reframed: placement follows feature semantics, not
+  uniformity. Remaining tension: `site-sidebar` at doc-level for a
+  website-scoped feature. See the bead for migration options.
 
 ## Decisions log (confirmed 2026-04-24)
 

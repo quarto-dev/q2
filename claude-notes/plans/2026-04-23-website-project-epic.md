@@ -563,7 +563,9 @@ phases above.
 - [x] **Phase 2:** Sidebar data model, generate, render, template.
       Closed `bd-9svl` on `feature/websites`.
       Sub-plan: `claude-notes/plans/2026-04-24-websites-phase-2.md`.
-- [ ] **Phase 3:** Navbar / footer project integration.
+- [x] **Phase 3:** Navbar / footer project integration.
+      Closed `bd-fqyg` on `feature/websites`.
+      Sub-plan: `claude-notes/plans/2026-04-24-websites-phase-3.md`.
 - [ ] **Phase 4:** Page navigation (prev/next).
 - [ ] **Phase 5:** Scoped artifact store + `site_libs/`.
 - [ ] **Phase 6:** Cross-document link rewriting.
@@ -643,6 +645,21 @@ when it files an issue):
     field; a structural guard would prevent recurrence.)
   - `bd-n9dr` — *(epic-wide)* Unify nav config placement across
     features (`navbar` vs `website.sidebar` vs `site-sidebar`).
-  - `bd-4g6g` — *(epic-wide)* Move sidebar to Q1 template
-    position (sidebar-left, TOC-right).
-- Phases 3–9: TBD.
+- **Phase 3 (`bd-fqyg`, closed).** Follow-ups filed at close-out:
+  - `bd-jfyl` — Footer `Text`-region project-link rewriting (depends
+    on Phase 6's body-link rewriter contract).
+  - `bd-jbml` — Navbar index-forgiveness
+    (`about/` == `about/index.html`) if a real site hits it.
+  - `bd-bwwv` — Navbar sub-row (book-style secondary navbar, epic-
+    excluded for MVP).
+  - `bd-9m8p` — `navbar.pinned` JS (rides with Phase 5 `site_libs/`).
+  - `bd-15dw` — Navbar icon-only item enrichment tie-break.
+  - `bd-n9dr` reframed: Phase 3 replaced "unify everything under one
+    namespace" with "placement follows feature semantics." The only
+    remaining tension is `site-sidebar` at the doc-level override for
+    a website-scoped feature. Description updated 2026-04-24.
+  - *(no epic-wide follow-up for sidebar template placement; `bd-4g6g`
+    remains open from Phase 2 unchanged.)*
+  - `bd-4g6g` — *(epic-wide, from Phase 2)* Move sidebar to Q1
+    template position (sidebar-left, TOC-right).
+- Phases 4–9: TBD.
