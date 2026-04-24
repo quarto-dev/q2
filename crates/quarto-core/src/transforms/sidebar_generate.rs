@@ -31,6 +31,7 @@ use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
+use crate::transforms::navigation_active::page_relative_source;
 use crate::transforms::sidebar_auto::{expand_auto, strip_auto};
 
 pub struct SidebarGenerateTransform;
@@ -120,8 +121,12 @@ impl AstTransform for SidebarGenerateTransform {
 
 /// Fill in `text` on any sidebar entry that carries only an `href`
 /// (the common "bare path" YAML shorthand: `- about.qmd`).
-/// Looks up the referenced profile by source path and uses its title
-/// as the displayed text. Format-agnostic: only writes `text`.
+///
+/// `Link` entries delegate to the shared navbar/footer helper
+/// ([`super::navigation_enrich::enrich_one`]). `Section` entries
+/// have their own enrichment path (sections can be text-less with an
+/// href, same shape as a Link but wrapped in the enum), then recurse
+/// into children.
 fn enrich_text_from_index(
     entries: &mut [quarto_navigation::SidebarEntry],
     index: &crate::project::index::ProjectIndex,
@@ -132,19 +137,8 @@ fn enrich_text_from_index(
 
     for entry in entries.iter_mut() {
         match entry {
-            SidebarEntry::Link { item, .. } => {
-                if item.text.is_some() {
-                    continue;
-                }
-                let Some(href) = item.href.as_deref() else {
-                    continue;
-                };
-                // Only pull title for project-local paths.
-                if let Some(profile) = index.lookup_by_source(std::path::Path::new(href)) {
-                    if let Some(title) = &profile.title {
-                        item.text = Some(ConfigValue::new_string(title, SourceInfo::default()));
-                    }
-                }
+            SidebarEntry::Link { item } => {
+                super::navigation_enrich::enrich_one(item, index);
             }
             SidebarEntry::Section {
                 text,
@@ -168,24 +162,6 @@ fn enrich_text_from_index(
             SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
         }
     }
-}
-
-/// Project-relative source path for the current page, forward-slash
-/// normalized. Falls back to the basename if the input isn't under
-/// the project root (shouldn't happen in practice, but defensive).
-fn page_relative_source(ctx: &RenderContext) -> String {
-    let relative = ctx
-        .document
-        .input
-        .strip_prefix(&ctx.project.dir)
-        .unwrap_or_else(|_| {
-            ctx.document
-                .input
-                .file_name()
-                .map(std::path::Path::new)
-                .unwrap_or(&ctx.document.input)
-        });
-    relative.to_string_lossy().replace('\\', "/")
 }
 
 #[cfg(test)]

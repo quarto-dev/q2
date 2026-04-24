@@ -7,9 +7,14 @@
 //!
 //! Reads the resolved structure from `navigation.navbar` (populated by
 //! [`NavbarGenerateTransform`](super::NavbarGenerateTransform) or a user
-//! override), produces an HTML string via
-//! [`quarto_navigation::render_html::navbar_to_html`], and stores the result
-//! at `rendered.navigation.navbar` for the template to inject.
+//! override), rewrites `.qmd` hrefs to output hrefs via the
+//! [`ProjectIndex`](crate::project::index::ProjectIndex), and emits
+//! HTML via [`quarto_navigation::render_html::navbar_to_html`]. The
+//! result lands at `rendered.navigation.navbar` for the template.
+//!
+//! The **brand fallback chain** (Phase 3 Decision 6) is applied here:
+//! `navbar.title → website.title → document.title`. See
+//! `brand_title_fallback` below.
 //!
 //! ## Skip conditions
 //!
@@ -17,15 +22,18 @@
 //! - `rendered.navigation.navbar` already populated — user pre-rendered HTML.
 //! - `navigation.navbar` absent — nothing to render.
 
-use quarto_navigation::{Navbar, render_html::navbar_to_html};
+use quarto_error_reporting::DiagnosticMessage;
+use quarto_navigation::{Navbar, NavigationItem, render_html::navbar_to_html};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
 use crate::Result;
+use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
+use crate::transforms::navigation_href::resolve_href_for_html;
 
 pub struct NavbarRenderTransform;
 
@@ -47,7 +55,7 @@ impl AstTransform for NavbarRenderTransform {
         "navbar-render"
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         if is_feature_disabled(&ast.meta, "navbar") {
             return Ok(());
         }
@@ -63,8 +71,27 @@ impl AstTransform for NavbarRenderTransform {
             return Ok(());
         };
 
-        let navbar = Navbar::from_config_value(navbar_cv);
-        let fallback = ast.meta.get("title").and_then(|v| v.as_plain_text());
+        let mut navbar = Navbar::from_config_value(navbar_cv);
+
+        // Rewrite .qmd → .html hrefs (including inside dropdown menus)
+        // when a ProjectIndex is attached. Borrow diagnostics out of
+        // ctx so the helper can push without a borrow cycle.
+        let mut local_diags = std::mem::take(&mut ctx.diagnostics);
+        rewrite_navigation_item_hrefs(
+            &mut navbar.left,
+            ctx.project_index.as_deref(),
+            "Navbar",
+            &mut local_diags,
+        );
+        rewrite_navigation_item_hrefs(
+            &mut navbar.right,
+            ctx.project_index.as_deref(),
+            "Navbar",
+            &mut local_diags,
+        );
+        ctx.diagnostics = local_diags;
+
+        let fallback = brand_title_fallback(&ast.meta);
         let html = navbar_to_html(&navbar, fallback.as_deref());
 
         ast.meta.insert_path(
@@ -76,17 +103,58 @@ impl AstTransform for NavbarRenderTransform {
     }
 }
 
+/// Walk navbar items (including dropdown `menu` children), rewriting
+/// each `href` from source-path to output-href via the shared
+/// resolver. Items without an `href` (pure dropdowns) are skipped for
+/// the lookup but still descended.
+fn rewrite_navigation_item_hrefs(
+    items: &mut [NavigationItem],
+    index: Option<&ProjectIndex>,
+    source_label: &str,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    for item in items.iter_mut() {
+        if let Some(href) = item.href.as_mut() {
+            *href = resolve_href_for_html(href, index, Some(source_label), diagnostics);
+        }
+        if !item.menu.is_empty() {
+            rewrite_navigation_item_hrefs(&mut item.menu, index, source_label, diagnostics);
+        }
+    }
+}
+
+/// Brand-title fallback chain, Phase 3 Decision 6:
+/// `navbar.title (handled in navbar_to_html) → website.title → document.title`.
+///
+/// This helper produces the string the renderer uses when
+/// `navbar.title == NavbarTitle::Default` — reading site-scoped
+/// `website.title` first, then falling back to the document's own
+/// `title`. `None` means the renderer has nothing to fall back to
+/// (brand anchor will be suppressed if no logo either).
+fn brand_title_fallback(meta: &ConfigValue) -> Option<String> {
+    if let Some(site_title) = meta
+        .get_path(&["website", "title"])
+        .and_then(|v| v.as_plain_text())
+    {
+        return Some(site_title);
+    }
+    meta.get("title").and_then(|v| v.as_plain_text())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document_profile::{DOCUMENT_PROFILE_VERSION, DocumentProfile};
     use crate::format::Format;
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
+    use pampa::toc::TocEntry;
     use quarto_navigation::{Navbar, NavbarTitle};
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_source_map::SourceInfo;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     fn make_test_project() -> ProjectContext {
         ProjectContext {
@@ -118,7 +186,34 @@ mod tests {
         ConfigValue::new_bool(x, SourceInfo::default())
     }
 
-    async fn run(meta: ConfigValue) -> ConfigValue {
+    fn profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {
+        DocumentProfile {
+            profile_version: DOCUMENT_PROFILE_VERSION,
+            source_path: PathBuf::from(source),
+            output_href: output_href.to_string(),
+            format_id: "html".to_string(),
+            title: Some(title.to_string()),
+            subtitle: None,
+            description: None,
+            authors: Vec::new(),
+            date: None,
+            categories: Vec::new(),
+            keywords: Vec::new(),
+            image: None,
+            draft: false,
+            order: None,
+            outline: Vec::<TocEntry>::new(),
+        }
+    }
+
+    async fn run(meta: ConfigValue) -> (ConfigValue, Vec<DiagnosticMessage>) {
+        run_with(meta, None).await
+    }
+
+    async fn run_with(
+        meta: ConfigValue,
+        index: Option<Arc<ProjectIndex>>,
+    ) -> (ConfigValue, Vec<DiagnosticMessage>) {
         let mut ast = Pandoc {
             meta,
             blocks: vec![],
@@ -128,30 +223,33 @@ mod tests {
         let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        if let Some(idx) = index {
+            ctx = ctx.with_project_index(idx);
+        }
         NavbarRenderTransform::new()
             .transform(&mut ast, &mut ctx)
             .await
             .unwrap();
-        ast.meta
+        (ast.meta, ctx.diagnostics)
     }
+
+    // --- Existing Phase 2 tests -----------------------------------
 
     #[tokio::test]
     async fn skips_when_navigation_navbar_missing() {
-        let out = run(ConfigValue::default()).await;
+        let (out, _) = run(ConfigValue::default()).await;
         assert!(!out.contains_path(&["rendered", "navigation", "navbar"]));
     }
 
     #[tokio::test]
     async fn skips_when_navbar_false() {
-        // Even if navigation.navbar was populated earlier, `navbar: false`
-        // must suppress render.
         let navbar = Navbar {
             title: NavbarTitle::Text(s("Ignored")),
             ..Navbar::with_defaults()
         };
         let mut meta = config_map(vec![("navbar", b(false))]);
         meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
-        let out = run(meta).await;
+        let (out, _) = run(meta).await;
         assert!(!out.contains_path(&["rendered", "navigation", "navbar"]));
     }
 
@@ -166,7 +264,7 @@ mod tests {
             &["rendered", "navigation", "navbar"],
             s("<nav>User-provided</nav>"),
         );
-        let out = run(meta).await;
+        let (out, _) = run(meta).await;
         let rendered = out.get_path(&["rendered", "navigation", "navbar"]).unwrap();
         assert_eq!(
             rendered.as_plain_text().as_deref(),
@@ -183,7 +281,7 @@ mod tests {
         };
         let mut meta = ConfigValue::default();
         meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
-        let out = run(meta).await;
+        let (out, _) = run(meta).await;
         let rendered = out.get_path(&["rendered", "navigation", "navbar"]).unwrap();
         let html = rendered.as_plain_text().unwrap();
         assert!(html.contains("<nav class=\"navbar navbar-expand-lg bg-primary\""));
@@ -192,19 +290,246 @@ mod tests {
 
     #[tokio::test]
     async fn falls_back_to_document_title() {
-        // With no explicit navbar title but a document-level `title:`, the
-        // brand anchor uses the document title.
         let mut meta = config_map(vec![("title", s("Doc Title"))]);
         meta.insert_path(
             &["navigation", "navbar"],
             Navbar::with_defaults().to_config_value(),
         );
-        let out = run(meta).await;
+        let (out, _) = run(meta).await;
         let html = out
             .get_path(&["rendered", "navigation", "navbar"])
             .unwrap()
             .as_plain_text()
             .unwrap();
         assert!(html.contains("Doc Title"));
+    }
+
+    // --- Phase 3 href rewriting -----------------------------------
+
+    /// Phase 3 test 28 — a leaf item `about.qmd` is rewritten to
+    /// `about.html` in the rendered HTML.
+    #[tokio::test]
+    async fn navbar_render_rewrites_qmd_hrefs_to_output_href() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+        let (out, diags) = run_with(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"about.html\""), "html: {}", html);
+        assert!(!html.contains("href=\"about.qmd\""));
+        assert!(diags.is_empty());
+    }
+
+    /// Phase 3 test 29 — dropdown menu items get the same rewrite.
+    #[tokio::test]
+    async fn navbar_render_rewrites_dropdown_hrefs() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                text: Some(s("Docs")),
+                menu: vec![NavigationItem {
+                    href: Some("guide.qmd".to_string()),
+                    text: Some(s("Guide")),
+                    ..NavigationItem::default()
+                }],
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "guide.qmd",
+            "guide.html",
+            "Guide",
+        )]));
+        let (out, _) = run_with(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"guide.html\""), "html: {}", html);
+    }
+
+    /// Phase 3 test 30 — external URLs pass through the rewriter.
+    #[tokio::test]
+    async fn navbar_render_passes_external_urls_through() {
+        let navbar = Navbar {
+            right: vec![NavigationItem {
+                icon: Some("github".to_string()),
+                href: Some("https://github.com/foo".to_string()),
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![]));
+        let (out, diags) = run_with(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"https://github.com/foo\""));
+        assert!(diags.is_empty());
+    }
+
+    /// Phase 3 test 31 — an unknown .qmd reference emits a warning
+    /// diagnostic tagged "Navbar …".
+    #[tokio::test]
+    async fn navbar_render_emits_diagnostic_for_unknown_qmd() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                href: Some("missing.qmd".to_string()),
+                text: Some(s("Missing")),
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![]));
+        let (_, diags) = run_with(meta, Some(index)).await;
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.starts_with("Navbar"), "got: {:?}", diags[0]);
+        assert!(diags[0].title.contains("missing.qmd"));
+    }
+
+    /// Phase 3 test 32 — after rewriting, the `active` class is
+    /// preserved on the rewritten link. The `active` bit survives
+    /// ConfigValue roundtrip (NavigationItem roundtrips it) and the
+    /// rewriter doesn't touch it.
+    #[tokio::test]
+    async fn navbar_render_preserves_active_class_on_rewritten_href() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                active: true,
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+        let (out, _) = run_with(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"about.html\""));
+        assert!(
+            html.contains("class=\"nav-link active\""),
+            "expected nav-link active after rewrite; got: {}",
+            html
+        );
+    }
+
+    // --- Phase 3 brand fallback chain -----------------------------
+
+    /// Phase 3 test 33 — with a default navbar title and
+    /// `website.title` set, the brand anchor uses the site title.
+    #[tokio::test]
+    async fn navbar_render_brand_uses_website_title_fallback() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["website", "title"], s("My Site"));
+        meta.insert_path(
+            &["navigation", "navbar"],
+            Navbar::with_defaults().to_config_value(),
+        );
+        let (out, _) = run(meta).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("My Site"), "got: {}", html);
+    }
+
+    /// Phase 3 test 34 — explicit navbar title wins over site title.
+    #[tokio::test]
+    async fn navbar_render_brand_prefers_navbar_title_over_website_title() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Explicit Navbar Title")),
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["website", "title"], s("Site Title"));
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let (out, _) = run(meta).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("Explicit Navbar Title"));
+        assert!(!html.contains("Site Title"));
+    }
+
+    /// Phase 3 test 35 — no `website.title`, default navbar title,
+    /// top-level `title: ...` → brand uses the document's title. This
+    /// is the single-doc behavior preserved from Phase 2.
+    #[tokio::test]
+    async fn navbar_render_brand_falls_back_to_document_title_when_no_website_title() {
+        let mut meta = config_map(vec![("title", s("Doc Title"))]);
+        meta.insert_path(
+            &["navigation", "navbar"],
+            Navbar::with_defaults().to_config_value(),
+        );
+        let (out, _) = run(meta).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("Doc Title"));
+    }
+
+    /// Phase 3 test 36 — standalone render (no ProjectIndex). A
+    /// .qmd navbar href is emitted verbatim; no rewrite, no
+    /// diagnostic. This is the revealjs/single-doc UX story.
+    #[tokio::test]
+    async fn navbar_render_no_index_passes_hrefs_through_unchanged() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let (out, diags) = run(meta).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"about.qmd\""), "got: {}", html);
+        assert!(diags.is_empty(), "no diagnostic without index");
     }
 }

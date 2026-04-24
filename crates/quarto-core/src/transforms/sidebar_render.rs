@@ -23,8 +23,6 @@
 //!   pre-rendered HTML).
 //! - `navigation.sidebar` absent.
 
-use std::path::Path;
-
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html};
 use quarto_pandoc_types::config_value::ConfigValue;
@@ -36,6 +34,7 @@ use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
+use crate::transforms::navigation_href::resolve_href_for_html;
 
 pub struct SidebarRenderTransform;
 
@@ -79,10 +78,14 @@ impl AstTransform for SidebarRenderTransform {
         // `ctx.diagnostics` via a local buffer that we swap in/out
         // so the helpers can push without a borrow cycle.
         let mut local_diags = std::mem::take(&mut ctx.diagnostics);
+        let label = sidebar_id
+            .as_deref()
+            .map(|id| format!("Sidebar '{}'", id))
+            .unwrap_or_else(|| "Sidebar".to_string());
         rewrite_hrefs(
             &mut sidebar.contents,
             ctx.project_index.as_deref(),
-            sidebar_id.as_deref(),
+            Some(label.as_str()),
             &mut local_diags,
         );
         ctx.diagnostics = local_diags;
@@ -103,81 +106,25 @@ impl AstTransform for SidebarRenderTransform {
 fn rewrite_hrefs(
     entries: &mut [SidebarEntry],
     index: Option<&ProjectIndex>,
-    sidebar_id: Option<&str>,
+    source_label: Option<&str>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
     for entry in entries.iter_mut() {
         match entry {
-            SidebarEntry::Link { item, .. } => {
+            SidebarEntry::Link { item } => {
                 if let Some(href) = item.href.as_mut() {
-                    *href = resolve_href_for_html(href, index, sidebar_id, diagnostics);
+                    *href = resolve_href_for_html(href, index, source_label, diagnostics);
                 }
             }
             SidebarEntry::Section { href, contents, .. } => {
                 if let Some(h) = href.as_mut() {
-                    *h = resolve_href_for_html(h, index, sidebar_id, diagnostics);
+                    *h = resolve_href_for_html(h, index, source_label, diagnostics);
                 }
-                rewrite_hrefs(contents, index, sidebar_id, diagnostics);
+                rewrite_hrefs(contents, index, source_label, diagnostics);
             }
             SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
         }
     }
-}
-
-/// Resolve an href for HTML output.
-///
-/// - External URLs and anchors pass through unchanged.
-/// - Project-relative source paths are rewritten to their output href
-///   via [`ProjectIndex::lookup_by_source`].
-/// - Source-path-shaped misses (`*.qmd` with no matching profile)
-///   emit a warning diagnostic naming the sidebar; the raw href is
-///   preserved (it'll render as a dangling link).
-fn resolve_href_for_html(
-    raw: &str,
-    index: Option<&ProjectIndex>,
-    sidebar_id: Option<&str>,
-    diagnostics: &mut Vec<DiagnosticMessage>,
-) -> String {
-    if is_external(raw) || raw.starts_with('#') {
-        return raw.to_string();
-    }
-    // Strip fragment / query so we can look up just the path. Preserve
-    // and re-append afterwards.
-    let (path_part, tail) = match raw.find(|c| c == '#' || c == '?') {
-        Some(i) => (&raw[..i], &raw[i..]),
-        None => (raw, ""),
-    };
-
-    if let Some(idx) = index {
-        if let Some(profile) = idx.lookup_by_source(Path::new(path_part)) {
-            return format!("{}{}", profile.output_href, tail);
-        }
-    }
-
-    // Looks like a source path but didn't resolve: diagnostic.
-    if path_part.ends_with(".qmd") {
-        let sidebar_tag = sidebar_id
-            .map(|id| format!(" '{}'", id))
-            .unwrap_or_default();
-        diagnostics.push(DiagnosticMessage::warning(format!(
-            "Sidebar{} references unknown document '{}'",
-            sidebar_tag, path_part
-        )));
-    }
-
-    raw.to_string()
-}
-
-fn is_external(href: &str) -> bool {
-    // Match Q1's cheap heuristic: anything with a scheme + `:` is
-    // external. We additionally treat protocol-relative `//…` as
-    // external since those bypass the project.
-    href.starts_with("http://")
-        || href.starts_with("https://")
-        || href.starts_with("mailto:")
-        || href.starts_with("tel:")
-        || href.starts_with("ftp://")
-        || href.starts_with("//")
 }
 
 #[cfg(test)]
@@ -436,9 +383,9 @@ mod tests {
                 item: NavigationItem {
                     href: Some("about.qmd".to_string()),
                     text: Some(s("About")),
+                    active: true,
                     ..NavigationItem::default()
                 },
-                active: true,
             }],
             ..Sidebar::with_defaults()
         };
@@ -470,7 +417,6 @@ mod tests {
                     text: Some(s("A")),
                     ..NavigationItem::default()
                 },
-                active: false,
             }],
             ..Sidebar::with_defaults()
         };

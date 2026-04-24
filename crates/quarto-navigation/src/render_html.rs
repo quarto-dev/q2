@@ -300,8 +300,13 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
     let label = render_item_label(item);
 
     let href = item.href.as_deref().unwrap_or("#");
+    let class = if item.active {
+        "class=\"nav-link active\""
+    } else {
+        "class=\"nav-link\""
+    };
     anchor_attrs.insert(0, format!("href=\"{}\"", escape_attr(href)));
-    anchor_attrs.insert(1, "class=\"nav-link\"".to_string());
+    anchor_attrs.insert(1, class.to_string());
 
     format!(
         "{}<li class=\"nav-item\"><a {}>{}</a></li>\n",
@@ -316,8 +321,13 @@ fn render_dropdown_item(item: &NavigationItem, indent: usize) -> String {
     let mut attrs = link_attrs(item);
     let label = render_item_label(item);
     let href = item.href.as_deref().unwrap_or("#");
+    let class = if item.active {
+        "class=\"dropdown-item active\""
+    } else {
+        "class=\"dropdown-item\""
+    };
     attrs.insert(0, format!("href=\"{}\"", escape_attr(href)));
-    attrs.insert(1, "class=\"dropdown-item\"".to_string());
+    attrs.insert(1, class.to_string());
     format!("{}<li><a {}>{}</a></li>\n", pad, attrs.join(" "), label)
 }
 
@@ -350,8 +360,8 @@ fn render_sidebar_entry(
     collapse_level: u32,
 ) {
     match entry {
-        SidebarEntry::Link { item, active } => {
-            render_sidebar_leaf(html, item, *active, depth);
+        SidebarEntry::Link { item } => {
+            render_sidebar_leaf(html, item, item.active, depth);
         }
         SidebarEntry::Section {
             text,
@@ -1122,6 +1132,84 @@ mod tests {
         assert!(out.contains("<code>x &amp; y</code>"));
     }
 
+    // --- Navbar active-item rendering (Phase 3) -------------------------
+
+    /// Phase 3 test 9 — a leaf item with `active: true` gets the
+    /// `active` class on its `nav-link` anchor.
+    #[test]
+    fn navbar_render_emits_active_class_on_leaf() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                active: true,
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None);
+        assert!(
+            html.contains("class=\"nav-link active\""),
+            "expected nav-link active class; got: {}",
+            html
+        );
+    }
+
+    /// Phase 3 test 10 — an inactive leaf has no `active` substring
+    /// in its class attribute.
+    #[test]
+    fn navbar_render_no_active_class_when_inactive() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None);
+        assert!(html.contains("class=\"nav-link\""));
+        assert!(
+            !html.contains("nav-link active"),
+            "inactive item should not carry active class; got: {}",
+            html
+        );
+    }
+
+    /// Phase 3 test 11 — active propagates into dropdown leaves:
+    /// a menu item whose `active: true` emits `dropdown-item active`.
+    #[test]
+    fn navbar_render_active_propagates_into_dropdown_leaves() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                text: Some(s("Docs")),
+                menu: vec![
+                    NavigationItem {
+                        href: Some("start.qmd".to_string()),
+                        text: Some(s("Getting Started")),
+                        ..NavigationItem::default()
+                    },
+                    NavigationItem {
+                        href: Some("advanced.qmd".to_string()),
+                        text: Some(s("Advanced")),
+                        active: true,
+                        ..NavigationItem::default()
+                    },
+                ],
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None);
+        assert!(
+            html.contains("class=\"dropdown-item active\""),
+            "expected dropdown-item active for advanced leaf; got: {}",
+            html
+        );
+        // The inactive dropdown sibling keeps the plain class.
+        assert!(html.contains("class=\"dropdown-item\""));
+    }
+
     // --- Sidebar rendering tests (Phase 2) ------------------------------
 
     use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle};
@@ -1133,7 +1221,6 @@ mod tests {
                 text: Some(s(text)),
                 ..NavigationItem::default()
             },
-            active: false,
         }
     }
 
@@ -1142,9 +1229,9 @@ mod tests {
             item: NavigationItem {
                 href: Some(href.to_string()),
                 text: Some(s(text)),
+                active: true,
                 ..NavigationItem::default()
             },
-            active: true,
         }
     }
 

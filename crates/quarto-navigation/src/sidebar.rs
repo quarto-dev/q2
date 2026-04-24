@@ -130,9 +130,10 @@ impl AutoSpec {
 /// A single entry in a sidebar's `contents:`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SidebarEntry {
-    /// A leaf link. `active: true` is set by the Generate step when
-    /// this entry's `href` matches the current page's source path.
-    Link { item: NavigationItem, active: bool },
+    /// A leaf link. The current-page highlight lives on
+    /// [`NavigationItem::active`], set by the Generate step when the
+    /// entry's `href` matches the current page's source path.
+    Link { item: NavigationItem },
 
     /// A collapsible section. `expanded: true` is the rendered state
     /// (including both the YAML `expanded:` override and the
@@ -219,11 +220,10 @@ impl SidebarEntry {
             }
         }
 
-        // Otherwise, try to parse as a leaf link. The `active:` key
-        // survives round-trips through `navigation.sidebar`:
-        // Generate writes it, Render reads it.
-        let active = cv.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
-        NavigationItem::from_config_value(cv).map(|item| SidebarEntry::Link { item, active })
+        // Otherwise, try to parse as a leaf link. `NavigationItem` now
+        // roundtrips its own `active` field, so there's nothing extra
+        // to splice in here.
+        NavigationItem::from_config_value(cv).map(|item| SidebarEntry::Link { item })
     }
 
     /// Classify a bare string: a run of 3+ dashes is a separator; any
@@ -237,7 +237,6 @@ impl SidebarEntry {
                 href: Some(s.to_string()),
                 ..NavigationItem::default()
             },
-            active: false,
         }
     }
 
@@ -245,26 +244,7 @@ impl SidebarEntry {
     pub fn to_config_value(&self) -> ConfigValue {
         let info = SourceInfo::default();
         match self {
-            SidebarEntry::Link { item, active } => {
-                let cv = item.to_config_value();
-                if !*active {
-                    return cv;
-                }
-                // Append `active: true` by cloning the existing map
-                // entries. `ConfigValue` does not expose mutable access
-                // to its map, so we rebuild.
-                let existing = cv
-                    .as_map_entries()
-                    .map(|slice| slice.to_vec())
-                    .unwrap_or_default();
-                let mut entries = existing;
-                entries.push(ConfigMapEntry {
-                    key: "active".to_string(),
-                    key_source: info.clone(),
-                    value: ConfigValue::new_bool(true, info.clone()),
-                });
-                ConfigValue::new_map(entries, info)
-            }
+            SidebarEntry::Link { item } => item.to_config_value(),
             SidebarEntry::Section {
                 text,
                 href,
@@ -575,7 +555,7 @@ pub fn sidebar_for_page<'a>(
 fn contains_source_path(entries: &[SidebarEntry], page_source: &str) -> bool {
     for entry in entries {
         match entry {
-            SidebarEntry::Link { item, .. } => {
+            SidebarEntry::Link { item } => {
                 if item.href.as_deref() == Some(page_source) {
                     return true;
                 }
@@ -616,9 +596,9 @@ fn mark_active_in(entries: &mut [SidebarEntry], self_source: &str) -> bool {
     let mut any = false;
     for entry in entries.iter_mut() {
         match entry {
-            SidebarEntry::Link { item, active } => {
+            SidebarEntry::Link { item } => {
                 if item.href.as_deref() == Some(self_source) {
-                    *active = true;
+                    item.active = true;
                     any = true;
                 }
             }
@@ -684,14 +664,14 @@ mod tests {
         let sb = &list[0];
         assert_eq!(sb.contents.len(), 2);
         match &sb.contents[0] {
-            SidebarEntry::Link { item, active } => {
+            SidebarEntry::Link { item } => {
                 assert_eq!(item.href.as_deref(), Some("a.qmd"));
-                assert!(!active);
+                assert!(!item.active);
             }
             other => panic!("expected Link, got {:?}", other),
         }
         match &sb.contents[1] {
-            SidebarEntry::Link { item, .. } => {
+            SidebarEntry::Link { item } => {
                 assert_eq!(item.href.as_deref(), Some("b.qmd"));
             }
             other => panic!("expected Link, got {:?}", other),
@@ -739,7 +719,7 @@ mod tests {
                 assert_eq!(contents.len(), 1);
                 assert!(!expanded); // default false
                 match &contents[0] {
-                    SidebarEntry::Link { item, .. } => {
+                    SidebarEntry::Link { item } => {
                         assert_eq!(item.href.as_deref(), Some("x.qmd"));
                     }
                     other => panic!("expected Link inside section, got {:?}", other),
@@ -818,9 +798,9 @@ mod tests {
                     item: NavigationItem {
                         href: Some("intro.qmd".to_string()),
                         text: Some(s("Intro")),
+                        active: true,
                         ..NavigationItem::default()
                     },
-                    active: true,
                 },
                 SidebarEntry::Separator,
                 SidebarEntry::Section {
@@ -834,7 +814,6 @@ mod tests {
                             text: Some(s("Deep")),
                             ..NavigationItem::default()
                         },
-                        active: false,
                     }],
                 },
                 SidebarEntry::Heading(s("Resources")),
@@ -856,18 +835,9 @@ mod tests {
         // because inline markup may serialize differently.
         assert_eq!(reparsed.contents.len(), original.contents.len());
         match (&reparsed.contents[0], &original.contents[0]) {
-            (
-                SidebarEntry::Link {
-                    item: a,
-                    active: a_active,
-                },
-                SidebarEntry::Link {
-                    item: b,
-                    active: b_active,
-                },
-            ) => {
+            (SidebarEntry::Link { item: a }, SidebarEntry::Link { item: b }) => {
                 assert_eq!(a.href, b.href);
-                assert_eq!(a_active, b_active);
+                assert_eq!(a.active, b.active);
             }
             _ => panic!("link shape lost in roundtrip"),
         }
@@ -906,7 +876,7 @@ mod tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].contents.len(), 1);
         match &list[0].contents[0] {
-            SidebarEntry::Link { item, .. } => {
+            SidebarEntry::Link { item } => {
                 assert_eq!(item.href.as_deref(), Some("hello.qmd"));
             }
             other => panic!("expected single Link, got {:?}", other),
@@ -965,7 +935,7 @@ mod tests {
         let cv = map(vec![("contents", arr(vec![s("--")]))]);
         let list = Sidebar::parse_list_from_config(&cv);
         match &list[0].contents[0] {
-            SidebarEntry::Link { item, .. } => {
+            SidebarEntry::Link { item } => {
                 assert_eq!(item.href.as_deref(), Some("--"));
             }
             other => panic!("expected Link for two-dash string, got {:?}", other),
@@ -1121,8 +1091,8 @@ mod tests {
                     } => {
                         assert!(*expanded, "inner section should be expanded");
                         match &contents[0] {
-                            SidebarEntry::Link { active, .. } => {
-                                assert!(*active, "matching leaf should be active");
+                            SidebarEntry::Link { item } => {
+                                assert!(item.active, "matching leaf should be active");
                             }
                             other => panic!("expected Link, got {:?}", other),
                         }
@@ -1135,7 +1105,7 @@ mod tests {
 
         // Unrelated leaf stays inactive.
         match &sb.contents[0] {
-            SidebarEntry::Link { active, .. } => assert!(!active),
+            SidebarEntry::Link { item } => assert!(!item.active),
             _ => unreachable!(),
         }
     }
@@ -1148,7 +1118,7 @@ mod tests {
         assert!(!matched);
         for entry in &sb.contents {
             match entry {
-                SidebarEntry::Link { active, .. } => assert!(!active),
+                SidebarEntry::Link { item } => assert!(!item.active),
                 _ => unreachable!(),
             }
         }
@@ -1166,8 +1136,8 @@ mod tests {
         let matched = resolve_active_state(&mut sb, "about.qmd");
         assert!(matched);
         match &sb.contents[0] {
-            SidebarEntry::Link { active, item } => {
-                assert!(*active);
+            SidebarEntry::Link { item } => {
+                assert!(item.active);
                 // Href unchanged — Generate does not rewrite.
                 assert_eq!(item.href.as_deref(), Some("about.qmd"));
             }

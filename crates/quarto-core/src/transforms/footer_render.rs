@@ -6,22 +6,36 @@
 //! HTML rendering transform for the page footer.
 //!
 //! Reads the resolved structure from `navigation.footer` (populated by
-//! [`FooterGenerateTransform`](super::FooterGenerateTransform) or a user
-//! override), produces an HTML string via
-//! [`quarto_navigation::render_html::page_footer_to_html`], and stores the
-//! result at `rendered.navigation.footer`.
+//! [`FooterGenerateTransform`](super::FooterGenerateTransform) or a
+//! user override), rewrites `.qmd` hrefs inside `FooterRegion::Items`
+//! regions to output hrefs via the
+//! [`ProjectIndex`](crate::project::index::ProjectIndex), emits HTML
+//! via [`quarto_navigation::render_html::page_footer_to_html`], and
+//! stores the result at `rendered.navigation.footer`.
 //!
 //! Mirrors [`NavbarRenderTransform`](super::NavbarRenderTransform).
+//! Footer items do **not** get active marking (Phase 3 Decision 8).
+//!
+//! ## Skip conditions
+//!
+//! - `page-footer: false` (affirmative disable).
+//! - `rendered.navigation.footer` already populated (user override).
+//! - `navigation.footer` absent.
 
-use quarto_navigation::{PageFooter, render_html::page_footer_to_html};
+use quarto_error_reporting::DiagnosticMessage;
+use quarto_navigation::{
+    FooterRegion, NavigationItem, PageFooter, render_html::page_footer_to_html,
+};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
 use crate::Result;
+use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
+use crate::transforms::navigation_href::resolve_href_for_html;
 
 pub struct FooterRenderTransform;
 
@@ -43,7 +57,7 @@ impl AstTransform for FooterRenderTransform {
         "footer-render"
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         if is_feature_disabled(&ast.meta, "page-footer") {
             return Ok(());
         }
@@ -59,7 +73,29 @@ impl AstTransform for FooterRenderTransform {
             return Ok(());
         };
 
-        let footer = PageFooter::from_config_value(footer_cv);
+        let mut footer = PageFooter::from_config_value(footer_cv);
+
+        // Rewrite hrefs in each Items region. Text and Empty regions
+        // pass through unchanged — body-content link rewriting is
+        // Phase 6's territory.
+        let mut local_diags = std::mem::take(&mut ctx.diagnostics);
+        rewrite_region_hrefs(
+            &mut footer.left,
+            ctx.project_index.as_deref(),
+            &mut local_diags,
+        );
+        rewrite_region_hrefs(
+            &mut footer.center,
+            ctx.project_index.as_deref(),
+            &mut local_diags,
+        );
+        rewrite_region_hrefs(
+            &mut footer.right,
+            ctx.project_index.as_deref(),
+            &mut local_diags,
+        );
+        ctx.diagnostics = local_diags;
+
         let html = page_footer_to_html(&footer);
 
         ast.meta.insert_path(
@@ -71,17 +107,47 @@ impl AstTransform for FooterRenderTransform {
     }
 }
 
+fn rewrite_region_hrefs(
+    region: &mut FooterRegion,
+    index: Option<&ProjectIndex>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    if let FooterRegion::Items(items) = region {
+        rewrite_items_hrefs(items, index, diagnostics);
+    }
+}
+
+fn rewrite_items_hrefs(
+    items: &mut [NavigationItem],
+    index: Option<&ProjectIndex>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    for item in items.iter_mut() {
+        if let Some(href) = item.href.as_mut() {
+            *href = resolve_href_for_html(href, index, Some("Page footer"), diagnostics);
+        }
+        // Footer items rarely nest `menu`, but the type allows it —
+        // handle symmetrically with navbar.
+        if !item.menu.is_empty() {
+            rewrite_items_hrefs(&mut item.menu, index, diagnostics);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document_profile::{DOCUMENT_PROFILE_VERSION, DocumentProfile};
     use crate::format::Format;
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
-    use quarto_navigation::{FooterRegion, PageFooter};
+    use pampa::toc::TocEntry;
+    use quarto_navigation::{FooterRegion, NavigationItem, PageFooter};
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_source_map::SourceInfo;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     fn make_test_project() -> ProjectContext {
         ProjectContext {
@@ -113,7 +179,34 @@ mod tests {
         ConfigValue::new_bool(x, SourceInfo::default())
     }
 
-    async fn run(meta: ConfigValue) -> ConfigValue {
+    fn profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {
+        DocumentProfile {
+            profile_version: DOCUMENT_PROFILE_VERSION,
+            source_path: PathBuf::from(source),
+            output_href: output_href.to_string(),
+            format_id: "html".to_string(),
+            title: Some(title.to_string()),
+            subtitle: None,
+            description: None,
+            authors: Vec::new(),
+            date: None,
+            categories: Vec::new(),
+            keywords: Vec::new(),
+            image: None,
+            draft: false,
+            order: None,
+            outline: Vec::<TocEntry>::new(),
+        }
+    }
+
+    async fn run(meta: ConfigValue) -> (ConfigValue, Vec<DiagnosticMessage>) {
+        run_with(meta, None).await
+    }
+
+    async fn run_with(
+        meta: ConfigValue,
+        index: Option<Arc<ProjectIndex>>,
+    ) -> (ConfigValue, Vec<DiagnosticMessage>) {
         let mut ast = Pandoc {
             meta,
             blocks: vec![],
@@ -123,16 +216,21 @@ mod tests {
         let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        if let Some(idx) = index {
+            ctx = ctx.with_project_index(idx);
+        }
         FooterRenderTransform::new()
             .transform(&mut ast, &mut ctx)
             .await
             .unwrap();
-        ast.meta
+        (ast.meta, ctx.diagnostics)
     }
+
+    // --- Phase 2 behavior preserved -------------------------------
 
     #[tokio::test]
     async fn skips_when_navigation_footer_missing() {
-        let out = run(ConfigValue::default()).await;
+        let (out, _) = run(ConfigValue::default()).await;
         assert!(!out.contains_path(&["rendered", "navigation", "footer"]));
     }
 
@@ -144,7 +242,7 @@ mod tests {
         };
         let mut meta = config_map(vec![("page-footer", b(false))]);
         meta.insert_path(&["navigation", "footer"], footer.to_config_value());
-        let out = run(meta).await;
+        let (out, _) = run(meta).await;
         assert!(!out.contains_path(&["rendered", "navigation", "footer"]));
     }
 
@@ -159,7 +257,7 @@ mod tests {
             &["rendered", "navigation", "footer"],
             s("<footer>User</footer>"),
         );
-        let out = run(meta).await;
+        let (out, _) = run(meta).await;
         assert_eq!(
             out.get_path(&["rendered", "navigation", "footer"])
                 .unwrap()
@@ -177,7 +275,7 @@ mod tests {
         };
         let mut meta = ConfigValue::default();
         meta.insert_path(&["navigation", "footer"], footer.to_config_value());
-        let out = run(meta).await;
+        let (out, _) = run(meta).await;
         let html = out
             .get_path(&["rendered", "navigation", "footer"])
             .unwrap()
@@ -186,5 +284,121 @@ mod tests {
         assert!(html.contains("<footer class=\"footer\">"));
         assert!(html.contains("nav-footer-center"));
         assert!(html.contains("Copyright 2026"));
+    }
+
+    // --- Phase 3 href rewriting -----------------------------------
+
+    /// Phase 3 test 41 — leaf items in a footer Items region get
+    /// their hrefs rewritten to output hrefs.
+    #[tokio::test]
+    async fn footer_render_rewrites_qmd_hrefs_in_items_region() {
+        let footer = PageFooter {
+            right: FooterRegion::Items(vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+        let (out, diags) = run_with(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"about.html\""), "got: {}", html);
+        assert!(!html.contains("href=\"about.qmd\""));
+        assert!(diags.is_empty());
+    }
+
+    /// Phase 3 test 42 — a string-valued region (Text) is NOT
+    /// scanned for .qmd links. Body-content link rewriting is Phase 6.
+    #[tokio::test]
+    async fn footer_render_leaves_text_regions_unchanged() {
+        let footer = PageFooter {
+            center: FooterRegion::Text(s("See [docs](docs.qmd) here")),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "docs.qmd",
+            "docs.html",
+            "Docs",
+        )]));
+        let (out, diags) = run_with(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        // The literal `docs.qmd` should still appear (rendered through
+        // the text-region emission path; markdown parsing is not
+        // Phase 3's job).
+        assert!(
+            html.contains("docs.qmd"),
+            "text region should not be rewritten; got: {}",
+            html
+        );
+        assert!(
+            diags.is_empty(),
+            "text region rewrite should not emit diagnostics"
+        );
+    }
+
+    /// Phase 3 test 43 — unknown .qmd href in a footer item emits a
+    /// diagnostic tagged "Page footer …".
+    #[tokio::test]
+    async fn footer_render_emits_diagnostic_for_unknown_qmd() {
+        let footer = PageFooter {
+            right: FooterRegion::Items(vec![NavigationItem {
+                href: Some("missing.qmd".to_string()),
+                text: Some(s("Missing")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![]));
+        let (_, diags) = run_with(meta, Some(index)).await;
+        assert_eq!(diags.len(), 1);
+        assert!(
+            diags[0].title.starts_with("Page footer"),
+            "got: {:?}",
+            diags[0]
+        );
+        assert!(diags[0].title.contains("missing.qmd"));
+    }
+
+    /// Phase 3 test 44 — standalone render (no ProjectIndex).
+    /// `.qmd` hrefs survive unchanged, no diagnostic.
+    #[tokio::test]
+    async fn footer_render_no_index_passes_hrefs_through() {
+        let footer = PageFooter {
+            right: FooterRegion::Items(vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let (out, diags) = run(meta).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(html.contains("href=\"about.qmd\""));
+        assert!(diags.is_empty());
     }
 }

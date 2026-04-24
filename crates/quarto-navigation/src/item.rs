@@ -48,6 +48,14 @@ pub struct NavigationItem {
 
     /// Nested menu items. Only populated for dropdown entries; typically empty.
     pub menu: Vec<NavigationItem>,
+
+    /// Whether this item represents the currently-rendered page.
+    /// Set by the `mark_active` pass in Generate transforms; read by
+    /// Render transforms when emitting the `active` class on the anchor.
+    /// Does not roundtrip through YAML input (users don't author this),
+    /// but does roundtrip through the generate→render handoff via
+    /// `to_config_value` / `from_config_value`.
+    pub active: bool,
 }
 
 impl NavigationItem {
@@ -86,6 +94,12 @@ impl NavigationItem {
             })
             .unwrap_or_default();
 
+        // `active` roundtrips through the Generate→Render handoff
+        // (a Generate transform writes `active: true` into the
+        // navigation subtree; Render parses it back here). Absent by
+        // default for user-authored YAML.
+        let active = cv.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
+
         // If we didn't recognise any fields, reject.
         if href.is_none()
             && text.is_none()
@@ -94,6 +108,7 @@ impl NavigationItem {
             && rel.is_none()
             && target.is_none()
             && menu.is_empty()
+            && !active
         {
             return None;
         }
@@ -106,6 +121,7 @@ impl NavigationItem {
             rel,
             target,
             menu,
+            active,
         })
     }
 
@@ -167,6 +183,15 @@ impl NavigationItem {
                 key: "menu".to_string(),
                 key_source: source_info.clone(),
                 value: ConfigValue::new_array(menu_values, source_info.clone()),
+            });
+        }
+        // Only emit `active` when it's been set, to keep stored metadata
+        // tidy and match the omit-default convention used elsewhere.
+        if self.active {
+            entries.push(ConfigMapEntry {
+                key: "active".to_string(),
+                key_source: source_info.clone(),
+                value: ConfigValue::new_bool(true, source_info.clone()),
             });
         }
 
@@ -270,9 +295,7 @@ mod tests {
             text: Some(s("Home")),
             icon: Some("house".to_string()),
             aria_label: Some("Home".to_string()),
-            rel: None,
-            target: None,
-            menu: vec![],
+            ..NavigationItem::default()
         };
         let cv = original.to_config_value();
         let reparsed = NavigationItem::from_config_value(&cv).unwrap();
@@ -283,6 +306,62 @@ mod tests {
             reparsed.text.as_ref().unwrap().as_plain_text(),
             original.text.as_ref().unwrap().as_plain_text()
         );
+        assert!(!reparsed.active);
+    }
+
+    // Phase 3 test 1 — `active` defaults to false for every factory path.
+    #[test]
+    fn navigation_item_default_has_inactive() {
+        assert!(!NavigationItem::default().active);
+        // Bare-string form.
+        let from_bare = NavigationItem::from_config_value(&s("about.qmd")).unwrap();
+        assert!(!from_bare.active);
+        // Object-form without active: key.
+        let from_obj =
+            NavigationItem::from_config_value(&map(vec![("href", s("about.qmd"))])).unwrap();
+        assert!(!from_obj.active);
+        // Menu item.
+        let menu = NavigationItem::from_config_value(&map(vec![
+            ("text", s("Dropdown")),
+            (
+                "menu",
+                ConfigValue::new_array(vec![s("sub.qmd")], SourceInfo::default()),
+            ),
+        ]))
+        .unwrap();
+        assert!(!menu.active);
+        assert!(!menu.menu[0].active);
+    }
+
+    // Phase 3 test 2 — `to_config_value` emits `active: true` when set,
+    // and `from_config_value` reads it back. This is the
+    // Generate→Render handoff path.
+    #[test]
+    fn navigation_item_roundtrip_preserves_active() {
+        let active_item = NavigationItem {
+            href: Some("about.qmd".to_string()),
+            text: Some(s("About")),
+            active: true,
+            ..NavigationItem::default()
+        };
+        let cv = active_item.to_config_value();
+        // The stored ConfigValue carries `active: true`.
+        assert_eq!(cv.get("active").and_then(|v| v.as_bool()), Some(true));
+        let reparsed = NavigationItem::from_config_value(&cv).unwrap();
+        assert!(reparsed.active);
+    }
+
+    // Phase 3 test 2 (cont.) — inactive items don't emit the `active`
+    // key at all (tidy metadata; omit-default convention).
+    #[test]
+    fn navigation_item_inactive_omits_active_key() {
+        let item = NavigationItem {
+            href: Some("about.qmd".to_string()),
+            text: Some(s("About")),
+            ..NavigationItem::default()
+        };
+        let cv = item.to_config_value();
+        assert!(cv.get("active").is_none());
     }
 
     #[test]

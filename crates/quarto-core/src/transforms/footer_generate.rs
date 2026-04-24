@@ -5,10 +5,20 @@
 
 //! Page-footer resolution transform.
 //!
-//! Reads the raw `page-footer:` YAML from merged metadata, hands it to
-//! [`quarto_navigation::resolve_page_footer`], and stores the resolved
-//! structure at `navigation.footer`. Mirrors
-//! [`NavbarGenerateTransform`](super::NavbarGenerateTransform).
+//! Reads the top-level `page-footer:` YAML from merged metadata
+//! (Phase 3 Decision 1 — stays at the top level; it's feature-scoped
+//! rather than website-scoped, so revealjs/single-doc users can
+//! configure a footer without namespacing their config under
+//! `website:`). Hands it to [`quarto_navigation::resolve_page_footer`]
+//! and stores the result at `navigation.footer`.
+//!
+//! When a [`ProjectIndex`](crate::project::index::ProjectIndex) is
+//! attached to the context, bare-href items inside the footer's
+//! `left`/`center`/`right` regions (when those regions are
+//! `FooterRegion::Items`) get their `text` enriched with the
+//! referenced document's title — matching the sidebar and navbar
+//! enrichment. Footer items do **not** get active marking (Phase 3
+//! Decision 8 — matches Q1; footers are static cross-site chrome).
 //!
 //! ## Skip conditions
 //!
@@ -16,16 +26,15 @@
 //! - `page-footer` absent or `page-footer: true`.
 //! - `navigation.footer` already populated (user override).
 
-use quarto_navigation::resolve_page_footer;
+use quarto_navigation::{FooterRegion, resolve_page_footer};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
+use crate::transforms::navigation_enrich::enrich_navigation_items;
 
-/// Transform that resolves the user's `page-footer:` config and stores it at
-/// `navigation.footer`.
 pub struct FooterGenerateTransform;
 
 impl FooterGenerateTransform {
@@ -46,7 +55,7 @@ impl AstTransform for FooterGenerateTransform {
         "footer-generate"
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         if is_feature_disabled(&ast.meta, "page-footer") {
             return Ok(());
         }
@@ -55,9 +64,15 @@ impl AstTransform for FooterGenerateTransform {
             return Ok(());
         }
 
-        let Some(footer) = resolve_page_footer(&ast.meta) else {
+        let Some(mut footer) = resolve_page_footer(&ast.meta) else {
             return Ok(());
         };
+
+        if let Some(index) = ctx.project_index.as_deref() {
+            enrich_footer_region(&mut footer.left, index);
+            enrich_footer_region(&mut footer.center, index);
+            enrich_footer_region(&mut footer.right, index);
+        }
 
         ast.meta
             .insert_path(&["navigation", "footer"], footer.to_config_value());
@@ -66,16 +81,29 @@ impl AstTransform for FooterGenerateTransform {
     }
 }
 
+/// Enrich items inside a footer region when the region carries a
+/// `Vec<NavigationItem>`. `Text` and `Empty` regions are untouched —
+/// body-content link rewriting is Phase 6's territory.
+fn enrich_footer_region(region: &mut FooterRegion, index: &crate::project::index::ProjectIndex) {
+    if let FooterRegion::Items(items) = region {
+        enrich_navigation_items(items, index);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::document_profile::{DOCUMENT_PROFILE_VERSION, DocumentProfile};
     use crate::format::Format;
+    use crate::project::index::ProjectIndex;
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
+    use pampa::toc::TocEntry;
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_source_map::SourceInfo;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     fn make_test_project() -> ProjectContext {
         ProjectContext {
@@ -107,7 +135,38 @@ mod tests {
         ConfigValue::new_string(s, SourceInfo::default())
     }
 
+    fn arr(items: Vec<ConfigValue>) -> ConfigValue {
+        ConfigValue::new_array(items, SourceInfo::default())
+    }
+
+    fn profile(source: &str, title: &str) -> DocumentProfile {
+        DocumentProfile {
+            profile_version: DOCUMENT_PROFILE_VERSION,
+            source_path: PathBuf::from(source),
+            output_href: source.replace(".qmd", ".html"),
+            format_id: "html".to_string(),
+            title: Some(title.to_string()),
+            subtitle: None,
+            description: None,
+            authors: Vec::new(),
+            date: None,
+            categories: Vec::new(),
+            keywords: Vec::new(),
+            image: None,
+            draft: false,
+            order: None,
+            outline: Vec::<TocEntry>::new(),
+        }
+    }
+
     async fn run_transform(meta: ConfigValue) -> ConfigValue {
+        run_transform_with(meta, None).await
+    }
+
+    async fn run_transform_with(
+        meta: ConfigValue,
+        index: Option<Arc<ProjectIndex>>,
+    ) -> ConfigValue {
         let mut ast = Pandoc {
             meta,
             blocks: vec![],
@@ -117,12 +176,17 @@ mod tests {
         let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        if let Some(idx) = index {
+            ctx = ctx.with_project_index(idx);
+        }
         FooterGenerateTransform::new()
             .transform(&mut ast, &mut ctx)
             .await
             .unwrap();
         ast.meta
     }
+
+    // --- Existing Phase 2 tests -----------------------------------
 
     #[tokio::test]
     async fn skips_when_absent() {
@@ -194,6 +258,90 @@ mod tests {
                 .and_then(|v| v.as_plain_text())
                 .as_deref(),
             Some("Pre-existing")
+        );
+    }
+
+    // --- Phase 3 enrichment tests ---------------------------------
+
+    /// Phase 3 test 37 — bare-href items in a footer Items region
+    /// get `text` from the matching profile.
+    #[tokio::test]
+    async fn footer_generate_enriches_items_in_regions() {
+        let footer_cv = config_map(vec![("right", arr(vec![str_value("about.qmd")]))]);
+        let meta = config_map(vec![("page-footer", footer_cv)]);
+        let index = Arc::new(ProjectIndex::new(vec![profile("about.qmd", "About")]));
+        let out = run_transform_with(meta, Some(index)).await;
+        let stored = out.get_path(&["navigation", "footer"]).unwrap();
+        let right = stored.get("right").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(
+            right[0]
+                .get("text")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("About"),
+            "bare-href footer item should be enriched; got: {:?}",
+            right[0]
+        );
+    }
+
+    /// Phase 3 test 38 — a string-valued region (Text) is not
+    /// scanned for .qmd links. It survives exactly as authored.
+    #[tokio::test]
+    async fn footer_generate_does_not_enrich_text_regions() {
+        let footer_cv = config_map(vec![("center", str_value("See [our docs](docs.qmd)"))]);
+        let meta = config_map(vec![("page-footer", footer_cv)]);
+        let index = Arc::new(ProjectIndex::new(vec![profile("docs.qmd", "Docs")]));
+        let out = run_transform_with(meta, Some(index)).await;
+        let stored = out.get_path(&["navigation", "footer"]).unwrap();
+        assert_eq!(
+            stored
+                .get("center")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("See [our docs](docs.qmd)"),
+            "text region must not be rewritten (Phase 6's concern)"
+        );
+    }
+
+    /// Phase 3 test 39 — hrefs survive as source paths; the .qmd →
+    /// .html rewrite is deferred to Render (format-agnostic invariant).
+    #[tokio::test]
+    async fn footer_generate_keeps_qmd_paths() {
+        let footer_cv = config_map(vec![("right", arr(vec![str_value("about.qmd")]))]);
+        let meta = config_map(vec![("page-footer", footer_cv)]);
+        let index = Arc::new(ProjectIndex::new(vec![profile("about.qmd", "About")]));
+        let out = run_transform_with(meta, Some(index)).await;
+        let stored = out.get_path(&["navigation", "footer"]).unwrap();
+        let right = stored.get("right").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(
+            right[0]
+                .get("href")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("about.qmd"),
+            "href should still be the source path at Generate time"
+        );
+    }
+
+    /// Phase 3 test 40 — standalone render (no ProjectIndex): no
+    /// enrichment, footer stored verbatim.
+    #[tokio::test]
+    async fn footer_generate_no_index_passes_through_unchanged() {
+        let footer_cv = config_map(vec![("right", arr(vec![str_value("about.qmd")]))]);
+        let meta = config_map(vec![("page-footer", footer_cv)]);
+        let out = run_transform_with(meta, None).await;
+        let stored = out.get_path(&["navigation", "footer"]).unwrap();
+        let right = stored.get("right").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(
+            right[0]
+                .get("href")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("about.qmd")
+        );
+        assert!(
+            right[0].get("text").is_none(),
+            "no enrichment without index"
         );
     }
 }

@@ -340,7 +340,6 @@ fn link_entry(profile: &DocumentProfile) -> SidebarEntry {
             text: Some(ConfigValue::new_string(&text, SourceInfo::default())),
             ..NavigationItem::default()
         },
-        active: false,
     }
 }
 
@@ -595,7 +594,6 @@ mod tests {
                         href: Some("a.qmd".to_string()),
                         ..NavigationItem::default()
                     },
-                    active: false,
                 },
                 SidebarEntry::Auto(AutoSpec::All),
             ],
