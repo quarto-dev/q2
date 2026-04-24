@@ -32,3 +32,5 @@ crates/wasm-quarto-hub-client/pkg/
 .worktrees/
 
 /.luarc.json
+
+.claude/scheduled_tasks.lock
