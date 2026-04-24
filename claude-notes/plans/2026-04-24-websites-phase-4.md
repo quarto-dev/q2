@@ -1,12 +1,12 @@
 # Phase 4 — Page navigation (prev / next)
 
 **Date:** 2026-04-24
-**Beads:** to be filed (parent `bd-0tr6`; blocked-by `bd-fqyg` Phase 3 —
-closed; `bd-9svl` Phase 2 — closed).
+**Beads:** `bd-nwun` (closed; parent `bd-0tr6`).
+Follow-ups: `bd-q1pe`, `bd-xwq8`, `bd-q6ky`, `bd-bobp`, `bd-nf50`.
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-24-websites-phase-3.md`
-**Status:** Decisions 1–9 confirmed 2026-04-24 after design iteration.
-Implementation pending user go-ahead.
+**Status:** Closed 2026-04-24. Decisions 1–9 confirmed; implementation
+shipped on `feature/websites` in commit `4a59a9dd`.
 
 ## Goal of this phase
 
@@ -724,42 +724,32 @@ Phase 2 and Phase 3 made).
       Rust build + tests + fmt + clippy + lint + hub-client build
       (incl. WASM) + trace-viewer build + trace-viewer tests, all 9
       steps clean.
-- [ ] **BLOCKED — `br` tool rejects all commands due to a stale
-      `k-02o9` issue at line 124 of `.beads/issues.jsonl` (prefix
-      mismatch with the project's `bd` prefix).** This blocks bead
-      creation and `br close` / `br sync`. Surfaced to user;
-      follow-up bead filing deferred until the JSONL data is
-      reconciled or the user decides on a path forward.
-- [ ] **Follow-ups to file once `br` is unblocked** (each tied back
-      to this sub-plan):
-      * `Emit <link rel="prev/next"> meta tags for page-nav` —
-        Decision 7 deferred Q1's SEO/preload links to a follow-up;
-        wiring goes through the HTML render config + template
-        `<head>` slot, tangential to the page-nav feature itself.
-      * `Suppress page-nav for custom-layout pages` — Q1 hides the
-        strip when a page sets `page-layout: custom`; defer until a
-        real page hits the edge case.
-      * `Plain-text aria-label projection for rich titles` — once
-        `DocumentProfile.title` supports inline markup, strip
-        formatting for ARIA labels (current Phase 4 uses the title
-        verbatim; titles are plain `String` today so this is a
-        no-op).
-      * `Index-forgiveness for page-source matching` — strict equality
-        today; mirror Phase 3's `bd-jbml` framing if real content
-        hits `about/` vs `about/index.qmd` drift.
-      * *(epic-wide)* **`bd-tr81` docs site needs a dedicated
-        section on page-navigation rules** — flatten + dedupe +
-        separator-as-boundary + section-header-as-neighbor are
-        non-obvious and the user explicitly flagged them
-        (Decision 9). Tie to `bd-tr81`.
+- [x] **`br` upgrade to 0.1.45 unblocked bead operations.** The
+      newer release accepts the mixed `k-` / `bd-` prefix history
+      that the project's JSONL contains, so the v0.1.28 prefix-
+      enforcement error is gone. Phase 4 issue `bd-nwun` filed,
+      linked parent-child to `bd-0tr6`, marked `in_progress`, then
+      closed with a reason citing commit `4a59a9dd` and the
+      follow-up bead IDs.
+- [x] **Follow-ups filed** (each `discovered-from:bd-nwun`):
+      * `bd-q1pe` — Emit `<link rel="prev/next">` meta tags for
+        page-navigation (Decision 7 defer).
+      * `bd-xwq8` — Suppress page-nav for `page-layout: custom`
+        pages (Q1 parity).
+      * `bd-q6ky` — Plain-text aria-label projection for rich
+        titles (rides with rich-title support in
+        `DocumentProfile`).
+      * `bd-bobp` — Index-forgiveness for page-source matching
+        (mirrors Phase 3's `bd-jbml`).
+      * `bd-nf50` — *(epic-wide, related to `bd-tr81`)* Page-
+        navigation rules need user-facing docs in the Q2 docs
+        site (Decision 9).
 - [x] Updated the epic plan's "Work items" checklist — Phase 4 marked
-      done, sub-plan linked.
+      done, sub-plan linked, `bd-nwun` referenced.
 - [x] Added the documentation reminder to the epic plan's
       "Epic-wide follow-ups surfaced by sub-plans" section.
-- [ ] `br close <phase-4-bd>` — blocked (no bd issue ever created).
-- [ ] `br sync --flush-only && git add .beads/ claude-notes/ crates/ && git commit`
-      — beads sync skipped; commit will cover `claude-notes/` +
-      `crates/` only.
+- [x] `br close bd-nwun` — closed with reason citing `4a59a9dd`.
+- [x] `.beads/issues.jsonl` updated by `br`; ready to commit.
 - [ ] Ask user permission before pushing.
 
 ## Risks and mitigations
