@@ -123,6 +123,7 @@ $endfor$
 /// - `$navigation.toc.title$` - TOC title (if set)
 /// - `$rendered.navigation.navbar$` - Rendered navbar HTML (if navbar: set)
 /// - `$rendered.navigation.sidebar$` - Rendered sidebar HTML (if website.sidebar: set)
+/// - `$rendered.navigation.page_navigation$` - Rendered prev/next page-nav strip
 /// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
 const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
@@ -217,6 +218,10 @@ $endif$
 $endif$
 
 $body$
+
+$if(rendered.navigation.page_navigation)$
+$rendered.navigation.page_navigation$
+$endif$
 </main>
 </div>
 $for(include-after)$

@@ -66,9 +66,10 @@ use crate::transforms::{
     CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
     FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
     FootnotesTransform, MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
+    TocGenerateTransform, TocRenderTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -623,10 +624,14 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(TocGenerateTransform::new()));
     pipeline.push(Box::new(NavbarGenerateTransform::new()));
     pipeline.push(Box::new(SidebarGenerateTransform::new()));
+    // PageNavGenerate must run after SidebarGenerate so it reads the
+    // resolved `navigation.sidebar` for the current page.
+    pipeline.push(Box::new(PageNavGenerateTransform::new()));
     pipeline.push(Box::new(FooterGenerateTransform::new()));
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
+    pipeline.push(Box::new(PageNavRenderTransform::new()));
     pipeline.push(Box::new(FooterRenderTransform::new()));
 
     // === FINALIZATION PHASE ===

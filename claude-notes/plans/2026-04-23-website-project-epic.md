@@ -577,7 +577,15 @@ phases above.
       Follow-up `bd-r82e` tracks the deferred
       `DocumentProfile.includes: Vec<…>` field needed for Phase-8
       cache invalidation (see §Epic-wide follow-ups).
-- [ ] **Phase 4:** Page navigation (prev/next).
+- [x] **Phase 4:** Page navigation (prev/next).
+      Implemented on `feature/websites`. Sub-plan:
+      `claude-notes/plans/2026-04-24-websites-phase-4.md`.
+      `bd` issue creation **blocked** by stale `k-02o9` entry in
+      `.beads/issues.jsonl` (line 124, prefix mismatch); needs
+      reconciliation before follow-ups can be filed. Phase 4
+      adds 48 new tests (45 unit + 6 integration + 6 CLI smoke
+      paths) and a Q1-matching prev/next strip emitted from the
+      already-resolved sidebar.
 - [ ] **Phase 5:** Scoped artifact store + `site_libs/`.
 - [ ] **Phase 6:** Cross-document link rewriting.
 - [ ] **Phase 7:** Post-render (sitemap, favicon, site-url/title).
@@ -623,6 +631,23 @@ relevant design work starts.
   needs to invalidate a parent's cached profile when any
   (transitive) include changes. Tracked as `bd-r82e`; not a
   blocker for Phases 4–7.
+- **Page-navigation rules need user-facing docs.** Surfaced in
+  Phase 4 scoping (see `2026-04-24-websites-phase-4.md` Decision 9).
+  The flatten-the-sidebar / dedupe-by-href / separator-as-boundary /
+  section-header-as-neighbor rules are all non-obvious. Should land
+  in `bd-tr81`'s docs site. Not a blocker for the epic; user
+  explicitly flagged the need.
+- **`br` tool blocked on stale `k-02o9` JSONL entry.** Surfaced in
+  Phase 4 close-out: every `br` command (create / ready / sync /
+  close) errors with `Configuration error: Prefix mismatch at line
+  124: expected 'bd', found issue 'k-02o9'`. This blocks per-phase
+  bead creation, status flips, and `br sync --flush-only` after a
+  commit. The sequence of "old `k-` IDs and new `bd-` IDs" co-exists
+  in `.beads/issues.jsonl`; either reconcile the prefix (rename
+  `k-*` to `bd-*` in the JSONL or update the `br` config to accept
+  the older prefix) or move the project's bead-tracking forward
+  some other way. Not a feature blocker, but blocks the epic's
+  close-out report.
 
 ## Follow-up beads report (running log)
 
@@ -683,4 +708,18 @@ when it files an issue):
     remains open from Phase 2 unchanged.)*
   - `bd-4g6g` — *(epic-wide, from Phase 2)* Move sidebar to Q1
     template position (sidebar-left, TOC-right).
-- Phases 4–9: TBD.
+- **Phase 4 (no `bd` issue created — `br` blocked on stale `k-02o9`
+  JSONL entry; see epic-wide follow-ups).** Follow-ups *to file*
+  once `br` is unblocked:
+  - Emit `<link rel="prev/next">` meta tags for page-nav (deferred
+    Decision 7).
+  - Suppress page-nav for custom-layout pages (Q1 parity).
+  - Plain-text aria-label projection for rich titles (rides with
+    eventual rich-title support in `DocumentProfile`).
+  - Index-forgiveness for page-source matching (mirrors `bd-jbml`).
+  - *(epic-wide)* Page-navigation rules need user-facing docs in
+    `bd-tr81`. (Decision 9.)
+  - *(epic-wide)* `br` tool blocked on stale `k-02o9` JSONL entry —
+    surfaces during Phase 4 close-out, blocks bead-tracking until
+    reconciled.
+- Phases 5–9: TBD.

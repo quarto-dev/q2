@@ -622,6 +622,127 @@ fn mark_active_in(entries: &mut [SidebarEntry], self_source: &str) -> bool {
     any
 }
 
+// ----------------------------------------------------------------------------
+// Page-navigation flatten (Phase 4).
+//
+// Walks the sidebar tree depth-first to produce the linear sequence of
+// "navigable positions" that prev/next neighbors are picked from. The
+// rules — included shapes, dedupe-by-href, separators-as-boundary —
+// match Q1's `flattenItems` + `nextAndPrevious`. See
+// `claude-notes/plans/2026-04-24-websites-phase-4.md` §Decision 4.
+// ----------------------------------------------------------------------------
+
+/// One position in the page-nav flat list. Items are positions you can
+/// navigate to; separators are hard boundaries that interrupt prev/next
+/// adjacency without occupying a navigable position themselves.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FlatEntry {
+    Item(NavigationItem),
+    Separator,
+}
+
+impl FlatEntry {
+    /// True when this entry is an `Item` whose `href` equals
+    /// `page_source` (project-relative source path, forward-slash
+    /// form). Separators and href-less items never match.
+    pub fn is_link_with_href(&self, page_source: &str) -> bool {
+        match self {
+            FlatEntry::Item(item) => item.href.as_deref() == Some(page_source),
+            FlatEntry::Separator => false,
+        }
+    }
+}
+
+/// Depth-first flatten of `entries` for page-nav prev/next computation.
+///
+/// Inclusion rules:
+/// - `Link { item }` with an internal `href` → `Item(item.clone())`.
+/// - `Section { href: Some(_), contents, .. }` with an internal href:
+///   the header is emitted as `Item(...)` *and* contents are recursed
+///   into.
+/// - `Section { href: None | external, contents, .. }`: header skipped,
+///   contents still recursed.
+/// - `Separator` → `Separator`.
+/// - `Heading(_)` and `Auto(_)` are skipped (Auto defensively — should
+///   have been expanded earlier).
+///
+/// External hrefs (`http://`, `https://`, `mailto:`, etc. — see
+/// [`is_external_href`]) never produce navigable items.
+///
+/// After collection, items are de-duplicated by `href`, keeping the
+/// first occurrence. Separators are never deduped.
+pub fn flatten_for_page_nav(entries: &[SidebarEntry]) -> Vec<FlatEntry> {
+    let mut out = Vec::new();
+    walk_for_page_nav(entries, &mut out);
+    dedupe_items_by_href(&mut out);
+    out
+}
+
+fn walk_for_page_nav(entries: &[SidebarEntry], out: &mut Vec<FlatEntry>) {
+    for entry in entries {
+        match entry {
+            SidebarEntry::Link { item } => {
+                if let Some(href) = item.href.as_deref() {
+                    if !is_external_href(href) {
+                        out.push(FlatEntry::Item(item.clone()));
+                    }
+                }
+            }
+            SidebarEntry::Section {
+                href,
+                contents,
+                text,
+                ..
+            } => {
+                if let Some(h) = href.as_deref() {
+                    if !is_external_href(h) {
+                        // The section header is a navigable position
+                        // — synthesize a NavigationItem from the
+                        // section's href + text.
+                        let item = NavigationItem {
+                            href: Some(h.to_string()),
+                            text: text.clone(),
+                            ..NavigationItem::default()
+                        };
+                        out.push(FlatEntry::Item(item));
+                    }
+                }
+                walk_for_page_nav(contents, out);
+            }
+            SidebarEntry::Separator => {
+                out.push(FlatEntry::Separator);
+            }
+            SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {
+                // Heading: pure label, no navigable position.
+                // Auto: defensively skip (should have been expanded).
+            }
+        }
+    }
+}
+
+fn dedupe_items_by_href(list: &mut Vec<FlatEntry>) {
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    list.retain(|e| match e {
+        FlatEntry::Item(item) => match item.href.as_deref() {
+            Some(h) => seen.insert(h.to_string()),
+            None => true, // hrefless items (shouldn't happen post-walk) survive
+        },
+        FlatEntry::Separator => true,
+    });
+}
+
+/// External-URL classifier. Local copy here so `quarto-navigation`
+/// stays free of a `quarto-core` dep; semantics match
+/// `quarto-core::transforms::navigation_href::is_external`.
+fn is_external_href(href: &str) -> bool {
+    href.starts_with("http://")
+        || href.starts_with("https://")
+        || href.starts_with("mailto:")
+        || href.starts_with("tel:")
+        || href.starts_with("ftp://")
+        || href.starts_with("//")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1160,5 +1281,222 @@ mod tests {
             SidebarEntry::Section { expanded, .. } => assert!(*expanded),
             _ => unreachable!(),
         }
+    }
+
+    // --- Phase 4: page-nav flatten ----------------------------------------
+
+    fn flatten_yaml(yaml: ConfigValue) -> Vec<FlatEntry> {
+        let sb = sidebar_from_yaml(yaml);
+        flatten_for_page_nav(&sb.contents)
+    }
+
+    fn item_href(e: &FlatEntry) -> Option<&str> {
+        match e {
+            FlatEntry::Item(item) => item.href.as_deref(),
+            FlatEntry::Separator => None,
+        }
+    }
+
+    /// Test 4 — internal links flow through, external links don't.
+    #[test]
+    fn flatten_includes_internal_links_only() {
+        let cv = map(vec![(
+            "contents",
+            arr(vec![s("about.qmd"), s("https://example.com/")]),
+        )]);
+        let flat = flatten_yaml(cv);
+        assert_eq!(
+            flat.len(),
+            1,
+            "external link should be excluded; got {:?}",
+            flat
+        );
+        assert_eq!(item_href(&flat[0]), Some("about.qmd"));
+    }
+
+    /// Test 5 — section header with an internal href emits as an Item,
+    /// and the section's children are recursed into.
+    #[test]
+    fn flatten_includes_section_header_with_href() {
+        let section = map(vec![
+            ("section", s("Docs")),
+            ("href", s("docs/index.qmd")),
+            ("contents", arr(vec![s("docs/a.qmd"), s("docs/b.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![section]))]);
+        let flat = flatten_yaml(cv);
+        let hrefs: Vec<&str> = flat.iter().filter_map(item_href).collect();
+        assert_eq!(
+            hrefs,
+            vec!["docs/index.qmd", "docs/a.qmd", "docs/b.qmd"],
+            "header then children, depth-first"
+        );
+    }
+
+    /// Test 6 — section without an href has its header skipped, but
+    /// children are still walked.
+    #[test]
+    fn flatten_skips_section_header_without_href() {
+        let section = map(vec![
+            ("section", s("Group")),
+            ("contents", arr(vec![s("a.qmd"), s("b.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![section]))]);
+        let flat = flatten_yaml(cv);
+        let hrefs: Vec<&str> = flat.iter().filter_map(item_href).collect();
+        assert_eq!(hrefs, vec!["a.qmd", "b.qmd"]);
+    }
+
+    /// Test 7 — separators appear in the flat list as boundary markers.
+    #[test]
+    fn flatten_includes_separators_as_markers() {
+        let cv = map(vec![(
+            "contents",
+            arr(vec![s("a.qmd"), s("---"), s("b.qmd")]),
+        )]);
+        let flat = flatten_yaml(cv);
+        assert_eq!(flat.len(), 3);
+        assert!(matches!(flat[0], FlatEntry::Item(_)));
+        assert!(matches!(flat[1], FlatEntry::Separator));
+        assert!(matches!(flat[2], FlatEntry::Item(_)));
+    }
+
+    /// Test 8 — pure heading labels are skipped.
+    #[test]
+    fn flatten_skips_headings() {
+        let heading = map(vec![("text", s("Group label"))]);
+        let cv = map(vec![("contents", arr(vec![heading, s("a.qmd")]))]);
+        let flat = flatten_yaml(cv);
+        let hrefs: Vec<&str> = flat.iter().filter_map(item_href).collect();
+        assert_eq!(hrefs, vec!["a.qmd"]);
+    }
+
+    /// Test 9 — defensive: stray Auto entries (should have been
+    /// expanded earlier) are skipped, not panicked-on.
+    #[test]
+    fn flatten_skips_stray_auto() {
+        // Construct a Sidebar manually to plant an Auto that would
+        // otherwise have been expanded.
+        let mut sb = Sidebar::with_defaults();
+        sb.contents = vec![
+            SidebarEntry::Auto(AutoSpec::All),
+            SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("a.qmd".to_string()),
+                    ..NavigationItem::default()
+                },
+            },
+        ];
+        let flat = flatten_for_page_nav(&sb.contents);
+        let hrefs: Vec<&str> = flat.iter().filter_map(item_href).collect();
+        assert_eq!(hrefs, vec!["a.qmd"]);
+    }
+
+    /// Test 10 — dedupe-by-href keeps the first occurrence (section
+    /// header that shares an href with one of its children).
+    #[test]
+    fn flatten_dedupes_by_href_keeping_first() {
+        let section = map(vec![
+            ("section", s("Docs")),
+            ("href", s("docs.qmd")),
+            ("contents", arr(vec![s("docs.qmd"), s("other.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![section]))]);
+        let flat = flatten_yaml(cv);
+        let hrefs: Vec<&str> = flat.iter().filter_map(item_href).collect();
+        assert_eq!(
+            hrefs,
+            vec!["docs.qmd", "other.qmd"],
+            "section header occurs first; later child duplicate dropped"
+        );
+        // Header text comes from the section, not the child link.
+        match &flat[0] {
+            FlatEntry::Item(item) => assert_eq!(
+                item.text
+                    .as_ref()
+                    .and_then(|t| t.as_plain_text())
+                    .as_deref(),
+                Some("Docs"),
+                "first-occurrence wins"
+            ),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Test 11 — separators are never deduped; two separators on
+    /// either side of a link survive as three flat entries.
+    #[test]
+    fn flatten_dedupe_does_not_collapse_separators() {
+        let cv = map(vec![(
+            "contents",
+            arr(vec![s("---"), s("a.qmd"), s("---")]),
+        )]);
+        let flat = flatten_yaml(cv);
+        assert_eq!(flat.len(), 3);
+        assert!(matches!(flat[0], FlatEntry::Separator));
+        assert!(matches!(flat[1], FlatEntry::Item(_)));
+        assert!(matches!(flat[2], FlatEntry::Separator));
+    }
+
+    /// Test 12 — depth-first traversal pins exact Q1-style ordering on
+    /// a two-level fixture. Reviewer can eyeball the expected sequence.
+    #[test]
+    fn flatten_depth_first_order_matches_q1() {
+        // sidebar:
+        //   - index.qmd
+        //   - section: Setup
+        //     href: setup/index.qmd
+        //     contents:
+        //       - setup/install.qmd
+        //       - section: Advanced
+        //         contents:
+        //           - setup/advanced/tuning.qmd
+        //           - setup/advanced/profile.qmd
+        //   - about.qmd
+        let advanced = map(vec![
+            ("section", s("Advanced")),
+            (
+                "contents",
+                arr(vec![
+                    s("setup/advanced/tuning.qmd"),
+                    s("setup/advanced/profile.qmd"),
+                ]),
+            ),
+        ]);
+        let setup = map(vec![
+            ("section", s("Setup")),
+            ("href", s("setup/index.qmd")),
+            ("contents", arr(vec![s("setup/install.qmd"), advanced])),
+        ]);
+        let cv = map(vec![(
+            "contents",
+            arr(vec![s("index.qmd"), setup, s("about.qmd")]),
+        )]);
+        let flat = flatten_yaml(cv);
+        let hrefs: Vec<&str> = flat.iter().filter_map(item_href).collect();
+        assert_eq!(
+            hrefs,
+            vec![
+                "index.qmd",
+                "setup/index.qmd",
+                "setup/install.qmd",
+                "setup/advanced/tuning.qmd",
+                "setup/advanced/profile.qmd",
+                "about.qmd",
+            ]
+        );
+    }
+
+    /// Sanity: `is_link_with_href` matches Item href and rejects
+    /// separators / non-matching items.
+    #[test]
+    fn flat_entry_is_link_with_href() {
+        let item = FlatEntry::Item(NavigationItem {
+            href: Some("about.qmd".to_string()),
+            ..NavigationItem::default()
+        });
+        assert!(item.is_link_with_href("about.qmd"));
+        assert!(!item.is_link_with_href("other.qmd"));
+        assert!(!FlatEntry::Separator.is_link_with_href("about.qmd"));
     }
 }

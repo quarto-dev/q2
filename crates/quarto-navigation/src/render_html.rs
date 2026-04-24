@@ -25,6 +25,7 @@ use quarto_pandoc_types::inline::{Inline, Inlines};
 use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::NavigationItem;
 use crate::navbar::{Navbar, NavbarTitle};
+use crate::page_nav::PageNavigation;
 use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle};
 
 /// Render a complete navbar element.
@@ -220,6 +221,69 @@ pub fn sidebar_to_html(sidebar: &Sidebar) -> String {
 
     html.push_str("</nav>\n");
     html
+}
+
+/// Render the prev/next page-navigation strip.
+///
+/// Emits `<nav class="page-navigation">` containing two `<div>`
+/// wrappers (`nav-page-previous`, `nav-page-next`). Each wrapper holds
+/// an `<a class="pagination-link">` only when the corresponding side
+/// is `Some(_)`. The `<div>` is always emitted so the CSS layout
+/// retains its two-column symmetry — matches Q1's
+/// `nav-after-body-postamble.ejs`.
+///
+/// Hrefs are taken verbatim. Callers (e.g. `PageNavRenderTransform` in
+/// `quarto-core`) are responsible for rewriting `.qmd` source paths to
+/// format-specific output hrefs before calling this function.
+///
+/// `aria-label` defaults to the item's plain-text `text`; falls back
+/// to the `href` if the text is missing or empty.
+pub fn page_navigation_to_html(page_nav: &PageNavigation) -> String {
+    let mut html = String::new();
+    html.push_str("<nav class=\"page-navigation\">\n");
+    render_page_nav_side(&mut html, "previous", page_nav.prev.as_ref());
+    render_page_nav_side(&mut html, "next", page_nav.next.as_ref());
+    html.push_str("</nav>\n");
+    html
+}
+
+fn render_page_nav_side(html: &mut String, side: &str, item: Option<&NavigationItem>) {
+    html.push_str(&format!("  <div class=\"nav-page nav-page-{}\">\n", side));
+    if let Some(item) = item {
+        let href = item.href.as_deref().unwrap_or("");
+        let text_html = item
+            .text
+            .as_ref()
+            .map(render_text)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| escape_html(href));
+        let aria_source = item
+            .text
+            .as_ref()
+            .and_then(|cv| cv.as_plain_text())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| href.to_string());
+        html.push_str(&format!(
+            "    <a href=\"{}\" class=\"pagination-link\" aria-label=\"{}\">\n",
+            escape_attr(href),
+            escape_attr(&aria_source)
+        ));
+        if side == "previous" {
+            html.push_str("      <i class=\"bi bi-arrow-left-short\"></i>\n");
+            html.push_str(&format!(
+                "      <span class=\"nav-page-text\">{}</span>\n",
+                text_html
+            ));
+        } else {
+            html.push_str(&format!(
+                "      <span class=\"nav-page-text\">{}</span>\n",
+                text_html
+            ));
+            html.push_str("      <i class=\"bi bi-arrow-right-short\"></i>\n");
+        }
+        html.push_str("    </a>\n");
+    }
+    html.push_str("  </div>\n");
 }
 
 // --- Private helpers ---------------------------------------------------------
@@ -1469,5 +1533,128 @@ mod tests {
         assert!(html.contains(">B<"));
         // No auto artifact leaks out.
         assert!(!html.contains("auto"));
+    }
+
+    // --- Phase 4: page-navigation rendering -------------------------------
+
+    fn item(href: &str, text: &str) -> NavigationItem {
+        NavigationItem {
+            href: Some(href.to_string()),
+            text: Some(s(text)),
+            ..NavigationItem::default()
+        }
+    }
+
+    /// Test 13 — both sides filled: output contains both wrappers and
+    /// both `pagination-link` anchors.
+    #[test]
+    fn page_nav_html_emits_prev_and_next_divs() {
+        let pn = PageNavigation {
+            prev: Some(item("a.html", "A")),
+            next: Some(item("c.html", "C")),
+        };
+        let html = page_navigation_to_html(&pn);
+        assert!(html.contains("<nav class=\"page-navigation\">"));
+        assert!(html.contains("<div class=\"nav-page nav-page-previous\">"));
+        assert!(html.contains("<div class=\"nav-page nav-page-next\">"));
+        let anchor_count = html.matches("class=\"pagination-link\"").count();
+        assert_eq!(
+            anchor_count, 2,
+            "two pagination-link anchors; got HTML:\n{}",
+            html
+        );
+        assert!(html.contains("href=\"a.html\""));
+        assert!(html.contains("href=\"c.html\""));
+    }
+
+    /// Test 14 — `prev: None, next: Some(_)`: previous wrapper exists
+    /// but contains no anchor.
+    #[test]
+    fn page_nav_html_empty_prev_wrapper_when_missing() {
+        let pn = PageNavigation {
+            prev: None,
+            next: Some(item("c.html", "C")),
+        };
+        let html = page_navigation_to_html(&pn);
+        // The wrapper is present (CSS layout depends on the symmetry).
+        assert!(html.contains("<div class=\"nav-page nav-page-previous\">"));
+        // But there's no anchor inside it — only one `<a>` total.
+        assert_eq!(html.matches("<a ").count(), 1);
+        // And the next side has its anchor.
+        assert!(html.contains("href=\"c.html\""));
+    }
+
+    /// Test 15 — item text appears in the `aria-label` attribute.
+    #[test]
+    fn page_nav_html_uses_text_in_aria_label() {
+        let pn = PageNavigation {
+            prev: None,
+            next: Some(item("about.html", "About")),
+        };
+        let html = page_navigation_to_html(&pn);
+        assert!(
+            html.contains("aria-label=\"About\""),
+            "expected aria-label='About'; HTML:\n{}",
+            html
+        );
+    }
+
+    /// Test 16 — text containing HTML metacharacters is escaped both
+    /// in the visible span and in the aria-label / href attributes.
+    #[test]
+    fn page_nav_html_escapes_text_and_attributes() {
+        let pn = PageNavigation {
+            prev: None,
+            next: Some(item("foo&bar.html", "A & <B>")),
+        };
+        let html = page_navigation_to_html(&pn);
+        // Href is attribute-escaped.
+        assert!(html.contains("href=\"foo&amp;bar.html\""));
+        // aria-label likewise.
+        assert!(html.contains("aria-label=\"A &amp; &lt;B&gt;\""));
+        // Visible text is HTML-escaped.
+        assert!(html.contains("A &amp; &lt;B&gt;"));
+        // Make sure no raw < or > leak into the visible span text.
+        assert!(!html.contains(">A & <B<"));
+    }
+
+    /// Test 17 — when `text` is missing, the visible span falls back
+    /// to the href.
+    #[test]
+    fn page_nav_html_falls_back_to_href_when_text_missing() {
+        let pn = PageNavigation {
+            prev: None,
+            next: Some(NavigationItem {
+                href: Some("a.qmd".to_string()),
+                text: None,
+                ..NavigationItem::default()
+            }),
+        };
+        let html = page_navigation_to_html(&pn);
+        assert!(
+            html.contains("<span class=\"nav-page-text\">a.qmd</span>"),
+            "expected fallback to href; HTML:\n{}",
+            html
+        );
+    }
+
+    /// Test 18 — Q1-matching Bootstrap icon classes.
+    #[test]
+    fn page_nav_html_emits_q1_bootstrap_icons() {
+        let pn = PageNavigation {
+            prev: Some(item("a.html", "A")),
+            next: Some(item("c.html", "C")),
+        };
+        let html = page_navigation_to_html(&pn);
+        assert!(html.contains("<i class=\"bi bi-arrow-left-short\"></i>"));
+        assert!(html.contains("<i class=\"bi bi-arrow-right-short\"></i>"));
+        // Order: left-arrow appears in the previous block, right-arrow in next.
+        let prev_block = html
+            .split("nav-page-previous")
+            .nth(1)
+            .and_then(|s| s.split("nav-page-next").next())
+            .unwrap_or("");
+        assert!(prev_block.contains("bi-arrow-left-short"));
+        assert!(!prev_block.contains("bi-arrow-right-short"));
     }
 }
