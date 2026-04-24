@@ -90,7 +90,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             info!(
                 "Rendering project: {} (type: {})",
                 project.dir.display(),
-                project.project_type().as_str()
+                project.project_kind().as_str()
             );
         }
     }

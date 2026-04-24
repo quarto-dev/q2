@@ -216,9 +216,14 @@ fn adjust_paths_recursive(value: &mut ConfigValue, metadata_dir: &Path, document
     }
 }
 
-/// Project type enumeration
+/// Project kind enumeration.
+///
+/// This is the *tag* a `_quarto.yml` selects via `project.type:`. It is
+/// deliberately narrow — it carries no behavior. The orchestration hook-set
+/// is implemented by the [`ProjectType`](crate::project::orchestrator::ProjectType)
+/// trait, which dispatches on this tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ProjectType {
+pub enum ProjectKind {
     /// Default project (individual documents)
     #[default]
     Default,
@@ -230,27 +235,27 @@ pub enum ProjectType {
     Manuscript,
 }
 
-impl ProjectType {
-    /// Get the project type name
+impl ProjectKind {
+    /// Get the project kind name as it appears in `_quarto.yml`.
     pub fn as_str(&self) -> &'static str {
         match self {
-            ProjectType::Default => "default",
-            ProjectType::Website => "website",
-            ProjectType::Book => "book",
-            ProjectType::Manuscript => "manuscript",
+            ProjectKind::Default => "default",
+            ProjectKind::Website => "website",
+            ProjectKind::Book => "book",
+            ProjectKind::Manuscript => "manuscript",
         }
     }
 }
 
-impl TryFrom<&str> for ProjectType {
+impl TryFrom<&str> for ProjectKind {
     type Error = String;
 
     fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
         match s.to_lowercase().as_str() {
-            "default" => Ok(ProjectType::Default),
-            "website" => Ok(ProjectType::Website),
-            "book" => Ok(ProjectType::Book),
-            "manuscript" => Ok(ProjectType::Manuscript),
+            "default" => Ok(ProjectKind::Default),
+            "website" => Ok(ProjectKind::Website),
+            "book" => Ok(ProjectKind::Book),
+            "manuscript" => Ok(ProjectKind::Manuscript),
             _ => Err(format!("Unknown project type: {}", s)),
         }
     }
@@ -259,8 +264,8 @@ impl TryFrom<&str> for ProjectType {
 /// Parsed project configuration from `_quarto.yml`
 #[derive(Debug, Clone, Default)]
 pub struct ProjectConfig {
-    /// Project type
-    pub project_type: ProjectType,
+    /// Project kind (the tag selected by `project.type:`).
+    pub project_kind: ProjectKind,
 
     /// Output directory (relative to project root)
     pub output_dir: Option<PathBuf>,
@@ -516,11 +521,11 @@ impl ProjectContext {
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
         // Extract project-specific settings from metadata
-        let project_type = metadata
+        let project_kind = metadata
             .get("project")
             .and_then(|p| p.get("type"))
             .and_then(|t| t.as_str())
-            .and_then(|s| ProjectType::try_from(s).ok())
+            .and_then(|s| ProjectKind::try_from(s).ok())
             .unwrap_or_default();
 
         let output_dir = metadata
@@ -541,24 +546,24 @@ impl ProjectContext {
             .unwrap_or_default();
 
         Ok(ProjectConfig {
-            project_type,
+            project_kind,
             output_dir,
             render_patterns,
             metadata: Some(metadata),
         })
     }
 
-    /// Get the project type
-    pub fn project_type(&self) -> ProjectType {
-        self.config.project_type
+    /// Get the project kind.
+    pub fn project_kind(&self) -> ProjectKind {
+        self.config.project_kind
     }
 
     /// Check if this is a multi-document project
     pub fn is_multi_document(&self) -> bool {
         !self.is_single_file
             && matches!(
-                self.project_type(),
-                ProjectType::Website | ProjectType::Book | ProjectType::Manuscript
+                self.project_kind(),
+                ProjectKind::Website | ProjectKind::Book | ProjectKind::Manuscript
             )
     }
 }
@@ -567,58 +572,58 @@ impl ProjectContext {
 mod tests {
     use super::*;
 
-    // === ProjectType tests ===
+    // === ProjectKind tests ===
 
     #[test]
-    fn test_project_type_from_string() {
+    fn test_project_kind_from_string() {
         assert_eq!(
-            ProjectType::try_from("website").unwrap(),
-            ProjectType::Website
+            ProjectKind::try_from("website").unwrap(),
+            ProjectKind::Website
         );
-        assert_eq!(ProjectType::try_from("book").unwrap(), ProjectType::Book);
+        assert_eq!(ProjectKind::try_from("book").unwrap(), ProjectKind::Book);
         assert_eq!(
-            ProjectType::try_from("default").unwrap(),
-            ProjectType::Default
+            ProjectKind::try_from("default").unwrap(),
+            ProjectKind::Default
         );
-        assert!(ProjectType::try_from("unknown").is_err());
+        assert!(ProjectKind::try_from("unknown").is_err());
     }
 
     #[test]
-    fn test_project_type_from_string_manuscript() {
+    fn test_project_kind_from_string_manuscript() {
         assert_eq!(
-            ProjectType::try_from("manuscript").unwrap(),
-            ProjectType::Manuscript
+            ProjectKind::try_from("manuscript").unwrap(),
+            ProjectKind::Manuscript
         );
     }
 
     #[test]
-    fn test_project_type_from_string_case_insensitive() {
+    fn test_project_kind_from_string_case_insensitive() {
         // Test uppercase
         assert_eq!(
-            ProjectType::try_from("WEBSITE").unwrap(),
-            ProjectType::Website
+            ProjectKind::try_from("WEBSITE").unwrap(),
+            ProjectKind::Website
         );
-        assert_eq!(ProjectType::try_from("BOOK").unwrap(), ProjectType::Book);
+        assert_eq!(ProjectKind::try_from("BOOK").unwrap(), ProjectKind::Book);
         assert_eq!(
-            ProjectType::try_from("DEFAULT").unwrap(),
-            ProjectType::Default
+            ProjectKind::try_from("DEFAULT").unwrap(),
+            ProjectKind::Default
         );
         assert_eq!(
-            ProjectType::try_from("MANUSCRIPT").unwrap(),
-            ProjectType::Manuscript
+            ProjectKind::try_from("MANUSCRIPT").unwrap(),
+            ProjectKind::Manuscript
         );
 
         // Test mixed case
         assert_eq!(
-            ProjectType::try_from("WebSite").unwrap(),
-            ProjectType::Website
+            ProjectKind::try_from("WebSite").unwrap(),
+            ProjectKind::Website
         );
-        assert_eq!(ProjectType::try_from("Book").unwrap(), ProjectType::Book);
+        assert_eq!(ProjectKind::try_from("Book").unwrap(), ProjectKind::Book);
     }
 
     #[test]
-    fn test_project_type_from_string_error_message() {
-        let result = ProjectType::try_from("invalid");
+    fn test_project_kind_from_string_error_message() {
+        let result = ProjectKind::try_from("invalid");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Unknown project type"));
@@ -626,22 +631,22 @@ mod tests {
     }
 
     #[test]
-    fn test_project_type_as_str() {
-        assert_eq!(ProjectType::Default.as_str(), "default");
-        assert_eq!(ProjectType::Website.as_str(), "website");
-        assert_eq!(ProjectType::Book.as_str(), "book");
-        assert_eq!(ProjectType::Manuscript.as_str(), "manuscript");
+    fn test_project_kind_as_str() {
+        assert_eq!(ProjectKind::Default.as_str(), "default");
+        assert_eq!(ProjectKind::Website.as_str(), "website");
+        assert_eq!(ProjectKind::Book.as_str(), "book");
+        assert_eq!(ProjectKind::Manuscript.as_str(), "manuscript");
     }
 
     #[test]
-    fn test_project_type_default() {
-        let default_type: ProjectType = Default::default();
-        assert_eq!(default_type, ProjectType::Default);
+    fn test_project_kind_default() {
+        let default_type: ProjectKind = Default::default();
+        assert_eq!(default_type, ProjectKind::Default);
     }
 
     #[test]
-    fn test_project_type_clone_and_copy() {
-        let original = ProjectType::Website;
+    fn test_project_kind_clone_and_copy() {
+        let original = ProjectKind::Website;
         let cloned = original.clone();
         let copied = original; // Copy trait
         assert_eq!(original, cloned);
@@ -649,9 +654,9 @@ mod tests {
     }
 
     #[test]
-    fn test_project_type_eq() {
-        assert_eq!(ProjectType::Website, ProjectType::Website);
-        assert_ne!(ProjectType::Website, ProjectType::Book);
+    fn test_project_kind_eq() {
+        assert_eq!(ProjectKind::Website, ProjectKind::Website);
+        assert_ne!(ProjectKind::Website, ProjectKind::Book);
     }
 
     // === ProjectConfig tests ===
@@ -659,7 +664,7 @@ mod tests {
     #[test]
     fn test_project_config_default() {
         let config = ProjectConfig::default();
-        assert_eq!(config.project_type, ProjectType::Default);
+        assert_eq!(config.project_kind, ProjectKind::Default);
         assert!(config.output_dir.is_none());
         assert!(config.render_patterns.is_empty());
         assert!(config.metadata.is_none());
@@ -673,7 +678,7 @@ mod tests {
         let metadata = ConfigValue::new_string("test", SourceInfo::default());
         let config = ProjectConfig::with_metadata(metadata.clone());
 
-        assert_eq!(config.project_type, ProjectType::Default);
+        assert_eq!(config.project_kind, ProjectKind::Default);
         assert!(config.output_dir.is_none());
         assert!(config.render_patterns.is_empty());
         assert!(config.metadata.is_some());
@@ -738,11 +743,11 @@ mod tests {
     // === ProjectContext tests (unit tests for methods that don't need runtime) ===
 
     #[test]
-    fn test_project_context_project_type_with_config() {
+    fn test_project_context_project_kind_with_config() {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
             config: ProjectConfig {
-                project_type: ProjectType::Website,
+                project_kind: ProjectKind::Website,
                 ..Default::default()
             },
             is_single_file: false,
@@ -750,11 +755,11 @@ mod tests {
             output_dir: PathBuf::from("/project/_site"),
         };
 
-        assert_eq!(context.project_type(), ProjectType::Website);
+        assert_eq!(context.project_kind(), ProjectKind::Website);
     }
 
     #[test]
-    fn test_project_context_project_type_without_config() {
+    fn test_project_context_project_kind_without_config() {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
             config: ProjectConfig::default(),
@@ -763,7 +768,7 @@ mod tests {
             output_dir: PathBuf::from("/project"),
         };
 
-        assert_eq!(context.project_type(), ProjectType::Default);
+        assert_eq!(context.project_kind(), ProjectKind::Default);
     }
 
     #[test]
@@ -771,7 +776,7 @@ mod tests {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
             config: ProjectConfig {
-                project_type: ProjectType::Website,
+                project_kind: ProjectKind::Website,
                 ..Default::default()
             },
             is_single_file: false,
@@ -787,7 +792,7 @@ mod tests {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
             config: ProjectConfig {
-                project_type: ProjectType::Book,
+                project_kind: ProjectKind::Book,
                 ..Default::default()
             },
             is_single_file: false,
@@ -803,7 +808,7 @@ mod tests {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
             config: ProjectConfig {
-                project_type: ProjectType::Manuscript,
+                project_kind: ProjectKind::Manuscript,
                 ..Default::default()
             },
             is_single_file: false,
@@ -820,7 +825,7 @@ mod tests {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
             config: ProjectConfig {
-                project_type: ProjectType::Default,
+                project_kind: ProjectKind::Default,
                 ..Default::default()
             },
             is_single_file: false,
@@ -837,7 +842,7 @@ mod tests {
         let context = ProjectContext {
             dir: PathBuf::from("/project"),
             config: ProjectConfig {
-                project_type: ProjectType::Website,
+                project_kind: ProjectKind::Website,
                 ..Default::default()
             },
             is_single_file: true,
@@ -882,7 +887,7 @@ mod tests {
 
             assert!(ctx.is_single_file);
             // Config should be default with no metadata
-            assert_eq!(ctx.config.project_type, ProjectType::Default);
+            assert_eq!(ctx.config.project_kind, ProjectKind::Default);
             assert!(ctx.config.metadata.is_none());
         }
 
@@ -897,7 +902,7 @@ mod tests {
 
             assert!(ctx.is_single_file);
             // Config should be default with no metadata
-            assert_eq!(ctx.config.project_type, ProjectType::Default);
+            assert_eq!(ctx.config.project_kind, ProjectKind::Default);
             assert!(ctx.config.metadata.is_none());
         }
     }

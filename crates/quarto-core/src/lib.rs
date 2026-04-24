@@ -65,7 +65,7 @@ pub use pipeline::{
     build_html_pipeline_stages, build_html_pipeline_with_stages, build_wasm_html_pipeline,
     render_qmd_to_html,
 };
-pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectType};
+pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectKind};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
 pub use transform::{AstTransform, TransformPipeline};
 pub use transforms::{
