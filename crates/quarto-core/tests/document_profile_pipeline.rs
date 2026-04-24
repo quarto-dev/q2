@@ -302,3 +302,121 @@ fn stages_report_stable_names() {
     assert_eq!(DocumentProfileStage::new().name(), "document-profile");
     assert_eq!(UnwrapProfileStage::new().name(), "unwrap-profile");
 }
+
+// ---------------------------------------------------------------------------
+// bd-xfwx: IncludeExpansionStage must run BEFORE DocumentProfileStage so
+// statically-knowable content declared via `{{< include child.qmd >}}`
+// (headings, code blocks, crossref targets, …) appears in the profile
+// consumed by downstream project features (sidebars, cross-doc links,
+// incremental rebuild cache, eventual freeze).
+//
+// Plan: claude-notes/plans/2026-04-24-include-expansion-merge.md
+// ---------------------------------------------------------------------------
+
+/// Variant of [`run_head_pipeline`] that lets the caller control the
+/// project directory and parent-document path. Needed for include
+/// tests, where the parent's location on disk determines where
+/// `{{< include child.qmd >}}` resolves relative paths against.
+async fn run_head_pipeline_in_dir(
+    project_dir: &std::path::Path,
+    parent_path: &std::path::Path,
+    content: &[u8],
+) -> quarto_core::stage::DocumentAtProfile {
+    let full = build_html_pipeline_stages();
+    let checkpoint =
+        position_of(&full, "document-profile").expect("document-profile stage present in pipeline");
+    let head: Vec<Box<dyn PipelineStage>> = full.into_iter().take(checkpoint + 1).collect();
+    let pipeline = Pipeline::new(head).expect("head pipeline valid");
+
+    let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+        Arc::new(quarto_system_runtime::NativeRuntime::new());
+    let project = ProjectContext {
+        dir: project_dir.to_path_buf(),
+        config: ProjectConfig::default(),
+        is_single_file: true,
+        files: vec![DocumentInfo::from_path(parent_path)],
+        output_dir: project_dir.to_path_buf(),
+    };
+    let doc = DocumentInfo::from_path(parent_path);
+    let format = Format::html();
+    let mut ctx = StageContext::new(runtime, format, project, doc).expect("stage context");
+    let input = PipelineData::LoadedSource(LoadedSource::new(
+        parent_path.to_path_buf(),
+        content.to_vec(),
+    ));
+
+    let out = pipeline.run(input, &mut ctx).await.expect("head pipeline");
+    assert_eq!(out.kind(), PipelineDataKind::AtProfile);
+    out.into_at_profile().unwrap()
+}
+
+/// Walk every entry in an outline (and its nested children) and collect
+/// their titles, so we can check for the presence of a specific heading
+/// without assuming tree shape.
+fn collect_outline_titles(outline: &[pampa::toc::TocEntry]) -> Vec<String> {
+    fn walk(entry: &pampa::toc::TocEntry, out: &mut Vec<String>) {
+        out.push(entry.title.clone());
+        for child in &entry.children {
+            walk(child, out);
+        }
+    }
+    let mut titles = Vec::new();
+    for entry in outline {
+        walk(entry, &mut titles);
+    }
+    titles
+}
+
+#[tokio::test]
+async fn profile_sees_heading_from_included_file() {
+    // A parent document whose only content is `{{< include child.qmd >}}`.
+    // For the profile to reflect the included heading, IncludeExpansion
+    // must run before the DocumentProfile checkpoint.
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let project_dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+
+    let child_path = project_dir.join("child.qmd");
+    std::fs::write(&child_path, "## Child Heading\n\nChild body.\n").expect("write child");
+
+    let parent_path = project_dir.join("parent.qmd");
+    let parent_content: &[u8] = b"---\ntitle: Parent\n---\n\n{{< include child.qmd >}}\n";
+
+    let bundle = run_head_pipeline_in_dir(&project_dir, &parent_path, parent_content).await;
+
+    let titles = collect_outline_titles(&bundle.profile.outline);
+    assert!(
+        titles.iter().any(|t| t == "Child Heading"),
+        "DocumentProfile.outline must include the heading `## Child Heading` \
+         from the included file (bd-xfwx); got outline titles: {titles:?}"
+    );
+}
+
+#[test]
+fn include_expansion_precedes_document_profile() {
+    // Structural guard against future refactors silently reordering the
+    // two stages. See bd-xfwx and the plan at
+    // claude-notes/plans/2026-04-24-include-expansion-merge.md.
+    let stages = build_html_pipeline_stages();
+    let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+
+    let include_pos = names.iter().position(|n| *n == "include-expansion").expect(
+        "include-expansion stage must be present in the HTML pipeline — \
+         bd-xfwx requires IncludeExpansion to run before DocumentProfile \
+         so statically-knowable content declared via `{{< include ... >}}` \
+         is visible in the profile",
+    );
+    let profile_pos = names
+        .iter()
+        .position(|n| *n == "document-profile")
+        .expect("document-profile stage must be present in the HTML pipeline");
+    assert!(
+        include_pos < profile_pos,
+        "include-expansion (at {include_pos}) must come strictly before \
+         document-profile (at {profile_pos}) — otherwise the profile is \
+         computed from the pre-include AST and cross-document features \
+         (sidebars, nav, incremental rebuilds) see inconsistent state"
+    );
+}

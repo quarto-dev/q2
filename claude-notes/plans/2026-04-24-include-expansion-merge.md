@@ -200,11 +200,13 @@ push-approval gate.
 
 ### Phase A — Scaffolding before the merge
 
-- [ ] **A0. Create a worktree** `.worktrees/include-merge` off
+- [x] **A0. Create a worktree** `.worktrees/include-merge` off
       `feature/websites` so the merge can be aborted cleanly without
       disturbing the main working tree. Add the beads redirect per
       `.claude/rules/worktrees.md`.
-- [ ] **A1. Add a TDD-style regression test** exercising
+      *Done:* branch `merge/include-expansion`; `br where` confirms
+      the redirect resolves to the main repo's `.beads/`.
+- [x] **A1. Add a TDD-style regression test** exercising
       the ordering contract we want to land. The test lives in
       `crates/quarto-core/src/pipeline.rs` (or a new test file if the
       existing module is crowded) and:
@@ -225,11 +227,23 @@ push-approval gate.
       **Do not proceed to the merge until this test has been verified
       to fail for exactly that reason.** (This is the key TDD check
       that the merge fix actually fixes something.)
-- [ ] **A2. Also add a stage-ordering assertion** to
+      *Done:* test `profile_sees_heading_from_included_file` added in
+      `crates/quarto-core/tests/document_profile_pipeline.rs`. Landed
+      with one heading (`## Child Heading`) rather than two sections —
+      same contract, lighter fixture. Verified RED on
+      `merge/include-expansion` (pre-merge HEAD): fails with
+      `got outline titles: []` — the `{{< include >}}` shortcode is
+      not expanded and the parent has no headings of its own.
+- [x] **A2. Also add a stage-ordering assertion** to
       `test_build_html_pipeline_stages`: the position of
       `"include-expansion"` must be strictly less than the position
       of `"document-profile"`. This is a cheap structural guard
       against future refactors silently reordering the two stages.
+      *Done:* `include_expansion_precedes_document_profile` added to
+      `tests/document_profile_pipeline.rs` (kept with the other
+      pipeline-shape assertions rather than in `pipeline.rs` unit
+      tests). Verified RED pre-merge: panics on
+      `.expect("include-expansion stage must be present ...")`.
 
 ### Phase B — Perform the merge
 
