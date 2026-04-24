@@ -1,0 +1,18 @@
+---
+title: Quarto Doc API Test
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - - "IS-HTML-FORMAT"
+          - "libs/doc-api-probe/extra\\.css"
+          - "SENTINEL-IN-HEADER"
+          - "SENTINEL-AFTER-BODY"
+        - - "NOT-HTML-FORMAT"
+      fileExists:
+        supportPath: "libs/doc-api-probe/extra.css"
+---
+
+Result: {{< doc-api >}}
