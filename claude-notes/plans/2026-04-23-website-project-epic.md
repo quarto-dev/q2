@@ -566,6 +566,17 @@ phases above.
 - [x] **Phase 3:** Navbar / footer project integration.
       Closed `bd-fqyg` on `feature/websites`.
       Sub-plan: `claude-notes/plans/2026-04-24-websites-phase-3.md`.
+- [x] **Interphase merge:** `main` → `feature/websites` to thread
+      `IncludeExpansionStage` (from main, 2026-04-20) through the
+      DocumentProfile checkpoint. Post-merge pipeline order runs
+      `IncludeExpansion` immediately before `DocumentProfile`, so
+      profiles reflect content spliced in via `{{< include … >}}`.
+      Closed `bd-xfwx` (merge commit `c3bcfb76` on
+      `feature/websites`). Sub-plan:
+      `claude-notes/plans/2026-04-24-include-expansion-merge.md`.
+      Follow-up `bd-r82e` tracks the deferred
+      `DocumentProfile.includes: Vec<…>` field needed for Phase-8
+      cache invalidation (see §Epic-wide follow-ups).
 - [ ] **Phase 4:** Page navigation (prev/next).
 - [ ] **Phase 5:** Scoped artifact store + `site_libs/`.
 - [ ] **Phase 6:** Cross-document link rewriting.
