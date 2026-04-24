@@ -574,6 +574,31 @@ Documentation is tracked separately as `bd-tr81`.
 Each phase will get its own `claude-notes/plans/YYYY-MM-DD-*.md` sub-plan
 before implementation begins.
 
+## Epic-wide follow-ups surfaced by sub-plans
+
+Issues that transcend a single phase — surfaced while scoping a phase
+but with implications across the epic. These must be tracked here so
+the epic's close-out catches them; filing as bd happens when the
+relevant design work starts.
+
+- **Nav-config placement is inconsistent across features.** Surfaced
+  in Phase 2 scoping (see `2026-04-24-websites-phase-2.md` Decision 1
+  & 6). Today: `navbar` reads from top-level document metadata,
+  `sidebar` reads from `website.sidebar`, and the per-page
+  sidebar-id override reads from top-level `site-sidebar`. Q1 has the
+  same split. For Q2 we should pick one placement — either
+  "everything top-level" or "everything under a nav namespace" — and
+  migrate all of navbar / sidebar / page-footer / page-navigation /
+  site-url / title-prefix / `site-sidebar` to it. The decision should
+  land before we commit to a docs-facing release, but is not a
+  blocker for the website epic to ship a working MVP.
+- **Sidebar template placement.** Phase 2 puts the sidebar beside the
+  TOC on the right, which is the minimum-churn slot in the existing
+  full HTML template. Q1 renders sidebar-left, TOC-right. Moving to
+  the Q1 layout is a `FULL_HTML_TEMPLATE` restructuring task — not
+  sidebar-feature work — and is tracked as a separate follow-up so
+  Phase 2 stays scoped to feature implementation.
+
 ## Follow-up beads report (running log)
 
 Each phase will accumulate follow-up `bd` issues — deferred work
