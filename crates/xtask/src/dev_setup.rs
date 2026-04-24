@@ -156,22 +156,15 @@ pub fn run() -> Result<()> {
 /// wasmtime-c-api-impl transitively via quarto-highlight, and its build.rs
 /// shells out to cmake).
 fn check_cmake() {
-    let output = Command::new("cmake").arg("--version").output();
-
-    let ok = matches!(&output, Ok(o) if o.status.success());
-    if !ok {
-        println!(
-            "\n  WARNING: cmake not found. `cargo build --workspace` will fail.\n  \
-             cmake is required transitively by quarto-highlight (wasmtime-c-api-impl).\n  \
-             Install:"
-        );
-        for line in cmake_install_hints() {
-            println!("    {line}");
-        }
+    let Ok(output) = Command::new("cmake").arg("--version").output() else {
+        warn_cmake_missing();
+        return;
+    };
+    if !output.status.success() {
+        warn_cmake_missing();
         return;
     }
 
-    let output = output.expect("checked Ok above");
     let first_line = String::from_utf8_lossy(&output.stdout)
         .lines()
         .next()
@@ -179,6 +172,17 @@ fn check_cmake() {
         .trim()
         .to_string();
     println!("\n  {first_line} — detected");
+}
+
+fn warn_cmake_missing() {
+    println!(
+        "\n  Warning: cmake not found. `cargo build --workspace` will fail.\n  \
+         cmake is required transitively by quarto-highlight (wasmtime-c-api-impl).\n  \
+         Install:"
+    );
+    for line in cmake_install_hints() {
+        println!("    {line}");
+    }
 }
 
 /// Platform-specific cmake install commands. Order matters: preferred first.
