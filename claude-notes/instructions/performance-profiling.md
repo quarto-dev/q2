@@ -200,56 +200,28 @@ standalone driver — **not vitest**.
    `setTimeout(0)` round trips. Profiling without the override
    measures the scheduler, not your code.
 
-**Standalone driver template.** Place under `/tmp/<target>-perf/` or
-similar — these are throwaway per-session, like the Rust native-proxy
-fixtures. The pieces:
+**Standalone driver template.** Throwaway files under
+`/tmp/<target>-perf/`, same way the Rust native-proxy fixtures are
+throwaway. The minimum is a single **driver** that overrides
+`requestIdleCallback` as above, imports the code under test, and
+calls the hot function in a timed loop over scaled fixtures.
 
-- **Shim files** for any external packages you need to stub. Each shim
-  is a normal ESM module that exports the subset of the API the code
-  under test imports, with hooks the driver controls:
+If you also need to shim an ESM dep (e.g. to bypass
+`@automerge/automerge`'s `diff`), add three more pieces, and change the
+driver to import the code under test **dynamically** (`await
+import(...)`) — a static import would resolve before the register hook
+lands:
 
-  ```js
-  // shim-someDep.mjs
-  let impl = () => [];
-  export function setImpl(fn) { impl = fn; }
-  export function someApiFn(...args) { return impl(...args); }
-  ```
-
-- **Resolve hook** that redirects the package specifier to the shim:
-
-  ```js
-  // resolve-hook.mjs
-  import { fileURLToPath } from 'node:url';
-  import { dirname, join } from 'node:path';
-  const here = dirname(fileURLToPath(import.meta.url));
-  const shim = 'file://' + join(here, 'shim-someDep.mjs');
-  export async function resolve(specifier, context, next) {
-    if (specifier === '@scope/some-dep') {
-      return { url: shim, shortCircuit: true, format: 'module' };
-    }
-    return next(specifier, context);
-  }
-  ```
-
-- **Register bootstrap** that installs the hook on startup:
-
-  ```js
-  // register.mjs
-  import { register } from 'node:module';
-  register('./resolve-hook.mjs', import.meta.url);
-  ```
-
-- **Driver** that dynamically imports the code under test (it has to
-  be dynamic, not static, so the register hook is in place first):
-
-  ```js
-  // driver.mjs
-  globalThis.requestIdleCallback = (cb) => { cb({ didTimeout: false, timeRemaining: () => 50 }); return 0; };
-  const mod = await import(new URL('../../hub-client/src/services/<module>.ts', import.meta.url).href);
-  const shim = await import('./shim-someDep.mjs');
-  shim.setImpl(/* mock that returns workload patches */);
-  // ... call mod.hotFunction() in a timed loop over scaled fixtures
-  ```
+- A **shim** — plain ESM module exporting the API slice the code under
+  test imports, plus a setter so the driver can swap in the workload
+  (e.g. `export function setImpl(fn) { impl = fn }`).
+- A **resolve hook** that redirects the real specifier to the shim URL,
+  returning `{ url, shortCircuit: true, format: 'module' }`.
+  `shortCircuit: true` is required.
+- A **register bootstrap** — two lines calling
+  `register('./resolve-hook.mjs', import.meta.url)`. Passed via Node's
+  `--import` flag (see invocation below) so the hook is active before
+  any `import` resolves.
 
 **Invocation:**
 
