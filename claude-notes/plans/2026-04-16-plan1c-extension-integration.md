@@ -42,38 +42,60 @@ Following Quarto 1's approach: engine extensions are **built** (bundled from TS 
   pub enum EngineContribution {
       /// An external engine module (.ts source or .js bundle).
       /// Absolute path (resolved during read_extension).
-      External { path: PathBuf },
+      External {
+          path: PathBuf,
+          /// Static hints: languages this engine might claim (e.g., ["julia"]).
+          /// Used to skip launching the Deno subprocess when no code blocks
+          /// match. Empty = no hint, always consult engine dynamically.
+          languages: Vec<String>,
+          /// Static hints: file extensions this engine might claim (e.g., [".jl"]).
+          /// Used to skip launching the subprocess when the input file doesn't
+          /// match. Empty = no hint, always consult engine dynamically.
+          file_extensions: Vec<String>,
+      },
       /// A bare engine name string — reordering hint that moves a
       /// previously registered engine to higher priority.
       Reorder { name: String },
   }
   ```
-  This matches Quarto 1's schema exactly: `contributes.engines` accepts both
+  This extends Quarto 1's schema: `contributes.engines` accepts both
   objects with a `path` property (creating new engines) and bare strings
-  (reordering hints). In `resolveEngines()`, string entries are added to the
-  ordering list while object entries are dynamically imported and registered.
+  (reordering hints). The `languages` and `file-extensions` fields are
+  q2 additions — optional static hints that let q2 skip launching the
+  Deno subprocess when the engine is clearly irrelevant (e.g., a project
+  with only `{python}` blocks doesn't need to launch the Julia engine).
+  If omitted, q2 falls back to always consulting the engine dynamically.
 
 - [ ] Add `engines` parsing in `parse_contributes()` in `crates/quarto-core/src/extension/read.rs`:
   - Handle array of strings (reordering hints → `EngineContribution::Reorder`)
     and objects with `path` key (resolve to absolute paths relative to ext_dir
     → `EngineContribution::External`)
+  - For object entries, also read optional `languages` (array of strings) and
+    `file-extensions` (array of strings). These are static hints for pre-filtering.
   - Include `engines` in the "at least one sub-field" validation check
   - This supersedes Phase 8 of the extensions grand plan
     (`claude-notes/plans/2026-03-16-extensions-grand-plan.md`)
 
-- [ ] Define extension YAML schema for engines, matching Quarto 1's schema:
+- [ ] Define extension YAML schema for engines, extending Quarto 1's schema:
   ```yaml
   contributes:
     engines:
-      - path: julia-engine.js   # object form: new engine
-      - jupyter                  # string form: reordering hint
+      - path: julia-engine.js     # required: path to bundled JS
+        languages: ["julia"]      # optional: languages this engine might claim
+        file-extensions: [".jl"]  # optional: file extensions this engine might claim
+      - jupyter                   # string form: reordering hint
   ```
   **Quarto 1 reference:** The extension schema (in `src/resources/schema/extension.yml`)
   defines engines as an array of either strings (engine names for reordering) or
   objects with a `path` property. Both forms are allowed in both `_extension.yml`
-  and `_quarto.yml` (identical schema). In practice, `_extension.yml` mostly uses
-  the object form to contribute new engines, while `_quarto.yml` uses strings to
-  reorder. But extensions may also reorder engines if needed.
+  and `_quarto.yml` (identical schema).
+
+  **q2 extension:** The `languages` and `file-extensions` fields are new to q2.
+  They are conservative supersets — they list what the engine *might* claim.
+  The dynamic `claimsLanguage`/`claimsFile` functions in the TS engine are the
+  precise check. Static hints avoid launching the Deno subprocess when the engine
+  is clearly irrelevant. Extension authors are incentivized to declare them for
+  faster project scans. If omitted, the subprocess is always consulted.
 
   The Julia engine's `_extension.yml` uses `- path: julia-engine.js` (pointing to
   the pre-built bundle). The engine's name comes from the module's `name` property

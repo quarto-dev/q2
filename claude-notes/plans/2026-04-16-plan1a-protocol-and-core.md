@@ -48,36 +48,44 @@ Define the message types used between Rust and Deno. Both sides need matching de
   `target()` is harness-internal — q2 constructs execution targets
   from its AST natively.
 
+  **Shared subprocess model:** One Deno process hosts all TS engine extensions.
+  Every message (except `Shutdown`) carries an `engine: String` field to route
+  to the correct engine. `Init` is called once per engine loaded into the
+  subprocess. This avoids spawning N Deno processes (one per engine) — important
+  because Julia is bundled, so anyone with an additional TS engine has at least
+  two. See the "Shared subprocess" design note below.
+
   ```rust
   // Rust → Deno messages
+  //
+  // All variants except Shutdown carry `engine: String` for routing
+  // in the shared subprocess. The engine name comes from EngineMeta
+  // (returned in Ready after Init).
   #[derive(Serialize)]
   #[serde(tag = "type")]
   enum ToEngine {
       // === Lifecycle ===
+      // Init is called once per engine. Multiple engines coexist in
+      // one subprocess. The harness loads the module, calls init/launch,
+      // and tracks the instance keyed by engine name.
       #[serde(rename = "init")]
       Init { engine_path: String, context: EngineHostContext },
       #[serde(rename = "shutdown")]
-      Shutdown,
+      Shutdown,  // shuts down the entire subprocess (all engines)
 
       // === Discovery (ExecutionEngineDiscovery) ===
       #[serde(rename = "claimsLanguage")]
-      ClaimsLanguage { language: String, first_class: Option<String> },
+      ClaimsLanguage { engine: String, language: String, first_class: Option<String> },
       #[serde(rename = "claimsFile")]
-      ClaimsFile { file: String, ext: String },
+      ClaimsFile { engine: String, file: String, ext: String },
 
       // === File conversion ===
-      // Called only for non-QMD files claimed by this engine via claimsFile.
-      // Engine reads the file in its native format and returns QMD text.
-      // For QMD files, q2 handles parsing directly — this is never called.
       #[serde(rename = "markdownForFile")]
-      MarkdownForFile { file: String },
+      MarkdownForFile { engine: String, file: String },
 
       // === Optional instance methods ===
-      // partitionedMarkdown: partition file into yaml/heading/body.
-      // Also on the Rust ExecutionEngine trait (Jupyter needs it for
-      // ipynb-filters). TsEngine forwards to subprocess.
       #[serde(rename = "partitionedMarkdown")]
-      PartitionedMarkdown { file: String, format: Option<TsFormatInfo> },
+      PartitionedMarkdown { engine: String, file: String, format: Option<TsFormatInfo> },
       // Note: target() is harness-internal, not a protocol message.
       // The harness checks if the engine implements target(), calls it
       // if so, and uses the result (including the opaque `data` cookie)
@@ -86,25 +94,25 @@ Define the message types used between Rust and Deno. Both sides need matching de
 
       // === Execute ===
       #[serde(rename = "execute")]
-      Execute { options: TsExecuteOptions },
+      Execute { engine: String, options: TsExecuteOptions },
 
       // === Post-execute ===
       #[serde(rename = "dependencies")]
-      Dependencies { options: TsDependenciesOptions },
+      Dependencies { engine: String, options: TsDependenciesOptions },
       #[serde(rename = "postprocess")]
-      Postprocess { options: TsPostProcessOptions },
+      Postprocess { engine: String, options: TsPostProcessOptions },
       #[serde(rename = "postRender")]
-      PostRender { file: TsRenderResultFile },
+      PostRender { engine: String, file: TsRenderResultFile },
 
       // === Queries ===
       #[serde(rename = "canKeepSource")]
-      CanKeepSource { target: TsExecutionTarget },
+      CanKeepSource { engine: String, target: TsExecutionTarget },
       #[serde(rename = "intermediateFiles")]
-      IntermediateFiles { input: String },
+      IntermediateFiles { engine: String, input: String },
       #[serde(rename = "filterFormat")]
-      FilterFormat { source: String, options: TsRenderOptions, format: TsFormatInfo },
+      FilterFormat { engine: String, source: String, options: TsRenderOptions, format: TsFormatInfo },
       #[serde(rename = "executeTargetSkipped")]
-      ExecuteTargetSkipped { target: TsExecutionTarget, format: TsFormatInfo },
+      ExecuteTargetSkipped { engine: String, target: TsExecutionTarget, format: TsFormatInfo },
   }
 
   // Deno → Rust messages
@@ -281,26 +289,59 @@ Define the message types used between Rust and Deno. Both sides need matching de
   
   See `~/src/quarto-cli/src/resources/extension-subtrees/julia-engine/src/julia-engine.ts`.
 
-### Phase 2: Deno process management
+### Phase 2: Shared subprocess management
 
-Spawn and manage the Deno subprocess.
+Spawn and manage the shared Deno subprocess that hosts all TS engine extensions.
 
-- [ ] Create `crates/quarto-core/src/engine/ts_process.rs`:
+- [ ] Define `EngineTransport` trait in `crates/quarto-core/src/engine/ts_process.rs`:
   ```rust
-  pub struct EngineProcess {
+  /// Transport abstraction for the engine subprocess protocol.
+  /// Currently only StdioTransport exists. A future WebSocketTransport
+  /// would enable running the engine host as a standalone server
+  /// (e.g., for WASM hub-client needing filesystem/process access).
+  pub trait EngineTransport: Send {
+      fn send(&mut self, msg: &ToEngine) -> Result<()>;
+      fn recv(&mut self) -> Result<FromEngine>;
+      fn shutdown(&mut self) -> Result<()>;
+  }
+  ```
+
+- [ ] Implement `StdioTransport`:
+  ```rust
+  pub struct StdioTransport {
       child: std::process::Child,
       stdin: BufWriter<ChildStdin>,
       stdout: BufReader<ChildStdout>,
   }
+  impl EngineTransport for StdioTransport { /* JSON lines over stdio */ }
+  ```
 
-  impl EngineProcess {
-      pub fn spawn(engine_host_path: &Path) -> Result<Self>;
-      pub fn send(&mut self, msg: &ToEngine) -> Result<()>;
-      pub fn recv(&mut self) -> Result<FromEngine>;
-      pub fn shutdown(self) -> Result<()>;
+- [ ] Create `TsEngineHost` — the shared subprocess manager:
+  ```rust
+  pub struct TsEngineHost {
+      transport: Mutex<Option<Box<dyn EngineTransport>>>,
+  }
+
+  impl TsEngineHost {
+      pub fn new() -> Self;
+      /// Ensure the subprocess is running. Lazily spawns on first call.
+      pub fn ensure_started(&self) -> Result<()>;
+      /// Load an engine into the running subprocess. Sends Init,
+      /// receives Ready with EngineMeta. Can be called multiple times
+      /// for different engines.
+      pub fn init_engine(&self, engine_path: &Path, ctx: &EngineHostContext)
+          -> Result<EngineMeta>;
+      /// Send a message routed to a specific engine (by name).
+      pub fn send(&self, msg: &ToEngine) -> Result<()>;
+      /// Receive the next response.
+      pub fn recv(&self) -> Result<FromEngine>;
+      /// Shut down the entire subprocess (all engines).
+      pub fn shutdown(&self) -> Result<()>;
   }
   ```
-  The `EngineProcess` is **long-lived** — spawned once when the engine is first needed during a project render, then reused for all discovery queries and execution calls. It is shut down at the end of the project render (or when the engine is no longer needed).
+  The `TsEngineHost` is **shared across all TS engines** in a project render.
+  It is owned by the `EngineRegistry` (in `StageContext`) as an
+  `Arc<TsEngineHost>`. Each `TsEngine` holds a clone of the `Arc`.
 
 - [ ] Spawn Deno with: `deno run --allow-all <engine-host-deno.js>`
   - `--allow-all` because engine extensions need file/net/process access
@@ -349,7 +390,30 @@ extensions) to participate in the same claiming system and execution pipeline.
     kernelspec). The harness builds the `ExecutionTarget` from
     `TsExecuteOptions` fields when the engine doesn't implement it.
 
-- [ ] Add **partitioned markdown method** with default:
+- [ ] Define `PartitionedMarkdown` Rust struct (in `ts_protocol.rs` or a shared types module):
+  ```rust
+  /// A file's markdown split into structured parts.
+  /// Rust equivalent of Quarto 1's PartitionedMarkdown.
+  pub struct PartitionedMarkdown {
+      /// Parsed YAML frontmatter (None if no frontmatter present).
+      pub yaml: Option<ConfigValue>,
+      /// Text of the first heading (None if no heading).
+      pub heading_text: Option<String>,
+      /// Pandoc attributes of the first heading (id, classes, key-values).
+      pub heading_attr: Option<PandocAttr>,
+      /// Whether the document contains crossref references.
+      pub contains_refs: bool,
+      /// The markdown body (after yaml block and first heading).
+      pub markdown: String,
+      /// Full markdown text with the yaml block removed.
+      pub src_markdown_no_yaml: String,
+  }
+  ```
+  `yaml` uses `ConfigValue` (q2-native) rather than `HashMap<String, TsMetadataValue>`
+  (protocol type). `TsEngine` converts at the boundary: `TsPartitionedMarkdown` →
+  `PartitionedMarkdown` (converting `TsMetadataValue` → `ConfigValue` for `yaml`).
+
+- [ ] Add **partitioned markdown method** to the trait with default:
   ```rust
   /// Partition a file's markdown into yaml/heading/body.
   /// Intended default: calls markdown_for_file then partitions the result.
@@ -412,26 +476,39 @@ extensions) to participate in the same claiming system and execution pipeline.
 
 ### Phase 4: TsEngine struct
 
-The Rust struct that implements `ExecutionEngine` by delegating to the subprocess.
+The Rust struct that implements `ExecutionEngine` by delegating to the shared subprocess.
 
 - [ ] Create `crates/quarto-core/src/engine/ts_engine.rs`:
   ```rust
   pub struct TsEngine {
       name: String,
-      bundle_path: PathBuf,         // Path to the bundled .js file (built from .ts source)
-      engine_host_path: PathBuf,    // Path to engine-host-deno.js bundle
-      process: Option<EngineProcess>, // Long-lived subprocess, lazily spawned
-      engine_meta: Option<EngineMeta>, // Cached after init
+      bundle_path: PathBuf,             // Path to the bundled .js file
+      host: Arc<TsEngineHost>,          // Shared subprocess (from EngineRegistry)
+      engine_meta: Option<EngineMeta>,  // Cached after init
+      initialized: AtomicBool,          // Whether Init has been sent for this engine
+      // Static hints from _extension.yml (see Plan 1c).
+      // Used to skip launching the subprocess when the engine is
+      // clearly irrelevant. Empty = no hint, always consult dynamically.
+      language_hints: Vec<String>,
+      file_extension_hints: Vec<String>,
   }
   ```
-  Note: `ExecutionEngine` trait requires `Send + Sync`. Since `EngineProcess` holds a child process with stdio handles, this may need `Mutex` wrapping or interior mutability. Evaluate whether to use `Arc<Mutex<EngineProcess>>` or restructure the trait's `execute` method (which takes `&self`).
+  `TsEngine` does NOT own the subprocess — it shares `TsEngineHost` with other
+  TS engines via `Arc`. The `Mutex` is inside `TsEngineHost`, not `TsEngine`.
+  `Send + Sync` is satisfied because `Arc<TsEngineHost>` is `Send + Sync` and
+  `AtomicBool` is lock-free.
 
 - [ ] Implement lifecycle methods (not part of `ExecutionEngine` trait — called by the project render orchestration):
-  - `ensure_started(&mut self, ctx)` — lazily spawn the subprocess and send `Init` if not already running. Called before discovery queries or execution.
-  - `shutdown(&mut self)` — send `Shutdown` message, wait for process exit. Called at end of project render.
+  - `ensure_initialized(&self)` — ensures the shared subprocess is running
+    (calls `host.ensure_started()`) AND this engine is loaded (calls
+    `host.init_engine()` if not yet initialized). Called before discovery
+    queries or execution.
+  - Shutdown is on `TsEngineHost`, not per-engine. Called at end of project
+    render by the `EngineRegistry` (which owns the `Arc<TsEngineHost>`).
 
-- [ ] Implement `ExecutionEngine` trait — all methods delegate to the subprocess via
-  protocol messages. Each method calls `ensure_started()` first:
+- [ ] Implement `ExecutionEngine` trait — all methods delegate to the shared
+  subprocess via protocol messages. Each method calls `ensure_initialized()`
+  first (which ensures both the subprocess and this engine are ready):
 
   **Existing trait methods:**
   - `name()` → `self.name` (from `EngineMeta`, no subprocess call)
@@ -442,8 +519,15 @@ The Rust struct that implements `ExecutionEngine` by delegating to the subproces
 
   **Discovery methods (defined in Phase 3 above):**
   - `valid_extensions()` → from `EngineMeta` (no subprocess call, cached from init)
-  - `claims_language(language, first_class)` → send `ClaimsLanguage`, recv `ClaimsLanguageResult`. Harness converts JS `false` → `null`, `true` → `1`, number → `Math.trunc()` to `i32`. Negative values allowed (meaning "I'll take this if no one else will").
-  - `claims_file(file, ext)` → send `ClaimsFile`, recv `ClaimsFileResult`
+  - `claims_language(language, first_class)` → **static pre-filter first**: if
+    `language_hints` is non-empty and language isn't in the list, return `None`
+    without touching the subprocess. Otherwise, send `ClaimsLanguage`, recv
+    `ClaimsLanguageResult`. Harness converts JS `false` → `null`, `true` → `1`,
+    number → `Math.trunc()` to `i32`. Negative values allowed.
+  - `claims_file(file, ext)` → **static pre-filter first**: if
+    `file_extension_hints` is non-empty and ext isn't in the list, return `false`
+    without touching the subprocess. Otherwise, send `ClaimsFile`, recv
+    `ClaimsFileResult`.
   - Cache `claims_language` results: deterministic, so cache `(language, first_class) → result`
 
   **File conversion (defined in Phase 3 above):**
@@ -468,27 +552,54 @@ The Rust struct that implements `ExecutionEngine` by delegating to the subproces
 
 - [ ] Wire into engine module (`engine/mod.rs`): add `ts_engine`, `ts_process`,
     `ts_protocol` modules behind `#[cfg(not(target_arch = "wasm32"))]` (same gate
-    as knitr/jupyter). Re-export `TsEngine` from `engine/mod.rs`.
-- [ ] Use `Mutex<Option<EngineProcess>>` for interior mutability so `TsEngine`
-    satisfies `Send + Sync` while allowing `&self` methods to access the subprocess.
+    as knitr/jupyter). Re-export `TsEngine` and `TsEngineHost` from `engine/mod.rs`.
+- [ ] The `Mutex` lives inside `TsEngineHost` (on the transport), not in `TsEngine`.
     `Mutex` (not `RwLock`) is correct since every operation needs exclusive access
-    (both reads and writes go through the same stdin/stdout handles). The subprocess
-    is inherently single-threaded — the protocol is request-response over a single
-    channel. If two threads try to call `execute()` concurrently, the Mutex serializes
-    them. This matches Quarto 1's behavior (engines process one file at a time).
+    (both reads and writes go through the same transport). The subprocess is
+    inherently single-threaded — the protocol is request-response over a single
+    channel. All TS engines serialize through the same Mutex. This matches
+    Quarto 1's behavior (engines process one file at a time).
 - [ ] Write test with a mock engine (echo engine — see Plan 1c Phase 3).
     A stub Deno harness is sufficient for smoke-testing the Rust side in
     isolation; the full harness is Plan 1b.
 
 ## Design Notes
 
-### Process lifetime
+### Shared subprocess
 
-The subprocess is **long-lived: one per project render**. It is spawned lazily on first need (discovery query or execute call), reused for all subsequent operations on that engine, and shut down at the end of the project render.
+All TS engine extensions share **one Deno subprocess per project render**.
+The subprocess is spawned lazily on first need (any TS engine's discovery
+query or execute call). Each engine is loaded into the subprocess via a
+separate `Init` message. The subprocess is shut down at the end of the
+project render.
 
-This is necessary for efficient discovery — a project scan may call `claimsLanguage` and `claimsFile` across many files, and spawning a fresh process for each query would be prohibitively slow. The long-lived process also matches the Quarto 1 model where engines are loaded once and queried many times.
+This avoids spawning N Deno processes — important because Julia is bundled,
+so anyone with an additional TS engine extension has at least two. Each
+Deno process costs ~100-200ms startup and ~30-50MB memory.
 
-The lifecycle is managed by the project render orchestration layer, not by individual `execute()` calls. The `TsEngine` struct holds an `Option<EngineProcess>` that is populated on first use and cleared on shutdown.
+All protocol messages carry an `engine: String` field for routing to the
+correct engine within the subprocess. The harness maintains a
+`Map<string, EngineInstance>` internally.
+
+The lifecycle is managed by `TsEngineHost` (owned by the `EngineRegistry`
+in `StageContext`). Individual `TsEngine` structs hold `Arc<TsEngineHost>`
+and their engine name.
+
+### Transport abstraction
+
+The `EngineTransport` trait abstracts the communication channel between
+q2 and the engine-host subprocess. Currently only `StdioTransport` exists
+(JSON lines over stdin/stdout of a child process).
+
+**Future direction — engine server:** The protocol is already
+transport-agnostic (self-contained JSON messages). A future
+`WebSocketTransport` would enable running the engine-host as a standalone
+server. Use case: WASM hub-client running in a browser needs to execute
+code via a TS engine, but can't spawn processes or access the filesystem.
+A locally-running engine server with full OS access could serve this role.
+Each WebSocket connection would be its own session (no request-ID
+multiplexing needed). This requires no protocol changes — only a new
+transport implementation and a way to start/discover the server.
 
 ### Stderr handling (Rust side)
 

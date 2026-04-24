@@ -84,12 +84,10 @@ Rust side because:
 
 ### R1: Rust-side `PartitionedMarkdown` type
 
-Define a Rust struct for the partition result. Options:
-- Full Quarto 1 parity (all 6 fields)
-- Minimal (just what callers need: yaml as ConfigValue, heading_text, heading_attr)
-
-**Open question:** Should `yaml` be a `ConfigValue` (q2-native) or
-`HashMap<String, TsMetadataValue>` (protocol-compatible)?
+**Resolved in Plan 1a.** The struct has all 6 fields matching Quarto 1,
+using q2-native types (`ConfigValue` for yaml, `PandocAttr` for heading
+attributes). `TsEngine` converts from the protocol type
+(`TsPartitionedMarkdown`) at the boundary.
 
 ### R2: `partition_markdown()` utility function
 

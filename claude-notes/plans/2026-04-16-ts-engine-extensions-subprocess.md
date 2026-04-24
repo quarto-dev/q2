@@ -12,31 +12,40 @@ Implement TypeScript engine extensions in q2 using a **Deno subprocess** archite
 
 ## Architecture
 
-### Subprocess lifecycle (one per project render)
+### Shared subprocess lifecycle (one Deno process per project render)
+
+All TS engine extensions share one Deno subprocess. Each engine is loaded
+via a separate `Init` message. All other messages carry `engine: "<name>"`
+for routing.
 
 ```
-q2 (Rust)                              engine-host (Deno subprocess)
-─────────                              ─────────────────────────────
-spawn deno engine-host-deno.js ─────→  start, read init message
+q2 (Rust)                              engine-host (shared Deno subprocess)
+─────────                              ────────────────────────────────────
+spawn deno engine-host-deno.js ─────→  start, wait for init messages
                                        
-send: { type: "init",        ──────→  load engine module
-        enginePath: "...",             call engine.init(quartoAPI)
-        context: { paths, format, ... } }
-recv: { type: "ready",       ←──────  engine loaded, ready for queries
-        engineMeta: { name, canFreeze, ... } }
+send: { type: "init",        ──────→  load julia-engine.js
+        enginePath: "julia..." }       call engine.init(quartoAPI), engine.launch(ctx)
+recv: { type: "ready",       ←──────  engine "julia" loaded
+        engineMeta: { name: "julia", ... } }
 
-send: { type: "claimsLanguage", ───→  call engine.claimsLanguage("julia")
+send: { type: "init",        ──────→  load marimo-engine.js
+        enginePath: "marimo..." }      call engine.init(quartoAPI), engine.launch(ctx)
+recv: { type: "ready",       ←──────  engine "marimo" loaded
+        engineMeta: { name: "marimo", ... } }
+
+send: { type: "claimsLanguage", ───→  route to julia instance
+        engine: "julia",               call julia.claimsLanguage("julia")
         language: "julia" }
-recv: { type: "claimsLanguageResult", ←── return result (true→1, false→null)
+recv: { type: "claimsLanguageResult", ←── return result
         result: 1 }
 
-send: { type: "execute",     ──────→  call engine.launch(ctx).execute(opts)
+send: { type: "execute",     ──────→  route to julia instance
+        engine: "julia",               call julia.execute(opts)
         options: { ... } }
-                                       (during execution, logs go to stderr)
 recv: { type: "executeResult", ←────  return ExecuteResult
         result: { markdown, supporting, ... } }
 
-send: { type: "shutdown" }   ──────→  clean up, exit
+send: { type: "shutdown" }   ──────→  clean up all engines, exit
 ```
 
 ### Where things live
