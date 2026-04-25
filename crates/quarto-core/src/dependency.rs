@@ -17,7 +17,7 @@ use pampa::lua::{HtmlDependency, IncludeLocation, TextInclude};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
 
-use crate::artifact::{Artifact, ArtifactStore};
+use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
 use crate::stage::PandocIncludes;
 
 /// Store HTML dependencies as artifacts.
@@ -25,7 +25,15 @@ use crate::stage::PandocIncludes;
 /// For each dependency, reads stylesheet and script files via the runtime
 /// and stores them as `css:{name}:{filename}` and `js:{name}:{filename}`
 /// artifacts. Artifact paths follow Quarto 1's `libs/` convention:
-/// `libs/{name}/{filename}` (relative to `{stem}_files/`).
+/// `libs/{name}/{filename}` (relative to the scope root).
+///
+/// Phase 5: extension dependencies are tagged
+/// [`ArtifactScope::Project`] — under a website project they
+/// land at `_site/site_libs/libs/{name}/{filename}` once,
+/// deduplicated across all pages that reference the same
+/// extension. Single-doc renders treat Project scope identically
+/// to Page scope (resolved via the per-page resource directory),
+/// preserving pre-Phase-5 byte-identical behavior.
 pub fn store_html_dependencies(
     deps: Vec<HtmlDependency>,
     artifacts: &mut ArtifactStore,
@@ -46,7 +54,9 @@ pub fn store_html_dependencies(
                 Ok(content) => {
                     artifacts.store(
                         &artifact_key,
-                        Artifact::from_bytes(content, "text/css").with_path(&relative_path),
+                        Artifact::from_bytes(content, "text/css")
+                            .with_path(&relative_path)
+                            .with_scope(ArtifactScope::Project),
                     );
                 }
                 Err(e) => {
@@ -72,7 +82,9 @@ pub fn store_html_dependencies(
                 Ok(content) => {
                     artifacts.store(
                         &artifact_key,
-                        Artifact::from_bytes(content, "text/javascript").with_path(&relative_path),
+                        Artifact::from_bytes(content, "text/javascript")
+                            .with_path(&relative_path)
+                            .with_scope(ArtifactScope::Project),
                     );
                 }
                 Err(e) => {

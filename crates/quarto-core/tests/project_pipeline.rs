@@ -132,6 +132,8 @@ impl ProjectType for CountingProjectType {
         _project: &ProjectContext,
         _index: &ProjectIndex,
         _outputs: &[RenderToFileResult],
+        _project_artifacts: &quarto_core::ArtifactStore,
+        _runtime: &dyn SystemRuntime,
     ) -> quarto_core::Result<()> {
         self.post_calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
@@ -214,8 +216,10 @@ impl ProjectType for CountingProjectTypeWrapper {
         p: &ProjectContext,
         i: &ProjectIndex,
         o: &[RenderToFileResult],
+        a: &quarto_core::ArtifactStore,
+        r: &dyn SystemRuntime,
     ) -> quarto_core::Result<()> {
-        self.inner.post_render(p, i, o).await
+        self.inner.post_render(p, i, o, a, r).await
     }
 }
 

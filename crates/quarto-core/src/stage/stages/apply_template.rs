@@ -10,14 +10,12 @@
 //! This stage wraps the rendered HTML body with a complete HTML document
 //! using the template engine.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use async_trait::async_trait;
 use quarto_doctemplate::{ChainedResolver, MemoryResolver, Template};
 
-use crate::artifact::Artifact;
-use crate::pipeline::DEFAULT_CSS_ARTIFACT_PATH;
-use crate::resources::DEFAULT_CSS;
+use crate::resource_resolver::ResourceResolverContext;
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -26,32 +24,35 @@ use crate::template::RuntimeResolver;
 use crate::trace_event;
 
 /// Configuration for the ApplyTemplateStage.
+///
+/// Phase 5: replaced `css_paths` + `resource_prefix` with a
+/// scope-aware [`ResourceResolverContext`]. When `resolver` is
+/// provided (CLI render, project pipeline), every CSS / JS
+/// artifact in the store gets its `<link>` / `<script>` URL
+/// computed by the resolver. When `resolver` is absent
+/// (in-memory tests, hub-client legacy path), each artifact's
+/// bare `path` is used verbatim.
 #[derive(Default)]
 pub struct ApplyTemplateConfig {
-    /// CSS paths to include in the document (relative to the output HTML).
-    pub css_paths: Vec<String>,
-    /// Prefix for extension dependency paths (e.g., `"test_files/"` for
-    /// `test.html`). Extension CSS/JS artifacts use paths like `libs/kbd/kbd.css`
-    /// which are relative to the resource directory. This prefix makes them
-    /// relative to the output HTML file.
-    pub resource_prefix: String,
+    /// Scope-aware resolver. When `Some`, drives URL computation
+    /// for every artifact emitted into `<head>`. When `None`,
+    /// artifacts' relative `path`s are used as-is (legacy
+    /// in-memory behavior; preserved for tests and the WASM
+    /// hub-client until that gets a resolver of its own —
+    /// tracked separately as the Phase 5 WASM-audit task).
+    pub resolver: Option<ResourceResolverContext>,
 }
 
 impl ApplyTemplateConfig {
-    /// Create a new default configuration.
+    /// Create a new default configuration (no resolver).
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Set custom CSS paths.
-    pub fn with_css_paths(mut self, paths: Vec<String>) -> Self {
-        self.css_paths = paths;
-        self
-    }
-
-    /// Set the resource prefix for extension dependency paths.
-    pub fn with_resource_prefix(mut self, prefix: String) -> Self {
-        self.resource_prefix = prefix;
+    /// Set the [`ResourceResolverContext`] that translates
+    /// per-artifact `(scope, path)` tuples into HTML URLs.
+    pub fn with_resolver(mut self, resolver: ResourceResolverContext) -> Self {
+        self.resolver = Some(resolver);
         self
     }
 }
@@ -138,48 +139,25 @@ impl PipelineStage for ApplyTemplateStage {
             rendered.content.len()
         );
 
-        // Store CSS artifact for WASM consumption (only if not already set
-        // by CompileThemeCssStage, which produces themed CSS)
-        if ctx.artifacts.get("css:default").is_none() {
-            ctx.artifacts.store(
-                "css:default",
-                Artifact::from_string(DEFAULT_CSS, "text/css")
-                    .with_path(PathBuf::from(DEFAULT_CSS_ARTIFACT_PATH)),
-            );
-        }
-
         // Get metadata from the rendered output
         let metadata = rendered.metadata.clone();
 
-        // CSS paths for the template context: default + extension deps
-        let mut css_paths: Vec<String> = if self.config.css_paths.is_empty() {
-            vec![DEFAULT_CSS_ARTIFACT_PATH.to_string()]
-        } else {
-            self.config.css_paths.clone()
-        };
-
-        // Add extension CSS dependencies (css:* artifacts, excluding css:default).
-        // Artifact paths like `libs/kbd/kbd.css` are relative to the resource
-        // directory; prepend the resource prefix to make them relative to the
-        // output HTML file.
-        let prefix = &self.config.resource_prefix;
-        for (key, artifact) in ctx.artifacts.get_by_prefix("css:") {
-            if key == "css:default" {
-                continue;
-            }
-            if let Some(path) = &artifact.path {
-                css_paths.push(format!("{}{}", prefix, path.to_string_lossy()));
-            }
-        }
-
-        // Collect JS paths from js:* artifacts
-        let script_paths: Vec<String> = ctx
-            .artifacts
-            .get_by_prefix("js:")
-            .iter()
-            .filter_map(|(_, a)| a.path.as_ref())
-            .map(|p| format!("{}{}", prefix, p.to_string_lossy()))
-            .collect();
+        // Build CSS / JS URL lists from the artifact store.
+        //
+        // Phase 5: every CSS / JS artifact carries an
+        // `ArtifactScope` tag (Page or Project). The resolver
+        // translates the artifact's `(scope, path)` into a URL
+        // suitable for the rendered HTML, accounting for the
+        // page's depth below the site root and the project's
+        // shared lib dir.
+        //
+        // Iteration order is deterministic (sorted by key) so the
+        // emitted `<link>` / `<script>` order does not depend on
+        // HashMap layout. Theme CSS (key prefix `css:theme:`)
+        // sorts ahead of extension CSS (`css:libs:*` /
+        // `css:<other>:*`), preserving today's "theme first" order.
+        let css_paths = collect_artifact_urls(ctx, "css:", self.config.resolver.as_ref());
+        let script_paths = collect_artifact_urls(ctx, "js:", self.config.resolver.as_ref());
 
         // Extract custom template/partials from merged metadata
         let custom_template_path = metadata.get("template").and_then(|v| v.as_str());
@@ -309,6 +287,40 @@ impl PipelineStage for ApplyTemplateStage {
     }
 }
 
+/// Collect HTML URLs for every artifact under a given key
+/// prefix.
+///
+/// Iterates artifacts in sorted-key order so the emitted
+/// `<link>` / `<script>` block is deterministic across runs.
+/// Skips artifacts without a `path`.
+///
+/// - `Some(resolver)`: each artifact's URL is computed by the
+///   resolver from its `(scope, path)` tuple.
+/// - `None`: each artifact's URL is its `path` rendered as a
+///   forward-slash relative URL. This preserves legacy
+///   in-memory test behavior; the WASM hub-client (which today
+///   relies on a synthetic `DEFAULT_CSS_ARTIFACT_PATH`) will be
+///   migrated to a resolver in the WASM-audit follow-up.
+fn collect_artifact_urls(
+    ctx: &StageContext,
+    prefix: &str,
+    resolver: Option<&ResourceResolverContext>,
+) -> Vec<String> {
+    let mut entries: Vec<(&str, &crate::artifact::Artifact)> = ctx.artifacts.get_by_prefix(prefix);
+    entries.sort_by(|a, b| a.0.cmp(b.0));
+
+    let mut urls = Vec::with_capacity(entries.len());
+    for (_, artifact) in entries {
+        let Some(path) = &artifact.path else { continue };
+        let url = match resolver {
+            Some(r) => r.html_url_for(artifact.scope, path),
+            None => path.to_string_lossy().replace('\\', "/"),
+        };
+        urls.push(url);
+    }
+    urls
+}
+
 /// Build a `MemoryResolver` from explicit partial paths, reading content via runtime.
 ///
 /// Partials are keyed by file stem (e.g., `title-block.html` → `"title-block"`).
@@ -348,6 +360,7 @@ mod tests {
     use crate::project::{DocumentInfo, ProjectContext};
     use crate::stage::RenderedOutput;
     use quarto_system_runtime::TempDir;
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     // Mock runtime for testing
@@ -528,8 +541,12 @@ mod tests {
             .expect("Should be RenderedOutput");
         assert!(result.content.contains("<!DOCTYPE html>"));
         assert!(result.content.contains("<p>Hello, world!</p>"));
-        // Should have the default CSS artifact stored
-        assert!(ctx.artifacts.get("css:default").is_some());
+        // Phase 5: ApplyTemplateStage no longer stores its own
+        // theme CSS artifact. CompileThemeCssStage is now the
+        // sole producer (key prefix `css:theme:*`); when
+        // ApplyTemplateStage runs in isolation (e.g. this test
+        // sets up RenderedOutput directly without running the
+        // earlier stages), no theme CSS artifact is expected.
     }
 
     fn make_rendered_output_with_metadata(

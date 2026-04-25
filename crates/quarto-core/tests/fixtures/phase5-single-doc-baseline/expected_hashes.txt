@@ -1,0 +1,14 @@
+# Phase 5 single-doc byte-identity baseline.
+#
+# Captured 2026-04-24 against commit 7881178e (pre-Phase-5 refactor).
+# Each line: "<relative-path-from-doc-dir> <sha256>"
+#
+# After Phase 5's scoped-artifact refactor, these hashes MUST remain
+# unchanged. See `claude-notes/plans/2026-04-24-websites-phase-5.md`
+# Decision 10.
+#
+# To re-capture (if intentional changes to default theme / template
+# land), render `doc.qmd` and run:
+#   shasum -a 256 doc.html doc_files/styles.css
+doc.html 7026c8c5357f7261d725eedd29fc3b7bc794509bf92f4e9b420f37dcbdd5cc28
+doc_files/styles.css 3536a93eba680c9bd74acd4efba42fcd643981b1bc9d4128a3c09c8b278bbd15

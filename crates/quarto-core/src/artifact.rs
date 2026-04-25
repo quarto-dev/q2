@@ -19,6 +19,32 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Scope of an artifact: where it lives in the rendered output.
+///
+/// - [`ArtifactScope::Page`]: artifact belongs to a single page
+///   (e.g. an engine-generated figure). Lands under that page's
+///   per-page resource directory (`{stem}_files/...`).
+/// - [`ArtifactScope::Project`]: artifact is shared across the
+///   project (e.g. theme CSS, extension dependencies). In a
+///   website project this lands under
+///   `{output_dir}/{lib_dir}/...` once, deduplicated across
+///   pages. In a default (single-doc) project this resolves to
+///   the same per-page resource directory as `Page` — there's no
+///   separate shared location.
+///
+/// See `claude-notes/plans/2026-04-24-websites-phase-5.md`
+/// Decision 1 for the design rationale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ArtifactScope {
+    /// Per-page artifact (default). Lands under `{stem}_files/`.
+    #[default]
+    Page,
+    /// Project-shared artifact. Lands under `{lib_dir}/` in
+    /// projects that have one (websites: `site_libs/`); falls
+    /// back to per-page resource dir for default projects.
+    Project,
+}
+
 /// An artifact stored during rendering.
 ///
 /// Can represent text, binary data, or structured data.
@@ -43,6 +69,13 @@ pub struct Artifact {
 
     /// Arbitrary metadata for downstream consumers
     pub metadata: HashMap<String, serde_json::Value>,
+
+    /// Scope: per-page or project-shared. See [`ArtifactScope`].
+    ///
+    /// Defaults to [`ArtifactScope::Page`] so the field is opt-in
+    /// for producers — flipping a producer to `Project` is the
+    /// explicit signal that its output is shareable across pages.
+    pub scope: ArtifactScope,
 }
 
 impl Artifact {
@@ -53,6 +86,7 @@ impl Artifact {
             content_type: content_type.into(),
             path: None,
             metadata: HashMap::new(),
+            scope: ArtifactScope::default(),
         }
     }
 
@@ -63,6 +97,7 @@ impl Artifact {
             content_type: content_type.into(),
             path: None,
             metadata: HashMap::new(),
+            scope: ArtifactScope::default(),
         }
     }
 
@@ -76,6 +111,7 @@ impl Artifact {
             content_type: content_type.into(),
             path: Some(path.into()),
             metadata: HashMap::new(),
+            scope: ArtifactScope::default(),
         }
     }
 
@@ -88,6 +124,12 @@ impl Artifact {
     /// Add metadata to this artifact
     pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.metadata.insert(key.into(), value);
+        self
+    }
+
+    /// Set the scope (per-page or project-shared) for this artifact.
+    pub fn with_scope(mut self, scope: ArtifactScope) -> Self {
+        self.scope = scope;
         self
     }
 
@@ -211,7 +253,133 @@ impl ArtifactStore {
     pub fn clear(&mut self) {
         self.artifacts.clear();
     }
+
+    // === Phase 5: scope-aware drain / merge ===
+
+    /// Iterate over keys whose artifact is [`ArtifactScope::Project`].
+    pub fn project_scoped_keys(&self) -> impl Iterator<Item = &str> {
+        self.artifacts
+            .iter()
+            .filter(|(_, a)| a.scope == ArtifactScope::Project)
+            .map(|(k, _)| k.as_str())
+    }
+
+    /// Iterate over keys whose artifact is [`ArtifactScope::Page`].
+    pub fn page_scoped_keys(&self) -> impl Iterator<Item = &str> {
+        self.artifacts
+            .iter()
+            .filter(|(_, a)| a.scope == ArtifactScope::Page)
+            .map(|(k, _)| k.as_str())
+    }
+
+    /// Move every [`ArtifactScope::Project`] artifact out of `self`
+    /// into a fresh [`ArtifactStore`].
+    ///
+    /// `self` retains all [`ArtifactScope::Page`] entries unchanged.
+    /// The returned store inherits each artifact's scope tag (so it
+    /// stays `Project` for downstream merging).
+    ///
+    /// See `claude-notes/plans/2026-04-24-websites-phase-5.md`
+    /// Decision 2 for the parallelism contract this enables.
+    pub fn drain_project_scoped(&mut self) -> ArtifactStore {
+        // Snapshot keys first to avoid aliasing the borrow on iter.
+        let mut keys: Vec<String> = self.project_scoped_keys().map(String::from).collect();
+        keys.sort(); // determinism for downstream iteration
+        let mut out = ArtifactStore::new();
+        for k in keys {
+            if let Some(a) = self.artifacts.remove(&k) {
+                out.artifacts.insert(k, a);
+            }
+        }
+        out
+    }
+
+    /// Merge `other` into `self`, treating identical-key entries as
+    /// dedup candidates.
+    ///
+    /// Behavior per key in `other`:
+    /// - If the key is **absent** in `self`: insert.
+    /// - If the key is **present** with byte-equal content: count as
+    ///   deduped; do not insert again.
+    /// - If the key is **present** with different content: return
+    ///   `Err(ArtifactMergeConflict)` naming the key. `self` is
+    ///   left in a partially-merged state — the caller is expected
+    ///   to abort the build, so this is acceptable.
+    ///
+    /// Iteration over `other` is in sorted-key order so error
+    /// reporting is deterministic across runs / threads.
+    ///
+    /// Consumes `other` because drained artifacts should not be
+    /// reused after a merge attempt.
+    pub fn merge_into_project(
+        &mut self,
+        other: ArtifactStore,
+    ) -> std::result::Result<MergeStats, ArtifactMergeConflict> {
+        let mut entries: Vec<(String, Artifact)> = other.artifacts.into_iter().collect();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut stats = MergeStats::default();
+        for (key, incoming) in entries {
+            match self.artifacts.get(&key) {
+                Some(existing) => {
+                    if existing.content == incoming.content {
+                        stats.deduped += 1;
+                    } else {
+                        return Err(ArtifactMergeConflict {
+                            key,
+                            existing_len: existing.content.len(),
+                            incoming_len: incoming.content.len(),
+                        });
+                    }
+                }
+                None => {
+                    self.artifacts.insert(key, incoming);
+                    stats.inserted += 1;
+                }
+            }
+        }
+        Ok(stats)
+    }
 }
+
+/// Outcome of a successful [`ArtifactStore::merge_into_project`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MergeStats {
+    /// Number of new entries inserted into the destination.
+    pub inserted: usize,
+    /// Number of entries skipped because the same key was already
+    /// present with byte-equal content.
+    pub deduped: usize,
+}
+
+/// Reason a merge attempt aborted: two artifacts share a key but
+/// carry different content. The orchestrator is expected to format
+/// a user-facing diagnostic that names the source documents
+/// (which the store itself doesn't track).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactMergeConflict {
+    /// The artifact key whose content differed.
+    pub key: String,
+    /// Length in bytes of the entry already in the destination
+    /// store. Useful for diagnostics ("you already have N bytes,
+    /// new doc is producing M bytes").
+    pub existing_len: usize,
+    /// Length in bytes of the new entry that triggered the
+    /// conflict.
+    pub incoming_len: usize,
+}
+
+impl std::fmt::Display for ArtifactMergeConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "artifact key '{}' has conflicting content (existing: {} bytes, incoming: {} bytes)",
+            self.key, self.existing_len, self.incoming_len
+        )
+    }
+}
+
+impl std::error::Error for ArtifactMergeConflict {}
 
 #[cfg(test)]
 mod tests {
@@ -285,5 +453,173 @@ mod tests {
         let removed = store.remove("key");
         assert!(removed.is_some());
         assert!(!store.contains("key"));
+    }
+
+    // === Phase 5 Decision 1: ArtifactScope ===
+
+    /// Plan test 1: every constructor produces an artifact whose
+    /// scope defaults to Page. Producers must explicitly opt into
+    /// Project scope.
+    #[test]
+    fn artifact_default_scope_is_page() {
+        let a = Artifact::from_string("body { color: red; }", "text/css");
+        assert_eq!(a.scope, ArtifactScope::Page);
+
+        let b = Artifact::from_bytes(vec![0u8, 1, 2], "image/png");
+        assert_eq!(b.scope, ArtifactScope::Page);
+
+        let c = Artifact::from_path("/tmp/file.css", "text/css");
+        assert_eq!(c.scope, ArtifactScope::Page);
+    }
+
+    /// Plan test 2: `.with_scope()` sets the scope without
+    /// touching content / content_type / path / metadata.
+    #[test]
+    fn artifact_with_scope_builder_only_touches_scope() {
+        let original = Artifact::from_string("body {}", "text/css")
+            .with_path("/tmp/styles.css")
+            .with_metadata("k", serde_json::json!("v"));
+
+        let scoped = original.clone().with_scope(ArtifactScope::Project);
+
+        assert_eq!(scoped.scope, ArtifactScope::Project);
+        assert_eq!(scoped.content, original.content);
+        assert_eq!(scoped.content_type, original.content_type);
+        assert_eq!(scoped.path, original.path);
+        assert_eq!(scoped.metadata.len(), original.metadata.len());
+        assert_eq!(scoped.metadata.get("k"), original.metadata.get("k"));
+    }
+
+    /// Plan test 3: scope survives store/get round-trip.
+    #[test]
+    fn artifact_scope_round_trips_through_store() {
+        let mut store = ArtifactStore::new();
+        store.store(
+            "css:project",
+            Artifact::from_string("project", "text/css").with_scope(ArtifactScope::Project),
+        );
+        store.store(
+            "css:page",
+            Artifact::from_string("page", "text/css"), // default Page
+        );
+
+        assert_eq!(
+            store.get("css:project").unwrap().scope,
+            ArtifactScope::Project
+        );
+        assert_eq!(store.get("css:page").unwrap().scope, ArtifactScope::Page);
+    }
+
+    // === Phase 5 Decision 2 / 3: drain + merge ===
+
+    /// Plan test 11: drain returns Project entries; Page entries
+    /// stay in the source store.
+    #[test]
+    fn drain_returns_only_project_scoped() {
+        let mut per_doc = ArtifactStore::new();
+        per_doc.store(
+            "css:theme:abc",
+            Artifact::from_string("theme", "text/css").with_scope(ArtifactScope::Project),
+        );
+        per_doc.store(
+            "image:fig-1",
+            Artifact::from_bytes(vec![0xff, 0xd8], "image/jpeg"), // Page (default)
+        );
+
+        let drained = per_doc.drain_project_scoped();
+
+        assert_eq!(drained.len(), 1);
+        assert!(drained.contains("css:theme:abc"));
+        assert_eq!(per_doc.len(), 1);
+        assert!(per_doc.contains("image:fig-1"));
+        assert!(!per_doc.contains("css:theme:abc"));
+    }
+
+    /// Plan test 12: two drains with same key + same bytes
+    /// dedup; the project store has exactly one entry.
+    #[test]
+    fn merge_dedupes_byte_equal_keys() {
+        let mut project = ArtifactStore::new();
+
+        let make = || {
+            let mut s = ArtifactStore::new();
+            s.store(
+                "css:theme:abc",
+                Artifact::from_string("body{}", "text/css").with_scope(ArtifactScope::Project),
+            );
+            s
+        };
+
+        let stats1 = project.merge_into_project(make()).unwrap();
+        assert_eq!(stats1.inserted, 1);
+        assert_eq!(stats1.deduped, 0);
+
+        let stats2 = project.merge_into_project(make()).unwrap();
+        assert_eq!(stats2.inserted, 0);
+        assert_eq!(stats2.deduped, 1);
+
+        assert_eq!(project.len(), 1);
+    }
+
+    /// Plan test 13: merging two stores with the same key but
+    /// different bytes is a hard error naming the key.
+    #[test]
+    fn merge_errors_on_byte_mismatch() {
+        let mut project = ArtifactStore::new();
+
+        let mut a = ArtifactStore::new();
+        a.store(
+            "css:libs:kbd:kbd.css",
+            Artifact::from_string("v1", "text/css").with_scope(ArtifactScope::Project),
+        );
+        let mut b = ArtifactStore::new();
+        b.store(
+            "css:libs:kbd:kbd.css",
+            Artifact::from_string("v2-different", "text/css").with_scope(ArtifactScope::Project),
+        );
+
+        project.merge_into_project(a).expect("first merge");
+        let err = project
+            .merge_into_project(b)
+            .expect_err("second merge must conflict");
+        assert_eq!(err.key, "css:libs:kbd:kbd.css");
+        assert_eq!(err.existing_len, "v1".len());
+        assert_eq!(err.incoming_len, "v2-different".len());
+
+        // Display includes the key for orchestrator-side
+        // diagnostic composition.
+        let msg = format!("{}", err);
+        assert!(msg.contains("css:libs:kbd:kbd.css"), "msg: {msg}");
+    }
+
+    /// Plan test 14: drain + merge preserves all artifact fields
+    /// (path, content_type, metadata, scope).
+    #[test]
+    fn drain_preserves_artifact_metadata_path() {
+        let mut per_doc = ArtifactStore::new();
+        per_doc.store(
+            "css:theme:abc",
+            Artifact::from_string("body{}", "text/css")
+                .with_path("quarto/quarto-theme-abc.css")
+                .with_metadata("source", serde_json::json!("compile_theme_css"))
+                .with_scope(ArtifactScope::Project),
+        );
+
+        let drained = per_doc.drain_project_scoped();
+        let mut project = ArtifactStore::new();
+        project.merge_into_project(drained).unwrap();
+
+        let got = project.get("css:theme:abc").expect("present after merge");
+        assert_eq!(got.scope, ArtifactScope::Project);
+        assert_eq!(
+            got.path,
+            Some(std::path::PathBuf::from("quarto/quarto-theme-abc.css"))
+        );
+        assert_eq!(got.content_type, "text/css");
+        assert_eq!(
+            got.metadata.get("source"),
+            Some(&serde_json::json!("compile_theme_css"))
+        );
+        assert_eq!(got.as_str(), Some("body{}"));
     }
 }

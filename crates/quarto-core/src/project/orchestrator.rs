@@ -93,6 +93,29 @@ pub trait ProjectType {
     /// The tag this implementation serves.
     fn kind(&self) -> ProjectKind;
 
+    /// Name of the project's shared "lib" directory (e.g.
+    /// `"site_libs"` for websites). The empty string indicates
+    /// the project type has **no** shared lib directory: in that
+    /// case [`ArtifactScope::Project`] artifacts resolve under
+    /// the same per-page resource directory as
+    /// [`ArtifactScope::Page`] artifacts (preserving pre-Phase-5
+    /// single-doc behavior).
+    ///
+    /// Returns an owned `String` rather than `&'static str` so
+    /// implementations can later read the value from
+    /// [`ProjectContext::config`] when the user-config override
+    /// (`project.lib-dir:`) lands without churning this trait
+    /// signature.
+    ///
+    /// See `claude-notes/plans/2026-04-24-websites-phase-5.md`
+    /// Decision 4 for the design rationale.
+    ///
+    /// [`ArtifactScope::Project`]: crate::artifact::ArtifactScope::Project
+    /// [`ArtifactScope::Page`]: crate::artifact::ArtifactScope::Page
+    fn lib_dir(&self) -> String {
+        String::new()
+    }
+
     /// Called once per project, after Pass 1 and before Pass 2.
     /// Default: no-op.
     async fn pre_render(&self, _project: &mut ProjectContext, _index: &ProjectIndex) -> Result<()> {
@@ -100,11 +123,21 @@ pub trait ProjectType {
     }
 
     /// Called once per project, after Pass 2. Default: no-op.
+    ///
+    /// **Phase 5:** receives the orchestrator's project-wide
+    /// artifact accumulator (filled by per-doc Pass-2 renders
+    /// merging their drained Project-scoped artifacts). Website
+    /// projects flush this to `{output_dir}/{lib_dir}/...`.
+    /// Default projects ignore it (single-doc renders flush
+    /// per-doc inside [`render_document_to_file`] when no
+    /// orchestrator is involved).
     async fn post_render(
         &self,
         _project: &ProjectContext,
         _index: &ProjectIndex,
         _outputs: &[RenderToFileResult],
+        _project_artifacts: &crate::artifact::ArtifactStore,
+        _runtime: &dyn quarto_system_runtime::SystemRuntime,
     ) -> Result<()> {
         Ok(())
     }
@@ -137,6 +170,61 @@ pub struct WebsiteProjectType;
 impl ProjectType for WebsiteProjectType {
     fn kind(&self) -> ProjectKind {
         ProjectKind::Website
+    }
+
+    fn lib_dir(&self) -> String {
+        "site_libs".to_string()
+    }
+
+    /// Phase 5: flush every Project-scoped artifact accumulated
+    /// across Pass-2 renders to disk under `_site/site_libs/`.
+    ///
+    /// Each artifact's relative `path` is joined onto
+    /// `{output_dir}/{lib_dir}/`. Iteration is in sorted-key
+    /// order so the on-disk write order is deterministic across
+    /// runs.
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn post_render(
+        &self,
+        project: &ProjectContext,
+        _index: &ProjectIndex,
+        _outputs: &[RenderToFileResult],
+        project_artifacts: &crate::artifact::ArtifactStore,
+        runtime: &dyn SystemRuntime,
+    ) -> Result<()> {
+        if project_artifacts.is_empty() {
+            return Ok(());
+        }
+
+        let lib_root = project.output_dir.join(self.lib_dir());
+
+        let mut entries: Vec<(&str, &crate::artifact::Artifact)> =
+            project_artifacts.iter().collect();
+        entries.sort_by(|a, b| a.0.cmp(b.0));
+
+        for (_, artifact) in entries {
+            let Some(path) = &artifact.path else { continue };
+            let on_disk = lib_root.join(path);
+            if let Some(parent) = on_disk.parent() {
+                runtime.dir_create(parent, true).map_err(|e| {
+                    crate::error::QuartoError::other(format!(
+                        "Failed to create site_libs subdirectory {}: {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
+            runtime
+                .file_write(&on_disk, &artifact.content)
+                .map_err(|e| {
+                    crate::error::QuartoError::other(format!(
+                        "Failed to write site_libs artifact {}: {}",
+                        on_disk.display(),
+                        e
+                    ))
+                })?;
+        }
+        Ok(())
     }
 }
 
@@ -204,6 +292,21 @@ pub struct ProjectPipeline<'a> {
     format_str: String,
     options: &'a RenderToFileOptions,
     runtime: Arc<dyn SystemRuntime>,
+    /// Project-wide artifact accumulator (Phase 5).
+    ///
+    /// Project-scoped artifacts produced by per-doc Pass-2
+    /// renders are drained from the per-doc `StageContext` and
+    /// merged into this store by the orchestrator. After Pass 2
+    /// completes, [`ProjectType::post_render`] flushes the
+    /// accumulated artifacts to disk.
+    ///
+    /// The orchestrator is the **only** owner that mutates this
+    /// store; per-doc workers never touch it. This is what makes
+    /// the design ready for future rayon-per-worker parallelism
+    /// without redesign — see
+    /// `claude-notes/plans/2026-04-24-websites-phase-5.md`
+    /// Decision 2.
+    project_artifacts: crate::artifact::ArtifactStore,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -223,7 +326,15 @@ impl<'a> ProjectPipeline<'a> {
             format_str: format_str.into(),
             options,
             runtime,
+            project_artifacts: crate::artifact::ArtifactStore::new(),
         }
+    }
+
+    /// Read-only view of the project-wide artifact accumulator
+    /// (Phase 5). Useful for tests and for `post_render`
+    /// implementations that take `&self` on the trait.
+    pub fn project_artifacts(&self) -> &crate::artifact::ArtifactStore {
+        &self.project_artifacts
     }
 
     /// Run Pass 1 → `pre_render` → Pass 2 → `post_render`.
@@ -246,7 +357,13 @@ impl<'a> ProjectPipeline<'a> {
         let (outputs, pass2_failures) = self.pass_two(index.clone(), &skip).await;
 
         self.project_type
-            .post_render(self.project, &index, &outputs)
+            .post_render(
+                self.project,
+                &index,
+                &outputs,
+                &self.project_artifacts,
+                self.runtime.as_ref(),
+            )
             .await
             .map_err(|e| QuartoError::other(format!("post_render failed: {e}")))?;
 
@@ -330,14 +447,25 @@ impl<'a> ProjectPipeline<'a> {
 
     /// Re-render every file under the built `ProjectIndex`,
     /// skipping files that failed Pass 1.
+    ///
+    /// **Phase 5:** each per-doc render drains its
+    /// Project-scoped artifacts into the orchestrator's
+    /// `project_artifacts` accumulator. The merge is sequential
+    /// (no shared mutable state during render) so the function
+    /// composes with future rayon-per-worker parallelism — see
+    /// `claude-notes/plans/2026-04-24-websites-phase-5.md`
+    /// Decision 2.
     async fn pass_two(
-        &self,
+        &mut self,
         index: Arc<ProjectIndex>,
         skip: &std::collections::HashSet<std::path::PathBuf>,
     ) -> (Vec<RenderToFileResult>, Vec<FileFailure>) {
         let mut outputs = Vec::with_capacity(self.project.files.len());
         let mut failures = Vec::new();
-        for doc_info in &self.project.files {
+        // Snapshot the file list to avoid borrowing `self.project`
+        // while we also mutate `self.project_artifacts`.
+        let files: Vec<crate::project::DocumentInfo> = self.project.files.clone();
+        for doc_info in &files {
             if skip.contains(&doc_info.input) {
                 continue;
             }
@@ -348,6 +476,7 @@ impl<'a> ProjectPipeline<'a> {
                 Some(self.project),
                 self.runtime.clone(),
                 Some(index.clone()),
+                Some(&mut self.project_artifacts),
             ) {
                 Ok(result) => outputs.push(result),
                 Err(e) => failures.push(FileFailure {
@@ -390,12 +519,16 @@ mod tests {
             files: Vec::new(),
             output_dir: PathBuf::from("/project"),
         };
-        let _ = &runtime; // silence unused warning
         let t = DefaultProjectType;
         let index = ProjectIndex::default();
+        let project_artifacts = crate::artifact::ArtifactStore::new();
 
         assert!(t.pre_render(&mut project, &index).await.is_ok());
-        assert!(t.post_render(&project, &index, &[]).await.is_ok());
+        assert!(
+            t.post_render(&project, &index, &[], &project_artifacts, &runtime)
+                .await
+                .is_ok()
+        );
     }
 
     #[test]
@@ -413,6 +546,24 @@ mod tests {
             let back = ProjectKind::try_from(s).unwrap();
             assert_eq!(back, expected);
         }
+    }
+
+    // === Phase 5 Decision 4: ProjectType::lib_dir ===
+
+    /// Plan test 15: WebsiteProjectType reports `"site_libs"`.
+    #[test]
+    fn website_project_type_lib_dir_is_site_libs() {
+        let t = WebsiteProjectType;
+        assert_eq!(t.lib_dir(), "site_libs");
+    }
+
+    /// Plan test 16: DefaultProjectType reports the empty
+    /// string — its [`ArtifactScope::Project`] artifacts fall
+    /// back to the per-page resource directory.
+    #[test]
+    fn default_project_type_lib_dir_is_empty() {
+        let t = DefaultProjectType;
+        assert_eq!(t.lib_dir(), "");
     }
 
     #[test]

@@ -29,7 +29,7 @@ use std::sync::{Arc, OnceLock};
 
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
-    QuartoError, RenderContext, RenderOptions, render_qmd_to_html,
+    QuartoError, RenderContext, RenderOptions, ResourceResolverContext, render_qmd_to_html,
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
@@ -968,8 +968,14 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         ctx.user_grammar_provider = Some(Box::new(provider));
     }
 
-    // Use the unified async pipeline (same as CLI)
-    let config = HtmlRenderConfig::default();
+    // Use the unified async pipeline (same as CLI). Phase 5:
+    // attach a VFS-root resolver so artifacts (theme CSS,
+    // extension deps) get URLs of the form
+    // `/.quarto/project-artifacts/<artifact_path>` and the
+    // browser-side post-processor reads them from VFS at the
+    // matching synthetic path.
+    let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+    let config = HtmlRenderConfig::with_resolver(resolver.clone());
     let source_name = path.to_string_lossy();
 
     // Share the global VFS runtime with the pipeline
@@ -979,10 +985,12 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
     match render_qmd_to_html(&content, &source_name, &mut ctx, &config, runtime_arc).await {
         Ok(output) => {
             // Populate VFS with artifacts so post-processor can resolve them.
-            // This includes CSS at /.quarto/project-artifacts/styles.css.
+            // Phase 5: route every artifact through the resolver so the
+            // VFS path matches the URL embedded in HTML.
             for (_key, artifact) in ctx.artifacts.iter() {
                 if let Some(artifact_path) = &artifact.path {
-                    runtime.add_file(artifact_path, artifact.content.clone());
+                    let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
+                    runtime.add_file(&vfs_path, artifact.content.clone());
                 }
             }
 
@@ -1075,9 +1083,11 @@ pub async fn render_qmd_content(
         ctx.user_grammar_provider = Some(Box::new(provider));
     }
 
-    // Use the unified async pipeline (same as CLI)
+    // Use the unified async pipeline (same as CLI). Phase 5:
+    // VFS-root resolver (see render_qmd above for context).
     // TODO: Support custom templates via template_bundle parameter
-    let config = HtmlRenderConfig::default();
+    let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+    let config = HtmlRenderConfig::with_resolver(resolver.clone());
 
     // Share the global VFS runtime with the pipeline
     let runtime_arc: Arc<dyn SystemRuntime> =
@@ -1095,11 +1105,12 @@ pub async fn render_qmd_content(
     match result {
         Ok(output) => {
             // Populate VFS with artifacts so post-processor can resolve them.
-            // This includes CSS at /.quarto/project-artifacts/styles.css.
+            // Phase 5: route through the resolver so VFS path matches HTML URL.
             let runtime = get_runtime();
             for (_key, artifact) in ctx.artifacts.iter() {
                 if let Some(path) = &artifact.path {
-                    runtime.add_file(path, artifact.content.clone());
+                    let vfs_path = resolver.on_disk_path_for(artifact.scope, path);
+                    runtime.add_file(&vfs_path, artifact.content.clone());
                 }
             }
 

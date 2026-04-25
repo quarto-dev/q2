@@ -50,6 +50,7 @@ pub mod project;
 pub mod render;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod render_to_file;
+pub mod resource_resolver;
 pub mod resources;
 pub mod stage;
 pub mod template;
@@ -57,7 +58,7 @@ pub mod transform;
 pub mod transforms;
 
 // Re-export commonly used types
-pub use artifact::{Artifact, ArtifactStore};
+pub use artifact::{Artifact, ArtifactMergeConflict, ArtifactScope, ArtifactStore, MergeStats};
 pub use error::{ParseError, QuartoError, Result};
 pub use format::{Format, FormatIdentifier};
 pub use pipeline::{
@@ -67,6 +68,7 @@ pub use pipeline::{
 };
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectKind};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
+pub use resource_resolver::ResourceResolverContext;
 pub use transform::{AstTransform, TransformPipeline};
 pub use transforms::{
     CalloutResolveTransform, CalloutTransform, MetadataNormalizeTransform,

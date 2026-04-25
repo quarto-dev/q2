@@ -582,7 +582,21 @@ phases above.
       Sub-plan: `claude-notes/plans/2026-04-24-websites-phase-4.md`.
       Adds 48 new tests (42 unit + 6 integration) and a Q1-matching
       prev/next strip emitted from the already-resolved sidebar.
-- [ ] **Phase 5:** Scoped artifact store + `site_libs/`.
+- [x] **Phase 5:** Scoped artifact store + `site_libs/`.
+      Closed `bd-u5pr` on `feature/websites`.
+      Sub-plan: `claude-notes/plans/2026-04-24-websites-phase-5.md`.
+      Adds `ArtifactScope { Page, Project }`,
+      `ResourceResolverContext` (single_doc / website / vfs_root
+      flavors), fingerprinted theme CSS keying, scope-aware
+      drain/merge with byte-equality dedup. Single-doc
+      byte-identity preserved against pre-Phase-5 baseline.
+      Multi-doc websites now emit one shared
+      `_site/site_libs/quarto/quarto-theme-<fingerprint>.css`
+      with correct relative URLs in nested-page `<link>` tags.
+      Follow-ups: `bd-b9za` (ext-dep dedup integration test),
+      `bd-78ud` (empty `{stem}_files/` cleanup), `bd-apvo`
+      (`project.lib-dir:` user-config override), `bd-vdl8`
+      (retire `DEFAULT_CSS_ARTIFACT_PATH`).
 - [ ] **Phase 6:** Cross-document link rewriting.
 - [ ] **Phase 7:** Post-render (sitemap, favicon, site-url/title).
 - [ ] **Phase 8:** Incremental rebuilds.
@@ -714,4 +728,15 @@ when it files an issue):
     `bd-jbml` from Phase 3).
   - `bd-nf50` — *(epic-wide, related to `bd-tr81`)* Page-navigation
     rules need user-facing docs in the Q2 docs site. (Decision 9.)
-- Phases 5–9: TBD.
+- **Phase 5 (`bd-u5pr`, closed).** Follow-ups filed at close-out:
+  - `bd-b9za` — Extension-dep `site_libs/` dedup integration
+    test (Phase-5 plan tests 19 / 22 deferred; unit-level
+    coverage exists, integration fixture would close the gap).
+  - `bd-78ud` — Empty `{stem}_files/` cleanup for pages that
+    emit no Page-scoped artifacts. (Open question 5.)
+  - `bd-apvo` — `project.lib-dir:` user-config override.
+    `lib_dir()` returns owned `String` precisely to make this a
+    drop-in change. (Decision 4.)
+  - `bd-vdl8` — Retire `DEFAULT_CSS_ARTIFACT_PATH` once
+    hub-client (Phase 9) moves off synthetic VFS paths.
+- Phases 6–9: TBD.

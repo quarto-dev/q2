@@ -9,7 +9,12 @@
 //!
 //! This stage reads the format-flattened metadata (produced by
 //! [`MetadataMergeStage`]), extracts the theme configuration, compiles
-//! SCSS to CSS, and stores the result as the `"css:default"` artifact.
+//! SCSS to CSS, and stores the result as a Project-scoped artifact
+//! keyed `css:theme:<fingerprint>` (Phase 5). The fingerprint is
+//! derived from the *output* CSS bytes so two compilations producing
+//! identical output share an artifact (deduplication across pages
+//! that use the same theme), while different output produces
+//! different keys (multi-theme websites coexist).
 //!
 //! Behavior by theme value (mirrors Quarto 1):
 //!
@@ -34,8 +39,7 @@ use quarto_system_runtime::{
     SASS_CACHE_BUDGET_BYTES, SystemRuntime, cache_get_lru, cache_set_lru, ensure_namespace_version,
 };
 
-use crate::artifact::Artifact;
-use crate::pipeline::DEFAULT_CSS_ARTIFACT_PATH;
+use crate::artifact::{Artifact, ArtifactScope};
 use crate::resources::DEFAULT_CSS;
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -83,7 +87,7 @@ async fn ensure_sass_cache_ready(runtime: &dyn SystemRuntime) -> bool {
 /// 1. Extracts `ThemeConfig` from merged metadata (`doc.ast.meta`)
 /// 2. If no theme: stores `DEFAULT_CSS` and returns
 /// 3. If themed: assembles SCSS, checks cache, compiles if needed
-/// 4. Stores result as `"css:default"` artifact
+/// 4. Stores result as `"css:theme:<fingerprint>"` Project-scoped artifact
 ///
 /// The stage passes `DocumentAst` through unchanged — it only produces
 /// a side-effect artifact.
@@ -363,18 +367,74 @@ impl PipelineStage for CompileThemeCssStage {
     }
 }
 
+/// Length of the theme fingerprint hex prefix used in artifact
+/// keys and on-disk filenames. 16 hex chars = 64 bits = ample
+/// collision resistance for the small set of distinct themes a
+/// single project will produce.
+const THEME_FINGERPRINT_LEN: usize = 16;
+
+/// Compute a stable, content-derived fingerprint for a compiled
+/// theme CSS string. Two compilations producing identical bytes
+/// produce identical fingerprints; the merge layer
+/// ([`crate::artifact::ArtifactStore::merge_into_project`])
+/// dedupes those into a single shared artifact.
+///
+/// Hashing the *output* (rather than the inputs) sidesteps the
+/// "did we hash everything that affects the result?" problem:
+/// the SCSS pipeline can normalize / canonicalize inputs in any
+/// order it likes, and identical CSS output → identical
+/// fingerprint by construction.
+///
+/// See `claude-notes/plans/2026-04-24-websites-phase-5.md`
+/// Decision 9.
+pub fn theme_fingerprint(css: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(css.as_bytes());
+    let hash = hasher.finalize();
+    let hex = format!("{:x}", hash);
+    hex[..THEME_FINGERPRINT_LEN].to_string()
+}
+
+/// Build the artifact key + relative on-disk path from a theme
+/// CSS fingerprint.
+///
+/// **Path naming differs by project type** to preserve byte-
+/// identical single-doc behavior (see Phase 5 Decision 10):
+///
+/// - **Single-doc** (`is_single_file == true`): path is the bare
+///   `styles.css`, mirroring the pre-Phase-5 layout. Single-doc
+///   renders only ever produce one theme per render call, so a
+///   non-fingerprinted name is unambiguous.
+/// - **Multi-doc / website**: path is
+///   `quarto/quarto-theme-<fingerprint>.css`, namespaced under
+///   `quarto/` so multi-theme websites can coexist.
+///
+/// The artifact **key** is fingerprint-keyed in both cases so
+/// the project-merge dedup works whenever two pages emit the
+/// same theme bytes.
+fn theme_artifact_key_and_path(fingerprint: &str, single_doc: bool) -> (String, PathBuf) {
+    let key = format!("css:theme:{}", fingerprint);
+    let path = if single_doc {
+        PathBuf::from("styles.css")
+    } else {
+        PathBuf::from(format!("quarto/quarto-theme-{}.css", fingerprint))
+    };
+    (key, path)
+}
+
 fn store_default_css(ctx: &mut StageContext) {
-    ctx.artifacts.store(
-        "css:default",
-        Artifact::from_string(DEFAULT_CSS, "text/css")
-            .with_path(PathBuf::from(DEFAULT_CSS_ARTIFACT_PATH)),
-    );
+    store_css(ctx, DEFAULT_CSS.to_string());
 }
 
 fn store_css(ctx: &mut StageContext, css: String) {
+    let fingerprint = theme_fingerprint(&css);
+    let (key, path) = theme_artifact_key_and_path(&fingerprint, ctx.project.is_single_file);
     ctx.artifacts.store(
-        "css:default",
-        Artifact::from_string(css, "text/css").with_path(PathBuf::from(DEFAULT_CSS_ARTIFACT_PATH)),
+        key,
+        Artifact::from_string(css, "text/css")
+            .with_path(path)
+            .with_scope(ArtifactScope::Project),
     );
 }
 
@@ -504,11 +564,20 @@ mod tests {
         }
     }
 
+    /// Locate the (single) `css:theme:*` artifact stored by
+    /// [`CompileThemeCssStage`] and return its content as a string.
+    /// Phase 5 retires the singleton `"css:default"` key in favor
+    /// of fingerprint-keyed artifacts.
     fn get_css_artifact(ctx: &StageContext) -> String {
-        let artifact = ctx
-            .artifacts
-            .get("css:default")
-            .expect("css:default artifact missing");
+        let entries: Vec<_> = ctx.artifacts.get_by_prefix("css:theme:");
+        assert_eq!(
+            entries.len(),
+            1,
+            "expected exactly one css:theme:* artifact, found {}",
+            entries.len()
+        );
+        let artifact = entries[0].1;
+        assert_eq!(artifact.scope, ArtifactScope::Project);
         String::from_utf8(artifact.content.clone()).expect("CSS should be valid UTF-8")
     }
 
@@ -1336,6 +1405,81 @@ mod tests {
         // Same config, same runtime → same key (deterministic)
         let key2 = cache_key(&config, &ctx, &runtime).unwrap();
         assert_eq!(key1, key2);
+    }
+
+    // === Phase 5 Decision 9: theme fingerprinting ===
+
+    /// Plan test 15a: identical CSS bytes produce identical
+    /// fingerprints across calls.
+    #[test]
+    fn fingerprint_stable_for_identical_inputs() {
+        let css = "body { color: red; }";
+        let fp1 = theme_fingerprint(css);
+        let fp2 = theme_fingerprint(css);
+        assert_eq!(fp1, fp2);
+        assert_eq!(fp1.len(), THEME_FINGERPRINT_LEN);
+    }
+
+    /// Plan test 15b: different CSS outputs produce different
+    /// fingerprints (collision-resistance sanity).
+    #[test]
+    fn fingerprint_differs_for_different_themes() {
+        let cosmo_like = ".btn-primary { background: #2780e3; }";
+        let darkly_like = ".btn-primary { background: #375a7f; }";
+        assert_ne!(
+            theme_fingerprint(cosmo_like),
+            theme_fingerprint(darkly_like)
+        );
+    }
+
+    /// Plan test 15c: adding additional rules (analogous to a
+    /// user SCSS layer added on top of `cosmo`) changes the
+    /// fingerprint. Demonstrates that the fingerprint reacts to
+    /// any output change without needing to enumerate every
+    /// possible input source.
+    #[test]
+    fn fingerprint_differs_for_added_scss_layer() {
+        let base = ".btn { padding: 0.5rem; }";
+        let with_layer = ".btn { padding: 0.5rem; } .custom-rule { color: rebeccapurple; }";
+        assert_ne!(theme_fingerprint(base), theme_fingerprint(with_layer));
+    }
+
+    /// Plan test 15d: under content-based fingerprinting, two
+    /// inputs that produce *byte-equal* CSS outputs (e.g. SCSS
+    /// pipelines that canonicalize whitespace, list ordering,
+    /// or selector ordering) get the same fingerprint regardless
+    /// of how the input differed. This is the key property that
+    /// makes the dedup work in practice without a brittle
+    /// per-input canonicalization layer.
+    #[test]
+    fn fingerprint_input_canonicalization() {
+        // Whatever upstream did to produce these strings, if both
+        // emerge byte-identical from the SCSS pipeline, the
+        // fingerprint must agree.
+        let a = ".btn{color:red}";
+        let b = ".btn{color:red}";
+        assert_eq!(theme_fingerprint(a), theme_fingerprint(b));
+    }
+
+    /// Sanity: the artifact key/path helper produces the
+    /// documented namespace + filename shape (Decision 5) and
+    /// honors the single-doc flattening rule (Decision 10).
+    #[test]
+    fn theme_artifact_key_and_path_shape() {
+        let (key_w, path_w) = theme_artifact_key_and_path("abc123", false);
+        assert_eq!(key_w, "css:theme:abc123");
+        assert_eq!(path_w, PathBuf::from("quarto/quarto-theme-abc123.css"));
+
+        let (key_s, path_s) = theme_artifact_key_and_path("abc123", true);
+        assert_eq!(
+            key_s, "css:theme:abc123",
+            "key is fingerprint-derived in both modes",
+        );
+        assert_eq!(
+            path_s,
+            PathBuf::from("styles.css"),
+            "single-doc path is the bare styles.css for byte-identity",
+        );
     }
 
     #[test]

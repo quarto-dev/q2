@@ -79,22 +79,27 @@ use crate::transforms::{
 pub const DEFAULT_CSS_ARTIFACT_PATH: &str = "/.quarto/project-artifacts/styles.css";
 
 /// Configuration for HTML rendering.
+///
+/// Phase 5: the legacy `css_paths` + `resource_prefix` pair has
+/// been replaced by an optional [`ResourceResolverContext`].
+/// When `resolver` is provided (CLI render via `render_to_file`,
+/// project pipeline, or any caller that knows where the output
+/// HTML will live on disk), every CSS / JS artifact in the store
+/// gets its `<link>` / `<script>` URL computed by the resolver.
+/// When `resolver` is absent (in-memory test renders), each
+/// artifact's bare `path` is used verbatim.
 #[derive(Debug, Default)]
-pub struct HtmlRenderConfig<'a> {
-    /// CSS paths to include in the document (relative to the output HTML).
-    /// If empty, the default CSS artifact will be used.
-    pub css_paths: &'a [String],
-    /// Prefix for extension dependency paths (e.g., `"test_files/"` for
-    /// `test.html`). Passed through to `ApplyTemplateConfig::resource_prefix`.
-    pub resource_prefix: &'a str,
+pub struct HtmlRenderConfig {
+    /// Scope-aware resolver passed through to
+    /// [`ApplyTemplateConfig::resolver`]. See its docs.
+    pub resolver: Option<crate::resource_resolver::ResourceResolverContext>,
 }
 
-impl<'a> HtmlRenderConfig<'a> {
-    /// Create a new configuration with custom CSS paths.
-    pub fn with_css(css_paths: &'a [String]) -> Self {
+impl HtmlRenderConfig {
+    /// Create a new configuration with a resolver attached.
+    pub fn with_resolver(resolver: crate::resource_resolver::ResourceResolverContext) -> Self {
         Self {
-            css_paths,
-            ..Default::default()
+            resolver: Some(resolver),
         }
     }
 }
@@ -514,17 +519,15 @@ pub async fn render_qmd_to_html(
     content: &[u8],
     source_name: &str,
     ctx: &mut RenderContext<'_>,
-    config: &HtmlRenderConfig<'_>,
+    config: &HtmlRenderConfig,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> Result<RenderOutput> {
     // Build pipeline based on config. Both branches share the same
     // stage list (via `build_html_pipeline_stages_with_apply_config`);
     // the only difference is whether the final `ApplyTemplateStage`
-    // carries a custom CSS-path / resource-prefix config.
-    let stages = if !config.css_paths.is_empty() {
-        let apply_config = ApplyTemplateConfig::new()
-            .with_css_paths(config.css_paths.to_vec())
-            .with_resource_prefix(config.resource_prefix.to_string());
+    // carries a scope-aware resolver.
+    let stages = if let Some(resolver) = config.resolver.clone() {
+        let apply_config = ApplyTemplateConfig::new().with_resolver(resolver);
         build_html_pipeline_stages_with_apply_config(Some(apply_config))
     } else {
         build_html_pipeline_stages()
@@ -857,7 +860,12 @@ mod tests {
     }
 
     #[test]
-    fn test_render_with_css_paths() {
+    fn test_render_emits_theme_css_link_via_resolver() {
+        // Phase 5: the theme CSS comes from the
+        // `css:theme:<fingerprint>` artifact stored by
+        // `CompileThemeCssStage`. With a `single_doc` resolver
+        // attached, its URL appears as
+        // `<output_stem>_files/styles.css` in the rendered HTML.
         let content = b"---\ntitle: Test\n---\n\nContent";
 
         let project = make_test_project();
@@ -866,27 +874,36 @@ mod tests {
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
-        let css_paths = vec!["custom.css".to_string()];
-        let config = HtmlRenderConfig::with_css(&css_paths);
+        let resolver = crate::resource_resolver::ResourceResolverContext::single_doc(
+            "/project/test.html",
+            "test",
+        );
+        let config = HtmlRenderConfig::with_resolver(resolver);
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_html(
             content, "test.qmd", &mut ctx, &config, runtime,
         ))
         .unwrap();
 
-        // Custom CSS should be in the output
-        assert!(output.html.contains("custom.css"));
+        assert!(
+            output.html.contains("test_files/styles.css"),
+            "expected `<link href=\"test_files/styles.css\">` from the resolver; got:\n{}",
+            &output.html,
+        );
     }
 
     #[test]
-    fn test_render_code_block_is_syntax_highlighted_with_css_paths() {
+    fn test_render_code_block_is_syntax_highlighted_via_resolver() {
         // Regression test for the CLI render path: `render_document_to_file`
-        // always supplies a non-empty `css_paths`, which routes through the
-        // "custom ApplyTemplateStage" branch of `render_qmd_to_html`. A
-        // previous version of that branch inlined its own stage list and
-        // silently omitted `CodeHighlightStage`, so `quarto render` emitted
-        // un-highlighted HTML even though the default-config test passed.
-        // Keep this test in lockstep with `test_render_code_block_is_syntax_highlighted`.
+        // routes through the "resolver-attached ApplyTemplateStage"
+        // branch of `render_qmd_to_html`. A previous version of that
+        // branch inlined its own stage list and silently omitted
+        // `CodeHighlightStage`, so `quarto render` emitted
+        // un-highlighted HTML even though the default-config test
+        // passed. Phase 5 keeps both branches sharing the same stage
+        // list via `build_html_pipeline_stages_with_apply_config`;
+        // this test pins the highlighting still works under the
+        // resolver-attached config.
         let content =
             b"---\ntitle: Test\n---\n\n```python\ndef greet(name):\n    print(name)\n```\n";
 
@@ -896,8 +913,11 @@ mod tests {
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
-        let css_paths = vec!["custom.css".to_string()];
-        let config = HtmlRenderConfig::with_css(&css_paths);
+        let resolver = crate::resource_resolver::ResourceResolverContext::single_doc(
+            "/project/test.html",
+            "test",
+        );
+        let config = HtmlRenderConfig::with_resolver(resolver);
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_html(
             content, "test.qmd", &mut ctx, &config, runtime,
@@ -1118,11 +1138,16 @@ mod tests {
     }
 
     fn get_css_artifact(ctx: &crate::render::RenderContext) -> String {
-        let artifact = ctx
-            .artifacts
-            .get("css:default")
-            .expect("css:default artifact missing");
-        String::from_utf8(artifact.content.clone()).expect("CSS should be valid UTF-8")
+        // Phase 5: theme CSS is now keyed `css:theme:<fingerprint>`
+        // (one entry per distinct compiled theme).
+        let entries: Vec<_> = ctx.artifacts.get_by_prefix("css:theme:");
+        assert_eq!(
+            entries.len(),
+            1,
+            "expected exactly one css:theme:* artifact, found {}",
+            entries.len()
+        );
+        String::from_utf8(entries[0].1.content.clone()).expect("CSS should be valid UTF-8")
     }
 
     #[test]
