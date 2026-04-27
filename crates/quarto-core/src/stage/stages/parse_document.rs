@@ -126,6 +126,7 @@ impl PipelineStage for ParseDocumentStage {
                     ast_context,
                     source_context,
                     warnings,
+                    recorded_includes: Vec::new(),
                 }))
             }
             Err(diagnostics) => {

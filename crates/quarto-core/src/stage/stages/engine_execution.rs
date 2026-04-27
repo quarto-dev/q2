@@ -340,6 +340,7 @@ impl PipelineStage for EngineExecutionStage {
             ast_context: merged_ast_context,
             source_context: doc_ast.source_context,
             warnings,
+            recorded_includes: doc_ast.recorded_includes,
         }))
     }
 }
@@ -564,6 +565,7 @@ mod tests {
             ast_context,
             source_context,
             warnings,
+            recorded_includes: Vec::new(),
         }
     }
 

@@ -21,6 +21,7 @@ use async_trait::async_trait;
 use quarto_pandoc_types::shortcode::ShortcodeArg;
 use quarto_pandoc_types::{Block, Inline};
 
+use crate::document_profile::IncludeEntry;
 use crate::stage::data::DocumentAst;
 use crate::stage::{PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext};
 
@@ -218,6 +219,15 @@ fn expand_includes_in_blocks(
                 doc.ast.blocks.insert(i + j, block);
             }
 
+            // Record this child in the parent's `recorded_includes`
+            // side-channel for `bd-r82e` / Phase-8 cache invalidation.
+            // The `canonical` path is what cycle detection keys on;
+            // when canonicalize fails, it falls back to the resolved
+            // path (still a stable identifier for hashing). Dedupe so
+            // a child included twice in different positions appears
+            // once.
+            record_include(&mut doc.recorded_includes, &canonical, &content);
+
             // Recursively expand includes in the newly inserted blocks
             include_stack.insert(canonical.clone());
 
@@ -231,6 +241,7 @@ fn expand_includes_in_blocks(
                 ast_context: doc.ast_context.clone(),
                 source_context: doc.source_context.clone(),
                 warnings: vec![],
+                recorded_includes: Vec::new(),
             };
             // Only process the newly inserted blocks
             let remaining = sub_doc.ast.blocks.split_off(num_inserted);
@@ -246,6 +257,13 @@ fn expand_includes_in_blocks(
             doc.ast_context = sub_doc.ast_context;
             doc.source_context = sub_doc.source_context;
 
+            // Merge back transitively-recorded includes, dedup-by-path.
+            for entry in sub_doc.recorded_includes {
+                if !doc.recorded_includes.iter().any(|e| e.path == entry.path) {
+                    doc.recorded_includes.push(entry);
+                }
+            }
+
             include_stack.remove(&canonical);
 
             // Don't increment i — the new blocks at position i may themselves
@@ -257,6 +275,17 @@ fn expand_includes_in_blocks(
         }
     }
     Ok(())
+}
+
+/// Append an [`IncludeEntry`] for a freshly-spliced child file,
+/// deduplicating by resolved path (a child included twice in
+/// different positions of the parent appears once in the recorded
+/// set). The hash captures the bytes that were spliced.
+fn record_include(out: &mut Vec<IncludeEntry>, resolved: &Path, bytes: &[u8]) {
+    if out.iter().any(|e| e.path == resolved) {
+        return;
+    }
+    out.push(IncludeEntry::new(resolved.to_path_buf(), bytes));
 }
 
 /// Check if a block is a paragraph containing only an include shortcode.
@@ -583,6 +612,7 @@ mod tests {
             ast_context,
             source_context,
             warnings: vec![],
+            recorded_includes: Vec::new(),
         }
     }
 

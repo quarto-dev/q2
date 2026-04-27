@@ -94,25 +94,13 @@ impl ProjectIndex {
 mod tests {
     use super::*;
 
-    use pampa::toc::TocEntry;
-
     fn make_profile(source: &str, href: &str, title: &str) -> DocumentProfile {
         DocumentProfile {
-            profile_version: crate::document_profile::DOCUMENT_PROFILE_VERSION,
             source_path: PathBuf::from(source),
             output_href: href.to_string(),
             format_id: "html".to_string(),
             title: Some(title.to_string()),
-            subtitle: None,
-            description: None,
-            authors: Vec::new(),
-            date: None,
-            categories: Vec::new(),
-            keywords: Vec::new(),
-            image: None,
-            draft: false,
-            order: None,
-            outline: Vec::<TocEntry>::new(),
+            ..DocumentProfile::default()
         }
     }
 

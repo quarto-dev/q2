@@ -96,12 +96,11 @@ impl AstTransform for NavbarGenerateTransform {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document_profile::{DOCUMENT_PROFILE_VERSION, DocumentProfile};
+    use crate::document_profile::DocumentProfile;
     use crate::format::Format;
     use crate::project::index::ProjectIndex;
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
-    use pampa::toc::TocEntry;
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_source_map::SourceInfo;
@@ -144,21 +143,11 @@ mod tests {
 
     fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {
         DocumentProfile {
-            profile_version: DOCUMENT_PROFILE_VERSION,
             source_path: PathBuf::from(source),
             output_href: output_href.to_string(),
             format_id: "html".to_string(),
             title: Some(title.to_string()),
-            subtitle: None,
-            description: None,
-            authors: Vec::new(),
-            date: None,
-            categories: Vec::new(),
-            keywords: Vec::new(),
-            image: None,
-            draft: false,
-            order: None,
-            outline: Vec::<TocEntry>::new(),
+            ..DocumentProfile::default()
         }
     }
 

@@ -384,27 +384,15 @@ fn capitalize(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document_profile::DOCUMENT_PROFILE_VERSION;
-    use pampa::toc::TocEntry;
     use std::path::PathBuf;
 
     fn make_profile(source: &str, title: &str) -> DocumentProfile {
         DocumentProfile {
-            profile_version: DOCUMENT_PROFILE_VERSION,
             source_path: PathBuf::from(source),
             output_href: source.replace(".qmd", ".html"),
             format_id: "html".to_string(),
             title: Some(title.to_string()),
-            subtitle: None,
-            description: None,
-            authors: Vec::new(),
-            date: None,
-            categories: Vec::new(),
-            keywords: Vec::new(),
-            image: None,
-            draft: false,
-            order: None,
-            outline: Vec::<TocEntry>::new(),
+            ..DocumentProfile::default()
         }
     }
 

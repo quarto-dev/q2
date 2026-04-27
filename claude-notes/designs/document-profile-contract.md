@@ -1,7 +1,8 @@
 # `DocumentProfile` contract
 
-**Status:** Active (Phase 0 of the website epic, `bd-0tr6` / `bd-f3jc`).
-**Version tag:** `DOCUMENT_PROFILE_VERSION = 1`
+**Status:** Active (Phase 0 of the website epic, `bd-0tr6` / `bd-f3jc`;
+extended in Phase 8 sub-phase 8.0, `bd-fegm` + `bd-r82e`).
+**Version tag:** `DOCUMENT_PROFILE_VERSION = 2`
 **Type:** `quarto_core::document_profile::DocumentProfile`
 **Stage:** `quarto_core::stage::stages::DocumentProfileStage` (name
 `"document-profile"`) + `UnwrapProfileStage` (`"unwrap-profile"`),
@@ -57,6 +58,10 @@ produced.
 | `draft` | Boolean. Defaults to `false` when the key is missing or non-boolean. |
 | `order` | `Option<i32>` sort key from `order:` frontmatter. `None` when the key is absent or non-integer. Consumed by Phase-2's auto-sidebar sort (`claude-notes/plans/2026-04-24-websites-phase-2.md`). Added v1-additive (no version bump). |
 | `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. |
+| `includes` | `Vec<IncludeEntry { path, content_hash }>` recording every file whose contents were spliced into the parent AST via `{{< include child.qmd >}}`. Populated by `IncludeExpansionStage` via a side-channel on `DocumentAst.recorded_includes`, drained into the profile by `DocumentProfileStage`. Direct + transitive children appear; cycles are pre-truncated. **Phase-8 cache invalidation depends on this field** (`bd-r82e`). Default empty. |
+| `nav_dependencies` | `Vec<PathBuf>` of project-relative `.qmd` paths the user explicitly declares as cross-doc dependencies via `meta.project.nav-dependencies`. The Phase-8 dependency graph adds an edge to each declared target. The escape hatch for Lua filters that walk siblings without using sidebar / link / prev-next channels. Default empty. |
+| `always_render` | `bool` from `meta.project.always-render`. When `true`, Mode B (subset render) pulls this page into the render set if any of its dependents is among the user-named targets. Mode A re-renders every page anyway, so this flag has no Mode-A effect. Default `false`. |
+| `body_link_targets` | `Vec<PathBuf>` of project-relative `.qmd` paths this page links to from its body content. Populated by `LinkResolutionStage` (Pass-1) using the same `resolve_doc_relative_target` helper Phase 6's `LinkRewriteTransform` calls in Pass-2 — equivalence test asserts the two produce the same set. The Phase-8 dependency graph turns each target into an edge. See `body-link-resolution-contract.md`. Default empty. |
 
 ## Non-guarantees (explicit)
 
@@ -168,3 +173,22 @@ Phase 1 replaces that with a real consumer.
   from `order:` frontmatter, consumed by Phase-2 auto-sidebar sort.
   `#[serde(default)]` so v1-serialized profiles still deserialize.
   No `profile_version` bump. (`bd-9svl`)
+- **2026-04-27 — v2 (`bd-fegm` / `bd-r82e`).** `DOCUMENT_PROFILE_VERSION`
+  bumped 1 → 2. Four new fields, all collection-shaped with
+  `#[serde(default, skip_serializing_if = ...)]` so default profiles
+  serialize without bloat:
+  - `includes: Vec<IncludeEntry>` — closes `bd-r82e`. Required for
+    Phase-8 cache invalidation when transitive `{{< include … >}}`
+    children change.
+  - `nav_dependencies: Vec<PathBuf>` — user-declared cross-doc
+    dependency channel for filter-introduced edges.
+  - `always_render: bool` — per-page Mode-B opt-in for non-
+    deterministic / non-modelable filters.
+  - `body_link_targets: Vec<PathBuf>` — populated by the new
+    `LinkResolutionStage` for Phase-8 dependency-graph edges.
+  v1 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently
+  regenerated.
+  See companion contracts:
+  `claude-notes/designs/body-link-resolution-contract.md`,
+  `claude-notes/designs/sidebar-auto-expansion-contract.md`.

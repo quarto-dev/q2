@@ -56,9 +56,10 @@ use crate::stage::CodeHighlightStage;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
-    EngineExecutionStage, IncludeExpansionStage, LoadedSource, MetadataMergeStage,
-    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage,
-    RenderHtmlBodyStage, StageContext, UnwrapProfileStage, UserFiltersStage,
+    EngineExecutionStage, IncludeExpansionStage, LinkResolutionStage, LoadedSource,
+    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
+    PreEngineSugaringStage, RenderHtmlBodyStage, StageContext, UnwrapProfileStage,
+    UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -135,7 +136,8 @@ pub struct AstOutput {
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 3. `IncludeExpansionStage` - Splice in `{{< include child.qmd >}}` bodies
 /// 4. `DocumentProfileStage` - Extract the static profile at the checkpoint
-/// 5. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 5. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
+/// 6. `UnwrapProfileStage` - Hand the AST back to downstream stages
 /// 6. `PreEngineSugaringStage` - Seed crossref registry / desugar shorthand
 /// 7. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
 /// 8. `CompileThemeCssStage` - Compile theme CSS from merged metadata
@@ -176,6 +178,12 @@ pub fn build_html_pipeline_stages_with_apply_config(
         // Profile checkpoint: post-merge, pre-mutation. See
         // `claude-notes/designs/document-profile-contract.md`.
         Box::new(DocumentProfileStage::new()),
+        // Pass-1 cross-doc body-link resolution. Walks the AST
+        // (read-only) and writes each link target into
+        // `profile.body_link_targets` so the Phase-8 dependency
+        // graph can use them. See
+        // `claude-notes/designs/body-link-resolution-contract.md`.
+        Box::new(LinkResolutionStage::new()),
         Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(EngineExecutionStage::new()),
@@ -231,7 +239,8 @@ pub fn build_html_pipeline() -> Pipeline {
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 3. `IncludeExpansionStage` - Splice in `{{< include child.qmd >}}` bodies
 /// 4. `DocumentProfileStage` - Extract the static profile at the checkpoint
-/// 5. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 5. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
+/// 6. `UnwrapProfileStage` - Hand the AST back to downstream stages
 /// 6. `CompileThemeCssStage` - Compile theme CSS from merged metadata
 /// 7. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
 /// 8. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
@@ -258,6 +267,8 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         // Phase 9 will intercept this variant to build project-wide
         // nav state.
         Box::new(DocumentProfileStage::new()),
+        // Pass-1 cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
+        Box::new(LinkResolutionStage::new()),
         Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(CompileThemeCssStage::new()),
@@ -1022,7 +1033,7 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 14);
+        assert_eq!(stages.len(), 15);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
@@ -1030,31 +1041,33 @@ mod tests {
         assert_eq!(stages[2].name(), "include-expansion");
         // Profile checkpoint (Phase 0 website epic, bd-f3jc).
         assert_eq!(stages[3].name(), "document-profile");
-        assert_eq!(stages[4].name(), "unwrap-profile");
-        assert_eq!(stages[5].name(), "pre-engine-sugaring");
-        assert_eq!(stages[6].name(), "engine-execution");
-        assert_eq!(stages[7].name(), "compile-theme-css");
-        assert_eq!(stages[8].name(), "user-filters-pre");
-        assert_eq!(stages[9].name(), "ast-transforms");
-        assert_eq!(stages[10].name(), "user-filters-post");
-        assert_eq!(stages[11].name(), "code-highlight");
-        assert_eq!(stages[12].name(), "render-html-body");
-        assert_eq!(stages[13].name(), "apply-template");
+        // Cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
+        assert_eq!(stages[4].name(), "link-resolution");
+        assert_eq!(stages[5].name(), "unwrap-profile");
+        assert_eq!(stages[6].name(), "pre-engine-sugaring");
+        assert_eq!(stages[7].name(), "engine-execution");
+        assert_eq!(stages[8].name(), "compile-theme-css");
+        assert_eq!(stages[9].name(), "user-filters-pre");
+        assert_eq!(stages[10].name(), "ast-transforms");
+        assert_eq!(stages[11].name(), "user-filters-post");
+        assert_eq!(stages[12].name(), "code-highlight");
+        assert_eq!(stages[13].name(), "render-html-body");
+        assert_eq!(stages[14].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 14);
+        assert_eq!(pipeline.len(), 15);
     }
 
     #[test]
     fn test_build_wasm_html_pipeline() {
         let pipeline = build_wasm_html_pipeline();
-        // WASM pipeline has 13 stages: same as the native HTML pipeline
-        // (include-expansion, profile checkpoint, code-highlight, …)
-        // minus `engine-execution` — code cells pass through as-is.
-        assert_eq!(pipeline.len(), 13);
+        // WASM pipeline now has 14 stages: same as the native HTML
+        // pipeline (include-expansion, profile checkpoint, link-resolution,
+        // code-highlight, …) minus `engine-execution`.
+        assert_eq!(pipeline.len(), 14);
     }
 
     #[test]

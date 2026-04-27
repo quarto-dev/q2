@@ -333,6 +333,7 @@ mod tests {
             ast_context: ASTContext::default(),
             source_context: SourceContext::new(),
             warnings: vec![],
+            recorded_includes: Vec::new(),
         }
     }
 
@@ -410,6 +411,7 @@ mod tests {
             ast_context: ASTContext::default(),
             source_context: SourceContext::new(),
             warnings: vec![],
+            recorded_includes: Vec::new(),
         }
     }
 

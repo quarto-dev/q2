@@ -533,6 +533,7 @@ mod tests {
             ast_context: pampa::pandoc::ASTContext::default(),
             source_context: SourceContext::new(),
             warnings: vec![],
+            recorded_includes: Vec::new(),
         })
     }
 
@@ -1127,6 +1128,7 @@ mod tests {
             ast_context: pampa::pandoc::ASTContext::default(),
             source_context: SourceContext::new(),
             warnings: vec![],
+            recorded_includes: Vec::new(),
         })
     }
 

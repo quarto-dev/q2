@@ -97,17 +97,23 @@ fn wasm_pipeline_includes_profile_stage() {
         "WASM HTML pipeline must include UnwrapProfileStage; got {names:?}"
     );
 
-    // The unwrap stage must come immediately after the profile stage —
-    // otherwise downstream stages would see the AtProfile variant and
-    // fail their input-kind check.
+    // After Phase-8 sub-phase 8.0d, link-resolution sits between
+    // document-profile and unwrap-profile. Both stages take/produce
+    // AtProfile, so downstream stages still receive DocumentAst from
+    // unwrap-profile as before.
     let p = names
         .iter()
         .position(|n| *n == "document-profile")
         .expect("document-profile present");
     assert_eq!(
         names.get(p + 1).copied(),
+        Some("link-resolution"),
+        "link-resolution must follow document-profile"
+    );
+    assert_eq!(
+        names.get(p + 2).copied(),
         Some("unwrap-profile"),
-        "unwrap-profile must immediately follow document-profile"
+        "unwrap-profile must follow link-resolution"
     );
 }
 
@@ -128,7 +134,12 @@ fn html_pipeline_includes_profile_stage() {
         .iter()
         .position(|n| *n == "document-profile")
         .expect("document-profile present");
-    assert_eq!(names.get(p + 1).copied(), Some("unwrap-profile"));
+    // Phase-8 sub-phase 8.0d inserts `link-resolution` between
+    // `document-profile` and `unwrap-profile`. Both relative orders
+    // (document-profile → link-resolution → unwrap-profile) are
+    // invariants other consumers rely on.
+    assert_eq!(names.get(p + 1).copied(), Some("link-resolution"));
+    assert_eq!(names.get(p + 2).copied(), Some("unwrap-profile"));
 
     // Position: checkpoint is between metadata-merge and pre-engine-sugaring.
     let merge = names
@@ -391,6 +402,92 @@ async fn profile_sees_heading_from_included_file() {
         titles.iter().any(|t| t == "Child Heading"),
         "DocumentProfile.outline must include the heading `## Child Heading` \
          from the included file (bd-xfwx); got outline titles: {titles:?}"
+    );
+}
+
+#[tokio::test]
+async fn profile_records_direct_include_in_includes_field() {
+    // bd-r82e: a parent that pulls in `{{< include child.qmd >}}`
+    // should land an `IncludeEntry` in `profile.includes` so the
+    // Phase-8 cache key can invalidate when the child's content
+    // changes.
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let project_dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+
+    let child_path = project_dir.join("child.qmd");
+    let child_bytes: &[u8] = b"## Child Heading\n\nChild body.\n";
+    std::fs::write(&child_path, child_bytes).expect("write child");
+
+    let parent_path = project_dir.join("parent.qmd");
+    let parent_content: &[u8] = b"---\ntitle: Parent\n---\n\n{{< include child.qmd >}}\n";
+
+    let bundle = run_head_pipeline_in_dir(&project_dir, &parent_path, parent_content).await;
+
+    assert_eq!(
+        bundle.profile.includes.len(),
+        1,
+        "profile.includes should record exactly one direct include; got {:?}",
+        bundle.profile.includes
+    );
+    let entry = &bundle.profile.includes[0];
+    assert!(
+        entry.path.ends_with("child.qmd"),
+        "IncludeEntry.path should reference the resolved child file; got {:?}",
+        entry.path
+    );
+    assert_eq!(
+        entry.content_hash,
+        quarto_core::document_profile::IncludeEntry::hash_bytes(child_bytes),
+        "IncludeEntry.content_hash must match SHA-256(child bytes) — \
+         this is what Phase-8 cache invalidation keys on (bd-r82e)"
+    );
+}
+
+#[tokio::test]
+async fn profile_records_transitive_includes() {
+    // grandchild.qmd → child.qmd → parent.qmd. The profile of
+    // parent.qmd must record both child *and* grandchild so a
+    // change to the grandchild correctly invalidates parent's
+    // cache entry.
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let project_dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+
+    let grandchild_path = project_dir.join("grandchild.qmd");
+    std::fs::write(&grandchild_path, "## Grandchild Heading\n").expect("write grandchild");
+
+    let child_path = project_dir.join("child.qmd");
+    std::fs::write(&child_path, "{{< include grandchild.qmd >}}\n").expect("write child");
+
+    let parent_path = project_dir.join("parent.qmd");
+    let parent_content: &[u8] = b"---\ntitle: Parent\n---\n\n{{< include child.qmd >}}\n";
+
+    let bundle = run_head_pipeline_in_dir(&project_dir, &parent_path, parent_content).await;
+
+    let recorded_names: Vec<String> = bundle
+        .profile
+        .includes
+        .iter()
+        .filter_map(|e| {
+            e.path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(String::from)
+        })
+        .collect();
+    assert!(
+        recorded_names.iter().any(|n| n == "child.qmd"),
+        "parent profile should record the direct include child.qmd; got {recorded_names:?}"
+    );
+    assert!(
+        recorded_names.iter().any(|n| n == "grandchild.qmd"),
+        "parent profile should record the transitive include grandchild.qmd; \
+         got {recorded_names:?}"
     );
 }
 

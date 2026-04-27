@@ -514,6 +514,7 @@ mod tests {
             ast_context: pampa::pandoc::ASTContext::default(),
             source_context: quarto_source_map::SourceContext::new(),
             warnings: vec![],
+            recorded_includes: Vec::new(),
         };
 
         let data = PipelineData::DocumentAst(doc);
@@ -535,6 +536,7 @@ mod tests {
             ast_context,
             source_context: quarto_source_map::SourceContext::new(),
             warnings: vec![],
+            recorded_includes: Vec::new(),
         };
 
         let data = PipelineData::DocumentAst(doc);

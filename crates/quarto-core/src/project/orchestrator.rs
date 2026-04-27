@@ -404,7 +404,8 @@ impl<'a> ProjectPipeline<'a> {
         use crate::pipeline::run_pipeline;
         use crate::render::{BinaryDependencies, RenderContext};
         use crate::stage::{
-            DocumentProfileStage, MetadataMergeStage, ParseDocumentStage, PipelineStage,
+            DocumentProfileStage, IncludeExpansionStage, LinkResolutionStage, MetadataMergeStage,
+            ParseDocumentStage, PipelineStage,
         };
 
         let content = self.runtime.file_read(&doc_info.input).map_err(|e| {
@@ -422,7 +423,18 @@ impl<'a> ProjectPipeline<'a> {
         let stages: Vec<Box<dyn PipelineStage>> = vec![
             Box::new(ParseDocumentStage::new()),
             Box::new(MetadataMergeStage::new()),
+            // Include-expansion threads child content through the
+            // profile so transitive `{{< include … >}}` is visible
+            // (bd-xfwx). Phase 8 sub-phase 8.0d's LinkResolutionStage
+            // also depends on it: the AST walk must see post-include
+            // content so a body link inside an included child counts
+            // as a dependency edge of the parent.
+            Box::new(IncludeExpansionStage::new()),
             Box::new(DocumentProfileStage::new()),
+            // Pass-1 cross-doc body-link resolution. Reads the
+            // post-include AST, writes
+            // `profile.body_link_targets` for the dependency graph.
+            Box::new(LinkResolutionStage::new()),
         ];
 
         let (output, _diagnostics) = run_pipeline(

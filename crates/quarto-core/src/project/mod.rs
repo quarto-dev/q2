@@ -26,6 +26,7 @@
 pub mod discovery;
 pub mod index;
 pub mod orchestrator;
+pub mod sidebar_membership;
 pub mod website_config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod website_post_render;

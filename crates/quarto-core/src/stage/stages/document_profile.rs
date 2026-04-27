@@ -68,7 +68,7 @@ impl PipelineStage for DocumentProfileStage {
         input: PipelineData,
         ctx: &mut StageContext,
     ) -> Result<PipelineData, PipelineError> {
-        let PipelineData::DocumentAst(doc) = input else {
+        let PipelineData::DocumentAst(mut doc) = input else {
             return Err(PipelineError::unexpected_input(
                 self.name(),
                 self.input_kind(),
@@ -80,7 +80,14 @@ impl PipelineStage for DocumentProfileStage {
         let output_href = project_relative_output_href(&ctx.output_path(), &ctx.project.output_dir);
         let format_id = ctx.format.target_format.clone();
 
-        let profile = DocumentProfile::extract(&doc.ast, &source_path, &output_href, &format_id);
+        let mut profile =
+            DocumentProfile::extract(&doc.ast, &source_path, &output_href, &format_id);
+
+        // Drain the include side-channel populated by
+        // `IncludeExpansionStage` into the profile so cache-key
+        // construction and `bd-r82e` invalidation can see every
+        // (transitive) child file the parent depends on.
+        profile.includes = std::mem::take(&mut doc.recorded_includes);
 
         Ok(PipelineData::AtProfile(DocumentAtProfile {
             profile,
@@ -321,6 +328,7 @@ mod tests {
             ast_context: ASTContext::default(),
             source_context: SourceContext::new(),
             warnings: vec![],
+            recorded_includes: Vec::new(),
         }
     }
 

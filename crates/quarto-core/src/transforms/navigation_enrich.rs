@@ -64,27 +64,16 @@ pub(crate) fn enrich_one(item: &mut NavigationItem, index: &ProjectIndex) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document_profile::{DOCUMENT_PROFILE_VERSION, DocumentProfile};
-    use pampa::toc::TocEntry;
+    use crate::document_profile::DocumentProfile;
     use std::path::PathBuf;
 
     fn profile(source: &str, title: &str) -> DocumentProfile {
         DocumentProfile {
-            profile_version: DOCUMENT_PROFILE_VERSION,
             source_path: PathBuf::from(source),
             output_href: source.replace(".qmd", ".html"),
             format_id: "html".to_string(),
             title: Some(title.to_string()),
-            subtitle: None,
-            description: None,
-            authors: Vec::new(),
-            date: None,
-            categories: Vec::new(),
-            keywords: Vec::new(),
-            image: None,
-            draft: false,
-            order: None,
-            outline: Vec::<TocEntry>::new(),
+            ..DocumentProfile::default()
         }
     }
 

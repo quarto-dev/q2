@@ -25,7 +25,7 @@ use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceContext;
 
-use crate::document_profile::DocumentProfile;
+use crate::document_profile::{DocumentProfile, IncludeEntry};
 use crate::format::Format;
 
 /// Type tag for pipeline data variants.
@@ -310,7 +310,7 @@ impl DocumentSource {
 /// `Clone` is implemented so the pipeline can take a snapshot at the
 /// profile checkpoint (see [`DocumentAtProfile`]) and resume from it
 /// later. All inner fields are already `Clone`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DocumentAst {
     /// Path to the source file
     pub path: PathBuf,
@@ -322,6 +322,18 @@ pub struct DocumentAst {
     pub source_context: SourceContext,
     /// Warnings collected during parsing
     pub warnings: Vec<DiagnosticMessage>,
+    /// Side-channel populated by `IncludeExpansionStage` for every
+    /// file whose contents were spliced into this AST via
+    /// `{{< include child.qmd >}}`. Each entry records the
+    /// resolved path and a SHA-256 of the file's bytes at splice
+    /// time. Drained by `DocumentProfileStage` into
+    /// [`DocumentProfile::includes`] for Phase-8 cache-key
+    /// invalidation (`bd-r82e`).
+    ///
+    /// Default: empty (no includes seen). Order: first-occurrence in
+    /// expansion order; cycles already truncated by
+    /// `IncludeExpansionStage`.
+    pub recorded_includes: Vec<IncludeEntry>,
 }
 
 /// Pipeline state at the profile checkpoint.
