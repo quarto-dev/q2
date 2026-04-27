@@ -7,8 +7,7 @@
 //!
 //! Builds a deterministic SHA-256 over every input that participates
 //! in producing a `DocumentProfile`, so the on-disk profile cache
-//! can be keyed cleanly. The hash domain matches the prose contract
-//! in `claude-notes/plans/2026-04-27-websites-phase-8.md` Decision 2:
+//! can be keyed cleanly. The hash domain:
 //!
 //! ```text
 //! sha256(
@@ -22,14 +21,33 @@
 //!         path                  (length-prefixed UTF-8)
 //!         bytes                 (length-prefixed)
 //!   | _quarto.yml bytes         (length-prefixed; empty if absent)
-//!   | for each include (in declared order):
-//!         path                  (length-prefixed UTF-8)
-//!         content_hash          (32 bytes — already SHA-256 of bytes)
 //!   | for each format-extension contribution, sorted by name:
 //!         name                  (length-prefixed UTF-8)
 //!         metadata bytes        (length-prefixed)
 //! )
 //! ```
+//!
+//! ## Where transitive includes fit in
+//!
+//! The original Phase-8 plan put the include set's
+//! `(path, content_hash)` pairs in the hash domain. That ran into
+//! a chicken-and-egg: to *look up* the cache before running Pass-1,
+//! the caller would need to know the include set, which is exactly
+//! what Pass-1 produces. Phase 8.2's resolution:
+//!
+//! - The cache key **does not include the include set**.
+//! - The cached `DocumentProfile` carries `includes:
+//!   Vec<IncludeEntry>` (Phase-8 sub-phase 8.0a, `bd-r82e`).
+//! - On load, the cache wrapper verifies each cached include's
+//!   `content_hash` against the file's current bytes. Any mismatch
+//!   degrades the load to a miss.
+//!
+//! Net effect on invalidation: identical. A change to an included
+//! child's bytes still invalidates the parent's cache entry —
+//! through the verification step rather than the key.
+//!
+//! See `crates/quarto-core/src/project/profile_cache.rs` for the
+//! verification step.
 //!
 //! ## Versioning
 //!
@@ -64,7 +82,7 @@ use std::path::PathBuf;
 
 use sha2::{Digest, Sha256};
 
-use crate::document_profile::{DOCUMENT_PROFILE_VERSION, IncludeEntry};
+use crate::document_profile::DOCUMENT_PROFILE_VERSION;
 
 /// Manual key-version constant. Bump when a head-pipeline behavior
 /// change alters what a profile records without changing
@@ -110,10 +128,6 @@ pub struct Pass1KeyInputs<'a> {
     /// Empty slice when the project has no config file.
     pub quarto_yml_bytes: &'a [u8],
 
-    /// Transitive include set, in declared order. Hashed via the
-    /// pre-computed `content_hash` on each entry.
-    pub includes: &'a [IncludeEntry],
-
     /// Format-extension contributions, sorted by name. Each entry
     /// is `(name, raw-metadata-bytes)`. Empty when no extensions
     /// apply.
@@ -148,14 +162,6 @@ pub fn pass1_key(inputs: &Pass1KeyInputs<'_>) -> [u8; 32] {
 
     // _quarto.yml bytes (empty slice when absent).
     write_lp_bytes(&mut hasher, inputs.quarto_yml_bytes);
-
-    // Transitive includes — hash via the pre-computed content_hash
-    // (32 bytes per entry, no length prefix needed since the size
-    // is fixed).
-    for entry in inputs.includes {
-        write_lp_str(&mut hasher, &entry.path.to_string_lossy());
-        hasher.update(entry.content_hash);
-    }
 
     // Format-extension contributions, sorted by name (caller's
     // responsibility). Hashing in any other order would change the
@@ -208,10 +214,6 @@ fn write_lp_bytes(hasher: &mut Sha256, bytes: &[u8]) {
 mod tests {
     use super::*;
 
-    fn entry(path: &str, hash_seed: &[u8]) -> IncludeEntry {
-        IncludeEntry::new(PathBuf::from(path), hash_seed)
-    }
-
     fn minimal_inputs() -> Pass1KeyInputs<'static> {
         Pass1KeyInputs {
             format_id: "html",
@@ -219,7 +221,6 @@ mod tests {
             source_bytes: b"# Hello\n\nBody.\n",
             metadata_files: &[],
             quarto_yml_bytes: b"",
-            includes: &[],
             extension_contributions: &[],
         }
     }
@@ -301,41 +302,6 @@ mod tests {
         tweaked.quarto_yml_bytes = b"project: { type: website }\n";
         let b = pass1_key(&tweaked);
         assert_ne!(a, b);
-    }
-
-    #[test]
-    fn key_changes_on_include_content_change() {
-        let inc_a = vec![entry("child.qmd", b"hello")];
-        let inc_b = vec![entry("child.qmd", b"world")];
-        let mut a = minimal_inputs();
-        a.includes = &inc_a;
-        let mut b = minimal_inputs();
-        b.includes = &inc_b;
-        assert_ne!(pass1_key(&a), pass1_key(&b));
-    }
-
-    #[test]
-    fn key_changes_on_include_path_change() {
-        // Same content but different path ⇒ different key.
-        // (`child_a.qmd` and `child_b.qmd` carrying identical bytes.)
-        let inc_a = vec![entry("child_a.qmd", b"shared body")];
-        let inc_b = vec![entry("child_b.qmd", b"shared body")];
-        let mut a = minimal_inputs();
-        a.includes = &inc_a;
-        let mut b = minimal_inputs();
-        b.includes = &inc_b;
-        assert_ne!(pass1_key(&a), pass1_key(&b));
-    }
-
-    #[test]
-    fn key_changes_on_include_set_size() {
-        let inc_one = vec![entry("a.qmd", b"a")];
-        let inc_two = vec![entry("a.qmd", b"a"), entry("b.qmd", b"b")];
-        let mut a = minimal_inputs();
-        a.includes = &inc_one;
-        let mut b = minimal_inputs();
-        b.includes = &inc_two;
-        assert_ne!(pass1_key(&a), pass1_key(&b));
     }
 
     #[test]

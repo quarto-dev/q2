@@ -37,9 +37,11 @@
 //! See `claude-notes/plans/2026-04-27-websites-phase-8.md`
 //! Decision 14 for the policy.
 
+use std::path::Path;
+
 use quarto_system_runtime::{RuntimeError, RuntimeResult, SystemRuntime};
 
-use crate::document_profile::DocumentProfile;
+use crate::document_profile::{DocumentProfile, IncludeEntry};
 
 /// Cache namespace for serialized profiles.
 ///
@@ -59,14 +61,36 @@ pub const PROFILE_CACHE_NAMESPACE: &str = "profiles";
 /// `Err` as "best to abort the cache lookup" — the orchestrator
 /// degrades gracefully to a live Pass-1 either way.
 ///
+/// **Include verification**. The cache key (per
+/// [`cache_key::pass1_key`](super::cache_key::pass1_key)) does
+/// not include the transitive include set — at lookup time we
+/// don't yet know which child files the document includes. After
+/// loading, this function verifies each [`IncludeEntry`] in the
+/// cached profile against the include's current bytes via
+/// `include_resolver`. If `include_resolver` returns a different
+/// `content_hash` than the one stored on the entry, the load
+/// degrades to a miss.
+///
+/// `include_resolver` is given each [`IncludeEntry::path`] and
+/// returns the file's current SHA-256 (matching
+/// [`IncludeEntry::hash_bytes`]). It returns `Err` if the file
+/// can't be read (deleted child file, permission error). Phase 8
+/// treats unreadable includes as a miss too — the file may be
+/// gone and a fresh Pass-1 will surface that as its own
+/// diagnostic.
+///
 /// `key` is the 64-char hex string from
 /// [`hex_encode`](crate::project::cache_key::hex_encode); it must
 /// satisfy `validate_cache_key` (ASCII-alphanumeric + `-` + `_`,
 /// non-empty, ≤128 chars), which `hex_encode` guarantees.
-pub async fn load(
+pub async fn load<F>(
     runtime: &dyn SystemRuntime,
     key: &str,
-) -> RuntimeResult<Option<DocumentProfile>> {
+    include_resolver: F,
+) -> RuntimeResult<Option<DocumentProfile>>
+where
+    F: Fn(&Path) -> RuntimeResult<[u8; 32]>,
+{
     let raw = match runtime.cache_get(PROFILE_CACHE_NAMESPACE, key).await? {
         Some(bytes) => bytes,
         None => return Ok(None),
@@ -81,10 +105,37 @@ pub async fn load(
         }
     };
 
-    match DocumentProfile::from_json(json) {
-        Ok(profile) => Ok(Some(profile)),
-        Err(_) => Ok(None),
+    let profile = match DocumentProfile::from_json(json) {
+        Ok(p) => p,
+        Err(_) => return Ok(None),
+    };
+
+    // Verify includes. Any unreadable / changed file ⇒ miss.
+    if !verify_includes(&profile.includes, &include_resolver) {
+        return Ok(None);
     }
+
+    Ok(Some(profile))
+}
+
+/// Compare each cached `IncludeEntry`'s recorded `content_hash`
+/// against the include's current bytes (via `resolver`). Returns
+/// `true` only when every include matches. Any read error or
+/// hash mismatch is reported as `false` (a miss).
+fn verify_includes<F>(includes: &[IncludeEntry], resolver: F) -> bool
+where
+    F: Fn(&Path) -> RuntimeResult<[u8; 32]>,
+{
+    for entry in includes {
+        let current_hash = match resolver(&entry.path) {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+        if current_hash != entry.content_hash {
+            return false;
+        }
+    }
+    true
 }
 
 /// Persist a `DocumentProfile` to the cache.
@@ -114,6 +165,26 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    /// Resolver that always returns the entry's own recorded
+    /// content_hash, so verification trivially succeeds. Use in
+    /// tests that don't care about include verification.
+    fn passthrough_resolver(_p: &Path) -> RuntimeResult<[u8; 32]> {
+        // We can't read entry.content_hash from inside the
+        // resolver — the resolver only knows the path. The
+        // simplest workable approach in tests is to compute the
+        // hash from the same bytes the entry was constructed
+        // with; tests below build entries with `IncludeEntry::new`
+        // and then hand a resolver keyed on path → bytes.
+        // This passthrough is only safe for profiles whose
+        // includes list is empty (nothing to verify).
+        Ok([0u8; 32])
+    }
+
+    /// Bytes for the "snippets/header.qmd" include used by
+    /// `rich_profile`. Tests that verify include behavior key
+    /// resolvers off this constant.
+    const HEADER_BYTES: &[u8] = b"shared header";
+
     /// Build a profile with non-default values across every field
     /// the orchestrator might cache, so round-trip tests exercise
     /// serialization comprehensively.
@@ -128,13 +199,48 @@ mod tests {
             categories: vec!["docs".to_string()],
             includes: vec![IncludeEntry::new(
                 PathBuf::from("snippets/header.qmd"),
-                b"shared header",
+                HEADER_BYTES,
             )],
             nav_dependencies: vec![PathBuf::from("../tutorial.qmd")],
             always_render: true,
             body_link_targets: vec![PathBuf::from("about.qmd")],
             ..DocumentProfile::default()
         }
+    }
+
+    /// Resolver matching `rich_profile`'s only include — returns
+    /// the same hash the entry was built with, so verification
+    /// passes.
+    fn matching_resolver(p: &Path) -> RuntimeResult<[u8; 32]> {
+        if p == Path::new("snippets/header.qmd") {
+            Ok(IncludeEntry::hash_bytes(HEADER_BYTES))
+        } else {
+            Err(RuntimeError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("test resolver: unknown include {}", p.display()),
+            )))
+        }
+    }
+
+    /// Resolver that pretends the included file changed: returns
+    /// a different hash for the header file.
+    fn mismatched_resolver(p: &Path) -> RuntimeResult<[u8; 32]> {
+        if p == Path::new("snippets/header.qmd") {
+            Ok(IncludeEntry::hash_bytes(b"DIFFERENT"))
+        } else {
+            Err(RuntimeError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("test resolver: unknown include {}", p.display()),
+            )))
+        }
+    }
+
+    /// Resolver that fails to read the include (e.g. file deleted).
+    fn unreadable_resolver(_p: &Path) -> RuntimeResult<[u8; 32]> {
+        Err(RuntimeError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "test resolver: include disappeared",
+        )))
     }
 
     /// `tempfile`-backed `NativeRuntime` so the test exercises the
@@ -154,7 +260,7 @@ mod tests {
     #[tokio::test]
     async fn load_returns_none_for_missing_key() {
         let (runtime, _temp) = native_runtime_with_temp_cache();
-        let result = load(runtime.as_ref(), "0000000000000000")
+        let result = load(runtime.as_ref(), "0000000000000000", passthrough_resolver)
             .await
             .expect("load should not error on miss");
         assert!(result.is_none());
@@ -167,7 +273,7 @@ mod tests {
         let key = "abc123def456";
 
         save(runtime.as_ref(), key, &profile).await.expect("save");
-        let loaded = load(runtime.as_ref(), key)
+        let loaded = load(runtime.as_ref(), key, matching_resolver)
             .await
             .expect("load")
             .expect("hit");
@@ -185,7 +291,7 @@ mod tests {
             .await
             .expect("set");
 
-        let result = load(runtime.as_ref(), key)
+        let result = load(runtime.as_ref(), key, passthrough_resolver)
             .await
             .expect("load should swallow the parse error");
         assert!(result.is_none(), "corrupt JSON should be a cache miss");
@@ -220,7 +326,7 @@ mod tests {
             .await
             .expect("set");
 
-        let result = load(runtime.as_ref(), key)
+        let result = load(runtime.as_ref(), key, passthrough_resolver)
             .await
             .expect("load should swallow the version-mismatch error");
         assert!(result.is_none(), "v1 entry should be a cache miss");
@@ -233,7 +339,7 @@ mod tests {
         // honors that — Phase 8 caching is a no-op in that
         // configuration.
         let runtime: Arc<dyn SystemRuntime> = Arc::new(quarto_system_runtime::NativeRuntime::new());
-        let result = load(runtime.as_ref(), "any_key")
+        let result = load(runtime.as_ref(), "any_key", passthrough_resolver)
             .await
             .expect("load should not error");
         assert!(result.is_none());
@@ -263,7 +369,10 @@ mod tests {
         p2.title = Some("Second".to_string());
         save(runtime.as_ref(), key, &p2).await.unwrap();
 
-        let loaded = load(runtime.as_ref(), key).await.unwrap().expect("hit");
+        let loaded = load(runtime.as_ref(), key, matching_resolver)
+            .await
+            .unwrap()
+            .expect("hit");
         assert_eq!(loaded.title.as_deref(), Some("Second"));
     }
 
@@ -277,5 +386,68 @@ mod tests {
         let bogus = ""; // empty key fails validate_cache_key
         let err = save(runtime.as_ref(), bogus, &rich_profile()).await;
         assert!(err.is_err(), "empty key should be rejected by runtime");
+    }
+
+    // === Phase 8.2 step 2: include verification ============================
+
+    #[tokio::test]
+    async fn load_misses_when_include_content_hash_changed() {
+        // The cached profile records snippets/header.qmd with
+        // hash(HEADER_BYTES). The mismatched_resolver returns a
+        // different hash → verification fails → cache miss.
+        let (runtime, _temp) = native_runtime_with_temp_cache();
+        let profile = rich_profile();
+        let key = "include_changed";
+
+        save(runtime.as_ref(), key, &profile).await.unwrap();
+        let result = load(runtime.as_ref(), key, mismatched_resolver)
+            .await
+            .expect("load should not error on verification mismatch");
+        assert!(result.is_none(), "include hash mismatch should be a miss");
+    }
+
+    #[tokio::test]
+    async fn load_misses_when_include_unreadable() {
+        // The included file disappeared between runs.
+        let (runtime, _temp) = native_runtime_with_temp_cache();
+        let profile = rich_profile();
+        let key = "include_gone";
+
+        save(runtime.as_ref(), key, &profile).await.unwrap();
+        let result = load(runtime.as_ref(), key, unreadable_resolver)
+            .await
+            .expect("load should swallow resolver errors");
+        assert!(result.is_none(), "unreadable include should be a miss");
+    }
+
+    #[tokio::test]
+    async fn load_hits_when_includes_unchanged() {
+        let (runtime, _temp) = native_runtime_with_temp_cache();
+        let profile = rich_profile();
+        let key = "includes_match";
+
+        save(runtime.as_ref(), key, &profile).await.unwrap();
+        let result = load(runtime.as_ref(), key, matching_resolver)
+            .await
+            .expect("load should not error")
+            .expect("verification should succeed");
+        assert_eq!(result.includes.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn load_hits_for_profile_with_no_includes() {
+        // A profile with empty `includes` skips verification
+        // entirely — any resolver behavior is irrelevant.
+        let (runtime, _temp) = native_runtime_with_temp_cache();
+        let mut profile = rich_profile();
+        profile.includes.clear();
+        let key = "no_includes";
+
+        save(runtime.as_ref(), key, &profile).await.unwrap();
+        let result = load(runtime.as_ref(), key, unreadable_resolver)
+            .await
+            .expect("load")
+            .expect("hit");
+        assert_eq!(result.includes.len(), 0);
     }
 }

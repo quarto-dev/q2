@@ -374,6 +374,12 @@ impl<'a> ProjectPipeline<'a> {
 
     /// Advance every file to the profile checkpoint, collecting
     /// profiles and any per-file failures.
+    ///
+    /// Phase 8 sub-phase 8.2: each file's profile lookup goes
+    /// through the [`profile_cache`](crate::project::profile_cache)
+    /// before the head pipeline runs. On hit, the cached profile is
+    /// returned directly. On miss, the head pipeline runs and the
+    /// resulting profile is saved.
     async fn pass_one(
         &self,
     ) -> (
@@ -383,7 +389,7 @@ impl<'a> ProjectPipeline<'a> {
         let mut profiles = Vec::with_capacity(self.project.files.len());
         let mut failures = Vec::new();
         for doc_info in &self.project.files {
-            match self.profile_single_file(doc_info).await {
+            match self.profile_with_cache(doc_info).await {
                 Ok(profile) => profiles.push(profile),
                 Err(e) => failures.push(FileFailure {
                     input: doc_info.input.clone(),
@@ -395,11 +401,108 @@ impl<'a> ProjectPipeline<'a> {
         (profiles, failures)
     }
 
-    /// Profile one file by running the head pipeline up through
-    /// [`DocumentProfileStage`](crate::stage::DocumentProfileStage).
-    async fn profile_single_file(
+    /// Compute the [`pass1_key`](crate::project::cache_key::pass1_key)
+    /// for a document, then try the cache, falling back to a live
+    /// Pass-1 on miss.
+    ///
+    /// The cache load verifies the cached profile's
+    /// [`includes`](crate::document_profile::DocumentProfile::includes)
+    /// against current file bytes — see
+    /// [`profile_cache::load`](crate::project::profile_cache::load).
+    /// Any include drift triggers a miss.
+    async fn profile_with_cache(
         &self,
         doc_info: &DocumentInfo,
+    ) -> Result<crate::document_profile::DocumentProfile> {
+        // Read source bytes — used for both the cache key
+        // computation and the live pipeline below.
+        let source_bytes = self.runtime.file_read(&doc_info.input).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to read {} during pass 1: {}",
+                doc_info.input.display(),
+                e
+            ))
+        })?;
+
+        // Compute the project-relative source path the same way
+        // DocumentProfileStage does. The math goes through
+        // canonicalize when possible (matches the orchestrator's
+        // file-discovery path); otherwise falls back to file_name.
+        let source_path = self.project_relative_source_path(&doc_info.input);
+        let format_id = self.format.target_format.clone();
+
+        // Layered _metadata.yml raw bytes for the cache-key domain.
+        // We re-read the raw bytes (not the parsed ConfigValue)
+        // because byte-for-byte changes invalidate the key — a
+        // comment-only edit to _metadata.yml correctly invalidates
+        // the cache, which is intentional v1 behavior.
+        let metadata_files = self.layered_metadata_raw_bytes(&doc_info.input);
+
+        // _quarto.yml raw bytes (project root). Empty when the
+        // project has no config file (single-file render).
+        let quarto_yml_bytes = self.read_quarto_yml_bytes();
+
+        // Format extensions: TODO follow-up. For v1 we pass empty
+        // contributions; extension changes require `--clean`.
+        // See plan §"Sub-phase 8.4" for the user-facing escape
+        // hatch and §Decision 2 footnote for the rationale.
+        let extension_contributions: Vec<(String, Vec<u8>)> = Vec::new();
+
+        let key_inputs = crate::project::cache_key::Pass1KeyInputs {
+            format_id: &format_id,
+            source_path: &source_path,
+            source_bytes: &source_bytes,
+            metadata_files: &metadata_files,
+            quarto_yml_bytes: &quarto_yml_bytes,
+            extension_contributions: &extension_contributions,
+        };
+        let key_bytes = crate::project::cache_key::pass1_key(&key_inputs);
+        let key_hex = crate::project::cache_key::hex_encode(&key_bytes);
+
+        // Cache lookup. The include resolver reads each include's
+        // current bytes and computes their SHA-256 to compare
+        // against the cached profile's recorded content_hashes.
+        // A miss here (load returns Ok(None)) just means we do a
+        // live extraction and overwrite.
+        let runtime = self.runtime.clone();
+        let include_resolver = move |path: &std::path::Path| {
+            let bytes = runtime.file_read(path)?;
+            Ok(crate::document_profile::IncludeEntry::hash_bytes(&bytes))
+        };
+
+        match crate::project::profile_cache::load(self.runtime.as_ref(), &key_hex, include_resolver)
+            .await
+        {
+            Ok(Some(profile)) => return Ok(profile),
+            // Cache miss / verification failure / runtime error
+            // (e.g. cache directory unwritable): degrade to a live
+            // extraction. We don't surface the error because the
+            // orchestrator never wants a cache hiccup to abort an
+            // otherwise-fine render.
+            Ok(None) | Err(_) => {}
+        }
+
+        // Cache miss → live extraction.
+        let profile = self
+            .profile_single_file_live(doc_info, &source_bytes)
+            .await?;
+
+        // Best-effort save. A save failure here is also non-fatal
+        // — the profile is already computed and downstream code can
+        // use it for this run; the next run will just retry the
+        // cache write.
+        let _ =
+            crate::project::profile_cache::save(self.runtime.as_ref(), &key_hex, &profile).await;
+
+        Ok(profile)
+    }
+
+    /// Run the head pipeline live (no cache lookup). Used by
+    /// [`profile_with_cache`] when the cache misses.
+    async fn profile_single_file_live(
+        &self,
+        doc_info: &DocumentInfo,
+        source_bytes: &[u8],
     ) -> Result<crate::document_profile::DocumentProfile> {
         use crate::pipeline::run_pipeline;
         use crate::render::{BinaryDependencies, RenderContext};
@@ -408,15 +511,7 @@ impl<'a> ProjectPipeline<'a> {
             ParseDocumentStage, PipelineStage,
         };
 
-        let content = self.runtime.file_read(&doc_info.input).map_err(|e| {
-            QuartoError::other(format!(
-                "Failed to read {} during pass 1: {}",
-                doc_info.input.display(),
-                e
-            ))
-        })?;
         let source_name = doc_info.input.to_string_lossy().to_string();
-
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(self.project, doc_info, &self.format, &binaries);
 
@@ -438,7 +533,7 @@ impl<'a> ProjectPipeline<'a> {
         ];
 
         let (output, _diagnostics) = run_pipeline(
-            &content,
+            source_bytes,
             &source_name,
             &mut ctx,
             self.runtime.clone(),
@@ -446,13 +541,82 @@ impl<'a> ProjectPipeline<'a> {
         )
         .await?;
 
-        // Extract the `DocumentProfile` from the `AtProfile` variant.
         let profile = output.into_at_profile().ok_or_else(|| {
             QuartoError::other(
                 "Pass 1 did not produce an AtProfile variant — pipeline shape unexpected",
             )
         })?;
         Ok(profile.profile)
+    }
+
+    /// Helper: project-relative source path for cache-key
+    /// construction. Mirrors `DocumentProfileStage`'s computation
+    /// (canonicalize when possible, fall back to file name).
+    fn project_relative_source_path(&self, input: &std::path::Path) -> String {
+        if let Ok(rel) = input.strip_prefix(&self.project.dir) {
+            rel.to_string_lossy().into_owned()
+        } else if let Some(name) = input.file_name() {
+            name.to_string_lossy().into_owned()
+        } else {
+            input.to_string_lossy().into_owned()
+        }
+    }
+
+    /// Helper: walk the layered `_metadata.yml` files for a doc
+    /// and return their raw bytes for cache-key hashing. Skips any
+    /// file that can't be read; the cache key for that doc just
+    /// reflects the available subset (matching what the head
+    /// pipeline would see).
+    fn layered_metadata_raw_bytes(
+        &self,
+        document_path: &std::path::Path,
+    ) -> Vec<(std::path::PathBuf, Vec<u8>)> {
+        if self.project.is_single_file {
+            return Vec::new();
+        }
+        let document_path = self
+            .runtime
+            .canonicalize(document_path)
+            .unwrap_or_else(|_| document_path.to_path_buf());
+        let document_dir = match document_path.parent() {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+        let project_dir = &self.project.dir;
+        let relative_path = match document_dir.strip_prefix(project_dir) {
+            Ok(rel) => rel,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut out = Vec::new();
+        let mut current = project_dir.clone();
+        for component in relative_path.components() {
+            current = current.join(component);
+            for candidate in ["_metadata.yml", "_metadata.yaml"] {
+                let path = current.join(candidate);
+                if let Ok(bytes) = self.runtime.file_read(&path) {
+                    out.push((path.clone(), bytes));
+                    break; // prefer .yml; if both exist this picks .yml
+                }
+            }
+        }
+        out
+    }
+
+    /// Helper: read the project's `_quarto.yml` (or `_quarto.yaml`)
+    /// raw bytes for cache-key hashing. Empty `Vec` when the
+    /// project has no config file.
+    fn read_quarto_yml_bytes(&self) -> Vec<u8> {
+        if self.project.is_single_file {
+            return Vec::new();
+        }
+        for candidate in ["_quarto.yml", "_quarto.yaml"] {
+            let path = self.project.dir.join(candidate);
+            if let Ok(bytes) = self.runtime.file_read(&path) {
+                return bytes;
+            }
+        }
+        Vec::new()
     }
 
     /// Re-render every file under the built `ProjectIndex`,
