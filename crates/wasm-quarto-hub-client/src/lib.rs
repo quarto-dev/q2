@@ -975,6 +975,9 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
     // browser-side post-processor reads them from VFS at the
     // matching synthetic path.
     let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+    // Phase 6: also expose the resolver to AST transforms via
+    // RenderContext for body-link rewriting.
+    ctx.resource_resolver = Some(resolver.clone());
     let config = HtmlRenderConfig::with_resolver(resolver.clone());
     let source_name = path.to_string_lossy();
 

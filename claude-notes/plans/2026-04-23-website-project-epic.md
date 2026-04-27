@@ -597,7 +597,22 @@ phases above.
       `bd-78ud` (empty `{stem}_files/` cleanup), `bd-apvo`
       (`project.lib-dir:` user-config override), `bd-vdl8`
       (retire `DEFAULT_CSS_ARTIFACT_PATH`).
-- [ ] **Phase 6:** Cross-document link rewriting.
+- [x] **Phase 6:** Cross-document link rewriting.
+      Closed `bd-v30t` on `feature/websites`.
+      Sub-plan: `claude-notes/plans/2026-04-24-websites-phase-6.md`.
+      Adds `LinkRewriteTransform` (start of Finalization Phase),
+      `resolve_doc_relative_href` helper in `navigation_href.rs`
+      (with private path-normalization helper), `page_url_for`
+      method on `ResourceResolverContext`, and a new
+      `resource_resolver` field on both `RenderContext` and
+      `StageContext` (bridged through `AstTransformsStage`).
+      Adds 49 new tests (10 unit + 21 helper + 11 integration +
+      7 resolver) and validates against `/tmp/q2-phase6-smoke/`
+      end-to-end. Follow-ups: `bd-p4sc` (draft-mode), `bd-fo1r`
+      (index-forgiveness), `bd-nb32` (data-noresolveinput),
+      `bd-j3a0` (diagnostic dedup), `bd-gdrv` (cross-format —
+      `related` not parent-child), `bd-td2a` (footer text-region
+      rewrite, supersedes `bd-jfyl`).
 - [ ] **Phase 7:** Post-render (sitemap, favicon, site-url/title).
 - [ ] **Phase 8:** Incremental rebuilds.
 - [ ] **Phase 9:** Hub-client project rendering.
@@ -739,4 +754,24 @@ when it files an issue):
     drop-in change. (Decision 4.)
   - `bd-vdl8` — Retire `DEFAULT_CSS_ARTIFACT_PATH` once
     hub-client (Phase 9) moves off synthetic VFS paths.
-- Phases 6–9: TBD.
+- **Phase 6 (`bd-v30t`, closed).** Follow-ups filed at close-out
+  (each `discovered-from:bd-v30t` and linked into the epic graph
+  via `parent-child:bd-0tr6` or `related:bd-0tr6`):
+  - `bd-p4sc` — Body-link draft-mode visibility (replace `<a>`
+    with inner content for draft targets when
+    `draft-mode != "visible"`). Requires draft-mode YAML config
+    surface first. P3.
+  - `bd-fo1r` — Body-link index-forgiveness (`docs/` → `docs/index.qmd`).
+    Mirrors Phase 3's `bd-jbml` and Phase 4's `bd-bobp`; consider
+    unifying. P3.
+  - `bd-nb32` — `data-noresolveinput` escape hatch for
+    user-controlled body links (Q1 parity). P4.
+  - `bd-j3a0` — Diagnostic dedup by (page, href). P3.
+  - `bd-gdrv` — Cross-format URL resolution (HTML→PDF). Out of
+    website-epic scope (`related` to `bd-0tr6`, not
+    parent-child); multi-format projects are a future epic. P4.
+  - `bd-td2a` — Footer Text-region project-link rewriting
+    using Phase 6's helper. Replaces / supersedes Phase 5's
+    `bd-jfyl`; the helper now exists, so this is "wire it in".
+    P3.
+- Phases 7–9: TBD.

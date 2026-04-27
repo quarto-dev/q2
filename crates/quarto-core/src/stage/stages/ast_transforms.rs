@@ -162,6 +162,11 @@ impl PipelineStage for AstTransformsStage {
         // `Arc` instead of moving it. Leaving `ctx.project_index`
         // untouched means later stages in the pipeline still see it.
         render_ctx.project_index = ctx.project_index.clone();
+        // Phase 6: bridge the resource resolver in the same way —
+        // read-only to transforms, the AST-side body-link rewriter
+        // (`LinkRewriteTransform`) consumes it to compute
+        // page-relative URLs.
+        render_ctx.resource_resolver = ctx.resource_resolver.clone();
 
         // Execute the transform pipeline
         let result = pipeline

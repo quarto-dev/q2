@@ -32,6 +32,7 @@ use crate::extension::Extension;
 use crate::format::Format;
 use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
+use crate::resource_resolver::ResourceResolverContext;
 
 /// Owned context passed to all pipeline stages.
 ///
@@ -114,6 +115,20 @@ pub struct StageContext {
     /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
     pub project_index: Option<Arc<ProjectIndex>>,
 
+    /// Per-page scope-aware resolver for HTML asset URLs and
+    /// cross-document body links.
+    ///
+    /// Populated by the top-level render entry points
+    /// ([`crate::render_to_file::render_document_to_file`] for the
+    /// CLI; the equivalent setup in `wasm-quarto-hub-client` for
+    /// the browser). Threaded through to the inner
+    /// [`RenderContext`](crate::render::RenderContext) inside
+    /// [`AstTransformsStage`](crate::stage::stages::AstTransformsStage)
+    /// so AST transforms (Phase 6's `LinkRewriteTransform`,
+    /// future body-link / footer-text consumers) can compute
+    /// page-relative URLs without re-deriving the resolver.
+    pub resource_resolver: Option<ResourceResolverContext>,
+
     /// Optional provider of user-defined tree-sitter grammars, consulted
     /// by `CodeHighlightStage` before falling back to the built-in
     /// registry. Set by the top-level render entry points:
@@ -172,6 +187,7 @@ impl StageContext {
             ref_type_registry: None,
             crossref_index: None,
             project_index: None,
+            resource_resolver: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
             user_grammar_provider: None,

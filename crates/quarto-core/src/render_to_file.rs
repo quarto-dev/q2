@@ -232,6 +232,12 @@ pub fn render_document_to_file(
         project_type.lib_dir(),
         &output_stem,
     );
+    // Phase 6: make the same resolver available to AST transforms
+    // via `RenderContext::resource_resolver` so the body-link
+    // rewriter (`LinkRewriteTransform`) can compute page-relative
+    // URLs the same way Phase 5's `ApplyTemplateStage` does for
+    // shared assets.
+    ctx.resource_resolver = Some(resolver.clone());
     let config = HtmlRenderConfig::with_resolver(resolver.clone());
 
     // Run the render pipeline

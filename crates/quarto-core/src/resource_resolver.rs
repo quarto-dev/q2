@@ -163,6 +163,32 @@ impl ResourceResolverContext {
         rel_to_url(&rel)
     }
 
+    /// Compute the URL to embed in HTML for a link to another page
+    /// in the same project, given the target's project-relative
+    /// output href (e.g. `"docs/api.html"`).
+    ///
+    /// Used by [`crate::transforms::LinkRewriteTransform`] (Phase 6
+    /// of the website-projects epic) to rewrite body-content `.qmd`
+    /// hrefs into page-relative URLs.
+    ///
+    /// Behavior:
+    /// - **VFS-root mode** (hub-client): returns
+    ///   `/{vfs_root}/{target_output_href}`, matching the convention
+    ///   used by `html_url_for` for shared assets.
+    /// - **Single-doc / website mode**: returns the relative URL from
+    ///   the current page's directory to
+    ///   `{site_root}/{target_output_href}`. For single-doc renders
+    ///   this collapses to the input (since `site_root == page_dir`).
+    pub fn page_url_for(&self, target_output_href: &str) -> String {
+        if let Some(root) = &self.vfs_root_mode {
+            return rel_to_url(&root.join(target_output_href));
+        }
+        let target_abs = self.site_root.join(target_output_href);
+        let page_dir = self.page_output.parent().unwrap_or_else(|| Path::new("."));
+        let rel = pathdiff::diff_paths(&target_abs, page_dir).unwrap_or_else(|| target_abs.clone());
+        rel_to_url(&rel)
+    }
+
     /// Compute the absolute on-disk path where an artifact's bytes
     /// should be written. In VFS-root mode this is `{vfs_root}/{artifact_path}`
     /// regardless of scope.
@@ -375,6 +401,99 @@ mod tests {
 
         let url2 = r.html_url_for(ArtifactScope::Page, Path::new("libs/kbd/kbd.css"));
         assert_eq!(url2, "/.quarto/project-artifacts/libs/kbd/kbd.css");
+    }
+
+    // ---- Phase 6 tests for `page_url_for` ----
+    //
+    // These exercise the helper used by `LinkRewriteTransform` to turn a
+    // target page's project-relative output href into a relative URL
+    // from the current page. See
+    // `claude-notes/plans/2026-04-24-websites-phase-6.md` Decision 4.
+
+    /// Phase 6 plan test 1: page at `_site/index.html`, target
+    /// `about.html` → `"about.html"`.
+    #[test]
+    fn page_url_for_root_page_root_target() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/index.html",
+            "site_libs",
+            "index",
+        );
+        assert_eq!(r.page_url_for("about.html"), "about.html");
+    }
+
+    /// Phase 6 plan test 2: page at `_site/index.html`, target
+    /// `docs/api.html` → `"docs/api.html"`.
+    #[test]
+    fn page_url_for_root_page_nested_target() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/index.html",
+            "site_libs",
+            "index",
+        );
+        assert_eq!(r.page_url_for("docs/api.html"), "docs/api.html");
+    }
+
+    /// Phase 6 plan test 3: page at `_site/docs/api.html`, target
+    /// `about.html` → `"../about.html"`.
+    #[test]
+    fn page_url_for_nested_page_root_target() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/docs/api.html",
+            "site_libs",
+            "api",
+        );
+        assert_eq!(r.page_url_for("about.html"), "../about.html");
+    }
+
+    /// Phase 6 plan test 4: page at `_site/docs/api.html`, target
+    /// `docs/intro.html` → `"intro.html"`.
+    #[test]
+    fn page_url_for_nested_page_sibling_target() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/docs/api.html",
+            "site_libs",
+            "api",
+        );
+        assert_eq!(r.page_url_for("docs/intro.html"), "intro.html");
+    }
+
+    /// Phase 6 plan test 5: deeply nested page accumulates `../`
+    /// components.
+    #[test]
+    fn page_url_for_deep_nesting() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/a/b/c/d.html",
+            "site_libs",
+            "d",
+        );
+        assert_eq!(r.page_url_for("e/f.html"), "../../../e/f.html");
+    }
+
+    /// Phase 6 plan test 6: VFS-root mode produces an absolute URL
+    /// rooted at the synthetic VFS path. Matches `html_url_for` VFS
+    /// conventions.
+    #[test]
+    fn page_url_for_vfs_root_mode() {
+        let r = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+        assert_eq!(
+            r.page_url_for("about.html"),
+            "/.quarto/project-artifacts/about.html"
+        );
+    }
+
+    /// Phase 6 plan test 7: single-doc resolver returns the target
+    /// verbatim (single-doc treats `site_root == page_dir`, so the
+    /// relative computation collapses to the input).
+    #[test]
+    fn page_url_for_single_doc_returns_target_verbatim() {
+        let r = ResourceResolverContext::single_doc("/tmp/doc.html", "doc");
+        assert_eq!(r.page_url_for("about.html"), "about.html");
     }
 
     #[test]

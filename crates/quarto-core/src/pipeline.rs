@@ -65,8 +65,8 @@ use crate::transforms::{
     AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, CrossrefIndexTransform,
     CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
     FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesTransform, MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    FootnotesTransform, LinkRewriteTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
+    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
     TocGenerateTransform, TocRenderTransform,
@@ -413,6 +413,11 @@ pub async fn run_pipeline(
     // Cloning the `Arc` is cheap and keeps the RenderContext usable
     // after the stage context is built.
     stage_ctx.project_index = ctx.project_index.clone();
+    // Phase 6: thread the per-page resource resolver through to the
+    // stage so that `AstTransformsStage` can re-bridge it back into
+    // the inner `RenderContext` consumed by AST transforms (notably
+    // `LinkRewriteTransform`).
+    stage_ctx.resource_resolver = ctx.resource_resolver.clone();
 
     // Create input from content
     let input = PipelineData::LoadedSource(LoadedSource::new(
@@ -583,8 +588,10 @@ pub async fn render_qmd_to_html(
 /// 16. `FooterRenderTransform` - Render page footer to HTML for template insertion
 ///
 /// ## Finalization Phase
-/// 15. `AppendixStructureTransform` - Consolidate appendix content into container
-/// 16. `ResourceCollectorTransform` - Collect image dependencies
+/// 17. `LinkRewriteTransform` - Rewrite body-content `.qmd` links to relative output URLs (Phase 6)
+/// 18. `AppendixStructureTransform` - Consolidate appendix content into container
+/// 19. `CrossrefRenderTransform` - Resolve crossref custom nodes to final HTML structure
+/// 20. `ResourceCollectorTransform` - Collect image dependencies
 pub fn build_transform_pipeline(
     shortcode_paths: Vec<std::path::PathBuf>,
     extensions: Vec<crate::extension::types::Extension>,
@@ -638,6 +645,14 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(FooterRenderTransform::new()));
 
     // === FINALIZATION PHASE ===
+    // LinkRewriteTransform runs first in the Finalization Phase
+    // (Phase 6 of the website-projects epic). It walks every
+    // `Inline::Link` in the body and rewrites internal `.qmd`
+    // hrefs to their page-relative output URLs via the
+    // `ProjectIndex` and `ResourceResolverContext`. Standalone
+    // renders without a `ProjectIndex` are a no-op. See
+    // `claude-notes/plans/2026-04-24-websites-phase-6.md`.
+    pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
