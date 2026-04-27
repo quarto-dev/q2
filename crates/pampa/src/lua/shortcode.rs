@@ -420,7 +420,7 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
                 };
                 match context.as_str() {
                     "block" => {
-                        let para = lua.create_userdata(LuaBlock(Block::Paragraph(
+                        let para = lua.create_userdata(LuaBlock::new(Block::Paragraph(
                             crate::pandoc::Paragraph {
                                 content: vec![make_strong_inline(err_text)],
                                 source_info: Default::default(),
@@ -430,7 +430,7 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
                     }
                     "inline" => {
                         let strong =
-                            lua.create_userdata(LuaInline(make_strong_inline(err_text)))?;
+                            lua.create_userdata(LuaInline::new(make_strong_inline(err_text)))?;
                         Ok(Value::UserData(strong))
                     }
                     _ => Ok(Value::String(lua.create_string(&err_text)?)),

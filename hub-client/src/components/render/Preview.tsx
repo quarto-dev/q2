@@ -3,6 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../../types/project';
 import type { Diagnostic } from '../../types/diagnostic';
 import { renderToHtml, isWasmReady, setScrollSyncEnabled } from '../../services/wasmRenderer';
+import { getFileContent, getBinaryFileContent } from '../../services/automergeSync';
 import { useScrollSync } from '../../hooks/useScrollSync';
 import { useSelectionSync } from '../../hooks/useSelectionSync';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
@@ -54,7 +55,8 @@ type RenderResult = {
 // The document content must already be in the VFS via Automerge sync.
 // Scroll sync (source-location) is controlled via runtime metadata, not per-render.
 async function doRender(
-  documentPath: string
+  documentPath: string,
+  projectFilePaths: readonly string[],
 ): Promise<RenderResult> {
   // Caller should check isWasmReady() before calling this
   if (!isWasmReady()) {
@@ -68,6 +70,12 @@ async function doRender(
   try {
     const result = await renderToHtml({
       documentPath: documentPath,
+      userGrammars: {
+        files: projectFilePaths,
+        getBinaryContent: async (path) =>
+          getBinaryFileContent(path)?.content ?? null,
+        getTextContent: async (path) => getFileContent(path),
+      },
     });
 
     // Collect all diagnostics from both success and error paths
@@ -210,7 +218,12 @@ export default function Preview({
       return;
     }
 
-    const result = await doRender(documentPath);
+    // Pass the current project file list so the render can auto-discover
+    // any user-defined tree-sitter grammars under `_quarto/grammars/*`.
+    // The discovery step is pure + cache-backed so this is ~free when
+    // grammars haven't changed since the last render.
+    const projectFilePaths = files.map((f) => f.path);
+    const result = await doRender(documentPath, projectFilePaths);
     if (qmdContent !== lastContentRef.current) return;
 
     // Update diagnostics
@@ -239,7 +252,7 @@ export default function Preview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [onDiagnosticsChange]);
+  }, [onDiagnosticsChange, files]);
 
   // Debounced render update
   const updatePreview = useCallback((newContent: string, documentPath: string) => {

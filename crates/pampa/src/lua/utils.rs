@@ -66,7 +66,7 @@ fn create_blocks_to_inlines(lua: &Lua) -> Result<Function> {
                     if let Value::UserData(ud) = val
                         && let Ok(inline) = ud.borrow::<LuaInline>()
                     {
-                        sep_inlines.push(inline.0.clone());
+                        sep_inlines.push(inline.clone_inline());
                     }
                 }
                 sep_inlines
@@ -106,14 +106,14 @@ fn extract_blocks(value: &Value) -> Result<Vec<Block>> {
                 if let Value::UserData(ud) = val
                     && let Ok(block) = ud.borrow::<LuaBlock>()
                 {
-                    blocks.push(block.0.clone());
+                    blocks.push(block.clone_block());
                 }
             }
             Ok(blocks)
         }
         Value::UserData(ud) => {
             if let Ok(block) = ud.borrow::<LuaBlock>() {
-                Ok(vec![block.0.clone()])
+                Ok(vec![block.clone_block()])
             } else {
                 Ok(vec![])
             }
@@ -279,10 +279,10 @@ fn create_type(lua: &Lua) -> Result<Function> {
                 // For our Pandoc userdata types, return the specific element type
                 // Check these first before falling back to generic __name
                 if let Ok(inline) = ud.borrow::<LuaInline>() {
-                    return Ok(get_inline_type_name(&inline.0));
+                    return Ok(get_inline_type_name(&inline.borrow_inline()));
                 }
                 if let Ok(block) = ud.borrow::<LuaBlock>() {
-                    return Ok(get_block_type_name(&block.0));
+                    return Ok(get_block_type_name(&block.borrow_block()));
                 }
                 // For other userdata, try metatable __name
                 if let Ok(mt) = ud.metatable()
@@ -327,7 +327,7 @@ fn get_inline_type_name(inline: &Inline) -> String {
         Inline::Cite(_) => "Cite".to_string(),
         Inline::Shortcode(_) => "Shortcode".to_string(),
         Inline::NoteReference(_) => "NoteReference".to_string(),
-        Inline::Attr(_, _) => "Attr".to_string(),
+        Inline::Attr(_) => "Attr".to_string(),
         Inline::Insert(_) => "Insert".to_string(),
         Inline::Delete(_) => "Delete".to_string(),
         Inline::Highlight(_) => "Highlight".to_string(),
@@ -743,11 +743,11 @@ fn stringify_value(value: &Value) -> Result<String> {
         Value::UserData(ud) => {
             // Try to extract as LuaInline
             if let Ok(inline) = ud.borrow::<LuaInline>() {
-                return Ok(stringify_inline(&inline.0));
+                return Ok(stringify_inline(&inline.borrow_inline()));
             }
             // Try to extract as LuaBlock
             if let Ok(block) = ud.borrow::<LuaBlock>() {
-                return Ok(stringify_block(&block.0));
+                return Ok(stringify_block(&block.borrow_block()));
             }
             Ok(String::new())
         }
@@ -794,7 +794,7 @@ fn stringify_inline(inline: &Inline) -> String {
         // Additional inline types
         Inline::Shortcode(_) => String::new(),
         Inline::NoteReference(_) => String::new(),
-        Inline::Attr(_, _) => String::new(),
+        Inline::Attr(_) => String::new(),
         Inline::Insert(i) => stringify_inlines(&i.content),
         Inline::Delete(d) => stringify_inlines(&d.content),
         Inline::Highlight(h) => stringify_inlines(&h.content),

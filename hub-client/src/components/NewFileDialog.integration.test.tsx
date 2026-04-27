@@ -23,7 +23,6 @@ describe('NewFileDialog', () => {
     existingPaths: [],
     onClose: vi.fn(),
     onCreateTextFile: vi.fn(),
-    onUploadBinaryFile: vi.fn(),
   };
 
   beforeEach(() => {
@@ -40,15 +39,20 @@ describe('NewFileDialog', () => {
     it('renders the dialog when open', () => {
       render(<NewFileDialog {...defaultProps} />);
 
-      expect(screen.getByText('Add File')).toBeInTheDocument();
-      expect(screen.getByText('New Text File')).toBeInTheDocument();
-      expect(screen.getByText('Upload File')).toBeInTheDocument();
+      expect(screen.getByText('New file')).toBeInTheDocument();
     });
 
     it('does not render when closed', () => {
       render(<NewFileDialog {...defaultProps} isOpen={false} />);
 
-      expect(screen.queryByText('Add File')).not.toBeInTheDocument();
+      expect(screen.queryByText('New file')).not.toBeInTheDocument();
+    });
+
+    it('does not render any upload-tab UI', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      expect(screen.queryByText(/upload file/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/drag.*drop/i)).not.toBeInTheDocument();
     });
 
     it('shows filename input in text mode', () => {

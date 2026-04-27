@@ -1,0 +1,181 @@
+---
+title: "Navbars and Page Footers"
+---
+
+Quarto 2 lets a single HTML document declare its own top-level navbar and
+page footer through YAML metadata, using the same mental model as the table
+of contents. Configuration can live in the document's frontmatter, in a
+directory `_metadata.yml`, or in `_quarto.yml`; the usual metadata-merge
+rules resolve conflicts.
+
+## Navbar
+
+The `navbar:` key controls the top navigation bar. In its simplest form you
+provide items for the `left` and `right` sides, along with a title:
+
+``` yaml
+---
+title: My Document
+navbar:
+  title: Navbar Demo Site
+  background: primary
+  search: true
+  left:
+    - text: Home
+      href: index.qmd
+    - text: Docs
+      menu:
+        - text: Getting Started
+          href: start.qmd
+        - text: Reference
+          href: ref.qmd
+  right:
+    - icon: github
+      href: https://github.com/
+      aria-label: GitHub
+---
+```
+
+### Navbar options
+
+| Option             | Description                                                                                                 |
+|--------------------|-------------------------------------------------------------------------------------------------------------|
+| `title`            | Brand text. Defaults to the document's `title`. Use `false` to hide.                                        |
+| `logo`             | Path to a logo image displayed left of the title.                                                           |
+| `logo-alt`         | Alternate text for the logo.                                                                                |
+| `logo-href`        | Link target for the logo/title (defaults to `/`).                                                           |
+| `background`       | Background color: a Bootstrap named color (`primary`, `secondary`, …, `light`, `dark`) or a hex value.      |
+| `foreground`       | Foreground color for navbar text.                                                                           |
+| `search`           | `true` to emit a search placeholder that theme JS can wire up.                                              |
+| `pinned`           | `true` to keep the navbar visible when scrolling.                                                           |
+| `collapse`         | `false` to disable the hamburger collapse behavior (default `true`).                                        |
+| `collapse-below`   | Breakpoint for collapsing: `sm`, `md`, `lg` (default), `xl`, `xxl`.                                         |
+| `toggle-position`  | `left` (default) or `right` for the hamburger toggle.                                                       |
+| `tools-collapse`   | Whether tool icons collapse into the menu at narrow widths.                                                 |
+| `left`             | List of navigation items for the left side.                                                                 |
+| `right`            | List of navigation items for the right side.                                                                |
+
+### Disabling the navbar
+
+Use `navbar: false` to suppress the navbar — for example, in a specific
+document that should opt out of a project-wide navbar.
+
+## Page footer
+
+The `page-footer:` key controls the footer. Its simplest form is a string
+that becomes the centered footer text:
+
+``` yaml
+page-footer: "Copyright 2026, Acme Co."
+```
+
+To split the footer into regions, use the object form:
+
+``` yaml
+page-footer:
+  left: "Copyright 2026, **Acme** Co."
+  right:
+    - icon: github
+      href: https://github.com/
+```
+
+### Footer options
+
+| Option       | Description                                                                                           |
+|--------------|-------------------------------------------------------------------------------------------------------|
+| `left`       | Content for the left region: a string (markdown in document context) or a list of navigation items.   |
+| `center`     | Same shape, for the center region.                                                                    |
+| `right`      | Same shape, for the right region.                                                                     |
+| `border`     | `true`, `false`, or a color. Controls the top border.                                                 |
+| `background` | Background color.                                                                                     |
+| `foreground` | Foreground color.                                                                                     |
+
+As with the navbar, `page-footer: false` suppresses the footer.
+
+## Navigation items
+
+Items used in `navbar.left`, `navbar.right`, dropdown menus, and footer
+regions all share the same shape. A bare string is shorthand for an `href`:
+
+``` yaml
+left:
+  - about.qmd                              # shorthand: { href: about.qmd }
+  - text: Home                             # explicit form
+    href: index.qmd
+  - text: Docs                             # dropdown menu
+    menu:
+      - text: Getting Started
+        href: start.qmd
+      - text: Reference
+        href: ref.qmd
+```
+
+Supported keys on a navigation item:
+
+| Key          | Description                                                                                     |
+|--------------|-------------------------------------------------------------------------------------------------|
+| `href`       | Target URL or project-relative path. Can also be written as `file:` for clarity.                |
+| `text`       | Display text. In document context this is rendered as markdown.                                 |
+| `icon`       | Bootstrap icon name (e.g. `github`, `bluesky`); see <https://icons.getbootstrap.com/>.          |
+| `aria-label` | Accessibility label for the link.                                                               |
+| `rel`        | HTML `rel` attribute.                                                                           |
+| `target`     | HTML `target` attribute (e.g. `_blank` to open in a new tab).                                   |
+| `menu`       | Nested list of navigation items. Makes the entry a dropdown; usually has no `href` of its own.  |
+
+## Markdown in text fields
+
+In document frontmatter, string values are interpreted as markdown by
+default (this is a general property of Quarto 2's metadata handling, not
+specific to navigation). Writing
+
+``` yaml
+page-footer:
+  left: "Copyright 2026, **Acme** Co."
+```
+
+in a document's frontmatter produces `Copyright 2026, <strong>Acme</strong> Co.`
+in the rendered footer. In `_quarto.yml`, strings are kept literal by
+default; opt in to markdown with the `!md` tag:
+
+``` yaml
+page-footer:
+  left: !md "Copyright 2026, **Acme** Co."
+```
+
+Use `!str` if you want a literal string in document context.
+
+## Controlling merges with `!prefer` and `!concat`
+
+Navbar and page-footer settings follow the usual metadata-merge rules:
+
+- **Scalars** (e.g. `background`, `title`): last layer wins. Setting
+  `navbar: { background: secondary }` in a document overrides a project-
+  level `background: primary`.
+- **Arrays** (e.g. `left`, `right`): default merge is `!concat`, i.e.
+  document items are appended to project items.
+- **Maps**: by default, keys are deep-merged; the higher layer's scalars
+  replace the lower layer's, but sibling keys from the lower layer survive.
+
+To change this per-value, use the `!prefer` tag to reset/replace, or
+`!concat` to make concatenation explicit:
+
+``` yaml
+# _quarto.yml
+navbar:
+  left:
+    - index.qmd
+    - about.qmd
+
+# doc.qmd — replace the entire `left` array:
+navbar:
+  left: !prefer [special.qmd]
+
+# doc.qmd — append to the project's `left` array (explicit):
+navbar:
+  left: !concat [extra.qmd]
+```
+
+The affirmative-disable shortcut `navbar: false` / `page-footer: false`
+works without any special tag: because scalars default to last-wins, the
+`false` in a document's frontmatter overrides a full navbar/footer object
+in the project layer.

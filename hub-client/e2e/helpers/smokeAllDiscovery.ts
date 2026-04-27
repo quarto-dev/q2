@@ -185,6 +185,11 @@ function parseFormatSpec(
           assertions.push({ type: 'shouldError' });
           break;
         case 'printsMessage': {
+          // Matches Q1 semantics (tests/smoke/smoke-all.test.ts:
+          // resolveTestSpecs): printsMessage alone does NOT suppress the
+          // default noErrorsOrWarnings. Fixtures that expect messages pair
+          // printsMessage with an explicit noErrors / noErrorsOrWarnings /
+          // shouldError.
           if (!options.skipPrintsMessage) {
             const items = Array.isArray(assertionValue) ? assertionValue : [assertionValue];
             for (const item of items) {

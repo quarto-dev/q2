@@ -14,6 +14,14 @@ export const Div = (args) => {
     const dragStartRef = React.useRef(null)
     const divRef = React.useRef(null)
 
+    // Sync x and y when attrs change externally (not during drag)
+    React.useEffect(() => {
+        if (!dragStartRef.current) {
+            setX(initialX)
+            setY(initialY)
+        }
+    }, [initialX, initialY])
+
     const getScale = (el) => {
         let scale = 1
         let current = el

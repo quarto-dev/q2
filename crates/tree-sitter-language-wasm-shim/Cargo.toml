@@ -1,0 +1,27 @@
+# Drop-in replacement for `tree-sitter-language` that neutralizes the
+# upstream wasm32 stdio/stdlib/string C stubs. See
+# ../../claude-notes/plans/2026-04-20-wasm-shim-merge.md for the full
+# rationale.
+#
+# The name, version, and `links` key must match upstream 0.1.7 exactly so
+# that `[patch.crates-io]` can substitute this crate into a build graph
+# that expects the published version.
+
+[package]
+name = "tree-sitter-language"
+version = "0.1.7"
+edition = "2021"
+rust-version = "1.77"
+authors = [
+    "Max Brunsfeld <maxbrunsfeld@gmail.com>",
+    "Amaan Qureshi <amaanq12@gmail.com>",
+]
+description = "Local wasm-shim fork of tree-sitter-language — neutralizes upstream wasm32 stdio stubs so wasm-quarto-hub-client's c_shim.rs can be the single source of truth."
+license = "MIT"
+repository = "https://github.com/quarto-dev/q2"
+links = "tree-sitter-language"
+build = "build.rs"
+
+[lib]
+name = "tree_sitter_language"
+path = "src/language.rs"

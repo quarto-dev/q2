@@ -27,6 +27,7 @@ use super::data::PandocIncludes;
 use super::error::PipelineError;
 use super::observer::{NoopObserver, PipelineObserver};
 use crate::artifact::ArtifactStore;
+use crate::crossref::{CrossrefIndex, RefTypeRegistry};
 use crate::extension::Extension;
 use crate::format::Format;
 use crate::project::{DocumentInfo, ProjectContext};
@@ -80,12 +81,38 @@ pub struct StageContext {
     /// Diagnostics (warnings, errors, info) collected during execution
     pub diagnostics: Vec<DiagnosticMessage>,
 
+    /// Ref-type registry: built-in + `crossref.custom` + promised-id prefixes.
+    ///
+    /// Populated by `PreEngineSugaringStage` after metadata merge and before
+    /// engine execution. Frozen thereafter. See design plan D7.
+    pub ref_type_registry: Option<RefTypeRegistry>,
+
+    /// Per-document crossref index.
+    ///
+    /// Populated incrementally by transforms in the crossref phase of
+    /// `AstTransformsStage` and consumed by later transforms and back-end
+    /// renderers. Bridged to/from `RenderContext` by `AstTransformsStage`.
+    pub crossref_index: Option<CrossrefIndex>,
+
     // === Observation & Control ===
     /// Observer for tracing, progress reporting, and WASM callbacks
     pub observer: Arc<dyn PipelineObserver>,
 
     /// Cancellation token for graceful shutdown (Ctrl+C)
     pub cancellation: Cancellation,
+
+    /// Optional provider of user-defined tree-sitter grammars, consulted
+    /// by `CodeHighlightStage` before falling back to the built-in
+    /// registry. Set by the top-level render entry points:
+    ///
+    /// - **Native CLI**: typically left `None` here; the stage builds a
+    ///   native `UserGrammars` on-demand from `<project.dir>/_quarto/grammars/`.
+    ///   (An advanced native caller could set this directly to override
+    ///   the disk-scan behavior; no caller does so today.)
+    /// - **Browser (hub-client)**: set to a `JsUserGrammars` handle that
+    ///   forwards highlight requests to JS callbacks backed by
+    ///   `web-tree-sitter`. See `crates/wasm-quarto-hub-client/src/lib.rs`.
+    pub user_grammar_provider: Option<Box<dyn quarto_highlight::UserGrammarProvider>>,
 }
 
 impl StageContext {
@@ -129,8 +156,11 @@ impl StageContext {
             artifacts: ArtifactStore::new(),
             includes: PandocIncludes::default(),
             diagnostics: Vec::new(),
+            ref_type_registry: None,
+            crossref_index: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
+            user_grammar_provider: None,
         })
     }
 

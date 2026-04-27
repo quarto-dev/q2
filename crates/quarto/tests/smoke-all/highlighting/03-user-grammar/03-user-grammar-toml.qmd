@@ -1,0 +1,43 @@
+---
+title: User-supplied grammar (TOML)
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # Container marks the block with the language class, same as
+        # built-ins. Tree-sitter captures from tree-sitter-toml's own
+        # highlights.scm produce `hl-string`, `hl-number`, `hl-operator`
+        # spans — these map 1:1 from the capture names in the grammar's
+        # query file.
+        - [!str "<pre class=\"sourceCode toml\"",
+           !str "hl-string\">&quot;example&quot;</span>",
+           !str "hl-number\">42</span>",
+           !str "hl-operator\">=</span>"]
+---
+
+Quarto picks up tree-sitter grammars that are **not** built in but
+live alongside your project. Drop them under
+`_quarto/grammars/<name>/` with two files:
+
+- `<name>.wasm` — the grammar compiled with `tree-sitter build --wasm`
+  (or downloaded from a release asset).
+- `highlights.scm` — the tree-sitter query file that assigns capture
+  names to syntactic patterns. Its classes flow through to the HTML
+  output as `hl-<capture-with-dots-as-hyphens>` spans.
+
+Optional extras (`injections.scm`, `locals.scm`) are read if present.
+
+This document includes [tree-sitter-toml v0.7.0](https://github.com/tree-sitter-grammars/tree-sitter-toml)
+under `_quarto/grammars/toml/`, then uses it to highlight a plain
+`toml` code block:
+
+```toml
+name = "example"
+count = 42
+```
+
+TOML isn't in the 14 built-in languages, but the user grammar takes
+priority on class collision anyway — so you can override a built-in
+the same way you'd add a new one.

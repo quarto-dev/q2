@@ -1,0 +1,51 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "SELECT name FROM users WHERE id = 1;\n"
+---
+[
+  [
+    0,
+    6,
+    "keyword"
+  ],
+  [
+    7,
+    11,
+    "field"
+  ],
+  [
+    12,
+    16,
+    "keyword"
+  ],
+  [
+    17,
+    22,
+    "type"
+  ],
+  [
+    23,
+    28,
+    "keyword"
+  ],
+  [
+    29,
+    31,
+    "field"
+  ],
+  [
+    32,
+    33,
+    "operator"
+  ],
+  [
+    34,
+    35,
+    "string"
+  ],
+  [
+    35,
+    36,
+    "punctuation.delimiter"
+  ]
+]

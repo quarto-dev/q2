@@ -1,0 +1,51 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "def greet(name):\n    print(f\"hi, {name}\")\n"
+---
+[
+  [
+    0,
+    3,
+    "keyword"
+  ],
+  [
+    4,
+    9,
+    "function"
+  ],
+  [
+    10,
+    14,
+    "variable"
+  ],
+  [
+    21,
+    26,
+    "function.builtin"
+  ],
+  [
+    33,
+    34,
+    "punctuation.special"
+  ],
+  [
+    34,
+    38,
+    "variable"
+  ],
+  [
+    38,
+    39,
+    "punctuation.special"
+  ],
+  [
+    33,
+    39,
+    "embedded"
+  ],
+  [
+    27,
+    40,
+    "string"
+  ]
+]

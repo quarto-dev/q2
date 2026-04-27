@@ -1,0 +1,22 @@
+[package]
+name = "quarto-highlight-encoding"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Wire-format types for Quarto 2's code-highlight span annotations"
+
+# This crate is a small, WASM-safe dependency shared by producers
+# (`quarto-highlight` on native) and consumers (`pampa`'s HTML writer,
+# which must compile to wasm32-unknown-unknown). Keeping it free of
+# heavy deps (wasmtime, tree-sitter grammar crates, etc.) is deliberate
+# — `quarto-highlight` is native-only because of those, and pampa
+# cannot carry them.
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

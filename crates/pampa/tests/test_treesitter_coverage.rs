@@ -24,14 +24,14 @@ fn parse_qmd(input: &str) -> pampa::pandoc::Pandoc {
 }
 
 // ============================================================================
-// List tests - exercise get_block_source_info with different block types
+// List tests - exercise Block::source_info() with different block types
 // ============================================================================
 
 #[test]
 fn test_list_with_code_block_item() {
     // This creates a list item ending with a code block, exercising Block::CodeBlock path
-    // in get_block_source_info during loose list detection
-    // Note: get_block_source_info is called on the LAST block of each item
+    // in Block::source_info() during loose list detection
+    // Note: Block::source_info() is called on the LAST block of each item
     let input = r#"- First item
 
 - Item ending with code:
@@ -138,7 +138,7 @@ fn test_list_with_nested_ordered_list() {
 #[test]
 fn test_list_with_table_item() {
     // This creates a list item ending with a pipe table, exercising Block::Table path
-    // Note: get_block_source_info is called on the LAST block of each item
+    // Note: Block::source_info() is called on the LAST block of each item
     let input = r#"- First item
 
 - Item ending with table:
@@ -168,7 +168,7 @@ fn test_list_with_table_item() {
 #[test]
 fn test_list_with_div_item() {
     // This creates a list item ending with a fenced div, exercising Block::Div path
-    // Note: get_block_source_info is called on the LAST block of each item
+    // Note: Block::source_info() is called on the LAST block of each item
     let input = r#"- First item
 
 - Item ending with div:
@@ -198,7 +198,7 @@ fn test_list_with_div_item() {
 #[test]
 fn test_list_with_horizontal_rule_item() {
     // This creates a list item ending with a horizontal rule, exercising Block::HorizontalRule path
-    // Note: get_block_source_info is called on the LAST block of each item
+    // Note: Block::source_info() is called on the LAST block of each item
     let input = r#"- First item
 
 - Item ending with rule:

@@ -14,17 +14,30 @@ import { fileURLToPath } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { JSDOM } from 'jsdom';
 
+import { discoverUserGrammars } from './userGrammarDiscovery';
+import { loadUserGrammar } from './userGrammarHighlight';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+interface JsUserGrammarsHandle {
+  register(
+    languageClass: string,
+    highlightFn: (class_: string, source: string) => string | null | undefined,
+  ): void;
+  free(): void;
+}
+
 interface WasmModule {
   default: (input?: BufferSource) => Promise<void>;
   vfs_add_file: (path: string, content: string) => string;
+  vfs_add_binary_file: (path: string, content: Uint8Array) => string;
   vfs_clear: () => string;
   vfs_list_files: () => string;
   vfs_read_file: (path: string) => string;
-  render_qmd: (path: string) => Promise<string>;
+  render_qmd: (path: string, user_grammars?: unknown) => Promise<string>;
+  JsUserGrammars: new () => JsUserGrammarsHandle;
 }
 
 interface JsonDiagnostic {
@@ -234,6 +247,11 @@ function parseFormatSpec(format: string, value: Record<string, unknown>, options
           assertions.push(assertShouldError);
           break;
         case 'printsMessage': {
+          // Matches Q1 semantics (tests/smoke/smoke-all.test.ts:
+          // resolveTestSpecs): printsMessage alone does NOT suppress the
+          // default noErrorsOrWarnings. Fixtures that expect messages pair
+          // printsMessage with an explicit noErrors / noErrorsOrWarnings /
+          // shouldError.
           if (!options.skipPrintsMessage) {
             const items = Array.isArray(assertionValue) ? assertionValue : [assertionValue];
             for (const item of items) {
@@ -309,9 +327,42 @@ async function findProjectRoot(qmdDir: string): Promise<string> {
   return qmdDir;
 }
 
-/** Recursively read all files in a directory tree. */
-async function readAllFiles(dir: string): Promise<{ path: string; content: string }[]> {
-  const files: { path: string; content: string }[] = [];
+/**
+ * File extensions routed through `vfs_add_binary_file` rather than
+ * `vfs_add_file`. Reading these as UTF-8 corrupts their bytes (and in
+ * the `.wasm` case makes the user-grammar loader fail silently).
+ */
+const BINARY_EXTENSIONS = new Set<string>([
+  '.wasm',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.pdf',
+  '.ico',
+  '.webp',
+  '.ttf',
+  '.woff',
+  '.woff2',
+  '.zip',
+]);
+
+function isBinaryFilename(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  const dot = lower.lastIndexOf('.');
+  if (dot < 0) return false;
+  return BINARY_EXTENSIONS.has(lower.slice(dot));
+}
+
+interface FileEntry {
+  path: string; // absolute on disk
+  projectRelPath: string; // relative to the smoke-all project root, no leading slash
+  content: string | Uint8Array;
+}
+
+/** Recursively read every file under `dir`, binary-aware. */
+async function readAllFiles(dir: string, projectRoot: string): Promise<FileEntry[]> {
+  const files: FileEntry[] = [];
 
   async function walk(d: string) {
     const entries = await readdir(d, { withFileTypes: true });
@@ -320,8 +371,14 @@ async function readAllFiles(dir: string): Promise<{ path: string; content: strin
       if (entry.isDirectory()) {
         await walk(full);
       } else if (entry.isFile()) {
-        const content = await readFile(full, 'utf-8');
-        files.push({ path: full, content });
+        const content: string | Uint8Array = isBinaryFilename(entry.name)
+          ? new Uint8Array(await readFile(full))
+          : await readFile(full, 'utf-8');
+        files.push({
+          path: full,
+          projectRelPath: relative(projectRoot, full),
+          content,
+        });
       }
     }
   }
@@ -330,21 +387,69 @@ async function readAllFiles(dir: string): Promise<{ path: string; content: strin
   return files;
 }
 
-/** Populate the WASM VFS with all files from the project root. */
-async function populateVfs(qmdPath: string): Promise<string> {
+/**
+ * Populate the WASM VFS with all files from the project root. Returns
+ * both the `/project/`-prefixed VFS path for the QMD being rendered,
+ * and the flat list of project-relative file paths (consumed by the
+ * user-grammar discovery step downstream).
+ */
+async function populateVfs(
+  qmdPath: string,
+): Promise<{ vfsPath: string; projectFiles: FileEntry[] }> {
   const qmdDir = dirname(qmdPath);
   const projectRoot = await findProjectRoot(qmdDir);
 
-  const files = await readAllFiles(projectRoot);
+  const files = await readAllFiles(projectRoot, projectRoot);
   for (const file of files) {
-    const rel = relative(projectRoot, file.path);
-    const vfsPath = `/project/${rel}`;
-    wasm.vfs_add_file(vfsPath, file.content);
+    const vfsPath = `/project/${file.projectRelPath}`;
+    if (typeof file.content === 'string') {
+      wasm.vfs_add_file(vfsPath, file.content);
+    } else {
+      wasm.vfs_add_binary_file(vfsPath, file.content);
+    }
   }
 
-  // Return the VFS path for the QMD file
   const relQmd = relative(projectRoot, qmdPath);
-  return `/project/${relQmd}`;
+  return { vfsPath: `/project/${relQmd}`, projectFiles: files };
+}
+
+/**
+ * Given the project's file list, discover any user-defined tree-sitter
+ * grammars under `_quarto/grammars/<name>/`, load them, and return a
+ * `JsUserGrammars` handle ready to pass into `render_qmd`. Returns
+ * `undefined` when the project has no grammars, which lets callers
+ * pass `undefined` to the render and take the built-ins-only path.
+ *
+ * This mirrors the runtime flow in `wasmRenderer.ts:prepareUserGrammarsHandle`
+ * but without the long-lived cache — smokeAll renders each fixture
+ * once per test invocation, so loading on demand is fine.
+ */
+async function buildUserGrammarsHandle(
+  files: readonly FileEntry[],
+): Promise<JsUserGrammarsHandle | undefined> {
+  const paths = files.map((f) => f.projectRelPath);
+  const descriptors = discoverUserGrammars(paths);
+  if (descriptors.length === 0) return undefined;
+
+  const byPath = new Map<string, FileEntry>();
+  for (const f of files) byPath.set(f.projectRelPath, f);
+
+  const handle = new wasm.JsUserGrammars();
+  for (const desc of descriptors) {
+    const wasmEntry = byPath.get(desc.wasmPath);
+    const scmEntry = byPath.get(desc.highlightsPath);
+    if (!wasmEntry || !scmEntry) continue;
+    if (!(wasmEntry.content instanceof Uint8Array)) continue;
+    if (typeof scmEntry.content !== 'string') continue;
+
+    const highlighter = await loadUserGrammar({
+      name: desc.class,
+      wasmBytes: wasmEntry.content,
+      highlightsScm: scmEntry.content,
+    });
+    handle.register(desc.class, (_cls, source) => highlighter.highlight(source));
+  }
+  return handle;
 }
 
 // ---------------------------------------------------------------------------
@@ -588,8 +693,9 @@ describe('smoke-all WASM tests', () => {
 
         try {
           wasm.vfs_clear();
-          const vfsPath = await populateVfs(testFile);
-          const resultJson = await wasm.render_qmd(vfsPath);
+          const { vfsPath, projectFiles } = await populateVfs(testFile);
+          const grammarsHandle = await buildUserGrammarsHandle(projectFiles);
+          const resultJson = await wasm.render_qmd(vfsPath, grammarsHandle);
           const result: WasmRenderResult = JSON.parse(resultJson);
 
           // If render failed and we don't expect errors, report immediately

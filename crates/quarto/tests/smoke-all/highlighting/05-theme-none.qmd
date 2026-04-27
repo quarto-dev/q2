@@ -1,0 +1,41 @@
+---
+title: theme none
+format:
+  html:
+    theme: none
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # `theme: none` does not suppress highlight *emission* — the
+        # HTML writer still produces `hl-*` span classes around tokens.
+        # What it does suppress is the default CSS that colors those
+        # spans. See the prose below for the design rationale.
+        - ["<pre class=\"sourceCode python\"",
+           "hl-keyword\">def</span>"]
+---
+
+`theme: none` is an affirmative declaration that you're taking over
+theming — typically by injecting your own stylesheets or by
+JavaScript-inserted CSS nodes on the DOM. In that mode Quarto ships
+only a minimal static CSS (no Bootstrap, no built-in highlight
+colors): the default highlight SCSS layer is NOT included.
+
+What this means in practice:
+
+- `<span class="hl-keyword">` spans are still emitted around tokens,
+  same as with any other theme. Highlighting is an AST-level concern
+  in Quarto, not a theme-level one.
+- The served CSS (under `/.quarto/project-artifacts/styles.css`)
+  contains NO `.hl-*` rules. Tokens render in the surrounding text
+  color — visually indistinguishable from non-highlighted code.
+
+If you want highlight colors alongside `theme: none`, ship your own
+CSS with rules like `.hl-keyword { color: green; }` via a `css:`
+entry or an embedded `<style>` block.
+
+```python
+def hi():
+    pass
+```

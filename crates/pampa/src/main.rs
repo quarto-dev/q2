@@ -46,8 +46,14 @@ struct Args {
     #[arg(short = 'v', long = "verbose")]
     verbose: bool,
 
-    #[arg(short = 'i', long = "input", default_value = "-")]
-    input: String,
+    /// Input file (alternative to the positional INPUT_FILE). Use `-` for stdin.
+    #[arg(short = 'i', long = "input")]
+    input: Option<String>,
+
+    /// Input file (pandoc-style positional). Use `-` for stdin. Cannot be
+    /// combined with `-i/--input`. Only one input file is supported.
+    #[arg(value_name = "INPUT_FILE")]
+    input_positional: Option<String>,
 
     #[arg(long = "loose")]
     loose: bool,
@@ -174,6 +180,18 @@ fn main() {
         }
     }
 
+    let input_source = match (args.input.as_deref(), args.input_positional.as_deref()) {
+        (Some(_), Some(_)) => {
+            eprintln!(
+                "error: input file specified both with -i/--input and as a positional argument; \
+                 pass it one way or the other"
+            );
+            std::process::exit(2);
+        }
+        (Some(s), None) | (None, Some(s)) => s,
+        (None, None) => "-",
+    };
+
     let mut input_filename = "<stdin>";
     let mut input = String::new();
     let mut output_stream = if args.verbose {
@@ -181,15 +199,15 @@ fn main() {
     } else {
         VerboseOutput::Sink(io::sink())
     };
-    if args.input == "-" {
+    if input_source == "-" {
         // Read from stdin
         io::stdin()
             .read_to_string(&mut input)
             .expect("Failed to read from stdin");
     } else {
         // Read from file
-        input_filename = &args.input;
-        std::fs::File::open(&args.input)
+        input_filename = input_source;
+        std::fs::File::open(input_source)
             .expect("Failed to open input file")
             .read_to_string(&mut input)
             .expect("Failed to read input file");

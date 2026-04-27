@@ -204,6 +204,37 @@ impl SourceInfo {
             SourceInfo::FilterProvenance { .. } => 0,
         }
     }
+
+    /// Remap every `FileId` referenced by this `SourceInfo` (including those
+    /// inside `Substring` parents and `Concat` pieces) using the provided
+    /// mapping function.
+    ///
+    /// Used when merging ASTs that were parsed against different files into a
+    /// single `ASTContext` with a shared filename table — callers shift each
+    /// AST's `FileId`s to their slot in the merged table before combining.
+    pub fn remap_file_ids<F>(&mut self, map: &F)
+    where
+        F: Fn(FileId) -> FileId,
+    {
+        match self {
+            SourceInfo::Original { file_id, .. } => {
+                *file_id = map(*file_id);
+            }
+            SourceInfo::Substring { parent, .. } => {
+                // Arc::make_mut clones if there are other references.
+                let parent = Arc::make_mut(parent);
+                parent.remap_file_ids(map);
+            }
+            SourceInfo::Concat { pieces } => {
+                for piece in pieces {
+                    piece.source_info.remap_file_ids(map);
+                }
+            }
+            SourceInfo::FilterProvenance { .. } => {
+                // No FileId inside — the filter_path is a separate string.
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -239,6 +270,64 @@ mod tests {
                 assert_eq!(mapped_id, file_id);
             }
             _ => panic!("Expected Original mapping"),
+        }
+    }
+
+    #[test]
+    fn test_remap_file_ids_original() {
+        let mut info = SourceInfo::original(FileId(0), 0, 10);
+        info.remap_file_ids(&|id| FileId(id.0 + 1));
+        match info {
+            SourceInfo::Original { file_id, .. } => assert_eq!(file_id, FileId(1)),
+            _ => panic!("Expected Original"),
+        }
+    }
+
+    #[test]
+    fn test_remap_file_ids_substring() {
+        let parent = SourceInfo::original(FileId(0), 0, 100);
+        let mut info = SourceInfo::substring(parent, 5, 20);
+        info.remap_file_ids(&|id| FileId(id.0 + 7));
+        match info {
+            SourceInfo::Substring { parent, .. } => match &*parent {
+                SourceInfo::Original { file_id, .. } => assert_eq!(*file_id, FileId(7)),
+                _ => panic!("Expected Original parent"),
+            },
+            _ => panic!("Expected Substring"),
+        }
+    }
+
+    #[test]
+    fn test_remap_file_ids_concat() {
+        let a = SourceInfo::original(FileId(0), 0, 5);
+        let b = SourceInfo::original(FileId(3), 5, 10);
+        let mut info = SourceInfo::concat(vec![(a, 5), (b, 5)]);
+        info.remap_file_ids(&|id| FileId(id.0 + 10));
+        match info {
+            SourceInfo::Concat { pieces } => {
+                match &pieces[0].source_info {
+                    SourceInfo::Original { file_id, .. } => assert_eq!(*file_id, FileId(10)),
+                    _ => panic!("Expected Original"),
+                }
+                match &pieces[1].source_info {
+                    SourceInfo::Original { file_id, .. } => assert_eq!(*file_id, FileId(13)),
+                    _ => panic!("Expected Original"),
+                }
+            }
+            _ => panic!("Expected Concat"),
+        }
+    }
+
+    #[test]
+    fn test_remap_file_ids_filter_provenance_is_noop() {
+        let mut info = SourceInfo::filter_provenance("foo.lua", 42);
+        info.remap_file_ids(&|_| FileId(99));
+        match info {
+            SourceInfo::FilterProvenance { filter_path, line } => {
+                assert_eq!(filter_path, "foo.lua");
+                assert_eq!(line, 42);
+            }
+            _ => panic!("Expected FilterProvenance"),
         }
     }
 

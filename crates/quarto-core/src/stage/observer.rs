@@ -144,12 +144,48 @@ pub trait PipelineObserver: Send + Sync {
     /// * `index` - Zero-based index of the transform in the pipeline
     /// * `total` - Total number of transforms
     /// * `ast` - The AST after this transform has been applied
+    /// * `ast_context` - The AST context, carrying filename attribution and
+    ///   source-info pool for the `ast`. Required so trace observers can emit
+    ///   correct source metadata instead of falling back to anonymous files.
     fn on_transform_data(
         &self,
         _name: &str,
         _index: usize,
         _total: usize,
         _ast: &quarto_pandoc_types::pandoc::Pandoc,
+        _ast_context: &pampa::pandoc::ASTContext,
+    ) {
+    }
+
+    /// Called by transforms that want to publish auxiliary structured data
+    /// alongside the AST trace.
+    ///
+    /// This is how front-end transforms surface data they *build* but don't
+    /// encode back into the AST — the crossref index, collected citation keys,
+    /// etc. It's deliberately open-ended: observers that know the `kind` can
+    /// record it; those that don't can ignore it.
+    ///
+    /// Invariants:
+    /// - `kind` is a stable, well-known tag (e.g. `"CrossrefIndex"`). Pick one
+    ///   per data type you plan to emit and document it near the producer.
+    /// - `data` is JSON; callers serialize their structured value upfront so
+    ///   the observer stays object-safe and doesn't need generics.
+    ///
+    /// # Arguments
+    ///
+    /// * `stage` - Name of the transform or stage that produced this data
+    ///   (e.g., `"crossref-index"`). Used to scope the trace entry.
+    /// * `index` - Zero-based index of the producer in its enclosing pipeline,
+    ///   or `0` if that's not meaningful.
+    /// * `kind` - Stable tag identifying the kind of data. Observers may
+    ///   dispatch on this.
+    /// * `data` - Serialized JSON value of the data.
+    fn on_auxiliary_data(
+        &self,
+        _stage: &str,
+        _index: usize,
+        _kind: &str,
+        _data: &serde_json::Value,
     ) {
     }
 }
@@ -272,6 +308,8 @@ mod tests {
         stage_data_calls: AtomicUsize,
         /// Records (stage_name, data_kind) for each on_stage_data call
         stage_data_log: std::sync::Mutex<Vec<(String, super::super::data::PipelineDataKind)>>,
+        /// Records (stage, kind, data) for each on_auxiliary_data call
+        aux_log: std::sync::Mutex<Vec<(String, String, serde_json::Value)>>,
     }
 
     impl CountingObserver {
@@ -284,6 +322,7 @@ mod tests {
                 pipeline_inputs: AtomicUsize::new(0),
                 stage_data_calls: AtomicUsize::new(0),
                 stage_data_log: std::sync::Mutex::new(Vec::new()),
+                aux_log: std::sync::Mutex::new(Vec::new()),
             }
         }
     }
@@ -315,6 +354,19 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push((name.to_string(), data.kind()));
+        }
+
+        fn on_auxiliary_data(
+            &self,
+            stage: &str,
+            _index: usize,
+            kind: &str,
+            data: &serde_json::Value,
+        ) {
+            self.aux_log
+                .lock()
+                .unwrap()
+                .push((stage.to_string(), kind.to_string(), data.clone()));
         }
     }
 
@@ -395,5 +447,29 @@ mod tests {
     fn test_tracing_observer_creation() {
         // Just test that it can be created
         let _observer = TracingObserver::new();
+    }
+
+    #[test]
+    fn test_on_auxiliary_data_default_is_noop() {
+        // Guards the "open-ended, safely ignored by default" contract: adding
+        // an aux kind shouldn't break observers that don't implement it.
+        let observer = NoopObserver::new();
+        observer.on_auxiliary_data("any-stage", 0, "AnyKind", &serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_on_auxiliary_data_routes_to_observer() {
+        let observer = Arc::new(CountingObserver::new());
+        observer.on_auxiliary_data(
+            "crossref-index",
+            0,
+            "CrossrefIndex",
+            &serde_json::json!({"entries": []}),
+        );
+        let log = observer.aux_log.lock().unwrap();
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].0, "crossref-index");
+        assert_eq!(log[0].1, "CrossrefIndex");
+        assert_eq!(log[0].2["entries"], serde_json::json!([]));
     }
 }

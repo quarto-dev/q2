@@ -14,15 +14,22 @@ pampa = { path = "../pampa", default-features = false, features = ["lua-filter"]
 quarto-ast-reconcile = { path = "../quarto-ast-reconcile" }
 quarto-core = { path = "../quarto-core" }
 quarto-error-reporting = { path = "../quarto-error-reporting" }
+# Direct dep so the test-only `quarto_highlight_for_test` export can
+# call the Registry-backed highlight path. Same crate quarto-core uses
+# via CodeHighlightStage — ensuring WASM tests exercise the same code
+# path as native tests.
+quarto-highlight = { path = "../quarto-highlight" }
 quarto-lsp-core = { path = "../quarto-lsp-core" }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-sass = { path = "../quarto-sass" }
 quarto-source-map = { path = "../quarto-source-map" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }
 quarto-project-create = { path = "../quarto-project-create" }
+wasm-printf-fmt = { path = "../wasm-printf-fmt" }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["console"] }
+js-sys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
@@ -40,3 +47,7 @@ getrandom = { version = "0.2", features = ["js"] }
 [patch.crates-io]
 lua-src = { path = "../lua-src-wasm" }
 wasm-bindgen-futures = { path = "../wasm-bindgen-futures-patch" }
+# Neutralize upstream's wasm32 stdio/stdlib/string stubs so our
+# c_shim.rs is the single source of truth for C stdlib symbols. See
+# ../../claude-notes/plans/2026-04-20-wasm-shim-merge.md.
+tree-sitter-language = { path = "../tree-sitter-language-wasm-shim" }

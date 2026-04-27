@@ -12,8 +12,39 @@ declare module 'wasm-quarto-hub-client' {
   export function vfs_get_runtime_metadata(): string;
   export function vfs_read_file(path: string): string;
   export function vfs_read_binary_file(path: string): string;
-  export function render_qmd(path: string): Promise<string>;
-  export function render_qmd_content(content: string, template_bundle: string): Promise<string>;
+  /**
+   * JS-interop user-grammar provider — hand-in to `render_qmd` /
+   * `render_qmd_content` so the render pipeline consults
+   * `web-tree-sitter`-backed grammars before built-ins. Construct via
+   * `new JsUserGrammars()`, populate via `register(class, fn)`, then
+   * pass the handle (or `undefined`). The handle is consumed by the
+   * render call; construct a fresh one per call.
+   */
+  export class JsUserGrammars {
+    constructor();
+    register(
+      language_class: string,
+      highlight_fn: (class_: string, source: string) => string | null | undefined,
+    ): void;
+    free(): void;
+  }
+
+  export function render_qmd(
+    path: string,
+    user_grammars?: JsUserGrammars,
+  ): Promise<string>;
+  export function render_qmd_content(
+    content: string,
+    template_bundle: string,
+    user_grammars?: JsUserGrammars,
+  ): Promise<string>;
+
+  /** Test-only: calls the user-grammar bridge directly. Phase 4.3 of syntax-highlighting. */
+  export function quarto_highlight_with_user_for_test(
+    language_class: string,
+    source: string,
+    user: JsUserGrammars,
+  ): string | undefined;
   export function get_builtin_template(name: string): string;
 
   // JavaScript execution test functions (interstitial validation)

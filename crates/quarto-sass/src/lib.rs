@@ -23,10 +23,34 @@ mod types;
 /// SHA-256 hash (first 16 hex chars) of all `.scss` files under `resources/scss/`.
 ///
 /// Computed at build time. Changes to any built-in SCSS resource (Bootstrap,
-/// Quarto customizations, built-in themes) will produce a different hash,
-/// invalidating cached CSS without runtime file reads.
+/// Quarto customizations, built-in themes) will produce a different hash.
+/// Exposed for callers that specifically need "did a SCSS file change?".
+///
+/// For cache-invalidation use, prefer [`CSS_BUILD_ID`] — it also covers
+/// Rust-side changes to SCSS assembly logic.
 pub const SCSS_RESOURCES_HASH: &str =
     include_str!(concat!(env!("OUT_DIR"), "/scss_resources_hash.txt"));
+
+/// SHA-256 hash (first 16 hex chars) combining [`SCSS_RESOURCES_HASH`]
+/// with a hash of every `.rs` file under `crates/quarto-sass/src/`.
+///
+/// Use this for CSS-cache invalidation (e.g., the IndexedDB
+/// cross-session cache in `CompileThemeCssStage`). It changes whenever
+/// either a `.scss` resource OR any Rust file that influences SCSS
+/// assembly changes. That covers the full surface of inputs that can
+/// affect the compiled CSS.
+///
+/// Why this matters: `SCSS_RESOURCES_HASH` alone is not enough.
+/// Modifications to `compile_default_css`, `assemble_theme_scss`, or
+/// the layer-loading bundle — anything that changes *which* layers
+/// get assembled or *how* — don't touch any `.scss` file, so the
+/// SCSS hash stays stable. A persistent IndexedDB cache keyed only
+/// on `SCSS_RESOURCES_HASH` would then serve pre-change CSS to users
+/// who upgrade their WASM binary. Including the Rust sources in the
+/// hash fixes that by construction. See
+/// `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.md`
+/// for the incident that motivated this.
+pub const CSS_BUILD_ID: &str = include_str!(concat!(env!("OUT_DIR"), "/css_build_id.txt"));
 
 pub use bundle::{
     assemble_bootstrap, assemble_scss, assemble_themes, assemble_with_theme,

@@ -15,11 +15,13 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sidebar-border);
 }
 
-.sidebar-header .new-file-btn {
+.sidebar-header .new-file-btn,
+.sidebar-header .upload-asset-btn {
   padding: 4px 10px;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
@@ -30,7 +32,8 @@
   transition: all 0.2s;
 }
 
-.sidebar-header .new-file-btn:hover {
+.sidebar-header .new-file-btn:hover,
+.sidebar-header .upload-asset-btn:hover {
   background: var(--editor-accent-border);
   color: var(--editor-text);
 }

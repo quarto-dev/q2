@@ -18,7 +18,6 @@
 
 use pampa::pandoc::{Block, Inline};
 use pampa::readers;
-use quarto_source_map::SourceInfo;
 
 // =============================================================================
 // Helpers
@@ -38,47 +37,8 @@ fn parse_qmd(input: &str) -> pampa::pandoc::Pandoc {
 
 /// Extract source span (start, end) from an Inline's source_info.
 fn inline_span(inline: &Inline) -> (usize, usize) {
-    let si = inline_source_info(inline);
+    let si = inline.source_info();
     (si.start_offset(), si.end_offset())
-}
-
-fn inline_source_info(inline: &Inline) -> &SourceInfo {
-    match inline {
-        Inline::Str(s) => &s.source_info,
-        Inline::Emph(e) => &e.source_info,
-        Inline::Strong(s) => &s.source_info,
-        Inline::Underline(u) => &u.source_info,
-        Inline::Strikeout(s) => &s.source_info,
-        Inline::Superscript(s) => &s.source_info,
-        Inline::Subscript(s) => &s.source_info,
-        Inline::SmallCaps(s) => &s.source_info,
-        Inline::Quoted(q) => &q.source_info,
-        Inline::Cite(c) => &c.source_info,
-        Inline::Code(c) => &c.source_info,
-        Inline::Space(s) => &s.source_info,
-        Inline::SoftBreak(s) => &s.source_info,
-        Inline::LineBreak(l) => &l.source_info,
-        Inline::Math(m) => &m.source_info,
-        Inline::RawInline(r) => &r.source_info,
-        Inline::Link(l) => &l.source_info,
-        Inline::Image(i) => &i.source_info,
-        Inline::Note(n) => &n.source_info,
-        Inline::Span(s) => &s.source_info,
-        Inline::Shortcode(sc) => &sc.source_info,
-        Inline::NoteReference(nr) => &nr.source_info,
-        // Attr is a special case — AttrSourceInfo doesn't have a single span.
-        // Use a dummy; Attr inlines are rare and won't appear in our tests.
-        Inline::Attr(_, _) => {
-            static DUMMY: std::sync::LazyLock<SourceInfo> =
-                std::sync::LazyLock::new(SourceInfo::default);
-            &DUMMY
-        }
-        Inline::Insert(i) => &i.source_info,
-        Inline::Delete(d) => &d.source_info,
-        Inline::Highlight(h) => &h.source_info,
-        Inline::EditComment(e) => &e.source_info,
-        Inline::Custom(c) => &c.source_info,
-    }
 }
 
 fn inline_type_name(inline: &Inline) -> &'static str {
@@ -105,7 +65,7 @@ fn inline_type_name(inline: &Inline) -> &'static str {
         Inline::Span(_) => "Span",
         Inline::Shortcode(_) => "Shortcode",
         Inline::NoteReference(_) => "NoteReference",
-        Inline::Attr(_, _) => "Attr",
+        Inline::Attr(_) => "Attr",
         Inline::Insert(_) => "Insert",
         Inline::Delete(_) => "Delete",
         Inline::Highlight(_) => "Highlight",

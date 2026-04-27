@@ -2276,3 +2276,126 @@ a {
   padding: 0;
   width: 1px;
 }
+
+// ============================================================================
+// Page footer layout
+// ----------------------------------------------------------------------------
+// Ported from Quarto 1's `src/resources/projects/website/navigation/quarto-nav.scss`
+// (lines 806-926). Provides the three-region flex layout used by
+// `<footer class="footer"><div class="nav-footer">` with left/center/right
+// children. Variables ($footer-bg, $footer-fg, $footer-border,
+// $footer-border-color, $footer-*-font-size) are defined in
+// `_bootstrap-variables.scss`.
+// ============================================================================
+
+.nav-footer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  text-align: center;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  @if variable-exists(footer-bg) {
+    background-color: $footer-bg;
+  }
+}
+
+body .nav-footer {
+  @if variable-exists(footer-border) and $footer-border {
+    @if variable-exists(footer-border-color) {
+      border-top: 1px solid $footer-border-color;
+    } @else {
+      border-top: 1px solid $table-border-color;
+    }
+  }
+}
+
+.nav-footer {
+  min-height: 3.5em;
+  color: $footer-fg;
+  a {
+    @if variable-exists(footer-fg) {
+      color: $footer-fg;
+    }
+  }
+}
+
+@if variable-exists(footer-left-font-size) {
+  .nav-footer .nav-footer-left {
+    font-size: $footer-left-font-size;
+  }
+}
+
+@if variable-exists(footer-center-font-size) {
+  .nav-footer .nav-footer-center {
+    font-size: $footer-center-font-size;
+  }
+}
+
+@if variable-exists(footer-right-font-size) {
+  .nav-footer .nav-footer-right {
+    font-size: $footer-right-font-size;
+  }
+}
+
+.nav-footer-left .footer-items,
+.nav-footer-center .footer-items,
+.nav-footer-right .footer-items {
+  display: inline-flex;
+  padding-top: 0.3em;
+  padding-bottom: 0.3em;
+  margin-bottom: 0em;
+}
+
+.nav-footer-left .footer-items .nav-link,
+.nav-footer-center .footer-items .nav-link,
+.nav-footer-right .footer-items .nav-link {
+  padding-left: 0.6em;
+  padding-right: 0.6em;
+}
+
+.nav-footer-left {
+  @include media-breakpoint-up(md) {
+    flex: 1 1 0px;
+    text-align: left;
+  }
+  @include media-breakpoint-down(sm) {
+    margin-bottom: 1em;
+    flex: 100%;
+  }
+}
+
+.nav-footer-right {
+  @include media-breakpoint-up(md) {
+    flex: 1 1 0px;
+    text-align: right;
+  }
+  @include media-breakpoint-down(sm) {
+    margin-bottom: 1em;
+    flex: 100%;
+  }
+}
+
+.nav-footer-center {
+  @include media-breakpoint-up(md) {
+    flex: 1 1 0px;
+  }
+  text-align: center;
+  min-height: 3em;
+  .footer-items {
+    justify-content: center;
+  }
+  @include media-breakpoint-down(md) {
+    margin-bottom: 1em;
+    flex: 100%;
+  }
+}
+
+@include media-breakpoint-down(md) {
+  .nav-footer-center {
+    margin-top: 3em;
+    order: 10;
+  }
+}

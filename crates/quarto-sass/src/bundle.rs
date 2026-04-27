@@ -207,6 +207,28 @@ pub fn load_title_block_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("title-block.scss"))
 }
 
+/// Load the default syntax-highlight SCSS layer.
+///
+/// Reads `highlight.scss` from the embedded templates directory. The
+/// layer provides color rules for every `.hl-<capture>` class the HTML
+/// writer can produce from a tree-sitter grammar's `highlights.scm`
+/// query (see `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`).
+///
+/// Included as a user-layer — after Bootstrap / Quarto defaults, before
+/// user-supplied theme overrides — so user themes can redefine any
+/// `.hl-*` class without touching markup.
+pub fn load_highlight_layer() -> Result<SassLayer, SassError> {
+    use crate::resources::TEMPLATES_RESOURCES;
+
+    let content = TEMPLATES_RESOURCES
+        .read_str(Path::new("highlight.scss"))
+        .ok_or_else(|| SassError::CompilationFailed {
+            message: "highlight.scss not found in templates resources".to_string(),
+        })?;
+
+    parse_layer(content, Some("highlight.scss"))
+}
+
 /// Assemble a complete SCSS string for compilation.
 ///
 /// This function implements the correct assembly order from TypeScript Quarto:

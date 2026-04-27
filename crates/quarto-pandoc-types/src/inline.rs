@@ -38,7 +38,7 @@ pub enum Inline {
     NoteReference(NoteReference),
     // this is used to represent commonmark attributes in the document in places
     // where they are not directly attached to a block, like in headings and tables
-    Attr(Attr, AttrSourceInfo),
+    Attr(InlineAttr),
 
     // CriticMarkup-like extensions
     Insert(Insert),
@@ -51,6 +51,41 @@ pub enum Inline {
     /// Parsed from Spans with special class names. When serialized to Pandoc JSON,
     /// these are converted to wrapper Spans with `__quarto_custom_node` class.
     Custom(CustomNode),
+}
+
+impl Inline {
+    pub fn source_info(&self) -> &quarto_source_map::SourceInfo {
+        match self {
+            Inline::Str(s) => &s.source_info,
+            Inline::Emph(e) => &e.source_info,
+            Inline::Underline(u) => &u.source_info,
+            Inline::Strong(s) => &s.source_info,
+            Inline::Strikeout(s) => &s.source_info,
+            Inline::Superscript(s) => &s.source_info,
+            Inline::Subscript(s) => &s.source_info,
+            Inline::SmallCaps(s) => &s.source_info,
+            Inline::Quoted(q) => &q.source_info,
+            Inline::Cite(c) => &c.source_info,
+            Inline::Code(c) => &c.source_info,
+            Inline::Space(s) => &s.source_info,
+            Inline::SoftBreak(s) => &s.source_info,
+            Inline::LineBreak(l) => &l.source_info,
+            Inline::Math(m) => &m.source_info,
+            Inline::RawInline(r) => &r.source_info,
+            Inline::Link(l) => &l.source_info,
+            Inline::Image(i) => &i.source_info,
+            Inline::Note(n) => &n.source_info,
+            Inline::Span(s) => &s.source_info,
+            Inline::Shortcode(s) => &s.source_info,
+            Inline::NoteReference(n) => &n.source_info,
+            Inline::Attr(a) => &a.source_info,
+            Inline::Insert(i) => &i.source_info,
+            Inline::Delete(d) => &d.source_info,
+            Inline::Highlight(h) => &h.source_info,
+            Inline::EditComment(e) => &e.source_info,
+            Inline::Custom(c) => &c.source_info,
+        }
+    }
 }
 
 pub type Inlines = Vec<Inline>;
@@ -258,6 +293,24 @@ pub struct EditComment {
     pub attr_source: AttrSourceInfo,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InlineAttr {
+    pub attr: Attr,
+    pub attr_source: AttrSourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
+}
+
+impl InlineAttr {
+    pub fn new(attr: Attr, attr_source: AttrSourceInfo) -> Self {
+        let source_info = attr_source.combine_all().unwrap_or_default();
+        Self {
+            attr,
+            attr_source,
+            source_info,
+        }
+    }
+}
+
 pub trait AsInline {
     fn as_inline(self) -> Inline;
 }
@@ -309,9 +362,11 @@ impl_as_inline!(
     EditComment
 );
 
-// Note: Attr is omitted from the macro because it has two fields (Attr, AttrSourceInfo)
-// and the macro doesn't support that pattern. Inline::Attr already IS an inline,
-// so it doesn't need AsInline impl - the generic impl for Inline handles it.
+impl AsInline for InlineAttr {
+    fn as_inline(self) -> Inline {
+        Inline::Attr(self)
+    }
+}
 
 pub fn is_empty_target(target: &Target) -> bool {
     target.0.is_empty() && target.1.is_empty()
@@ -1318,5 +1373,109 @@ mod tests {
             source_info: dummy_source_info(),
         };
         assert_eq!(note.content.len(), 1);
+    }
+
+    // === Inline::source_info() tests ===
+
+    fn test_si(file: usize, start: usize, end: usize) -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(quarto_source_map::FileId(file), start, end)
+    }
+
+    #[test]
+    fn source_info_str() {
+        let si = test_si(0, 0, 5);
+        let inline = Inline::Str(Str {
+            text: "hello".into(),
+            source_info: si.clone(),
+        });
+        assert_eq!(inline.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_space() {
+        let si = test_si(0, 5, 6);
+        let inline = Inline::Space(Space {
+            source_info: si.clone(),
+        });
+        assert_eq!(inline.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_shortcode() {
+        let si = test_si(1, 10, 30);
+        let inline = Inline::Shortcode(crate::shortcode::Shortcode {
+            is_escaped: false,
+            name: "include".into(),
+            positional_args: vec![],
+            keyword_args: std::collections::HashMap::new(),
+            source_info: si.clone(),
+        });
+        assert_eq!(inline.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_attr_empty() {
+        // Empty AttrSourceInfo → source_info is SourceInfo::default()
+        let inline = Inline::Attr(InlineAttr::new(
+            (String::new(), vec![], LinkedHashMap::new()),
+            AttrSourceInfo::empty(),
+        ));
+        assert_eq!(
+            inline.source_info(),
+            &quarto_source_map::SourceInfo::default()
+        );
+    }
+
+    #[test]
+    fn source_info_attr_with_id() {
+        // AttrSourceInfo with an id → precomputed source_info matches the id's SourceInfo
+        let id_si = test_si(2, 10, 15);
+        let attr_source = AttrSourceInfo {
+            id: Some(id_si.clone()),
+            classes: vec![],
+            attributes: vec![],
+        };
+        let inline = Inline::Attr(InlineAttr::new(
+            ("myid".into(), vec![], LinkedHashMap::new()),
+            attr_source,
+        ));
+        assert_eq!(inline.source_info(), &id_si);
+    }
+
+    #[test]
+    fn source_info_attr_with_id_and_classes() {
+        // AttrSourceInfo with id + class → precomputed source_info is a Concat
+        let id_si = test_si(3, 10, 15);
+        let class_si = test_si(3, 16, 25);
+        let attr_source = AttrSourceInfo {
+            id: Some(id_si),
+            classes: vec![Some(class_si)],
+            attributes: vec![],
+        };
+        let inline = Inline::Attr(InlineAttr::new(
+            ("myid".into(), vec!["myclass".into()], LinkedHashMap::new()),
+            attr_source,
+        ));
+        // The combined source_info should be a Concat with 2 pieces
+        match inline.source_info() {
+            quarto_source_map::SourceInfo::Concat { pieces } => {
+                assert_eq!(pieces.len(), 2);
+            }
+            other => panic!("Expected Concat, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn source_info_link() {
+        let si = test_si(4, 0, 30);
+        let inline = Inline::Link(Link {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            target: ("url".into(), String::new()),
+            source_info: si.clone(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        assert_eq!(inline.source_info(), &si);
     }
 }

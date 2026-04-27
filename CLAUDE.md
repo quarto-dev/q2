@@ -30,7 +30,7 @@ Always follow TDD workflow: write/update tests BEFORE implementing features. Whe
 1. Stage and commit changes as needed
 2. **Verify the full workspace compiles cleanly** (`cargo build --workspace`)
 3. **Verify the full workspace tests pass** (`cargo nextest run --workspace`)
-4. **For changes to quarto-core or quarto-pandoc-types**: Run `cargo xtask verify` to ensure hub-client/WASM builds work
+4. **Run `cargo xtask verify`** — at minimum `cargo xtask verify --skip-hub-build` for Rust-only changes; full `cargo xtask verify` when the WASM leg could be affected (any change under `quarto-core`, `quarto-pandoc-types`, or anything else hub-client depends on). This is the step that matches CI's `-D warnings` strictness; plain `cargo build` / `cargo nextest` from steps 2 and 3 do not.
 5. Ask the user for permission before pushing
 6. Only push after receiving explicit approval
 
@@ -178,6 +178,49 @@ br import -i .beads/issues.jsonl --resolve-collisions  # Auto-resolve
 
 Only `blocks` dependencies affect the ready work queue.
 
+## Where information lives (memory vs. repo)
+
+Claude's project-memory system (`~/.claude/projects/.../memory/`) is
+**per-user and per-machine**. It does not sync to colleagues, does not
+appear in code review, and cannot be corrected via a PR. Do not put
+project-wide facts there.
+
+Before writing a `project`-type memory, ask two questions:
+
+1. **Would a colleague benefit from seeing this in their own Claude
+   session?** If yes, it belongs in the repo, not in memory.
+2. **Is it already captured in a repo artifact?** If yes, memory is
+   redundant.
+
+Where project-wide information should live instead:
+
+- **`CLAUDE.md`** — always-on guidance, project conventions, commands.
+- **`claude-notes/plans/`** — decisions, rationale, in-progress work.
+- **`claude-notes/research/`** — findings, audits, reference material.
+- **Code comments** — invariants local to specific code.
+- **Commit messages + `br`** — temporal context, who did what when.
+
+What memory is *actually* appropriate for:
+
+- `user` type — facts about the user (role, expertise, what they're
+  working on this week). Not visible in code.
+- `feedback` type — preferences the user has expressed about how I
+  should work with them (style, terseness, confirmation thresholds).
+- `reference` type — pointers to external systems (Linear project
+  IDs, dashboard URLs, Slack channels).
+- `project` type — narrow cases where something affects *my*
+  behavior with *this user* specifically and isn't already captured
+  anywhere in the repo.
+
+**Red flags** that a proposed memory should go in the repo instead:
+
+- It's an architectural decision ("we chose X over Y").
+- It's project state everyone needs ("crate Z is being removed").
+- It duplicates something already in `CLAUDE.md` or a plan/research
+  note.
+- Future agents running on a colleague's machine would be confused or
+  misled without it.
+
 ## **CRITICAL - TEST-DRIVEN DEVELOPMENT**
 
 When fixing ANY bug:
@@ -301,7 +344,27 @@ The changelog is rendered in the About section of the hub-client UI.
 - **CRITICAL**: Do NOT pipe `cargo nextest run` through `tail` or other commands - it causes hangs. Run it directly.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
 - **CRITICAL**: For hub-client changes, passing tests alone is NOT sufficient. You must also verify that `npm run build:all` (from `hub-client/`) succeeds before claiming work is done. The production build (`tsc -b && vite build`) is stricter than `tsc --noEmit` and `vitest` — it uses project references mode and catches errors the other tools miss.
+- **CRITICAL**: For any CLI- or user-visible feature, passing tests alone is NOT sufficient. See **End-to-end verification before declaring success** below.
 - **Windows**: Some crates must be manually excluded from tests. See claude-notes/instructions/windows-dev.md for details.
+
+## End-to-end verification before declaring success
+
+Tests passing is **necessary but not sufficient** to declare a feature complete. Before reporting a feature done, you MUST:
+
+1. **Exercise the feature end-to-end through the binary a real user would run.** For CLI features, that means `cargo run --bin q2 -- render <fixture>.qmd` (or the equivalent). For hub-client features, that means a real browser session against a running hub. In-process tests that call library functions directly do NOT count as end-to-end verification — they may bypass config branches, CLI argument parsing, file I/O, or pipeline builders that the real binary uses.
+2. **Inspect the actual output.** Read the generated file, view the rendered HTML in a browser if UI is involved, grep for the expected markup. Do not infer success from the absence of errors.
+3. **Record the end-to-end example in your communications.** Either in the session transcript (when reporting completion) or in the plan document for the feature, include:
+   - the exact invocation used,
+   - a snippet of the observed output demonstrating the feature,
+   - an explicit note that the output was inspected.
+4. **Prefer test helpers that drive the binary.** When adding tests for a CLI-visible feature, route through `render_document_to_file` (or the equivalent end-to-end entry point) with realistic config — not `render_qmd_to_html` with `HtmlRenderConfig::default()`. If the feature activates only under a specific config branch, make sure at least one regression test hits that branch.
+
+If you cannot test a feature end-to-end (e.g. no access to a browser for a hub-client change), **say so explicitly** rather than claiming success based on unit tests alone. "Tests pass, I did not verify the real render path" is a valid and honest status update.
+
+**Why this matters:** tests verify the contract the test author had in mind. Real invocations verify the contract the user is relying on. These are not the same thing.
+
+Past incidents where they diverged:
+- **2026-04-20**: `CodeHighlightStage` never ran under `quarto render` because the CLI path used a different branch of `render_qmd_to_html` than the tests. Every test passed; no rendered document had highlighting. See `claude-notes/plans/2026-04-19-syntax-highlighting-design.md` ("Phase 2 post-mortem") and the process-improvement plan at `claude-notes/plans/2026-04-20-end-to-end-verification-process.md`.
 
 ## Build Commands
 
@@ -361,6 +424,11 @@ Add new rules in `crates/xtask/src/lint/`. Each rule should:
 ## Debugging Approach
 
 When diagnosing issues, do NOT jump to conclusions (e.g., 'race condition') before gathering evidence. Check the actual error path, inspect runtime values, and verify hypotheses with targeted tests before proposing fixes.
+
+## Performance profiling
+
+- **CRITICAL**: If you're investigating a performance hotspot (Chrome profile on hub-client, slow CLI run, suspicious Big-O), read `claude-notes/instructions/performance-profiling.md` before starting. It codifies the native-proxy-first workflow we use: build a representative fixture, scale it geometrically, add env-gated counters, confirm the complexity class empirically, *then* design a fix. Do not iterate on performance fixes in the browser.
+- `QUARTO_PERF_STATS=1` is the shared env var for all perf-collection output in the tree. Individual gauges identify themselves with an output prefix like `perf.<gauge-name>` (e.g. `perf.intern` from the JSON writer's `SourceInfoSerializer` in `crates/pampa/src/writers/json.rs`, left in place after bd-h5l7 as a reference for the instrumentation pattern).
 
 ## Claude Code hooks
 

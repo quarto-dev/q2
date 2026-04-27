@@ -163,7 +163,7 @@ fn inlines_to_plain_text(inlines: &[Inline]) -> String {
                 }
             }
             // Skip these - they don't contribute meaningful text
-            Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_, _) => {}
+            Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {}
         }
     }
     result

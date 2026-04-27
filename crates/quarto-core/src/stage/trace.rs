@@ -187,8 +187,9 @@ impl PipelineObserver for JsonTraceObserver {
         index: usize,
         _total: usize,
         ast: &quarto_pandoc_types::pandoc::Pandoc,
+        ast_context: &pampa::pandoc::ASTContext,
     ) {
-        let data_json = serialize_pandoc_ast(ast);
+        let data_json = serialize_pandoc_ast(ast, ast_context);
         let mut state = self.state.lock().unwrap();
         Self::push_entry(
             &mut state,
@@ -197,6 +198,22 @@ impl PipelineObserver for JsonTraceObserver {
                 index,
                 data_kind: Some(PipelineDataKind::DocumentAst.to_string()),
                 data: Some(data_json),
+                duration_ms: None,
+                status: StageStatus::Ok,
+                error: None,
+            },
+        );
+    }
+
+    fn on_auxiliary_data(&self, stage: &str, index: usize, kind: &str, data: &serde_json::Value) {
+        let mut state = self.state.lock().unwrap();
+        Self::push_entry(
+            &mut state,
+            TraceEntry {
+                stage: format!("aux:{}", stage),
+                index,
+                data_kind: Some(kind.to_string()),
+                data: Some(data.clone()),
                 duration_ms: None,
                 status: StageStatus::Ok,
                 error: None,
@@ -300,6 +317,7 @@ impl PipelineObserver for SummaryTraceObserver {
         index: usize,
         total: usize,
         ast: &quarto_pandoc_types::pandoc::Pandoc,
+        _ast_context: &pampa::pandoc::ASTContext,
     ) {
         let block_count = ast.blocks.len();
         eprintln!(
@@ -358,7 +376,7 @@ fn serialize_pipeline_data(data: &PipelineData) -> serde_json::Value {
             "markdown": s.markdown,
         }),
         PipelineData::DocumentAst(doc) => {
-            let ast_json = serialize_pandoc_ast(&doc.ast);
+            let ast_json = serialize_pandoc_ast(&doc.ast, &doc.ast_context);
             serde_json::json!({
                 "path": doc.path.display().to_string(),
                 "ast": ast_json,
@@ -398,10 +416,16 @@ fn serialize_pipeline_data(data: &PipelineData) -> serde_json::Value {
 }
 
 /// Serialize a Pandoc AST to a JSON value using pampa's JSON writer.
-fn serialize_pandoc_ast(ast: &quarto_pandoc_types::pandoc::Pandoc) -> serde_json::Value {
-    let context = pampa::pandoc::ASTContext::anonymous();
+///
+/// The caller supplies the real [`ASTContext`] so source-attribution metadata
+/// (filenames, source info pool) is preserved in the trace. Passing an
+/// anonymous context here would produce bogus `astContext.files` entries.
+fn serialize_pandoc_ast(
+    ast: &quarto_pandoc_types::pandoc::Pandoc,
+    context: &pampa::pandoc::ASTContext,
+) -> serde_json::Value {
     let mut buf = Vec::new();
-    match pampa::writers::json::write(ast, &context, &mut buf) {
+    match pampa::writers::json::write(ast, context, &mut buf) {
         Ok(()) => serde_json::from_slice(&buf).unwrap_or_else(|_| {
             serde_json::json!({
                 "__error": "Failed to parse JSON output",
@@ -482,6 +506,59 @@ mod tests {
         assert_eq!(json["path"], "test.qmd");
         assert!(json["ast"].is_object());
         assert_eq!(json["warnings_count"], 0);
+    }
+
+    /// Trace serializer must use the real ASTContext from DocumentAst,
+    /// not a fresh anonymous one. Regression test for bd-b0f2.
+    #[test]
+    fn test_document_ast_trace_preserves_filenames() {
+        let ast = quarto_pandoc_types::pandoc::Pandoc::default();
+        let ast_context = pampa::pandoc::ASTContext::with_filename("hello.qmd");
+        let doc = crate::stage::DocumentAst {
+            path: PathBuf::from("hello.qmd"),
+            ast,
+            ast_context,
+            source_context: quarto_source_map::SourceContext::new(),
+            warnings: vec![],
+        };
+
+        let data = PipelineData::DocumentAst(doc);
+        let json = serialize_pipeline_data(&data);
+
+        let files = &json["ast"]["astContext"]["files"];
+        assert!(files.is_array(), "astContext.files should be an array");
+        let files = files.as_array().unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(
+            files[0]["name"], "hello.qmd",
+            "serialized trace must carry the real filename, got: {:?}",
+            files[0]
+        );
+    }
+
+    /// Trace observer must preserve the filename on `on_transform_data`
+    /// entries. Regression test for bd-b0f2 covering per-transform
+    /// observability inside `AstTransformsStage`.
+    #[test]
+    fn test_on_transform_data_preserves_filenames() {
+        let observer =
+            JsonTraceObserver::new(PathBuf::from("/tmp/test-trace.json"), RenderInfo::default());
+
+        let ast = quarto_pandoc_types::pandoc::Pandoc::default();
+        let ast_context = pampa::pandoc::ASTContext::with_filename("foo.qmd");
+
+        observer.on_transform_data("callout", 0, 1, &ast, &ast_context);
+
+        let state = observer.state.lock().unwrap();
+        assert_eq!(state.doc.pipeline.len(), 1);
+        let entry = &state.doc.pipeline[0];
+        assert_eq!(entry.stage, "transform:callout");
+        let data = entry.data.as_ref().expect("entry should have data");
+        let files = &data["astContext"]["files"];
+        assert!(files.is_array(), "astContext.files should be an array");
+        let files = files.as_array().unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0]["name"], "foo.qmd");
     }
 
     #[test]

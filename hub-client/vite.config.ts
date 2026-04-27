@@ -41,6 +41,12 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        debug: path.resolve(__dirname, 'debug.html'),
+      },
+    },
   },
   server: {
     fs: {

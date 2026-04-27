@@ -1,0 +1,54 @@
+[package]
+name = "quarto-highlight"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Syntax highlighting for Quarto 2 code blocks via tree-sitter"
+
+[dependencies]
+tree-sitter.workspace = true
+tree-sitter-highlight.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+once_cell.workspace = true
+
+# Shared wire-format types with consumers (pampa's HTML writer, etc.).
+quarto-highlight-encoding.workspace = true
+
+# Pandoc AST types — the annotate walker touches CodeBlock / Code attrs.
+quarto-pandoc-types.workspace = true
+
+# Built-in grammar crates. Versions scouted in
+# claude-notes/research/syntax-highlighting-grammar-crate-scout.md.
+tree-sitter-python = "0.25"
+tree-sitter-r = "1.2"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-bash = "0.25"
+tree-sitter-sequel = "0.3"
+tree-sitter-html = "0.23"
+tree-sitter-css = "0.25"
+tree-sitter-json = "0.24"
+tree-sitter-yaml = "0.7"
+tree-sitter-julia = "0.23"
+tree-sitter-lua = "0.5"
+
+# Native-only: wasmtime-backed user-grammar loader. The `wasm` feature on
+# tree-sitter pulls in wasmtime-c-api, which itself has transitive deps
+# (cranelift, etc.) that cannot compile for `wasm32-unknown-unknown`.
+# Browser-side user grammars take a different path (Phase 4: web-tree-sitter
+# via wasm-bindgen JS interop).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tree-sitter = { workspace = true, features = ["wasm"] }
+
+[dev-dependencies]
+insta.workspace = true
+serde_json.workspace = true
+hashlink = "0.11"
+quarto-source-map.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,26 @@
+---
+title: Built-in syntax highlighting
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # Code block: outer container carries `sourceCode python` and
+        # keyword / builtin tokens wrap in `<span class="hl-*">`.
+        - ["<pre class=\"sourceCode python\"", "hl-keyword\">def</span>", "hl-function-builtin\">print</span>"]
+      # Linked CSS must include the `.hl-keyword` rule — the default
+      # highlight SCSS layer is always part of themed CSS.
+      ensureCssRegexMatches:
+        - ["\\.hl-keyword"]
+---
+
+Quarto highlights every fenced code block whose first class matches a
+known language. The 14 built-in languages are `bash`/`sh`, `css`, `html`,
+`javascript`/`js`/`jsx`, `json`, `julia`/`jl`, `lua`, `python`/`py`, `r`,
+`sql`, `tsx`, `typescript`/`ts`, `yaml`/`yml`.
+
+```python
+def hello():
+    print("Hello, World!")
+```

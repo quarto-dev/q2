@@ -10,6 +10,20 @@
 //! These types correspond to Quarto schema options and are used by multiple
 //! transforms to read configuration consistently.
 
+use quarto_pandoc_types::config_value::ConfigValue;
+
+/// Returns `true` if the top-level metadata key is explicitly set to the boolean
+/// `false`. This is the "affirmative disable" convention used across `toc`,
+/// `navbar`, and `page-footer`: setting the key to `false` in any layer that
+/// wins the metadata merge suppresses the feature regardless of any other
+/// structured data (e.g. pre-populated `navigation.toc`, `navigation.navbar`,
+/// `navigation.footer`) that may also be present in the merged metadata.
+///
+/// Returns `false` if the key is absent, non-boolean, or set to `true`.
+pub fn is_feature_disabled(meta: &ConfigValue, key: &str) -> bool {
+    meta.get(key).and_then(|v| v.as_bool()) == Some(false)
+}
+
 /// Where footnotes/references should be placed.
 ///
 /// Corresponds to the `reference-location` option in Quarto schema.
@@ -97,6 +111,58 @@ impl AppendixStyle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_pandoc_types::ConfigMapEntry;
+    use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
+    use quarto_source_map::SourceInfo;
+    use yaml_rust2::Yaml;
+
+    fn meta_with(key: &str, value: ConfigValue) -> ConfigValue {
+        ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: key.to_string(),
+                key_source: SourceInfo::default(),
+                value,
+            }],
+            SourceInfo::default(),
+        )
+    }
+
+    fn bool_value(b: bool) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::Boolean(b)),
+            source_info: SourceInfo::default(),
+            merge_op: Default::default(),
+        }
+    }
+
+    #[test]
+    fn test_is_feature_disabled_false() {
+        let meta = meta_with("toc", bool_value(false));
+        assert!(is_feature_disabled(&meta, "toc"));
+    }
+
+    #[test]
+    fn test_is_feature_disabled_true_is_not_disabled() {
+        let meta = meta_with("toc", bool_value(true));
+        assert!(!is_feature_disabled(&meta, "toc"));
+    }
+
+    #[test]
+    fn test_is_feature_disabled_absent_is_not_disabled() {
+        let meta = ConfigValue::default();
+        assert!(!is_feature_disabled(&meta, "toc"));
+    }
+
+    #[test]
+    fn test_is_feature_disabled_non_bool_is_not_disabled() {
+        // `toc: "auto"` is a valid value that means enabled; it must not trip
+        // the disabled check.
+        let meta = meta_with(
+            "toc",
+            ConfigValue::new_string("auto", SourceInfo::default()),
+        );
+        assert!(!is_feature_disabled(&meta, "toc"));
+    }
 
     #[test]
     fn test_reference_location_from_str() {

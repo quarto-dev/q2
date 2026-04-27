@@ -42,6 +42,7 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
+use crate::transforms::is_feature_disabled;
 
 /// Transform that generates TOC from document headings.
 ///
@@ -75,6 +76,14 @@ impl AstTransform for TocGenerateTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+        // Affirmative disable: `toc: false` in merged metadata suppresses
+        // generation. Handled explicitly so the intent is symmetric with the
+        // render transform (which also short-circuits on `toc: false`) and
+        // with the navbar/footer transforms that share the convention.
+        if is_feature_disabled(&ast.meta, "toc") {
+            return Ok(());
+        }
+
         // Check if TOC auto-generation is requested.
         // Read from ast.meta which contains merged project + document metadata.
         let should_generate = match ast.meta.get("toc") {
@@ -266,6 +275,30 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].get("id").unwrap().as_str(), Some("intro"));
         assert_eq!(entries[1].get("id").unwrap().as_str(), Some("methods"));
+    }
+
+    #[tokio::test]
+    async fn test_toc_false_skips_generation() {
+        // `toc: false` (the post-merge winner when a document overrides a
+        // project-level `toc: true`) must not generate a TOC.
+        let mut ast = Pandoc {
+            meta: config_map(vec![("toc", config_bool(false))]),
+            blocks: vec![
+                make_header(2, "intro", "Introduction"),
+                make_para("Content."),
+            ],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TocGenerateTransform::new();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
+
+        assert!(!ast.meta.contains_path(&["navigation", "toc"]));
     }
 
     #[tokio::test]

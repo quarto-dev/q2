@@ -366,12 +366,12 @@ fn get_filter_table(lua: &Lua) -> Result<Table> {
 
 /// Extract an Inline from a Lua UserData value.
 pub(crate) fn extract_lua_inline(ud: &mlua::AnyUserData) -> Result<Inline> {
-    Ok(ud.borrow::<LuaInline>()?.0.clone())
+    Ok(ud.borrow::<LuaInline>()?.clone_inline())
 }
 
 /// Extract a Block from a Lua UserData value.
 pub(crate) fn extract_lua_block(ud: &mlua::AnyUserData) -> Result<Block> {
-    Ok(ud.borrow::<LuaBlock>()?.0.clone())
+    Ok(ud.borrow::<LuaBlock>()?.clone_block())
 }
 
 /// Extract a Vec<Inline> from a Lua table of UserData values.
@@ -407,7 +407,7 @@ fn handle_inline_return(ret: Value, original: &Inline) -> Result<Vec<Inline>> {
         Value::UserData(ud) => {
             // Single element return - replace
             let lua_inline = ud.borrow::<LuaInline>()?;
-            Ok(vec![lua_inline.0.clone()])
+            Ok(vec![lua_inline.0.borrow().clone()])
         }
         Value::Table(table) => {
             let len = table.raw_len();
@@ -421,7 +421,7 @@ fn handle_inline_return(ret: Value, original: &Inline) -> Result<Vec<Inline>> {
                 let value: Value = table.get(i)?;
                 if let Value::UserData(ud) = value {
                     let lua_inline = ud.borrow::<LuaInline>()?;
-                    inlines.push(lua_inline.0.clone());
+                    inlines.push(lua_inline.0.borrow().clone());
                 }
             }
             Ok(inlines)
@@ -437,7 +437,7 @@ fn handle_block_return(ret: Value, original: &Block) -> Result<Vec<Block>> {
         Value::UserData(ud) => {
             // Single element return - replace
             let lua_block = ud.borrow::<LuaBlock>()?;
-            Ok(vec![lua_block.0.clone()])
+            Ok(vec![lua_block.0.borrow().clone()])
         }
         Value::Table(table) => {
             let len = table.raw_len();
@@ -451,7 +451,7 @@ fn handle_block_return(ret: Value, original: &Block) -> Result<Vec<Block>> {
                 let value: Value = table.get(i)?;
                 if let Value::UserData(ud) = value {
                     let lua_block = ud.borrow::<LuaBlock>()?;
-                    blocks.push(lua_block.0.clone());
+                    blocks.push(lua_block.0.borrow().clone());
                 }
             }
             Ok(blocks)
@@ -486,7 +486,7 @@ fn handle_inline_return_with_control(
         Value::Nil => vec![original.clone()],
         Value::UserData(ud) => {
             let lua_inline = ud.borrow::<LuaInline>()?;
-            vec![lua_inline.0.clone()]
+            vec![lua_inline.0.borrow().clone()]
         }
         Value::Table(table) => {
             let len = table.raw_len();
@@ -498,7 +498,7 @@ fn handle_inline_return_with_control(
                     let value: Value = table.get(i)?;
                     if let Value::UserData(ud) = value {
                         let lua_inline = ud.borrow::<LuaInline>()?;
-                        inlines.push(lua_inline.0.clone());
+                        inlines.push(lua_inline.0.borrow().clone());
                     }
                 }
                 inlines
@@ -530,7 +530,7 @@ fn handle_block_return_with_control(
         Value::Nil => vec![original.clone()],
         Value::UserData(ud) => {
             let lua_block = ud.borrow::<LuaBlock>()?;
-            vec![lua_block.0.clone()]
+            vec![lua_block.0.borrow().clone()]
         }
         Value::Table(table) => {
             let len = table.raw_len();
@@ -542,7 +542,7 @@ fn handle_block_return_with_control(
                     let value: Value = table.get(i)?;
                     if let Value::UserData(ud) = value {
                         let lua_block = ud.borrow::<LuaBlock>()?;
-                        blocks.push(lua_block.0.clone());
+                        blocks.push(lua_block.0.borrow().clone());
                     }
                 }
                 blocks
@@ -581,7 +581,7 @@ fn handle_blocks_return_with_control(
                     let value: Value = table.get(i)?;
                     if let Value::UserData(ud) = value {
                         let lua_block = ud.borrow::<LuaBlock>()?;
-                        result.push(lua_block.0.clone());
+                        result.push(lua_block.0.borrow().clone());
                     }
                 }
                 result
@@ -620,7 +620,7 @@ fn handle_inlines_return_with_control(
                     let value: Value = table.get(i)?;
                     if let Value::UserData(ud) = value {
                         let lua_inline = ud.borrow::<LuaInline>()?;
-                        result.push(lua_inline.0.clone());
+                        result.push(lua_inline.0.borrow().clone());
                     }
                 }
                 result
@@ -688,7 +688,7 @@ fn inline_tag(inline: &Inline) -> &'static str {
         Inline::Span(_) => "Span",
         Inline::Shortcode(_) => "Shortcode",
         Inline::NoteReference(_) => "NoteReference",
-        Inline::Attr(_, _) => "Attr",
+        Inline::Attr(_) => "Attr",
         Inline::Insert(_) => "Insert",
         Inline::Delete(_) => "Delete",
         Inline::Highlight(_) => "Highlight",
@@ -838,11 +838,11 @@ async fn walk_inlines_for_element_filters(
         // Then apply type-specific or generic Inline filter
         let tag = inline_tag(&walked);
         let filtered = if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-            let inline_ud = lua.create_userdata(LuaInline(walked.clone()))?;
+            let inline_ud = lua.create_userdata(LuaInline::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(inline_ud).await?;
             handle_inline_return(ret, &walked)?
         } else if let Ok(filter_fn) = filter_table.get::<Function>("Inline") {
-            let inline_ud = lua.create_userdata(LuaInline(walked.clone()))?;
+            let inline_ud = lua.create_userdata(LuaInline::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(inline_ud).await?;
             handle_inline_return(ret, &walked)?
         } else {
@@ -969,7 +969,7 @@ fn walk_inline_children_for_element_filters<'a>(
             | Inline::Cite(_)
             | Inline::Shortcode(_)
             | Inline::NoteReference(_)
-            | Inline::Attr(_, _)
+            | Inline::Attr(_)
             | Inline::Insert(_)
             | Inline::Delete(_)
             | Inline::Highlight(_)
@@ -1117,7 +1117,7 @@ async fn apply_inlines_filter(
                     let value: Value = table.get(i)?;
                     if let Value::UserData(ud) = value {
                         let lua_inline = ud.borrow::<LuaInline>()?;
-                        result.push(lua_inline.0.clone());
+                        result.push(lua_inline.0.borrow().clone());
                     }
                 }
                 Ok(result)
@@ -1144,11 +1144,11 @@ async fn walk_block_splicing(
         // Then apply type-specific or generic Block filter
         let tag = block_tag(&walked);
         let filtered = if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-            let block_ud = lua.create_userdata(LuaBlock(walked.clone()))?;
+            let block_ud = lua.create_userdata(LuaBlock::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(block_ud).await?;
             handle_block_return(ret, &walked)?
         } else if let Ok(filter_fn) = filter_table.get::<Function>("Block") {
-            let block_ud = lua.create_userdata(LuaBlock(walked.clone()))?;
+            let block_ud = lua.create_userdata(LuaBlock::new(walked.clone()))?;
             let ret: Value = filter_fn.call_async(block_ud).await?;
             handle_block_return(ret, &walked)?
         } else {
@@ -1257,7 +1257,7 @@ async fn walk_blocks_straight(
                     let value: Value = table.get(i)?;
                     if let Value::UserData(ud) = value {
                         let lua_block = ud.borrow::<LuaBlock>()?;
-                        result.push(lua_block.0.clone());
+                        result.push(lua_block.0.borrow().clone());
                     }
                 }
                 Ok(result)
@@ -1408,11 +1408,11 @@ async fn apply_block_filter_topdown(
 
     // Try type-specific filter first, then generic Block filter
     if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-        let block_ud = lua.create_userdata(LuaBlock(block.clone()))?;
+        let block_ud = lua.create_userdata(LuaBlock::new(block.clone()))?;
         let ret: MultiValue = filter_fn.call_async(block_ud).await?;
         handle_block_return_with_control(ret, block)
     } else if let Ok(filter_fn) = filter_table.get::<Function>("Block") {
-        let block_ud = lua.create_userdata(LuaBlock(block.clone()))?;
+        let block_ud = lua.create_userdata(LuaBlock::new(block.clone()))?;
         let ret: MultiValue = filter_fn.call_async(block_ud).await?;
         handle_block_return_with_control(ret, block)
     } else {
@@ -1565,11 +1565,11 @@ async fn apply_inline_filter_topdown(
 
     // Try type-specific filter first, then generic Inline filter
     if let Ok(filter_fn) = filter_table.get::<Function>(tag) {
-        let inline_ud = lua.create_userdata(LuaInline(inline.clone()))?;
+        let inline_ud = lua.create_userdata(LuaInline::new(inline.clone()))?;
         let ret: MultiValue = filter_fn.call_async(inline_ud).await?;
         handle_inline_return_with_control(ret, inline)
     } else if let Ok(filter_fn) = filter_table.get::<Function>("Inline") {
-        let inline_ud = lua.create_userdata(LuaInline(inline.clone()))?;
+        let inline_ud = lua.create_userdata(LuaInline::new(inline.clone()))?;
         let ret: MultiValue = filter_fn.call_async(inline_ud).await?;
         handle_inline_return_with_control(ret, inline)
     } else {
@@ -1711,7 +1711,7 @@ fn walk_inline_children_topdown<'a>(
             | Inline::Cite(_)
             | Inline::Shortcode(_)
             | Inline::NoteReference(_)
-            | Inline::Attr(_, _)
+            | Inline::Attr(_)
             | Inline::Custom(_) => Ok(inline.clone()),
         }
     })
@@ -2046,7 +2046,7 @@ mod unit_tests {
     fn test_inline_tag_all_variants() {
         use crate::pandoc::custom::CustomNode;
         use crate::pandoc::inline::*;
-        use crate::pandoc::{AttrSourceInfo, Inline, TargetSourceInfo};
+        use crate::pandoc::{AttrSourceInfo, Inline, InlineAttr, TargetSourceInfo};
         use hashlink::LinkedHashMap;
         use quarto_source_map::SourceInfo;
         use std::collections::HashMap;
@@ -2226,10 +2226,10 @@ mod unit_tests {
             "NoteReference"
         );
         assert_eq!(
-            inline_tag(&Inline::Attr(
+            inline_tag(&Inline::Attr(InlineAttr::new(
                 (String::new(), vec![], LinkedHashMap::new()),
                 AttrSourceInfo::empty()
-            )),
+            ))),
             "Attr"
         );
         assert_eq!(

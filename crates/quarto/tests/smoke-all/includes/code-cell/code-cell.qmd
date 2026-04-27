@@ -1,0 +1,18 @@
+---
+title: Code Cell Through Include
+format: html
+execute:
+  eval: false
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["code-marker-from-child"]
+---
+
+Parent before.
+
+{{< include _cell.qmd >}}
+
+Parent after.

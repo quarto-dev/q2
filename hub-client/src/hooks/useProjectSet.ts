@@ -16,6 +16,7 @@ import {
 } from '../services/projectSetStorage';
 import * as projectSetService from '../services/projectSetService';
 import * as projectStorage from '../services/projectStorage';
+import { reconcileIntoConnectedProjectSet } from '../services/projectSetReconciler';
 import type { ProjectEntry } from '../types/project';
 
 // ============================================================================
@@ -81,6 +82,27 @@ export function useProjectSet(): [ProjectSetState, ProjectSetActions] {
       },
     });
   }, []);
+
+  // Reconcile local IDB entries into the synced set whenever we become
+  // connected. This closes the race window in the share-route handler: if a
+  // share link wrote a project to IDB before the set was connected, the
+  // reconciler picks it up here. Idempotent and safe to re-run.
+  useEffect(() => {
+    if (status !== 'connected') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const added = await reconcileIntoConnectedProjectSet();
+        if (!cancelled && added > 0) {
+          setProjects(projectSetService.listProjects());
+        }
+      } catch (err) {
+        // Non-fatal: reconciliation is a best-effort self-heal.
+        console.error('[project-set] reconciliation failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [status]);
 
   // Initialize on mount
   useEffect(() => {

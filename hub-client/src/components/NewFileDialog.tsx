@@ -1,17 +1,13 @@
 /**
- * New File Dialog Component
+ * New File Dialog
  *
- * Modal dialog for creating new files or uploading images.
- * Supports:
- * - Text input for filename
- * - Drag-and-drop zone for images
- * - File browser button
- * - Validation
+ * Modal dialog for creating a new text file the user will edit in Monaco.
+ * Supports filename input and optional starter template.
+ *
+ * Binary asset uploads go through `NewAssetDialog` (a sibling component).
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { isBinaryExtension, isTextExtension } from '../types/project';
-import { validateFileSize, FILE_SIZE_LIMITS, sanitizeFilename } from '../services/resourceService';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
 import './NewFileDialog.css';
 
@@ -20,17 +16,8 @@ export interface NewFileDialogProps {
   existingPaths: string[];
   onClose: () => void;
   onCreateTextFile: (path: string, content: string) => void;
-  onUploadBinaryFile: (file: File, targetName: string) => void;
-  /** Optional pre-filled files from drag-and-drop */
-  initialFiles?: File[];
-  /** Optional initial filename for text file creation (e.g., from clicking a link to a non-existent file) */
+  /** Optional initial filename (e.g., from clicking a link to a non-existent file) */
   initialFilename?: string;
-}
-
-interface FilePreview {
-  file: File;
-  preview?: string; // Data URL for image preview
-  error?: string;
 }
 
 export default function NewFileDialog({
@@ -38,17 +25,10 @@ export default function NewFileDialog({
   existingPaths,
   onClose,
   onCreateTextFile,
-  onUploadBinaryFile,
-  initialFiles,
   initialFilename,
 }: NewFileDialogProps) {
-  const [mode, setMode] = useState<'text' | 'upload'>('text');
   const [filename, setFilename] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [filePreviews, setFilePreviews] = useState<FilePreview[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [editedNames, setEditedNames] = useState<Map<File, string>>(new Map());
 
   // Template state
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
@@ -56,83 +36,17 @@ export default function NewFileDialog({
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
   const filenameInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Process dropped/selected files (defined before effects that use it)
-  const processFiles = useCallback((files: File[]) => {
-    const previews: FilePreview[] = [];
-
-    for (const file of files) {
-      const preview: FilePreview = { file };
-
-      // Validate file size
-      const sizeValidation = validateFileSize(file.size);
-      if (!sizeValidation.valid) {
-        preview.error = sizeValidation.error;
-        previews.push(preview);
-        continue;
-      }
-
-      // Check if it's an allowed type
-      if (!isBinaryExtension(file.name) && !isTextExtension(file.name)) {
-        // Allow common binary types
-        const ext = file.name.split('.').pop()?.toLowerCase();
-        if (!ext) {
-          preview.error = 'Unknown file type';
-          previews.push(preview);
-          continue;
-        }
-      }
-
-      // Generate preview for images
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setFilePreviews((prev) =>
-            prev.map((p) =>
-              p.file === file ? { ...p, preview: e.target?.result as string } : p
-            )
-          );
-        };
-        reader.readAsDataURL(file);
-      }
-
-      previews.push(preview);
-    }
-
-    setFilePreviews(previews);
-
-    // Populate edited names with sanitized defaults
-    setEditedNames((prev) => {
-      const next = new Map(prev);
-      for (const { file } of previews) {
-        if (!next.has(file)) {
-          next.set(file, sanitizeFilename(file.name));
-        }
-      }
-      return next;
-    });
-  }, []);
-
-  // Handle initial files from drag-and-drop
-  useEffect(() => {
-    if (isOpen && initialFiles && initialFiles.length > 0) {
-      setMode('upload');
-      processFiles(initialFiles);
-    }
-  }, [isOpen, initialFiles, processFiles]);
-
-  // Handle initial filename (e.g., from clicking a link to a non-existent file)
+  // Seed the filename input on open.
   useEffect(() => {
     if (isOpen && initialFilename) {
-      setMode('text');
       setFilename(initialFilename);
     }
   }, [isOpen, initialFilename]);
 
-  // Load templates when dialog opens in text mode
+  // Load templates when the dialog opens.
   useEffect(() => {
-    if (isOpen && mode === 'text') {
+    if (isOpen) {
       setLoadingTemplates(true);
       discoverTemplates()
         .then((discovered) => {
@@ -146,192 +60,65 @@ export default function NewFileDialog({
           setLoadingTemplates(false);
         });
     }
-  }, [isOpen, mode]);
+  }, [isOpen]);
 
-  // Focus filename input when dialog opens in text mode
+  // Focus the filename input when the dialog opens.
   useEffect(() => {
-    if (isOpen && mode === 'text') {
+    if (isOpen) {
       setTimeout(() => filenameInputRef.current?.focus(), 100);
     }
-  }, [isOpen, mode]);
+  }, [isOpen]);
 
-  // Reset state when dialog closes
+  // Reset state when the dialog closes.
   useEffect(() => {
     if (!isOpen) {
       setFilename('');
       setError(null);
-      setFilePreviews([]);
-      setMode('text');
-      setIsDragOver(false);
-      setIsUploading(false);
-      setEditedNames(new Map());
       setTemplates([]);
       setSelectedTemplate(null);
       setLoadingTemplates(false);
     }
   }, [isOpen]);
 
-  // Drag and drop handlers
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragOver(false);
-
-      const droppedFiles = Array.from(e.dataTransfer.files);
-      if (droppedFiles.length > 0) {
-        setMode('upload');
-        processFiles(droppedFiles);
-      }
-    },
-    [processFiles]
-  );
-
-  // File browser handler
-  const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selectedFiles = Array.from(e.target.files || []);
-      if (selectedFiles.length > 0) {
-        processFiles(selectedFiles);
-      }
-    },
-    [processFiles]
-  );
-
-  // Validate filename
   const validateFilename = useCallback(
     (name: string): string | null => {
       if (!name.trim()) {
         return 'Filename is required';
       }
-
-      // Check for invalid characters
       if (/[<>:"|?*\\]/.test(name)) {
         return 'Filename contains invalid characters';
       }
-
-      // Check for existing file
       if (existingPaths.includes(name)) {
         return 'A file with this name already exists';
       }
-
       return null;
     },
     [existingPaths]
   );
 
-  // Validate an upload filename, checking against existing paths and other files in the batch
-  const validateUploadFilename = useCallback(
-    (name: string, currentFile: File): string | null => {
-      if (!name.trim()) {
-        return 'Filename is required';
-      }
-
-      if (/[<>:"|?*\\]/.test(name)) {
-        return 'Filename contains invalid characters';
-      }
-
-      if (existingPaths.includes(name)) {
-        return 'A file with this name already exists';
-      }
-
-      // Check for duplicates with other files in the batch
-      for (const [file, editedName] of editedNames) {
-        if (file !== currentFile && editedName === name) {
-          return 'Duplicate filename in upload batch';
-        }
-      }
-
-      return null;
-    },
-    [existingPaths, editedNames]
-  );
-
-  // Handle create text file
   const handleCreateTextFile = useCallback(() => {
     const validationError = validateFilename(filename);
     if (validationError) {
       setError(validationError);
       return;
     }
-
-    // Use template content if selected, otherwise empty
     const content = selectedTemplate?.strippedContent ?? '';
     onCreateTextFile(filename, content);
     onClose();
   }, [filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
-  // Handle upload files
-  const handleUploadFiles = useCallback(async () => {
-    const validFiles = filePreviews.filter((p) => !p.error);
-    if (validFiles.length === 0) {
-      setError('No valid files to upload');
-      return;
-    }
-
-    // Validate all edited filenames before uploading
-    for (const { file } of validFiles) {
-      const targetName = editedNames.get(file) ?? file.name;
-      const validationError = validateUploadFilename(targetName, file);
-      if (validationError) {
-        setError(`"${targetName}": ${validationError}`);
-        return;
-      }
-    }
-
-    setIsUploading(true);
-    setError(null);
-
-    try {
-      for (const { file } of validFiles) {
-        const targetName = editedNames.get(file) ?? file.name;
-        onUploadBinaryFile(file, targetName);
-      }
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setIsUploading(false);
-    }
-  }, [filePreviews, editedNames, validateUploadFilename, onUploadBinaryFile, onClose]);
-
-  // Remove a file from preview
-  const removeFilePreview = useCallback((file: File) => {
-    setFilePreviews((prev) => prev.filter((p) => p.file !== file));
-    setEditedNames((prev) => {
-      const next = new Map(prev);
-      next.delete(file);
-      return next;
-    });
-  }, []);
-
-  // Handle key press
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && mode === 'text') {
+      if (e.key === 'Enter') {
         handleCreateTextFile();
       } else if (e.key === 'Escape') {
         onClose();
       }
     },
-    [mode, handleCreateTextFile, onClose]
+    [handleCreateTextFile, onClose]
   );
 
   if (!isOpen) return null;
-
-  const maxMB = FILE_SIZE_LIMITS.MAX_FILE_SIZE / (1024 * 1024);
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
@@ -339,191 +126,66 @@ export default function NewFileDialog({
         className="new-file-dialog"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       >
         <div className="dialog-header">
-          <h2>Add File</h2>
-          <button className="close-btn" onClick={onClose}>
+          <h2>New file</h2>
+          <button className="close-btn" onClick={onClose} aria-label="Close">
             &times;
           </button>
         </div>
 
-        <div className="dialog-tabs">
-          <button
-            className={`tab ${mode === 'text' ? 'active' : ''}`}
-            onClick={() => setMode('text')}
-          >
-            New Text File
-          </button>
-          <button
-            className={`tab ${mode === 'upload' ? 'active' : ''}`}
-            onClick={() => setMode('upload')}
-          >
-            Upload File
-          </button>
-        </div>
-
         <div className="dialog-content">
-          {mode === 'text' ? (
-            <div className="text-file-form">
-              {templates.length > 0 && (
-                <div className="template-selector">
-                  <label htmlFor="template">Template:</label>
-                  <select
-                    id="template"
-                    value={selectedTemplate?.path ?? ''}
-                    onChange={(e) => {
-                      const template = templates.find((t) => t.path === e.target.value);
-                      setSelectedTemplate(template ?? null);
-                    }}
-                    disabled={loadingTemplates}
-                  >
-                    <option value="">Blank file</option>
-                    {templates.map((t) => (
-                      <option key={t.path} value={t.path}>
-                        {t.displayName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="filename-input">
-                <label htmlFor="filename">Filename:</label>
-                <input
-                  ref={filenameInputRef}
-                  id="filename"
-                  type="text"
-                  value={filename}
+          <div className="text-file-form">
+            {templates.length > 0 && (
+              <div className="template-selector">
+                <label htmlFor="template">Template:</label>
+                <select
+                  id="template"
+                  value={selectedTemplate?.path ?? ''}
                   onChange={(e) => {
-                    setFilename(e.target.value);
-                    setError(null);
+                    const template = templates.find((t) => t.path === e.target.value);
+                    setSelectedTemplate(template ?? null);
                   }}
-                  placeholder="e.g., chapter1.qmd"
-                />
+                  disabled={loadingTemplates}
+                >
+                  <option value="">Blank file</option>
+                  {templates.map((t) => (
+                    <option key={t.path} value={t.path}>
+                      {t.displayName}
+                    </option>
+                  ))}
+                </select>
               </div>
-              {error && <div className="error-message">{error}</div>}
-            </div>
-          ) : (
-            <div className="upload-form">
-              <div className={`drop-zone ${isDragOver ? 'drag-over' : ''}`}>
-                {filePreviews.length === 0 ? (
-                  <>
-                    <span className="drop-icon">📥</span>
-                    <p>Drag & drop files here</p>
-                    <p className="hint">or</p>
-                    <button
-                      className="browse-btn"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Browse Files
-                    </button>
-                    <p className="size-hint">Max file size: {maxMB}MB</p>
-                  </>
-                ) : (
-                  <div className="file-previews">
-                    {filePreviews.map(({ file, preview, error: fileError }) => {
-                      const editedName = editedNames.get(file) ?? file.name;
-                      const nameError = fileError ? null : validateUploadFilename(editedName, file);
-                      return (
-                        <div
-                          key={file.name}
-                          className={`file-preview ${fileError || nameError ? 'has-error' : ''}`}
-                        >
-                          {preview ? (
-                            <img src={preview} alt={editedName} />
-                          ) : (
-                            <span className="file-icon">📄</span>
-                          )}
-                          <div className="file-info">
-                            <input
-                              className="file-name-input"
-                              type="text"
-                              value={editedName}
-                              onChange={(e) => {
-                                setEditedNames((prev) => {
-                                  const next = new Map(prev);
-                                  next.set(file, e.target.value);
-                                  return next;
-                                });
-                                setError(null);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === 'Escape') {
-                                  e.stopPropagation();
-                                  (e.target as HTMLInputElement).blur();
-                                }
-                              }}
-                              disabled={!!fileError}
-                            />
-                            <span className="file-size">
-                              {(file.size / 1024).toFixed(1)} KB
-                            </span>
-                            {fileError && (
-                              <span className="file-error">{fileError}</span>
-                            )}
-                            {nameError && (
-                              <span className="file-error">{nameError}</span>
-                            )}
-                          </div>
-                          <button
-                            className="remove-btn"
-                            onClick={() => removeFilePreview(file)}
-                          >
-                            &times;
-                          </button>
-                        </div>
-                      );
-                    })}
-                    <button
-                      className="add-more-btn"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      + Add more
-                    </button>
-                  </div>
-                )}
-              </div>
+            )}
+            <div className="filename-input">
+              <label htmlFor="filename">Filename:</label>
               <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*,.pdf,.svg"
-                onChange={handleFileSelect}
-                style={{ display: 'none' }}
+                ref={filenameInputRef}
+                id="filename"
+                type="text"
+                value={filename}
+                onChange={(e) => {
+                  setFilename(e.target.value);
+                  setError(null);
+                }}
+                placeholder="e.g., chapter1.qmd"
               />
-              {error && <div className="error-message">{error}</div>}
             </div>
-          )}
+            {error && <div className="error-message">{error}</div>}
+          </div>
         </div>
 
         <div className="dialog-actions">
           <button className="cancel-btn" onClick={onClose}>
             Cancel
           </button>
-          {mode === 'text' ? (
-            <button
-              className="create-btn"
-              onClick={handleCreateTextFile}
-              disabled={!filename.trim()}
-            >
-              Create
-            </button>
-          ) : (
-            <button
-              className="upload-btn"
-              onClick={handleUploadFiles}
-              disabled={
-                filePreviews.length === 0 ||
-                filePreviews.every((p) => !!p.error) ||
-                filePreviews.some((p) => !p.error && !!validateUploadFilename(editedNames.get(p.file) ?? p.file.name, p.file)) ||
-                isUploading
-              }
-            >
-              {isUploading ? 'Uploading...' : 'Upload'}
-            </button>
-          )}
+          <button
+            className="create-btn"
+            onClick={handleCreateTextFile}
+            disabled={!filename.trim()}
+          >
+            Create
+          </button>
         </div>
       </div>
     </div>

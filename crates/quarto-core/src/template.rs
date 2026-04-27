@@ -121,6 +121,8 @@ $endfor$
 /// - `$version$` - Quarto version for generator meta tag
 /// - `$rendered.navigation.toc$` - Rendered TOC HTML (if toc: true)
 /// - `$navigation.toc.title$` - TOC title (if set)
+/// - `$rendered.navigation.navbar$` - Rendered navbar HTML (if navbar: set)
+/// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
 const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
@@ -156,6 +158,9 @@ $header-includes$
 $endfor$
 </head>
 <body class="fullcontent$if(body-classes)$ $body-classes$$endif$">
+$if(rendered.navigation.navbar)$
+$rendered.navigation.navbar$
+$endif$
 $for(include-before)$
 $include-before$
 $endfor$
@@ -211,6 +216,9 @@ $body$
 $for(include-after)$
 $include-after$
 $endfor$
+$if(rendered.navigation.footer)$
+$rendered.navigation.footer$
+$endif$
 </body>
 </html>
 "#;
@@ -1788,6 +1796,75 @@ mod tests {
             after_pos > body_pos,
             "include-after should appear after body"
         );
+    }
+
+    fn nav_map(key: &str, html: &str) -> TemplateValue {
+        use std::collections::HashMap;
+        let mut navigation = HashMap::new();
+        navigation.insert(key.to_string(), TemplateValue::String(html.to_string()));
+        let mut rendered = HashMap::new();
+        rendered.insert("navigation".to_string(), TemplateValue::Map(navigation));
+        TemplateValue::Map(rendered)
+    }
+
+    #[test]
+    fn test_full_template_renders_navbar_slot() {
+        let template = full_html_template().unwrap();
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Body</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        ctx.insert(
+            "rendered",
+            nav_map("navbar", "<nav class=\"navbar\">NAV</nav>"),
+        );
+
+        let html = template.render(&ctx).unwrap();
+
+        let nav_pos = html.find("<nav class=\"navbar\">NAV</nav>").unwrap();
+        let body_pos = html.find("<p>Body</p>").unwrap();
+        assert!(
+            nav_pos < body_pos,
+            "navbar should appear before body: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn test_full_template_renders_footer_slot() {
+        let template = full_html_template().unwrap();
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Body</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        ctx.insert(
+            "rendered",
+            nav_map("footer", "<footer class=\"footer\">FOOT</footer>"),
+        );
+
+        let html = template.render(&ctx).unwrap();
+
+        let body_pos = html.find("<p>Body</p>").unwrap();
+        let footer_pos = html.find("<footer class=\"footer\">FOOT</footer>").unwrap();
+        assert!(
+            footer_pos > body_pos,
+            "footer should appear after body: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn test_full_template_omits_navbar_and_footer_when_absent() {
+        let template = full_html_template().unwrap();
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Body</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(!html.contains("<nav class=\"navbar\""));
+        assert!(!html.contains("<footer class=\"footer\""));
     }
 
     #[test]

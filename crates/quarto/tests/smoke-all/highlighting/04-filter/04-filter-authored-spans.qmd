@@ -1,0 +1,43 @@
+---
+title: Filter-authored highlight spans
+format: html
+filters:
+  - highlight-words.lua
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # The filter produces `hl-error` and `hl-warning` spans around
+        # the literal words ERROR and WARN. The HTML writer renders
+        # them as nested <span class="hl-error"> and <span class="hl-warning">.
+        # The container still carries `sourceCode log` — the walker
+        # only skips the annotate step when `data-hl-spans` is already
+        # present, not the sourceCode marking.
+        - ["hl-error\">ERROR</span>",
+           "hl-warning\">WARN</span>",
+           "<pre class=\"sourceCode log\""]
+---
+
+Not every language you want to highlight has a tree-sitter grammar.
+Quarto's highlighting is just an attribute on the AST — a
+`data-hl-spans` key whose value is a JSON array of start/end/capture
+triples — and any Lua filter (or JSON filter) can write that
+attribute directly. The HTML writer handles the rest: nested
+`<span class="hl-<capture>">` emission with dots becoming hyphens.
+
+This document uses `highlight-words.lua` to highlight the literal
+words `ERROR` and `WARN` in a fenced code block whose class is `log`
+(not a registered language). Open the filter file to see the encoding
+in about 30 lines of readable Lua.
+
+```log
+2026-04-20T10:12:01 ERROR connection refused
+2026-04-20T10:12:04 WARN high latency detected
+2026-04-20T10:12:09 ERROR timeout reading from upstream
+```
+
+The `hl-error` / `hl-warning` captures correspond to entries in the
+default highlight SCSS theme. To use a completely new capture name,
+ship your own CSS with `.hl-<your-capture> { … }` rules alongside the
+filter.

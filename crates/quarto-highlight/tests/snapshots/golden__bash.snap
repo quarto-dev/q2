@@ -1,0 +1,31 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "greet() {\n  echo \"hello, $1\"\n}\n"
+---
+[
+  [
+    0,
+    5,
+    "function"
+  ],
+  [
+    12,
+    16,
+    "function"
+  ],
+  [
+    25,
+    26,
+    "operator"
+  ],
+  [
+    26,
+    27,
+    "property"
+  ],
+  [
+    17,
+    28,
+    "string"
+  ]
+]

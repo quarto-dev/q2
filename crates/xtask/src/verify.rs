@@ -107,13 +107,35 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
                 ""
             }
         );
+        // On Windows, Cargo cannot re-link target/debug/xtask.exe while the
+        // currently-running xtask holds a file lock on it. Linux/macOS
+        // tolerate overwriting a running binary.
+        #[cfg(windows)]
+        let build_args: &[&str] = &["build", "--workspace", "--exclude", "xtask"];
+        #[cfg(not(windows))]
+        let build_args: &[&str] = &["build", "--workspace"];
+
         run_command(
             "cargo",
-            &["build", "--workspace"],
+            build_args,
             &project_root,
             rustflags,
             "Rust build failed",
         )?;
+
+        // On Windows we excluded xtask above; `cargo check -p xtask` still
+        // gives xtask the `-D warnings` pass without relinking the running
+        // exe (cargo check doesn't produce a binary). This keeps xtask
+        // validated even under `cargo xtask verify --skip-rust-tests`.
+        #[cfg(windows)]
+        run_command(
+            "cargo",
+            &["check", "-p", "xtask"],
+            &project_root,
+            rustflags,
+            "xtask check failed",
+        )?;
+
         println!("✓ Rust build complete");
     } else {
         println!("\n━━━ Step 3/{}: Skipping Rust build ━━━\n", TOTAL_STEPS);

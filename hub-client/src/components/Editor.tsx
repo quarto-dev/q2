@@ -29,6 +29,7 @@ import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
+import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import MinimalHeader from './MinimalHeader';
 import SidebarTabs from './SidebarTabs';
@@ -249,11 +250,15 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     enabled: currentFormat === 'q2-slides',
   });
 
-  // New file dialog state
+  // New file dialog state (text-only after Phase C of generic-file-uploader plan)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   // Initial filename for new file dialog (e.g., from clicking a link to a non-existent file)
   const [newFileInitialName, setNewFileInitialName] = useState<string>('');
+
+  // Asset upload dialog state
+  const [showNewAssetDialog, setShowNewAssetDialog] = useState(false);
+  const [assetInitialFiles, setAssetInitialFiles] = useState<File[]>([]);
+  const [assetDestination, setAssetDestination] = useState<string>('');
 
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -670,10 +675,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       )
     : undefined;
 
-  // Handle opening new file dialog
+  // Handle opening new file dialog (text files only after Phase C).
   // Pre-fill the filename with the current file's directory path
   const handleNewFile = useCallback(() => {
-    setPendingUploadFiles([]);
     if (currentFile) {
       const lastSlash = currentFile.path.lastIndexOf('/');
       if (lastSlash >= 0) {
@@ -684,16 +688,26 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   }, [currentFile]);
 
   // Handle closing the new file dialog
-  // Note: We don't clear pendingDropPositionRef here because the upload
-  // happens asynchronously after dialog close. It's cleared after insertion.
   const handleDialogClose = useCallback(() => {
     setShowNewFileDialog(false);
   }, []);
 
-  // Handle files dropped on sidebar (open dialog with files pre-filled)
-  const handleUploadFiles = useCallback((droppedFiles: File[]) => {
-    setPendingUploadFiles(droppedFiles);
-    setShowNewFileDialog(true);
+  // Open the asset dialog with the given files and destination. Invoked by
+  // FileSidebar (its Upload button and its drop handler).
+  const handleUploadFiles = useCallback(
+    (droppedFiles: File[], destination: string) => {
+      setAssetInitialFiles(droppedFiles);
+      setAssetDestination(destination);
+      setShowNewAssetDialog(true);
+    },
+    []
+  );
+
+  const handleAssetDialogClose = useCallback(() => {
+    setShowNewAssetDialog(false);
+    setAssetInitialFiles([]);
+    // Note: we don't clear pendingDropPositionRef here — editor-drop image
+    // uploads happen inside handleUploadAsset and clear it after insertion.
   }, []);
 
   // Editor drag-drop handlers for image/file insertion
@@ -761,28 +775,22 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       }
     }
 
-    // Handle external file drop (from desktop)
+    // Handle external file drop (from desktop). All editor drops route to
+    // the asset dialog. For image drops we stash the drop position so that
+    // after the upload completes, handleUploadAsset can insert a markdown
+    // image reference at the drop point.
     const files = Array.from(e.dataTransfer?.files ?? []);
-    // Filter for image files only (for markdown insertion)
-    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    if (files.length === 0) return;
 
-    if (imageFiles.length > 0 && editorRef.current) {
-      // Get editor position at drop point
+    const hasImages = files.some(f => f.type.startsWith('image/'));
+    if (hasImages && editorRef.current) {
       const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY);
-      if (target?.position) {
-        pendingDropPositionRef.current = target.position;
-      } else {
-        // Fall back to current cursor position
-        pendingDropPositionRef.current = editorRef.current.getPosition();
-      }
-      // Open upload dialog with image files
-      setPendingUploadFiles(imageFiles);
-      setShowNewFileDialog(true);
-    } else if (files.length > 0) {
-      // Non-image files: upload without markdown insertion
-      setPendingUploadFiles(files);
-      setShowNewFileDialog(true);
+      pendingDropPositionRef.current = target?.position ?? editorRef.current.getPosition();
     }
+
+    setAssetInitialFiles(files);
+    setAssetDestination('');
+    setShowNewAssetDialog(true);
   }, [currentFile]);
 
   // Cleanup editor drag-drop listeners and Monaco providers on unmount
@@ -812,20 +820,23 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
   }, []);
 
-  // Handle uploading a file (text files go through text creation, binary through binary)
-  const handleUploadBinaryFile = useCallback(async (file: File, targetName: string) => {
+  // Handle uploading an asset (text files go through text creation,
+  // everything else becomes a binary file). `targetPath` is the already-
+  // validated final path (e.g. "_quarto/grammars/toml/toml.wasm").
+  const handleUploadAsset = useCallback(async (file: File, targetPath: string) => {
     try {
       // Text files must be created as text documents so the editor can display them
-      if (isTextExtension(targetName)) {
+      if (isTextExtension(targetPath)) {
         const textContent = await file.text();
-        handleCreateTextFile(targetName, textContent);
+        handleCreateTextFile(targetPath, textContent);
         return;
       }
 
       const { content: binaryContent, mimeType } = await processFileForUpload(file);
-      const result = await createBinaryFile(targetName, binaryContent, mimeType);
+      const result = await createBinaryFile(targetPath, binaryContent, mimeType);
 
-      // If this is an image and we have a pending drop position, insert markdown
+      // If this is an image and we have a pending drop position (editor drop),
+      // insert a markdown image reference at the drop point.
       if (file.type.startsWith('image/') && pendingDropPositionRef.current && editorRef.current) {
         const position = pendingDropPositionRef.current;
         const markdown = `![](${result.path})`;
@@ -840,18 +851,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           text: markdown,
           forceMoveMarkers: true,
         }]);
-        // Monaco's onChange fires synchronously from executeEdits,
-        // updating both React state and CRDT via the splice path.
 
-        // Clear the pending position after insertion
         pendingDropPositionRef.current = null;
       }
     } catch (err) {
       console.error('Failed to upload file:', err);
-      // Clear pending position on error too
       pendingDropPositionRef.current = null;
     }
-  }, [handleCreateTextFile, currentFile]);
+  }, [handleCreateTextFile]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
@@ -1054,7 +1061,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         <ReplayDrawer state={replayState} controls={replayControls} disabled={!!currentFile && isBinaryExtension(currentFile.path)} identities={identities} />
       )}
 
-      {/* New file dialog */}
+      {/* New text-file dialog */}
       <NewFileDialog
         isOpen={showNewFileDialog}
         existingPaths={files.map(f => f.path)}
@@ -1063,9 +1070,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           setNewFileInitialName(''); // Clear on close
         }}
         onCreateTextFile={handleCreateTextFile}
-        onUploadBinaryFile={handleUploadBinaryFile}
-        initialFiles={pendingUploadFiles}
         initialFilename={newFileInitialName}
+      />
+
+      {/* Asset upload dialog */}
+      <NewAssetDialog
+        isOpen={showNewAssetDialog}
+        existingPaths={files.map(f => f.path)}
+        defaultDestination={assetDestination}
+        initialFiles={assetInitialFiles}
+        onClose={handleAssetDialogClose}
+        onUploadAsset={handleUploadAsset}
       />
 
       {/* Share project dialog */}

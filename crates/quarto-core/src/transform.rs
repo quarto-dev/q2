@@ -45,7 +45,7 @@
 //! pipeline.push(Box::new(MyTransform));
 //!
 //! // Execute transforms
-//! pipeline.execute(&mut ast, &mut ctx)?;
+//! pipeline.execute(&mut ast, &ast_context, &mut ctx)?;
 //! ```
 
 use crate::Result;
@@ -126,11 +126,19 @@ impl TransformPipeline {
         self.transforms.is_empty()
     }
 
+    /// Iterate over the transforms in insertion order.
+    pub fn iter(&self) -> impl Iterator<Item = &dyn AstTransform> {
+        self.transforms.iter().map(|t| t.as_ref())
+    }
+
     /// Execute all transforms in insertion order.
     ///
     /// # Arguments
     ///
     /// * `ast` - The Pandoc AST to transform
+    /// * `ast_context` - AST context passed to the observer so that trace
+    ///   entries emitted between transforms carry the correct source
+    ///   attribution metadata (filenames, source info pool)
     /// * `ctx` - The render context
     ///
     /// # Errors
@@ -139,6 +147,7 @@ impl TransformPipeline {
     pub async fn execute(
         &self,
         ast: &mut quarto_pandoc_types::pandoc::Pandoc,
+        ast_context: &pampa::pandoc::ASTContext,
         ctx: &mut RenderContext<'_>,
     ) -> Result<()> {
         let total = self.transforms.len();
@@ -146,7 +155,7 @@ impl TransformPipeline {
             tracing::debug!(transform = transform.name(), "Running transform");
             transform.transform(ast, ctx).await?;
             ctx.observer
-                .on_transform_data(transform.name(), idx, total, ast);
+                .on_transform_data(transform.name(), idx, total, ast, ast_context);
         }
 
         Ok(())
@@ -293,7 +302,11 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let mut ast = make_empty_ast();
 
-        pipeline.execute(&mut ast, &mut ctx).await.unwrap();
+        let ast_context = pampa::pandoc::ASTContext::default();
+        pipeline
+            .execute(&mut ast, &ast_context, &mut ctx)
+            .await
+            .unwrap();
 
         assert_eq!(counter.load(Ordering::SeqCst), 2);
         assert_eq!(*order.lock().unwrap(), vec![1, 2]);
@@ -334,7 +347,11 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let mut ast = make_empty_ast();
 
-        pipeline.execute(&mut ast, &mut ctx).await.unwrap();
+        let ast_context = pampa::pandoc::ASTContext::default();
+        pipeline
+            .execute(&mut ast, &ast_context, &mut ctx)
+            .await
+            .unwrap();
 
         // Should preserve insertion order
         assert_eq!(*order.lock().unwrap(), vec![1, 2, 3]);
@@ -369,7 +386,8 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let mut ast = make_empty_ast();
 
-        let result = pipeline.execute(&mut ast, &mut ctx).await;
+        let ast_context = pampa::pandoc::ASTContext::default();
+        let result = pipeline.execute(&mut ast, &ast_context, &mut ctx).await;
 
         assert!(result.is_err());
         // Only the first transform should have run

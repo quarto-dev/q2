@@ -37,6 +37,7 @@
 //! ```
 
 pub mod artifact;
+pub mod crossref;
 pub mod dependency;
 pub mod engine;
 pub mod error;

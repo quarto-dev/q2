@@ -6,7 +6,10 @@ _quarto:
     html:
       noErrors: true
       ensureFileRegexMatches:
-        - ["<pre", "<code", "def hello", "print"]
+        # Syntax highlighting is applied on the CLI render path: the
+        # outer container carries `sourceCode` and tokens are wrapped
+        # in nested `<span class="hl-*">` tags.
+        - ["<pre class=\"sourceCode python\"", "<code", "hl-keyword\">def</span>", "hl-function-builtin\">print</span>"]
 ---
 
 Here is some Python code:

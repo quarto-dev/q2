@@ -446,8 +446,14 @@ fn write_attr<W: Write>(attr: &Attr, ctx: &mut HtmlWriterContext<'_, W>) -> std:
         write!(ctx, " class=\"{}\"", escape_html(&classes.join(" ")))?;
     }
 
-    // Write key-value attributes, prefixing custom ones with "data-"
+    // Write key-value attributes, prefixing custom ones with "data-".
+    // `data-hl-spans` is reserved: the code-block writer consumes it to
+    // emit nested highlight spans and must not leak it onto the
+    // container element.
     for (k, v) in attrs {
+        if k == quarto_highlight_encoding::SPANS_ATTR_KEY {
+            continue;
+        }
         if should_prefix_attribute(k) {
             write!(ctx, " data-{}=\"{}\"", escape_html(k), escape_html(v))?;
         } else {
@@ -456,6 +462,136 @@ fn write_attr<W: Write>(attr: &Attr, ctx: &mut HtmlWriterContext<'_, W>) -> std:
     }
 
     Ok(())
+}
+
+/// Write an `Attr`'s id/classes/kv list for a code container (`<pre>`
+/// wrapping a code block, or an inline `<code>`). Adds `sourceCode` to
+/// the class list whenever highlight spans are being emitted, so
+/// themes can key off `.sourceCode`. If `with_source_code_class` is
+/// false, delegates to [`write_attr`].
+fn write_code_container_attr<W: Write>(
+    attr: &Attr,
+    with_source_code_class: bool,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    if !with_source_code_class {
+        return write_attr(attr, ctx);
+    }
+
+    let (id, classes, attrs) = attr;
+
+    if !id.is_empty() {
+        write!(ctx, " id=\"{}\"", escape_html(id))?;
+    }
+
+    // Prepend `sourceCode` if it isn't already in the class list.
+    let mut combined = Vec::with_capacity(classes.len() + 1);
+    combined.push("sourceCode");
+    for c in classes {
+        if c != "sourceCode" {
+            combined.push(c);
+        }
+    }
+    write!(ctx, " class=\"{}\"", escape_html(&combined.join(" ")))?;
+
+    for (k, v) in attrs {
+        if k == quarto_highlight_encoding::SPANS_ATTR_KEY {
+            continue;
+        }
+        if should_prefix_attribute(k) {
+            write!(ctx, " data-{}=\"{}\"", escape_html(k), escape_html(v))?;
+        } else {
+            write!(ctx, " {}=\"{}\"", escape_html(k), escape_html(v))?;
+        }
+    }
+    Ok(())
+}
+
+/// Parse `data-hl-spans` from a code node's attribute map, if present.
+/// Returns `None` on missing, malformed, or empty JSON — callers fall
+/// back to plain escaped text.
+fn read_hl_spans(attr: &Attr) -> Option<Vec<quarto_highlight_encoding::HighlightSpan>> {
+    let raw = attr.2.get(quarto_highlight_encoding::SPANS_ATTR_KEY)?;
+    let spans = quarto_highlight_encoding::decode(raw).ok()?;
+    if spans.is_empty() { None } else { Some(spans) }
+}
+
+/// Emit the body of a code container — the part that lives between the
+/// opening and closing tags — with nested `<span class="hl-…">` tags
+/// driven by `spans`. Capture names from the tree-sitter query flow
+/// through verbatim, with `.` replaced by `-` to form class names
+/// (e.g. `function.builtin` → `hl-function-builtin`).
+///
+/// Spans may nest: a larger range fully enclosing a smaller one is
+/// represented by two independent `HighlightSpan`s whose byte ranges
+/// overlap. We walk them in start-order, opening new spans before
+/// emitting text and closing them when they end. Identical start/end
+/// pairs are resolved by outer-first (larger range first).
+fn write_highlighted_body<W: Write>(
+    text: &str,
+    spans: &[quarto_highlight_encoding::HighlightSpan],
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    // Event list: (byte_offset, tie_breaker, event_kind)
+    // `Open` events sort before `Close` at the same byte so an
+    // adjacent close-then-open renders as close first, then open
+    // (the natural reading order).
+    enum EventKind<'a> {
+        Open(&'a str), // capture name
+        Close,
+    }
+    let mut events: Vec<(usize, i32, EventKind<'_>)> = Vec::with_capacity(spans.len() * 2);
+    for (i, s) in spans.iter().enumerate() {
+        // For simultaneous opens: larger ranges (outer) open first.
+        // For simultaneous closes: smaller ranges (inner) close first.
+        let span_len = s.end.saturating_sub(s.start) as i32;
+        events.push((s.start, -span_len, EventKind::Open(&s.capture)));
+        events.push((s.end, span_len + (i as i32), EventKind::Close));
+    }
+    events.sort_by(|a, b| {
+        a.0.cmp(&b.0).then_with(|| {
+            // Close (tie_breaker from len) comes before Open when close
+            // end == open start. But within same kind at same position
+            // we want Opens (outer-first) and Closes (inner-first). The
+            // signs baked into tie_breaker above handle this.
+            match (&a.2, &b.2) {
+                (EventKind::Close, EventKind::Open(_)) => std::cmp::Ordering::Less,
+                (EventKind::Open(_), EventKind::Close) => std::cmp::Ordering::Greater,
+                _ => a.1.cmp(&b.1),
+            }
+        })
+    });
+
+    let mut cursor = 0usize;
+    for (offset, _, kind) in &events {
+        // Flush text between cursor and the event.
+        if *offset > cursor && cursor < text.len() {
+            let end = (*offset).min(text.len());
+            write!(ctx, "{}", escape_html(&text[cursor..end]))?;
+            cursor = end;
+        }
+        match kind {
+            EventKind::Open(capture) => {
+                write!(ctx, "<span class=\"hl-{}\">", capture_to_class(capture))?;
+            }
+            EventKind::Close => {
+                write!(ctx, "</span>")?;
+            }
+        }
+    }
+    // Any trailing text after the last event.
+    if cursor < text.len() {
+        write!(ctx, "{}", escape_html(&text[cursor..]))?;
+    }
+    Ok(())
+}
+
+/// Map a tree-sitter capture name (e.g. `function.builtin`,
+/// `string.escape`) to the CSS class suffix used on span elements
+/// (`function-builtin`, `string-escape`). Done here (not at encode
+/// time) so the wire form keeps grammar-native names.
+fn capture_to_class(capture: &str) -> String {
+    capture.replace('.', "-")
 }
 
 /// Write source location attributes for a block element.
@@ -602,10 +738,18 @@ fn write_inline<W: Write>(
             write!(ctx, "{}", close)?;
         }
         Inline::Code(c) => {
+            let spans = read_hl_spans(&c.attr);
+            let highlighted = spans.is_some();
             write!(ctx, "<code")?;
-            write_attr(&c.attr, ctx)?;
+            write_code_container_attr(&c.attr, highlighted, ctx)?;
             write_inline_source_attrs(inline, ctx)?;
-            write!(ctx, ">{}</code>", escape_html(&c.text))?;
+            write!(ctx, ">")?;
+            if let Some(spans) = &spans {
+                write_highlighted_body(&c.text, spans, ctx)?;
+            } else {
+                write!(ctx, "{}", escape_html(&c.text))?;
+            }
+            write!(ctx, "</code>")?;
         }
         Inline::Math(m) => {
             let class = match m.math_type {
@@ -714,7 +858,7 @@ fn write_inline<W: Write>(
             write!(ctx, "</span>")?;
         }
         // Quarto extensions - render as raw HTML or skip
-        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_, _) => {
+        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {
             // These should not appear in final output
         }
         Inline::Insert(ins) => {
@@ -817,11 +961,17 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             writeln!(ctx, "</div>")?;
         }
         Block::CodeBlock(codeblock) => {
+            let spans = read_hl_spans(&codeblock.attr);
+            let highlighted = spans.is_some();
             write!(ctx, "<pre")?;
-            write_attr(&codeblock.attr, ctx)?;
+            write_code_container_attr(&codeblock.attr, highlighted, ctx)?;
             write_block_source_attrs(block, ctx)?;
             write!(ctx, "><code>")?;
-            write!(ctx, "{}", escape_html(&codeblock.text))?;
+            if let Some(spans) = &spans {
+                write_highlighted_body(&codeblock.text, spans, ctx)?;
+            } else {
+                write!(ctx, "{}", escape_html(&codeblock.text))?;
+            }
             writeln!(ctx, "</code></pre>")?;
         }
         Block::RawBlock(raw) => {
@@ -1608,6 +1758,147 @@ mod tests {
             !html.contains("<section"),
             "Should not have <section> tag, got: {}",
             html
+        );
+    }
+
+    // =========================================================================
+    // Syntax-highlight span emission (reads `data-hl-spans` on CodeBlock / Code)
+    // =========================================================================
+
+    use crate::pandoc::block::CodeBlock;
+    use crate::pandoc::inline::Code;
+    use quarto_pandoc_types::AttrSourceInfo;
+
+    fn codeblock_with_hl_spans(language: &str, text: &str, spans_json: &str) -> Block {
+        use hashlink::LinkedHashMap;
+        let mut kvs = LinkedHashMap::new();
+        kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
+        Block::CodeBlock(CodeBlock {
+            attr: (String::new(), vec![language.to_string()], kvs),
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn render_block_to_html(block: Block) -> String {
+        let ctx = ASTContext::anonymous();
+        let pandoc = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![block],
+        };
+        let mut output = Vec::new();
+        write(&pandoc, &ctx, &mut output).unwrap();
+        String::from_utf8(output).unwrap()
+    }
+
+    #[test]
+    fn codeblock_emits_nested_hl_spans() {
+        let html = render_block_to_html(codeblock_with_hl_spans(
+            "python",
+            "def foo(): pass",
+            r#"[[0,3,"keyword"],[4,7,"function"]]"#,
+        ));
+
+        // Nested spans for the two captures.
+        assert!(
+            html.contains("<span class=\"hl-keyword\">def</span>"),
+            "expected hl-keyword span for `def`, got:\n{html}",
+        );
+        assert!(
+            html.contains("<span class=\"hl-function\">foo</span>"),
+            "expected hl-function span for `foo`, got:\n{html}",
+        );
+
+        // The `data-hl-spans` attribute itself must not leak onto the container.
+        assert!(
+            !html.contains("data-hl-spans="),
+            "container should not carry the raw data-hl-spans attr, got:\n{html}",
+        );
+
+        // Container still marked with `.sourceCode` + language class.
+        assert!(html.contains("class=\"python sourceCode\"") || html.contains("sourceCode"));
+    }
+
+    #[test]
+    fn codeblock_without_hl_spans_falls_back_to_plain() {
+        // No data-hl-spans attr: output looks like before this feature.
+        use hashlink::LinkedHashMap;
+        let block = Block::CodeBlock(CodeBlock {
+            attr: (
+                String::new(),
+                vec!["python".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "def foo():".to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let html = render_block_to_html(block);
+        assert!(!html.contains("<span class=\"hl-"), "no spans expected");
+        assert!(html.contains("def foo():"));
+    }
+
+    #[test]
+    fn codeblock_with_nested_captures_nests_spans() {
+        // function.builtin enclosing something — from the Python grammar's
+        // `print(f"...")` pattern the call is a function.builtin that
+        // contains nested string-interpolation captures. Use a made-up
+        // but well-formed example here.
+        let html = render_block_to_html(codeblock_with_hl_spans(
+            "python",
+            "print(42)",
+            r#"[[0,5,"function.builtin"],[6,8,"number"]]"#,
+        ));
+        assert!(html.contains("<span class=\"hl-function-builtin\">print</span>"));
+        assert!(html.contains("<span class=\"hl-number\">42</span>"));
+    }
+
+    #[test]
+    fn codeblock_with_malformed_hl_spans_falls_back_to_plain() {
+        // Bad JSON — must not panic; must emit plain escaped text.
+        let html = render_block_to_html(codeblock_with_hl_spans(
+            "python",
+            "def foo()",
+            "not valid json",
+        ));
+        assert!(!html.contains("<span class=\"hl-"));
+        assert!(html.contains("def foo()"));
+    }
+
+    #[test]
+    fn inline_code_emits_hl_spans() {
+        use crate::pandoc::block::Paragraph;
+        use hashlink::LinkedHashMap;
+        let mut kvs = LinkedHashMap::new();
+        kvs.insert(
+            "data-hl-spans".to_string(),
+            r#"[[0,3,"keyword"]]"#.to_string(),
+        );
+        let code = Inline::Code(Code {
+            attr: (String::new(), vec!["python".to_string()], kvs),
+            text: "def".to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let html = render_block_to_html(Block::Paragraph(Paragraph {
+            content: vec![code],
+            source_info: dummy_source_info(),
+        }));
+        assert!(html.contains("<span class=\"hl-keyword\">def</span>"));
+        assert!(!html.contains("data-hl-spans="));
+    }
+
+    #[test]
+    fn capture_name_dots_become_hyphens_in_class() {
+        let html = render_block_to_html(codeblock_with_hl_spans(
+            "javascript",
+            "foo",
+            r#"[[0,3,"variable.parameter.builtin"]]"#,
+        ));
+        assert!(
+            html.contains("<span class=\"hl-variable-parameter-builtin\">foo</span>"),
+            "capture names should flatten `.` to `-` in class names, got:\n{html}",
         );
     }
 }

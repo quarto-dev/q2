@@ -1,0 +1,26 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "{\"n\": 1, \"s\": \"x\"}\n"
+---
+[
+  [
+    1,
+    4,
+    "string"
+  ],
+  [
+    6,
+    7,
+    "number"
+  ],
+  [
+    9,
+    12,
+    "string"
+  ],
+  [
+    14,
+    17,
+    "string"
+  ]
+]

@@ -20,6 +20,7 @@ use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::artifact::ArtifactStore;
+use crate::crossref::{CrossrefIndex, RefTypeRegistry};
 use crate::format::Format;
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::stage::{NoopObserver, PandocIncludes, PipelineObserver};
@@ -106,11 +107,36 @@ pub struct RenderContext<'a> {
     /// Diagnostics (warnings, errors, info) collected during transforms
     pub diagnostics: Vec<DiagnosticMessage>,
 
+    /// Ref-type registry: built-in + `crossref.custom` + promised-id prefixes.
+    ///
+    /// Populated by `PreEngineSugaringStage` before the transform pipeline
+    /// runs. Bridged from `StageContext` by `AstTransformsStage`. `None` when
+    /// the pipeline is invoked directly without the pre-engine stage (e.g.
+    /// some unit tests).
+    pub ref_type_registry: Option<RefTypeRegistry>,
+
+    /// Per-document crossref index.
+    ///
+    /// Populated by `CrossrefIndexTransform` during the crossref phase;
+    /// consumed by `CrossrefResolveTransform` and later by back-end renderers.
+    /// Bridged to/from `StageContext` by `AstTransformsStage`.
+    pub crossref_index: Option<CrossrefIndex>,
+
     /// Observer for pipeline tracing.
     ///
     /// Bridged from `StageContext` by `AstTransformsStage` so that
     /// inner transforms can emit data trace events.
     pub observer: Arc<dyn PipelineObserver>,
+
+    /// Optional provider of user-defined tree-sitter grammars. Transferred
+    /// to `StageContext` by `run_pipeline` before the pipeline starts.
+    ///
+    /// Callers: the native CLI typically leaves this `None` and lets
+    /// `CodeHighlightStage` load grammars from `_quarto/grammars/`. The
+    /// browser hub-client sets this to a `JsUserGrammars` (Phase 4.3 of
+    /// the syntax-highlighting plan) so JS-backed user grammars flow
+    /// through the same `CodeHighlightStage` code path.
+    pub user_grammar_provider: Option<Box<dyn quarto_highlight::UserGrammarProvider>>,
 }
 
 /// Options for rendering
@@ -146,7 +172,10 @@ impl<'a> RenderContext<'a> {
             options: RenderOptions::default(),
             includes: PandocIncludes::default(),
             diagnostics: Vec::new(),
+            ref_type_registry: None,
+            crossref_index: None,
             observer: Arc::new(NoopObserver),
+            user_grammar_provider: None,
         }
     }
 

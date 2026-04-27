@@ -8,7 +8,18 @@ default-members = ["crates/*", "crates/experiments/reconcile-viewer"]
 # - WASM crates: require --target wasm32-unknown-unknown and -Zbuild-std (see dev-docs/wasm.md)
 # - pampa/fuzz: requires nightly Rust + libfuzzer-sys (Linux/macOS only), run via `cargo fuzz`
 # crates/experiments is a container directory, not a crate, so we exclude it from crates/* matching.
-exclude = ["crates/wasm-quarto-hub-client", "crates/wasm-qmd-parser", "crates/experiments", "crates/pampa/fuzz"]
+exclude = [
+    "crates/wasm-quarto-hub-client",
+    "crates/wasm-qmd-parser",
+    "crates/experiments",
+    "crates/pampa/fuzz",
+    # WASM-only drop-in replacement for tree-sitter-language; used via
+    # [patch.crates-io] in wasm-quarto-hub-client. Collides with the
+    # real tree-sitter-language crate (same `links` key) if both appear
+    # in the same workspace graph. See
+    # claude-notes/plans/2026-04-20-wasm-shim-merge.md.
+    "crates/tree-sitter-language-wasm-shim",
+]
 resolver = "2"
 
 [workspace.package]
@@ -77,6 +88,9 @@ default-features = false
 [workspace.dependencies.tree-sitter]
 version = "0.25.10"
 
+[workspace.dependencies.tree-sitter-highlight]
+version = "0.25.10"
+
 [workspace.dependencies.tree-sitter-qmd]
 path = "./crates/tree-sitter-qmd"
 
@@ -141,8 +155,17 @@ path = "./crates/quarto-lsp"
 [workspace.dependencies.quarto-sass]
 path = "./crates/quarto-sass"
 
+[workspace.dependencies.quarto-highlight]
+path = "./crates/quarto-highlight"
+
+[workspace.dependencies.quarto-highlight-encoding]
+path = "./crates/quarto-highlight-encoding"
+
 [workspace.dependencies.quarto-hub]
 path = "./crates/quarto-hub"
+
+[workspace.dependencies.quarto-navigation]
+path = "./crates/quarto-navigation"
 
 [workspace.dependencies.quarto-test]
 path = "./crates/quarto-test"
@@ -250,3 +273,13 @@ lua-src = { path = "crates/lua-src-wasm" }
 # work around "too many locals" error in WASM builds
 # https://github.com/wasm-bindgen/wasm-bindgen/issues/3451#issuecomment-1562982835
 opt-level = "s"
+
+# Release-like profile with debug info preserved for profilers (samply, etc.).
+# Used by perf-harness drivers; see claude-notes/instructions/performance-profiling.md.
+[profile.release-perf]
+inherits = "release"
+debug = true
+# samply / perf need unstripped symbols. Also keep inlining info for meaningful
+# stacks — release's default `codegen-units` still lets LLVM inline aggressively,
+# which is what we want to profile.
+strip = false

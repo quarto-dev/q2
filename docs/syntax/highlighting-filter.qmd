@@ -1,0 +1,115 @@
+---
+title: "Custom syntax highlighting via Lua filters"
+---
+
+Quarto's syntax-highlighting feature is driven by an attribute on the
+AST: a `data-hl-spans` key on a `CodeBlock` (or inline `Code`) whose
+value is a JSON array of `[start, end, capture]` triples. The
+built-in pipeline stage produces this attribute from tree-sitter
+queries; **any Lua filter that writes the same shape produces
+identical output**. This page is a practical guide for that filter
+path.
+
+## Encoding
+
+`data-hl-spans` is a JSON array. Each entry is a three-element array:
+
+```json
+[start_byte, end_byte, capture_name]
+```
+
+- `start_byte` / `end_byte` are 0-based, half-open. `code[start..end]`
+  (in Rust/tree-sitter semantics) is the highlighted span.
+- `capture_name` is a dotted identifier like `keyword`, `string`,
+  `function.builtin`, or anything you invent. Dots become hyphens in
+  the rendered HTML class name: `function.builtin` →
+  `hl-function-builtin`.
+
+Nesting is implicit: a span whose range encloses a shorter one nests
+around it when rendered. Order spans by start offset; the writer is
+otherwise lenient.
+
+## Minimal example
+
+This filter highlights the literal words `ERROR` and `WARN` in any
+code block whose first class is `log`:
+
+```lua
+function CodeBlock(cb)
+  if cb.attr.classes[1] ~= "log" then return nil end
+
+  local spans = {}
+  for _, row in ipairs({ { "ERROR", "error" }, { "WARN", "warning" } }) do
+    local needle, capture = row[1], row[2]
+    local init = 1
+    while true do
+      local s, e = cb.text:find(needle, init, true)
+      if not s then break end
+      spans[#spans + 1] = { s - 1, e, capture }
+      init = e + 1
+    end
+  end
+  table.sort(spans, function(a, b) return a[1] < b[1] end)
+
+  cb.attr.attributes["data-hl-spans"] = pandoc.json.encode(spans)
+  return cb
+end
+```
+
+The only attribute mutation needed is:
+
+```lua
+cb.attr.attributes["data-hl-spans"] = pandoc.json.encode(spans)
+```
+
+This writes directly through to the block's `Attr` and persists on
+the returned `CodeBlock`. `cb.attributes[k] = v` also works as a
+shortcut (Pandoc-compatible).
+
+## Styling
+
+Capture names become HTML classes with `hl-` prefix and dots
+converted to hyphens. In your CSS or SCSS:
+
+```css
+.hl-error   { color: #c0392b; font-weight: bold; }
+.hl-warning { color: #d35400; }
+```
+
+The default Quarto highlight theme ships rules for a broad taxonomy
+(keyword, string, comment, function, …). For custom capture names,
+ship your own stylesheet alongside the filter.
+
+## End-to-end examples
+
+Two fixtures in the test corpus are maintained as canonical
+copy-paste references:
+
+- `crates/quarto/tests/smoke-all/highlighting/04-filter/` — the
+  literal-word pattern from the snippet above.
+- `crates/quarto/tests/smoke-all/highlighting/06-filter-severity/` —
+  a structured systemd-log highlighter with multiple captures
+  (`severity.err`, `severity.warning`, `timestamp`, …).
+
+Both use the same idiomatic pattern:
+`cb.attr.attributes["data-hl-spans"] = pandoc.json.encode(spans)`.
+
+## When to use this vs a tree-sitter grammar
+
+Use a filter when:
+
+- The language has no tree-sitter grammar and writing one is overkill.
+- You want highlights that aren't lexical (e.g. "flag all instances of
+  `TODO`" or "color log lines by severity").
+- You're prototyping: a filter is ~30 lines of Lua.
+
+Use a tree-sitter grammar when:
+
+- The language is complex and you want robust, nested captures from
+  real parsing.
+- You want Quarto's built-in theme mappings out of the box.
+- You want your highlights to survive arbitrary user edits
+  (grammars update spans when the text changes; filters run once).
+
+The two paths coexist — the built-in stage skips any block that
+already has `data-hl-spans`, so filter-authored spans take precedence.

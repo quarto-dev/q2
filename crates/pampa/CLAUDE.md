@@ -145,14 +145,25 @@ The script is executable with a deno hashbang line. Deno is installed on the env
 
 ## Binary usage
 
-The `quarto-markdown-pandoc` binary accepts the following options:
+The `pampa` binary accepts the following options:
 - `-t, --to <TO>`: Output format (default: native)
 - `-f, --from <FROM>`: Input format (default: qmd)
 - `-v, --verbose`: Verbose output
-- `-i, --input <INPUT>`: Input file (default: stdin)
+- `-i, --input <INPUT>`: Input file (alternative to the positional form;
+  default: stdin). Use `-` for stdin.
+- `[INPUT_FILE]`: Positional input file (pandoc-style). Cannot be combined
+  with `-i/--input`; only one input file is supported.
 - `--loose`: Loose parsing mode
 - `--json-errors`: Output errors as JSON
 - `-h, --help`: Show help
+
+Examples:
+
+```bash
+cargo run -- input.qmd -t json     # pandoc-style positional
+cargo run -- -i input.qmd -t json  # equivalent, flag form
+cat input.qmd | cargo run -- -t json
+```
 
 ## Instructions
 

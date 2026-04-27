@@ -1,0 +1,61 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "p.intro { color: red; font-weight: bold; }\n"
+---
+[
+  [
+    0,
+    1,
+    "tag"
+  ],
+  [
+    1,
+    2,
+    "punctuation.delimiter"
+  ],
+  [
+    2,
+    7,
+    "property"
+  ],
+  [
+    8,
+    9,
+    "punctuation.bracket"
+  ],
+  [
+    10,
+    15,
+    "property"
+  ],
+  [
+    15,
+    16,
+    "punctuation.delimiter"
+  ],
+  [
+    20,
+    21,
+    "punctuation.delimiter"
+  ],
+  [
+    22,
+    33,
+    "property"
+  ],
+  [
+    33,
+    34,
+    "punctuation.delimiter"
+  ],
+  [
+    39,
+    40,
+    "punctuation.delimiter"
+  ],
+  [
+    41,
+    42,
+    "punctuation.bracket"
+  ]
+]

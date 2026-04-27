@@ -1,0 +1,60 @@
+---
+title: "Phase 3 syntax-highlighting check"
+format: html
+---
+
+This document exercises browser-side syntax highlighting in the hub-client.
+After opening it in a hub-client preview, the code blocks below should render
+with `hl-keyword`, `hl-string`, `hl-function-builtin`, and similar `hl-*`
+span classes visible in the DOM.
+
+## Python
+
+```python
+def greet(name):
+    print(f"hi, {name}")
+```
+
+## R
+
+```r
+x <- c(1, 2, 3)
+mean(x)
+```
+
+## JavaScript
+
+```javascript
+const add = (a, b) => a + b;
+```
+
+## Bash
+
+```bash
+greet() {
+  echo "hello, $1"
+}
+```
+
+## JSON
+
+```json
+{"n": 1, "s": "x"}
+```
+
+## YAML
+
+```yaml
+title: "hello"
+count: 1
+```
+
+## CSS
+
+```css
+p.intro { color: red; font-weight: bold; }
+```
+
+## Inline code
+
+The Python function `print()`{.python} is a builtin.

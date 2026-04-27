@@ -126,4 +126,36 @@ describe('theme CSS compilation in WASM pipeline', () => {
     // flatly primary color should NOT be present
     expect(css).not.toMatch(/--bs-primary:.*#2c3e50/);
   });
+
+  it('default CSS (no theme specified) includes syntax-highlight rules', async () => {
+    // Regression guard for Phase 3 of syntax highlighting: a document
+    // with no `theme:` frontmatter entry and no project config theme
+    // still needs the `.hl-*` color rules, because the HTML writer
+    // emits span classes like `hl-keyword` / `hl-function-builtin` for
+    // every code block it highlights.
+    //
+    // Before the fix, the wasm32 `compile_default_css` loaded only the
+    // title-block layer (not highlight.scss), so spans had no colors
+    // unless the user explicitly set a theme. See the native fix in
+    // commit 50745caa ("HTML writer emits nested highlight spans +
+    // default SCSS") and its WASM follow-up discussed in
+    // `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.md`.
+    wasm.vfs_add_file('/project/_quarto.yml', 'title: "Test Project"\n');
+    wasm.vfs_add_file(
+      '/project/doc.qmd',
+      '---\ntitle: "No Theme"\n---\n\n```python\ndef f():\n    pass\n```\n',
+    );
+
+    const result: RenderResponse = JSON.parse(
+      await wasm.render_qmd('/project/doc.qmd'),
+    );
+
+    const css = extractCss(result);
+    expect(css.length).toBeGreaterThan(0);
+    expect(css, 'default CSS must include .hl-keyword rule').toContain('.hl-keyword');
+    expect(
+      css,
+      'default CSS must include nested-capture .hl-function-builtin rule',
+    ).toContain('.hl-function-builtin');
+  });
 });

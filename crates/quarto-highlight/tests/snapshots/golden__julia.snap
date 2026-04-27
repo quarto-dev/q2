@@ -1,0 +1,66 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "function greet(name)\n  println(\"hi, $name\")\nend\n"
+---
+[
+  [
+    0,
+    8,
+    "keyword.function"
+  ],
+  [
+    9,
+    14,
+    "function.call"
+  ],
+  [
+    14,
+    15,
+    "punctuation.bracket"
+  ],
+  [
+    15,
+    19,
+    "variable"
+  ],
+  [
+    19,
+    20,
+    "punctuation.bracket"
+  ],
+  [
+    23,
+    30,
+    "function.call"
+  ],
+  [
+    30,
+    31,
+    "punctuation.bracket"
+  ],
+  [
+    36,
+    37,
+    "punctuation.special"
+  ],
+  [
+    37,
+    41,
+    "variable"
+  ],
+  [
+    31,
+    42,
+    "string"
+  ],
+  [
+    42,
+    43,
+    "punctuation.bracket"
+  ],
+  [
+    44,
+    47,
+    "keyword.function"
+  ]
+]

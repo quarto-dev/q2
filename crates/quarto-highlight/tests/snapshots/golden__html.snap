@@ -1,0 +1,46 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "<a href=\"/\">home</a>\n"
+---
+[
+  [
+    0,
+    1,
+    "punctuation.bracket"
+  ],
+  [
+    1,
+    2,
+    "tag"
+  ],
+  [
+    3,
+    7,
+    "attribute"
+  ],
+  [
+    9,
+    10,
+    "string"
+  ],
+  [
+    11,
+    12,
+    "punctuation.bracket"
+  ],
+  [
+    16,
+    18,
+    "punctuation.bracket"
+  ],
+  [
+    18,
+    19,
+    "tag"
+  ],
+  [
+    19,
+    20,
+    "punctuation.bracket"
+  ]
+]

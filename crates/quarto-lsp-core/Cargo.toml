@@ -18,12 +18,20 @@ thiserror.workspace = true
 # Workspace dependencies (all WASM-compatible)
 pampa = { workspace = true }
 quarto-analysis = { workspace = true }
+quarto-core = { workspace = true }
+quarto-pandoc-types = { workspace = true }
+quarto-system-runtime = { workspace = true }
 quarto-yaml = { workspace = true }
 quarto-source-map = { workspace = true }
 quarto-error-reporting = { workspace = true }
 
+# Analysis pipeline is async; the LSP wraps it to stay compatible with
+# the sync entry points expected by WASM bindings.
+pollster = { workspace = true }
+
 [dev-dependencies]
 insta.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]
 workspace = true

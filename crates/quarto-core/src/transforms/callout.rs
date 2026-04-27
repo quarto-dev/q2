@@ -43,6 +43,7 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use serde_json::json;
 
 use crate::Result;
+use crate::crossref::RefTypeRegistry;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
 
@@ -74,54 +75,54 @@ impl AstTransform for CalloutTransform {
         "callout"
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
-        // Transform all blocks in the document
-        transform_blocks(&mut ast.blocks);
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+        let registry = ctx.ref_type_registry.as_ref();
+        transform_blocks(&mut ast.blocks, registry);
         Ok(())
     }
 }
 
 /// Transform a vector of blocks, converting callout Divs to CustomNodes.
-fn transform_blocks(blocks: &mut Vec<Block>) {
+fn transform_blocks(blocks: &mut Vec<Block>, registry: Option<&RefTypeRegistry>) {
     for block in blocks.iter_mut() {
-        transform_block(block);
+        transform_block(block, registry);
     }
 }
 
 /// Transform a single block, potentially converting it to a CustomNode.
-fn transform_block(block: &mut Block) {
+fn transform_block(block: &mut Block, registry: Option<&RefTypeRegistry>) {
     // First, recursively transform any nested blocks
     match block {
         Block::BlockQuote(bq) => {
-            transform_blocks(&mut bq.content);
+            transform_blocks(&mut bq.content, registry);
         }
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                transform_blocks(item);
+                transform_blocks(item, registry);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                transform_blocks(item);
+                transform_blocks(item, registry);
             }
         }
         Block::DefinitionList(dl) => {
             for (_term, defs) in &mut dl.content {
                 for def in defs {
-                    transform_blocks(def);
+                    transform_blocks(def, registry);
                 }
             }
         }
         Block::Figure(fig) => {
-            transform_blocks(&mut fig.content);
+            transform_blocks(&mut fig.content, registry);
         }
         Block::Div(div) => {
             // First transform nested content
-            transform_blocks(&mut div.content);
+            transform_blocks(&mut div.content, registry);
 
             // Then check if this div is a callout and convert it
             if let Some(callout_type) = extract_callout_type(&div.attr) {
-                let custom = convert_div_to_callout(div, &callout_type);
+                let custom = convert_div_to_callout(div, &callout_type, registry);
                 *block = Block::Custom(custom);
             }
         }
@@ -130,20 +131,20 @@ fn transform_block(block: &mut Block) {
             for body in &mut table.bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        transform_blocks(&mut cell.content);
+                        transform_blocks(&mut cell.content, registry);
                     }
                 }
             }
             // Transform table head
             for row in &mut table.head.rows {
                 for cell in &mut row.cells {
-                    transform_blocks(&mut cell.content);
+                    transform_blocks(&mut cell.content, registry);
                 }
             }
             // Transform table foot
             for row in &mut table.foot.rows {
                 for cell in &mut row.cells {
-                    transform_blocks(&mut cell.content);
+                    transform_blocks(&mut cell.content, registry);
                 }
             }
         }
@@ -151,8 +152,8 @@ fn transform_block(block: &mut Block) {
             // Transform blocks inside custom node slots
             for (_name, slot) in &mut custom.slots {
                 match slot {
-                    Slot::Block(b) => transform_block(b),
-                    Slot::Blocks(bs) => transform_blocks(bs),
+                    Slot::Block(b) => transform_block(b, registry),
+                    Slot::Blocks(bs) => transform_blocks(bs, registry),
                     _ => {}
                 }
             }
@@ -183,7 +184,11 @@ fn extract_callout_type(attr: &Attr) -> Option<String> {
 }
 
 /// Convert a Div to a CustomNode with type "Callout".
-fn convert_div_to_callout(div: &mut Div, callout_type: &str) -> CustomNode {
+fn convert_div_to_callout(
+    div: &mut Div,
+    callout_type: &str,
+    registry: Option<&RefTypeRegistry>,
+) -> CustomNode {
     let mut content_blocks = std::mem::take(&mut div.content);
     let mut title_inlines = Vec::new();
 
@@ -202,12 +207,27 @@ fn convert_div_to_callout(div: &mut Div, callout_type: &str) -> CustomNode {
     let icon = extract_attr_value(&div.attr, "icon").is_none_or(|v| v != "false");
 
     // Build the plain_data JSON
-    let plain_data = json!({
+    let mut plain_data = json!({
         "type": callout_type,
         "appearance": appearance,
         "collapse": collapse,
         "icon": icon
     });
+
+    // If the callout has a crossref-eligible id, inject the standard
+    // crossref triple so the indexer and resolver pick it up (plan 2.2).
+    let identifier = &div.attr.0;
+    if !identifier.is_empty() {
+        if let Some(reg) = registry {
+            if let Some(def) = reg.classify_cite_id(identifier) {
+                if let Some(obj) = plain_data.as_object_mut() {
+                    obj.insert("ref_type".into(), json!(def.ref_type));
+                    obj.insert("kind".into(), json!(def.kind));
+                    obj.insert("identifier".into(), json!(identifier));
+                }
+            }
+        }
+    }
 
     // Create the CustomNode
     let mut custom = CustomNode::new("Callout", div.attr.clone(), div.source_info.clone());
@@ -460,5 +480,130 @@ mod tests {
     async fn test_transform_name() {
         let transform = CalloutTransform::new();
         assert_eq!(transform.name(), "callout");
+    }
+
+    #[tokio::test]
+    async fn test_callout_with_crossref_id_gets_plain_data_triple() {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+
+        let mut ast = quarto_pandoc_types::pandoc::Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![Block::Div(Div {
+                attr: (
+                    "nte-important".into(),
+                    vec!["callout-note".into()],
+                    hashlink::LinkedHashMap::new(),
+                ),
+                content: vec![Block::Paragraph(Paragraph {
+                    content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
+                        text: "A note.".into(),
+                        source_info: dummy_source_info(),
+                    })],
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        CalloutTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        let Block::Custom(node) = &ast.blocks[0] else {
+            panic!("expected Custom");
+        };
+        assert_eq!(node.type_name, "Callout");
+        // The crossref triple should be populated.
+        assert_eq!(node.plain_data["ref_type"], "nte");
+        assert_eq!(node.plain_data["kind"], "Note");
+        assert_eq!(node.plain_data["identifier"], "nte-important");
+        // And the normal callout fields are still present.
+        assert_eq!(node.plain_data["type"], "note");
+    }
+
+    #[tokio::test]
+    async fn test_callout_without_crossref_id_has_no_triple() {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+
+        let mut ast = quarto_pandoc_types::pandoc::Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![Block::Div(Div {
+                attr: callout_attr("note"),
+                content: vec![Block::Paragraph(Paragraph {
+                    content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
+                        text: "No id.".into(),
+                        source_info: dummy_source_info(),
+                    })],
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        CalloutTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        let Block::Custom(node) = &ast.blocks[0] else {
+            panic!("expected Custom");
+        };
+        // No crossref fields — empty id doesn't classify.
+        assert!(node.plain_data.get("ref_type").is_none());
+        assert!(node.plain_data.get("identifier").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_callout_with_non_crossref_id_has_no_triple() {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+
+        let mut ast = quarto_pandoc_types::pandoc::Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![Block::Div(Div {
+                attr: (
+                    "my-callout".into(),
+                    vec!["callout-warning".into()],
+                    hashlink::LinkedHashMap::new(),
+                ),
+                content: vec![Block::Paragraph(Paragraph {
+                    content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
+                        text: "body".into(),
+                        source_info: dummy_source_info(),
+                    })],
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        CalloutTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        let Block::Custom(node) = &ast.blocks[0] else {
+            panic!("expected Custom");
+        };
+        // "my" is not a registered ref-type prefix, so no triple.
+        assert!(node.plain_data.get("ref_type").is_none());
     }
 }

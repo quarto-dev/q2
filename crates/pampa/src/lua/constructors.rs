@@ -269,7 +269,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Str",
         lua.create_function(|lua, text: String| {
-            lua.create_userdata(LuaInline(Inline::Str(Str {
+            lua.create_userdata(LuaInline::new(Inline::Str(Str {
                 text,
                 source_info: filter_source_info(lua),
             })))
@@ -280,7 +280,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "Space",
         lua.create_function(|lua, ()| {
-            lua.create_userdata(LuaInline(Inline::Space(Space {
+            lua.create_userdata(LuaInline::new(Inline::Space(Space {
                 source_info: filter_source_info(lua),
             })))
         })?,
@@ -290,7 +290,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "SoftBreak",
         lua.create_function(|lua, ()| {
-            lua.create_userdata(LuaInline(Inline::SoftBreak(SoftBreak {
+            lua.create_userdata(LuaInline::new(Inline::SoftBreak(SoftBreak {
                 source_info: filter_source_info(lua),
             })))
         })?,
@@ -300,7 +300,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "LineBreak",
         lua.create_function(|lua, ()| {
-            lua.create_userdata(LuaInline(Inline::LineBreak(LineBreak {
+            lua.create_userdata(LuaInline::new(Inline::LineBreak(LineBreak {
                 source_info: filter_source_info(lua),
             })))
         })?,
@@ -311,7 +311,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Emph",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Emph(Emph {
+            lua.create_userdata(LuaInline::new(Inline::Emph(Emph {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -323,7 +323,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Strong",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Strong(Strong {
+            lua.create_userdata(LuaInline::new(Inline::Strong(Strong {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -335,7 +335,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Underline",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Underline(Underline {
+            lua.create_userdata(LuaInline::new(Inline::Underline(Underline {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -347,7 +347,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Strikeout",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Strikeout(Strikeout {
+            lua.create_userdata(LuaInline::new(Inline::Strikeout(Strikeout {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -359,7 +359,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Superscript",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Superscript(Superscript {
+            lua.create_userdata(LuaInline::new(Inline::Superscript(Superscript {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -371,7 +371,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Subscript",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Subscript(Subscript {
+            lua.create_userdata(LuaInline::new(Inline::Subscript(Subscript {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -383,7 +383,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "SmallCaps",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::SmallCaps(SmallCaps {
+            lua.create_userdata(LuaInline::new(Inline::SmallCaps(SmallCaps {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -405,7 +405,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 }
             };
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Quoted(Quoted {
+            lua.create_userdata(LuaInline::new(Inline::Quoted(Quoted {
                 quote_type: qt,
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -418,7 +418,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Code",
         lua.create_function(|lua, (text, attr): (String, Option<Value>)| {
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaInline(Inline::Code(crate::pandoc::Code {
+            lua.create_userdata(LuaInline::new(Inline::Code(crate::pandoc::Code {
                 text,
                 attr,
                 source_info: filter_source_info(lua),
@@ -436,7 +436,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 "DisplayMath" => MathType::DisplayMath,
                 _ => return Err(Error::runtime(format!("invalid math type: {}", math_type))),
             };
-            lua.create_userdata(LuaInline(Inline::Math(Math {
+            lua.create_userdata(LuaInline::new(Inline::Math(Math {
                 math_type: mt,
                 text,
                 source_info: filter_source_info(lua),
@@ -448,7 +448,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "RawInline",
         lua.create_function(|lua, (format, text): (String, String)| {
-            lua.create_userdata(LuaInline(Inline::RawInline(RawInline {
+            lua.create_userdata(LuaInline::new(Inline::RawInline(RawInline {
                 format,
                 text,
                 source_info: filter_source_info(lua),
@@ -464,7 +464,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaInline(Inline::Link(Link {
+                lua.create_userdata(LuaInline::new(Inline::Link(Link {
                     content: inlines,
                     target: (target, title),
                     attr,
@@ -484,7 +484,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaInline(Inline::Image(Image {
+                lua.create_userdata(LuaInline::new(Inline::Image(Image {
                     content: inlines,
                     target: (src, title),
                     attr,
@@ -502,7 +502,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaInline(Inline::Span(Span {
+            lua.create_userdata(LuaInline::new(Inline::Span(Span {
                 content: inlines,
                 attr,
                 source_info: filter_source_info(lua),
@@ -516,7 +516,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Note",
         lua.create_function(|lua, content: Value| {
             let blocks = peek_blocks_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Note(Note {
+            lua.create_userdata(LuaInline::new(Inline::Note(Note {
                 content: blocks,
                 source_info: filter_source_info(lua),
             })))
@@ -529,7 +529,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (citations, content): (Value, Value)| {
             let citations = parse_citations(lua, citations)?;
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline(Inline::Cite(Cite {
+            lua.create_userdata(LuaInline::new(Inline::Cite(Cite {
                 citations,
                 content: inlines,
                 source_info: filter_source_info(lua),
@@ -546,7 +546,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Para",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaBlock(Block::Paragraph(Paragraph {
+            lua.create_userdata(LuaBlock::new(Block::Paragraph(Paragraph {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -558,7 +558,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Plain",
         lua.create_function(|lua, content: Value| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaBlock(Block::Plain(Plain {
+            lua.create_userdata(LuaBlock::new(Block::Plain(Plain {
                 content: inlines,
                 source_info: filter_source_info(lua),
             })))
@@ -571,7 +571,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (level, content, attr): (i64, Value, Option<Value>)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock(Block::Header(Header {
+            lua.create_userdata(LuaBlock::new(Block::Header(Header {
                 level: level as usize,
                 content: inlines,
                 attr,
@@ -586,7 +586,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "CodeBlock",
         lua.create_function(|lua, (text, attr): (String, Option<Value>)| {
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock(Block::CodeBlock(CodeBlock {
+            lua.create_userdata(LuaBlock::new(Block::CodeBlock(CodeBlock {
                 text,
                 attr,
                 source_info: filter_source_info(lua),
@@ -599,7 +599,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "RawBlock",
         lua.create_function(|lua, (format, text): (String, String)| {
-            lua.create_userdata(LuaBlock(Block::RawBlock(RawBlock {
+            lua.create_userdata(LuaBlock::new(Block::RawBlock(RawBlock {
                 format,
                 text,
                 source_info: filter_source_info(lua),
@@ -612,7 +612,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "BlockQuote",
         lua.create_function(|lua, content: Value| {
             let blocks = peek_blocks_fuzzy(lua, content)?;
-            lua.create_userdata(LuaBlock(Block::BlockQuote(BlockQuote {
+            lua.create_userdata(LuaBlock::new(Block::BlockQuote(BlockQuote {
                 content: blocks,
                 source_info: filter_source_info(lua),
             })))
@@ -624,7 +624,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "BulletList",
         lua.create_function(|lua, items: Value| {
             let content = parse_list_items(lua, items)?;
-            lua.create_userdata(LuaBlock(Block::BulletList(BulletList {
+            lua.create_userdata(LuaBlock::new(Block::BulletList(BulletList {
                 content,
                 source_info: filter_source_info(lua),
             })))
@@ -636,7 +636,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "OrderedList",
         lua.create_function(|lua, (items, _list_attr): (Value, Option<Value>)| {
             let content = parse_list_items(lua, items)?;
-            lua.create_userdata(LuaBlock(Block::OrderedList(OrderedList {
+            lua.create_userdata(LuaBlock::new(Block::OrderedList(OrderedList {
                 content,
                 attr: (
                     1, // start
@@ -654,7 +654,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
             let blocks = peek_blocks_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock(Block::Div(Div {
+            lua.create_userdata(LuaBlock::new(Block::Div(Div {
                 content: blocks,
                 attr,
                 source_info: filter_source_info(lua),
@@ -667,7 +667,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "HorizontalRule",
         lua.create_function(|lua, ()| {
-            lua.create_userdata(LuaBlock(Block::HorizontalRule(HorizontalRule {
+            lua.create_userdata(LuaBlock::new(Block::HorizontalRule(HorizontalRule {
                 source_info: filter_source_info(lua),
             })))
         })?,
@@ -680,7 +680,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "DefinitionList",
         lua.create_function(|lua, content: Value| {
             let items = parse_definition_list_items(lua, content)?;
-            lua.create_userdata(LuaBlock(Block::DefinitionList(DefinitionList {
+            lua.create_userdata(LuaBlock::new(Block::DefinitionList(DefinitionList {
                 content: items,
                 source_info: filter_source_info(lua),
             })))
@@ -693,7 +693,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "LineBlock",
         lua.create_function(|lua, content: Value| {
             let lines = parse_line_block_content(lua, content)?;
-            lua.create_userdata(LuaBlock(Block::LineBlock(LineBlock {
+            lua.create_userdata(LuaBlock::new(Block::LineBlock(LineBlock {
                 content: lines,
                 source_info: filter_source_info(lua),
             })))
@@ -708,7 +708,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let blocks = peek_blocks_fuzzy(lua, content)?;
                 let caption = parse_caption(lua, caption)?;
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaBlock(Block::Figure(Figure {
+                lua.create_userdata(LuaBlock::new(Block::Figure(Figure {
                     content: blocks,
                     caption,
                     attr,
@@ -738,7 +738,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let bodies = parse_table_bodies(lua, bodies)?;
                 let foot = parse_table_foot(lua, foot)?;
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaBlock(Block::Table(PandocTable {
+                lua.create_userdata(LuaBlock::new(Block::Table(PandocTable {
                     caption,
                     colspec: colspecs,
                     head,
@@ -760,9 +760,10 @@ fn parse_attr(_lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
     match attr {
         None => Ok((String::new(), vec![], LinkedHashMap::new())),
         Some(Value::UserData(ud)) => {
-            // Support LuaAttr userdata
+            // Support LuaAttr userdata (all variants — Owned / BlockRef /
+            // InlineRef clone out to an independent Attr value)
             let lua_attr = ud.borrow::<LuaAttr>()?;
-            Ok(lua_attr.0.clone())
+            Ok(lua_attr.clone_attr())
         }
         Some(Value::Table(table)) => {
             // Support table format: {identifier, classes, attributes}
@@ -1280,28 +1281,20 @@ fn register_attr_constructor(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(
             |lua, (identifier, classes, attributes): (Option<String>, Option<Value>, Option<Value>)| {
                 let id = identifier.unwrap_or_default();
+                // Both `classes` and `attributes` accept a plain Lua
+                // table OR a corresponding proxy userdata (so
+                // `pandoc.Attr(id, cb.attr.classes, cb.attr.attributes)`
+                // works without the user having to materialize a table
+                // first).
                 let cls = match classes {
-                    Some(Value::Table(table)) => {
-                        let mut result = Vec::new();
-                        for item in table.sequence_values::<String>() {
-                            result.push(item?);
-                        }
-                        result
-                    }
-                    Some(_) => return Err(Error::runtime("classes must be a table of strings")),
-                    None => Vec::new(),
+                    None | Some(Value::Nil) => Vec::new(),
+                    Some(v) => super::types::lua_table_to_strings(lua, v)
+                        .map_err(|_| Error::runtime("classes must be a table of strings"))?,
                 };
                 let attrs = match attributes {
-                    Some(Value::Table(table)) => {
-                        let mut result = LinkedHashMap::new();
-                        for pair in table.pairs::<String, String>() {
-                            let (k, v) = pair?;
-                            result.insert(k, v);
-                        }
-                        result
-                    }
-                    Some(_) => return Err(Error::runtime("attributes must be a table")),
-                    None => LinkedHashMap::new(),
+                    None | Some(Value::Nil) => LinkedHashMap::new(),
+                    Some(v) => super::types::lua_table_to_string_map(lua, v)
+                        .map_err(|_| Error::runtime("attributes must be a table"))?,
                 };
                 lua.create_userdata(LuaAttr::new((id, cls, attrs)))
             },
@@ -1593,7 +1586,7 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     let inlines = peek_inlines_fuzzy(lua, val)?;
                     let result = lua.create_table()?;
                     for (i, inline) in inlines.into_iter().enumerate() {
-                        result.raw_set(i + 1, lua.create_userdata(LuaInline(inline))?)?;
+                        result.raw_set(i + 1, lua.create_userdata(LuaInline::new(inline))?)?;
                     }
                     result
                 }
@@ -1615,7 +1608,7 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     let blocks = peek_blocks_fuzzy(lua, val)?;
                     let result = lua.create_table()?;
                     for (i, block) in blocks.into_iter().enumerate() {
-                        result.raw_set(i + 1, lua.create_userdata(LuaBlock(block))?)?;
+                        result.raw_set(i + 1, lua.create_userdata(LuaBlock::new(block))?)?;
                     }
                     result
                 }

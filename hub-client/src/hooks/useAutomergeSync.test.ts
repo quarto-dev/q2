@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 // Mock automergeSync service
@@ -22,6 +22,7 @@ import { useAutomergeSync } from './useAutomergeSync';
 import { getFileContent, setImmediateFileChangeCallback } from '../services/automergeSync';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import type { FileEntry } from '../types/project';
+import { setVisibility, resetVisibility, fireWindowFocus } from '../test-utils/visibility';
 
 const mockGetFileContent = vi.mocked(getFileContent);
 const mockSetImmediateFileChangeCallback = vi.mocked(setImmediateFileChangeCallback);
@@ -63,6 +64,11 @@ describe('useAutomergeSync', () => {
     vi.clearAllMocks();
     mockGetFileContent.mockReturnValue('# Hello');
     mockDiffToMonacoEdits.mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    resetVisibility();
+    vi.restoreAllMocks();
   });
 
   describe('initialization', () => {
@@ -438,6 +444,218 @@ describe('useAutomergeSync', () => {
       });
 
       expect(result.current.content).toBe('# Different File');
+    });
+  });
+
+  // ── Visibility gating ───────────────────────────────────────────────────
+  //
+  // Backgrounded tabs queue remote Automerge change events; on refocus they
+  // drain and each one applies a separate executeEdits, producing a visible
+  // "replay animation". The gate stashes the latest content while hidden and
+  // flushes once on visibilitychange→visible (or window focus, for browsers
+  // that skip visibilitychange). See
+  // claude-notes/plans/2026-04-24-hub-client-visibility-gating.md.
+  describe('visibility gating', () => {
+    function fakeEdits(text: string) {
+      return [{ range: {}, text, forceMoveMarkers: true }] as never;
+    }
+
+    function getRegisteredCallback(): (path: string, newContent: string) => void {
+      // The latest registered handler (effects re-run on currentFile change).
+      const calls = mockSetImmediateFileChangeCallback.mock.calls;
+      for (let i = calls.length - 1; i >= 0; i--) {
+        if (typeof calls[i][0] === 'function') {
+          return calls[i][0] as (path: string, newContent: string) => void;
+        }
+      }
+      throw new Error('no immediate callback registered');
+    }
+
+    // Stable opts avoid the reconciliation effect re-firing on every render
+    // from a fresh fileContents Map reference, which would inflate
+    // executeEdits counts. Each test builds its own baseline then reuses it.
+    function setup(initialContent: string) {
+      mockGetFileContent.mockReturnValue(initialContent);
+      const opts = defaultOptions({
+        fileContents: new Map([['test.qmd', initialContent]]),
+      });
+      const mockEditor = createMockEditor(initialContent);
+      const { result, unmount } = renderHook(() => useAutomergeSync(opts));
+      act(() => {
+        result.current.onEditorMount(mockEditor as never);
+      });
+      return { result, unmount, mockEditor };
+    }
+
+    it('baseline: when visible, each remote change applies one executeEdits', () => {
+      const { mockEditor } = setup('# A');
+      const cb = getRegisteredCallback();
+
+      mockDiffToMonacoEdits.mockImplementation((from: string, to: string) => fakeEdits(to));
+
+      act(() => cb('test.qmd', '# B'));
+      act(() => cb('test.qmd', '# C'));
+      act(() => cb('test.qmd', '# D'));
+
+      expect(mockEditor.executeEdits).toHaveBeenCalledTimes(3);
+    });
+
+    it('hidden: successive remote changes produce zero executeEdits calls', () => {
+      const { mockEditor } = setup('# A');
+      const cb = getRegisteredCallback();
+
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('should not apply'));
+
+      act(() => setVisibility('hidden'));
+      act(() => cb('test.qmd', '# B'));
+      act(() => cb('test.qmd', '# C'));
+      act(() => cb('test.qmd', '# D'));
+
+      expect(mockEditor.executeEdits).not.toHaveBeenCalled();
+    });
+
+    it('flush on visible: exactly one executeEdits, diffed against latest stashed content', () => {
+      const { mockEditor } = setup('# A');
+      const cb = getRegisteredCallback();
+
+      act(() => setVisibility('hidden'));
+      act(() => cb('test.qmd', '# B'));
+      act(() => cb('test.qmd', '# C'));
+      act(() => cb('test.qmd', '# D'));
+
+      mockDiffToMonacoEdits.mockClear();
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('# D'));
+
+      act(() => setVisibility('visible'));
+
+      expect(mockEditor.executeEdits).toHaveBeenCalledTimes(1);
+      expect(mockEditor.executeEdits).toHaveBeenCalledWith('remote-sync', fakeEdits('# D'));
+      // diff is between current Monaco value ('# A') and the latest stashed content ('# D')
+      expect(mockDiffToMonacoEdits).toHaveBeenCalledWith('# A', '# D');
+    });
+
+    it('flush on visible: second hide→visible with no stash produces zero calls', () => {
+      const { mockEditor } = setup('# A');
+      const cb = getRegisteredCallback();
+
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('# D'));
+      act(() => setVisibility('hidden'));
+      act(() => cb('test.qmd', '# D'));
+      act(() => setVisibility('visible'));
+
+      expect(mockEditor.executeEdits).toHaveBeenCalledTimes(1);
+
+      // Second hide→visible cycle with no stashed content.
+      mockEditor.executeEdits.mockClear();
+      act(() => setVisibility('hidden'));
+      act(() => setVisibility('visible'));
+
+      expect(mockEditor.executeEdits).not.toHaveBeenCalled();
+    });
+
+    it('file switch while hidden: no stale edit for old file is applied', () => {
+      const mockEditor = createMockEditor('# A');
+      const fileA: FileEntry = { path: 'a.qmd' };
+      const fileB: FileEntry = { path: 'b.qmd' };
+      mockGetFileContent.mockImplementation((p: string) =>
+        p === 'a.qmd' ? '# A' : '# B'
+      );
+
+      const optsA = defaultOptions({
+        currentFile: fileA,
+        fileContents: new Map([['a.qmd', '# A']]),
+      });
+      const optsB = defaultOptions({
+        currentFile: fileB,
+        fileContents: new Map([['b.qmd', '# B']]),
+      });
+
+      const { result, rerender } = renderHook(
+        (props: typeof optsA) => useAutomergeSync(props),
+        { initialProps: optsA }
+      );
+      act(() => {
+        result.current.onEditorMount(mockEditor as never);
+      });
+
+      act(() => setVisibility('hidden'));
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('# A (stale remote)'));
+      act(() => getRegisteredCallback()('a.qmd', '# A (stale remote)'));
+
+      // Simulate the file-switch code separately updating Monaco to fileB's
+      // content (that happens via a different code path in the app). Keep
+      // the diff mock returning [] so reconciliation doesn't fire an edit.
+      mockEditor._setContent('# B');
+      mockDiffToMonacoEdits.mockReturnValue([]);
+
+      rerender(optsB);
+      act(() => setVisibility('visible'));
+
+      expect(mockEditor.executeEdits).not.toHaveBeenCalled();
+    });
+
+    it('cleanup on unmount removes visibilitychange and focus listeners', () => {
+      const docRemove = vi.spyOn(document, 'removeEventListener');
+      const winRemove = vi.spyOn(window, 'removeEventListener');
+
+      const { unmount } = setup('# A');
+      unmount();
+
+      const visCall = docRemove.mock.calls.find((c) => c[0] === 'visibilitychange');
+      const focusCall = winRemove.mock.calls.find((c) => c[0] === 'focus');
+      expect(visCall).toBeDefined();
+      expect(focusCall).toBeDefined();
+    });
+
+    it('React content state still updates while hidden (for Preview etc.)', () => {
+      const { result, mockEditor } = setup('# A');
+      const cb = getRegisteredCallback();
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('# Hidden new'));
+
+      act(() => setVisibility('hidden'));
+      act(() => cb('test.qmd', '# Hidden new'));
+
+      expect(result.current.content).toBe('# Hidden new');
+      expect(mockEditor.executeEdits).not.toHaveBeenCalled();
+    });
+
+    it('focus-only flush: window focus without visibilitychange triggers exactly one executeEdits', () => {
+      const { mockEditor } = setup('# A');
+      const cb = getRegisteredCallback();
+
+      act(() => setVisibility('hidden'));
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('# D'));
+      act(() => cb('test.qmd', '# B'));
+      act(() => cb('test.qmd', '# D'));
+
+      mockDiffToMonacoEdits.mockClear();
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('# D'));
+
+      // Simulate the documented cases where visibilitychange never fires:
+      // fire focus while visibilityState still reports 'hidden'.
+      act(() => fireWindowFocus());
+
+      expect(mockEditor.executeEdits).toHaveBeenCalledTimes(1);
+      expect(mockDiffToMonacoEdits).toHaveBeenCalledWith('# A', '# D');
+
+      // Ref was cleared by the flush: a subsequent focus is a no-op.
+      mockEditor.executeEdits.mockClear();
+      act(() => fireWindowFocus());
+      expect(mockEditor.executeEdits).not.toHaveBeenCalled();
+    });
+
+    it('idempotent double-fire: visibilitychange + focus produces exactly one executeEdits', () => {
+      const { mockEditor } = setup('# A');
+      const cb = getRegisteredCallback();
+
+      act(() => setVisibility('hidden'));
+      mockDiffToMonacoEdits.mockReturnValue(fakeEdits('# D'));
+      act(() => cb('test.qmd', '# D'));
+
+      act(() => setVisibility('visible'));
+      act(() => fireWindowFocus());
+
+      expect(mockEditor.executeEdits).toHaveBeenCalledTimes(1);
     });
   });
 });

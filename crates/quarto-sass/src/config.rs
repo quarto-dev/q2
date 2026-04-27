@@ -59,12 +59,24 @@ pub struct ThemeConfig {
     ///
     /// Defaults to `true` for consistency with TypeScript Quarto.
     pub minified: bool,
+
+    /// Sentinel indicating the user asked to suppress the Bootstrap layer
+    /// entirely via `theme: none`.
+    ///
+    /// This mirrors Quarto 1's `theme: none` behavior: callers should skip
+    /// Bootstrap compilation and emit a minimal or empty CSS payload of
+    /// their choosing. `themes` is always empty when this is `true`.
+    pub suppress_bootstrap: bool,
 }
 
 impl ThemeConfig {
     /// Create a new ThemeConfig with the given themes.
     pub fn new(themes: Vec<ThemeSpec>, minified: bool) -> Self {
-        Self { themes, minified }
+        Self {
+            themes,
+            minified,
+            suppress_bootstrap: false,
+        }
     }
 
     /// Create config for default Bootstrap theme (no Bootswatch customization).
@@ -75,6 +87,7 @@ impl ThemeConfig {
         Self {
             themes: Vec::new(),
             minified: true,
+            suppress_bootstrap: false,
         }
     }
 
@@ -123,11 +136,23 @@ impl ThemeConfig {
                     return Ok(Self::default_bootstrap());
                 }
 
+                // `theme: none` sentinel: suppress Bootstrap entirely.
+                if let Some(s) = config_value_as_text(value)
+                    && s.eq_ignore_ascii_case("none")
+                {
+                    return Ok(Self {
+                        themes: Vec::new(),
+                        minified: true,
+                        suppress_bootstrap: true,
+                    });
+                }
+
                 // Try to extract themes
                 let themes = extract_theme_specs(value)?;
                 Ok(Self {
                     themes,
                     minified: true, // Always minified for TS Quarto parity
+                    suppress_bootstrap: false,
                 })
             }
         }
@@ -536,6 +561,42 @@ mod tests {
 
         assert!(theme_config.themes.is_empty());
         assert!(!theme_config.has_themes());
+    }
+
+    #[test]
+    fn test_theme_none_sets_suppress_bootstrap_flag() {
+        // `theme: none` is a Q1-compatible sentinel: it suppresses Bootstrap
+        // entirely and asks the caller to emit a minimal CSS fallback (or
+        // none at all). It must not be parsed as a BuiltInTheme.
+        let config = flattened_config_with_theme_string("none");
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+
+        assert!(theme_config.suppress_bootstrap);
+        assert!(theme_config.themes.is_empty());
+        assert!(!theme_config.has_themes());
+    }
+
+    #[test]
+    fn test_theme_none_is_case_insensitive() {
+        // YAML bare `None`, `NONE`, `None` should all map to the sentinel.
+        for name in ["none", "None", "NONE"] {
+            let config = flattened_config_with_theme_string(name);
+            let theme_config = ThemeConfig::from_config_value(&config)
+                .unwrap_or_else(|e| panic!("{name} should parse: {e:?}"));
+            assert!(
+                theme_config.suppress_bootstrap,
+                "{name} should set suppress_bootstrap"
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_theme_config_does_not_suppress_bootstrap() {
+        // A plain missing-theme config must NOT set suppress_bootstrap, so
+        // the caller compiles the default Bootstrap+Quarto layer.
+        let config = empty_config();
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+        assert!(!theme_config.suppress_bootstrap);
     }
 
     #[test]

@@ -35,9 +35,12 @@ export async function waitForPreviewRender(
     // Check if any fatal console errors have been collected
     if (consoleErrors && consoleErrors.length > 0) {
       // Only treat unrecoverable WASM traps as immediately fatal.
-      // Lua panics ("panicked at ... lua error") are transient — they happen
-      // when extension files haven't synced yet, and the app retries on re-render.
-      // Network errors (500s) may also be transient.
+      // Lua panics are expected control flow on wasm32 (LUAI_THROW is
+      // rewired to a Rust panic caught by rust_lua_protected_call) and
+      // are suppressed by a custom panic hook in wasm-quarto-hub-client
+      // (see claude-notes/plans/2026-04-16-suppress-lua-panic-noise.md),
+      // so they should not reach consoleErrors at all. Network errors
+      // (500s) and out-of-date builds may still produce transient noise.
       const fatal = consoleErrors.find(
         (e) =>
           e.includes('unreachable') ||

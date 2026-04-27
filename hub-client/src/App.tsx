@@ -587,6 +587,7 @@ function App() {
           projectSetEntries={projectSetState.status === 'connected' ? projectSetState.projects : undefined}
           onRemoveProjectFromSet={projectSetActions.removeProject}
           onTouchProject={projectSetActions.touchProject}
+          onAddProjectToSet={projectSetActions.addProject}
         />
       ) : (
         <ViewModeProvider>

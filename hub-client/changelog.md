@@ -13,6 +13,40 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-04-24
+
+- [`542a1686`](https://github.com/quarto-dev/q2/commits/542a1686): Defer remote edit application and presence notifications while the tab is hidden to avoid replay-animation on refocus
+
+### 2026-04-22
+
+- [`b0c84210`](https://github.com/quarto-dev/q2/commits/b0c84210): Remote cursor/selection tracking switched from custom OT offset transforms to Automerge cursors anchored on `['text']` — presence stays correct under concurrent edits without the transformOffset / same-line-guard machinery
+
+### 2026-04-21
+
+- [`b0366d07`](https://github.com/quarto-dev/q2/commits/b0366d07): Phase 4.5 UI wiring (bd-n7x2) — Preview's render loop now actually passes the project file list + content resolvers into `renderToHtml`\'s user-grammars option, so auto-discovery fires on every render from the real UI (the previous commit wired the service layer; this connects it to the component tree)
+- [`2653d6ca`](https://github.com/quarto-dev/q2/commits/2653d6ca): Phase 4.5 of syntax-highlighting (bd-n7x2) — hub-client auto-discovers user-defined tree-sitter grammars from `_quarto/grammars/<name>/` (containing a `.wasm` + `highlights.scm`); `renderToHtml` grows an optional `userGrammars` option that runs discovery + cache-backed loading before each render so dropping a grammar into the project highlights matching code blocks without any further user action
+- [`d3b051c3`](https://github.com/quarto-dev/q2/commits/d3b051c3): Phase 4.3 of syntax-highlighting (bd-n7x2) — `JsUserGrammars` wasm-bindgen bridge; `renderQmd` / `renderQmdContent` grow an optional `userGrammars` parameter so hub-client can route code-block highlighting through JS-side `web-tree-sitter` grammars before falling back to built-ins (wire-up to project discovery is Phase 4.5)
+- [`896a676d`](https://github.com/quarto-dev/q2/commits/896a676d): Phase 4.2 of syntax-highlighting (bd-n7x2) — adds `web-tree-sitter`-based user-grammar highlighter (`loadUserGrammar` in `src/services/userGrammarHighlight.ts`); infrastructure-only, not yet wired into the render path (Phase 4.3 + 4.5 land the wasm-bindgen bridge and hub-client auto-discovery)
+- [`b0177b8d`](https://github.com/quarto-dev/q2/commits/b0177b8d): Generic file uploader — any binary asset (images, PDFs, `.wasm` grammars, data files, fonts) can now be added to a project via the new "Upload" button in the file sidebar, drag-drop onto the sidebar (destination derived from drop target), or drag-drop into the editor; destination paths validated against leading `/`, `.`/`..` segments, and forbidden characters
+
+### 2026-04-20
+
+- [`23e020cd`](https://github.com/quarto-dev/q2/commits/23e020cd): CSS cache now invalidates automatically on any Rust-side SCSS-assembly change — replaces the manual `_vN` version knob with a build-time hash of quarto-sass source files
+- [`2824fceb`](https://github.com/quarto-dev/q2/commits/2824fceb): Syntax-highlight color rules now reach users whose browsers had cached the pre-fix default CSS (cache-key version bump; previously only affected users with warm IndexedDB state)
+- [`f57a8fef`](https://github.com/quarto-dev/q2/commits/f57a8fef): Fix Firefox Quirks Mode in preview iframe — stylesheets (including the new syntax-highlight colors) now apply correctly in Firefox, not just Chrome
+- [`981bda93`](https://github.com/quarto-dev/q2/commits/981bda93): Documents without an explicit `theme:` entry now ship the built-in syntax-highlight color rules, matching native `quarto render` behavior
+- [`2dfd24a0`](https://github.com/quarto-dev/q2/commits/2dfd24a0): Syntax highlighting for code blocks now works in the hub-client preview (12 built-in languages: bash, css, html, javascript, json, julia, lua, python, r, sql, typescript, yaml)
+
+### 2026-04-17
+
+- [`123ea422`](https://github.com/quarto-dev/q2/commits/123ea422): Show cross-referenceable elements (figures, tables, theorems, equations, ...) in the document outline, with rendered labels like "Figure 1: caption" and absorbing inner theorem headers so they don't appear twice
+
+### 2026-04-16
+
+- [`ee5d8ca0`](https://github.com/quarto-dev/q2/commits/ee5d8ca0): Reconcile orphan IDB projects into the synced project set so share-link visits reliably appear in the project list and re-adding via Connect is idempotent
+- [`5c45260a`](https://github.com/quarto-dev/q2/commits/5c45260a): Suppress noisy 'lua error' panic stack traces in the browser console (expected Lua control flow no longer reaches console.error)
+- [`26110945`](https://github.com/quarto-dev/q2/commits/26110945): Add Automerge debugger entry at /debug.html with Server and Local IndexedDB modes
+
 ### 2026-04-15
 
 - [`3162a627`](https://github.com/quarto-dev/q2/commits/3162a627): Attempt silent token refresh on visibility change before logging out

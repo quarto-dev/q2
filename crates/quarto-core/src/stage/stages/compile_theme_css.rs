@@ -11,14 +11,28 @@
 //! [`MetadataMergeStage`]), extracts the theme configuration, compiles
 //! SCSS to CSS, and stores the result as the `"css:default"` artifact.
 //!
-//! If no theme is specified, the stage stores the static `DEFAULT_CSS`
-//! without compilation. Compilation results are cached via the
-//! `SystemRuntime` cache interface to avoid expensive recompilation.
+//! Behavior by theme value (mirrors Quarto 1):
+//!
+//! - Theme **absent**: compile the default Bootstrap + Quarto customization
+//!   layer. Produces a fully functional Bootstrap stylesheet ready for
+//!   navbar / footer / TOC rendering.
+//! - `theme: none`: ship the static lightweight `DEFAULT_CSS` without any
+//!   Bootstrap. Opt-out for users who want minimal output.
+//! - `theme: cosmo` (or any other name/array): compile the named theme(s)
+//!   layered on top of Bootstrap + Quarto.
+//!
+//! Compilation results are cached via the `SystemRuntime` cache interface
+//! to avoid expensive recompilation.
 
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use quarto_sass::{ThemeConfig, ThemeContext, assemble_theme_scss};
+use quarto_sass::{
+    CSS_BUILD_ID, ThemeConfig, ThemeContext, assemble_theme_scss, compile_default_css,
+};
+use quarto_system_runtime::{
+    SASS_CACHE_BUDGET_BYTES, SystemRuntime, cache_get_lru, cache_set_lru, ensure_namespace_version,
+};
 
 use crate::artifact::Artifact;
 use crate::pipeline::DEFAULT_CSS_ARTIFACT_PATH;
@@ -27,6 +41,41 @@ use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
 use crate::trace_event;
+
+/// Name of the cache namespace used for compiled SCSS CSS output.
+const SASS_CACHE_NAMESPACE: &str = "sass";
+
+/// Fixed cache key for the default (no-theme) compiled CSS. The
+/// minified flag distinguishes minified from expanded output; the
+/// generational purge ([`ensure_sass_cache_ready`]) keyed on
+/// [`CSS_BUILD_ID`] handles all other invalidation cases
+/// automatically. No manual `_vN` suffix needed — the build ID
+/// changes whenever any SCSS resource OR any Rust source in
+/// `crates/quarto-sass/src/` changes.
+const DEFAULT_CACHE_KEY_MINIFIED: &str = "default_minified";
+const DEFAULT_CACHE_KEY_EXPANDED: &str = "default_expanded";
+
+fn default_cache_key(minified: bool) -> &'static str {
+    if minified {
+        DEFAULT_CACHE_KEY_MINIFIED
+    } else {
+        DEFAULT_CACHE_KEY_EXPANDED
+    }
+}
+
+/// Run the generational-purge check on the `sass` namespace.
+///
+/// Called once per stage run (not memoized). On WASM this adds a single
+/// IndexedDB read per render — negligible compared to the 100-500 ms
+/// compile cost the caching prevents, and the simplicity is worth it
+/// (memoization keyed by process-scope was considered but leaked state
+/// between tests and between runtimes). Returns `false` if the cache
+/// layer errors out; callers fall through to compile-without-caching.
+async fn ensure_sass_cache_ready(runtime: &dyn SystemRuntime) -> bool {
+    ensure_namespace_version(runtime, SASS_CACHE_NAMESPACE, CSS_BUILD_ID.as_bytes())
+        .await
+        .is_ok()
+}
 
 /// Compile theme CSS and store as a pipeline artifact.
 ///
@@ -148,14 +197,73 @@ impl PipelineStage for CompileThemeCssStage {
             }
         };
 
-        // No themes → use static DEFAULT_CSS (no compilation needed)
-        if !theme_config.has_themes() {
+        // `theme: none` → ship the static lightweight DEFAULT_CSS without
+        // compiling Bootstrap. This is the explicit opt-out path.
+        if theme_config.suppress_bootstrap {
             trace_event!(
                 ctx,
                 EventLevel::Debug,
-                "no theme specified, using default CSS"
+                "theme: none set, using static DEFAULT_CSS"
             );
             store_default_css(ctx);
+            return Ok(PipelineData::DocumentAst(doc));
+        }
+
+        // Ensure the sass namespace matches the current SCSS resources
+        // generation. When this returns `false` the cache layer is
+        // unavailable and we compile without caching.
+        let cache_ok = ensure_sass_cache_ready(ctx.runtime.as_ref()).await;
+
+        // Theme absent → compile default Bootstrap + Quarto layer. Matches
+        // Quarto 1's behavior so features like navbar/footer have the CSS
+        // classes they depend on.
+        if !theme_config.has_themes() {
+            // Try the runtime cache first (cross-session persistence).
+            if cache_ok {
+                if let Ok(Some(cached)) = cache_get_lru(
+                    ctx.runtime.as_ref(),
+                    SASS_CACHE_NAMESPACE,
+                    default_cache_key(theme_config.minified),
+                )
+                .await
+                {
+                    if let Ok(css) = String::from_utf8(cached) {
+                        trace_event!(ctx, EventLevel::Debug, "cache hit for default CSS");
+                        store_css(ctx, css);
+                        return Ok(PipelineData::DocumentAst(doc));
+                    }
+                }
+            }
+
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "no theme specified, compiling default Bootstrap + Quarto layer"
+            );
+            match compile_default(ctx, theme_config.minified).await {
+                Ok(css) => {
+                    if cache_ok {
+                        let _ = cache_set_lru(
+                            ctx.runtime.as_ref(),
+                            SASS_CACHE_NAMESPACE,
+                            default_cache_key(theme_config.minified),
+                            css.as_bytes(),
+                            SASS_CACHE_BUDGET_BYTES,
+                        )
+                        .await;
+                    }
+                    store_css(ctx, css);
+                }
+                Err(e) => {
+                    trace_event!(
+                        ctx,
+                        EventLevel::Warn,
+                        "default Bootstrap compilation failed: {}, using static DEFAULT_CSS",
+                        e
+                    );
+                    store_default_css(ctx);
+                }
+            }
             return Ok(PipelineData::DocumentAst(doc));
         }
 
@@ -182,9 +290,11 @@ impl PipelineStage for CompileThemeCssStage {
             }
         };
 
-        // Check cache (best-effort — errors are non-fatal)
-        if !key.is_empty() {
-            if let Ok(Some(cached)) = ctx.runtime.cache_get("sass", &key).await {
+        // Check cache (best-effort — errors are non-fatal).
+        if cache_ok && !key.is_empty() {
+            if let Ok(Some(cached)) =
+                cache_get_lru(ctx.runtime.as_ref(), SASS_CACHE_NAMESPACE, &key).await
+            {
                 if let Ok(css) = String::from_utf8(cached) {
                     trace_event!(
                         ctx,
@@ -225,9 +335,16 @@ impl PipelineStage for CompileThemeCssStage {
 
         match css {
             Ok(css) => {
-                // Store in cache (best-effort, skip if no key)
-                if !key.is_empty() {
-                    let _ = ctx.runtime.cache_set("sass", &key, css.as_bytes()).await;
+                // Store in cache (best-effort, skip if no key or cache unavailable).
+                if cache_ok && !key.is_empty() {
+                    let _ = cache_set_lru(
+                        ctx.runtime.as_ref(),
+                        SASS_CACHE_NAMESPACE,
+                        &key,
+                        css.as_bytes(),
+                        SASS_CACHE_BUDGET_BYTES,
+                    )
+                    .await;
                 }
                 store_css(ctx, css);
             }
@@ -265,6 +382,22 @@ fn store_css(ctx: &mut StageContext, css: String) {
 ///
 /// Uses `compile_scss_with_embedded` on native (sync, via grass) and
 /// `runtime.compile_sass` on WASM (async, via dart-sass JS bridge).
+/// Compile the default Bootstrap + Quarto layer (no Bootswatch theme).
+///
+/// Native uses `grass` in-process (sync); WASM uses the dart-sass JS bridge
+/// (async). This wrapper gives the stage one call site.
+#[cfg(not(target_arch = "wasm32"))]
+async fn compile_default(ctx: &StageContext, minified: bool) -> Result<String, String> {
+    compile_default_css(ctx.runtime.as_ref(), minified).map_err(|e| e.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn compile_default(ctx: &StageContext, minified: bool) -> Result<String, String> {
+    compile_default_css(ctx.runtime.as_ref(), minified)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 async fn compile_scss(
     ctx: &StageContext,
@@ -524,18 +657,48 @@ mod tests {
     // ── Tests ────────────────────────────────────────────────────────
 
     #[tokio::test]
-    async fn test_no_theme_uses_default_css() {
-        let runtime = Arc::new(MockRuntime);
+    async fn test_no_theme_compiles_default_bootstrap() {
+        // Q1 parity: when `theme:` is absent, compile the full Bootstrap +
+        // Quarto customization layer. The old behavior (static 244-line
+        // DEFAULT_CSS) is now gated behind the explicit `theme: none`
+        // opt-out.
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
         let mut ctx = make_stage_context(runtime);
         let stage = CompileThemeCssStage::new();
 
         let input = make_doc_ast(empty_meta());
         let output = stage.run(input, &mut ctx).await.unwrap();
-
-        // Should pass through DocumentAst
         assert!(output.into_document_ast().is_some());
 
-        // Artifact should be DEFAULT_CSS
+        let css = get_css_artifact(&ctx);
+        assert_ne!(
+            css, DEFAULT_CSS,
+            "missing theme must produce compiled Bootstrap, not static DEFAULT_CSS"
+        );
+        assert!(
+            css.contains(".navbar"),
+            "compiled default CSS should include Bootstrap .navbar rules"
+        );
+        assert!(
+            css.contains(".btn"),
+            "compiled default CSS should include Bootstrap .btn rules"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_theme_none_preserves_static_default_css() {
+        // `theme: none` is the explicit opt-out from Bootstrap — the stage
+        // ships the lightweight static DEFAULT_CSS instead of compiling
+        // anything.
+        let runtime = Arc::new(MockRuntime);
+        let mut ctx = make_stage_context(runtime);
+        let stage = CompileThemeCssStage::new();
+
+        let input = make_doc_ast(meta_with_theme("none"));
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        assert!(output.into_document_ast().is_some());
+
         let css = get_css_artifact(&ctx);
         assert_eq!(css, DEFAULT_CSS);
     }
@@ -589,6 +752,211 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_no_theme_path_writes_runtime_cache() {
+        // After a successful first compile, the default-cache key and the
+        // version sentinel should both be present in the runtime cache.
+        // Proves the no-theme path routes through cache_set_lru +
+        // ensure_namespace_version, so a cold-start second session will
+        // find it.
+        let temp = tempfile::TempDir::new().unwrap();
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(
+            quarto_system_runtime::NativeRuntime::with_cache_dir(temp.path().to_path_buf()),
+        );
+
+        let mut ctx = make_stage_context(runtime.clone());
+        let stage = CompileThemeCssStage::new();
+        stage
+            .run(make_doc_ast(empty_meta()), &mut ctx)
+            .await
+            .unwrap();
+
+        // Default-key entry present after the compile.
+        let cached =
+            pollster::block_on(runtime.cache_get("sass", DEFAULT_CACHE_KEY_MINIFIED)).unwrap();
+        assert!(
+            cached.is_some(),
+            "no-theme path should populate the default cache entry"
+        );
+        // Version sentinel written by the generational-purge helper.
+        let version =
+            pollster::block_on(runtime.cache_get("sass", quarto_system_runtime::CACHE_VERSION_KEY))
+                .unwrap();
+        assert_eq!(
+            version.as_deref(),
+            Some(quarto_sass::CSS_BUILD_ID.as_bytes())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_theme_path_uses_cached_value_on_subsequent_run() {
+        // Pre-populating the cache with a recognizable sentinel string
+        // makes a second-run hit observable: the stage must return the
+        // sentinel unchanged rather than recompiling.
+        let temp = tempfile::TempDir::new().unwrap();
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(
+            quarto_system_runtime::NativeRuntime::with_cache_dir(temp.path().to_path_buf()),
+        );
+
+        // Seed the namespace with the correct version and a sentinel entry.
+        pollster::block_on(runtime.cache_set(
+            "sass",
+            quarto_system_runtime::CACHE_VERSION_KEY,
+            quarto_sass::CSS_BUILD_ID.as_bytes(),
+        ))
+        .unwrap();
+        const SENTINEL: &str = "/* cached sentinel */";
+        pollster::block_on(quarto_system_runtime::cache_set_lru(
+            runtime.as_ref(),
+            "sass",
+            DEFAULT_CACHE_KEY_MINIFIED,
+            SENTINEL.as_bytes(),
+            quarto_system_runtime::SASS_CACHE_BUDGET_BYTES,
+        ))
+        .unwrap();
+
+        let mut ctx = make_stage_context(runtime.clone());
+        let stage = CompileThemeCssStage::new();
+        stage
+            .run(make_doc_ast(empty_meta()), &mut ctx)
+            .await
+            .unwrap();
+
+        let css = get_css_artifact(&ctx);
+        assert_eq!(
+            css, SENTINEL,
+            "no-theme path must reuse the cached value instead of recompiling"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rust_side_change_invalidates_default_cache_via_build_id() {
+        // Regression guard for the Phase 3 syntax-highlighting bug. The
+        // original incident:
+        //
+        //   1. Old Quarto assembled default CSS without `highlight.scss`
+        //      and stored it under `"default_minified"` in IndexedDB,
+        //      with the namespace version sentinel set to
+        //      `SCSS_RESOURCES_HASH` (hash of `.scss` files only).
+        //   2. We changed `compile_default_css` (Rust) to also load
+        //      `highlight_layer`. No `.scss` file changed, so
+        //      `SCSS_RESOURCES_HASH` was identical across the upgrade.
+        //   3. On next render, the generational purge compared the
+        //      stored sentinel to the (unchanged) hash, saw a match,
+        //      and left the stale entry in place. Users got served the
+        //      pre-fix CSS missing the `.hl-*` rules.
+        //
+        // The fix is to key the generational purge on `CSS_BUILD_ID`
+        // instead of `SCSS_RESOURCES_HASH`. `CSS_BUILD_ID` combines the
+        // SCSS hash with a hash of every `.rs` file under
+        // `crates/quarto-sass/src/`, so any Rust edit that could affect
+        // the compiled CSS automatically bumps the sentinel and triggers
+        // a namespace purge on next load. No manual version knob.
+        //
+        // This test simulates the same setup as the original incident:
+        // a previous deploy's CSS cached under the current key, but
+        // tagged with an OLD build-id. The generational purge must wipe
+        // it on first load despite the cache key itself being
+        // unchanged.
+        let temp = tempfile::TempDir::new().unwrap();
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(
+            quarto_system_runtime::NativeRuntime::with_cache_dir(temp.path().to_path_buf()),
+        );
+
+        pollster::block_on(runtime.cache_set(
+            "sass",
+            quarto_system_runtime::CACHE_VERSION_KEY,
+            b"previous-deploy-build-id",
+        ))
+        .unwrap();
+        const STALE: &str = "/* stale: pre-Rust-edit default CSS without .hl-* rules */";
+        pollster::block_on(quarto_system_runtime::cache_set_lru(
+            runtime.as_ref(),
+            "sass",
+            DEFAULT_CACHE_KEY_MINIFIED,
+            STALE.as_bytes(),
+            quarto_system_runtime::SASS_CACHE_BUDGET_BYTES,
+        ))
+        .unwrap();
+
+        let mut ctx = make_stage_context(runtime.clone());
+        let stage = CompileThemeCssStage::new();
+        stage
+            .run(make_doc_ast(empty_meta()), &mut ctx)
+            .await
+            .unwrap();
+
+        // Build-id mismatch → namespace purged → stale entry gone →
+        // stage recompiled. Output must be the new CSS, not the stale
+        // sentinel, and must include the highlight-layer rules.
+        let css = get_css_artifact(&ctx);
+        assert_ne!(
+            css, STALE,
+            "stage must not serve stale CSS after a Rust-side change",
+        );
+        assert!(
+            css.contains(".hl-keyword"),
+            "recompiled default CSS must include .hl-* rules from highlight.scss",
+        );
+
+        // Version sentinel was rewritten to the current build-id.
+        let version =
+            pollster::block_on(runtime.cache_get("sass", quarto_system_runtime::CACHE_VERSION_KEY))
+                .unwrap();
+        assert_eq!(
+            version.as_deref(),
+            Some(quarto_sass::CSS_BUILD_ID.as_bytes()),
+            "generational purge must rewrite the sentinel to the current CSS_BUILD_ID",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stale_generation_purges_old_default_entry() {
+        // If a stored cache entry was produced for a different SCSS
+        // generation (e.g., we bumped Bootstrap), the generational purge
+        // must clear it on first use.
+        let temp = tempfile::TempDir::new().unwrap();
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(
+            quarto_system_runtime::NativeRuntime::with_cache_dir(temp.path().to_path_buf()),
+        );
+
+        // Seed with a stale version + a leftover stale entry.
+        pollster::block_on(runtime.cache_set(
+            "sass",
+            quarto_system_runtime::CACHE_VERSION_KEY,
+            b"stale-hash-from-an-older-quarto",
+        ))
+        .unwrap();
+        pollster::block_on(runtime.cache_set(
+            "sass",
+            DEFAULT_CACHE_KEY_MINIFIED,
+            b"/* stale css */",
+        ))
+        .unwrap();
+
+        let mut ctx = make_stage_context(runtime.clone());
+        let stage = CompileThemeCssStage::new();
+        stage
+            .run(make_doc_ast(empty_meta()), &mut ctx)
+            .await
+            .unwrap();
+
+        // The stored CSS must NOT be the stale sentinel — the stage had to
+        // recompile after the purge cleared it.
+        let css = get_css_artifact(&ctx);
+        assert_ne!(css, "/* stale css */");
+        // Fresh compile produces real Bootstrap CSS.
+        assert!(css.contains(".navbar"));
+        // And the version sentinel was rewritten to the current hash.
+        let version =
+            pollster::block_on(runtime.cache_get("sass", quarto_system_runtime::CACHE_VERSION_KEY))
+                .unwrap();
+        assert_eq!(
+            version.as_deref(),
+            Some(quarto_sass::CSS_BUILD_ID.as_bytes())
+        );
+    }
+
+    #[tokio::test]
     async fn test_invalid_theme_falls_back_to_default() {
         let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
             Arc::new(quarto_system_runtime::NativeRuntime::new());
@@ -607,8 +975,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_null_theme_uses_default_css() {
-        let runtime = Arc::new(MockRuntime);
+    async fn test_null_theme_compiles_default_bootstrap() {
+        // `theme: null` is treated identically to "theme absent": compile
+        // the default Bootstrap + Quarto layer. (Historically this test
+        // paired with MockRuntime and relied on compilation-failure fallback
+        // producing DEFAULT_CSS; after the Q1-parity change it asserts the
+        // real behavior on a real runtime.)
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
         let mut ctx = make_stage_context(runtime);
         let stage = CompileThemeCssStage::new();
 
@@ -633,7 +1007,14 @@ mod tests {
         stage.run(input, &mut ctx).await.unwrap();
 
         let css = get_css_artifact(&ctx);
-        assert_eq!(css, DEFAULT_CSS);
+        assert_ne!(
+            css, DEFAULT_CSS,
+            "null theme must compile default Bootstrap, not fall through to static CSS"
+        );
+        assert!(
+            css.contains(".navbar"),
+            "null-theme compiled CSS should include Bootstrap .navbar"
+        );
     }
 
     /// Helper to create a theme array metadata (e.g., `theme: [cosmo, custom.scss]`)
@@ -738,6 +1119,7 @@ mod tests {
         ThemeConfig {
             themes: vec![spec],
             minified,
+            suppress_bootstrap: false,
         }
     }
 
@@ -745,6 +1127,7 @@ mod tests {
         ThemeConfig {
             themes: vec![ThemeSpec::Custom(PathBuf::from(path))],
             minified,
+            suppress_bootstrap: false,
         }
     }
 

@@ -16,6 +16,7 @@ The features documented here are currently under development. The syntax and beh
 - [Footnotes](footnotes.qmd) - Add footnotes with inline or fenced block syntax
 - [Lists](lists.qmd) - Empty list items require special `[]` syntax
 - [YAML Metadata](yaml-metadata.qmd) - Control markdown parsing in metadata with YAML tags
+- [Custom syntax highlighting via Lua filters](highlighting-filter.qmd) - Write a filter that emits `data-hl-spans` for languages or patterns the built-in tree-sitter grammars don't cover
 
 ## Advanced Topics
 

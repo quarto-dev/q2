@@ -36,8 +36,6 @@ struct CodeBlock {
     language: String,
     /// The code content.
     code: String,
-    /// The full original fence (for preservation).
-    original: String,
 }
 
 /// Execute code blocks in QMD input and return markdown with outputs.
@@ -81,14 +79,16 @@ fn map_language_to_kernel(language: &str) -> String {
 /// Parse code blocks from markdown input.
 ///
 /// Finds all fenced code blocks with executable language specifiers
-/// like ```{python}, ```{julia}, etc.
+/// of the form ```` ```{lang} ```` (e.g. `{python}`, `{julia}`).
+///
+/// Quarto 2 is strict: only a bare `{lang}` is accepted. The Quarto 1
+/// variant `{python echo=false}` (fence-attached options) is not
+/// supported — per-cell directives live inside the block as
+/// `#| key: value` YAML comments. Dropping fence-attached options
+/// keeps the tree-sitter grammar for qmd tractable.
 fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
-    // Match ```{language} ... ``` blocks
-    // The pattern captures:
-    // - Opening fence with {language} specifier
-    // - Code content
-    // - Closing fence
-    let pattern = r"(?m)^```\s*\{(\w+)(?:[^}]*)?\}\s*\n([\s\S]*?)^```\s*$";
+    // Match ```{language} ... ``` blocks (no fence options allowed).
+    let pattern = r"(?m)^```\s*\{(\w+)\}\s*\n([\s\S]*?)^```\s*$";
     let re = Regex::new(pattern).expect("Invalid regex pattern");
 
     let mut blocks = Vec::new();
@@ -105,7 +105,6 @@ fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
                 end: full_match.end(),
                 language,
                 code,
-                original: full_match.as_str().to_string(),
             });
         }
     }
@@ -177,8 +176,11 @@ async fn execute_blocks_inner(
         // Append content before this block
         output.push_str(&input[last_end..block.start]);
 
-        // Keep the original code block
-        output.push_str(&block.original);
+        // Echo the cell source as a *non-executable* fenced block.
+        // The `{lang}` fence carries execution semantics (the engine
+        // just ran it); after execution the echoed source should
+        // render as plain code so the highlight stage picks it up.
+        output.push_str(&echoed_source_fence(block));
         output.push('\n');
 
         // Execute the code
@@ -200,6 +202,24 @@ async fn execute_blocks_inner(
     output.push_str(&input[last_end..]);
 
     Ok(ExecuteResult::new(output))
+}
+
+/// Reconstruct the echoed source fence for an executed cell.
+///
+/// The parser captures code cells with a `{lang}` fence (the curly
+/// braces mean "the engine should execute this"). After the engine
+/// runs, we emit the source back into the output markdown so readers
+/// see it — but at that point the braces are misleading: the block is
+/// no longer scheduled for execution, and downstream stages treat
+/// `{lang}` as an opaque class (no highlighting, no language awareness).
+///
+/// Strip the braces; keep just the language and the code. Per-cell
+/// directives like `#| echo: false` travel inside `block.code` and are
+/// handled by whatever stage consumes them — this function only
+/// rewrites the fence.
+fn echoed_source_fence(block: &CodeBlock) -> String {
+    let code = block.code.trim_end_matches('\n');
+    format!("```{}\n{}\n```", block.language, code)
 }
 
 /// Format kernel outputs as markdown.
@@ -319,7 +339,10 @@ print(x)
     }
 
     #[test]
-    fn test_parse_code_blocks_with_options() {
+    fn test_parse_code_blocks_rejects_fence_options() {
+        // Q2 doesn't accept Q1-style fence options like
+        // `{python echo=false}`. Per-cell directives go inside the
+        // block as `#| echo: false` YAML comments.
         let input = r#"
 ```{python echo=false}
 print("hello")
@@ -327,8 +350,10 @@ print("hello")
 "#;
 
         let blocks = parse_code_blocks(input);
-        assert_eq!(blocks.len(), 1);
-        assert_eq!(blocks[0].language, "python");
+        assert!(
+            blocks.is_empty(),
+            "Q1-style fence options must not be recognized as an executable cell"
+        );
     }
 
     #[test]
@@ -379,6 +404,20 @@ print("hello")
         assert!(is_executable_language("js"));
         assert!(!is_executable_language("json"));
         assert!(!is_executable_language("markdown"));
+    }
+
+    #[test]
+    fn test_echoed_source_fence_strips_braces() {
+        // `{python}` fence means "execute"; after execution the echoed
+        // source must come back as a plain `python` fence so the
+        // highlight stage can pick it up.
+        let block = CodeBlock {
+            start: 0,
+            end: 0,
+            language: "python".to_string(),
+            code: "print(\"hi\")\n".to_string(),
+        };
+        assert_eq!(echoed_source_fence(&block), "```python\nprint(\"hi\")\n```");
     }
 
     #[test]

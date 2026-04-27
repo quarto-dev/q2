@@ -14,6 +14,16 @@
 #[cfg(target_arch = "wasm32")]
 pub mod c_shim;
 
+/// Sentinel panic payload raised by `c_shim::rust_lua_throw`.
+///
+/// On wasm32 Lua's `LUAI_THROW` macro cannot use `setjmp`/`longjmp`, so
+/// it is rewired to raise a Rust panic that `rust_lua_protected_call`
+/// catches via `catch_unwind`. This happens on every Lua runtime error —
+/// including ones caught by `pcall` — so the panic is expected control
+/// flow. The `init()` panic hook filters panics carrying this payload
+/// so they do not spam `console.error` with stack traces.
+pub struct LuaThrow;
+
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
@@ -93,8 +103,20 @@ fn populate_dir_recursive(runtime: &WasmRuntime, dir: &include_dir::Dir<'_>, pre
 
 #[wasm_bindgen(start)]
 pub fn init() {
-    // Set up panic hook for better error messages in browser console
+    // Install console_error_panic_hook as the base, then wrap it to
+    // filter out expected Lua control-flow panics (see `LuaThrow` above).
+    // Without this wrapper, every pcall-caught Lua error would leave a
+    // full panic stack trace in console.error.
+    //
+    // See claude-notes/plans/2026-04-16-suppress-lua-panic-noise.md
     console_error_panic_hook::set_once();
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if info.payload().downcast_ref::<LuaThrow>().is_some() {
+            return;
+        }
+        default_hook(info);
+    }));
 }
 
 /// Basic unwind test — no Lua, just catch_unwind.
@@ -120,6 +142,139 @@ pub fn test_lua(script: &str) -> String {
 #[wasm_bindgen]
 pub async fn test_lua_async() -> String {
     pampa::lua_wasm_async_test().await
+}
+
+/// Test entry point for Phase 3 of syntax highlighting — consumed by
+/// `hub-client/tests/wasm-highlight.vitest.ts`. Not used in production.
+///
+/// Calls through to `quarto_highlight::highlight()`, which is the same
+/// `Registry::global().highlight()` → `tree_sitter_highlight::Highlighter`
+/// path the native CLI uses. The return value is the JSON triple-array
+/// encoding that ends up in the `data-hl-spans` attribute, so if this
+/// matches the native golden output for the same `(class, source)`
+/// input, the native and WASM highlight paths are equivalent.
+///
+/// Returns:
+///   - `Ok(Some(json))` when the class resolves to a built-in grammar
+///     and highlighting succeeds;
+///   - `Ok(None)` when the class is not registered (matches native
+///     fall-through behavior);
+///   - `Err(msg)` if the underlying Highlighter errored — propagated
+///     back to JS as a thrown exception via wasm-bindgen.
+#[wasm_bindgen]
+pub fn quarto_highlight_for_test(
+    language_class: &str,
+    source: &str,
+) -> Result<Option<String>, JsValue> {
+    quarto_highlight::highlight(language_class, source)
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+// ============================================================================
+// USER-GRAMMAR BRIDGE (Phase 4.3)
+// ============================================================================
+
+/// JS-interop user-grammar provider. JS constructs one of these via
+/// `new JsUserGrammars()`, registers highlight callbacks per language
+/// class via `register(class, fn)`, and hands the handle to
+/// `render_qmd` (or the test-only `quarto_highlight_with_user_for_test`).
+///
+/// The registered callback has signature
+///   `(class: string, source: string) => string | null | undefined`
+/// where the return value is either the JSON triple-array encoding
+/// expected in `data-hl-spans` or a nullish value meaning "no spans to
+/// emit for this input" (maps to `Ok(None)` on the Rust side).
+#[wasm_bindgen]
+pub struct JsUserGrammars {
+    grammars: std::collections::HashMap<String, js_sys::Function>,
+}
+
+#[wasm_bindgen]
+impl JsUserGrammars {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> JsUserGrammars {
+        JsUserGrammars {
+            grammars: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Register a highlight callback for a given language class. If a
+    /// callback was already registered for `language_class`, it is
+    /// replaced — this matches the "user grammar wins on collision"
+    /// semantics of the native loader.
+    pub fn register(&mut self, language_class: &str, highlight_fn: js_sys::Function) {
+        self.grammars
+            .insert(language_class.to_string(), highlight_fn);
+    }
+}
+
+impl Default for JsUserGrammars {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl quarto_highlight::UserGrammarProvider for JsUserGrammars {
+    fn contains(&self, class: &str) -> bool {
+        self.grammars.contains_key(class)
+    }
+
+    fn highlight(
+        &mut self,
+        class: &str,
+        source: &str,
+    ) -> Result<Option<String>, quarto_highlight::HighlightError> {
+        let Some(func) = self.grammars.get(class) else {
+            return Ok(None);
+        };
+        let this = JsValue::NULL;
+        let result = func
+            .call2(&this, &JsValue::from_str(class), &JsValue::from_str(source))
+            .map_err(|e| {
+                // JS exceptions are not convertible to Display directly;
+                // extract a reasonable message via JSON.stringify fallback.
+                let msg = js_sys::JSON::stringify(&e)
+                    .map(|s| s.as_string().unwrap_or_else(|| "<unstringifiable>".into()))
+                    .unwrap_or_else(|_| "<unknown JS error>".into());
+                quarto_highlight::HighlightError::Provider(format!(
+                    "JS user-grammar callback for `{}` threw: {}",
+                    class, msg
+                ))
+            })?;
+
+        if result.is_null() || result.is_undefined() {
+            return Ok(None);
+        }
+        match result.as_string() {
+            Some(json) => Ok(Some(json)),
+            None => Err(quarto_highlight::HighlightError::Provider(format!(
+                "JS user-grammar callback for `{}` returned non-string non-null: {:?}",
+                class, result
+            ))),
+        }
+    }
+}
+
+/// Test entry point for Phase 4.3 — consumed by
+/// `hub-client/src/services/userGrammarBridge.wasm.test.ts`.
+///
+/// Calls the bridge's `UserGrammarProvider::highlight` directly. Unlike
+/// the full `render_qmd` path, this does no AST walking — it's the
+/// narrowest verification that the JS callback is invoked correctly
+/// and its return value flows back through wasm-bindgen as expected.
+#[wasm_bindgen]
+pub fn quarto_highlight_with_user_for_test(
+    language_class: &str,
+    source: &str,
+    user: &mut JsUserGrammars,
+) -> Result<Option<String>, JsValue> {
+    use quarto_highlight::UserGrammarProvider;
+    if user.contains(language_class) {
+        user.highlight(language_class, source)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    } else {
+        Ok(None)
+    }
 }
 
 // ============================================================================
@@ -739,11 +894,17 @@ pub async fn parse_qmd_to_ast(content: &str) -> String {
 ///
 /// # Arguments
 /// * `path` - Path to the QMD file in VFS (e.g., "index.qmd")
+/// * `user_grammars` - Optional user-grammar provider. If present, the
+///   render pipeline consults it for any code block whose language class
+///   the provider recognizes, before falling back to built-in grammars.
+///   The value is consumed by this call; JS callers typically construct
+///   a fresh `JsUserGrammars` per render (re-registering from an in-JS
+///   cache of loaded grammars is cheap).
 ///
 /// # Returns
 /// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
-pub async fn render_qmd(path: &str) -> String {
+pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
     let runtime = get_runtime();
     let path = Path::new(path);
 
@@ -803,6 +964,9 @@ pub async fn render_qmd(path: &str) -> String {
     };
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
+    if let Some(provider) = user_grammars {
+        ctx.user_grammar_provider = Some(Box::new(provider));
+    }
 
     // Use the unified async pipeline (same as CLI)
     let config = HtmlRenderConfig::default();
@@ -865,11 +1029,17 @@ pub async fn render_qmd(path: &str) -> String {
 /// # Arguments
 /// * `content` - QMD source text
 /// * `_template_bundle` - Optional template bundle JSON (currently unused, reserved for future use)
+/// * `user_grammars` - Optional user-grammar provider; same semantics as
+///   for [`render_qmd`]. Consumed by the call.
 ///
 /// # Returns
 /// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
-pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
+pub async fn render_qmd_content(
+    content: &str,
+    _template_bundle: &str,
+    user_grammars: Option<JsUserGrammars>,
+) -> String {
     // Create a virtual path for this content
     let path = Path::new("/input.qmd");
 
@@ -901,6 +1071,9 @@ pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String
     };
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
+    if let Some(provider) = user_grammars {
+        ctx.user_grammar_provider = Some(Box::new(provider));
+    }
 
     // Use the unified async pipeline (same as CLI)
     // TODO: Support custom templates via template_bundle parameter

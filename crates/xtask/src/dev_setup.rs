@@ -146,9 +146,66 @@ pub fn run() -> Result<()> {
         println!("Installed {installed} tool(s), {already} already present.");
     }
 
+    check_cmake();
     check_pandoc();
 
     Ok(())
+}
+
+/// Check for cmake (required — `cargo build --workspace` pulls in
+/// wasmtime-c-api-impl transitively via quarto-highlight, and its build.rs
+/// shells out to cmake).
+fn check_cmake() {
+    let Ok(output) = Command::new("cmake").arg("--version").output() else {
+        warn_cmake_missing();
+        return;
+    };
+    if !output.status.success() {
+        warn_cmake_missing();
+        return;
+    }
+
+    let first_line = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .unwrap_or("cmake")
+        .trim()
+        .to_string();
+    println!("\n  {first_line} — detected");
+}
+
+fn warn_cmake_missing() {
+    println!(
+        "\n  Warning: cmake not found. `cargo build --workspace` will fail.\n  \
+         cmake is required transitively by quarto-highlight (wasmtime-c-api-impl).\n  \
+         Install:"
+    );
+    for line in cmake_install_hints() {
+        println!("    {line}");
+    }
+}
+
+/// Platform-specific cmake install commands. Order matters: preferred first.
+fn cmake_install_hints() -> &'static [&'static str] {
+    #[cfg(windows)]
+    {
+        &["scoop install cmake", "winget install Kitware.CMake"]
+    }
+    #[cfg(target_os = "macos")]
+    {
+        &["brew install cmake"]
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        &[
+            "apt install cmake    # Debian/Ubuntu",
+            "dnf install cmake    # Fedora/RHEL",
+        ]
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        &["See https://cmake.org/download/"]
+    }
 }
 
 /// Check for Pandoc 3.6+ (optional — needed only for pampa comparison tests).

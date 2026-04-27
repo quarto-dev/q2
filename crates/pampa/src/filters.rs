@@ -4,7 +4,7 @@
  */
 
 use crate::filter_context::FilterContext;
-use crate::pandoc::{self, AsInline, Block, Blocks, Inline, Inlines, MetaBlock};
+use crate::pandoc::{self, AsInline, Block, Blocks, Inline, InlineAttr, Inlines, MetaBlock};
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 
 // filters are destructive and take ownership of the input
@@ -237,15 +237,14 @@ impl_inline_filterable_terminal!(
     NoteReference
 );
 
-// Attr is special because it has two fields (Attr, AttrSourceInfo)
-// We need a custom impl that preserves attr_source
-// However, filters don't actually work on Attr values directly,
-// so this is just a placeholder that should never be called
-impl InlineFilterableStructure for (pandoc::Attr, crate::pandoc::attr::AttrSourceInfo) {
+// Attr is special — it wraps an InlineAttr struct.
+// Filters don't actually work on Attr values directly,
+// so this is just a placeholder that should never be called.
+impl InlineFilterableStructure for InlineAttr {
     fn filter_structure(self, _: &mut Filter, _ctx: &mut FilterContext) -> Inline {
         // Note: This should not be called in practice because Attr inlines
         // are stripped during postprocessing before filters run
-        Inline::Attr(self.0, self.1)
+        Inline::Attr(self)
     }
 }
 
@@ -600,19 +599,18 @@ pub fn topdown_traverse_inline(
         Inline::NoteReference(note_ref) => {
             handle_inline_filter!(NoteReference, note_ref, note_reference, filter, ctx)
         }
-        Inline::Attr(attr, attr_source) => {
-            // Special handling for Attr since it has two fields and filters don't actually work on Attr tuples
-            // Attr inlines should be stripped during postprocessing before filters run
-            // So this branch should rarely be hit
+        Inline::Attr(inline_attr) => {
+            // Special handling for Attr — filters don't actually work on Attr values.
+            // Attr inlines should be stripped during postprocessing before filters run.
             if let Some(f) = &mut filter.inline {
-                let inline = Inline::Attr(attr, attr_source);
+                let inline = Inline::Attr(inline_attr);
                 match f(inline.clone(), ctx) {
                     FilterReturn::Unchanged(_) => vec![inline],
                     FilterReturn::FilterResult(result, _should_recurse) => result,
                 }
             } else {
                 vec![traverse_inline_structure(
-                    Inline::Attr(attr, attr_source),
+                    Inline::Attr(inline_attr),
                     filter,
                     ctx,
                 )]
@@ -877,7 +875,7 @@ pub fn traverse_inline_structure(
         // extensions
         Inline::Shortcode(_) => inline,
         Inline::NoteReference(_) => inline,
-        Inline::Attr(_, _) => inline,
+        Inline::Attr(_) => inline,
         _ => traverse_inline_nonterminal(inline, filter, ctx),
     }
 }
@@ -1502,20 +1500,20 @@ mod tests {
         let mut filter =
             Filter::new().with_inlines(|inlines, _ctx| FilterReturn::Unchanged(inlines));
         let mut ctx = FilterContext::new();
-        let inline = Inline::Attr(empty_attr(), AttrSourceInfo::empty());
+        let inline = Inline::Attr(InlineAttr::new(empty_attr(), AttrSourceInfo::empty()));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
-        assert!(matches!(result[0], Inline::Attr(_, _)));
+        assert!(matches!(result[0], Inline::Attr(_)));
     }
 
     #[test]
     fn test_traverse_attr_without_filter() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Attr(empty_attr(), AttrSourceInfo::empty());
+        let inline = Inline::Attr(InlineAttr::new(empty_attr(), AttrSourceInfo::empty()));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
-        assert!(matches!(result[0], Inline::Attr(_, _)));
+        assert!(matches!(result[0], Inline::Attr(_)));
     }
 
     // === Tests for block traversal ===
@@ -2122,9 +2120,9 @@ mod tests {
     fn test_inline_filterable_structure_attr() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let attr_tuple = (empty_attr(), AttrSourceInfo::empty());
-        let result = attr_tuple.filter_structure(&mut filter, &mut ctx);
-        assert!(matches!(result, Inline::Attr(_, _)));
+        let inline_attr = InlineAttr::new(empty_attr(), AttrSourceInfo::empty());
+        let result = inline_attr.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Inline::Attr(_)));
     }
 
     // === Tests for BlockFilterableStructure implementations ===

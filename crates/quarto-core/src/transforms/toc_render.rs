@@ -49,6 +49,7 @@ use quarto_source_map::SourceInfo;
 use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
+use crate::transforms::is_feature_disabled;
 
 /// Transform that renders TOC to HTML.
 ///
@@ -76,6 +77,12 @@ impl AstTransform for TocRenderTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+        // Affirmative disable: `toc: false` in merged metadata suppresses
+        // rendering even if `navigation.toc` has been pre-populated.
+        if is_feature_disabled(&ast.meta, "toc") {
+            return Ok(());
+        }
+
         // Skip if already rendered (user provided pre-rendered HTML)
         if ast.meta.contains_path(&["rendered", "navigation", "toc"]) {
             return Ok(());
@@ -440,6 +447,48 @@ mod tests {
         assert!(html.contains("&amp;"));
         assert!(html.contains("&quot;quotes&quot;"));
         assert!(html.contains("intro-with-&lt;script&gt;"));
+    }
+
+    #[tokio::test]
+    async fn test_skips_when_toc_is_false() {
+        // Even if navigation.toc is pre-populated (e.g. by a user setting it
+        // directly in frontmatter, or from an earlier pipeline layer), a
+        // top-level `toc: false` must suppress rendering. This is the
+        // "affirmative disable" semantics shared across toc, navbar, and
+        // page-footer.
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+
+        // Pre-populate navigation.toc (would normally render a TOC).
+        let toc = NavigationToc {
+            title: None,
+            entries: vec![make_toc_entry("intro", "Introduction", 1)],
+        };
+        ast.meta
+            .insert_path(&["navigation", "toc"], toc.to_config_value());
+
+        // And set toc: false at top level.
+        ast.meta.insert_path(
+            &["toc"],
+            ConfigValue::new_scalar(yaml_rust2::Yaml::Boolean(false), dummy_source_info()),
+        );
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TocRenderTransform::new();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
+
+        // Affirmative disable wins: no rendered.navigation.toc.
+        assert!(
+            !ast.meta.contains_path(&["rendered", "navigation", "toc"]),
+            "`toc: false` must suppress rendering even when navigation.toc is pre-populated"
+        );
     }
 
     #[tokio::test]

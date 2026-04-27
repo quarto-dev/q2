@@ -188,51 +188,42 @@ struct SerializableSourcePiece {
 /// the same parent chains (e.g., YAML metadata with siblings).
 struct SourceInfoSerializer<'a> {
     pool: Vec<SerializableSourceInfo>,
-    id_map: HashMap<*const SourceInfo, usize>,
-    // Store clones of SourceInfo for content-based deduplication.
-    // When a clone is created (e.g., in write_config_value for Path), the pointer lookup
-    // will fail, so we fall back to checking content equality against this list.
-    content_map: Vec<(SourceInfo, usize)>,
+    // Dedup cache for `Substring` parent edges, keyed by `Arc::as_ptr(parent)`.
+    // The Arc inside a Substring is owned by AST nodes for the full serialization
+    // lifetime, so its inner address is stable — unlike a raw `*const SourceInfo`
+    // borrowed from a by-value AST field, which is what the previous design cached
+    // and what caused the 2026-01-13 memory-reuse bug.
+    arc_parent_ids: HashMap<*const SourceInfo, usize>,
     context: &'a ASTContext,
     config: &'a JsonConfig,
+    // Diagnostic counters for the intern hotspot (bd-h5l7). Printed on Drop when
+    // QUARTO_PERF_STATS=1. Free when unused.
+    stat_intern_calls: usize,
+    stat_arc_parent_hits: usize,
 }
 
 impl<'a> SourceInfoSerializer<'a> {
     fn new(context: &'a ASTContext, config: &'a JsonConfig) -> Self {
         SourceInfoSerializer {
             pool: Vec::new(),
-            id_map: HashMap::new(),
-            content_map: Vec::new(),
+            arc_parent_ids: HashMap::new(),
             context,
             config,
+            stat_intern_calls: 0,
+            stat_arc_parent_hits: 0,
         }
     }
 
     /// Intern a SourceInfo into the pool, returning its ID.
     ///
-    /// If this SourceInfo (or an Rc-equivalent) has already been interned,
-    /// returns the existing ID. Otherwise, recursively interns parents and
-    /// adds this SourceInfo to the pool with a new ID.
+    /// Each call allocates a fresh pool entry. The one cache, `arc_parent_ids`,
+    /// dedups `Substring` parent Arcs at the recursion edge — the only place
+    /// pointer identity is genuinely stable across calls. Pool entries are not
+    /// deduplicated by content: two structurally-equal SourceInfo values
+    /// arriving through different call sites will get different pool IDs. See
+    /// `claude-notes/plans/2026-04-22-sourceinfo-eq-hotspot.md` for why.
     fn intern(&mut self, source_info: &SourceInfo) -> usize {
-        // For Rc-shared SourceInfo objects, we need to detect if they point to the same
-        // underlying data. We use the data pointer address for this.
-        let ptr = source_info as *const SourceInfo;
-
-        // Check if already interned by pointer
-        if let Some(&id) = self.id_map.get(&ptr) {
-            return id;
-        }
-
-        // Fallback: check for content equality against previously interned SourceInfos.
-        // This handles cases where SourceInfo is cloned (e.g., in write_config_value for Path).
-        // Clones have different addresses but identical content.
-        for (existing, id) in &self.content_map {
-            if existing == source_info {
-                // Cache this pointer for future lookups
-                self.id_map.insert(ptr, *id);
-                return *id;
-            }
-        }
+        self.stat_intern_calls += 1;
 
         // Extract offsets and recursively intern parents to build the serializable mapping
         let (start_offset, end_offset, mapping) = match source_info {
@@ -250,7 +241,18 @@ impl<'a> SourceInfoSerializer<'a> {
                 start_offset,
                 end_offset,
             } => {
-                let parent_id = self.intern(parent);
+                // Dedup the parent edge by Arc identity. `Arc::as_ptr` is stable
+                // for the lifetime of any reference holding the Arc; here the AST
+                // owns the Arc for the whole serialization.
+                let parent_arc_ptr = std::sync::Arc::as_ptr(parent);
+                let parent_id = if let Some(&id) = self.arc_parent_ids.get(&parent_arc_ptr) {
+                    self.stat_arc_parent_hits += 1;
+                    id
+                } else {
+                    let id = self.intern(parent);
+                    self.arc_parent_ids.insert(parent_arc_ptr, id);
+                    id
+                };
                 (
                     *start_offset,
                     *end_offset,
@@ -284,22 +286,13 @@ impl<'a> SourceInfoSerializer<'a> {
             ),
         };
 
-        // Calculate ID after recursion completes
         let id = self.pool.len();
-
-        // Add to pool
         self.pool.push(SerializableSourceInfo {
             id,
             start_offset,
             end_offset,
             mapping,
         });
-
-        // Record this pointer's ID for future lookups
-        self.id_map.insert(ptr, id);
-
-        // Also store a clone for content-based deduplication of future clones
-        self.content_map.push((source_info.clone(), id));
 
         id
     }
@@ -329,6 +322,19 @@ impl<'a> SourceInfoSerializer<'a> {
     }
 }
 
+impl<'a> Drop for SourceInfoSerializer<'a> {
+    fn drop(&mut self) {
+        if std::env::var_os("QUARTO_PERF_STATS").is_some_and(|v| v == "1") {
+            eprintln!(
+                "perf.intern intern_calls={} arc_parent_hits={} pool_size={}",
+                self.stat_intern_calls,
+                self.stat_arc_parent_hits,
+                self.pool.len(),
+            );
+        }
+    }
+}
+
 /// Context for JSON writer containing both source info serialization and error collection.
 ///
 /// This struct combines the SourceInfoSerializer (for building the source info pool)
@@ -337,13 +343,6 @@ impl<'a> SourceInfoSerializer<'a> {
 struct JsonWriterContext<'a> {
     serializer: SourceInfoSerializer<'a>,
     errors: Vec<DiagnosticMessage>,
-    /// Pre-serialized JSON for ConfigValue Path/Glob/Expr variants.
-    /// Keys are pointers to original ConfigValues in the AST; values are already-serialized JSON.
-    /// This prevents memory reuse bugs where temporary Inlines created during serialization
-    /// get dropped and their memory addresses get reused by subsequent allocations.
-    /// By pre-serializing during the precomputation phase, we ensure all SourceInfos from
-    /// these variants are interned first, and we store the resulting JSON for later retrieval.
-    precomputed_json: HashMap<*const ConfigValue, Value>,
 }
 
 impl<'a> JsonWriterContext<'a> {
@@ -351,7 +350,6 @@ impl<'a> JsonWriterContext<'a> {
         JsonWriterContext {
             serializer: SourceInfoSerializer::new(ast_context, config),
             errors: Vec::new(),
-            precomputed_json: HashMap::new(),
         }
     }
 }
@@ -439,217 +437,6 @@ fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
         source_info: SourceInfo::default(),
         attr_source: AttrSourceInfo::empty(),
     })]
-}
-
-/// Walk a ConfigValue and pre-serialize Inlines for Path/Glob/Expr variants.
-///
-/// This function is called at the start of serialization to build all Inlines
-/// upfront, serialize them to JSON (which interns their SourceInfos into the pool),
-/// and store the resulting JSON for later retrieval.
-///
-/// CRITICAL: The `inlines_keeper` parameter collects all temporary Inlines created
-/// during precomputation. These MUST be kept alive until precomputation completes
-/// to prevent memory reuse bugs. Without this, the allocator can reuse a freed
-/// clone's address for a subsequent clone, causing the SourceInfoSerializer's
-/// pointer cache to return incorrect IDs.
-///
-/// See: claude-notes/plans/2026-01-13-precomputation-memory-reuse-bug.md
-fn precompute_config_value_json(
-    config_value: &ConfigValue,
-    ctx: &mut JsonWriterContext,
-    inlines_keeper: &mut Vec<Inlines>,
-) {
-    match &config_value.value {
-        ConfigValueKind::Path(s) => {
-            let inlines = build_path_inlines(s, &config_value.source_info);
-            let json = write_inlines(&inlines, ctx);
-            ctx.precomputed_json
-                .insert(config_value as *const ConfigValue, json);
-            inlines_keeper.push(inlines); // Keep alive until precomputation completes
-        }
-        ConfigValueKind::Glob(s) => {
-            let inlines = build_glob_inlines(s, &config_value.source_info);
-            let json = write_inlines(&inlines, ctx);
-            ctx.precomputed_json
-                .insert(config_value as *const ConfigValue, json);
-            inlines_keeper.push(inlines); // Keep alive until precomputation completes
-        }
-        ConfigValueKind::Expr(s) => {
-            let inlines = build_expr_inlines(s, &config_value.source_info);
-            let json = write_inlines(&inlines, ctx);
-            ctx.precomputed_json
-                .insert(config_value as *const ConfigValue, json);
-            inlines_keeper.push(inlines); // Keep alive until precomputation completes
-        }
-        ConfigValueKind::Map(entries) => {
-            for entry in entries {
-                precompute_config_value_json(&entry.value, ctx, inlines_keeper);
-            }
-        }
-        ConfigValueKind::Array(items) => {
-            for item in items {
-                precompute_config_value_json(item, ctx, inlines_keeper);
-            }
-        }
-        // Other variants don't need pre-computation
-        _ => {}
-    }
-}
-
-/// Walk a Block and pre-serialize JSON for any ConfigValue Path/Glob/Expr variants.
-///
-/// See `precompute_config_value_json` for why `inlines_keeper` is required.
-fn precompute_block_json(
-    block: &Block,
-    ctx: &mut JsonWriterContext,
-    inlines_keeper: &mut Vec<Inlines>,
-) {
-    match block {
-        Block::BlockMetadata(meta) => {
-            precompute_config_value_json(&meta.meta, ctx, inlines_keeper);
-        }
-        // Recursively walk blocks that contain other blocks
-        Block::BlockQuote(bq) => {
-            for b in &bq.content {
-                precompute_block_json(b, ctx, inlines_keeper);
-            }
-        }
-        Block::OrderedList(ol) => {
-            for item in &ol.content {
-                for b in item {
-                    precompute_block_json(b, ctx, inlines_keeper);
-                }
-            }
-        }
-        Block::BulletList(bl) => {
-            for item in &bl.content {
-                for b in item {
-                    precompute_block_json(b, ctx, inlines_keeper);
-                }
-            }
-        }
-        Block::DefinitionList(dl) => {
-            for (_, blocks_list) in &dl.content {
-                for blocks in blocks_list {
-                    for b in blocks {
-                        precompute_block_json(b, ctx, inlines_keeper);
-                    }
-                }
-            }
-        }
-        Block::Div(div) => {
-            for b in &div.content {
-                precompute_block_json(b, ctx, inlines_keeper);
-            }
-        }
-        Block::Figure(fig) => {
-            for b in &fig.content {
-                precompute_block_json(b, ctx, inlines_keeper);
-            }
-        }
-        Block::Table(table) => {
-            // Walk table bodies (head and body rows of each TableBody)
-            for table_body in &table.bodies {
-                for row in &table_body.head {
-                    for cell in &row.cells {
-                        for b in &cell.content {
-                            precompute_block_json(b, ctx, inlines_keeper);
-                        }
-                    }
-                }
-                for row in &table_body.body {
-                    for cell in &row.cells {
-                        for b in &cell.content {
-                            precompute_block_json(b, ctx, inlines_keeper);
-                        }
-                    }
-                }
-            }
-            // Walk table head
-            for row in &table.head.rows {
-                for cell in &row.cells {
-                    for b in &cell.content {
-                        precompute_block_json(b, ctx, inlines_keeper);
-                    }
-                }
-            }
-            // Walk table foot
-            for row in &table.foot.rows {
-                for cell in &row.cells {
-                    for b in &cell.content {
-                        precompute_block_json(b, ctx, inlines_keeper);
-                    }
-                }
-            }
-        }
-        Block::Custom(custom) => {
-            // Walk custom node slots for blocks
-            for slot in custom.slots.values() {
-                match slot {
-                    crate::pandoc::Slot::Block(b) => {
-                        precompute_block_json(b, ctx, inlines_keeper);
-                    }
-                    crate::pandoc::Slot::Blocks(blocks) => {
-                        for b in blocks {
-                            precompute_block_json(b, ctx, inlines_keeper);
-                        }
-                    }
-                    // Inlines don't contain blocks
-                    crate::pandoc::Slot::Inline(_) | crate::pandoc::Slot::Inlines(_) => {}
-                }
-            }
-        }
-        Block::NoteDefinitionFencedBlock(note) => {
-            for b in &note.content {
-                precompute_block_json(b, ctx, inlines_keeper);
-            }
-        }
-        // Leaf blocks that don't contain other blocks
-        Block::Plain(_)
-        | Block::Paragraph(_)
-        | Block::LineBlock(_)
-        | Block::CodeBlock(_)
-        | Block::RawBlock(_)
-        | Block::Header(_)
-        | Block::HorizontalRule(_)
-        | Block::NoteDefinitionPara(_)
-        | Block::CaptionBlock(_) => {}
-    }
-}
-
-/// Pre-serialize all Path/Glob/Expr ConfigValues in the entire Pandoc structure.
-///
-/// This must be called at the start of serialization. It builds temporary Inlines
-/// for Path/Glob/Expr variants, serializes them to JSON (which interns their
-/// SourceInfos into the pool), and stores the resulting JSON for later retrieval.
-///
-/// CRITICAL: All temporary Inlines are kept alive in `inlines_keeper` until this
-/// function returns. This prevents a memory reuse bug where the allocator could
-/// reuse a freed clone's address for a subsequent clone. When that happens, the
-/// SourceInfoSerializer's pointer cache (`id_map`) returns a stale ID for the
-/// new clone, causing incorrect source info references in the output.
-///
-/// The bug manifests as non-deterministic `s` values in the JSON output because
-/// memory reuse depends on allocator state, which varies between runs.
-///
-/// See: claude-notes/plans/2026-01-13-precomputation-memory-reuse-bug.md
-fn precompute_all_json(pandoc: &Pandoc, ctx: &mut JsonWriterContext) {
-    // Keep all temporary Inlines alive until precomputation is complete.
-    // This prevents memory reuse where a dropped clone's address could be
-    // reused by a subsequent clone, causing stale pointer cache hits.
-    let mut inlines_keeper: Vec<Inlines> = Vec::new();
-
-    // Walk top-level metadata
-    precompute_config_value_json(&pandoc.meta, ctx, &mut inlines_keeper);
-
-    // Walk all blocks for BlockMetadata nodes
-    for block in &pandoc.blocks {
-        precompute_block_json(block, ctx, &mut inlines_keeper);
-    }
-
-    // inlines_keeper is dropped here, AFTER all precomputation is done.
-    // At this point, all SourceInfos have been interned and their IDs are
-    // safely stored in precomputed_json. Memory can now be safely reused.
 }
 
 /// Helper to build a node JSON object with type, optional content, and source info.
@@ -976,12 +763,12 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
             let attr = (String::new(), vec!["footnote-ref".to_string()], attr_hash);
             node_with_source("Span", Some(json!([write_attr(&attr), []])), &note_ref.source_info, ctx)
         }
-        Inline::Attr(_attr, attr_source) => {
+        Inline::Attr(inline_attr) => {
             // Defensive: Standalone attributes should not reach JSON writer
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Standalone attribute not supported in JSON format")
                     .with_code("Q-3-32")
-                    .with_location(attr_source.id.clone().unwrap_or_default())
+                    .with_location(inline_attr.attr_source.id.clone().unwrap_or_default())
                     .problem("Cannot render standalone attributes in JSON format")
                     .add_detail("Standalone attributes should be attached to elements during parsing")
                     .add_hint("This may indicate a parsing issue or unsupported syntax")
@@ -1710,17 +1497,21 @@ fn write_config_value(value: &ConfigValue, ctx: &mut JsonWriterContext) -> Value
         ConfigValueKind::PandocBlocks(blocks) => {
             meta_node("MetaBlocks", write_blocks(blocks, ctx), s)
         }
-        // Path/Glob/Expr: retrieve pre-serialized JSON from the precomputation phase.
-        // The Inlines for these variants were built and serialized during precompute_all_json(),
-        // which ensures their SourceInfos are interned before any memory reuse can occur.
-        ConfigValueKind::Path(_) | ConfigValueKind::Glob(_) | ConfigValueKind::Expr(_) => {
-            let ptr = value as *const ConfigValue;
-            let precomputed_content = ctx
-                .precomputed_json
-                .get(&ptr)
-                .expect("Path/Glob/Expr ConfigValue should have precomputed JSON")
-                .clone();
-            meta_node("MetaInlines", precomputed_content, s)
+        // Path/Glob/Expr: synthesize Inlines on the fly and serialize them normally.
+        // The cloned SourceInfo inside the synthesized Str/Span will be interned as
+        // a fresh pool entry, which is fine — the `SourceInfoSerializer` no longer
+        // requires address-stable clones (see bd-h5l7).
+        ConfigValueKind::Path(p) => {
+            let inlines = build_path_inlines(p, &value.source_info);
+            meta_node("MetaInlines", write_inlines(&inlines, ctx), s)
+        }
+        ConfigValueKind::Glob(g) => {
+            let inlines = build_glob_inlines(g, &value.source_info);
+            meta_node("MetaInlines", write_inlines(&inlines, ctx), s)
+        }
+        ConfigValueKind::Expr(e) => {
+            let inlines = build_expr_inlines(e, &value.source_info);
+            meta_node("MetaInlines", write_inlines(&inlines, ctx), s)
         }
         ConfigValueKind::Array(items) => {
             let c: Vec<Value> = items
@@ -1793,16 +1584,6 @@ pub(crate) fn write_pandoc(
     // Create the JSON writer context
     let mut ctx = JsonWriterContext::new(ast_context, config);
 
-    // Pre-serialize all Path/Glob/Expr ConfigValue variants.
-    // This builds temporary Inlines, serializes them to JSON (interning their
-    // SourceInfos into the pool), and stores the resulting JSON for later retrieval.
-    // This prevents memory reuse bugs where temporary Inlines created during
-    // the main serialization pass could have their memory addresses reused by
-    // subsequent allocations, causing the SourceInfoSerializer's pointer cache
-    // to return incorrect IDs.
-    precompute_all_json(pandoc, &mut ctx);
-
-    // Phase 5: Write ConfigValue directly without MetaValueWithSourceInfo conversion
     // Serialize AST, which will build the pool
     let meta_json = write_config_value_as_meta(&pandoc.meta, &mut ctx);
     let blocks_json = write_blocks(&pandoc.blocks, &mut ctx);
@@ -1889,25 +1670,19 @@ pub(crate) fn write_pandoc(
 }
 
 /// Write Pandoc AST to JSON with custom configuration.
+///
+/// Uses the streaming implementation (bd-wgup) that emits bytes directly
+/// without building a `serde_json::Value` intermediate. The legacy
+/// `write_pandoc(...) -> Value` function is retained for HTML writer
+/// consumers that inspect the AST-as-Value for source-map construction.
 pub fn write_with_config<W: std::io::Write>(
     pandoc: &Pandoc,
     context: &ASTContext,
     writer: &mut W,
     config: &JsonConfig,
 ) -> Result<(), Vec<DiagnosticMessage>> {
-    let json = write_pandoc(pandoc, context, config)?;
-    serde_json::to_writer(writer, &json).map_err(|e| {
-        vec![quarto_error_reporting::DiagnosticMessage {
-            code: Some("Q-3-38".to_string()),
-            title: "JSON serialization failed".to_string(),
-            kind: quarto_error_reporting::DiagnosticKind::Error,
-            problem: Some(format!("Failed to serialize AST to JSON: {}", e).into()),
-            details: vec![],
-            hints: vec![],
-            location: None,
-        }]
-    })?;
-    Ok(())
+    let mut stream_writer = JsonStreamWriter::new(writer);
+    stream_write_pandoc(&mut stream_writer, pandoc, context, config)
 }
 
 /// Write Pandoc AST to JSON with default configuration.
@@ -1917,6 +1692,1849 @@ pub fn write<W: std::io::Write>(
     writer: &mut W,
 ) -> Result<(), Vec<DiagnosticMessage>> {
     write_with_config(pandoc, context, writer, &JsonConfig::default())
+}
+
+// =============================================================================
+// Streaming implementation (bd-wgup)
+//
+// Emits JSON bytes directly via super::json_stream::JsonStreamWriter without
+// materializing a serde_json::Value tree. This is the hub-client hot path
+// (parse_qmd_to_ast -> pampa::writers::json::write_with_config); the legacy
+// Value-returning functions above remain for HTML writer callers that still
+// consume a Value for source-map construction.
+//
+// All object keys are emitted in alphabetical order (deterministic), which may
+// differ from the legacy serializer's key order in edge cases but preserves
+// structural JSON-value equality. See
+// claude-notes/plans/2026-04-22-serde-json-value-intermediate.md.
+// =============================================================================
+
+use super::json_stream::JsonStreamWriter;
+use std::io;
+
+/// Intern `source_info` into the pool and emit its u64 id as the current value.
+#[inline]
+fn stream_source_ref<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    ctx: &mut JsonWriterContext,
+    source_info: &SourceInfo,
+) -> io::Result<()> {
+    let id = ctx.serializer.intern(source_info);
+    w.u64_value(id as u64)
+}
+
+/// Emit `null` if opt is None, otherwise intern the SourceInfo and emit its id.
+#[inline]
+fn stream_opt_source_ref<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    ctx: &mut JsonWriterContext,
+    opt: Option<&SourceInfo>,
+) -> io::Result<()> {
+    match opt {
+        Some(si) => stream_source_ref(w, ctx, si),
+        None => w.null_value(),
+    }
+}
+
+/// Emit the resolved location object `{b, e, f}` (each of b/e is `{c, l, o}`).
+/// Returns Ok(true) if emitted, Ok(false) if the source info couldn't be mapped
+/// (in which case the caller should not have emitted an "l" key).
+fn stream_write_location<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    source_info: &SourceInfo,
+    context: &ASTContext,
+) -> io::Result<bool> {
+    let Some((start_mapped, end_mapped)) =
+        source_info.map_range(0, source_info.length(), &context.source_context)
+    else {
+        return Ok(false);
+    };
+    w.begin_object()?;
+    w.key("b")?;
+    w.begin_object()?;
+    w.key("c")?;
+    w.u64_value((start_mapped.location.column + 1) as u64)?;
+    w.key("l")?;
+    w.u64_value((start_mapped.location.row + 1) as u64)?;
+    w.key("o")?;
+    w.u64_value(start_mapped.location.offset as u64)?;
+    w.end_object()?;
+    w.key("e")?;
+    w.begin_object()?;
+    w.key("c")?;
+    w.u64_value((end_mapped.location.column + 1) as u64)?;
+    w.key("l")?;
+    w.u64_value((end_mapped.location.row + 1) as u64)?;
+    w.key("o")?;
+    w.u64_value(end_mapped.location.offset as u64)?;
+    w.end_object()?;
+    w.key("f")?;
+    w.u64_value(start_mapped.file_id.0 as u64)?;
+    w.end_object()?;
+    Ok(true)
+}
+
+/// Emit `attr` as `[id, [classes...], [[k, v]...]]`.
+fn stream_write_attr<W: io::Write>(w: &mut JsonStreamWriter<W>, attr: &Attr) -> io::Result<()> {
+    w.begin_array()?;
+    w.str_value(&attr.0)?;
+    w.begin_array()?;
+    for cls in &attr.1 {
+        w.str_value(cls)?;
+    }
+    w.end_array()?;
+    w.begin_array()?;
+    for (k, v) in &attr.2 {
+        w.begin_array()?;
+        w.str_value(k)?;
+        w.str_value(v)?;
+        w.end_array()?;
+    }
+    w.end_array()?;
+    w.end_array()?;
+    Ok(())
+}
+
+/// Emit AttrSourceInfo as `{classes: [id?...], id: id?, kvs: [[id?, id?]...]}`.
+fn stream_write_attr_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    attr_source: &AttrSourceInfo,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("classes")?;
+    w.begin_array()?;
+    for cls in &attr_source.classes {
+        stream_opt_source_ref(w, ctx, cls.as_ref())?;
+    }
+    w.end_array()?;
+    w.key("id")?;
+    stream_opt_source_ref(w, ctx, attr_source.id.as_ref())?;
+    w.key("kvs")?;
+    w.begin_array()?;
+    for (k, v) in &attr_source.attributes {
+        w.begin_array()?;
+        stream_opt_source_ref(w, ctx, k.as_ref())?;
+        stream_opt_source_ref(w, ctx, v.as_ref())?;
+        w.end_array()?;
+    }
+    w.end_array()?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// Emit TargetSourceInfo as `[url_id?, title_id?]`.
+fn stream_write_target_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    target_source: &TargetSourceInfo,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    stream_opt_source_ref(w, ctx, target_source.url.as_ref())?;
+    stream_opt_source_ref(w, ctx, target_source.title.as_ref())?;
+    w.end_array()?;
+    Ok(())
+}
+
+/// Emit a CitationMode tag as `{"t": "..."}`.
+fn stream_write_citation_mode<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    mode: &CitationMode,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("t")?;
+    w.str_value(match mode {
+        CitationMode::NormalCitation => "NormalCitation",
+        CitationMode::AuthorInText => "AuthorInText",
+        CitationMode::SuppressAuthor => "SuppressAuthor",
+    })?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// Emit ListAttributes as `[start, {"t": style}, {"t": delim}]`.
+fn stream_write_list_attributes<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    attr: &ListAttributes,
+) -> io::Result<()> {
+    use crate::pandoc::{ListNumberDelim, ListNumberStyle};
+    let style = match attr.1 {
+        ListNumberStyle::Decimal => "Decimal",
+        ListNumberStyle::LowerAlpha => "LowerAlpha",
+        ListNumberStyle::UpperAlpha => "UpperAlpha",
+        ListNumberStyle::LowerRoman => "LowerRoman",
+        ListNumberStyle::UpperRoman => "UpperRoman",
+        ListNumberStyle::Example => "Example",
+        ListNumberStyle::Default => "Default",
+    };
+    let delim = match attr.2 {
+        ListNumberDelim::Period => "Period",
+        ListNumberDelim::OneParen => "OneParen",
+        ListNumberDelim::TwoParens => "TwoParens",
+        ListNumberDelim::Default => "Default",
+    };
+    w.begin_array()?;
+    w.u64_value(attr.0 as u64)?;
+    w.begin_object()?;
+    w.key("t")?;
+    w.str_value(style)?;
+    w.end_object()?;
+    w.begin_object()?;
+    w.key("t")?;
+    w.str_value(delim)?;
+    w.end_object()?;
+    w.end_array()?;
+    Ok(())
+}
+
+fn stream_write_alignment<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    alignment: &crate::pandoc::table::Alignment,
+) -> io::Result<()> {
+    use crate::pandoc::table::Alignment;
+    w.begin_object()?;
+    w.key("t")?;
+    w.str_value(match alignment {
+        Alignment::Left => "AlignLeft",
+        Alignment::Center => "AlignCenter",
+        Alignment::Right => "AlignRight",
+        Alignment::Default => "AlignDefault",
+    })?;
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_colwidth<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    colwidth: &crate::pandoc::table::ColWidth,
+) -> io::Result<()> {
+    use crate::pandoc::table::ColWidth;
+    w.begin_object()?;
+    match colwidth {
+        ColWidth::Default => {
+            w.key("t")?;
+            w.str_value("ColWidthDefault")?;
+        }
+        ColWidth::Percentage(p) => {
+            w.key("c")?;
+            w.f64_value(*p)?;
+            w.key("t")?;
+            w.str_value("ColWidth")?;
+        }
+    }
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_colspec<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    colspec: &crate::pandoc::table::ColSpec,
+) -> io::Result<()> {
+    w.begin_array()?;
+    stream_write_alignment(w, &colspec.0)?;
+    stream_write_colwidth(w, &colspec.1)?;
+    w.end_array()?;
+    Ok(())
+}
+
+/// Emit a simple node `{c, l?, s, t}` where `s` is the interned source id.
+/// Alphabetical key order. `content` is invoked to emit the `c` value.
+fn stream_write_simple_node<W: io::Write, F>(
+    w: &mut JsonStreamWriter<W>,
+    type_name: &str,
+    source_info: &SourceInfo,
+    ctx: &mut JsonWriterContext,
+    content: F,
+) -> io::Result<()>
+where
+    F: FnOnce(&mut JsonStreamWriter<W>, &mut JsonWriterContext) -> io::Result<()>,
+{
+    let s_id = ctx.serializer.intern(source_info);
+    w.begin_object()?;
+    w.key("c")?;
+    content(w, ctx)?;
+    if ctx.serializer.config.include_inline_locations {
+        let ast_context = ctx.serializer.context;
+        stream_write_location_key_if_mapped(w, "l", source_info, ast_context)?;
+    }
+    w.key("s")?;
+    w.u64_value(s_id as u64)?;
+    w.key("t")?;
+    w.str_value(type_name)?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// Emit a simple node without a `c` field: `{l?, s, t}`.
+fn stream_write_simple_node_no_content<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    type_name: &str,
+    source_info: &SourceInfo,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    let s_id = ctx.serializer.intern(source_info);
+    w.begin_object()?;
+    if ctx.serializer.config.include_inline_locations {
+        let ast_context = ctx.serializer.context;
+        stream_write_location_key_if_mapped(w, "l", source_info, ast_context)?;
+    }
+    w.key("s")?;
+    w.u64_value(s_id as u64)?;
+    w.key("t")?;
+    w.str_value(type_name)?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// If `source_info` can be mapped, emit `<key>: {b, e, f}` into the current object.
+/// Returns whether the key was emitted. Caller must be inside an object.
+fn stream_write_location_key_if_mapped<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    key: &str,
+    source_info: &SourceInfo,
+    context: &ASTContext,
+) -> io::Result<bool> {
+    let Some((start_mapped, end_mapped)) =
+        source_info.map_range(0, source_info.length(), &context.source_context)
+    else {
+        return Ok(false);
+    };
+    w.key(key)?;
+    w.begin_object()?;
+    w.key("b")?;
+    w.begin_object()?;
+    w.key("c")?;
+    w.u64_value((start_mapped.location.column + 1) as u64)?;
+    w.key("l")?;
+    w.u64_value((start_mapped.location.row + 1) as u64)?;
+    w.key("o")?;
+    w.u64_value(start_mapped.location.offset as u64)?;
+    w.end_object()?;
+    w.key("e")?;
+    w.begin_object()?;
+    w.key("c")?;
+    w.u64_value((end_mapped.location.column + 1) as u64)?;
+    w.key("l")?;
+    w.u64_value((end_mapped.location.row + 1) as u64)?;
+    w.key("o")?;
+    w.u64_value(end_mapped.location.offset as u64)?;
+    w.end_object()?;
+    w.key("f")?;
+    w.u64_value(start_mapped.file_id.0 as u64)?;
+    w.end_object()?;
+    Ok(true)
+}
+
+/// Emit a node with attrS: `{attrS, c, l?, s, t}`. Alphabetical.
+fn stream_write_attrs_node<W: io::Write, FC>(
+    w: &mut JsonStreamWriter<W>,
+    type_name: &str,
+    source_info: &SourceInfo,
+    attr_source: &AttrSourceInfo,
+    ctx: &mut JsonWriterContext,
+    content: FC,
+) -> io::Result<()>
+where
+    FC: FnOnce(&mut JsonStreamWriter<W>, &mut JsonWriterContext) -> io::Result<()>,
+{
+    let s_id = ctx.serializer.intern(source_info);
+    w.begin_object()?;
+    w.key("attrS")?;
+    stream_write_attr_source(w, attr_source, ctx)?;
+    w.key("c")?;
+    content(w, ctx)?;
+    if ctx.serializer.config.include_inline_locations {
+        let ast_context = ctx.serializer.context;
+        stream_write_location_key_if_mapped(w, "l", source_info, ast_context)?;
+    }
+    w.key("s")?;
+    w.u64_value(s_id as u64)?;
+    w.key("t")?;
+    w.str_value(type_name)?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// Emit an Inlines array: `[<inline>...]`.
+fn stream_write_inlines<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    inlines: &Inlines,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    for inline in inlines {
+        stream_write_inline(w, inline, ctx)?;
+    }
+    w.end_array()?;
+    Ok(())
+}
+
+/// Emit a Blocks array: `[<block>...]`.
+fn stream_write_blocks<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    blocks: &[Block],
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    for block in blocks {
+        stream_write_block(w, block, ctx)?;
+    }
+    w.end_array()?;
+    Ok(())
+}
+
+/// Emit a `[[Block]...]` (list of block groups — used by ordered/bullet/definition lists).
+fn stream_write_blockss<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    blockss: &[Vec<Block>],
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    for blocks in blockss {
+        stream_write_blocks(w, blocks, ctx)?;
+    }
+    w.end_array()?;
+    Ok(())
+}
+
+/// Emit Caption as `[short?, long]` where long is `[]` if missing.
+fn stream_write_caption<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    caption: &Caption,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    match caption.short.as_ref() {
+        Some(inlines) => stream_write_inlines(w, inlines, ctx)?,
+        None => w.null_value()?,
+    }
+    match caption.long.as_ref() {
+        Some(blocks) => stream_write_blocks(w, blocks, ctx)?,
+        None => {
+            w.begin_array()?;
+            w.end_array()?;
+        }
+    }
+    w.end_array()?;
+    Ok(())
+}
+
+fn stream_write_caption_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    caption: &Caption,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    stream_source_ref(w, ctx, &caption.source_info)
+}
+
+fn stream_write_cell<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    cell: &crate::pandoc::table::Cell,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    stream_write_attr(w, &cell.attr)?;
+    stream_write_alignment(w, &cell.alignment)?;
+    w.u64_value(cell.row_span as u64)?;
+    w.u64_value(cell.col_span as u64)?;
+    stream_write_blocks(w, &cell.content, ctx)?;
+    w.end_array()?;
+    Ok(())
+}
+
+fn stream_write_cell_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    cell: &crate::pandoc::table::Cell,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("attrS")?;
+    stream_write_attr_source(w, &cell.attr_source, ctx)?;
+    w.key("s")?;
+    stream_source_ref(w, ctx, &cell.source_info)?;
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_row<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    row: &crate::pandoc::table::Row,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    stream_write_attr(w, &row.attr)?;
+    w.begin_array()?;
+    for cell in &row.cells {
+        stream_write_cell(w, cell, ctx)?;
+    }
+    w.end_array()?;
+    w.end_array()?;
+    Ok(())
+}
+
+fn stream_write_row_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    row: &crate::pandoc::table::Row,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("attrS")?;
+    stream_write_attr_source(w, &row.attr_source, ctx)?;
+    w.key("cellsS")?;
+    w.begin_array()?;
+    for cell in &row.cells {
+        stream_write_cell_source(w, cell, ctx)?;
+    }
+    w.end_array()?;
+    w.key("s")?;
+    stream_source_ref(w, ctx, &row.source_info)?;
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_table_head<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    head: &crate::pandoc::table::TableHead,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    stream_write_attr(w, &head.attr)?;
+    w.begin_array()?;
+    for row in &head.rows {
+        stream_write_row(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.end_array()?;
+    Ok(())
+}
+
+fn stream_write_table_head_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    head: &crate::pandoc::table::TableHead,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("attrS")?;
+    stream_write_attr_source(w, &head.attr_source, ctx)?;
+    w.key("rowsS")?;
+    w.begin_array()?;
+    for row in &head.rows {
+        stream_write_row_source(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.key("s")?;
+    stream_source_ref(w, ctx, &head.source_info)?;
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_table_body<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    body: &crate::pandoc::table::TableBody,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    stream_write_attr(w, &body.attr)?;
+    w.u64_value(body.rowhead_columns as u64)?;
+    w.begin_array()?;
+    for row in &body.head {
+        stream_write_row(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.begin_array()?;
+    for row in &body.body {
+        stream_write_row(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.end_array()?;
+    Ok(())
+}
+
+fn stream_write_table_body_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    body: &crate::pandoc::table::TableBody,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("attrS")?;
+    stream_write_attr_source(w, &body.attr_source, ctx)?;
+    w.key("bodyS")?;
+    w.begin_array()?;
+    for row in &body.body {
+        stream_write_row_source(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.key("headS")?;
+    w.begin_array()?;
+    for row in &body.head {
+        stream_write_row_source(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.key("s")?;
+    stream_source_ref(w, ctx, &body.source_info)?;
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_table_foot<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    foot: &crate::pandoc::table::TableFoot,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    stream_write_attr(w, &foot.attr)?;
+    w.begin_array()?;
+    for row in &foot.rows {
+        stream_write_row(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.end_array()?;
+    Ok(())
+}
+
+fn stream_write_table_foot_source<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    foot: &crate::pandoc::table::TableFoot,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_object()?;
+    w.key("attrS")?;
+    stream_write_attr_source(w, &foot.attr_source, ctx)?;
+    w.key("rowsS")?;
+    w.begin_array()?;
+    for row in &foot.rows {
+        stream_write_row_source(w, row, ctx)?;
+    }
+    w.end_array()?;
+    w.key("s")?;
+    stream_source_ref(w, ctx, &foot.source_info)?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// Emit an Inline node in compact JSON form.
+fn stream_write_inline<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    inline: &Inline,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    match inline {
+        Inline::Str(s) => stream_write_simple_node(w, "Str", &s.source_info, ctx, |w, _ctx| {
+            w.str_value(&s.text)
+        }),
+        Inline::Space(space) => {
+            stream_write_simple_node_no_content(w, "Space", &space.source_info, ctx)
+        }
+        Inline::LineBreak(lb) => {
+            stream_write_simple_node_no_content(w, "LineBreak", &lb.source_info, ctx)
+        }
+        Inline::SoftBreak(sb) => {
+            stream_write_simple_node_no_content(w, "SoftBreak", &sb.source_info, ctx)
+        }
+        Inline::Emph(e) => stream_write_simple_node(
+            w,
+            "Emph",
+            &e.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &e.content, ctx)
+            },
+        ),
+        Inline::Strong(s) => stream_write_simple_node(
+            w,
+            "Strong",
+            &s.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &s.content, ctx)
+            },
+        ),
+        Inline::Code(c) => {
+            stream_write_attrs_node(w, "Code", &c.source_info, &c.attr_source, ctx, |w, _ctx| {
+                w.begin_array()?;
+                stream_write_attr(w, &c.attr)?;
+                w.str_value(&c.text)?;
+                w.end_array()?;
+                Ok(())
+            })
+        }
+        Inline::Math(m) => stream_write_simple_node(
+            w,
+            "Math",
+            &m.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, _ctx: &mut JsonWriterContext| {
+                use crate::pandoc::MathType;
+                w.begin_array()?;
+                w.begin_object()?;
+                w.key("t")?;
+                w.str_value(match m.math_type {
+                    MathType::InlineMath => "InlineMath",
+                    MathType::DisplayMath => "DisplayMath",
+                })?;
+                w.end_object()?;
+                w.str_value(&m.text)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Inline::Underline(u) => stream_write_simple_node(
+            w,
+            "Underline",
+            &u.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &u.content, ctx)
+            },
+        ),
+        Inline::Strikeout(s) => stream_write_simple_node(
+            w,
+            "Strikeout",
+            &s.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &s.content, ctx)
+            },
+        ),
+        Inline::Superscript(s) => stream_write_simple_node(
+            w,
+            "Superscript",
+            &s.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &s.content, ctx)
+            },
+        ),
+        Inline::Subscript(s) => stream_write_simple_node(
+            w,
+            "Subscript",
+            &s.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &s.content, ctx)
+            },
+        ),
+        Inline::SmallCaps(s) => stream_write_simple_node(
+            w,
+            "SmallCaps",
+            &s.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &s.content, ctx)
+            },
+        ),
+        Inline::Quoted(q) => stream_write_simple_node(
+            w,
+            "Quoted",
+            &q.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                use crate::pandoc::QuoteType;
+                w.begin_array()?;
+                w.begin_object()?;
+                w.key("t")?;
+                w.str_value(match q.quote_type {
+                    QuoteType::SingleQuote => "SingleQuote",
+                    QuoteType::DoubleQuote => "DoubleQuote",
+                })?;
+                w.end_object()?;
+                stream_write_inlines(w, &q.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Inline::Link(link) => {
+            let s_id = ctx.serializer.intern(&link.source_info);
+            w.begin_object()?;
+            w.key("attrS")?;
+            stream_write_attr_source(w, &link.attr_source, ctx)?;
+            w.key("c")?;
+            w.begin_array()?;
+            stream_write_attr(w, &link.attr)?;
+            stream_write_inlines(w, &link.content, ctx)?;
+            w.begin_array()?;
+            w.str_value(&link.target.0)?;
+            w.str_value(&link.target.1)?;
+            w.end_array()?;
+            w.end_array()?;
+            if ctx.serializer.config.include_inline_locations {
+                let ast_context = ctx.serializer.context;
+                stream_write_location_key_if_mapped(w, "l", &link.source_info, ast_context)?;
+            }
+            w.key("s")?;
+            w.u64_value(s_id as u64)?;
+            w.key("t")?;
+            w.str_value("Link")?;
+            w.key("targetS")?;
+            stream_write_target_source(w, &link.target_source, ctx)?;
+            w.end_object()?;
+            Ok(())
+        }
+        Inline::RawInline(raw) => stream_write_simple_node(
+            w,
+            "RawInline",
+            &raw.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, _ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                w.str_value(&raw.format)?;
+                w.str_value(&raw.text)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Inline::Image(image) => {
+            let s_id = ctx.serializer.intern(&image.source_info);
+            w.begin_object()?;
+            w.key("attrS")?;
+            stream_write_attr_source(w, &image.attr_source, ctx)?;
+            w.key("c")?;
+            w.begin_array()?;
+            stream_write_attr(w, &image.attr)?;
+            stream_write_inlines(w, &image.content, ctx)?;
+            w.begin_array()?;
+            w.str_value(&image.target.0)?;
+            w.str_value(&image.target.1)?;
+            w.end_array()?;
+            w.end_array()?;
+            if ctx.serializer.config.include_inline_locations {
+                let ast_context = ctx.serializer.context;
+                stream_write_location_key_if_mapped(w, "l", &image.source_info, ast_context)?;
+            }
+            w.key("s")?;
+            w.u64_value(s_id as u64)?;
+            w.key("t")?;
+            w.str_value("Image")?;
+            w.key("targetS")?;
+            stream_write_target_source(w, &image.target_source, ctx)?;
+            w.end_object()?;
+            Ok(())
+        }
+        Inline::Span(span) => stream_write_attrs_node(
+            w,
+            "Span",
+            &span.source_info,
+            &span.attr_source,
+            ctx,
+            |w, ctx| {
+                w.begin_array()?;
+                stream_write_attr(w, &span.attr)?;
+                stream_write_inlines(w, &span.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Inline::Note(note) => stream_write_simple_node(
+            w,
+            "Note",
+            &note.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_blocks(w, &note.content, ctx)
+            },
+        ),
+        Inline::Cite(cite) => stream_write_simple_node(
+            w,
+            "Cite",
+            &cite.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                w.begin_array()?;
+                for citation in &cite.citations {
+                    w.begin_object()?;
+                    w.key("citationHash")?;
+                    w.u64_value(citation.hash as u64)?;
+                    w.key("citationId")?;
+                    w.str_value(&citation.id)?;
+                    w.key("citationIdS")?;
+                    stream_opt_source_ref(w, ctx, citation.id_source.as_ref())?;
+                    w.key("citationMode")?;
+                    stream_write_citation_mode(w, &citation.mode)?;
+                    w.key("citationNoteNum")?;
+                    w.u64_value(citation.note_num as u64)?;
+                    w.key("citationPrefix")?;
+                    stream_write_inlines(w, &citation.prefix, ctx)?;
+                    w.key("citationSuffix")?;
+                    stream_write_inlines(w, &citation.suffix, ctx)?;
+                    w.end_object()?;
+                }
+                w.end_array()?;
+                stream_write_inlines(w, &cite.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Inline::Shortcode(shortcode) => {
+            let span = shortcode_to_span(shortcode.clone());
+            let attr = (
+                span.attr.0.clone(),
+                span.attr.1.clone(),
+                span.attr.2.clone(),
+            );
+            stream_write_simple_node(
+                w,
+                "Span",
+                &shortcode.source_info,
+                ctx,
+                |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                    w.begin_array()?;
+                    stream_write_attr(w, &attr)?;
+                    stream_write_inlines(w, &span.content, ctx)?;
+                    w.end_array()?;
+                    Ok(())
+                },
+            )
+        }
+        Inline::NoteReference(note_ref) => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed note reference in JSON writer")
+                    .with_code("Q-3-31")
+                    .with_location(note_ref.source_info.clone())
+                    .problem(format!(
+                        "Note reference `[^{}]` was not converted during postprocessing",
+                        note_ref.id
+                    ))
+                    .add_detail("Note references should be processed before JSON output")
+                    .add_hint("This may indicate a bug in the processing pipeline")
+                    .build(),
+            );
+            let mut attr_hash = LinkedHashMap::new();
+            attr_hash.insert("data-ref".to_string(), note_ref.id.clone());
+            let attr = (String::new(), vec!["footnote-ref".to_string()], attr_hash);
+            stream_write_simple_node(
+                w,
+                "Span",
+                &note_ref.source_info,
+                ctx,
+                |w: &mut JsonStreamWriter<W>, _ctx: &mut JsonWriterContext| {
+                    w.begin_array()?;
+                    stream_write_attr(w, &attr)?;
+                    w.begin_array()?;
+                    w.end_array()?;
+                    w.end_array()?;
+                    Ok(())
+                },
+            )
+        }
+        Inline::Attr(inline_attr) => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error(
+                    "Standalone attribute not supported in JSON format",
+                )
+                .with_code("Q-3-32")
+                .with_location(inline_attr.attr_source.id.clone().unwrap_or_default())
+                .problem("Cannot render standalone attributes in JSON format")
+                .add_detail("Standalone attributes should be attached to elements during parsing")
+                .add_hint("This may indicate a parsing issue or unsupported syntax")
+                .build(),
+            );
+            // Placeholder: emit {"c": "", "t": "Str"} (matches the legacy fallback).
+            w.begin_object()?;
+            w.key("c")?;
+            w.str_value("")?;
+            w.key("t")?;
+            w.str_value("Str")?;
+            w.end_object()?;
+            Ok(())
+        }
+        Inline::Insert(ins) => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Insert markup in JSON writer")
+                    .with_code("Q-3-33")
+                    .with_location(ins.source_info.clone())
+                    .problem("Insert markup `{++...++}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build(),
+            );
+            let attr = (
+                String::new(),
+                vec!["critic-insert".to_string()],
+                LinkedHashMap::new(),
+            );
+            stream_write_simple_node(
+                w,
+                "Span",
+                &ins.source_info,
+                ctx,
+                |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                    w.begin_array()?;
+                    stream_write_attr(w, &attr)?;
+                    stream_write_inlines(w, &ins.content, ctx)?;
+                    w.end_array()?;
+                    Ok(())
+                },
+            )
+        }
+        Inline::Delete(del) => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Delete markup in JSON writer")
+                    .with_code("Q-3-34")
+                    .with_location(del.source_info.clone())
+                    .problem("Delete markup `{--...--}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build(),
+            );
+            let attr = (
+                String::new(),
+                vec!["critic-delete".to_string()],
+                LinkedHashMap::new(),
+            );
+            stream_write_simple_node(
+                w,
+                "Span",
+                &del.source_info,
+                ctx,
+                |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                    w.begin_array()?;
+                    stream_write_attr(w, &attr)?;
+                    stream_write_inlines(w, &del.content, ctx)?;
+                    w.end_array()?;
+                    Ok(())
+                },
+            )
+        }
+        Inline::Highlight(hl) => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Highlight markup in JSON writer")
+                    .with_code("Q-3-35")
+                    .with_location(hl.source_info.clone())
+                    .problem("Highlight markup `{==...==}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build(),
+            );
+            let attr = (
+                String::new(),
+                vec!["critic-highlight".to_string()],
+                LinkedHashMap::new(),
+            );
+            stream_write_simple_node(
+                w,
+                "Span",
+                &hl.source_info,
+                ctx,
+                |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                    w.begin_array()?;
+                    stream_write_attr(w, &attr)?;
+                    stream_write_inlines(w, &hl.content, ctx)?;
+                    w.end_array()?;
+                    Ok(())
+                },
+            )
+        }
+        Inline::EditComment(ec) => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed EditComment markup in JSON writer")
+                    .with_code("Q-3-36")
+                    .with_location(ec.source_info.clone())
+                    .problem(
+                        "EditComment markup `{>>...<<}` was not desugared during postprocessing",
+                    )
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build(),
+            );
+            let attr = (
+                String::new(),
+                vec!["critic-comment".to_string()],
+                LinkedHashMap::new(),
+            );
+            stream_write_simple_node(
+                w,
+                "Span",
+                &ec.source_info,
+                ctx,
+                |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                    w.begin_array()?;
+                    stream_write_attr(w, &attr)?;
+                    stream_write_inlines(w, &ec.content, ctx)?;
+                    w.end_array()?;
+                    Ok(())
+                },
+            )
+        }
+        Inline::Custom(custom) => stream_write_custom_inline(w, custom, ctx),
+    }
+}
+
+/// Emit a Block node in compact JSON form.
+fn stream_write_block<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    block: &Block,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    match block {
+        Block::Figure(figure) => stream_write_attrs_node(
+            w,
+            "Figure",
+            &figure.source_info,
+            &figure.attr_source,
+            ctx,
+            |w, ctx| {
+                w.begin_array()?;
+                stream_write_attr(w, &figure.attr)?;
+                stream_write_caption(w, &figure.caption, ctx)?;
+                stream_write_blocks(w, &figure.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::DefinitionList(deflist) => stream_write_simple_node(
+            w,
+            "DefinitionList",
+            &deflist.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                for (term, definition) in &deflist.content {
+                    w.begin_array()?;
+                    stream_write_inlines(w, term, ctx)?;
+                    stream_write_blockss(w, definition, ctx)?;
+                    w.end_array()?;
+                }
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::OrderedList(ol) => stream_write_simple_node(
+            w,
+            "OrderedList",
+            &ol.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                stream_write_list_attributes(w, &ol.attr)?;
+                stream_write_blockss(w, &ol.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::RawBlock(raw) => stream_write_simple_node(
+            w,
+            "RawBlock",
+            &raw.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, _ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                w.str_value(&raw.format)?;
+                w.str_value(&raw.text)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::HorizontalRule(b) => {
+            stream_write_simple_node_no_content(w, "HorizontalRule", &b.source_info, ctx)
+        }
+        Block::Table(table) => {
+            let s_id = ctx.serializer.intern(&table.source_info);
+            w.begin_object()?;
+            w.key("attrS")?;
+            stream_write_attr_source(w, &table.attr_source, ctx)?;
+            w.key("bodiesS")?;
+            w.begin_array()?;
+            for body in &table.bodies {
+                stream_write_table_body_source(w, body, ctx)?;
+            }
+            w.end_array()?;
+            w.key("c")?;
+            w.begin_array()?;
+            stream_write_attr(w, &table.attr)?;
+            stream_write_caption(w, &table.caption, ctx)?;
+            w.begin_array()?;
+            for cs in &table.colspec {
+                stream_write_colspec(w, cs)?;
+            }
+            w.end_array()?;
+            stream_write_table_head(w, &table.head, ctx)?;
+            w.begin_array()?;
+            for body in &table.bodies {
+                stream_write_table_body(w, body, ctx)?;
+            }
+            w.end_array()?;
+            stream_write_table_foot(w, &table.foot, ctx)?;
+            w.end_array()?;
+            w.key("captionS")?;
+            stream_write_caption_source(w, &table.caption, ctx)?;
+            w.key("footS")?;
+            stream_write_table_foot_source(w, &table.foot, ctx)?;
+            w.key("headS")?;
+            stream_write_table_head_source(w, &table.head, ctx)?;
+            if ctx.serializer.config.include_inline_locations {
+                let ast_context = ctx.serializer.context;
+                stream_write_location_key_if_mapped(w, "l", &table.source_info, ast_context)?;
+            }
+            w.key("s")?;
+            w.u64_value(s_id as u64)?;
+            w.key("t")?;
+            w.str_value("Table")?;
+            w.end_object()?;
+            Ok(())
+        }
+        Block::Div(div) => stream_write_attrs_node(
+            w,
+            "Div",
+            &div.source_info,
+            &div.attr_source,
+            ctx,
+            |w, ctx| {
+                w.begin_array()?;
+                stream_write_attr(w, &div.attr)?;
+                stream_write_blocks(w, &div.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::BlockQuote(quote) => stream_write_simple_node(
+            w,
+            "BlockQuote",
+            &quote.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_blocks(w, &quote.content, ctx)
+            },
+        ),
+        Block::LineBlock(lineblock) => stream_write_simple_node(
+            w,
+            "LineBlock",
+            &lineblock.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                for inlines in &lineblock.content {
+                    stream_write_inlines(w, inlines, ctx)?;
+                }
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::Paragraph(p) => stream_write_simple_node(
+            w,
+            "Para",
+            &p.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &p.content, ctx)
+            },
+        ),
+        Block::Header(h) => stream_write_attrs_node(
+            w,
+            "Header",
+            &h.source_info,
+            &h.attr_source,
+            ctx,
+            |w, ctx| {
+                w.begin_array()?;
+                w.u64_value(h.level as u64)?;
+                stream_write_attr(w, &h.attr)?;
+                stream_write_inlines(w, &h.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::CodeBlock(cb) => stream_write_attrs_node(
+            w,
+            "CodeBlock",
+            &cb.source_info,
+            &cb.attr_source,
+            ctx,
+            |w, _ctx| {
+                w.begin_array()?;
+                stream_write_attr(w, &cb.attr)?;
+                w.str_value(&cb.text)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::Plain(plain) => stream_write_simple_node(
+            w,
+            "Plain",
+            &plain.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_inlines(w, &plain.content, ctx)
+            },
+        ),
+        Block::BulletList(bl) => stream_write_simple_node(
+            w,
+            "BulletList",
+            &bl.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_blockss(w, &bl.content, ctx)
+            },
+        ),
+        Block::BlockMetadata(meta) => stream_write_simple_node(
+            w,
+            "BlockMetadata",
+            &meta.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                stream_write_config_value(w, &meta.meta, ctx)
+            },
+        ),
+        Block::NoteDefinitionPara(refdef) => stream_write_simple_node(
+            w,
+            "NoteDefinitionPara",
+            &refdef.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                w.str_value(&refdef.id)?;
+                stream_write_inlines(w, &refdef.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::NoteDefinitionFencedBlock(refdef) => stream_write_simple_node(
+            w,
+            "NoteDefinitionFencedBlock",
+            &refdef.source_info,
+            ctx,
+            |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                w.begin_array()?;
+                w.str_value(&refdef.id)?;
+                stream_write_blocks(w, &refdef.content, ctx)?;
+                w.end_array()?;
+                Ok(())
+            },
+        ),
+        Block::CaptionBlock(caption) => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Orphaned caption block in JSON writer")
+                    .with_code("Q-3-21")
+                    .with_location(caption.source_info.clone())
+                    .problem("Caption block is not attached to a figure or table")
+                    .add_detail(
+                        "Captions should be associated with figures/tables during postprocessing",
+                    )
+                    .add_hint(
+                        "This may indicate a postprocessing issue or filter-generated orphaned caption",
+                    )
+                    .build(),
+            );
+            stream_write_simple_node(
+                w,
+                "Plain",
+                &caption.source_info,
+                ctx,
+                |w: &mut JsonStreamWriter<W>, ctx: &mut JsonWriterContext| {
+                    stream_write_inlines(w, &caption.content, ctx)
+                },
+            )
+        }
+        Block::Custom(custom) => stream_write_custom_block(w, custom, ctx),
+    }
+}
+
+/// Serialize a CustomNode as a wrapper Div with the __quarto_custom_node class.
+fn stream_write_custom_block<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    custom: &crate::pandoc::CustomNode,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    // Build the slot metadata (name -> type mapping)
+    let slot_meta: serde_json::Map<String, Value> = custom
+        .slots
+        .iter()
+        .map(|(name, slot)| {
+            let slot_type = match slot {
+                crate::pandoc::Slot::Block(_) => "Block",
+                crate::pandoc::Slot::Inline(_) => "Inline",
+                crate::pandoc::Slot::Blocks(_) => "Blocks",
+                crate::pandoc::Slot::Inlines(_) => "Inlines",
+            };
+            (name.clone(), json!(slot_type))
+        })
+        .collect();
+
+    let mut wrapper_attr_kvs = custom.attr.2.clone();
+    wrapper_attr_kvs.insert("data-custom-type".to_string(), custom.type_name.clone());
+    wrapper_attr_kvs.insert(
+        "data-custom-slots".to_string(),
+        serde_json::to_string(&slot_meta).unwrap_or_else(|_| "{}".to_string()),
+    );
+    if !custom.plain_data.is_null() {
+        wrapper_attr_kvs.insert(
+            "data-custom-data".to_string(),
+            serde_json::to_string(&custom.plain_data).unwrap_or_else(|_| "null".to_string()),
+        );
+    }
+
+    let mut classes = custom.attr.1.clone();
+    classes.insert(0, "__quarto_custom_node".to_string());
+
+    let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
+
+    let s_id = ctx.serializer.intern(&custom.source_info);
+    w.begin_object()?;
+    w.key("c")?;
+    w.begin_array()?;
+    stream_write_attr(w, &wrapper_attr)?;
+    // content: list of Div-wrapped slots
+    w.begin_array()?;
+    for (name, slot) in &custom.slots {
+        let mut slot_attr_kvs = LinkedHashMap::new();
+        slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
+        let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
+        w.begin_object()?;
+        w.key("c")?;
+        w.begin_array()?;
+        stream_write_attr(w, &slot_wrapper_attr)?;
+        // slot content
+        w.begin_array()?;
+        match slot {
+            crate::pandoc::Slot::Block(block) => {
+                stream_write_block(w, block, ctx)?;
+            }
+            crate::pandoc::Slot::Inline(inline) => {
+                // Wrap in a Plain block: {"t": "Plain", "c": [<inline>]}
+                w.begin_object()?;
+                w.key("c")?;
+                w.begin_array()?;
+                stream_write_inline(w, inline, ctx)?;
+                w.end_array()?;
+                w.key("t")?;
+                w.str_value("Plain")?;
+                w.end_object()?;
+            }
+            crate::pandoc::Slot::Blocks(blocks) => {
+                for b in blocks {
+                    stream_write_block(w, b, ctx)?;
+                }
+            }
+            crate::pandoc::Slot::Inlines(inlines) => {
+                // Wrap in a Plain block with c = [<inline>...]
+                w.begin_object()?;
+                w.key("c")?;
+                stream_write_inlines(w, inlines, ctx)?;
+                w.key("t")?;
+                w.str_value("Plain")?;
+                w.end_object()?;
+            }
+        }
+        w.end_array()?;
+        w.end_array()?;
+        w.key("t")?;
+        w.str_value("Div")?;
+        w.end_object()?;
+    }
+    w.end_array()?;
+    w.end_array()?;
+    w.key("s")?;
+    w.u64_value(s_id as u64)?;
+    w.key("t")?;
+    w.str_value("Div")?;
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_custom_inline<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    custom: &crate::pandoc::CustomNode,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    let slot_meta: serde_json::Map<String, Value> = custom
+        .slots
+        .iter()
+        .map(|(name, slot)| {
+            let slot_type = match slot {
+                crate::pandoc::Slot::Block(_) => "Block",
+                crate::pandoc::Slot::Inline(_) => "Inline",
+                crate::pandoc::Slot::Blocks(_) => "Blocks",
+                crate::pandoc::Slot::Inlines(_) => "Inlines",
+            };
+            (name.clone(), json!(slot_type))
+        })
+        .collect();
+
+    let mut wrapper_attr_kvs = custom.attr.2.clone();
+    wrapper_attr_kvs.insert("data-custom-type".to_string(), custom.type_name.clone());
+    wrapper_attr_kvs.insert(
+        "data-custom-slots".to_string(),
+        serde_json::to_string(&slot_meta).unwrap_or_else(|_| "{}".to_string()),
+    );
+    if !custom.plain_data.is_null() {
+        wrapper_attr_kvs.insert(
+            "data-custom-data".to_string(),
+            serde_json::to_string(&custom.plain_data).unwrap_or_else(|_| "null".to_string()),
+        );
+    }
+
+    let mut classes = custom.attr.1.clone();
+    classes.insert(0, "__quarto_custom_node".to_string());
+
+    let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
+
+    let s_id = ctx.serializer.intern(&custom.source_info);
+    w.begin_object()?;
+    w.key("c")?;
+    w.begin_array()?;
+    stream_write_attr(w, &wrapper_attr)?;
+    w.begin_array()?;
+    for (name, slot) in &custom.slots {
+        let mut slot_attr_kvs = LinkedHashMap::new();
+        slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
+        let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
+        w.begin_object()?;
+        w.key("c")?;
+        w.begin_array()?;
+        stream_write_attr(w, &slot_wrapper_attr)?;
+        w.begin_array()?;
+        match slot {
+            crate::pandoc::Slot::Inline(inline) => {
+                stream_write_inline(w, inline, ctx)?;
+            }
+            crate::pandoc::Slot::Inlines(inlines) => {
+                for i in inlines {
+                    stream_write_inline(w, i, ctx)?;
+                }
+            }
+            crate::pandoc::Slot::Block(_) | crate::pandoc::Slot::Blocks(_) => {
+                ctx.errors.push(
+                    DiagnosticMessageBuilder::error("Block slot in inline custom node")
+                        .with_code("Q-3-39")
+                        .with_location(custom.source_info.clone())
+                        .problem(format!(
+                            "Custom inline node `{}` has block-level slot `{}`",
+                            custom.type_name, name
+                        ))
+                        .add_detail("Inline custom nodes should only have inline slots")
+                        .build(),
+                );
+                // Placeholder: {"t": "Str", "c": "[block content]"}
+                w.begin_object()?;
+                w.key("c")?;
+                w.str_value("[block content]")?;
+                w.key("t")?;
+                w.str_value("Str")?;
+                w.end_object()?;
+            }
+        }
+        w.end_array()?;
+        w.end_array()?;
+        w.key("t")?;
+        w.str_value("Span")?;
+        w.end_object()?;
+    }
+    w.end_array()?;
+    w.end_array()?;
+    w.key("s")?;
+    w.u64_value(s_id as u64)?;
+    w.key("t")?;
+    w.str_value("Span")?;
+    w.end_object()?;
+    Ok(())
+}
+
+/// Emit a meta node `{c, s, t}` with alphabetical key ordering.
+fn stream_write_meta_node<W: io::Write, FC>(
+    w: &mut JsonStreamWriter<W>,
+    type_name: &str,
+    source_info: &SourceInfo,
+    ctx: &mut JsonWriterContext,
+    content: FC,
+) -> io::Result<()>
+where
+    FC: FnOnce(&mut JsonStreamWriter<W>, &mut JsonWriterContext) -> io::Result<()>,
+{
+    let s_id = ctx.serializer.intern(source_info);
+    w.begin_object()?;
+    w.key("c")?;
+    content(w, ctx)?;
+    w.key("s")?;
+    w.u64_value(s_id as u64)?;
+    w.key("t")?;
+    w.str_value(type_name)?;
+    w.end_object()?;
+    Ok(())
+}
+
+fn stream_write_config_value<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    value: &ConfigValue,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    match &value.value {
+        ConfigValueKind::Scalar(yaml) => match yaml {
+            yaml_rust2::Yaml::String(s) => {
+                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
+                    w.str_value(s)
+                })
+            }
+            yaml_rust2::Yaml::Boolean(b) => {
+                stream_write_meta_node(w, "MetaBool", &value.source_info, ctx, |w, _ctx| {
+                    w.bool_value(*b)
+                })
+            }
+            yaml_rust2::Yaml::Integer(i) => {
+                let text = i.to_string();
+                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
+                    w.str_value(&text)
+                })
+            }
+            yaml_rust2::Yaml::Real(r) => {
+                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
+                    w.str_value(r)
+                })
+            }
+            yaml_rust2::Yaml::Null => {
+                stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
+                    w.str_value("")
+                })
+            }
+            _ => stream_write_meta_node(w, "MetaString", &value.source_info, ctx, |w, _ctx| {
+                w.str_value("")
+            }),
+        },
+        ConfigValueKind::PandocInlines(inlines) => {
+            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+                stream_write_inlines(w, inlines, ctx)
+            })
+        }
+        ConfigValueKind::PandocBlocks(blocks) => {
+            stream_write_meta_node(w, "MetaBlocks", &value.source_info, ctx, |w, ctx| {
+                stream_write_blocks(w, blocks, ctx)
+            })
+        }
+        ConfigValueKind::Path(p) => {
+            let inlines = build_path_inlines(p, &value.source_info);
+            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+                stream_write_inlines(w, &inlines, ctx)
+            })
+        }
+        ConfigValueKind::Glob(g) => {
+            let inlines = build_glob_inlines(g, &value.source_info);
+            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+                stream_write_inlines(w, &inlines, ctx)
+            })
+        }
+        ConfigValueKind::Expr(e) => {
+            let inlines = build_expr_inlines(e, &value.source_info);
+            stream_write_meta_node(w, "MetaInlines", &value.source_info, ctx, |w, ctx| {
+                stream_write_inlines(w, &inlines, ctx)
+            })
+        }
+        ConfigValueKind::Array(items) => {
+            stream_write_meta_node(w, "MetaList", &value.source_info, ctx, |w, ctx| {
+                w.begin_array()?;
+                for item in items {
+                    stream_write_config_value(w, item, ctx)?;
+                }
+                w.end_array()?;
+                Ok(())
+            })
+        }
+        ConfigValueKind::Map(entries) => {
+            stream_write_meta_node(w, "MetaMap", &value.source_info, ctx, |w, ctx| {
+                w.begin_array()?;
+                for entry in entries {
+                    w.begin_object()?;
+                    w.key("key")?;
+                    w.str_value(&entry.key)?;
+                    w.key("key_source")?;
+                    stream_source_ref(w, ctx, &entry.key_source)?;
+                    w.key("value")?;
+                    stream_write_config_value(w, &entry.value, ctx)?;
+                    w.end_object()?;
+                }
+                w.end_array()?;
+                Ok(())
+            })
+        }
+    }
+}
+
+/// Emit the top-level meta map (sorted by key).
+fn stream_write_config_value_as_meta<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    meta: &ConfigValue,
+    ctx: &mut JsonWriterContext,
+) -> io::Result<()> {
+    match &meta.value {
+        ConfigValueKind::Map(entries) => {
+            // Sort by key for deterministic output.
+            let mut sorted_indices: Vec<usize> = (0..entries.len()).collect();
+            sorted_indices.sort_by(|&a, &b| entries[a].key.cmp(&entries[b].key));
+            w.begin_object()?;
+            for idx in sorted_indices {
+                let entry = &entries[idx];
+                w.key(&entry.key)?;
+                stream_write_config_value(w, &entry.value, ctx)?;
+            }
+            w.end_object()?;
+            Ok(())
+        }
+        _ => {
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Invalid metadata structure in JSON writer")
+                    .with_code("Q-3-40")
+                    .problem("Pandoc metadata is not a Map structure")
+                    .add_hint("This may indicate a malformed AST or parsing error")
+                    .build(),
+            );
+            w.begin_object()?;
+            w.end_object()?;
+            Ok(())
+        }
+    }
+}
+
+/// Emit the pool as the `sourceInfoPool` array.
+fn stream_write_source_info_pool<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    ctx: &JsonWriterContext,
+) -> io::Result<()> {
+    w.begin_array()?;
+    for entry in &ctx.serializer.pool {
+        // SourceInfoJson: {"d": ..., "r": [start, end], "t": type_code}
+        w.begin_object()?;
+        w.key("d")?;
+        match &entry.mapping {
+            SerializableSourceMapping::Original { file_id } => {
+                w.u64_value(file_id.0 as u64)?;
+            }
+            SerializableSourceMapping::Substring { parent_id } => {
+                w.u64_value(*parent_id as u64)?;
+            }
+            SerializableSourceMapping::Concat { pieces } => {
+                w.begin_array()?;
+                for piece in pieces {
+                    w.begin_array()?;
+                    w.u64_value(piece.source_info_id as u64)?;
+                    w.u64_value(piece.offset_in_concat as u64)?;
+                    w.u64_value(piece.length as u64)?;
+                    w.end_array()?;
+                }
+                w.end_array()?;
+            }
+            SerializableSourceMapping::FilterProvenance { filter_path, line } => {
+                w.begin_array()?;
+                w.str_value(filter_path)?;
+                w.u64_value(*line as u64)?;
+                w.end_array()?;
+            }
+        }
+        w.key("r")?;
+        w.begin_array()?;
+        w.u64_value(entry.start_offset as u64)?;
+        w.u64_value(entry.end_offset as u64)?;
+        w.end_array()?;
+        w.key("t")?;
+        w.u64_value(match &entry.mapping {
+            SerializableSourceMapping::Original { .. } => 0,
+            SerializableSourceMapping::Substring { .. } => 1,
+            SerializableSourceMapping::Concat { .. } => 2,
+            SerializableSourceMapping::FilterProvenance { .. } => 3,
+        })?;
+        w.end_object()?;
+    }
+    w.end_array()?;
+    Ok(())
+}
+
+/// Emit the whole document. Streaming order:
+/// `{blocks, meta, pandoc-api-version, astContext}` — alphabetical-friendly
+/// except astContext last (it carries `sourceInfoPool` which is only complete
+/// after we've walked `blocks` and `meta`). Object keys are unordered in the
+/// JSON specification, so any consumer that does property lookup gets the
+/// same data.
+fn stream_write_pandoc<W: io::Write>(
+    w: &mut JsonStreamWriter<W>,
+    pandoc: &Pandoc,
+    ast_context: &ASTContext,
+    config: &JsonConfig,
+) -> Result<(), Vec<DiagnosticMessage>> {
+    let mut ctx = JsonWriterContext::new(ast_context, config);
+
+    let res: io::Result<()> = (|| {
+        w.begin_object()?;
+        w.key("blocks")?;
+        stream_write_blocks(w, &pandoc.blocks, &mut ctx)?;
+        w.key("meta")?;
+        stream_write_config_value_as_meta(w, &pandoc.meta, &mut ctx)?;
+        w.key("pandoc-api-version")?;
+        w.begin_array()?;
+        w.u64_value(1)?;
+        w.u64_value(23)?;
+        w.u64_value(1)?;
+        w.end_array()?;
+        w.key("astContext")?;
+        w.begin_object()?;
+        // files (alphabetical: files, metaTopLevelKeySources?, sourceInfoPool)
+        w.key("files")?;
+        w.begin_array()?;
+        for idx in 0..ast_context.filenames.len() {
+            let filename = &ast_context.filenames[idx];
+            let file_info = ast_context
+                .source_context
+                .get_file(quarto_source_map::FileId(idx))
+                .and_then(|file| file.file_info.as_ref());
+            w.begin_object()?;
+            if let Some(info) = file_info {
+                w.key("line_breaks")?;
+                w.begin_array()?;
+                for lb in info.line_breaks() {
+                    w.u64_value(*lb as u64)?;
+                }
+                w.end_array()?;
+            }
+            w.key("name")?;
+            w.str_value(filename)?;
+            if let Some(info) = file_info {
+                w.key("total_length")?;
+                w.u64_value(info.total_length() as u64)?;
+            }
+            w.end_object()?;
+        }
+        w.end_array()?;
+
+        // metaTopLevelKeySources (only if non-empty)
+        if let ConfigValueKind::Map(entries) = &pandoc.meta.value {
+            if !entries.is_empty() {
+                w.key("metaTopLevelKeySources")?;
+                let mut sorted_indices: Vec<usize> = (0..entries.len()).collect();
+                sorted_indices.sort_by(|&a, &b| entries[a].key.cmp(&entries[b].key));
+                w.begin_object()?;
+                for idx in sorted_indices {
+                    let entry = &entries[idx];
+                    w.key(&entry.key)?;
+                    stream_source_ref(w, &mut ctx, &entry.key_source)?;
+                }
+                w.end_object()?;
+            }
+        }
+
+        // sourceInfoPool
+        if !ctx.serializer.pool.is_empty() {
+            w.key("sourceInfoPool")?;
+            stream_write_source_info_pool(w, &ctx)?;
+        }
+
+        w.end_object()?; // astContext
+        w.end_object()?; // top-level
+        Ok(())
+    })();
+
+    // Map io::Error into a DiagnosticMessage
+    if let Err(e) = res {
+        ctx.errors.push(DiagnosticMessage {
+            code: Some("Q-3-38".to_string()),
+            title: "JSON serialization failed".to_string(),
+            kind: quarto_error_reporting::DiagnosticKind::Error,
+            problem: Some(format!("Failed to write AST JSON: {}", e).into()),
+            details: vec![],
+            hints: vec![],
+            location: None,
+        });
+    }
+
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1935,7 +3553,14 @@ mod tests {
 
     #[test]
     fn test_source_info_pool_original() {
-        // Test that a single Original SourceInfo is added to the pool correctly
+        // Test that a single Original SourceInfo is added to the pool correctly.
+        //
+        // Post-bd-h5l7: each intern call allocates a fresh pool entry. Only
+        // `Substring` parent Arcs get deduped (see `test_source_info_pool_deduplication`).
+        // Two by-value interns of the same SourceInfo now produce two separate
+        // pool IDs — pool-ID equality no longer implies structural equality. Consumers
+        // that need "same source range?" should resolve both IDs through the pool and
+        // compare the resulting SourceInfo values structurally.
         let context = make_test_context();
         let config = make_test_config();
         let mut serializer = SourceInfoSerializer::new(&context, &config);
@@ -1963,10 +3588,24 @@ mod tests {
             _ => panic!("Expected Original mapping"),
         }
 
-        // Interning the same SourceInfo again should return the same ID
+        // Interning the same SourceInfo again produces a fresh pool entry.
         let id2 = serializer.intern(&source_info);
-        assert_eq!(id2, 0);
-        assert_eq!(serializer.pool.len(), 1); // No new entry added
+        assert_eq!(id2, 1);
+        assert_eq!(serializer.pool.len(), 2);
+
+        // Both entries resolve to structurally-equal pool values.
+        assert_eq!(
+            serializer.pool[0].start_offset,
+            serializer.pool[1].start_offset
+        );
+        assert_eq!(serializer.pool[0].end_offset, serializer.pool[1].end_offset);
+        match (&serializer.pool[0].mapping, &serializer.pool[1].mapping) {
+            (
+                SerializableSourceMapping::Original { file_id: a },
+                SerializableSourceMapping::Original { file_id: b },
+            ) => assert_eq!(a, b),
+            _ => panic!("Expected both to be Original"),
+        }
     }
 
     #[test]

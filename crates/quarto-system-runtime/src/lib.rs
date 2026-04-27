@@ -16,6 +16,8 @@
  * - [Node.js Permission Model](https://nodejs.org/api/permissions.html)
  */
 
+pub mod cache_lru;
+pub mod cache_versioning;
 mod sandbox;
 mod traits;
 
@@ -40,6 +42,8 @@ pub use sass_native::{
 mod wasm;
 
 // Re-export core types (API surface)
+pub use cache_lru::{CACHE_LRU_INDEX_KEY, SASS_CACHE_BUDGET_BYTES, cache_get_lru, cache_set_lru};
+pub use cache_versioning::{CACHE_VERSION_KEY, ensure_namespace_version};
 pub use traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind, validate_cache_key, validate_cache_namespace,

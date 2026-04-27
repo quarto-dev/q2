@@ -72,7 +72,7 @@ async fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String>
     let input_path_str = input_path.to_string_lossy();
     let mut output_stream = std::io::sink();
 
-    let (mut pandoc, _context, _warnings) = pampa::readers::qmd::read(
+    let (mut pandoc, ast_context, _warnings) = pampa::readers::qmd::read(
         &input_content,
         false, // loose mode
         &input_path_str,
@@ -108,7 +108,7 @@ async fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String>
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
     pipeline
-        .execute(&mut pandoc, &mut ctx)
+        .execute(&mut pandoc, &ast_context, &mut ctx)
         .await
         .map_err(|e| e.to_string())?;
 

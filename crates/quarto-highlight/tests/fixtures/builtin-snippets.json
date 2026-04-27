@@ -1,0 +1,72 @@
+[
+  {
+    "name": "python",
+    "class": "python",
+    "source": "def greet(name):\n    print(f\"hi, {name}\")\n"
+  },
+  {
+    "name": "r",
+    "class": "r",
+    "source": "x <- c(1, 2, 3)\nmean(x)\n"
+  },
+  {
+    "name": "javascript",
+    "class": "javascript",
+    "source": "const add = (a, b) => a + b;\n"
+  },
+  {
+    "name": "javascript_jsx_alias",
+    "class": "jsx",
+    "source": "const el = <div title=\"hi\">{name}</div>;\n"
+  },
+  {
+    "name": "typescript",
+    "class": "typescript",
+    "source": "const add = (a: number, b: number): number => a + b;\n"
+  },
+  {
+    "name": "tsx",
+    "class": "tsx",
+    "source": "const el: JSX.Element = <div>{x}</div>;\n"
+  },
+  {
+    "name": "bash",
+    "class": "bash",
+    "source": "greet() {\n  echo \"hello, $1\"\n}\n"
+  },
+  {
+    "name": "sql",
+    "class": "sql",
+    "source": "SELECT name FROM users WHERE id = 1;\n"
+  },
+  {
+    "name": "html",
+    "class": "html",
+    "source": "<a href=\"/\">home</a>\n"
+  },
+  {
+    "name": "css",
+    "class": "css",
+    "source": "p.intro { color: red; font-weight: bold; }\n"
+  },
+  {
+    "name": "json",
+    "class": "json",
+    "source": "{\"n\": 1, \"s\": \"x\"}\n"
+  },
+  {
+    "name": "yaml",
+    "class": "yaml",
+    "source": "title: \"hello\"\ncount: 1\n"
+  },
+  {
+    "name": "julia",
+    "class": "julia",
+    "source": "function greet(name)\n  println(\"hi, $name\")\nend\n"
+  },
+  {
+    "name": "lua",
+    "class": "lua",
+    "source": "local function greet(name)\n  print(\"hi, \" .. name)\nend\n"
+  }
+]

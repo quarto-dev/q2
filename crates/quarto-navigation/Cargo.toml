@@ -1,0 +1,15 @@
+[package]
+name = "quarto-navigation"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Document-model types for Quarto navigation (navbar, page footer, navigation items) plus YAML resolution and HTML rendering."
+
+[dependencies]
+quarto-pandoc-types.workspace = true
+quarto-source-map.workspace = true
+yaml-rust2.workspace = true
+
+[lints]
+workspace = true

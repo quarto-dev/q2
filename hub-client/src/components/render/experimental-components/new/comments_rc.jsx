@@ -65,6 +65,7 @@ const CommentWrapper = ({ children, comments, reactionCounts, setLocalAst, block
     const [commentText, setCommentText] = React.useState('');
     const [showEmojiPicker, setShowEmojiPicker] = React.useState(false);
     const [showCommentsList, setShowCommentsList] = React.useState(false);
+    const [isHovered, setIsHovered] = React.useState(false);
     const emojiPickerRef = React.useRef<HTMLDivElement>(null);
     const commentsListRef = React.useRef<HTMLDivElement>(null);
     const commentInputRef = React.useRef<HTMLInputElement>(null);
@@ -142,6 +143,7 @@ const CommentWrapper = ({ children, comments, reactionCounts, setLocalAst, block
 
     const commonEmojis = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '✅'];
     const reactionEntries = Array.from(reactionCounts.entries());
+    const hasContent = reactionEntries.length > 0 || comments.length > 0;
 
     return (
         <div style={{
@@ -150,15 +152,21 @@ const CommentWrapper = ({ children, comments, reactionCounts, setLocalAst, block
             {children}
 
             {/* Container for all bubbles */}
-            <div style={{
-                position: 'absolute',
-                bottom: '-11px',
-                right: '-10px',
-                display: 'flex',
-                flexDirection: 'row',
-                gap: '4px',
-                alignItems: 'center',
-            }}>
+            <div
+                style={{
+                    position: 'absolute',
+                    bottom: '-11px',
+                    right: '-10px',
+                    display: 'flex',
+                    flexDirection: 'row',
+                    gap: '4px',
+                    alignItems: 'center',
+                    opacity: hasContent || isHovered || showEmojiPicker || showCommentsList ? 1 : 0.2,
+                    transition: 'opacity 0.2s',
+                }}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+            >
                 {/* Reaction count bubbles */}
                 {reactionEntries.map(([emoji, count]) => (
                     <div

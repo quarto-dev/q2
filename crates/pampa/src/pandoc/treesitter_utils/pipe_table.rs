@@ -188,13 +188,9 @@ pub fn process_pipe_table(
                     caption_source_info = Some(caption_block.source_info.clone());
 
                     // Extract Inline::Attr if present at the end (for soft-break captions)
-                    if let Some(crate::pandoc::inline::Inline::Attr(
-                        caption_attr,
-                        caption_attr_source,
-                    )) = inlines.last()
-                    {
-                        attr = caption_attr.clone();
-                        attr_source = caption_attr_source.clone();
+                    if let Some(crate::pandoc::inline::Inline::Attr(inline_attr)) = inlines.last() {
+                        attr = inline_attr.attr.clone();
+                        attr_source = inline_attr.attr_source.clone();
                         inlines.pop();
 
                         // Trim trailing space before the attribute

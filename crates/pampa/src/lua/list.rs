@@ -577,7 +577,7 @@ pub fn create_list_table(lua: &Lua, values: Vec<Value>) -> Result<Value> {
 pub fn create_inlines_table(lua: &Lua, inlines: &[crate::pandoc::Inline]) -> Result<Value> {
     let table = lua.create_table()?;
     for (i, inline) in inlines.iter().enumerate() {
-        table.set(i + 1, lua.create_userdata(LuaInline(inline.clone()))?)?;
+        table.set(i + 1, lua.create_userdata(LuaInline::new(inline.clone()))?)?;
     }
 
     let mt = get_or_create_inlines_metatable(lua)?;
@@ -590,7 +590,7 @@ pub fn create_inlines_table(lua: &Lua, inlines: &[crate::pandoc::Inline]) -> Res
 pub fn create_blocks_table(lua: &Lua, blocks: &[crate::pandoc::Block]) -> Result<Value> {
     let table = lua.create_table()?;
     for (i, block) in blocks.iter().enumerate() {
-        table.set(i + 1, lua.create_userdata(LuaBlock(block.clone()))?)?;
+        table.set(i + 1, lua.create_userdata(LuaBlock::new(block.clone()))?)?;
     }
 
     let mt = get_or_create_blocks_metatable(lua)?;

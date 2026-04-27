@@ -1,0 +1,11 @@
+[package]
+name = "wasm-printf-fmt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "printf-family format-string rendering shared by the WASM c_shim layer. Target-agnostic so it can be unit-tested natively."
+
+[lints]
+workspace = true

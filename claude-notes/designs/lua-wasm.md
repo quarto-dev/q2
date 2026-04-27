@@ -273,7 +273,18 @@ This is sufficient for Quarto's Lua filter API — filters use `pandoc.*`
 constructors (registered by our Rust code) and standard string/table/math
 operations.
 
-### 6. SystemRuntime threading for VFS-based filter reading
+### 6. `dofile`/`loadfile` overrides for VFS
+
+On native, Lua's C `dofile`/`loadfile` use `fopen` to read files. On WASM,
+`fopen` returns null (stub in `c_shim.rs`), so `dofile_wasm.rs` overrides both
+globals with Rust implementations backed by `SystemRuntime::file_read_string()`.
+
+The overrides handle file I/O only — they resolve relative paths against the
+current script dir (for VFS compatibility) but do not push/pop the script-dir
+stack. This matches native Lua and Pandoc/TS Quarto behavior, where `dofile`
+does not affect path resolution for nested calls.
+
+### 7. SystemRuntime threading for VFS-based filter reading
 
 The Lua filter engine previously used `std::fs::read_to_string()` to read
 filter files. On WASM, there's no filesystem — files live in the VFS. The fix
@@ -376,7 +387,8 @@ pcall, and end-to-end filter through the full render pipeline.
   VFS for filters that read auxiliary data files.
 
 - **`require()` support**: Could implement a VFS-backed module loader so
-  filters can `require` other Lua files from the project.
+  filters can `require` other Lua files from the project. (`dofile`/`loadfile`
+  already work via VFS — see component 6.)
 
 - **Streaming compilation**: Lua source is compiled to bytecode on every render.
   Could cache compiled bytecode in the VFS for frequently-used filters.

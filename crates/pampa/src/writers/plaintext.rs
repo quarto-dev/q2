@@ -168,7 +168,7 @@ fn write_inline<T: std::io::Write>(
         Inline::NoteReference(NoteReference { source_info, .. }) => {
             ctx.warn_dropped_node("NoteReference", source_info);
         }
-        Inline::Attr(_, _) => {
+        Inline::Attr(_) => {
             // Attr uses AttrSourceInfo, not SourceInfo, so we drop silently
         }
         Inline::Custom(custom) => {
@@ -885,14 +885,14 @@ mod tests {
     fn test_attr_inline_silently_dropped() {
         let inlines = vec![
             make_str("text"),
-            Inline::Attr(
+            Inline::Attr(crate::pandoc::inline::InlineAttr::new(
                 (
                     "id".to_string(),
                     vec!["class".to_string()],
                     hashlink::LinkedHashMap::new(),
                 ),
                 crate::pandoc::attr::AttrSourceInfo::empty(),
-            ),
+            )),
         ];
         let (result, diags) = inlines_to_string(&inlines);
         // Attr is dropped silently (uses AttrSourceInfo, not SourceInfo)

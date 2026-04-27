@@ -16,6 +16,7 @@ import {
   computeExpandedFolders,
   type FileTreeNode,
 } from '../utils/fileTree';
+import { resolveDefaultDestination } from './fileUpload';
 import './FileSidebar.css';
 
 export interface FileSidebarProps {
@@ -23,7 +24,12 @@ export interface FileSidebarProps {
   currentFile: FileEntry | null;
   onSelectFile: (file: FileEntry) => void;
   onNewFile: () => void;
-  onUploadFiles: (files: File[]) => void;
+  /**
+   * Open the asset dialog. `files` may be empty (e.g. when the user clicks
+   * the Upload button). `destination` is the folder the dialog should seed
+   * the destination input with (empty string = project root).
+   */
+  onUploadFiles: (files: File[], destination: string) => void;
   onDeleteFile?: (file: FileEntry) => void;
   onRenameFile?: (file: FileEntry, newPath: string) => void;
   /** Open a file in a new browser tab */
@@ -147,11 +153,23 @@ export default function FileSidebar({
 
       const droppedFiles = Array.from(e.dataTransfer.files);
       if (droppedFiles.length > 0) {
-        onUploadFiles(droppedFiles);
+        const destination = resolveDefaultDestination({
+          dropTarget: e.target,
+          selection: currentFile?.path,
+        });
+        onUploadFiles(droppedFiles, destination);
       }
     },
-    [onUploadFiles]
+    [onUploadFiles, currentFile]
   );
+
+  // "Upload" button: open the asset dialog with no pre-filled files.
+  const handleUploadClick = useCallback(() => {
+    const destination = resolveDefaultDestination({
+      selection: currentFile?.path,
+    });
+    onUploadFiles([], destination);
+  }, [onUploadFiles, currentFile]);
 
   // Context menu handlers
   const handleContextMenu = useCallback((e: React.MouseEvent, file: FileEntry) => {
@@ -281,12 +299,18 @@ export default function FileSidebar({
     // Only make images and qmd files draggable (for editor insertion)
     const isDraggable =
       !isRenaming && (isImageFile(file.path) || isQmdFile(file.path));
+    // Parent folder of this file, used by resolveDefaultDestination when a
+    // drop lands on a file row (the drop target is the file, but the
+    // destination for an upload is the enclosing folder).
+    const lastSlash = file.path.lastIndexOf('/');
+    const parentFolderPath = lastSlash >= 0 ? file.path.slice(0, lastSlash) : '';
 
     return (
       <div
         key={file.path}
         className={`file-item ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
+        data-folder-path={parentFolderPath}
         onClick={(e) => !isRenaming && handleFileClick(e, file)}
         onContextMenu={(e) => handleContextMenu(e, file)}
         draggable={isDraggable}
@@ -332,7 +356,7 @@ export default function FileSidebar({
     }
 
     return (
-      <div key={node.path} className="tree-folder">
+      <div key={node.path} className="tree-folder" data-folder-path={node.path}>
         <div
           className="folder-header"
           style={{ paddingLeft: `${12 + depth * 16}px` }}
@@ -363,6 +387,13 @@ export default function FileSidebar({
       <div className="sidebar-header">
         <button className="new-file-btn" onClick={onNewFile} title="New file">
           + New
+        </button>
+        <button
+          className="upload-asset-btn"
+          onClick={handleUploadClick}
+          title="Upload asset"
+        >
+          ⬆ Upload
         </button>
       </div>
 

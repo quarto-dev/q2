@@ -148,6 +148,35 @@ pub unsafe extern "C" fn strncmp(ptr1: *const c_void, ptr2: *const c_void, n: us
     0
 }
 
+/// `strncpy(dest, src, n)` — copy up to `n` bytes of the
+/// null-terminated `src` into `dest`. If `src` is shorter than `n`, the
+/// remainder of `dest` is filled with null bytes. If `src` is longer,
+/// `dest` is NOT null-terminated (matches C semantics).
+///
+/// Previously provided by upstream `tree-sitter-language`'s
+/// `wasm/src/stdio.c`; our local-patch shim makes that file empty, so
+/// we need to ship our own here. See
+/// `claude-notes/plans/2026-04-20-wasm-shim-merge.md`.
+#[no_mangle]
+pub unsafe extern "C" fn strncpy(dest: *mut c_char, src: *const c_char, n: usize) -> *mut c_char {
+    let mut i = 0usize;
+    // Phase 1: copy from src until null or length limit.
+    while i < n {
+        let byte = *src.add(i);
+        *dest.add(i) = byte;
+        if byte == 0 {
+            break;
+        }
+        i += 1;
+    }
+    // Phase 2: zero-fill any remaining space up to n.
+    while i < n {
+        *dest.add(i) = 0;
+        i += 1;
+    }
+    dest
+}
+
 /* -------------------------------- wctype.h -------------------------------- */
 
 #[no_mangle]
@@ -182,6 +211,17 @@ pub unsafe extern "C" fn towlower(c: c_int) -> c_int {
     })
 }
 
+// Mirror of `towlower` for the uppercase direction. Required by
+// tree-sitter-html's scanner.c for case-insensitive tag-name matching.
+// Same 1:1-mapping-only caveat applies.
+// https://en.cppreference.com/w/c/string/wide/towupper
+#[no_mangle]
+pub unsafe extern "C" fn towupper(c: c_int) -> c_int {
+    char::from_u32(c as u32).map_or(0, |c| {
+        c.to_uppercase().next().map(|c| c as i32).unwrap_or(0)
+    })
+}
+
 /* --------------------------------- time.h --------------------------------- */
 
 #[no_mangle]
@@ -198,40 +238,64 @@ pub unsafe extern "C" fn isprint(c: c_int) -> bool {
 }
 
 /* --------------------------------- stdio.h -------------------------------- */
+//
+// Single source of truth for C stdio symbols in the WASM binary. Two
+// sets of callers rely on these: (a) the Lua runtime compiled into
+// `wasm-quarto-hub-client` via `lua-src-wasm`, and (b) tree-sitter
+// grammar crates whose scanner.c files occasionally reach stdio. The
+// upstream `tree-sitter-language` crate ships its own wasm32 stubs for
+// these symbols; we neutralize them via a local `[patch.crates-io]`
+// fork at `crates/tree-sitter-language-wasm-shim` so the two sets of
+// definitions can't collide.
+//
+// snprintf/vsnprintf cover the union of both callers' format-specifier
+// needs: all of `%d %i %u %s %c %% %x %X %p %o %ld %lu %lld %llu %zu
+// %zd %g %Lg`, plus flags (-, +, space, #, 0), field width, and
+// precision. See claude-notes/plans/2026-04-20-wasm-shim-merge.md for
+// the full rationale and behavioral diff against the upstream stubs.
+//
+// fputc/fputs/fwrite/fclose/fdopen/fprintf are silent no-ops — there
+// is no real stdio in WASM. Returning success-like values matches
+// upstream convention and keeps Lua's `luaL_error` path from aborting
+// if it reaches these under an odd condition.
 
 #[no_mangle]
 pub unsafe extern "C" fn fprintf(_file: *mut c_void, _format: *const c_void, _args: ...) -> c_int {
-    panic!("fprintf is not supported");
+    // No real stderr/stdout in WASM. Pretend we wrote everything.
+    0
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn fputs(_s: *const c_void, _file: *mut c_void) -> c_int {
-    panic!("fputs is not supported");
+    // Non-negative return indicates success per C.
+    0
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn fputc(_c: c_int, _file: *mut c_void) -> c_int {
-    panic!("fputc is not supported");
+pub unsafe extern "C" fn fputc(c: c_int, _file: *mut c_void) -> c_int {
+    // Success per C returns the character written.
+    c
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn fdopen(_fd: c_int, _mode: *const c_void) -> *mut c_void {
-    panic!("fdopen is not supported");
+    ptr::null_mut()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn fclose(_file: *mut c_void) -> c_int {
-    panic!("fclose is not supported");
+    0
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn fwrite(
     _ptr: *const c_void,
-    _size: usize,
-    _nmemb: usize,
+    size: usize,
+    nmemb: usize,
     _stream: *mut c_void,
 ) -> usize {
-    panic!("fwrite is not supported");
+    // Return the count requested — callers use this to detect errors.
+    size.saturating_mul(nmemb)
 }
 
 // Track if our snprintf is being called
@@ -242,10 +306,81 @@ pub fn get_snprintf_call_count() -> usize {
     SNPRINTF_CALL_COUNT.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-/// Minimal snprintf implementation for tree-sitter logging.
+/// Bridge `std::ffi::VaList` to `wasm-printf-fmt`'s [`VaArgSource`]
+/// trait. Both snprintf (variadic) and vsnprintf (va_list argument)
+/// receive a `VaList<'_>` on current nightly rustc, so this single
+/// impl covers both entry points.
+struct VaListSource<'a, 'b>(&'a mut std::ffi::VaList<'b>);
+
+impl<'a, 'b> wasm_printf_fmt::VaArgSource for VaListSource<'a, 'b> {
+    unsafe fn next_i32(&mut self) -> i32 {
+        unsafe { self.0.next_arg::<i32>() }
+    }
+    unsafe fn next_u32(&mut self) -> u32 {
+        unsafe { self.0.next_arg::<u32>() }
+    }
+    unsafe fn next_i64(&mut self) -> i64 {
+        unsafe { self.0.next_arg::<i64>() }
+    }
+    unsafe fn next_u64(&mut self) -> u64 {
+        unsafe { self.0.next_arg::<u64>() }
+    }
+    unsafe fn next_isize(&mut self) -> isize {
+        unsafe { self.0.next_arg::<isize>() }
+    }
+    unsafe fn next_usize(&mut self) -> usize {
+        unsafe { self.0.next_arg::<usize>() }
+    }
+    unsafe fn next_f64(&mut self) -> f64 {
+        unsafe { self.0.next_arg::<f64>() }
+    }
+    unsafe fn next_cstr(&mut self) -> *const c_char {
+        unsafe { self.0.next_arg::<*const c_char>() }
+    }
+    unsafe fn next_voidp(&mut self) -> *const c_void {
+        unsafe { self.0.next_arg::<*const c_void>() }
+    }
+}
+
+/// Shared tail of snprintf / vsnprintf: copy the formatted bytes into
+/// the caller-supplied buffer and null-terminate.
 ///
-/// Tree-sitter uses snprintf to format log messages. This implementation
-/// handles the common format specifiers used by tree-sitter's logging.
+/// This is a **safe** function. All unsafety lives at the FFI boundary
+/// in the caller, where the raw `*mut c_char` from C is converted into
+/// a `&mut [u8]` slice of the caller-declared length. After that single
+/// boundary op, everything is normal bounds-checked Rust.
+///
+/// Why we can't avoid unsafe entirely: `snprintf` / `vsnprintf` are
+/// `extern "C"` functions that receive a raw buffer pointer from C
+/// code. Writing bytes into that buffer fundamentally requires trusting
+/// the caller about pointer validity and buffer length — Rust cannot
+/// verify either. The previous revision of this file had the same
+/// unsafety, just spread across per-byte pointer writes with no
+/// explicit `unsafe { }` blocks (pre-Rust-2024 edition did not require
+/// them inside `unsafe fn` bodies). The refactor here consolidates the
+/// unsafe surface to a single well-labeled slice construction and then
+/// uses safe bounds-checked slice ops for the actual work.
+fn finish(dst: &mut [u8], out: &[u8]) -> c_int {
+    let written = out.len();
+    dst[..written].copy_from_slice(out);
+    dst[written] = 0;
+    written as c_int
+}
+
+/// `snprintf(buf, size, fmt, …)` — format to a user-supplied buffer,
+/// null-terminating the result and returning the number of bytes
+/// written (excluding the terminator).
+///
+/// Unsafe surface in this function (all at the C FFI boundary):
+///   - `CStr::from_ptr(format)` — trusts the C caller that `format`
+///     points to a null-terminated string.
+///   - `format_into` — reads variadic args, whose types must match the
+///     format spec. Type mismatches are the caller's responsibility.
+///   - `slice::from_raw_parts_mut(buf, size)` — trusts the C caller
+///     that `buf` points to at least `size` bytes of writable memory.
+///
+/// After those three boundary ops, everything is safe bounds-checked
+/// Rust. See [`finish`] for the rationale.
 #[no_mangle]
 pub unsafe extern "C" fn snprintf(
     buf: *mut c_char,
@@ -259,186 +394,39 @@ pub unsafe extern "C" fn snprintf(
         return 0;
     }
 
-    let format_str = std::ffi::CStr::from_ptr(format);
-    let format_bytes = format_str.to_bytes();
+    let format_bytes = unsafe { std::ffi::CStr::from_ptr(format).to_bytes() };
+    let mut out: Vec<u8> = Vec::with_capacity(size);
+    let mut source = VaListSource(&mut args);
+    unsafe { wasm_printf_fmt::format_into(&mut out, size, format_bytes, &mut source) };
 
-    let mut output = Vec::with_capacity(size);
-    let mut i = 0;
-
-    while i < format_bytes.len() && output.len() < size - 1 {
-        if format_bytes[i] == b'%' && i + 1 < format_bytes.len() {
-            i += 1;
-            // Skip flags, width, precision
-            while i < format_bytes.len()
-                && (format_bytes[i] == b'-'
-                    || format_bytes[i] == b'+'
-                    || format_bytes[i] == b' '
-                    || format_bytes[i] == b'#'
-                    || format_bytes[i] == b'0'
-                    || format_bytes[i].is_ascii_digit()
-                    || format_bytes[i] == b'.')
-            {
-                i += 1;
-            }
-
-            if i >= format_bytes.len() {
-                break;
-            }
-
-            match format_bytes[i] {
-                b'd' | b'i' => {
-                    let val: c_int = args.arg();
-                    let s = val.to_string();
-                    for b in s.bytes() {
-                        if output.len() < size - 1 {
-                            output.push(b);
-                        }
-                    }
-                }
-                b'u' => {
-                    let val: u32 = args.arg();
-                    let s = val.to_string();
-                    for b in s.bytes() {
-                        if output.len() < size - 1 {
-                            output.push(b);
-                        }
-                    }
-                }
-                b's' => {
-                    let ptr: *const c_char = args.arg();
-                    if !ptr.is_null() {
-                        let cstr = std::ffi::CStr::from_ptr(ptr);
-                        for b in cstr.to_bytes() {
-                            if output.len() < size - 1 {
-                                output.push(*b);
-                            }
-                        }
-                    }
-                }
-                b'c' => {
-                    let val: c_int = args.arg();
-                    if output.len() < size - 1 {
-                        output.push(val as u8);
-                    }
-                }
-                b'%' => {
-                    if output.len() < size - 1 {
-                        output.push(b'%');
-                    }
-                }
-                b'l' => {
-                    // Handle %ld, %lu, %lld, %llu
-                    i += 1;
-                    if i < format_bytes.len() {
-                        match format_bytes[i] {
-                            b'd' | b'i' => {
-                                let val: i64 = args.arg();
-                                let s = val.to_string();
-                                for b in s.bytes() {
-                                    if output.len() < size - 1 {
-                                        output.push(b);
-                                    }
-                                }
-                            }
-                            b'u' => {
-                                let val: u64 = args.arg();
-                                let s = val.to_string();
-                                for b in s.bytes() {
-                                    if output.len() < size - 1 {
-                                        output.push(b);
-                                    }
-                                }
-                            }
-                            b'l' => {
-                                // %lld or %llu
-                                i += 1;
-                                if i < format_bytes.len() {
-                                    match format_bytes[i] {
-                                        b'd' | b'i' => {
-                                            let val: i64 = args.arg();
-                                            let s = val.to_string();
-                                            for b in s.bytes() {
-                                                if output.len() < size - 1 {
-                                                    output.push(b);
-                                                }
-                                            }
-                                        }
-                                        b'u' => {
-                                            let val: u64 = args.arg();
-                                            let s = val.to_string();
-                                            for b in s.bytes() {
-                                                if output.len() < size - 1 {
-                                                    output.push(b);
-                                                }
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                b'z' => {
-                    // Handle %zu, %zd (size_t)
-                    i += 1;
-                    if i < format_bytes.len() {
-                        match format_bytes[i] {
-                            b'u' => {
-                                let val: usize = args.arg();
-                                let s = val.to_string();
-                                for b in s.bytes() {
-                                    if output.len() < size - 1 {
-                                        output.push(b);
-                                    }
-                                }
-                            }
-                            b'd' | b'i' => {
-                                let val: isize = args.arg();
-                                let s = val.to_string();
-                                for b in s.bytes() {
-                                    if output.len() < size - 1 {
-                                        output.push(b);
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                _ => {
-                    // Unknown specifier, just skip
-                }
-            }
-            i += 1;
-        } else {
-            if output.len() < size - 1 {
-                output.push(format_bytes[i]);
-            }
-            i += 1;
-        }
-    }
-
-    // Null-terminate
-    let written = output.len();
-    for (j, b) in output.into_iter().enumerate() {
-        *buf.add(j) = b as c_char;
-    }
-    *buf.add(written) = 0;
-
-    written as c_int
+    // Single slice construction is the whole FFI-boundary unsafety for
+    // writing the result. After this, `dst` is a normal &mut [u8] and
+    // `finish` is safe.
+    let dst = unsafe { std::slice::from_raw_parts_mut(buf as *mut u8, size) };
+    finish(dst, &out)
 }
 
+/// `vsnprintf(buf, size, fmt, va_list)` — same as snprintf but with an
+/// already-built va_list. Used by Lua's error / debug paths. Same
+/// unsafe-surface story as snprintf — see its doc comment.
 #[no_mangle]
 pub unsafe extern "C" fn vsnprintf(
-    _buf: *mut c_char,
-    _size: usize,
-    _format: *const c_char,
-    _args: ...
+    buf: *mut c_char,
+    size: usize,
+    format: *const c_char,
+    mut args: std::ffi::VaList<'_>,
 ) -> c_int {
-    // vsnprintf with va_list is harder to implement; tree-sitter primarily uses snprintf
-    0
+    if buf.is_null() || size == 0 {
+        return 0;
+    }
+
+    let format_bytes = unsafe { std::ffi::CStr::from_ptr(format).to_bytes() };
+    let mut out: Vec<u8> = Vec::with_capacity(size);
+    let mut source = VaListSource(&mut args);
+    unsafe { wasm_printf_fmt::format_into(&mut out, size, format_bytes, &mut source) };
+
+    let dst = unsafe { std::slice::from_raw_parts_mut(buf as *mut u8, size) };
+    finish(dst, &out)
 }
 
 /* ====================================================================== */
@@ -447,9 +435,14 @@ pub unsafe extern "C" fn vsnprintf(
 
 /// Replacement for Lua's longjmp-based error throw.
 /// Called from LUAI_THROW macro in ldo.c via luaD_throw.
+///
+/// The panic payload is `crate::LuaThrow`, which the custom panic hook
+/// in `init()` uses to distinguish expected Lua control-flow panics
+/// (caught microseconds later by `rust_lua_protected_call`) from real
+/// Rust panics that should be surfaced via `console.error`.
 #[no_mangle]
 pub extern "C-unwind" fn rust_lua_throw() -> ! {
-    panic!("lua error");
+    std::panic::panic_any(crate::LuaThrow);
 }
 
 /// Replacement for Lua's setjmp-based protected call.

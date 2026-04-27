@@ -1,0 +1,19 @@
+[package]
+name = "perf-harness"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Internal native drivers for profiling hub-client hot paths. See claude-notes/instructions/performance-profiling.md."
+
+[[bin]]
+name = "parse-qmd-to-ast"
+path = "src/bin/parse_qmd_to_ast.rs"
+
+[dependencies]
+pampa = { path = "../pampa" }
+quarto-core = { path = "../quarto-core" }
+quarto-system-runtime = { path = "../quarto-system-runtime" }
+pollster = { workspace = true }
+
+[lints]
+workspace = true

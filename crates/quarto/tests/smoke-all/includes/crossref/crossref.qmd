@@ -1,0 +1,14 @@
+---
+title: Crossref Through Include
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["a[href='#fig-included']"]
+---
+
+{{< include _figure.qmd >}}
+
+See @fig-included for the figure defined in the included file.

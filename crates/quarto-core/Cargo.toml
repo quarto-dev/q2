@@ -33,7 +33,14 @@ quarto-ast-reconcile.workspace = true
 quarto-analysis.workspace = true
 quarto-sass.workspace = true
 quarto-trace.workspace = true
+quarto-navigation.workspace = true
 pampa = { workspace = true, features = ["lua-filter", "json-filter"] }
+# Syntax highlighting. Uses statically linked tree-sitter grammar crates
+# on both native and wasm32. The `wasm` feature on `tree-sitter` (which
+# pulls in wasmtime for native user-grammar loading) is gated inside the
+# `quarto-highlight` crate itself to avoid compiling wasmtime for the
+# wasm32-unknown-unknown target.
+quarto-highlight.workspace = true
 
 # Native-only dependencies (for execution engines and resource extraction)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

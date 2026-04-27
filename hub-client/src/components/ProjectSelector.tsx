@@ -47,6 +47,8 @@ interface Props {
   onRemoveProjectFromSet?: (indexDocId: string) => void;
   /** Touch a project in the synced set (update lastAccessed). */
   onTouchProject?: (indexDocId: string) => void;
+  /** Add a project to the synced set (used by the Connect form). */
+  onAddProjectToSet?: (entry: Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'>) => void;
 }
 
 // Curated color palette for user selection (10 colors, single row)
@@ -73,6 +75,7 @@ export default function ProjectSelector({
   projectSetEntries,
   onRemoveProjectFromSet,
   onTouchProject,
+  onAddProjectToSet,
 }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -281,12 +284,39 @@ export default function ProjectSelector({
       if (!normalizedDocId.startsWith('automerge:')) {
         normalizedDocId = `automerge:${normalizedDocId}`;
       }
+      const syncServerValue = syncServer.trim();
+      const descriptionValue = description.trim() || undefined;
 
-      const project = await projectStorage.addProject(
-        normalizedDocId,
-        syncServer.trim(),
-        description.trim() || undefined
-      );
+      // Reuse any existing IDB entry so repeatedly connecting to the same
+      // doc is idempotent (and doesn't collide with the unique index on
+      // indexDocId). Happens any time a share-link visit already wrote to
+      // IDB and the user then opens the Connect form with the same ID.
+      let project = await projectStorage.getProjectByIndexDocId(normalizedDocId);
+      if (!project) {
+        project = await projectStorage.addProject(
+          normalizedDocId,
+          syncServerValue,
+          descriptionValue,
+        );
+      }
+
+      // Also add to the synced project set. In project-set mode the landing
+      // page renders its list from projectSetEntries, not IDB, so without
+      // this the project would be invisible even after a successful write.
+      // Safe to call even if already present — addProjectToSet dedupes.
+      if (useProjectSet && onAddProjectToSet) {
+        try {
+          onAddProjectToSet({
+            indexDocId: normalizedDocId,
+            syncServer: syncServerValue,
+            description: descriptionValue ?? project.description,
+          });
+        } catch (err) {
+          // Non-fatal — the reconciler will sweep this up on the next
+          // `connected` transition.
+          console.warn('Failed to add to synced project set:', err);
+        }
+      }
 
       setIndexDocId('');
       setDescription('');
@@ -296,7 +326,9 @@ export default function ProjectSelector({
       onSelectProject(project);
     } catch (err) {
       console.error('Failed to add project:', err);
-      setFormError('Failed to add project. The document ID may already exist.');
+      setFormError(
+        err instanceof Error ? `Failed to add project: ${err.message}` : 'Failed to add project.',
+      );
     }
   };
 

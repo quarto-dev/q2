@@ -8,3 +8,4 @@ int iswalnum(wint_t _wc);
 int iswdigit(wint_t c);
 int iswalpha(wint_t c);
 wint_t towlower(wint_t wc);
+wint_t towupper(wint_t wc);

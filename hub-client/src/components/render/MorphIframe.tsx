@@ -278,51 +278,76 @@ function MorphIframe({
   // Update iframe content when HTML changes
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (!iframe?.contentDocument || !iframe?.contentWindow) return;
-
-    const doc = iframe.contentDocument;
-    const win = iframe.contentWindow;
+    if (!iframe) return;
 
     // Check if this is the first time we're setting content
     // An uninitialized iframe document will have an empty body
     const isFirstLoad = !isInitializedRef.current;
 
     if (isFirstLoad) {
-      // Initial load: write the HTML directly
-      doc.open();
-      doc.write(html);
-      doc.close();
-
-      isInitializedRef.current = true;
-
-      // Post-process after initial load
-      internalPostProcess(iframe);
-    } else {
-      // Subsequent updates: use morphdom to update in place
-
-      // Save scroll position before morphing
-      const scrollPos = {
-        x: win.scrollX,
-        y: win.scrollY,
+      // Initial load: use `srcdoc` so the browser parses the payload as
+      // a fresh HTML document with the inline `<!DOCTYPE html>` honored.
+      //
+      // Why not the more direct `doc.open(); doc.write(html); doc.close()`?
+      // On Firefox, that pattern has historically left the document in
+      // Quirks Mode even when `html` starts with `<!DOCTYPE html>`,
+      // because `document.open()` on an already-initialized about:blank
+      // document can retain the original compatMode rather than
+      // re-deriving it from the written DOCTYPE. Chrome re-derives it
+      // correctly, which is why the bug only manifests in Firefox.
+      // Symptoms: external stylesheets load (the `<link>` is rewritten
+      // and the data URI resolves), but Quirks Mode alters how the
+      // cascade resolves external rules against UA defaults — making
+      // highlight colors and `pre > code { display: block }` silently
+      // fail to apply.
+      //
+      // `srcdoc` is parsed as a standalone HTML document, identical in
+      // all browsers, so the DOCTYPE takes effect. The load is async
+      // (we wait for the `load` event before post-processing), but
+      // subsequent morphdom updates are still synchronous against the
+      // settled contentDocument.
+      const handleLoad = () => {
+        isInitializedRef.current = true;
+        internalPostProcess(iframe);
       };
+      iframe.addEventListener('load', handleLoad, { once: true });
+      iframe.srcdoc = html;
 
-      // Create a temporary container with the new HTML
-      const tempContainer = doc.createElement('html');
-      tempContainer.innerHTML = html;
-
-      // Morph the document's documentElement
-      // This updates both <head> and <body> efficiently
-      morphdom(doc.documentElement, tempContainer);
-
-      // Post-process after morphing
-      internalPostProcess(iframe);
-
-      // Restore scroll position
-      // Use requestAnimationFrame to ensure DOM has been updated
-      requestAnimationFrame(() => {
-        win.scrollTo(scrollPos.x, scrollPos.y);
-      });
+      // If the effect re-runs with a new `html` before the previous
+      // load event fires, the cleanup below removes the stale listener
+      // so only the most recent srcdoc's post-process runs.
+      return () => {
+        iframe.removeEventListener('load', handleLoad);
+      };
     }
+
+    // Subsequent updates: morphdom against the already-initialized doc.
+    if (!iframe.contentDocument || !iframe.contentWindow) return;
+    const doc = iframe.contentDocument;
+    const win = iframe.contentWindow;
+
+    // Save scroll position before morphing
+    const scrollPos = {
+      x: win.scrollX,
+      y: win.scrollY,
+    };
+
+    // Create a temporary container with the new HTML
+    const tempContainer = doc.createElement('html');
+    tempContainer.innerHTML = html;
+
+    // Morph the document's documentElement — updates both <head> and
+    // <body> efficiently in place.
+    morphdom(doc.documentElement, tempContainer);
+
+    // Post-process after morphing
+    internalPostProcess(iframe);
+
+    // Restore scroll position. requestAnimationFrame ensures the DOM
+    // has been updated before we scroll.
+    requestAnimationFrame(() => {
+      win.scrollTo(scrollPos.x, scrollPos.y);
+    });
   }, [html, internalPostProcess]);
 
   // Expose methods via ref
@@ -416,7 +441,6 @@ function MorphIframe({
 
       // If we couldn't find matching elements, return
       if (!startElement || !endElement || !startLoc || !endLoc) {
-        console.log('Could not find elements for selection', { startPos, endPos });
         return;
       }
 
@@ -429,8 +453,6 @@ function MorphIframe({
         textNode: endElement.firstChild!,
         offset: endPos.startCol - endLoc.startCol
       }
-
-      console.log(startElement)
 
       // Create a range and set it as the document selection
       const selection = doc.getSelection();

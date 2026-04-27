@@ -5,7 +5,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, Paragraph};
-use crate::pandoc::inline::Inline;
+use crate::pandoc::inline::{Inline, InlineAttr};
 use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -27,7 +27,7 @@ pub fn process_paragraph(
         } else if let PandocNativeIntermediate::IntermediateAttr(attr, attr_source) = child {
             // Attributes can appear in paragraphs (e.g., after math expressions)
             // They will be processed by postprocess.rs to create Spans
-            inlines.push(Inline::Attr(attr, attr_source));
+            inlines.push(Inline::Attr(InlineAttr::new(attr, attr_source)));
         }
     }
     PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {

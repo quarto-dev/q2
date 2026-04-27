@@ -1,0 +1,26 @@
+---
+title: Inline-code highlighting
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # Inline code with `{.python}` is highlighted the same way as
+        # fenced code blocks: outer <code class="sourceCode python">
+        # plus nested hl-* spans.
+        - ["<code class=\"sourceCode python\"", "hl-function-builtin\">print</span>"]
+---
+
+Inline code spans can opt into highlighting by attaching a language
+class. The syntax is `` `expr`{.lang} `` — the `{.lang}` attribute
+tells Quarto which grammar to apply.
+
+For example, the Python builtin `print()`{.python} renders with the
+same `hl-function-builtin` color as it would inside a fenced code
+block. An unclassed inline span like `print()` stays plain.
+
+This is useful for API reference prose where you're naming functions,
+keywords, or types: write `` `Map.entrySet()`{.java} `` or
+`` `Vec::new()`{.rust} `` and they'll be styled to match surrounding
+code blocks.

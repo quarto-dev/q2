@@ -40,6 +40,32 @@ pub enum Block {
     Custom(CustomNode),
 }
 
+impl Block {
+    pub fn source_info(&self) -> &quarto_source_map::SourceInfo {
+        match self {
+            Block::Plain(b) => &b.source_info,
+            Block::Paragraph(b) => &b.source_info,
+            Block::LineBlock(b) => &b.source_info,
+            Block::CodeBlock(b) => &b.source_info,
+            Block::RawBlock(b) => &b.source_info,
+            Block::BlockQuote(b) => &b.source_info,
+            Block::OrderedList(b) => &b.source_info,
+            Block::BulletList(b) => &b.source_info,
+            Block::DefinitionList(b) => &b.source_info,
+            Block::Header(b) => &b.source_info,
+            Block::HorizontalRule(b) => &b.source_info,
+            Block::Table(b) => &b.source_info,
+            Block::Figure(b) => &b.source_info,
+            Block::Div(b) => &b.source_info,
+            Block::BlockMetadata(b) => &b.source_info,
+            Block::NoteDefinitionPara(b) => &b.source_info,
+            Block::NoteDefinitionFencedBlock(b) => &b.source_info,
+            Block::CaptionBlock(b) => &b.source_info,
+            Block::Custom(b) => &b.source_info,
+        }
+    }
+}
+
 pub type Blocks = Vec<Block>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -155,4 +181,80 @@ pub struct NoteDefinitionFencedBlock {
 pub struct CaptionBlock {
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_source_map::{FileId, SourceInfo};
+
+    fn test_si(file: usize, start: usize, end: usize) -> SourceInfo {
+        SourceInfo::original(FileId(file), start, end)
+    }
+
+    #[test]
+    fn source_info_plain() {
+        let si = test_si(0, 0, 10);
+        let block = Block::Plain(Plain {
+            content: vec![],
+            source_info: si.clone(),
+        });
+        assert_eq!(block.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_paragraph() {
+        let si = test_si(1, 10, 20);
+        let block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: si.clone(),
+        });
+        assert_eq!(block.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_codeblock() {
+        let si = test_si(2, 20, 30);
+        let block = Block::CodeBlock(CodeBlock {
+            attr: crate::attr::empty_attr(),
+            text: String::new(),
+            source_info: si.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(block.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_header() {
+        let si = test_si(3, 30, 40);
+        let block = Block::Header(Header {
+            level: 1,
+            attr: crate::attr::empty_attr(),
+            content: vec![],
+            source_info: si.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(block.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_div() {
+        let si = test_si(4, 40, 50);
+        let block = Block::Div(Div {
+            attr: crate::attr::empty_attr(),
+            content: vec![],
+            source_info: si.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(block.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_horizontal_rule() {
+        let si = test_si(5, 50, 53);
+        let block = Block::HorizontalRule(HorizontalRule {
+            source_info: si.clone(),
+        });
+        assert_eq!(block.source_info(), &si);
+    }
 }

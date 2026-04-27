@@ -1,0 +1,38 @@
+---
+title: Filter-authored severity highlighting
+format: html
+filters:
+  - highlight-severity.lua
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["hl-severity-err\">&lt;err&gt;</span>",
+           "hl-severity-warning\">&lt;warning&gt;</span>",
+           "hl-severity-info\">&lt;info&gt;</span>",
+           "hl-timestamp\">Apr 21 12:34:56</span>",
+           "<pre class=\"sourceCode systemd-log\""]
+---
+
+Filters aren't limited to literal-word matching. This document
+demonstrates a **structured log highlighter** — a Lua filter that
+matches timestamp prefixes and severity tags in journalctl-style
+output and produces nested `<span>` annotations via `data-hl-spans`.
+
+The filter is in `highlight-severity.lua`. It uses the idiomatic
+`cb.attr.attributes["data-hl-spans"] = …` mutation pattern; no
+`pandoc.Attr(…)` rebuild workaround is needed.
+
+```systemd-log
+Apr 21 12:34:56 host systemd[1]: <info> Starting service …
+Apr 21 12:34:57 host app[123]: <warning> Retrying connection
+Apr 21 12:34:58 host app[123]: <err> Connection refused
+```
+
+Every severity tag in `<…>` brackets gets its own capture
+(`severity.err`, `severity.warning`, `severity.info`, …), and each
+line's timestamp gets `timestamp`. Capture names with dots map to
+HTML classes with hyphens (`severity.err` → `hl-severity-err`), so
+users can style them with `.hl-severity-err { color: red; }` in
+their own CSS.

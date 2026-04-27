@@ -1,0 +1,36 @@
+---
+source: crates/quarto-highlight/tests/golden.rs
+description: "title: \"hello\"\ncount: 1\n"
+---
+[
+  [
+    0,
+    5,
+    "property"
+  ],
+  [
+    5,
+    6,
+    "punctuation.delimiter"
+  ],
+  [
+    7,
+    14,
+    "string"
+  ],
+  [
+    15,
+    20,
+    "property"
+  ],
+  [
+    20,
+    21,
+    "punctuation.delimiter"
+  ],
+  [
+    22,
+    23,
+    "number"
+  ]
+]

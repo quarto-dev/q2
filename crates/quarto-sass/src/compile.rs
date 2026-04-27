@@ -45,13 +45,16 @@ use crate::themes::{ThemeContext, process_theme_specs};
 // Native-only imports
 #[cfg(not(target_arch = "wasm32"))]
 use crate::resources::all_resources;
-#[cfg(not(target_arch = "wasm32"))]
+
 use std::sync::OnceLock;
 
 /// Cached default Bootstrap CSS (minified).
 ///
-/// This is compiled once and reused for all documents that don't specify a theme.
-#[cfg(not(target_arch = "wasm32"))]
+/// Compiled once per process and reused for every render of a document
+/// that doesn't specify a theme. Both the native and WASM entry points
+/// consult this cache; on WASM it's critical for keystroke-rate renders
+/// in hub-client because the underlying dart-sass bridge call is
+/// expensive (~100-500 ms per compile).
 static DEFAULT_CSS_CACHE: OnceLock<String> = OnceLock::new();
 
 /// Assemble the SCSS bundle for a themed configuration.
@@ -70,15 +73,18 @@ pub fn assemble_theme_scss(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<(String, Vec<PathBuf>), SassError> {
-    use crate::bundle::load_title_block_layer;
+    use crate::bundle::{load_highlight_layer, load_title_block_layer};
 
     // Process theme specs into layers
     let result = process_theme_specs(&config.themes, context)?;
 
-    // Build user layers: title block layer comes first (like TS Quarto),
-    // then any theme layers
+    // Build user layers: title block + syntax-highlight defaults first
+    // (like TS Quarto's order for built-in user layers), then any theme
+    // layers from the config. User themes can override any `.hl-*` or
+    // title-block rule by declaring the same selector in a later layer.
     let title_block_layer = load_title_block_layer()?;
-    let mut user_layers = vec![title_block_layer];
+    let highlight_layer = load_highlight_layer()?;
+    let mut user_layers = vec![title_block_layer, highlight_layer];
     user_layers.extend(result.layers);
 
     // Assemble SCSS
@@ -240,7 +246,7 @@ pub fn compile_default_css(
     runtime: &dyn SystemRuntime,
     minified: bool,
 ) -> Result<String, SassError> {
-    use crate::bundle::load_title_block_layer;
+    use crate::bundle::{load_highlight_layer, load_title_block_layer};
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     // Return cached version if available (only for minified)
@@ -250,12 +256,13 @@ pub fn compile_default_css(
         }
     }
 
-    // Load title block layer - this provides styling for title block elements
-    // In TS Quarto, this is always included as a user layer
+    // Load built-in user layers: title block styling + default syntax-
+    // highlight colors. Both ship with Quarto and are always included.
     let title_block_layer = load_title_block_layer()?;
+    let highlight_layer = load_highlight_layer()?;
 
-    // Assemble SCSS: Bootstrap + Quarto + title block layer
-    let scss = assemble_with_user_layers(&[title_block_layer])?;
+    // Assemble SCSS: Bootstrap + Quarto + title block + highlight defaults
+    let scss = assemble_with_user_layers(&[title_block_layer, highlight_layer])?;
 
     // Get load paths and resources
     let load_paths = default_load_paths();
@@ -354,33 +361,61 @@ pub async fn compile_css_from_config(
 /// This compiles Bootstrap with Quarto's customizations but without any
 /// Bootswatch theme or custom SCSS.
 ///
-/// Note: Unlike the native version, this does NOT cache the result.
-/// Caching should be handled by the JavaScript layer (SassCacheManager)
-/// which uses IndexedDB for persistent caching across sessions.
+/// Cached in-process via [`DEFAULT_CSS_CACHE`] (the same `OnceLock` the
+/// native entry uses). First call per WASM module lifetime compiles;
+/// subsequent calls return a clone of the cached string in nanoseconds.
+/// The dart-sass JS bridge is expensive (~100-500 ms), so this cache is
+/// critical for hub-client's keystroke-rate renders on documents with
+/// no theme.
+///
+/// Cross-session persistence is handled at a higher layer by
+/// `CompileThemeCssStage` routing through `runtime.cache_get`/`cache_set`
+/// (see the fix plan at
+/// `claude-notes/plans/2026-04-18-wasm-scss-cache-regression.md`).
 #[cfg(target_arch = "wasm32")]
 pub async fn compile_default_css(
     runtime: &dyn SystemRuntime,
     minified: bool,
 ) -> Result<String, SassError> {
-    use crate::bundle::load_title_block_layer;
+    use crate::bundle::{load_highlight_layer, load_title_block_layer};
 
-    // Load title block layer - this provides styling for title block elements
-    // In TS Quarto, this is always included as a user layer
+    // Return cached version if available (only for minified, matching
+    // native). Minified is always true in practice for hub-client.
+    if minified {
+        if let Some(cached) = DEFAULT_CSS_CACHE.get() {
+            return Ok(cached.clone());
+        }
+    }
+
+    // Load built-in user layers: title block styling + default syntax-
+    // highlight colors. Both ship with Quarto and are always included.
+    // This mirrors the native `compile_default_css`. Without the
+    // highlight layer, documents without an explicit `theme:` frontmatter
+    // entry would render code blocks with `hl-*` span classes but no
+    // associated colors.
     let title_block_layer = load_title_block_layer()?;
+    let highlight_layer = load_highlight_layer()?;
 
-    // Assemble SCSS: Bootstrap + Quarto + title block layer
-    let scss = assemble_with_user_layers(&[title_block_layer])?;
+    // Assemble SCSS: Bootstrap + Quarto + title block + highlight defaults
+    let scss = assemble_with_user_layers(&[title_block_layer, highlight_layer])?;
 
     // Get load paths (these point to VFS paths populated by wasm-quarto-hub-client)
     let load_paths = default_load_paths();
 
     // Compile via JS bridge
-    runtime
+    let css = runtime
         .compile_sass(&scss, &load_paths, minified)
         .await
         .map_err(|e| SassError::CompilationFailed {
             message: e.to_string(),
-        })
+        })?;
+
+    // Cache minified result
+    if minified {
+        let _ = DEFAULT_CSS_CACHE.set(css.clone());
+    }
+
+    Ok(css)
 }
 
 #[cfg(test)]
@@ -406,6 +441,31 @@ mod tests {
         assert!(
             css.contains(".quarto-title-meta"),
             "Should contain .quarto-title-meta class from title-block.scss"
+        );
+
+        // Should have default syntax-highlight rules for `.hl-*` classes
+        // emitted by the HTML writer for tree-sitter captures.
+        assert!(
+            css.contains(".hl-keyword"),
+            "Should contain .hl-keyword rule from highlight.scss"
+        );
+        assert!(
+            css.contains(".hl-function-builtin"),
+            "Should contain nested-capture .hl-function-builtin rule"
+        );
+
+        // Should have Quarto page-footer layout rules (ported from Q1).
+        assert!(
+            css.contains(".nav-footer"),
+            "Should contain .nav-footer layout from ported page-footer SCSS"
+        );
+        assert!(
+            css.contains(".nav-footer-left"),
+            "Should contain .nav-footer-left responsive rules"
+        );
+        assert!(
+            css.contains(".footer-items"),
+            "Should contain .footer-items rule for inline flex layout"
         );
 
         // Should be minified (few newlines)

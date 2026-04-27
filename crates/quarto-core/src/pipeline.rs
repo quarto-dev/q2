@@ -52,17 +52,23 @@ use quarto_source_map::SourceContext;
 
 use crate::Result;
 use crate::render::RenderContext;
+use crate::stage::CodeHighlightStage;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, EngineExecutionStage,
-    LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
-    RenderHtmlBodyStage, StageContext, UserFiltersStage,
+    IncludeExpansionStage, LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline,
+    PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, StageContext,
+    UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, FootnotesTransform,
-    MetadataNormalizeTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
+    AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, CrossrefIndexTransform,
+    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesTransform, MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
+    ShortcodeResolveTransform, TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform,
+    TocRenderTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -125,20 +131,47 @@ pub struct AstOutput {
 /// 5. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
 /// 6. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
 /// 7. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 8. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 9. `ApplyTemplateStage` - Apply HTML template
+/// 8. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
+/// 9. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 10. `ApplyTemplateStage` - Apply HTML template
 pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
-    vec![
+    build_html_pipeline_stages_with_apply_config(None)
+}
+
+/// Like [`build_html_pipeline_stages`], but allows the caller to supply
+/// a customized [`ApplyTemplateConfig`] (e.g. CSS paths and resource
+/// prefix from `render_to_file`). The rest of the pipeline — including
+/// [`CodeHighlightStage`] — is identical to [`build_html_pipeline_stages`].
+///
+/// This helper exists so that the CLI render path (which needs custom
+/// CSS paths) and the default in-memory path (which doesn't) share a
+/// single source of truth for the stage list. Without it, the two
+/// branches drift silently — in particular, a previous version of
+/// `render_qmd_to_html` inlined its own stage vec for the CSS-paths
+/// case and omitted the highlight stage, causing `quarto render` to
+/// emit un-highlighted HTML while all in-process tests passed.
+pub fn build_html_pipeline_stages_with_apply_config(
+    apply_config: Option<ApplyTemplateConfig>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
+        Box::new(PreEngineSugaringStage::new()),
         Box::new(EngineExecutionStage::new()),
         Box::new(CompileThemeCssStage::new()),
         Box::new(UserFiltersStage::pre()),
         Box::new(AstTransformsStage::new()),
         Box::new(UserFiltersStage::post()),
-        Box::new(RenderHtmlBodyStage::new()),
-        Box::new(ApplyTemplateStage::new()),
-    ]
+    ];
+    stages.push(Box::new(CodeHighlightStage::new()));
+    stages.push(Box::new(RenderHtmlBodyStage::new()));
+    let apply_stage = match apply_config {
+        Some(cfg) => ApplyTemplateStage::with_config(cfg),
+        None => ApplyTemplateStage::new(),
+    };
+    stages.push(Box::new(apply_stage));
+    stages
 }
 
 /// Build the standard HTML pipeline.
@@ -192,17 +225,20 @@ pub fn build_html_pipeline() -> Pipeline {
 /// Panics if the pipeline stages have incompatible types (should never happen
 /// with the standard stages).
 pub fn build_wasm_html_pipeline() -> Pipeline {
-    let stages: Vec<Box<dyn PipelineStage>> = vec![
+    let mut stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
         // No EngineExecutionStage - code cells pass through as-is
         Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
+        Box::new(PreEngineSugaringStage::new()),
         Box::new(CompileThemeCssStage::new()),
         Box::new(UserFiltersStage::pre()),
         Box::new(AstTransformsStage::new()),
         Box::new(UserFiltersStage::post()),
-        Box::new(RenderHtmlBodyStage::new()),
-        Box::new(ApplyTemplateStage::new()),
     ];
+    stages.push(Box::new(CodeHighlightStage::new()));
+    stages.push(Box::new(RenderHtmlBodyStage::new()));
+    stages.push(Box::new(ApplyTemplateStage::new()));
 
     Pipeline::new(stages).expect("WASM HTML pipeline stages should be compatible")
 }
@@ -241,6 +277,89 @@ pub fn build_html_pipeline_with_stages(
     Pipeline::new(stages)
 }
 
+/// Build the transform pipeline used by LSP-style document analysis.
+///
+/// This is the analysis-time equivalent of [`build_transform_pipeline`]. It
+/// runs the minimal set of transforms needed to leave the AST in an
+/// outline-ready state:
+///
+/// - Sugaring transforms (`Callout`, `Theorem`, `Proof`, `FloatRefTarget`,
+///   `EquationLabel`) so `::: {#fig-…}` / `::: {#thm-…}` / `$$ … $$ {#eq-…}`
+///   become canonical `CustomNode`s with `plain_data.ref_type`, `kind`, and
+///   `identifier`.
+/// - `CrossrefIndexTransform` so each target's `plain_data.order` carries
+///   the section-scoped number that will appear in the rendered document.
+///
+/// **Deliberately omitted** (compared to [`build_transform_pipeline`]):
+///
+/// - `ShortcodeResolveTransform` — runs Lua, costly at LSP speed. Simple
+///   `{{< meta key >}}` resolution is handled by the lightweight
+///   `quarto_analysis::MetaShortcodeTransform` in `quarto-lsp-core`.
+/// - `MetadataNormalizeTransform`, `TitleBlockTransform`, `SectionizeTransform`,
+///   `FootnotesTransform` — render-shape transforms that don't affect the
+///   outline.
+/// - `CalloutResolveTransform` — converts callout custom nodes back into
+///   render-visible Divs; the outline walker wants the custom-node form.
+/// - `CrossrefResolveTransform` — rewrites `@fig-1` citations; not needed
+///   for outline.
+/// - TOC phase — the outline *is* our TOC; no need to build another one.
+/// - Finalization phase (`AppendixStructure`, `CrossrefRender`,
+///   `ResourceCollector`) — `CrossrefRender` would destroy the crossref
+///   custom nodes we rely on; the others are render-only.
+pub fn build_analysis_transform_pipeline() -> TransformPipeline {
+    let mut pipeline: TransformPipeline = TransformPipeline::new();
+
+    // Normalization (subset): sugaring transforms only.
+    pipeline.push(Box::new(CalloutTransform::new()));
+    pipeline.push(Box::new(TheoremSugarTransform::new()));
+    pipeline.push(Box::new(ProofSugarTransform::new()));
+    pipeline.push(Box::new(FloatRefTargetSugarTransform::new()));
+    pipeline.push(Box::new(EquationLabelTransform::new()));
+
+    // Crossref indexing for section-scoped numbering.
+    pipeline.push(Box::new(CrossrefIndexTransform::new()));
+
+    pipeline
+}
+
+/// Build a pipeline suitable for LSP-style document analysis (outline,
+/// symbols, folding ranges, diagnostics) without any rendering, engine
+/// execution, or user-filter side effects.
+///
+/// ## Stages
+///
+/// 1. [`ParseDocumentStage`] — QMD → Pandoc AST
+/// 2. [`MetadataMergeStage`] — merge project / directory / document /
+///    runtime metadata into `pandoc.meta`
+/// 3. [`PreEngineSugaringStage`] — seed the [`RefTypeRegistry`] from
+///    `crossref.custom` metadata, seed a [`CrossrefIndex`], desugar
+///    code-block shorthand
+/// 4. [`AstTransformsStage`] with the [`build_analysis_transform_pipeline`]
+///    subset — apply sugaring + crossref indexing
+///
+/// After this pipeline runs, the AST is in its outline-ready state:
+/// cross-referenceable blocks are `CustomNode`s with
+/// `plain_data.{ref_type, kind, identifier, order}` populated, theorem
+/// titles have been absorbed into their CustomNode's `title` slot, and
+/// figure / table captions live in the `caption_long` / `caption_short`
+/// slots.
+///
+/// [`RefTypeRegistry`]: crate::crossref::RefTypeRegistry
+/// [`CrossrefIndex`]: crate::crossref::CrossrefIndex
+pub fn build_analysis_pipeline() -> Pipeline {
+    let stages: Vec<Box<dyn PipelineStage>> = vec![
+        Box::new(ParseDocumentStage::new()),
+        Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
+        Box::new(PreEngineSugaringStage::new()),
+        Box::new(AstTransformsStage::with_pipeline(
+            build_analysis_transform_pipeline(),
+        )),
+    ];
+
+    Pipeline::new(stages).expect("analysis pipeline stages should be compatible")
+}
+
 pub async fn run_pipeline(
     content: &[u8],
     source_name: &str,
@@ -259,6 +378,9 @@ pub async fn run_pipeline(
 
     // Transfer artifacts from RenderContext to StageContext
     stage_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
+    // Transfer user-grammar provider (browser path sets this; native CLI
+    // leaves it None and falls back to `CodeHighlightStage`'s disk scan).
+    stage_ctx.user_grammar_provider = ctx.user_grammar_provider.take();
 
     // Create input from content
     let input = PipelineData::LoadedSource(LoadedSource::new(
@@ -368,25 +490,15 @@ pub async fn render_qmd_to_html(
     config: &HtmlRenderConfig<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> Result<RenderOutput> {
-    // Build pipeline based on config
-    // If custom CSS or template is specified, use a customized ApplyTemplateStage
+    // Build pipeline based on config. Both branches share the same
+    // stage list (via `build_html_pipeline_stages_with_apply_config`);
+    // the only difference is whether the final `ApplyTemplateStage`
+    // carries a custom CSS-path / resource-prefix config.
     let stages = if !config.css_paths.is_empty() {
         let apply_config = ApplyTemplateConfig::new()
             .with_css_paths(config.css_paths.to_vec())
             .with_resource_prefix(config.resource_prefix.to_string());
-
-        let stages: Vec<Box<dyn PipelineStage>> = vec![
-            Box::new(ParseDocumentStage::new()),
-            Box::new(MetadataMergeStage::new()),
-            Box::new(EngineExecutionStage::new()),
-            Box::new(CompileThemeCssStage::new()),
-            Box::new(UserFiltersStage::pre()),
-            Box::new(AstTransformsStage::new()),
-            Box::new(UserFiltersStage::post()),
-            Box::new(RenderHtmlBodyStage::new()),
-            Box::new(ApplyTemplateStage::with_config(apply_config)),
-        ];
-        stages
+        build_html_pipeline_stages_with_apply_config(Some(apply_config))
     } else {
         build_html_pipeline_stages()
     };
@@ -421,14 +533,26 @@ pub async fn render_qmd_to_html(
 /// 5. `TitleBlockTransform` - Add title header from metadata if not present
 /// 6. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
 /// 7. `FootnotesTransform` - Extract footnotes and create footnotes section
+/// 8. `FloatRefTargetSugarTransform` - Wrap float crossref Divs / Figures in canonical CustomNode
 ///
-/// ## TOC Phase
-/// 8. `TocGenerateTransform` - Generate TOC from headers (if toc: true)
-/// 9. `TocRenderTransform` - Render TOC to HTML for template insertion
+/// ## Navigation Phase
+///
+/// All `Generate` transforms run first so that by the time any renderer sees
+/// `ast.meta.navigation.*`, every structured subtree is populated. This keeps
+/// the door open for user filters (between generate and render) or future
+/// non-HTML pipelines (slideshows, dashboards) that need the structured data
+/// but emit different HTML.
+///
+/// 9. `TocGenerateTransform` - Generate TOC from headers (if `toc: true`)
+/// 10. `NavbarGenerateTransform` - Resolve `navbar:` YAML into `navigation.navbar`
+/// 11. `FooterGenerateTransform` - Resolve `page-footer:` YAML into `navigation.footer`
+/// 12. `TocRenderTransform` - Render TOC to HTML for template insertion
+/// 13. `NavbarRenderTransform` - Render navbar to HTML for template insertion
+/// 14. `FooterRenderTransform` - Render page footer to HTML for template insertion
 ///
 /// ## Finalization Phase
-/// 10. `AppendixStructureTransform` - Consolidate appendix content into container
-/// 11. `ResourceCollectorTransform` - Collect image dependencies
+/// 15. `AppendixStructureTransform` - Consolidate appendix content into container
+/// 16. `ResourceCollectorTransform` - Collect image dependencies
 pub fn build_transform_pipeline(
     shortcode_paths: Vec<std::path::PathBuf>,
     extensions: Vec<crate::extension::types::Extension>,
@@ -450,14 +574,34 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(TitleBlockTransform::new()));
     pipeline.push(Box::new(SectionizeTransform::new()));
     pipeline.push(Box::new(FootnotesTransform::new()));
+    // TheoremSugarTransform / ProofSugarTransform run before
+    // FloatRefTargetSugarTransform so `Div(#thm-foo .theorem)` and
+    // `Div(.proof)` become Theorem / Proof custom nodes first; the
+    // float-target classifier only sees plain `Div` blocks.
+    pipeline.push(Box::new(TheoremSugarTransform::new()));
+    pipeline.push(Box::new(ProofSugarTransform::new()));
+    pipeline.push(Box::new(FloatRefTargetSugarTransform::new()));
+    pipeline.push(Box::new(EquationLabelTransform::new()));
 
-    // === TOC PHASE ===
-    // Must run after SectionizeTransform so section IDs are available
+    // === CROSSREF PHASE ===
+    pipeline.push(Box::new(CrossrefIndexTransform::new()));
+    pipeline.push(Box::new(CrossrefResolveTransform::new()));
+
+    // === NAVIGATION PHASE ===
+    // All generates run before any renders so a future user filter or
+    // non-HTML pipeline sees a complete navigation.* subtree before rendering.
+    // TocGenerate must run after SectionizeTransform so section IDs are
+    // available; navbar/footer generates only read top-level metadata.
     pipeline.push(Box::new(TocGenerateTransform::new()));
+    pipeline.push(Box::new(NavbarGenerateTransform::new()));
+    pipeline.push(Box::new(FooterGenerateTransform::new()));
     pipeline.push(Box::new(TocRenderTransform::new()));
+    pipeline.push(Box::new(NavbarRenderTransform::new()));
+    pipeline.push(Box::new(FooterRenderTransform::new()));
 
     // === FINALIZATION PHASE ===
     pipeline.push(Box::new(AppendixStructureTransform::new()));
+    pipeline.push(Box::new(CrossrefRenderTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
     pipeline
@@ -530,6 +674,59 @@ mod tests {
         assert!(output.html.contains("callout-warning"));
         assert!(output.html.contains("Watch Out"));
         assert!(output.html.contains("Be careful!"));
+    }
+
+    #[test]
+    fn test_render_code_block_is_syntax_highlighted() {
+        // Full-pipeline end-to-end: a Python code block should be
+        // annotated by `CodeHighlightStage` and rendered with nested
+        // `<span class="hl-*">` tags by the HTML writer.
+        let content =
+            b"---\ntitle: Test\n---\n\n```python\ndef greet(name):\n    print(name)\n```\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        // The annotation stage should have run and the HTML writer
+        // should have consumed `data-hl-spans` into nested spans.
+        assert!(
+            output
+                .html
+                .contains("<span class=\"hl-keyword\">def</span>"),
+            "expected hl-keyword span around `def`; got:\n{}",
+            &output.html,
+        );
+        assert!(
+            output
+                .html
+                .contains("<span class=\"hl-function-builtin\">print</span>"),
+            "expected hl-function-builtin span around `print`; got:\n{}",
+            &output.html,
+        );
+
+        // The raw `data-hl-spans` attribute must not leak to the container.
+        assert!(
+            !output.html.contains("data-hl-spans="),
+            "container should not carry the raw data-hl-spans attr; got:\n{}",
+            &output.html,
+        );
+
+        // The `.sourceCode` marker should be present so default themes
+        // + user themes can key off it.
+        assert!(
+            output.html.contains("sourceCode"),
+            "pre/code container should carry the `sourceCode` class",
+        );
     }
 
     #[test]
@@ -647,6 +844,53 @@ mod tests {
     }
 
     #[test]
+    fn test_render_code_block_is_syntax_highlighted_with_css_paths() {
+        // Regression test for the CLI render path: `render_document_to_file`
+        // always supplies a non-empty `css_paths`, which routes through the
+        // "custom ApplyTemplateStage" branch of `render_qmd_to_html`. A
+        // previous version of that branch inlined its own stage list and
+        // silently omitted `CodeHighlightStage`, so `quarto render` emitted
+        // un-highlighted HTML even though the default-config test passed.
+        // Keep this test in lockstep with `test_render_code_block_is_syntax_highlighted`.
+        let content =
+            b"---\ntitle: Test\n---\n\n```python\ndef greet(name):\n    print(name)\n```\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let css_paths = vec!["custom.css".to_string()];
+        let config = HtmlRenderConfig::with_css(&css_paths);
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        assert!(
+            output
+                .html
+                .contains("<span class=\"hl-keyword\">def</span>"),
+            "expected hl-keyword span around `def` on the CLI path; got:\n{}",
+            &output.html,
+        );
+        assert!(
+            output
+                .html
+                .contains("<span class=\"hl-function-builtin\">print</span>"),
+            "expected hl-function-builtin span around `print` on the CLI path; got:\n{}",
+            &output.html,
+        );
+        assert!(
+            !output.html.contains("data-hl-spans="),
+            "container should not carry the raw data-hl-spans attr; got:\n{}",
+            &output.html,
+        );
+    }
+
+    #[test]
     #[ignore = "pampa parser is too forgiving - need to find input that produces parse error"]
     fn test_parse_error_has_structured_diagnostics() {
         // NOTE: This test is ignored because pampa's parser is very forgiving
@@ -691,29 +935,81 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 9);
+        assert_eq!(stages.len(), 12);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
-        assert_eq!(stages[2].name(), "engine-execution");
-        assert_eq!(stages[3].name(), "compile-theme-css");
-        assert_eq!(stages[4].name(), "user-filters-pre");
-        assert_eq!(stages[5].name(), "ast-transforms");
-        assert_eq!(stages[6].name(), "user-filters-post");
-        assert_eq!(stages[7].name(), "render-html-body");
-        assert_eq!(stages[8].name(), "apply-template");
+        assert_eq!(stages[2].name(), "include-expansion");
+        assert_eq!(stages[3].name(), "pre-engine-sugaring");
+        assert_eq!(stages[4].name(), "engine-execution");
+        assert_eq!(stages[5].name(), "compile-theme-css");
+        assert_eq!(stages[6].name(), "user-filters-pre");
+        assert_eq!(stages[7].name(), "ast-transforms");
+        assert_eq!(stages[8].name(), "user-filters-post");
+        assert_eq!(stages[9].name(), "code-highlight");
+        assert_eq!(stages[10].name(), "render-html-body");
+        assert_eq!(stages[11].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 9);
+        assert_eq!(pipeline.len(), 12);
     }
 
     #[test]
     fn test_build_wasm_html_pipeline() {
         let pipeline = build_wasm_html_pipeline();
-        // WASM pipeline has 8 stages (no engine execution, but has user filters)
-        assert_eq!(pipeline.len(), 8);
+        // WASM pipeline has 11 stages (no engine execution, but otherwise
+        // the same as the native HTML pipeline: includes include-expansion
+        // and code-highlight).
+        assert_eq!(pipeline.len(), 11);
+    }
+
+    #[test]
+    fn test_build_analysis_pipeline() {
+        use crate::stage::PipelineDataKind;
+
+        let pipeline = build_analysis_pipeline();
+        // Parse + MetadataMerge + IncludeExpansion + PreEngineSugaring + AstTransforms(analysis subset)
+        assert_eq!(pipeline.len(), 5);
+        assert_eq!(pipeline.expected_input(), PipelineDataKind::LoadedSource);
+        assert_eq!(pipeline.expected_output(), PipelineDataKind::DocumentAst);
+    }
+
+    #[test]
+    fn test_build_analysis_transform_pipeline_ordering() {
+        // Lock in the order: sugaring before crossref indexing. The indexer
+        // relies on sugared CustomNodes carrying plain_data.{ref_type, kind,
+        // identifier} — if any sugar transform moves past the indexer the
+        // outline will lose numbers for that ref type.
+        let pipeline = build_analysis_transform_pipeline();
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+
+        let index_pos = names
+            .iter()
+            .position(|&n| n == "crossref-index")
+            .expect("crossref-index must be in analysis pipeline");
+        let theorem_pos = names
+            .iter()
+            .position(|&n| n == "theorem-sugar")
+            .expect("theorem-sugar must be in analysis pipeline");
+        let float_pos = names
+            .iter()
+            .position(|&n| n == "float-ref-target-sugar")
+            .expect("float-ref-target-sugar must be in analysis pipeline");
+        let equation_pos = names
+            .iter()
+            .position(|&n| n == "equation-label")
+            .expect("equation-label must be in analysis pipeline");
+
+        assert!(theorem_pos < index_pos);
+        assert!(float_pos < index_pos);
+        assert!(equation_pos < index_pos);
+
+        // CrossrefRenderTransform must NOT be in the analysis pipeline — it
+        // replaces crossref custom nodes with render-visible shapes, which
+        // would make the outline walker's job impossible.
+        assert!(!names.contains(&"crossref-render"));
     }
 
     #[test]
@@ -844,7 +1140,11 @@ mod tests {
     }
 
     #[test]
-    fn test_render_pipeline_no_theme_uses_default() {
+    fn test_render_pipeline_no_theme_compiles_default_bootstrap() {
+        // Q1 parity: missing `theme:` compiles the default Bootstrap +
+        // Quarto customization layer so navbar / footer / TOC CSS classes
+        // are available out of the box. The old static-DEFAULT_CSS path is
+        // now reached only via an explicit `theme: none` opt-out.
         let content = b"---\ntitle: Test\n---\n\nContent.";
 
         let project = make_test_project();
@@ -861,6 +1161,37 @@ mod tests {
         .unwrap();
 
         let css = get_css_artifact(&ctx);
-        assert_eq!(css, DEFAULT_CSS, "no theme should produce DEFAULT_CSS");
+        assert_ne!(
+            css, DEFAULT_CSS,
+            "no theme should compile Bootstrap, not ship static DEFAULT_CSS"
+        );
+        assert!(
+            css.contains(".navbar"),
+            "compiled default CSS should contain Bootstrap .navbar"
+        );
+    }
+
+    #[test]
+    fn test_render_pipeline_theme_none_opts_out_of_bootstrap() {
+        let content = b"---\ntitle: Test\ntheme: none\n---\n\nContent.";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let _output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        let css = get_css_artifact(&ctx);
+        assert_eq!(
+            css, DEFAULT_CSS,
+            "`theme: none` must ship the static DEFAULT_CSS (no Bootstrap)"
+        );
     }
 }
