@@ -202,7 +202,7 @@ impl ProjectType for WebsiteProjectType {
         &self,
         project: &ProjectContext,
         index: &ProjectIndex,
-        _outputs: &[RenderToFileResult],
+        outputs: &[RenderToFileResult],
         project_artifacts: &crate::artifact::ArtifactStore,
         runtime: &dyn SystemRuntime,
         diagnostics: &mut Vec<DiagnosticMessage>,
@@ -212,7 +212,7 @@ impl ProjectType for WebsiteProjectType {
         };
         flush_site_libs(project, project_artifacts, &self.lib_dir(), runtime)?;
         copy_favicon(project, runtime, diagnostics)?;
-        write_sitemap(project, index, runtime)?;
+        write_sitemap(project, index, outputs, runtime)?;
         write_robots_txt(project, runtime)?;
         Ok(())
     }

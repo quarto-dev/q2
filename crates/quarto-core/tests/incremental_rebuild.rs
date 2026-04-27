@@ -464,6 +464,88 @@ fn mode_b_pulls_in_always_render_dependents() {
 }
 
 #[test]
+fn mode_b_sitemap_preserves_untouched_entries_lastmod() {
+    // Phase 8.3 (bd-pphv): the sitemap merge should preserve the
+    // `<lastmod>` of pages that were *not* re-rendered this run.
+    // Mode B with target=about → the about entry refreshes;
+    // index/c entries keep their previous lastmod from the cold
+    // sitemap.
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\nwebsite:\n  site-url: https://example.com/site\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHome.\n",
+    );
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\nAbout.\n",
+    );
+
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+    let sitemap_path = project_dir.join("_site/sitemap.xml");
+    let cold_xml = std::fs::read_to_string(&sitemap_path).expect("sitemap exists after cold run");
+    // Cold run: both entries have lastmods. Capture them.
+    assert!(cold_xml.contains("<loc>https://example.com/site/index.html</loc>"));
+    assert!(cold_xml.contains("<loc>https://example.com/site/about.html</loc>"));
+
+    // Sleep just past second precision so any refresh is visible.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+
+    // Touch about.qmd so its mtime advances; render only about
+    // in Mode B.
+    std::fs::write(
+        project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\nAbout — REVISED.\n",
+    )
+    .unwrap();
+
+    let target = project_dir.join("about.qmd");
+    let _summary = render_mode_b(&project_dir, runtime, &[target]);
+
+    let warm_xml = std::fs::read_to_string(&sitemap_path).expect("sitemap exists after warm run");
+
+    // Both entries should still be present (Mode B doesn't drop
+    // pages from the project).
+    assert!(warm_xml.contains("<loc>https://example.com/site/index.html</loc>"));
+    assert!(warm_xml.contains("<loc>https://example.com/site/about.html</loc>"));
+
+    // The merge contract: extract index.html's lastmod from cold
+    // and warm; they should be byte-identical (preserved). Extract
+    // about.html's lastmod; it should have advanced.
+    let index_cold = lastmod_for_loc(&cold_xml, "https://example.com/site/index.html");
+    let index_warm = lastmod_for_loc(&warm_xml, "https://example.com/site/index.html");
+    let about_cold = lastmod_for_loc(&cold_xml, "https://example.com/site/about.html");
+    let about_warm = lastmod_for_loc(&warm_xml, "https://example.com/site/about.html");
+
+    assert_eq!(
+        index_cold, index_warm,
+        "index.html was not rendered in Mode B; its lastmod must be preserved"
+    );
+    assert_ne!(
+        about_cold, about_warm,
+        "about.html was rendered in Mode B; its lastmod should refresh \
+         (cold was {about_cold:?}, warm is {about_warm:?})"
+    );
+}
+
+/// Quick-and-dirty `<lastmod>` extractor for a given `<loc>`.
+/// Tests only — production lives in `parse_sitemap_locs`.
+fn lastmod_for_loc(xml: &str, loc: &str) -> Option<String> {
+    let needle = format!("<loc>{loc}</loc>");
+    let start = xml.find(&needle)?;
+    let after = &xml[start + needle.len()..];
+    let lm_start = after.find("<lastmod>")? + "<lastmod>".len();
+    let lm_end = after[lm_start..].find("</lastmod>")?;
+    Some(after[lm_start..lm_start + lm_end].to_string())
+}
+
+#[test]
 fn mode_b_with_no_targets_renders_nothing() {
     // Edge case: empty Subset set ⇒ pass_two skips every page.
     // This isn't a typical CLI invocation (no path arg ⇒ Mode A),

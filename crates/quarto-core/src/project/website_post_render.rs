@@ -177,12 +177,32 @@ struct SitemapEntry {
 
 /// Emit `<output_dir>/sitemap.xml` listing every rendered page.
 ///
-/// No-op when `website.site-url` is unset (Q1 parity). Phase 7 ships
-/// fresh-write only — no read-existing/merge path. Phase 8 adds the
-/// incremental merge.
+/// No-op when `website.site-url` is unset (Q1 parity).
+///
+/// **Phase 8 (`bd-pphv`):** the writer now does an
+/// incremental merge instead of a fresh write:
+///
+/// 1. Read the existing `sitemap.xml`, parsing each `<url>` entry
+///    into a `loc → lastmod` map.
+/// 2. Walk `index.profiles()`. For each profile:
+///    - If the page was rendered this run (its output path
+///      appears in `outputs`), use the input file's current
+///      mtime.
+///    - Otherwise, look up the page's `loc` in the previous
+///      sitemap. If found, preserve that `lastmod` (the page
+///      hasn't been re-rendered, so its on-disk lastmod is
+///      still authoritative). If not found (e.g. a brand-new
+///      page that wasn't in the targets this run), fall back
+///      to the current mtime.
+/// 3. Pages no longer in the index are dropped.
+/// 4. Write back, sorted by `loc` for stability.
+///
+/// If the existing sitemap can't be read or parsed, the merge
+/// degrades to a fresh-write — same shape as Phase 7.
 pub(super) fn write_sitemap(
     project: &ProjectContext,
     index: &ProjectIndex,
+    outputs: &[crate::render_to_file::RenderToFileResult],
     runtime: &dyn SystemRuntime,
 ) -> Result<()> {
     let Some(meta) = project.config.metadata.as_ref() else {
@@ -193,19 +213,60 @@ pub(super) fn write_sitemap(
     };
     let base = site_url.trim_end_matches('/');
 
+    // Set of output paths (absolute) that were rendered this run.
+    // Used to decide whether a profile's lastmod should refresh
+    // (rendered) or preserve from the existing sitemap (skipped).
+    let rendered_outputs: std::collections::HashSet<&Path> =
+        outputs.iter().map(|r| r.output_path.as_path()).collect();
+
+    // Try to read the existing sitemap. Failure is non-fatal —
+    // we fall back to fresh-write.
+    let dst = project.output_dir.join("sitemap.xml");
+    let prior: std::collections::HashMap<String, String> = runtime
+        .file_read(&dst)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .map(|xml| parse_sitemap_locs(&xml))
+        .unwrap_or_default();
+
     let mut entries: Vec<SitemapEntry> = Vec::with_capacity(index.profiles().len());
     for profile in index.profiles() {
-        let loc = format!("{}/{}", base, profile.output_href.trim_start_matches('/'));
-        let source_path = project.dir.join(&profile.source_path);
-        let lastmod = read_input_mtime(&source_path, runtime);
+        let loc_raw = format!("{}/{}", base, profile.output_href.trim_start_matches('/'));
+        let loc_escaped = escape_xml_text(&loc_raw);
+
+        // Was this page rendered this run? Check by comparing the
+        // expected output path to the rendered set.
+        let expected_output = project.output_dir.join(&profile.output_href);
+        let was_rendered = rendered_outputs.contains(expected_output.as_path());
+
+        let lastmod = if was_rendered {
+            // Rendered this run → fresh mtime from the input file.
+            let source_path = project.dir.join(&profile.source_path);
+            read_input_mtime(&source_path, runtime)
+        } else {
+            // Skipped this run → preserve the previous sitemap's
+            // lastmod when available. If the page is new (not in
+            // the prior sitemap), fall back to the current mtime
+            // so the entry still has a sensible date.
+            prior.get(&loc_escaped).cloned().or_else(|| {
+                let source_path = project.dir.join(&profile.source_path);
+                read_input_mtime(&source_path, runtime)
+            })
+        };
+
         entries.push(SitemapEntry {
-            loc: escape_xml_text(&loc),
+            loc: loc_escaped,
             lastmod,
         });
     }
 
+    // Sort by loc for deterministic output. (Pre-Phase-8 fresh
+    // writes used insertion order; sorting now makes the merge
+    // stable across runs that may visit profiles in different
+    // orders.)
+    entries.sort_by(|a, b| a.loc.cmp(&b.loc));
+
     let xml = render_sitemap_xml(&entries);
-    let dst = project.output_dir.join("sitemap.xml");
     if let Some(parent) = dst.parent() {
         runtime.dir_create(parent, true).map_err(|e| {
             QuartoError::other(format!(
@@ -219,6 +280,55 @@ pub(super) fn write_sitemap(
         QuartoError::other(format!("Failed to write sitemap {}: {}", dst.display(), e))
     })?;
     Ok(())
+}
+
+/// Parse `loc → lastmod` out of an existing sitemap XML.
+///
+/// Tolerant scanner: skips malformed `<url>` blocks, returns an
+/// empty map on root-level parse failures. We wrote this file
+/// ourselves last run (with `render_sitemap_xml`) so we know its
+/// shape; the parser is opinionated about that shape and falls
+/// back gracefully when reality disagrees.
+///
+/// `loc` strings are returned in their XML-escaped form (the same
+/// form the writer compares against), so callers can map directly
+/// from the freshly-computed escaped loc to the prior `lastmod`.
+fn parse_sitemap_locs(xml: &str) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    let mut cursor = 0;
+    while let Some(start_rel) = xml[cursor..].find("<url>") {
+        let block_start = cursor + start_rel + "<url>".len();
+        let block_end_rel = match xml[block_start..].find("</url>") {
+            Some(i) => i,
+            None => break,
+        };
+        let block = &xml[block_start..block_start + block_end_rel];
+        cursor = block_start + block_end_rel + "</url>".len();
+
+        let loc = match extract_inner_tag(block, "loc") {
+            Some(s) => s,
+            None => continue,
+        };
+        let lastmod = extract_inner_tag(block, "lastmod");
+        if let Some(lm) = lastmod {
+            out.insert(loc.to_string(), lm.to_string());
+        }
+        // Entries without a `<lastmod>` are not retained — there's
+        // nothing to preserve. The writer will compute a fresh
+        // lastmod for them anyway.
+    }
+    out
+}
+
+/// Extract the text between `<tag>` and `</tag>` in `block`.
+/// Returns `None` if either tag is missing. Doesn't unescape the
+/// XML entities — the caller compares against escaped strings.
+fn extract_inner_tag<'a>(block: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = block.find(&open)? + open.len();
+    let end_rel = block[start..].find(&close)?;
+    Some(&block[start..start + end_rel])
 }
 
 /// Read an input file's mtime as an ISO-8601 UTC string with
@@ -536,5 +646,100 @@ mod tests {
     fn iso8601_leap_day() {
         let t = SystemTime::UNIX_EPOCH + Duration::from_secs(1_709_208_000);
         assert_eq!(format_iso8601_utc(t), "2024-02-29T12:00:00Z");
+    }
+
+    // === Phase 8 sub-phase 8.3: sitemap merge parser =====================
+
+    /// `parse_sitemap_locs` extracts every `<url>` block's
+    /// `<loc>` and `<lastmod>` into a map. Round-trip from a
+    /// freshly-rendered sitemap.
+    #[test]
+    fn parse_sitemap_locs_round_trip() {
+        let xml = render_sitemap_xml(&[
+            SitemapEntry {
+                loc: "https://example.com/index.html".into(),
+                lastmod: Some("2026-04-27T10:00:00Z".into()),
+            },
+            SitemapEntry {
+                loc: "https://example.com/about.html".into(),
+                lastmod: Some("2026-04-27T11:00:00Z".into()),
+            },
+        ]);
+        let parsed = parse_sitemap_locs(&xml);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(
+            parsed
+                .get("https://example.com/index.html")
+                .map(String::as_str),
+            Some("2026-04-27T10:00:00Z")
+        );
+        assert_eq!(
+            parsed
+                .get("https://example.com/about.html")
+                .map(String::as_str),
+            Some("2026-04-27T11:00:00Z")
+        );
+    }
+
+    /// Entries lacking `<lastmod>` are not retained — there's
+    /// nothing to preserve, and the writer falls back to the
+    /// current mtime for them.
+    #[test]
+    fn parse_sitemap_locs_skips_entries_without_lastmod() {
+        let xml = render_sitemap_xml(&[
+            SitemapEntry {
+                loc: "https://example.com/with.html".into(),
+                lastmod: Some("2026-04-27T10:00:00Z".into()),
+            },
+            SitemapEntry {
+                loc: "https://example.com/without.html".into(),
+                lastmod: None,
+            },
+        ]);
+        let parsed = parse_sitemap_locs(&xml);
+        assert_eq!(parsed.len(), 1);
+        assert!(parsed.contains_key("https://example.com/with.html"));
+        assert!(!parsed.contains_key("https://example.com/without.html"));
+    }
+
+    /// Malformed input returns an empty map (or a partial one for
+    /// the `<url>` blocks that did parse). Tolerant by design.
+    #[test]
+    fn parse_sitemap_locs_handles_garbage() {
+        let parsed = parse_sitemap_locs("totally not xml");
+        assert!(parsed.is_empty());
+
+        // A `<url>` block missing `</url>` is silently skipped.
+        let truncated = "<url><loc>https://x/y</loc>";
+        let parsed = parse_sitemap_locs(truncated);
+        assert!(parsed.is_empty());
+    }
+
+    /// XML-escaped locs round-trip without unescaping. The writer
+    /// stores escaped locs in the `loc` field of `SitemapEntry`,
+    /// so the lookup map keys on escaped strings.
+    #[test]
+    fn parse_sitemap_locs_keeps_loc_escaped() {
+        let xml = render_sitemap_xml(&[SitemapEntry {
+            loc: "https://example.com/a&amp;b.html".into(),
+            lastmod: Some("2026-04-27T10:00:00Z".into()),
+        }]);
+        let parsed = parse_sitemap_locs(&xml);
+        // The `&amp;` stays escaped in the parsed key — the
+        // writer compares against the same escaped form.
+        assert!(parsed.contains_key("https://example.com/a&amp;b.html"));
+    }
+
+    #[test]
+    fn extract_inner_tag_simple() {
+        assert_eq!(
+            extract_inner_tag("<loc>https://example.com/x</loc>", "loc"),
+            Some("https://example.com/x")
+        );
+    }
+
+    #[test]
+    fn extract_inner_tag_missing_returns_none() {
+        assert_eq!(extract_inner_tag("<other>thing</other>", "loc"), None);
     }
 }

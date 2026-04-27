@@ -1101,11 +1101,24 @@ None — inline asserts cover the vocabulary.
       emitting edges. Updated tests + the contract doc.
 
 ### Sub-phase 8.3 — Sitemap merge (closes `bd-pphv`)
-- [ ] `website_post_render::write_sitemap` reads existing,
-      patches re-rendered entries, writes back.
-- [ ] Falls through to fresh-write on read/parse failure.
-- [ ] Test 53.
-- [ ] Close `bd-pphv`.
+- [x] `website_post_render::write_sitemap` reads existing
+      `<output_dir>/sitemap.xml`, parses each `<url>` block into
+      `loc → lastmod`, refreshes entries for pages rendered this
+      run (matched via the `outputs: &[RenderToFileResult]`
+      param), preserves entries for skipped pages, and writes
+      back sorted by `loc`.
+- [x] `parse_sitemap_locs` is tolerant of malformed input —
+      malformed `<url>` blocks are skipped, root-level parse
+      failures degrade to fresh-write.
+- [x] `RenderToFileResult.output_path` matched against
+      `project.output_dir.join(profile.output_href)` to identify
+      rendered pages.
+- [x] 6 unit tests on the parser (round-trip, missing-lastmod,
+      malformed input, escape preservation, extract_inner_tag
+      simple+missing) + 1 integration test
+      (`mode_b_sitemap_preserves_untouched_entries_lastmod`)
+      end-to-end via Mode B render.
+- [x] Close `bd-pphv`.
 
 ### Sub-phase 8.4 — CLI surface
 - [ ] `--clean` flag: wipes `profiles/` and `nav-config-hash`,
