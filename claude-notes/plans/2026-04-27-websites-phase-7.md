@@ -931,12 +931,16 @@ robots.txt cover the vocabulary. Consistent with Phases 2–6.
       * **`bd-82dn`** — Empty-`index.html` filter in sitemap.
         Coordinate with `bd-r82e` (`DocumentProfile.includes`
         enrichment is the natural place to add `is_empty`). P4.
-- [ ] Update epic plan §"Work items" — Phase 7 marked done with
-      sub-plan link and bead reference.
-- [ ] Update §"Follow-up beads report (running log)" with the
-      filed bd issues.
-- [ ] `br close <phase7-bd> --reason "Implemented at <commit>"`.
-- [ ] `br sync --flush-only && git add .beads/ && git commit`.
+- [x] Updated epic plan §"Work items" — Phase 7 marked done with
+      sub-plan link, `bd-b9mz` reference, and full follow-up
+      list.
+- [x] Updated §"Follow-up beads report (running log)" with the
+      eight filed bd issues.
+- [x] `br close bd-b9mz` (reason cites commit `78aa80cc`).
+- [x] All Phase-7 changes committed in commit `78aa80cc`
+      ("Phase 7: post-render (sitemap, favicon, site-url/title
+      prefix)") on `feature/websites`. The single commit
+      includes the .beads/issues.jsonl flush (br auto-flushed).
 - [ ] Ask user permission before pushing.
 
 ## Risks and mitigations
