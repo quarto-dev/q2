@@ -145,6 +145,9 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     for failure in &summary.pass2_failures {
         eprintln!("error: {}: {}", failure.input.display(), failure.error);
     }
+    for diagnostic in &summary.project_diagnostics {
+        eprintln!("{}", diagnostic.to_text(None));
+    }
 
     for result in &summary.outputs {
         if !args.quiet && !result.render_output.diagnostics.is_empty() {

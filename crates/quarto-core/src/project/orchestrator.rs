@@ -131,6 +131,11 @@ pub trait ProjectType {
     /// Default projects ignore it (single-doc renders flush
     /// per-doc inside [`render_document_to_file`] when no
     /// orchestrator is involved).
+    ///
+    /// **Phase 7:** `diagnostics` is a project-level diagnostic
+    /// channel surfaced through [`ProjectRenderSummary`]. The
+    /// website hook uses it for non-fatal warnings (e.g.
+    /// `website.favicon` references a missing source file).
     async fn post_render(
         &self,
         _project: &ProjectContext,
@@ -138,6 +143,7 @@ pub trait ProjectType {
         _outputs: &[RenderToFileResult],
         _project_artifacts: &crate::artifact::ArtifactStore,
         _runtime: &dyn quarto_system_runtime::SystemRuntime,
+        _diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
         Ok(())
     }
@@ -176,54 +182,38 @@ impl ProjectType for WebsiteProjectType {
         "site_libs".to_string()
     }
 
-    /// Phase 5: flush every Project-scoped artifact accumulated
-    /// across Pass-2 renders to disk under `_site/site_libs/`.
+    /// Run the four website post-render hooks in order:
     ///
-    /// Each artifact's relative `path` is joined onto
-    /// `{output_dir}/{lib_dir}/`. Iteration is in sorted-key
-    /// order so the on-disk write order is deterministic across
-    /// runs.
+    /// 1. **`flush_site_libs`** (Phase 5) — drain Project-scoped
+    ///    artifacts to `<output_dir>/site_libs/`.
+    /// 2. **`copy_favicon`** (Phase 7) — copy `website.favicon`
+    ///    from the project root to the output dir.
+    /// 3. **`write_sitemap`** (Phase 7) — emit `sitemap.xml` when
+    ///    `website.site-url` is set.
+    /// 4. **`write_robots_txt`** (Phase 7) — emit `robots.txt`
+    ///    (user-provided file wins; otherwise auto-generate when
+    ///    `website.site-url` is set).
+    ///
+    /// Each hook short-circuits cleanly when its triggering config
+    /// is absent, so a website project that opts in to none of
+    /// these features just runs the site_libs flush.
     #[cfg(not(target_arch = "wasm32"))]
     async fn post_render(
         &self,
         project: &ProjectContext,
-        _index: &ProjectIndex,
+        index: &ProjectIndex,
         _outputs: &[RenderToFileResult],
         project_artifacts: &crate::artifact::ArtifactStore,
         runtime: &dyn SystemRuntime,
+        diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
-        if project_artifacts.is_empty() {
-            return Ok(());
-        }
-
-        let lib_root = project.output_dir.join(self.lib_dir());
-
-        let mut entries: Vec<(&str, &crate::artifact::Artifact)> =
-            project_artifacts.iter().collect();
-        entries.sort_by(|a, b| a.0.cmp(b.0));
-
-        for (_, artifact) in entries {
-            let Some(path) = &artifact.path else { continue };
-            let on_disk = lib_root.join(path);
-            if let Some(parent) = on_disk.parent() {
-                runtime.dir_create(parent, true).map_err(|e| {
-                    crate::error::QuartoError::other(format!(
-                        "Failed to create site_libs subdirectory {}: {}",
-                        parent.display(),
-                        e
-                    ))
-                })?;
-            }
-            runtime
-                .file_write(&on_disk, &artifact.content)
-                .map_err(|e| {
-                    crate::error::QuartoError::other(format!(
-                        "Failed to write site_libs artifact {}: {}",
-                        on_disk.display(),
-                        e
-                    ))
-                })?;
-        }
+        use super::website_post_render::{
+            copy_favicon, flush_site_libs, write_robots_txt, write_sitemap,
+        };
+        flush_site_libs(project, project_artifacts, &self.lib_dir(), runtime)?;
+        copy_favicon(project, runtime, diagnostics)?;
+        write_sitemap(project, index, runtime)?;
+        write_robots_txt(project, runtime)?;
         Ok(())
     }
 }
@@ -262,6 +252,11 @@ pub struct ProjectRenderSummary {
     /// Pass-2 files that failed to render. The CLI decides whether
     /// this is a non-zero exit.
     pub pass2_failures: Vec<FileFailure>,
+    /// Project-level diagnostics emitted by
+    /// [`ProjectType::post_render`] (Phase 7+). These are
+    /// non-fatal warnings (e.g. missing favicon source) — failures
+    /// surface as a returned `Err` instead.
+    pub project_diagnostics: Vec<DiagnosticMessage>,
 }
 
 impl ProjectRenderSummary {
@@ -356,6 +351,7 @@ impl<'a> ProjectPipeline<'a> {
             pass1_failures.iter().map(|f| f.input.clone()).collect();
         let (outputs, pass2_failures) = self.pass_two(index.clone(), &skip).await;
 
+        let mut project_diagnostics: Vec<DiagnosticMessage> = Vec::new();
         self.project_type
             .post_render(
                 self.project,
@@ -363,6 +359,7 @@ impl<'a> ProjectPipeline<'a> {
                 &outputs,
                 &self.project_artifacts,
                 self.runtime.as_ref(),
+                &mut project_diagnostics,
             )
             .await
             .map_err(|e| QuartoError::other(format!("post_render failed: {e}")))?;
@@ -371,6 +368,7 @@ impl<'a> ProjectPipeline<'a> {
             outputs,
             pass1_failures,
             pass2_failures,
+            project_diagnostics,
         })
     }
 
@@ -524,11 +522,20 @@ mod tests {
         let project_artifacts = crate::artifact::ArtifactStore::new();
 
         assert!(t.pre_render(&mut project, &index).await.is_ok());
+        let mut diags: Vec<DiagnosticMessage> = Vec::new();
         assert!(
-            t.post_render(&project, &index, &[], &project_artifacts, &runtime)
-                .await
-                .is_ok()
+            t.post_render(
+                &project,
+                &index,
+                &[],
+                &project_artifacts,
+                &runtime,
+                &mut diags,
+            )
+            .await
+            .is_ok()
         );
+        assert!(diags.is_empty());
     }
 
     #[test]

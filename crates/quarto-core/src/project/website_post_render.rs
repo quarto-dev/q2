@@ -1,0 +1,540 @@
+/*
+ * project/website_post_render.rs
+ * Copyright (c) 2026 Posit, PBC
+ *
+ * WebsiteProjectType post-render hooks: site_libs flush, favicon
+ * copy, sitemap.xml, robots.txt.
+ */
+
+//! Post-render hooks for [`WebsiteProjectType`].
+//!
+//! Each function below runs once per project, after Pass 2 has
+//! finished rendering every file. The four hooks are:
+//!
+//! - [`flush_site_libs`] (Phase 5): drain the orchestrator's
+//!   project-wide artifact accumulator into `_site/site_libs/...`.
+//! - [`copy_favicon`] (Phase 7): copy `<project>/favicon-path` to
+//!   `<output_dir>/favicon-path`.
+//! - [`write_sitemap`] (Phase 7): emit `_site/sitemap.xml` when
+//!   `website.site-url` is set.
+//! - [`write_robots_txt`] (Phase 7): emit `_site/robots.txt`
+//!   pointing at the sitemap, unless the user provided one.
+//!
+//! Each hook short-circuits cleanly when its triggering config is
+//! absent. Failures bubble up as
+//! [`crate::error::QuartoError`]s — by Phase 1's contract, hook
+//! failures abort the whole project render.
+//!
+//! See `claude-notes/plans/2026-04-27-websites-phase-7.md`
+//! Decisions 8–11.
+//!
+//! [`WebsiteProjectType`]: super::orchestrator::WebsiteProjectType
+
+#![cfg(not(target_arch = "wasm32"))]
+
+use std::path::Path;
+use std::time::SystemTime;
+
+use quarto_error_reporting::DiagnosticMessage;
+use quarto_system_runtime::SystemRuntime;
+
+use crate::Result;
+use crate::artifact::ArtifactStore;
+use crate::error::QuartoError;
+use crate::project::ProjectContext;
+use crate::project::index::ProjectIndex;
+use crate::project::website_config::{normalize_favicon_path, website_favicon, website_site_url};
+
+// ═══════════════════════════════════════════════════════════════════
+// Site libs (Phase 5 — moved here from orchestrator.rs)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Flush every Project-scoped artifact accumulated across Pass-2
+/// renders to disk under `<output_dir>/<lib_dir>/`.
+///
+/// Each artifact's relative `path` is joined onto
+/// `{output_dir}/{lib_dir}/`. Iteration is in sorted-key order so
+/// the on-disk write order is deterministic across runs.
+pub(super) fn flush_site_libs(
+    project: &ProjectContext,
+    project_artifacts: &ArtifactStore,
+    lib_dir: &str,
+    runtime: &dyn SystemRuntime,
+) -> Result<()> {
+    if project_artifacts.is_empty() {
+        return Ok(());
+    }
+
+    let lib_root = project.output_dir.join(lib_dir);
+
+    let mut entries: Vec<(&str, &crate::artifact::Artifact)> = project_artifacts.iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (_, artifact) in entries {
+        let Some(path) = &artifact.path else {
+            continue;
+        };
+        let on_disk = lib_root.join(path);
+        if let Some(parent) = on_disk.parent() {
+            runtime.dir_create(parent, true).map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to create site_libs subdirectory {}: {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
+        runtime
+            .file_write(&on_disk, &artifact.content)
+            .map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to write site_libs artifact {}: {}",
+                    on_disk.display(),
+                    e
+                ))
+            })?;
+    }
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Favicon (Phase 7)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Copy the user-configured favicon from the project root to the
+/// output directory.
+///
+/// No-op when:
+/// - `website.favicon` is not set.
+/// - `project.config.metadata` is unavailable (single-doc render).
+/// - The source file is missing — emits a warning diagnostic into
+///   `diagnostics` but does not error so the render completes.
+pub(super) fn copy_favicon(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Result<()> {
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return Ok(());
+    };
+    let Some(raw) = website_favicon(meta) else {
+        return Ok(());
+    };
+    let normalized = normalize_favicon_path(&raw);
+    if normalized.is_empty() {
+        return Ok(());
+    }
+
+    let src = project.dir.join(&normalized);
+    let exists = runtime.path_exists(&src, None).map_err(|e| {
+        QuartoError::other(format!(
+            "Failed to probe favicon source {}: {}",
+            src.display(),
+            e
+        ))
+    })?;
+    if !exists {
+        diagnostics.push(DiagnosticMessage::warning(format!(
+            "website.favicon refers to missing file '{}'",
+            normalized
+        )));
+        return Ok(());
+    }
+
+    let dst = project.output_dir.join(&normalized);
+    if let Some(parent) = dst.parent() {
+        runtime.dir_create(parent, true).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to create favicon directory {}: {}",
+                parent.display(),
+                e
+            ))
+        })?;
+    }
+    runtime.file_copy(&src, &dst).map_err(|e| {
+        QuartoError::other(format!(
+            "Failed to copy favicon {} → {}: {}",
+            src.display(),
+            dst.display(),
+            e
+        ))
+    })?;
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sitemap (Phase 7)
+// ═══════════════════════════════════════════════════════════════════
+
+/// One entry of a sitemap urlset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SitemapEntry {
+    /// The fully-qualified URL of the page (XML-escaped).
+    loc: String,
+    /// ISO-8601 UTC timestamp, second precision; `None` to omit.
+    lastmod: Option<String>,
+}
+
+/// Emit `<output_dir>/sitemap.xml` listing every rendered page.
+///
+/// No-op when `website.site-url` is unset (Q1 parity). Phase 7 ships
+/// fresh-write only — no read-existing/merge path. Phase 8 adds the
+/// incremental merge.
+pub(super) fn write_sitemap(
+    project: &ProjectContext,
+    index: &ProjectIndex,
+    runtime: &dyn SystemRuntime,
+) -> Result<()> {
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return Ok(());
+    };
+    let Some(site_url) = website_site_url(meta) else {
+        return Ok(());
+    };
+    let base = site_url.trim_end_matches('/');
+
+    let mut entries: Vec<SitemapEntry> = Vec::with_capacity(index.profiles().len());
+    for profile in index.profiles() {
+        let loc = format!("{}/{}", base, profile.output_href.trim_start_matches('/'));
+        let source_path = project.dir.join(&profile.source_path);
+        let lastmod = read_input_mtime(&source_path, runtime);
+        entries.push(SitemapEntry {
+            loc: escape_xml_text(&loc),
+            lastmod,
+        });
+    }
+
+    let xml = render_sitemap_xml(&entries);
+    let dst = project.output_dir.join("sitemap.xml");
+    if let Some(parent) = dst.parent() {
+        runtime.dir_create(parent, true).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to create sitemap directory {}: {}",
+                parent.display(),
+                e
+            ))
+        })?;
+    }
+    runtime.file_write(&dst, xml.as_bytes()).map_err(|e| {
+        QuartoError::other(format!("Failed to write sitemap {}: {}", dst.display(), e))
+    })?;
+    Ok(())
+}
+
+/// Read an input file's mtime as an ISO-8601 UTC string with
+/// second precision. Returns `None` if the metadata is unreadable
+/// or has no mtime.
+fn read_input_mtime(path: &Path, runtime: &dyn SystemRuntime) -> Option<String> {
+    let metadata = runtime.path_metadata(path).ok()?;
+    metadata.modified.map(format_iso8601_utc)
+}
+
+/// Format a [`SystemTime`] as `YYYY-MM-DDThh:mm:ssZ` in UTC.
+///
+/// Manual algorithm so we don't pull in `chrono`. Computes
+/// civil-date components from the POSIX seconds-since-epoch using
+/// the Howard Hinnant calendar formulas (proleptic Gregorian).
+fn format_iso8601_utc(time: SystemTime) -> String {
+    let secs = match time.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(d) => d.as_secs() as i64,
+        Err(e) => -(e.duration().as_secs() as i64),
+    };
+
+    let days_since_epoch = secs.div_euclid(86_400);
+    let secs_of_day = secs.rem_euclid(86_400);
+
+    let (year, month, day) = civil_from_days(days_since_epoch);
+    let hour = (secs_of_day / 3600) as u32;
+    let minute = ((secs_of_day % 3600) / 60) as u32;
+    let second = (secs_of_day % 60) as u32;
+
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        year, month, day, hour, minute, second
+    )
+}
+
+/// Civil-date conversion (Howard Hinnant, public domain).
+///
+/// `days` is days since 1970-01-01. Returns (year, month, day) in
+/// the proleptic Gregorian calendar.
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // [0, 146_096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
+    let y = y + if m <= 2 { 1 } else { 0 };
+    (y as i32, m, d)
+}
+
+/// XML-text escaper for `<loc>` content.
+///
+/// Escapes `&`, `<`, `>`, `"`, `'`. Keeps the helper inline so we
+/// don't pull in an XML library for ~5 characters of substitution.
+fn escape_xml_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Hand-rolled sitemap XML emitter.
+///
+/// Format matches Q1's
+/// `external-sources/quarto-cli/src/resources/projects/website/templates/sitemap.ejs.xml`.
+fn render_sitemap_xml(entries: &[SitemapEntry]) -> String {
+    let mut out = String::new();
+    out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    out.push_str("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+    for entry in entries {
+        out.push_str("  <url>\n");
+        out.push_str("    <loc>");
+        out.push_str(&entry.loc);
+        out.push_str("</loc>\n");
+        if let Some(lastmod) = &entry.lastmod {
+            out.push_str("    <lastmod>");
+            out.push_str(lastmod);
+            out.push_str("</lastmod>\n");
+        }
+        out.push_str("  </url>\n");
+    }
+    out.push_str("</urlset>\n");
+    out
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// robots.txt (Phase 7)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Emit `<output_dir>/robots.txt`.
+///
+/// Behavior:
+/// 1. If `<project>/robots.txt` exists → copy it verbatim.
+/// 2. Else if `website.site-url` is set → write
+///    `Sitemap: <site-url>/sitemap.xml\n`.
+/// 3. Else → no-op.
+pub(super) fn write_robots_txt(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+) -> Result<()> {
+    let dst = project.output_dir.join("robots.txt");
+    let src = project.dir.join("robots.txt");
+
+    let user_robots_exists = runtime.path_exists(&src, None).map_err(|e| {
+        QuartoError::other(format!(
+            "Failed to probe robots.txt source {}: {}",
+            src.display(),
+            e
+        ))
+    })?;
+
+    if user_robots_exists {
+        if let Some(parent) = dst.parent() {
+            runtime.dir_create(parent, true).map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to create output directory {}: {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
+        runtime.file_copy(&src, &dst).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to copy robots.txt {} → {}: {}",
+                src.display(),
+                dst.display(),
+                e
+            ))
+        })?;
+        return Ok(());
+    }
+
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return Ok(());
+    };
+    let Some(site_url) = website_site_url(meta) else {
+        return Ok(());
+    };
+    let base = site_url.trim_end_matches('/');
+    let body = format!("Sitemap: {base}/sitemap.xml\n");
+
+    if let Some(parent) = dst.parent() {
+        runtime.dir_create(parent, true).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to create robots.txt directory {}: {}",
+                parent.display(),
+                e
+            ))
+        })?;
+    }
+    runtime.file_write(&dst, body.as_bytes()).map_err(|e| {
+        QuartoError::other(format!(
+            "Failed to write robots.txt {}: {}",
+            dst.display(),
+            e
+        ))
+    })?;
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Tests
+// ═══════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn entry_loc(loc: &str, lastmod: Option<&str>) -> SitemapEntry {
+        SitemapEntry {
+            loc: loc.to_string(),
+            lastmod: lastmod.map(String::from),
+        }
+    }
+
+    /// Plan test 23: zero entries → conformant empty urlset.
+    #[test]
+    fn sitemap_xml_empty_urlset() {
+        let xml = render_sitemap_xml(&[]);
+        assert_eq!(
+            xml,
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n\
+             </urlset>\n"
+        );
+    }
+
+    /// Plan test 24: single entry → conformant XML with `<loc>` and
+    /// `<lastmod>`.
+    #[test]
+    fn sitemap_xml_single_entry() {
+        let xml = render_sitemap_xml(&[entry_loc(
+            "https://example.com/index.html",
+            Some("2026-04-27T14:32:11Z"),
+        )]);
+        assert!(
+            xml.contains("<loc>https://example.com/index.html</loc>"),
+            "missing loc: {xml}"
+        );
+        assert!(
+            xml.contains("<lastmod>2026-04-27T14:32:11Z</lastmod>"),
+            "missing lastmod: {xml}"
+        );
+        assert!(
+            xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"),
+            "missing prologue: {xml}"
+        );
+    }
+
+    /// Plan test 25: special characters in `loc` are XML-escaped
+    /// before they hit the output (entry is built with the
+    /// already-escaped string from `escape_xml_text`).
+    #[test]
+    fn sitemap_xml_escapes_special_chars() {
+        let escaped = escape_xml_text("https://example.com/?q=a&b=c");
+        assert_eq!(escaped, "https://example.com/?q=a&amp;b=c");
+        let xml = render_sitemap_xml(&[entry_loc(&escaped, None)]);
+        assert!(xml.contains("<loc>https://example.com/?q=a&amp;b=c</loc>"));
+    }
+
+    /// Plan test 26: an entry with no mtime omits `<lastmod>`.
+    #[test]
+    fn sitemap_xml_omits_lastmod_when_unknown() {
+        let xml = render_sitemap_xml(&[entry_loc("https://example.com/x.html", None)]);
+        assert!(!xml.contains("<lastmod>"), "unexpected lastmod: {xml}");
+        assert!(xml.contains("<loc>https://example.com/x.html</loc>"));
+    }
+
+    /// Plan test 27 reframed: site-url with trailing slash + simple
+    /// output_href compose with one `/` separator (the actual
+    /// composition lives in `write_sitemap`; verify the helper
+    /// behavior here).
+    #[test]
+    fn sitemap_url_join_strips_trailing_slash() {
+        let base = "https://example.com/".trim_end_matches('/');
+        let href = "x.html".trim_start_matches('/');
+        assert_eq!(format!("{base}/{href}"), "https://example.com/x.html");
+    }
+
+    /// Plan test 28: default robots.txt body for a known site-url.
+    #[test]
+    fn robots_txt_default_body() {
+        let base = "https://example.com".trim_end_matches('/');
+        assert_eq!(
+            format!("Sitemap: {base}/sitemap.xml\n"),
+            "Sitemap: https://example.com/sitemap.xml\n"
+        );
+    }
+
+    /// Plan test 29: trailing slash on site-url is stripped before
+    /// the robots.txt body is composed.
+    #[test]
+    fn robots_txt_strips_trailing_slash_in_sitemap_url() {
+        let base = "https://example.com/".trim_end_matches('/');
+        assert_eq!(
+            format!("Sitemap: {base}/sitemap.xml\n"),
+            "Sitemap: https://example.com/sitemap.xml\n"
+        );
+    }
+
+    /// XML escape covers all five special characters.
+    #[test]
+    fn xml_escape_table() {
+        assert_eq!(escape_xml_text("&"), "&amp;");
+        assert_eq!(escape_xml_text("<"), "&lt;");
+        assert_eq!(escape_xml_text(">"), "&gt;");
+        assert_eq!(escape_xml_text("\""), "&quot;");
+        assert_eq!(escape_xml_text("'"), "&apos;");
+        assert_eq!(escape_xml_text("plain text"), "plain text");
+        assert_eq!(escape_xml_text("a & b"), "a &amp; b");
+    }
+
+    /// ISO-8601 formatter: epoch is `1970-01-01T00:00:00Z`.
+    #[test]
+    fn iso8601_unix_epoch() {
+        assert_eq!(
+            format_iso8601_utc(SystemTime::UNIX_EPOCH),
+            "1970-01-01T00:00:00Z"
+        );
+    }
+
+    /// ISO-8601 formatter: a known timestamp computes correctly.
+    /// 2026-04-27T14:32:11Z = 1_777_300_331 seconds since the
+    /// Unix epoch (computed by hand, cross-checked against the
+    /// formatter).
+    #[test]
+    fn iso8601_known_timestamp() {
+        let t = SystemTime::UNIX_EPOCH + Duration::from_secs(1_777_300_331);
+        assert_eq!(format_iso8601_utc(t), "2026-04-27T14:32:11Z");
+    }
+
+    /// ISO-8601 formatter: an end-of-year timestamp.
+    /// 2025-12-31T23:59:59Z = 1_767_225_599 seconds since epoch.
+    #[test]
+    fn iso8601_end_of_year() {
+        let t = SystemTime::UNIX_EPOCH + Duration::from_secs(1_767_225_599);
+        assert_eq!(format_iso8601_utc(t), "2025-12-31T23:59:59Z");
+    }
+
+    /// ISO-8601 formatter: a leap-day timestamp.
+    /// 2024-02-29T12:00:00Z = 1_709_208_000 seconds since epoch.
+    #[test]
+    fn iso8601_leap_day() {
+        let t = SystemTime::UNIX_EPOCH + Duration::from_secs(1_709_208_000);
+        assert_eq!(format_iso8601_utc(t), "2024-02-29T12:00:00Z");
+    }
+}

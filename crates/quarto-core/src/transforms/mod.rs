@@ -60,6 +60,9 @@ mod theorem;
 mod title_block;
 mod toc_generate;
 mod toc_render;
+mod website_canonical_url;
+mod website_favicon;
+mod website_title_prefix;
 
 pub use appendix::AppendixStructureTransform;
 pub use callout::CalloutTransform;
@@ -89,3 +92,6 @@ pub use theorem::TheoremSugarTransform;
 pub use title_block::TitleBlockTransform;
 pub use toc_generate::TocGenerateTransform;
 pub use toc_render::TocRenderTransform;
+pub use website_canonical_url::WebsiteCanonicalUrlTransform;
+pub use website_favicon::WebsiteFaviconTransform;
+pub use website_title_prefix::WebsiteTitlePrefixTransform;

@@ -134,6 +134,7 @@ impl ProjectType for CountingProjectType {
         _outputs: &[RenderToFileResult],
         _project_artifacts: &quarto_core::ArtifactStore,
         _runtime: &dyn SystemRuntime,
+        _diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
     ) -> quarto_core::Result<()> {
         self.post_calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
@@ -218,8 +219,9 @@ impl ProjectType for CountingProjectTypeWrapper {
         o: &[RenderToFileResult],
         a: &quarto_core::ArtifactStore,
         r: &dyn SystemRuntime,
+        d: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
     ) -> quarto_core::Result<()> {
-        self.inner.post_render(p, i, o, a, r).await
+        self.inner.post_render(p, i, o, a, r, d).await
     }
 }
 

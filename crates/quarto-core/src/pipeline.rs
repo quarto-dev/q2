@@ -69,7 +69,8 @@ use crate::transforms::{
     NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
-    TocGenerateTransform, TocRenderTransform,
+    TocGenerateTransform, TocRenderTransform, WebsiteCanonicalUrlTransform,
+    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -565,6 +566,12 @@ pub async fn render_qmd_to_html(
 /// 2. `CalloutResolveTransform` - Resolve CustomNodes to structured Divs
 /// 3. `ShortcodeResolveTransform` - Resolve shortcodes (e.g., `{{< meta title >}}`)
 /// 4. `MetadataNormalizeTransform` - Add derived metadata (pagetitle, etc.)
+/// 4a. `WebsiteTitlePrefixTransform` - Combine `website.title` with the page's title
+///     into the rendered `<title>` (Phase 7)
+/// 4b. `WebsiteFaviconTransform` - Append `<link rel="icon">` for `website.favicon`
+///     to the page's `header-includes` (Phase 7)
+/// 4c. `WebsiteCanonicalUrlTransform` - Set `canonical-url` from
+///     `website.site-url + output_href` (Phase 7)
 /// 5. `TitleBlockTransform` - Add title header from metadata if not present
 /// 6. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
 /// 7. `FootnotesTransform` - Extract footnotes and create footnotes section
@@ -610,6 +617,16 @@ pub fn build_transform_pipeline(
         target_format,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
+    // Website per-page metadata transforms (Phase 7 of the
+    // website-projects epic). Each is a no-op outside a website
+    // project. Order: title-prefix runs before favicon/canonical
+    // because the latter two read fields the former might modify
+    // in the future; today they're independent.
+    // See `claude-notes/plans/2026-04-27-websites-phase-7.md`
+    // §Decision 3.
+    pipeline.push(Box::new(WebsiteTitlePrefixTransform::new()));
+    pipeline.push(Box::new(WebsiteFaviconTransform::new()));
+    pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
     pipeline.push(Box::new(TitleBlockTransform::new()));
     pipeline.push(Box::new(SectionizeTransform::new()));
     pipeline.push(Box::new(FootnotesTransform::new()));

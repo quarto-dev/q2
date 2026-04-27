@@ -613,7 +613,32 @@ phases above.
       `bd-j3a0` (diagnostic dedup), `bd-gdrv` (cross-format —
       `related` not parent-child), `bd-td2a` (footer text-region
       rewrite, supersedes `bd-jfyl`).
-- [ ] **Phase 7:** Post-render (sitemap, favicon, site-url/title).
+- [x] **Phase 7:** Post-render (sitemap, favicon, site-url/title).
+      Closed `bd-b9mz` on `feature/websites`.
+      Sub-plan: `claude-notes/plans/2026-04-27-websites-phase-7.md`.
+      Adds three per-page Pass-2 transforms
+      (`WebsiteTitlePrefixTransform`, `WebsiteFaviconTransform`,
+      `WebsiteCanonicalUrlTransform`), the `website_config` helper
+      module, and the `website_post_render` module
+      (`flush_site_libs` extracted from orchestrator + new
+      `copy_favicon` / `write_sitemap` / `write_robots_txt`).
+      `WebsiteProjectType::post_render` is now a four-line
+      composition. Trait signature gained
+      `&mut Vec<DiagnosticMessage>` for non-fatal warnings;
+      `ProjectRenderSummary` gained `project_diagnostics`. Adds
+      46 new tests (8 + 8 + 10 + 9 + 12 + 10 across helper /
+      transforms / post-render / integration). Validated
+      end-to-end with `/tmp/q2-phase7-smoke/` (3-page website
+      with title, site-url, favicon) — all four post-render
+      outputs (`sitemap.xml`, `robots.txt`, `_site/favicon.ico`,
+      copied favicon) verified plus per-page `<title>`,
+      `<link rel="icon">`, `<link rel="canonical">` inspected
+      and matched. Follow-ups: `bd-7h6a` (per-page favicon
+      override — user-flagged), `bd-pphv` (sitemap incremental
+      merge), `bd-tyvt` (Open Graph / social meta), `bd-ochm`
+      (brand-aware favicon), `bd-4zdf` (multi-format favicon),
+      `bd-1hdz` (draft-mode sitemap), `bd-97yc` (home-page
+      title carve-out), `bd-82dn` (empty-index sitemap filter).
 - [ ] **Phase 8:** Incremental rebuilds.
 - [ ] **Phase 9:** Hub-client project rendering.
 
@@ -774,4 +799,26 @@ when it files an issue):
     using Phase 6's helper. Replaces / supersedes Phase 5's
     `bd-jfyl`; the helper now exists, so this is "wire it in".
     P3.
-- Phases 7–9: TBD.
+- **Phase 7 (`bd-b9mz`, closed).** Follow-ups filed at close-out
+  (each `discovered-from:bd-b9mz`, parent-child to `bd-0tr6`,
+  with extra `related` links where noted):
+  - `bd-7h6a` — Per-page favicon override (`meta.favicon` beats
+    `website.favicon`). User flagged 2026-04-27 as
+    expected-soon — the only follow-up the user explicitly
+    surfaced as likely to come up sooner rather than later. P3.
+  - `bd-pphv` — Sitemap incremental merge
+    (read-existing/update/write). Loops with Phase 8. P3.
+  - `bd-tyvt` — Open Graph / Twitter card / social meta tags
+    (Q1 `metadataHtmlPostProcessor` parity). P3.
+  - `bd-ochm` — Brand-aware favicon fallback (once Q2 brand
+    support lands). P4.
+  - `bd-4zdf` — Multi-format favicon variants (apple-touch-icon,
+    sizes). P4.
+  - `bd-1hdz` — Draft-mode interaction with sitemap.
+    Coordinate with `bd-p4sc` from Phase 6. P3.
+  - `bd-97yc` — Title-prefix home-page carve-out (Q1
+    `stem == "index"` parity). P4.
+  - `bd-82dn` — Empty-`index.html` filter in sitemap.
+    Coordinate with `bd-r82e` (`DocumentProfile.includes`
+    enrichment is the natural place to add `is_empty`). P4.
+- Phases 8–9: TBD.
