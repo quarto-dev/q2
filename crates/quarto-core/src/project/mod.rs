@@ -23,9 +23,12 @@
 //!   [`orchestrator::ProjectPipeline`] two-pass driver.
 //! - [`discovery`]: multi-file project file-list expansion.
 
+pub mod cache_key;
+pub mod dependency_graph;
 pub mod discovery;
 pub mod index;
 pub mod orchestrator;
+pub mod profile_cache;
 pub mod sidebar_membership;
 pub mod website_config;
 #[cfg(not(target_arch = "wasm32"))]
