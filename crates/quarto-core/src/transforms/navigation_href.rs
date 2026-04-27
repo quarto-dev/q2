@@ -96,30 +96,28 @@ pub fn is_external(href: &str) -> bool {
 
 /// Pass-1 / static counterpart to [`resolve_doc_relative_href`].
 ///
-/// Returns the project-relative source path of the target document
-/// when `raw` is an internal `.qmd` reference that resolves through
-/// `index`. Returns `None` for external URLs, fragment-only anchors,
-/// non-`.qmd` targets, and unresolvable paths.
+/// Returns the project-relative source path that an internal
+/// `.qmd` reference resolves to (after `..` / `.` / leading-`/`
+/// normalization), regardless of whether the target actually
+/// exists in the project. Returns `None` for external URLs,
+/// fragment-only anchors, and non-`.qmd` targets.
 ///
-/// Used by Phase 8's `LinkResolutionStage` (Pass-1) to populate
-/// `DocumentProfile.body_link_targets` for the dependency graph.
-/// Phase 6's `LinkRewriteTransform` (Pass-2) calls
-/// [`resolve_doc_relative_href`] for the same set of inputs to do
-/// the *rewrite*; the two share the same resolution rules
-/// (path normalization, query/fragment stripping, `ProjectIndex`
-/// lookup) so the dependency-graph view is consistent with the
-/// rendered output.
+/// **Why no index parameter?** Pass-1 (Phase 8 sub-phase 8.0d's
+/// `LinkResolutionStage`) runs *before* the project's
+/// `ProjectIndex` is built — the index is constructed *from* the
+/// profiles Pass-1 produces. Conditioning resolution on an index
+/// lookup at that point would always fail (no index yet), so we
+/// return the resolved path regardless. The Phase-8 dependency
+/// graph builder filters body-link edges against the actual
+/// index when it builds the graph, so unresolvable targets become
+/// no-op edges. Phase 6's [`resolve_doc_relative_href`] (Pass-2)
+/// keeps its index-aware lookup for diagnostics + rewriting.
 ///
-/// Side-effect-free — no diagnostics, no resolver calls. Phase 6 has
-/// the diagnostic surface; Phase 8 only needs the target set.
+/// Side-effect-free — no diagnostics, no resolver calls.
 ///
 /// See `claude-notes/designs/body-link-resolution-contract.md` for
-/// the prose contract Decision 7 of the Phase-8 plan calls out.
-pub fn resolve_doc_relative_target(
-    raw: &str,
-    source_relative: &str,
-    index: &ProjectIndex,
-) -> Option<PathBuf> {
+/// the prose contract.
+pub fn resolve_doc_relative_target(raw: &str, source_relative: &str) -> Option<PathBuf> {
     if is_external(raw) || raw.starts_with('#') {
         return None;
     }
@@ -133,8 +131,7 @@ pub fn resolve_doc_relative_target(
         return None;
     }
     let project_relative = resolve_to_project_root(source_relative, path_part);
-    let profile = index.lookup_by_source(Path::new(&project_relative))?;
-    Some(profile.source_path.clone())
+    Some(PathBuf::from(project_relative))
 }
 
 /// Resolve a body-content href to a relative URL.
@@ -736,169 +733,143 @@ mod tests {
     // ---- Phase 8: `resolve_doc_relative_target` ----
     //
     // Pass-1 / static counterpart to `resolve_doc_relative_href`.
-    // Returns the project-relative target path when an internal
-    // `.qmd` reference resolves through the index. See
+    // Returns the project-relative target path for any internal
+    // `.qmd` reference (no index check — the dependency-graph
+    // builder applies the existence filter). See
     // `claude-notes/designs/body-link-resolution-contract.md`.
 
     #[test]
     fn target_external_returns_none() {
-        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
         assert_eq!(
-            resolve_doc_relative_target("https://example.com", "index.qmd", &idx),
+            resolve_doc_relative_target("https://example.com", "index.qmd"),
             None
         );
         assert_eq!(
-            resolve_doc_relative_target("mailto:a@b.c", "index.qmd", &idx),
+            resolve_doc_relative_target("mailto:a@b.c", "index.qmd"),
             None
         );
         assert_eq!(
-            resolve_doc_relative_target("//cdn.example.com/x", "index.qmd", &idx),
+            resolve_doc_relative_target("//cdn.example.com/x", "index.qmd"),
             None
         );
     }
 
     #[test]
     fn target_fragment_only_returns_none() {
-        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
-        assert_eq!(
-            resolve_doc_relative_target("#section", "index.qmd", &idx),
-            None
-        );
+        assert_eq!(resolve_doc_relative_target("#section", "index.qmd"), None);
     }
 
     #[test]
     fn target_non_qmd_returns_none() {
-        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
         assert_eq!(
-            resolve_doc_relative_target("assets/logo.png", "index.qmd", &idx),
+            resolve_doc_relative_target("assets/logo.png", "index.qmd"),
             None
         );
     }
 
     #[test]
-    fn target_simple_qmd_hits_index() {
-        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
+    fn target_simple_qmd_resolves() {
         assert_eq!(
-            resolve_doc_relative_target("about.qmd", "index.qmd", &idx),
+            resolve_doc_relative_target("about.qmd", "index.qmd"),
             Some(PathBuf::from("about.qmd"))
         );
     }
 
     #[test]
     fn target_doc_relative_dotdot_resolves() {
-        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
         assert_eq!(
-            resolve_doc_relative_target("../about.qmd", "docs/api.qmd", &idx),
+            resolve_doc_relative_target("../about.qmd", "docs/api.qmd"),
             Some(PathBuf::from("about.qmd"))
         );
     }
 
     #[test]
     fn target_leading_slash_strips_to_project_root() {
-        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
         assert_eq!(
-            resolve_doc_relative_target("/about.qmd", "docs/api.qmd", &idx),
+            resolve_doc_relative_target("/about.qmd", "docs/api.qmd"),
             Some(PathBuf::from("about.qmd"))
         );
     }
 
     #[test]
     fn target_strips_query_and_fragment_before_lookup() {
-        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
         assert_eq!(
-            resolve_doc_relative_target("about.qmd#bio", "index.qmd", &idx),
+            resolve_doc_relative_target("about.qmd#bio", "index.qmd"),
             Some(PathBuf::from("about.qmd"))
         );
         assert_eq!(
-            resolve_doc_relative_target("about.qmd?x=1", "index.qmd", &idx),
+            resolve_doc_relative_target("about.qmd?x=1", "index.qmd"),
             Some(PathBuf::from("about.qmd"))
         );
         assert_eq!(
-            resolve_doc_relative_target("about.qmd?x=1#bio", "index.qmd", &idx),
+            resolve_doc_relative_target("about.qmd?x=1#bio", "index.qmd"),
             Some(PathBuf::from("about.qmd"))
         );
     }
 
     #[test]
-    fn target_unresolvable_qmd_returns_none() {
-        let idx = ProjectIndex::new(vec![]);
+    fn target_unresolvable_qmd_returns_path() {
+        // After the Phase-8.2 simplification, Pass-1 returns the
+        // resolved project-relative path regardless of whether
+        // the target is in the index. The dependency-graph
+        // builder filters; Pass-1 doesn't.
         assert_eq!(
-            resolve_doc_relative_target("missing.qmd", "index.qmd", &idx),
-            None
+            resolve_doc_relative_target("missing.qmd", "index.qmd"),
+            Some(PathBuf::from("missing.qmd"))
         );
     }
 
-    /// Equivalence between Pass-1 (`resolve_doc_relative_target`) and
-    /// Pass-2 (`resolve_doc_relative_href`): the Pass-1 helper returns
-    /// `Some(p)` IFF the Pass-2 helper rewrites `raw` (the result
-    /// differs from the input). When `Some(p)`, `p` is exactly the
-    /// matching profile's `source_path`. See the contract doc at
-    /// `claude-notes/designs/body-link-resolution-contract.md`.
+    /// Pass-1 / Pass-2 still agree on the *project-relative path*
+    /// when both report a hit. Pass-2 additionally requires the
+    /// path to be in the index to rewrite; Pass-1 does not. The
+    /// dependency-graph builder applies the index filter so the
+    /// edges it emits reflect Pass-2's rewrite set exactly.
     #[test]
-    fn pass1_pass2_agree_on_target_set() {
+    fn pass1_pass2_agree_on_resolved_path_when_both_hit() {
         let idx = ProjectIndex::new(vec![
             profile("about.qmd", "about.html"),
             profile("docs/api.qmd", "docs/api.html"),
         ]);
         let r = website_resolver("index.html");
 
-        // Each entry: (source_relative, raw, expected_pass1_some).
-        let cases: &[(&str, &str, bool)] = &[
-            // Hits.
-            ("index.qmd", "about.qmd", true),
-            ("index.qmd", "docs/api.qmd", true),
-            ("docs/api.qmd", "../about.qmd", true),
-            ("docs/api.qmd", "/about.qmd", true),
-            ("index.qmd", "about.qmd#bio", true),
-            ("index.qmd", "about.qmd?x=1", true),
-            // External / fragment / non-qmd / miss → None.
-            ("index.qmd", "https://example.com", false),
-            ("index.qmd", "#section", false),
-            ("index.qmd", "assets/logo.png", false),
-            ("index.qmd", "missing.qmd", false),
+        let cases: &[(&str, &str)] = &[
+            ("index.qmd", "about.qmd"),
+            ("index.qmd", "docs/api.qmd"),
+            ("docs/api.qmd", "../about.qmd"),
+            ("docs/api.qmd", "/about.qmd"),
+            ("index.qmd", "about.qmd#bio"),
+            ("index.qmd", "about.qmd?x=1"),
         ];
 
-        for (source, raw, expected_some) in cases {
-            let p1 = resolve_doc_relative_target(raw, source, &idx);
+        for (source, raw) in cases {
+            let p1 = resolve_doc_relative_target(raw, source);
             let mut diags = Vec::new();
             let p2 = resolve_doc_relative_href(raw, source, Some(&r), Some(&idx), None, &mut diags);
 
-            // Pass-1 is Some IFF Pass-2 actually rewrote.
-            let p1_hit = p1.is_some();
-            let p2_hit = p2 != *raw;
-            assert_eq!(
-                p1_hit, p2_hit,
-                "case ({}, {}): Pass-1 Some={:?}, Pass-2 rewrote={:?} (out={:?})",
-                source, raw, p1_hit, p2_hit, p2
+            let target = p1.expect("Pass-1 should resolve internal .qmd refs");
+            // Pass-2 should have rewritten the link.
+            assert_ne!(
+                p2.as_str(),
+                *raw,
+                "case ({}, {}): Pass-2 should rewrite when target is in index",
+                source,
+                raw
             );
-            assert_eq!(p1_hit, *expected_some, "case ({}, {})", source, raw);
-
-            // When both report a hit, the index profile we land on
-            // is consistent: Pass-1 returns its `source_path`,
-            // Pass-2's output begins with the corresponding
-            // `output_href` (modulo any leading `../` from the
-            // page-relative resolver).
-            if let Some(target) = p1 {
-                let prof = idx.lookup_by_source(&target).unwrap();
-                let core = prof.output_href.as_str();
-                // The Pass-2 output ends with either `core`, or `core?...`,
-                // or `core#...`. Find the (non-tail) prefix that ends with
-                // `core` somewhere — Pass-2 also prepends `../` for nested
-                // sources. Verify by stripping the ?/# tail and matching
-                // the suffix.
-                let p2_path: String = p2
-                    .find(|c| c == '#' || c == '?')
-                    .map(|i| p2[..i].to_string())
-                    .unwrap_or_else(|| p2.clone());
-                assert!(
-                    p2_path.ends_with(core),
-                    "case ({}, {}): Pass-2 output {:?} should end with target output_href {:?}",
-                    source,
-                    raw,
-                    p2_path,
-                    core
-                );
-            }
+            // The resolved path Pass-1 returns matches a profile in the index.
+            let prof = idx.lookup_by_source(&target).unwrap();
+            let core = prof.output_href.as_str();
+            let p2_path: String = p2
+                .find(|c| c == '#' || c == '?')
+                .map(|i| p2[..i].to_string())
+                .unwrap_or_else(|| p2.clone());
+            assert!(
+                p2_path.ends_with(core),
+                "case ({}, {}): Pass-2 output {:?} should end with target output_href {:?}",
+                source,
+                raw,
+                p2_path,
+                core
+            );
         }
     }
 }

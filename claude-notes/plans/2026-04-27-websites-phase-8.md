@@ -1067,15 +1067,38 @@ None — inline asserts cover the vocabulary.
       format id + source path, looks up via
       `profile_cache::load` (with include verification), and
       falls back to a live head pipeline on miss.
-- [x] 13 dependency_graph unit tests + 6 incremental-rebuild
-      integration tests.
-- [ ] Distinguish Mode A vs Mode B from CLI args.
-- [ ] Mode A wiring: `pass_one` over all pages with profile
-      cache; build graph (informational); `pass_two` over all.
-- [ ] Mode B wiring: `pass_one` over `targets`; build graph;
-      `pass_one` over `needed_profiles - targets`; augment
-      targets with implicit always-render dependents; `pass_two`
-      over augmented targets.
+- [x] 13 dependency_graph unit tests + 10 incremental-rebuild
+      integration tests (4 Mode B specific).
+- [x] `RenderMode { Full, Subset(HashSet<PathBuf>) }` enum on
+      `ProjectPipeline`; `with_mode()` builder method. Default
+      `Full` keeps the existing CLI behavior backward-compatible.
+- [x] Mode A wiring: `pass_one` over all pages with profile
+      cache; `compute_augmented_render_set` returns `None`;
+      `pass_two` filter no-ops.
+- [x] Mode B wiring: full Pass-1 (cache makes it cheap),
+      build dependency graph, augment user targets with
+      always-render dependents whose reverse-closure intersects
+      them, filter `pass_two` to render only the augmented set.
+      Per-target absolute paths translated to project-relative
+      for the graph query and back to absolute for the filter.
+- [x] **Deviation from plan:** the original plan called for a
+      "partial Pass-1 walk" in Mode B (profile only targets +
+      their dependency closure). Implementation found a
+      chicken-and-egg with sidebar `auto:` expansion: the
+      membership resolver consults the index, which doesn't
+      exist for non-target pages until they've been profiled.
+      v1 ships full Pass-1 in both modes, leveraging the cache
+      for warm-path speedup. The Pass-2 skip is the bigger
+      perf win anyway (filters and engines cost more than
+      profile extraction). Filing as a follow-up bead.
+- [x] **`LinkResolutionStage` no-index resolution.** Discovered
+      while wiring Mode B that `LinkResolutionStage` was reading
+      `ctx.project_index` to resolve links — but the index
+      doesn't exist during Pass-1 (it's *built from* Pass-1
+      profiles). Fix: `resolve_doc_relative_target` now does
+      pure path normalization (no index lookup); the dependency
+      graph builder applies the index existence check when
+      emitting edges. Updated tests + the contract doc.
 
 ### Sub-phase 8.3 — Sitemap merge (closes `bd-pphv`)
 - [ ] `website_post_render::write_sitemap` reads existing,

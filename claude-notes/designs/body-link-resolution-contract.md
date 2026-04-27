@@ -38,14 +38,24 @@ implementations) have a stable target.
 - `source_relative`: the page's project-relative source path,
   forward-slash separated (e.g. `chapters/intro.qmd`,
   `posts/2025/welcome.qmd`).
-- `index`: the project's `ProjectIndex` (the set of every
-  rendered page's `DocumentProfile`).
+
+**Note (Phase 8.2):** the Pass-1 helper does *not* take a
+`ProjectIndex` argument. Pass-1 runs *during* index construction
+— at the per-page profile checkpoint, before the index exists —
+so an index parameter would be `None` at the point of need. The
+helper instead returns the resolved project-relative path for
+any internal `.qmd` reference; the dependency-graph builder
+applies the index-existence filter when emitting edges. Phase 6's
+Pass-2 helper (`resolve_doc_relative_href`) does take an index
+because it runs after the index is fully built.
 
 ## Output
 
 A project-relative `PathBuf` (forward-slash, e.g. `other.qmd`,
-`docs/api.qmd`) when `raw` resolves to a project document, otherwise
-`None`.
+`docs/api.qmd`) for any internal `.qmd` reference; otherwise
+`None` (external URLs, fragment-only anchors, non-`.qmd` paths).
+The result reflects path normalization only — it is *not* a
+guarantee that the target exists in the project.
 
 ## Algorithm
 
@@ -76,10 +86,10 @@ A project-relative `PathBuf` (forward-slash, e.g. `other.qmd`,
      component). Extra `..` above the project root are clamped (no
      error).
 
-5. **Look up in `index`.** If the project-relative path matches a
-   `DocumentProfile.source_path`, return that profile's
-   `source_path` (which is canonical project-relative,
-   forward-slash, by Phase-0 invariant). Otherwise return `None`.
+5. **Return the resolved path.** Wrap as a `PathBuf` and return
+   `Some(p)`. The caller (the Phase-8 dependency-graph builder)
+   is responsible for any index-existence filter. Pass-2's
+   helper does its own index lookup for diagnostics + rewriting.
 
 ## Examples
 
@@ -99,20 +109,26 @@ A project-relative `PathBuf` (forward-slash, e.g. `other.qmd`,
 
 ## Equivalence with Pass-2 rewrite
 
-For a fixed `(raw, source_relative, index)`:
+The two helpers agree on path resolution but differ on index
+gating:
 
-- `resolve_doc_relative_target(raw, source_relative, index) == Some(p)`
-  if and only if Phase 6's `resolve_doc_relative_href(raw, source_relative, _resolver, Some(index), _label, _diags)`
-  rewrites `raw` to a string starting with the target's
-  `output_href`.
+- For internal `.qmd` references that path-resolve *and* exist in
+  the index: Pass-1 returns `Some(p)`; Pass-2 rewrites the href to
+  the target's `output_href`. Both produce the same `p`.
 
-- `resolve_doc_relative_target(raw, source_relative, index) == None`
-  if and only if `resolve_doc_relative_href` returns the raw href
-  unchanged (modulo the Pass-2 diagnostic for `.qmd`-shaped misses).
+- For internal `.qmd` references that path-resolve but *don't*
+  exist in the index: Pass-1 returns `Some(p)` (the resolved
+  path); Pass-2 leaves the href unchanged and emits a diagnostic.
+  The Phase-8 dependency-graph builder filters such targets out
+  before emitting edges, so the dep-graph view of body-link
+  edges still matches what Pass-2 actually rewrites.
 
-This equivalence is enforced by a unit test in
-`navigation_href.rs` that exercises the same fixtures through both
-helpers and asserts agreement.
+- For external URLs / fragment-only anchors / non-`.qmd` paths:
+  both return `None` / unchanged respectively.
+
+A unit test in `navigation_href.rs`
+(`pass1_pass2_agree_on_resolved_path_when_both_hit`) asserts this
+equivalence on shared fixtures.
 
 ## What this contract does NOT cover
 

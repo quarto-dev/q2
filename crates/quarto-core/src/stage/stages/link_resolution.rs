@@ -81,7 +81,7 @@ impl PipelineStage for LinkResolutionStage {
     async fn run(
         &self,
         input: PipelineData,
-        ctx: &mut StageContext,
+        _ctx: &mut StageContext,
     ) -> Result<PipelineData, PipelineError> {
         let PipelineData::AtProfile(mut bundle) = input else {
             return Err(PipelineError::unexpected_input(
@@ -96,21 +96,20 @@ impl PipelineStage for LinkResolutionStage {
         // already (Phase-0 invariant).
         let source_relative = bundle.profile.source_path.to_string_lossy().to_string();
 
-        // The dependency graph needs sibling profiles to look up
-        // against. With no `ProjectIndex` the target set is empty
-        // (we leave `body_link_targets` as the empty Vec the
-        // profile already carries from `extract`).
-        if let Some(index) = ctx.project_index.as_deref() {
-            let mut collector = TargetCollector {
-                source: &source_relative,
-                index,
-                seen: Vec::new(),
-            };
-            for block in &bundle.ast.ast.blocks {
-                collector.visit_block(block);
-            }
-            bundle.profile.body_link_targets = collector.seen;
+        // Walk the AST and collect every cross-doc `.qmd` link
+        // target. We don't gate on the project index because
+        // Pass-1 *builds* the index — the index doesn't exist
+        // yet. Targets that don't resolve to a project page get
+        // silently dropped by the dependency-graph builder when
+        // it does its own index lookup.
+        let mut collector = TargetCollector {
+            source: &source_relative,
+            seen: Vec::new(),
+        };
+        for block in &bundle.ast.ast.blocks {
+            collector.visit_block(block);
         }
+        bundle.profile.body_link_targets = collector.seen;
 
         Ok(PipelineData::AtProfile(bundle))
     }
@@ -121,13 +120,12 @@ impl PipelineStage for LinkResolutionStage {
 /// resulting list is deterministic across runs.
 struct TargetCollector<'a> {
     source: &'a str,
-    index: &'a crate::project::index::ProjectIndex,
     seen: Vec<PathBuf>,
 }
 
 impl<'a> TargetCollector<'a> {
     fn record(&mut self, raw: &str) {
-        if let Some(target) = resolve_doc_relative_target(raw, self.source, self.index) {
+        if let Some(target) = resolve_doc_relative_target(raw, self.source) {
             if !self.seen.contains(&target) {
                 self.seen.push(target);
             }
@@ -603,7 +601,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unresolvable_link_excluded() {
+    async fn unresolvable_link_recorded() {
+        // After Phase 8.2: LinkResolutionStage records every
+        // resolved `.qmd` path regardless of whether it's in the
+        // index. The dependency-graph builder filters edges
+        // against the actual index. This keeps Pass-1 free of the
+        // chicken-and-egg with the not-yet-built index.
         let bundle = parse_to_at_profile(
             "See [missing](missing.qmd) and [real](about.qmd).\n",
             "page.qmd",
@@ -611,18 +614,23 @@ mod tests {
         let out = run_stage(bundle, Some(make_index())).await;
         assert_eq!(
             out.profile.body_link_targets,
-            vec![PathBuf::from("about.qmd")]
+            vec![PathBuf::from("missing.qmd"), PathBuf::from("about.qmd")]
         );
     }
 
     #[tokio::test]
-    async fn no_index_yields_empty_targets() {
-        // Standalone render: no project context. Stage runs but
-        // contributes nothing — a pure pass-through with empty
-        // body_link_targets.
+    async fn no_index_still_records_targets() {
+        // Standalone render: no project context. The stage still
+        // records targets — Phase 8.2's index-free Pass-1
+        // resolution doesn't depend on a project index existing.
+        // The Phase-8 dependency-graph builder filters; outside a
+        // project context, nothing consumes body_link_targets.
         let bundle = parse_to_at_profile("See [the about](about.qmd).\n", "page.qmd");
         let out = run_stage(bundle, None).await;
-        assert!(out.profile.body_link_targets.is_empty());
+        assert_eq!(
+            out.profile.body_link_targets,
+            vec![PathBuf::from("about.qmd")]
+        );
     }
 
     #[tokio::test]

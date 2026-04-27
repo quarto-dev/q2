@@ -279,6 +279,40 @@ impl ProjectRenderSummary {
 /// WASM note: the driver exists only on native targets — hub-client
 /// orchestration is Phase 9 of the epic and will wire its own
 /// VFS-aware entry points (`build_project_nav`, `render_page_in_project`).
+/// What subset of the project to render.
+///
+/// - [`RenderMode::Full`] — render every page in the project.
+///   This is what `quarto render` (no path arg) does and is the
+///   default.
+/// - [`RenderMode::Subset`] — render only the user-named pages
+///   plus any always-render pages whose reverse dependencies
+///   intersect them. Used by `quarto render foo.qmd`,
+///   `quarto render foo/`, and `quarto render a.qmd b.qmd c.qmd`.
+///
+/// Both modes still do a full Pass-1 over every project page —
+/// the dependency graph builder needs every profile to derive
+/// sidebar / body-link / nav-dependency edges correctly, and the
+/// Phase 8 profile cache makes the warm-path Pass-1 cost
+/// negligible. Mode B's optimization is in Pass-2: only the
+/// augmented target set runs filters, engines, and rendering.
+///
+/// A later optimization may reduce Mode B's Pass-1 to a partial
+/// walk (target → sibling closure), but doing so safely requires
+/// resolving the sidebar-`auto:` chicken-and-egg (membership
+/// resolution consults the index, which doesn't yet exist for
+/// non-target pages). Filed as a Phase-8 follow-up.
+#[derive(Debug, Clone)]
+pub enum RenderMode {
+    Full,
+    Subset(std::collections::HashSet<std::path::PathBuf>),
+}
+
+impl Default for RenderMode {
+    fn default() -> Self {
+        RenderMode::Full
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub struct ProjectPipeline<'a> {
     project: &'a mut ProjectContext,
@@ -287,6 +321,9 @@ pub struct ProjectPipeline<'a> {
     format_str: String,
     options: &'a RenderToFileOptions,
     runtime: Arc<dyn SystemRuntime>,
+    /// Render mode. Default `Full`; CLI subset args (Mode B) set
+    /// this via [`with_mode`](Self::with_mode) before `run()`.
+    mode: RenderMode,
     /// Project-wide artifact accumulator (Phase 5).
     ///
     /// Project-scoped artifacts produced by per-doc Pass-2
@@ -321,8 +358,17 @@ impl<'a> ProjectPipeline<'a> {
             format_str: format_str.into(),
             options,
             runtime,
+            mode: RenderMode::Full,
             project_artifacts: crate::artifact::ArtifactStore::new(),
         }
+    }
+
+    /// Set the render mode. Default is [`RenderMode::Full`]; CLI
+    /// subset args set this to [`RenderMode::Subset`] before
+    /// calling [`run`](Self::run).
+    pub fn with_mode(mut self, mode: RenderMode) -> Self {
+        self.mode = mode;
+        self
     }
 
     /// Read-only view of the project-wide artifact accumulator
@@ -345,11 +391,20 @@ impl<'a> ProjectPipeline<'a> {
             .await
             .map_err(|e| QuartoError::other(format!("pre_render failed: {e}")))?;
 
+        // Phase 8.2: in Mode B, build the dependency graph from
+        // the freshly-loaded profiles, augment the user-named
+        // targets with always-render dependents, and tell pass_two
+        // to render only that set. Mode A renders every page; the
+        // augmented set is `None`.
+        let augmented_render_set = self.compute_augmented_render_set(&index);
+
         // Skip Pass-2 on files that failed Pass 1 — Pass 2 does
         // strictly more work, so it can only produce duplicate errors.
         let skip: std::collections::HashSet<std::path::PathBuf> =
             pass1_failures.iter().map(|f| f.input.clone()).collect();
-        let (outputs, pass2_failures) = self.pass_two(index.clone(), &skip).await;
+        let (outputs, pass2_failures) = self
+            .pass_two(index.clone(), &skip, augmented_render_set.as_ref())
+            .await;
 
         let mut project_diagnostics: Vec<DiagnosticMessage> = Vec::new();
         self.project_type
@@ -619,8 +674,76 @@ impl<'a> ProjectPipeline<'a> {
         Vec::new()
     }
 
+    /// Compute the absolute-path render set for Pass-2 dispatch.
+    ///
+    /// - [`RenderMode::Full`] → returns `None`, meaning "render
+    ///   every page" (the existing default).
+    /// - [`RenderMode::Subset(targets)`] → builds the dependency
+    ///   graph, augments the user-named targets with always-render
+    ///   pages whose reverse-closure intersects them, and returns
+    ///   the result as absolute paths matching `DocumentInfo.input`
+    ///   on each project file.
+    ///
+    /// `targets` are absolute paths (CLI args have been canonicalized
+    /// by the caller). They're translated to project-relative paths
+    /// for the graph query (which keys on
+    /// [`DocumentProfile::source_path`]) and back to absolute paths
+    /// for `pass_two` filtering.
+    fn compute_augmented_render_set(
+        &self,
+        index: &Arc<ProjectIndex>,
+    ) -> Option<std::collections::HashSet<std::path::PathBuf>> {
+        let RenderMode::Subset(target_abs_paths) = &self.mode else {
+            return None;
+        };
+
+        // Translate absolute target paths to project-relative
+        // forward-slash form (matches DocumentProfile.source_path).
+        let mut target_relatives: Vec<std::path::PathBuf> = Vec::new();
+        for abs in target_abs_paths {
+            let rel = if let Ok(r) = abs.strip_prefix(&self.project.dir) {
+                r.to_path_buf()
+            } else if let Some(name) = abs.file_name() {
+                std::path::PathBuf::from(name)
+            } else {
+                abs.clone()
+            };
+            target_relatives.push(rel);
+        }
+
+        // Build the dependency graph and augment.
+        let merged_meta = self.project.config.metadata.clone().unwrap_or_default();
+        let mut graph_diags: Vec<DiagnosticMessage> = Vec::new();
+        let graph = crate::project::dependency_graph::ProjectDependencyGraph::build(
+            index,
+            &merged_meta,
+            &mut graph_diags,
+        );
+        let augmented_relatives =
+            graph.augment_targets_with_always_render(target_relatives.iter().map(|p| p.as_path()));
+
+        // Translate back to the absolute paths Pass-2 filters on.
+        // Look each augmented project-relative path up in
+        // `self.project.files` (which carries absolute paths via
+        // `DocumentInfo.input`).
+        let mut out: std::collections::HashSet<std::path::PathBuf> =
+            std::collections::HashSet::new();
+        for doc_info in &self.project.files {
+            let rel = self.project_relative_source_path(&doc_info.input);
+            if augmented_relatives.contains(&std::path::PathBuf::from(&rel)) {
+                out.insert(doc_info.input.clone());
+            }
+        }
+        Some(out)
+    }
+
     /// Re-render every file under the built `ProjectIndex`,
     /// skipping files that failed Pass 1.
+    ///
+    /// `render_set` filters which files Pass-2 dispatches:
+    /// - `None` (Mode A) → every file.
+    /// - `Some(set)` (Mode B) → only files whose absolute input
+    ///   path appears in the set.
     ///
     /// **Phase 5:** each per-doc render drains its
     /// Project-scoped artifacts into the orchestrator's
@@ -633,6 +756,7 @@ impl<'a> ProjectPipeline<'a> {
         &mut self,
         index: Arc<ProjectIndex>,
         skip: &std::collections::HashSet<std::path::PathBuf>,
+        render_set: Option<&std::collections::HashSet<std::path::PathBuf>>,
     ) -> (Vec<RenderToFileResult>, Vec<FileFailure>) {
         let mut outputs = Vec::with_capacity(self.project.files.len());
         let mut failures = Vec::new();
@@ -642,6 +766,13 @@ impl<'a> ProjectPipeline<'a> {
         for doc_info in &files {
             if skip.contains(&doc_info.input) {
                 continue;
+            }
+            // Mode B: skip pages outside the augmented render set.
+            // Their existing on-disk output is left untouched.
+            if let Some(set) = render_set {
+                if !set.contains(&doc_info.input) {
+                    continue;
+                }
             }
             match render_document_to_file(
                 &doc_info.input,

@@ -33,7 +33,7 @@ use tempfile::TempDir;
 
 use quarto_core::format::Format;
 use quarto_core::project::ProjectContext;
-use quarto_core::project::orchestrator::{ProjectPipeline, project_type_for};
+use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
 use quarto_core::render_to_file::RenderToFileOptions;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
@@ -300,5 +300,192 @@ fn no_cache_dir_means_no_cache_files() {
     assert!(
         !cache_dir.exists() || list_cache_files(&cache_dir).is_empty(),
         "single-file render should not write to a cache dir"
+    );
+}
+
+// === Phase 8.2 step 3: Mode A vs Mode B ===============================
+
+/// Render a project in Mode B with the given subset of pages.
+/// `target_paths` are absolute paths matching `DocumentInfo.input`.
+fn render_mode_b(
+    project_dir: &std::path::Path,
+    runtime: Arc<dyn SystemRuntime>,
+    target_paths: &[PathBuf],
+) -> quarto_core::project::orchestrator::ProjectRenderSummary {
+    let mut project =
+        ProjectContext::discover(project_dir, runtime.as_ref()).expect("discover project");
+    let options = RenderToFileOptions::default();
+    let project_type = project_type_for(&project);
+    let targets: std::collections::HashSet<PathBuf> = target_paths.iter().cloned().collect();
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        Format::html(),
+        "html",
+        &options,
+        runtime.clone(),
+    )
+    .with_mode(RenderMode::Subset(targets));
+    pollster::block_on(pipeline.run()).expect("project render")
+}
+
+/// Read the mtime of an output file. Returns `None` if missing.
+fn output_mtime(p: &std::path::Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+}
+
+#[test]
+fn mode_b_renders_only_target() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minimal_website(&project_dir);
+
+    let runtime = runtime_with_cache(&project_dir);
+    // Cold full render to populate _site/.
+    let _ = render_project(&project_dir, runtime.clone());
+
+    let about_path = project_dir.join("_site/about.html");
+    let index_path = project_dir.join("_site/index.html");
+    let about_mtime_before = output_mtime(&about_path).expect("about exists after cold render");
+    let index_mtime_before = output_mtime(&index_path).expect("index exists after cold render");
+
+    // Sleep just enough that mtimes can differ if files are touched.
+    // (10ms is well under the typical filesystem mtime resolution
+    // ceiling of 1s on macOS HFS+, but enough to surface
+    // differences on modern filesystems with sub-second precision.)
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    // Mode B: render only about.qmd.
+    let target = project_dir.join("about.qmd");
+    let summary = render_mode_b(&project_dir, runtime, &[target]);
+
+    // pass_two reports only one output (the target).
+    assert_eq!(
+        summary.outputs.len(),
+        1,
+        "Mode B should render exactly one page; got {} outputs",
+        summary.outputs.len()
+    );
+
+    // about.html mtime advanced; index.html mtime unchanged.
+    let about_mtime_after = output_mtime(&about_path).expect("about exists");
+    let index_mtime_after = output_mtime(&index_path).expect("index exists");
+    assert!(
+        about_mtime_after >= about_mtime_before,
+        "about.html mtime should advance"
+    );
+    assert_eq!(
+        index_mtime_before, index_mtime_after,
+        "index.html should not be touched in Mode B with target=about"
+    );
+}
+
+#[test]
+fn mode_a_default_renders_everything() {
+    // Sanity: confirm the default mode (no with_mode call) is
+    // still Mode A — every page renders.
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minimal_website(&project_dir);
+
+    let runtime = runtime_with_cache(&project_dir);
+    let summary = render_project(&project_dir, runtime);
+
+    assert_eq!(
+        summary.outputs.len(),
+        2,
+        "Mode A should render every project page"
+    );
+}
+
+#[test]
+fn mode_b_pulls_in_always_render_dependents() {
+    // Setup: pages a, b, q. q has project.always-render: true and
+    // body-links to a (so q's reverse-dep is "things that link to
+    // q"; q is in nothing's reverse-dep). To exercise the
+    // augmentation we need q to be reachable via reverse_closure
+    // from the user-named target — i.e. q's *forward* dep set
+    // includes the target.
+    //
+    // q → a (q body-links to a). reverse_closure({a}) = {a, q}.
+    // q has always_render: true, so augment({a}) = {a, q}.
+    //
+    // The test renders Mode B with target={a}; both a and q must
+    // render.
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(&project_dir.join("a.qmd"), "---\ntitle: A\n---\n\nFoo.\n");
+    write(
+        &project_dir.join("b.qmd"),
+        "---\ntitle: B\n---\n\nUnrelated.\n",
+    );
+    write(
+        &project_dir.join("q.qmd"),
+        "---\ntitle: Q\nproject:\n  always-render: true\n---\n\nSee [a](a.qmd).\n",
+    );
+
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+
+    let q_path = project_dir.join("_site/q.html");
+    let b_path = project_dir.join("_site/b.html");
+    let q_mtime_before = output_mtime(&q_path).expect("q exists");
+    let b_mtime_before = output_mtime(&b_path).expect("b exists");
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    // Mode B: render only a.qmd. Augmentation should pull in q
+    // (always_render + reverse-deps include a).
+    let target = project_dir.join("a.qmd");
+    let summary = render_mode_b(&project_dir, runtime, &[target]);
+
+    // a + q should render; b is untouched.
+    assert_eq!(
+        summary.outputs.len(),
+        2,
+        "Mode B with always_render dependent should render 2 pages; got {}",
+        summary.outputs.len()
+    );
+    let q_mtime_after = output_mtime(&q_path).expect("q exists");
+    let b_mtime_after = output_mtime(&b_path).expect("b exists");
+    assert!(
+        q_mtime_after >= q_mtime_before,
+        "q.html mtime should advance (always_render augmentation)"
+    );
+    assert_eq!(
+        b_mtime_before, b_mtime_after,
+        "b.html should not be touched (no augmentation match)"
+    );
+}
+
+#[test]
+fn mode_b_with_no_targets_renders_nothing() {
+    // Edge case: empty Subset set ⇒ pass_two skips every page.
+    // This isn't a typical CLI invocation (no path arg ⇒ Mode A),
+    // but the orchestrator should handle the corner cleanly.
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minimal_website(&project_dir);
+
+    // Cold full render to populate _site/.
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+
+    let about_path = project_dir.join("_site/about.html");
+    let mtime_before = output_mtime(&about_path).expect("about exists");
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    let summary = render_mode_b(&project_dir, runtime, &[]);
+    assert_eq!(summary.outputs.len(), 0);
+    assert_eq!(
+        mtime_before,
+        output_mtime(&about_path).unwrap(),
+        "no target ⇒ no page touched"
     );
 }
