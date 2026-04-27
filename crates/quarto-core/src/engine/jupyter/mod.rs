@@ -57,6 +57,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use super::context::{ExecuteResult as EngineExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
+use crate::engine::LanguageClaim;
 
 /// Number of times the underlying PATH lookup for the jupyter
 /// executable has run during this process. With the
@@ -160,6 +161,17 @@ impl ExecutionEngine for JupyterEngine {
         true
     }
 
+    /// Deliberate q2 design choice: jupyter is the universal fallback kernel.
+    /// It returns `Fallback(0)` for *every* language it is asked about — it never
+    /// enumerates, and it does NOT claim "julia" at `Primary(1)` the way Q1 did.
+    /// Under the enum this falls out naturally: jupyter's `Fallback(0)` loses to a
+    /// dedicated extension's `Primary(1)` (kind dominates priority), so the Julia
+    /// extension wins when installed, and `{julia}` without it still reaches jupyter
+    /// via the T4 fallback tier. See `claude-notes/designs/engine-resolution.md` §4.3.
+    fn claims_language(&self, _language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        LanguageClaim::Fallback(0)
+    }
+
     fn is_available(&self) -> bool {
         self.jupyter_path.is_some()
     }
@@ -245,6 +257,39 @@ mod tests {
     fn test_jupyter_engine_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<JupyterEngine>();
+    }
+
+    // === Test Seam Row 1: JupyterEngine claim table ===
+
+    /// jupyter returns Fallback(0) for every language it is asked about —
+    /// including "julia" (verifying it loses to a Primary(1) julia claim)
+    /// and "r" and "python". This is the deliberate q2 design: jupyter is the
+    /// universal fallback, not a dedicated primary for any language.
+    #[test]
+    fn test_jupyter_claims_language_julia_is_fallback_0() {
+        let engine = JupyterEngine::new();
+        assert_eq!(
+            engine.claims_language("julia", None),
+            LanguageClaim::Fallback(0)
+        );
+    }
+
+    #[test]
+    fn test_jupyter_claims_language_python_is_fallback_0() {
+        let engine = JupyterEngine::new();
+        assert_eq!(
+            engine.claims_language("python", None),
+            LanguageClaim::Fallback(0)
+        );
+    }
+
+    #[test]
+    fn test_jupyter_claims_language_r_is_fallback_0() {
+        let engine = JupyterEngine::new();
+        assert_eq!(
+            engine.claims_language("r", None),
+            LanguageClaim::Fallback(0)
+        );
     }
 
     // bd-c5u2g: per-process memoization of `find_jupyter`. Pre-fix

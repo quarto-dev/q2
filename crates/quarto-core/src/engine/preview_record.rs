@@ -114,7 +114,7 @@ impl PipelineObserver for CaptureCollector {
 /// drift between the server-side record path and the in-browser
 /// replay path.
 fn build_capture_pipeline_stages(
-    engine_registry: Option<EngineRegistry>,
+    engine_registry: Option<Arc<EngineRegistry>>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None, engine_registry);
     if let Some(idx) = stages.iter().position(|s| s.name() == "engine-execution") {
@@ -138,7 +138,7 @@ pub async fn record_capture(
     path: &std::path::Path,
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
-    engine_registry: Option<EngineRegistry>,
+    engine_registry: Option<Arc<EngineRegistry>>,
 ) -> Result<Vec<EngineCapture>, PipelineError> {
     let content = runtime
         .file_read(path)
@@ -309,7 +309,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(PassthroughTestEngine));
 
-        let result = record_capture(&path, &project, runtime, Some(registry))
+        let result = record_capture(&path, &project, runtime, Some(Arc::new(registry)))
             .await
             .expect("pipeline runs cleanly with test engine");
 
@@ -358,7 +358,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(PassthroughTestEngine));
 
-        let result = record_capture(&path, &project, runtime, Some(registry))
+        let result = record_capture(&path, &project, runtime, Some(Arc::new(registry)))
             .await
             .expect("pipeline runs");
         let capture = result.first().expect("capture present");
@@ -469,7 +469,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(PassthroughTestEngine));
 
-        let captures = record_capture(&path, &project, runtime.clone(), Some(registry))
+        let captures = record_capture(&path, &project, runtime.clone(), Some(Arc::new(registry)))
             .await
             .expect("record_capture");
         let capture = captures.first().expect("capture present");

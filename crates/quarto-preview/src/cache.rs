@@ -152,7 +152,7 @@ pub async fn record_capture_cached(
     path: &Path,
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
-    engine_registry: Option<EngineRegistry>,
+    engine_registry: Option<Arc<EngineRegistry>>,
 ) -> Result<Vec<EngineCapture>, PipelineError> {
     // Compute the same input_qmd the engine would receive — this
     // doubles as the cache key derivation and as the source of truth
@@ -242,13 +242,13 @@ mod tests {
         }
     }
 
-    fn counting_registry() -> (EngineRegistry, Arc<AtomicUsize>) {
+    fn counting_registry() -> (Arc<EngineRegistry>, Arc<AtomicUsize>) {
         let calls = Arc::new(AtomicUsize::new(0));
         let mut reg = EngineRegistry::new();
         reg.register(Arc::new(CountingPassthroughEngine {
             calls: calls.clone(),
         }));
-        (reg, calls)
+        (Arc::new(reg), calls)
     }
 
     fn write_fixture(

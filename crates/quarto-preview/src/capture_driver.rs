@@ -56,7 +56,7 @@ pub const CAPTURE_MIME_TYPE: &str = "application/x-engine-capture+gzip";
 pub async fn record_eager_captures(
     ctx: Arc<HubContext>,
     runtime: Arc<dyn SystemRuntime>,
-    engine_registry: Option<EngineRegistry>,
+    engine_registry: Option<Arc<EngineRegistry>>,
     policy: EnginePolicy,
     cache_dir: &std::path::Path,
 ) -> Result<usize, RecordError> {
@@ -155,7 +155,7 @@ async fn record_one(
     rel_path: &str,
     ctx: &Arc<HubContext>,
     runtime: &Arc<dyn SystemRuntime>,
-    engine_registry: Option<EngineRegistry>,
+    engine_registry: Option<Arc<EngineRegistry>>,
     cache_dir: &std::path::Path,
 ) -> Result<bool, RecordError> {
     // Project discovery walks up for `_quarto.yml`; for single-file
@@ -227,7 +227,7 @@ pub async fn recompute_staleness(
     runtime: Arc<dyn SystemRuntime>,
     rel_path: &str,
     policy: EnginePolicy,
-    engine_registry: Option<EngineRegistry>,
+    engine_registry: Option<Arc<EngineRegistry>>,
     cache_dir: &std::path::Path,
 ) -> Result<bool, RecordError> {
     // C.6: `preview.engine: off` skips the watcher staleness hook
@@ -446,10 +446,10 @@ mod tests {
         }
     }
 
-    fn make_registry() -> EngineRegistry {
+    fn make_registry() -> Arc<EngineRegistry> {
         let mut reg = EngineRegistry::new();
         reg.register(Arc::new(PassthroughTestEngine));
-        reg
+        Arc::new(reg)
     }
 
     /// Each test invocation gets a process-unique cache directory so

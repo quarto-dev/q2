@@ -62,7 +62,17 @@ mod markdown;
 pub mod preview_record;
 mod registry;
 mod replay;
+pub mod resolution;
 mod traits;
+pub mod ts_protocol;
+
+// Native-only: subprocess management + demux for TS engine extensions.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod ts_process;
+
+// Native-only: TsEngine struct implementing ExecutionEngine via TsEngineHost.
+#[cfg(not(target_arch = "wasm32"))]
+mod ts_engine;
 
 // File-backed test engine for exercising multi-engine sequencing
 // (bd-5yff4). Native-only test utility; never registered in the default
@@ -76,6 +86,50 @@ pub mod jupyter;
 #[cfg(not(target_arch = "wasm32"))]
 mod knitr;
 
+use std::time::Duration;
+
+// ── Shared, WASM-clean types consumed by traits, resolution, and TsEngine ──
+
+/// Resolution tier for multi-engine language ownership.
+///
+/// See `claude-notes/designs/engine-resolution.md` §3.1 for the full contract.
+///
+/// **Semantics:**
+/// - `kind` sets the resolution tier; `priority` orders *only within* a kind
+///   (kind dominates priority — `Primary(-100)` beats `Fallback(100)`).
+/// - `Interop` is presence-gated: fires only for an engine already in the
+///   sequence via a positive claim ("extend if I'm already here," not "claim
+///   anywhere").
+/// - `Fallback` is the universal-kernel role; no longer hardcoded to jupyter —
+///   any engine can declare it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LanguageClaim {
+    /// I execute this language. (default priority 1)
+    Primary(i32),
+    /// Extend my ownership to this language iff I'm already present. (default priority 0)
+    Interop(i32),
+    /// Universal-kernel role: I will execute any language as a fallback. (default priority 0)
+    Fallback(i32),
+    /// I make no claim on this language.
+    None,
+}
+
+/// Languages that Quarto handles downstream via cell handlers (ojs, mermaid, dot).
+///
+/// Engines must **leave these blocks unchanged** in their output — they are
+/// pass-through cell handlers, not languages the engine executes. This is an
+/// instruction to engines, not documentation: when q2 grows real cell-handler
+/// support, this constant migrates to a registry. Single source of truth until
+/// then.
+pub const HANDLED_LANGUAGES: &[&str] = &["ojs", "mermaid", "dot"];
+
+/// Default per-request timeout for engine execution (5 minutes).
+///
+/// Promoted from `engine/jupyter/execute.rs` so it can be shared by the
+/// `ExecutionContext` builder and future TS-engine callers without a native-only
+/// import path.
+pub const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
+
 // Re-export public types
 pub use context::{ExecuteResult, ExecutionContext};
 pub use detection::{
@@ -88,6 +142,7 @@ pub use fixture::FixtureEngine;
 pub use markdown::MarkdownEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;
+pub use resolution::{EngineResolution, resolve_engines};
 pub use traits::ExecutionEngine;
 
 // Re-export native-only engines
@@ -95,6 +150,8 @@ pub use traits::ExecutionEngine;
 pub use jupyter::JupyterEngine;
 #[cfg(not(target_arch = "wasm32"))]
 pub use knitr::KnitrEngine;
+#[cfg(not(target_arch = "wasm32"))]
+pub use ts_engine::TsEngine;
 
 /// Print `perf.engine-discover jupyter=N rscript=N` to stderr when
 /// `QUARTO_PERF_STATS=1`. Call once at the end of a top-level
@@ -243,5 +300,13 @@ mod tests {
         assert_eq!(detected.name, "markdown");
         assert!(detected.is_markdown());
         assert!(!detected.requires_runtime());
+    }
+
+    /// Pin the contract: HANDLED_LANGUAGES must be exactly ["ojs", "mermaid", "dot"].
+    /// All three knitr sites read from this constant; any accidental change here
+    /// would silently alter the leave-alone set sent to the R subprocess.
+    #[test]
+    fn test_handled_languages_constant() {
+        assert_eq!(HANDLED_LANGUAGES, &["ojs", "mermaid", "dot"]);
     }
 }

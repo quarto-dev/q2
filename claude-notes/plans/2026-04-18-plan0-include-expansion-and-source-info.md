@@ -60,7 +60,7 @@ remapping is deferred as an open question.
 ## Pipeline change
 
 ```
-Current:
+Current (pre-Plan 0):
   Parse → MetadataMerge → PreEngineSugaring → EngineExec → CompileThemeCss →
     UserFilters(pre) → AstTransforms(ALL shortcodes) → UserFilters(post) →
     RenderHtmlBody → ApplyTemplate
@@ -71,10 +71,30 @@ After Plan 0:
     UserFilters(post) → RenderHtmlBody → ApplyTemplate
 ```
 
+**Note:** subsequent work on `main` (the website-project epic) inserts a
+`DocumentProfile` checkpoint after `IncludeExpansion` and a Phase-8
+`LinkResolutionStage` between the profile checkpoint and an
+`UnwrapProfileStage` that hands the AST back to downstream stages. The
+end-state pipeline is:
+
+```
+Parse → MetadataMerge → IncludeExpansion → DocumentProfileStage →
+  LinkResolutionStage → UnwrapProfileStage → PreEngineSugaring →
+  EngineExec → CompileThemeCss → UserFilters(pre) → AstTransforms →
+  UserFilters(post) → ResourceReportStage → CodeHighlight →
+  RenderHtmlBody → ApplyTemplate
+```
+
+`IncludeExpansion`'s position relative to `PreEngineSugaring` is
+unchanged; the profile checkpoint sits between them, observing the
+post-include AST. See `claude-notes/designs/document-profile-contract.md`.
+
 **Ordering rationale:** `IncludeExpansion` must run before `PreEngineSugaring`
 because included files may contain cross-references that `PreEngineSugaring`
 needs to index (it seeds `RefTypeRegistry` and builds `CrossrefIndex`). Both
-must run before `EngineExec`.
+must run before `EngineExec`. The profile checkpoint sits *after*
+`IncludeExpansion` so the recorded `DocumentProfile.includes` reflects the
+already-spliced transitive include set.
 
 **Note on non-QMD files:** Plan 1c restructures the pipeline entry point so
 that `claimsFile` (engine detection Phase 1) runs before `ParseDocument`.
@@ -432,34 +452,25 @@ dependent integration tests are deferred to Phase 0A's commit.
     in the serialized QMD, convert to byte offset, call `map_offset`, verify
     correct file + line in original source
 
-## Open Question: Error remapping responsibility
+## Error remapping responsibility
 
-When an engine reports an error with a line number, who translates it back
-to the original source position?
+When an engine reports an error with a line number, **q2 intercepts the error
+and remaps the position back to the original source**, using the `SourceInfo` +
+`SourceContext` it already holds (and the `source_map` it sends over the engine
+protocol). Engines stay oblivious — they report positions in the text they
+received (the serialized QMD); q2 translates those into original-file positions
+before display. This keeps the remapping logic in one place, on the side that
+owns the provenance, and works even for engines that only ever report
+post-expansion positions.
 
-**Options:**
-1. **q2 intercepts engine errors** — The engine returns
-   `ExecutionError::ExecutionFailedAtLines` with line numbers in the
-   serialized QMD. q2 uses SourceInfo + SourceContext to remap before
-   displaying.
-2. **Engine does it** — TS engines receive the source map in
-   `TsExecuteOptions` (reconstructed as MappedString by the harness).
-   Built-in engines have SourceInfo in `ExecutionContext`. Either way
-   the engine can remap positions itself before returning errors.
-3. **QuartoAPI utility** — For TS engines, the QuartoAPI provides a
-   `quarto.sourceMap.resolve(line, col)` method backed by the
-   MappedString the harness constructed from the source map.
-4. **Nobody does it** — Matching Quarto 1's current (lax) behavior, error
-   line numbers are approximate. Engines report positions in the text they
-   received; users must mentally map to their source.
-
-Option 1 is the most natural for q2's architecture (q2 holds the SourceInfo,
-engines are oblivious). Options 2-3 are needed if the engine wants to
-provide real-time error locations during long-running execution (like Julia's
-`buildSourceRanges`). These are not mutually exclusive.
-
-**Decision deferred.** Plan 0 ensures the SourceInfo exists and is correct.
-Error remapping can be implemented incrementally as engines need it.
+Implementation is deferred: the infrastructure is in place (`source_info` on
+`ExecutionContext`, the `source_map` on the wire, `ExecutionFailedAtLines`
+carrying line numbers), so remapping is a q2-internal addition with **no
+protocol change**. Until it lands, error positions match the
+expanded/converted text — the behavior Q1 ships today. An engine that wants to
+surface real-time positions during long-running execution may additionally
+remap on its own side (e.g. via a QuartoAPI source-map helper); that is
+complementary to q2's remap, not a substitute.
 
 ## Design Notes
 
@@ -479,8 +490,8 @@ original source?"
 
 The protocol naturally uses the SourceInfo representation (byte-range
 pieces), and the engine-host harness reconstructs a MappedString from it.
-See Plan 1a Phase 1 (`TsSourceMapEntry`) and Phase 5 (MappedString
-reconstruction) for the crossing.
+See plan1a-protocol (`TsSourceMapEntry`) and Plan 1b's Phase 3
+(MappedString reconstruction) for the crossing.
 
 ### Percent scripts: engine-side, not q2-side
 
@@ -611,4 +622,4 @@ remapping in the future.
 - [x] All existing tests pass (no regressions)
 - [x] Thorough unit tests for SourceInfo chain, even though no engine uses it
 - [x] `cargo nextest run --workspace` passes
-- [x] Error remapping responsibility documented as open question
+- [x] Error remapping responsibility decided (q2 intercepts + remaps; implementation deferred, no protocol change)

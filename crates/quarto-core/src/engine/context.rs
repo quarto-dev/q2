@@ -9,11 +9,15 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
+use pampa::lua::HtmlDependency;
 use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::{By, SourceContext, SourceInfo};
 
+use crate::engine::{DEFAULT_EXECUTE_TIMEOUT, HANDLED_LANGUAGES};
 use crate::stage::PandocIncludes;
+use crate::stage::cancellation::Cancellation;
 
 /// Context provided to execution engines.
 ///
@@ -71,6 +75,37 @@ pub struct ExecutionContext {
     /// the context is finalized after include expansion and doesn't change
     /// during engine execution.
     pub source_context: Arc<SourceContext>,
+
+    /// Languages that this engine must leave unchanged in its output.
+    ///
+    /// The set is `HANDLED_LANGUAGES ∪ { lang : ownership[lang] != this_engine }`:
+    /// cell-handler languages (ojs/mermaid/dot) plus any language owned by a
+    /// different engine in the sequence. Populated by `EngineExecutionStage`
+    /// via `EngineResolution::handled_languages_for`; defaults to `HANDLED_LANGUAGES`
+    /// so any code that builds an `ExecutionContext` directly (tests, knitr) gets the
+    /// same leave-alone set as before this field existed.
+    pub handled_languages: Vec<String>,
+
+    /// Cancellation token for graceful shutdown.
+    ///
+    /// Engines that support cancellation (TS engines) poll `cancellation.is_cancelled()`
+    /// and abort early when set. Built-in engines (knitr/jupyter) ignore it for now.
+    /// Defaults to a fresh, non-cancelled token.
+    pub cancellation: Cancellation,
+
+    /// Per-request execution timeout.
+    ///
+    /// `Some(d)` — abort if the engine doesn't respond within `d`.
+    /// `None`    — no timeout (equivalent to `execute: {timeout: false}`).
+    ///
+    /// Resolved from `execute.timeout` in document metadata (tri-state):
+    /// - integer `N` → `Some(Duration::from_secs(N))`
+    /// - boolean `false` → `None`
+    /// - absent / boolean `true` → `Some(DEFAULT_EXECUTE_TIMEOUT)` (300 s)
+    ///
+    /// Defaults to `Some(DEFAULT_EXECUTE_TIMEOUT)` so existing call sites
+    /// (tests, knitr, jupyter) are unaffected.
+    pub execute_timeout: Option<Duration>,
 }
 
 impl ExecutionContext {
@@ -94,6 +129,11 @@ impl ExecutionContext {
             // any consumer reads it.
             source_info: SourceInfo::generated(By::unknown()),
             source_context: Arc::new(SourceContext::new()),
+            // Default: leave ojs/mermaid/dot alone. EngineExecutionStage
+            // overrides this via `with_handled_languages` using the resolver.
+            handled_languages: HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect(),
+            cancellation: Cancellation::new(),
+            execute_timeout: Some(DEFAULT_EXECUTE_TIMEOUT),
         }
     }
 
@@ -123,6 +163,29 @@ impl ExecutionContext {
     ) -> Self {
         self.source_info = source_info;
         self.source_context = source_context;
+        self
+    }
+
+    /// Set the leave-alone language set for this engine.
+    ///
+    /// Computed by `EngineResolution::handled_languages_for(engine_name)`:
+    /// `HANDLED_LANGUAGES ∪ { lang : ownership[lang] != this_engine }`.
+    pub fn with_handled_languages(mut self, languages: Vec<String>) -> Self {
+        self.handled_languages = languages;
+        self
+    }
+
+    /// Set the cancellation token.
+    pub fn with_cancellation(mut self, cancellation: Cancellation) -> Self {
+        self.cancellation = cancellation;
+        self
+    }
+
+    /// Set the per-request execution timeout.
+    ///
+    /// `Some(d)` — abort after `d`; `None` — no timeout.
+    pub fn with_execute_timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.execute_timeout = timeout;
         self
     }
 }
@@ -167,6 +230,23 @@ pub struct ExecuteResult {
     /// If true, additional processing steps may be needed after
     /// the main rendering is complete.
     pub needs_postprocess: bool,
+
+    /// Structured HTML dependencies registered by the engine.
+    ///
+    /// Each entry is a `{ name, stylesheets, scripts }` manifest that
+    /// `EngineExecutionStage` passes to `store_html_dependencies` after
+    /// each engine runs.  This is a **disjoint** channel from
+    /// `includes`: `includes` carries pre-rendered HTML/text fragments
+    /// from Q1-shaped engines (the harness routes `engine.dependencies()`
+    /// results there), while `html_dependencies` carries structured
+    /// manifests from engines that use the Q2-native
+    /// `quarto.htmlDependency()` API (Plan 1b).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully (missing field
+    /// becomes an empty `Vec`).
+    #[serde(default)]
+    pub html_dependencies: Vec<HtmlDependency>,
 }
 
 impl ExecuteResult {
@@ -324,6 +404,47 @@ mod tests {
         assert!(result.supporting_files.is_empty());
         assert!(result.filters.is_empty());
         assert!(!result.needs_postprocess);
+        assert!(result.html_dependencies.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Row 14 — HtmlDependency serde round-trip through ExecuteResult.
+    //
+    // An ExecuteResult carrying a non-empty html_dependencies must survive
+    // serde_json serialization and deserialization with its deps intact.
+    // Vacuity: the input is non-empty and asserted equal post-round-trip
+    // (requires PartialEq on HtmlDependency added in pampa::lua::quarto_doc).
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_execute_result_html_dependencies_serde_round_trip() {
+        let dep = HtmlDependency {
+            name: "jquery".to_string(),
+            stylesheets: vec![PathBuf::from("libs/jquery/jquery.css")],
+            scripts: vec![PathBuf::from("libs/jquery/jquery.js")],
+        };
+
+        let original = ExecuteResult {
+            markdown: "# Hello".to_string(),
+            html_dependencies: vec![dep],
+            ..Default::default()
+        };
+
+        // The input must be non-empty (vacuity guard).
+        assert!(
+            !original.html_dependencies.is_empty(),
+            "vacuity: html_dependencies must be non-empty for this test to be meaningful"
+        );
+
+        // Round-trip through serde_json (the EngineCapture path).
+        let json = serde_json::to_string(&original).expect("serialize ExecuteResult");
+        let restored: ExecuteResult =
+            serde_json::from_str(&json).expect("deserialize ExecuteResult");
+
+        // The deps must survive intact.
+        assert_eq!(
+            restored.html_dependencies, original.html_dependencies,
+            "html_dependencies must round-trip through serde_json unchanged"
+        );
     }
 
     #[test]

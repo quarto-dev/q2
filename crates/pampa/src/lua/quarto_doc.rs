@@ -23,7 +23,7 @@ use super::quarto_api::current_script_dir;
 // =========================================================================
 
 /// An HTML dependency registered by an extension via `quarto.doc.add_html_dependency`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HtmlDependency {
     pub name: String,
     pub stylesheets: Vec<PathBuf>,
@@ -31,14 +31,14 @@ pub struct HtmlDependency {
 }
 
 /// A text include registered by an extension via `quarto.doc.include_text`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextInclude {
     pub location: IncludeLocation,
     pub content: String,
 }
 
 /// Where to inject text in the output document.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum IncludeLocation {
     InHeader,
     BeforeBody,

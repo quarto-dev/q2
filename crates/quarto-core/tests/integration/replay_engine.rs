@@ -91,7 +91,7 @@ fn capture_engine_input(content: &[u8], source_name: &str, engine_name: &str) ->
 
     let config = HtmlRenderConfig {
         resolver: None,
-        engine_registry: Some(registry),
+        engine_registry: Some(std::sync::Arc::new(registry)),
         ..Default::default()
     };
     let runtime = runtime_arc();

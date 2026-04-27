@@ -30,6 +30,7 @@ use super::error::PipelineError;
 use super::observer::{NoopObserver, PipelineObserver};
 use crate::artifact::ArtifactStore;
 use crate::crossref::{CrossrefIndex, RefTypeRegistry};
+use crate::engine::resolution::EngineResolution;
 use crate::extension::Extension;
 use crate::format::Format;
 use crate::project::index::ProjectIndex;
@@ -146,6 +147,18 @@ pub struct StageContext {
     /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
     pub project_index: Option<Arc<ProjectIndex>>,
 
+    /// Engine resolution artifact for this document, stashed by
+    /// `EngineExecutionStage` at the top of its `run` method.
+    ///
+    /// `None` before `EngineExecutionStage` runs (Pass-1 stages, pure-markdown
+    /// documents, stages that execute before engine execution). Mirrors how
+    /// `project_index` is stashed from outside the stage.
+    ///
+    /// Consumed by future stages that need the per-language ownership map
+    /// (e.g. Pass-1 profile lift, `DocumentProfile` extension) without
+    /// re-running the resolver.
+    pub engine_resolution: Option<EngineResolution>,
+
     /// Per-page scope-aware resolver for HTML asset URLs and
     /// cross-document body links.
     ///
@@ -251,6 +264,7 @@ impl StageContext {
             resource_report: crate::project_resources::DocumentResourceReport::new(),
             resource_copies: Vec::new(),
             project_index: None,
+            engine_resolution: None,
             resource_resolver: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),

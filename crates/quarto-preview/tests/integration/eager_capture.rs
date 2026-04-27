@@ -76,7 +76,7 @@ async fn eager_capture_populates_index_sidecar() {
         single_file: None,
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
-        engine_registry: Some(registry),
+        engine_registry: Some(Arc::new(registry)),
         engine_policy: Default::default(),
         resource_html_files: Vec::new(),
         cache_dir: None,

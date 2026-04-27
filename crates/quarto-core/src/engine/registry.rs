@@ -12,7 +12,11 @@
 //! registering only the engines available in each environment.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+use quarto_error_reporting::DiagnosticMessage;
+
+use crate::extension::types::ExtensionId;
 
 use super::markdown::MarkdownEngine;
 use super::traits::ExecutionEngine;
@@ -35,11 +39,22 @@ use super::knitr::KnitrEngine;
 ///
 /// # Thread Safety
 ///
-/// The registry uses `Arc<dyn ExecutionEngine>` for thread-safe sharing,
-/// which makes [`Clone`] cheap — engines are reference-counted.
-#[derive(Debug, Clone)]
+/// The registry uses `Arc<dyn ExecutionEngine>` for thread-safe sharing.
+/// The `aliases` and `diagnostics` fields are `Arc<Mutex<…>>` so that
+/// `TsEngine` instances can hold clones of the `Arc` (leaf-Arc sharing)
+/// without creating a cycle back to `EngineRegistry`. The registry and
+/// each engine share the same underlying `Mutex` data.
+#[derive(Debug)]
 pub struct EngineRegistry {
     engines: HashMap<String, Arc<dyn ExecutionEngine>>,
+    /// Runtime-alias map: TS engine runtime name → resolved extension id.
+    /// Populated lazily by `TsEngine` on first `LoadEngine` response.
+    /// `Arc<Mutex<…>>` so `TsEngine` can hold a clone without a cycle.
+    pub aliases: Arc<Mutex<HashMap<String, ExtensionId>>>,
+    /// Diagnostics accumulated during registry lifetime (e.g. hint-validation
+    /// warnings from `TsEngine` lazy init). Drained by the stage at
+    /// end-of-render and forwarded to the pipeline's diagnostic sink.
+    pub diagnostics: Arc<Mutex<Vec<DiagnosticMessage>>>,
 }
 
 impl EngineRegistry {
@@ -52,6 +67,8 @@ impl EngineRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
             engines: HashMap::new(),
+            aliases: Arc::new(Mutex::new(HashMap::new())),
+            diagnostics: Arc::new(Mutex::new(Vec::new())),
         };
 
         // Always register markdown engine
@@ -71,6 +88,8 @@ impl EngineRegistry {
     pub fn empty() -> Self {
         Self {
             engines: HashMap::new(),
+            aliases: Arc::new(Mutex::new(HashMap::new())),
+            diagnostics: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -173,11 +192,36 @@ impl EngineRegistry {
     /// sequence simply never run; extra real engines (those without a
     /// matching capture) keep their default implementations.
     pub fn with_replay_many(captures: Vec<quarto_trace::EngineCapture>) -> Self {
-        let mut registry = Self::new();
+        let mut registry = Self {
+            engines: HashMap::new(),
+            aliases: Arc::new(Mutex::new(HashMap::new())),
+            diagnostics: Arc::new(Mutex::new(Vec::new())),
+        };
+        // Start from the default engine set, then overlay replay engines.
+        registry.register(Arc::new(MarkdownEngine::new()));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            registry.register(Arc::new(KnitrEngine::new()));
+            registry.register(Arc::new(JupyterEngine::new()));
+        }
         for capture in captures {
             registry.register(Arc::new(super::ReplayEngine::new(capture)));
         }
         registry
+    }
+
+    /// Accessor for the alias map (for `TsEngine` lazy init and Plan 1c
+    /// alias-collision logic). Returns a cloned `Arc` so `TsEngine` can
+    /// hold it without a cycle back to `EngineRegistry`.
+    pub fn aliases(&self) -> Arc<Mutex<HashMap<String, ExtensionId>>> {
+        Arc::clone(&self.aliases)
+    }
+
+    /// Accessor for the diagnostics vec (for `TsEngine` hint-validation
+    /// warnings and stage drain). Returns a cloned `Arc` so `TsEngine` can
+    /// hold it without a cycle back to `EngineRegistry`.
+    pub fn diagnostics(&self) -> Arc<Mutex<Vec<DiagnosticMessage>>> {
+        Arc::clone(&self.diagnostics)
     }
 }
 

@@ -69,6 +69,7 @@ impl ExecutionEngine for MarkdownEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::LanguageClaim;
     use std::path::PathBuf;
 
     fn make_test_context() -> ExecutionContext {
@@ -179,5 +180,45 @@ x <- 1:10
     fn test_markdown_engine_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<MarkdownEngine>();
+    }
+
+    // === Test Seam Row 1: MarkdownEngine claim table ===
+
+    /// MarkdownEngine returns None for every language — it is the no-op engine
+    /// and makes no claim on any computational cell.
+    #[test]
+    fn test_markdown_claims_language_r_is_none() {
+        let engine = MarkdownEngine::new();
+        assert_eq!(engine.claims_language("r", None), LanguageClaim::None);
+    }
+
+    #[test]
+    fn test_markdown_claims_language_python_is_none() {
+        let engine = MarkdownEngine::new();
+        assert_eq!(engine.claims_language("python", None), LanguageClaim::None);
+    }
+
+    // === Test Seam Row 2: default markdown_for_file returns NotSupported ===
+
+    /// The default trait body must return exactly `Err(NotSupported("markdown_for_file"))`.
+    /// We test via MarkdownEngine (which does not override the default).
+    /// The default errors before consulting `_runtime`, so any valid runtime works.
+    #[test]
+    fn test_markdown_for_file_default_returns_not_supported() {
+        use crate::engine::error::ExecutionError;
+        use quarto_system_runtime::NativeRuntime;
+        use std::sync::Arc;
+
+        let engine = MarkdownEngine::new();
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(NativeRuntime::new());
+        let result = engine.markdown_for_file(std::path::Path::new("x.ipynb"), &runtime);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        // Must match the NotSupported VARIANT with the exact &'static str payload.
+        assert!(
+            matches!(err, ExecutionError::NotSupported("markdown_for_file")),
+            "expected NotSupported(\"markdown_for_file\"), got: {:?}",
+            err
+        );
     }
 }

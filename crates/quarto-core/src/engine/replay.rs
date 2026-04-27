@@ -274,6 +274,7 @@ mod tests {
                 include_after: vec!["<body>".into()],
             },
             needs_postprocess: true,
+            html_dependencies: Vec::new(),
         };
 
         let result_value = serde_json::to_value(&original).unwrap();

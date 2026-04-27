@@ -81,7 +81,7 @@
 //! - Format-specific stages (HTML, PDF, etc.)
 //! - Project vs single-document mode
 
-mod cancellation;
+pub mod cancellation;
 mod context;
 mod data;
 mod error;
@@ -93,6 +93,7 @@ pub mod trace;
 mod traits;
 
 // Re-export public types
+pub use cancellation::Cancellation;
 pub use context::StageContext;
 pub use data::{
     DocumentAst, DocumentAtProfile, DocumentSource, ExecutedDocument, FinalOutput, LoadedSource,

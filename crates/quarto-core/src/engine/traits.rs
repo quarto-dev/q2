@@ -8,9 +8,14 @@
 //! ExecutionEngine trait for code execution in Quarto documents.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use quarto_source_map::SourceInfo;
+use quarto_system_runtime::SystemRuntime;
 
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
+use crate::engine::LanguageClaim;
 
 /// Execution engine for code cells in Quarto documents.
 ///
@@ -99,10 +104,14 @@ pub trait ExecutionEngine: Send + Sync {
         false
     }
 
-    /// Get intermediate files produced by this engine.
+    /// Pure prediction of intermediate file paths derived from the input path.
     ///
-    /// These files may need to be cleaned up after rendering completes.
-    /// For example, knitr produces `{input}_files/` directories.
+    /// This is **not** post-execution introspection and **not** a cleanup list.
+    /// The argument is the original source path; the return lists paths the engine
+    /// will produce alongside the primary output (e.g. a generated `_files/`
+    /// directory for figures). The result is used to **exclude those paths from
+    /// the project's input-file set** so they are not treated as separate render
+    /// targets.
     ///
     /// # Arguments
     ///
@@ -110,9 +119,60 @@ pub trait ExecutionEngine: Send + Sync {
     ///
     /// # Returns
     ///
-    /// Paths to intermediate files/directories that may exist.
+    /// Paths to intermediate files/directories the engine will produce.
     fn intermediate_files(&self, _input_path: &Path) -> Vec<PathBuf> {
         Vec::new()
+    }
+
+    /// File extensions this engine handles (e.g. `[".jl"]` for a Julia engine).
+    ///
+    /// Used together with `claims_file` for non-QMD input support. An empty list
+    /// (the default) means this engine does not claim any file type.
+    fn valid_extensions(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Claim level for a computational language found in the document's AST.
+    ///
+    /// Called once per (language, first_class) pair during engine resolution.
+    /// `first_class` is the first non-language class on the cell (e.g. `"marimo"`
+    /// for `{python .marimo}`), or `None` for a plain cell.
+    ///
+    /// Returns a [`LanguageClaim`] indicating whether and how strongly this engine
+    /// wants to own cells of this language. The resolver uses kind + priority to
+    /// assign ownership; see `claude-notes/designs/engine-resolution.md` §3–§4.
+    ///
+    /// Default: `LanguageClaim::None` (no claim on any language).
+    fn claims_language(&self, _language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        LanguageClaim::None
+    }
+
+    /// Whether this engine claims a particular non-QMD input file.
+    ///
+    /// Called during Pass-1 project scanning for files whose extension appears
+    /// in `valid_extensions`. Return `true` to take ownership; if no engine
+    /// claims the file, rendering halts with a loud error.
+    ///
+    /// Default: `false`.
+    fn claims_file(&self, _file: &str, _ext: &str) -> bool {
+        false
+    }
+
+    /// Convert a non-QMD file to QMD text. Called only for files this engine
+    /// claimed via `claims_file`. For QMD files, q2 handles parsing directly
+    /// and this method is never called.
+    ///
+    /// Returns the converted text; the `SourceInfo` slot is reserved for
+    /// faithful original-file provenance (deferred — see "Provenance" in
+    /// plan1a-engine) and is `SourceInfo::default()` in v1.
+    ///
+    /// Default: returns `Err(ExecutionError::NotSupported("markdown_for_file"))`.
+    fn markdown_for_file(
+        &self,
+        _file: &Path,
+        _runtime: &Arc<dyn SystemRuntime>,
+    ) -> Result<(String, SourceInfo), ExecutionError> {
+        Err(ExecutionError::not_supported("markdown_for_file"))
     }
 
     /// Check if this engine is available in the current environment.

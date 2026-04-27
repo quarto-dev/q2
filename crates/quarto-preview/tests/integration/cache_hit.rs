@@ -47,10 +47,10 @@ impl ExecutionEngine for CountingPassthroughEngine {
     }
 }
 
-fn registry_with_counter(calls: Arc<AtomicUsize>) -> EngineRegistry {
+fn registry_with_counter(calls: Arc<AtomicUsize>) -> Arc<EngineRegistry> {
     let mut reg = EngineRegistry::new();
     reg.register(Arc::new(CountingPassthroughEngine { calls }));
-    reg
+    Arc::new(reg)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -30,7 +30,12 @@ use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
 
-use crate::engine::{EngineRegistry, ExecutionContext, ExecutionEngine, detect_engine_sequence};
+use std::time::Duration;
+
+use crate::engine::{
+    DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine,
+    detect_engine_sequence, resolve_engines,
+};
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
     StageContext,
@@ -75,7 +80,7 @@ pub const ENGINE_CAPTURE_KIND: &str = "EngineCapture";
 /// ```
 pub struct EngineExecutionStage {
     /// Engine registry for looking up engines by name
-    registry: EngineRegistry,
+    registry: Arc<EngineRegistry>,
 
     /// Engine names whose post-engine output was already provided to the
     /// pipeline out-of-band — specifically, spliced into the AST by
@@ -104,13 +109,13 @@ impl EngineExecutionStage {
     /// - `jupyter` (native only) - Python/Julia code execution
     pub fn new() -> Self {
         Self {
-            registry: EngineRegistry::new(),
+            registry: Arc::new(EngineRegistry::new()),
             spliced_engines: HashSet::new(),
         }
     }
 
     /// Create with a custom registry (primarily for testing).
-    pub fn with_registry(registry: EngineRegistry) -> Self {
+    pub fn with_registry(registry: Arc<EngineRegistry>) -> Self {
         Self {
             registry,
             spliced_engines: HashSet::new(),
@@ -230,6 +235,16 @@ impl PipelineStage for EngineExecutionStage {
                 .join(", ")
         );
 
+        // Step 1b: Run the pure resolver to build the ownership map.
+        // `claimed = None`: file-claim seeding is Plan 1c's job.
+        // The resolution is stashed on StageContext so later stages (profile
+        // lift, etc.) can consume it without re-running the resolver.
+        let resolution = resolve_engines(&doc_ast.ast.meta, &doc_ast.ast, &self.registry, None);
+        ctx.engine_resolution = Some(resolution.clone());
+
+        // Resolve the execute.timeout tri-state from metadata.
+        let execute_timeout = resolve_execute_timeout(&doc_ast.ast.meta);
+
         // Step 2: Resolve each detected engine to an implementation (with
         // fallback), dropping markdown — it's a no-op, so a markdown
         // engine anywhere in the sequence is skipped (this also covers
@@ -308,6 +323,9 @@ impl PipelineStage for EngineExecutionStage {
             // only consumers, so this is where the per-document `mkdir`
             // actually happens now (bd-tky36).
             let temp_dir = ctx.temp_dir()?.to_path_buf();
+            // Per-engine leave-alone set: HANDLED_LANGUAGES ∪ languages owned
+            // by other engines in the sequence (design doc §5).
+            let handled_languages = resolution.handled_languages_for(engine.name());
             let exec_context = ExecutionContext::new(
                 temp_dir,
                 ctx.project.dir.clone(),
@@ -320,7 +338,10 @@ impl PipelineStage for EngineExecutionStage {
                 Some(ctx.project.dir.clone())
             })
             .with_engine_config(engine_config)
-            .with_source_info(qmd_source_info, source_context_arc.clone());
+            .with_source_info(qmd_source_info, source_context_arc.clone())
+            .with_handled_languages(handled_languages)
+            .with_cancellation(ctx.cancellation.clone())
+            .with_execute_timeout(execute_timeout);
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             let mut result = engine
@@ -410,6 +431,24 @@ impl PipelineStage for EngineExecutionStage {
                     &path,
                     std::mem::take(&mut result.supporting_files),
                 );
+            }
+
+            // Store structured HTML dependencies (the Q2-native channel,
+            // disjoint from `includes` above). Name-collision dedup and
+            // benign cross-page dedup are both handled inside
+            // `store_html_dependencies`; warnings are appended to
+            // `ctx_diagnostics` which is drained at end-of-stage.
+            if !result.html_dependencies.is_empty() {
+                let mut dep_diagnostics = Vec::new();
+                crate::dependency::store_html_dependencies(
+                    std::mem::take(&mut result.html_dependencies),
+                    &mut ctx.artifacts,
+                    ctx.runtime.as_ref(),
+                    &mut dep_diagnostics,
+                );
+                if !dep_diagnostics.is_empty() {
+                    ctx.add_diagnostics(dep_diagnostics);
+                }
             }
 
             // Parse the executed markdown back to AST against a per-engine
@@ -542,6 +581,36 @@ fn serialize_ast_to_qmd(
     })?;
 
     Ok((text, source_info))
+}
+
+/// Resolve the `execute.timeout` tri-state from document metadata.
+///
+/// | Metadata value              | Result                           |
+/// |-----------------------------|----------------------------------|
+/// | integer `N`                 | `Some(Duration::from_secs(N))`   |
+/// | boolean `false`             | `None` (no timeout)              |
+/// | boolean `true` / absent     | `Some(DEFAULT_EXECUTE_TIMEOUT)`  |
+///
+/// This is a **pure helper** — no side effects. Tested by the bound test
+/// (plan1a-host's "Tri-state bound test" in plan1a-engine.md Phase 4).
+fn resolve_execute_timeout(meta: &quarto_pandoc_types::ConfigValue) -> Option<Duration> {
+    let Some(val) = meta.get_path(&["execute", "timeout"]) else {
+        return Some(DEFAULT_EXECUTE_TIMEOUT);
+    };
+    // Integer: explicit number of seconds.
+    if let Some(secs) = val.as_int() {
+        return Some(Duration::from_secs(secs.max(0) as u64));
+    }
+    // Boolean: false = no timeout, true = use default.
+    if let Some(b) = val.as_bool() {
+        return if b {
+            Some(DEFAULT_EXECUTE_TIMEOUT)
+        } else {
+            None
+        };
+    }
+    // Unknown value type: fall back to default.
+    Some(DEFAULT_EXECUTE_TIMEOUT)
 }
 
 #[cfg(test)]
@@ -1064,7 +1133,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockAppendingEngine));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         let content = b"---\nengine: mock-appending\n---\n\n# Hello\n\nOriginal paragraph.";
@@ -1129,7 +1198,7 @@ mod tests {
             vec!["Final output from B.".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n";
@@ -1172,7 +1241,7 @@ mod tests {
             vec!["Para from B.".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         // One kept prose block + one cell per engine (both present from
@@ -1225,7 +1294,7 @@ mod tests {
             vec!["spliced once".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         // engine declared twice; one fixture-a cell. If dedup failed,
@@ -1263,7 +1332,7 @@ mod tests {
             vec!["from A".to_string()],
         )));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         let content = b"---\nengine: [markdown, fixture-a]\n---\n\n```{fixture-a}\nx\n```\n";
@@ -1324,7 +1393,7 @@ mod tests {
             "fixture-b",
             vec!["Final B".to_string()],
         )));
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
         ctx.observer = observer.clone();
 
@@ -1397,7 +1466,7 @@ mod tests {
             "fixture-b",
             vec!["Final B".to_string()],
         )));
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
         ctx.observer = observer.clone();
 
@@ -1423,7 +1492,7 @@ mod tests {
         for capture in captures {
             replay_registry.register(Arc::new(ReplayEngine::new(capture)));
         }
-        let replay_stage = EngineExecutionStage::with_registry(replay_registry);
+        let replay_stage = EngineExecutionStage::with_registry(Arc::new(replay_registry));
         let mut replay_ctx = make_test_context();
 
         let output_replayed = replay_stage
@@ -1454,7 +1523,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         // Force engine: mock-includes via metadata
@@ -1482,7 +1551,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         // Force engine: mock-includes via metadata
@@ -1659,7 +1728,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(ReplayEngine::new(capture)));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1744,7 +1813,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
         ctx.observer = observer.clone();
 
@@ -1820,7 +1889,7 @@ mod tests {
 
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
 
         let mut ctx = make_test_context();
         ctx.observer = observer.clone();
@@ -1923,7 +1992,7 @@ mod tests {
         // populated engine_capture.
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(MockIncludesEngine));
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
         ctx.observer = observer.clone();
 
@@ -2044,7 +2113,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(ReplayEngine::new(capture)));
 
-        let stage = EngineExecutionStage::with_registry(registry);
+        let stage = EngineExecutionStage::with_registry(Arc::new(registry));
         let mut ctx = make_test_context();
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -2056,6 +2125,86 @@ mod tests {
         assert!(
             msg.contains("replay miss"),
             "expected 'replay miss' diagnostic in stage error, got: {msg}"
+        );
+    }
+
+    // ── execute.timeout tri-state bound tests (plan1a-engine.md Phase 4) ──────
+    //
+    // Named revert: delete the `get_path`/`as_bool`/`as_int` branch (hardcode
+    // `Some(300s)`) → the `5s` and `None` cases go RED, confirming the three
+    // windows are distinct (vacuity guard: not all mapping to the default).
+
+    /// Helper: build a ConfigValue map from a YAML-ish string path → value.
+    fn timeout_meta(
+        timeout_value: quarto_pandoc_types::ConfigValue,
+    ) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        use quarto_source_map::SourceInfo;
+
+        let execute_map = quarto_pandoc_types::ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "timeout".to_string(),
+                key_source: SourceInfo::for_test(),
+                value: timeout_value,
+            }],
+            SourceInfo::for_test(),
+        );
+        quarto_pandoc_types::ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "execute".to_string(),
+                key_source: SourceInfo::for_test(),
+                value: execute_map,
+            }],
+            SourceInfo::for_test(),
+        )
+    }
+
+    /// `execute: {timeout: 5}` → `Some(5s)`.
+    #[test]
+    fn test_resolve_execute_timeout_integer() {
+        use quarto_source_map::SourceInfo;
+        let meta = timeout_meta(quarto_pandoc_types::ConfigValue::new_scalar(
+            yaml_rust2::Yaml::Integer(5),
+            SourceInfo::for_test(),
+        ));
+        assert_eq!(
+            resolve_execute_timeout(&meta),
+            Some(Duration::from_secs(5)),
+            "integer timeout 5 must resolve to Some(5s)"
+        );
+    }
+
+    /// `execute: {timeout: false}` → `None` (no timeout).
+    #[test]
+    fn test_resolve_execute_timeout_false() {
+        use quarto_source_map::SourceInfo;
+        let meta = timeout_meta(quarto_pandoc_types::ConfigValue::new_bool(
+            false,
+            SourceInfo::for_test(),
+        ));
+        assert_eq!(
+            resolve_execute_timeout(&meta),
+            None,
+            "boolean false must resolve to None (no timeout)"
+        );
+    }
+
+    /// Absent `execute.timeout` → `Some(DEFAULT_EXECUTE_TIMEOUT)` (300 s).
+    #[test]
+    fn test_resolve_execute_timeout_absent() {
+        use quarto_source_map::SourceInfo;
+        let meta = quarto_pandoc_types::ConfigValue::new_map(vec![], SourceInfo::for_test());
+        assert_eq!(
+            resolve_execute_timeout(&meta),
+            Some(DEFAULT_EXECUTE_TIMEOUT),
+            "absent execute.timeout must resolve to Some(DEFAULT_EXECUTE_TIMEOUT)"
+        );
+        // Vacuity: DEFAULT_EXECUTE_TIMEOUT must be 300 s so this is distinct
+        // from the 5 s case.
+        assert_eq!(
+            DEFAULT_EXECUTE_TIMEOUT.as_secs(),
+            300,
+            "DEFAULT_EXECUTE_TIMEOUT must be 300 s"
         );
     }
 }

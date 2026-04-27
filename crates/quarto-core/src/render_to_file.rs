@@ -109,7 +109,7 @@ pub struct RenderToFileOptions {
     /// trace can be fabricated against the real pipeline rather
     /// than a synthetic context). Production callers should prefer
     /// `replay_captures`.
-    pub engine_registry_override: Option<crate::engine::EngineRegistry>,
+    pub engine_registry_override: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
 
     /// Resolved attribution mode (CLI override merged with YAML).
     /// `Some(AttributionMode::Git)` installs a [`GitBlameProvider`]
@@ -328,8 +328,8 @@ pub fn render_document_to_file(
     if let Some(reg) = options.engine_registry_override.clone() {
         config.engine_registry = Some(reg);
     } else if !options.replay_captures.is_empty() {
-        config.engine_registry = Some(crate::engine::EngineRegistry::with_replay_many(
-            options.replay_captures.clone(),
+        config.engine_registry = Some(std::sync::Arc::new(
+            crate::engine::EngineRegistry::with_replay_many(options.replay_captures.clone()),
         ));
     }
 

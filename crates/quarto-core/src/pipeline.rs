@@ -117,7 +117,7 @@ pub struct HtmlRenderConfig {
     /// orchestrator/CLI's replay path constructs this via
     /// [`crate::engine::EngineRegistry::with_replay`] from a
     /// [`quarto_trace::EngineCapture`] loaded from a trace file.
-    pub engine_registry: Option<crate::engine::EngineRegistry>,
+    pub engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
 
     /// Server-recorded engine captures to splice into the HTML render
     /// (bd-uy4uygha). When non-empty, a [`crate::stage::CaptureSpliceStage`]
@@ -143,7 +143,10 @@ impl HtmlRenderConfig {
     }
 
     /// Attach an engine registry override (bd-45yw replay activation).
-    pub fn with_engine_registry(mut self, registry: crate::engine::EngineRegistry) -> Self {
+    pub fn with_engine_registry(
+        mut self,
+        registry: std::sync::Arc<crate::engine::EngineRegistry>,
+    ) -> Self {
         self.engine_registry = Some(registry);
         self
     }
@@ -270,7 +273,7 @@ pub fn build_html_pipeline_stages_with_apply_config(
 /// behavior for every existing call site.
 pub fn build_html_pipeline_stages_with_options(
     apply_config: Option<ApplyTemplateConfig>,
-    engine_registry: Option<crate::engine::EngineRegistry>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let engine_stage = match engine_registry {
         Some(reg) => EngineExecutionStage::with_registry(reg),
@@ -412,7 +415,7 @@ const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &["math-js", "render-html-body", "app
 /// See `crates/quarto-core/src/engine/capture_splice.rs` and
 /// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
 pub fn build_q2_preview_pipeline_stages(
-    engine_registry: Option<crate::engine::EngineRegistry>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
     // Build the base list *without* threading the engine registry through;
@@ -967,7 +970,7 @@ pub async fn render_qmd_to_preview_ast(
     source_name: &str,
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
-    engine_registry: Option<crate::engine::EngineRegistry>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Result<PreviewAstOutput> {
     // Capture the untransformed AST before any pipeline stage runs.
@@ -2512,7 +2515,7 @@ mod tests {
             let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
             let probe_config = HtmlRenderConfig {
                 resolver: None,
-                engine_registry: Some(probe_registry),
+                engine_registry: Some(Arc::new(probe_registry)),
                 ..Default::default()
             };
             let runtime = make_test_runtime();
@@ -2557,7 +2560,7 @@ mod tests {
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         let config = HtmlRenderConfig {
             resolver: None,
-            engine_registry: Some(replay_registry),
+            engine_registry: Some(Arc::new(replay_registry)),
             ..Default::default()
         };
         let runtime = make_test_runtime();

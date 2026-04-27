@@ -93,6 +93,7 @@ pub static KNITR_RESOURCES: ResourceBundle = ResourceBundle::new("knitr", &KNITR
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
+use crate::engine::LanguageClaim;
 
 /// Knitr engine for R code execution.
 ///
@@ -183,8 +184,10 @@ impl ExecutionEngine for KnitrEngine {
             cwd: working_dir.clone(),
             params: None,
             resource_dir: resource_dir.to_path_buf(),
-            // Languages that Quarto handles (knitr passes them through unchanged)
-            handled_languages: vec!["ojs".to_string(), "mermaid".to_string(), "dot".to_string()],
+            // Languages that Quarto handles (knitr passes them through unchanged).
+            // Populated from ExecutionContext so multi-engine sequences can extend
+            // this set with languages owned by other engines.
+            handled_languages: ctx.handled_languages.clone(),
         };
 
         // Step 7: Build call options
@@ -215,11 +218,32 @@ impl ExecutionEngine for KnitrEngine {
             filters: result.filters,
             includes,
             needs_postprocess: result.post_process,
+            html_dependencies: Vec::new(),
         })
     }
 
     fn can_freeze(&self) -> bool {
         true
+    }
+
+    /// Deliberate q2 design choice: knitr claims `r` as Primary(1), and additionally
+    /// claims the `Interop` set — languages knitr can execute in-session via
+    /// `knit_engines` (reticulate for python, eng_sql for sql, shell engines for
+    /// bash/sh). `Interop` fires only when knitr is already in the sequence (via its
+    /// `r` Primary claim), so a knitr-only `{r}+{python}` doc routes python to knitr
+    /// via reticulate, while an explicit `[knitr, jupyter]` hands python to jupyter
+    /// (T2 explicit Fallback > T3 Interop). See `claude-notes/designs/engine-resolution.md`
+    /// §3.1 and §4.4.
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        match language {
+            "r" => LanguageClaim::Primary(1),
+            // The Interop set is knitr's `knit_engines` in-session capability
+            // (reticulate/eng_sql/shell), ceded to a dedicated engine when one is
+            // present. Pinned, not guessed: Q1 ships verified knitr support for
+            // each of these (knitr-fixup.lua for sql, reticulate for python, etc.).
+            "python" | "sql" | "bash" | "sh" => LanguageClaim::Interop(0),
+            _ => LanguageClaim::None,
+        }
     }
 
     fn is_available(&self) -> bool {
@@ -385,6 +409,56 @@ mod tests {
     fn test_knitr_engine_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<KnitrEngine>();
+    }
+
+    // === Test Seam Row 1: KnitrEngine claim table ===
+
+    #[test]
+    fn test_knitr_claims_language_r_is_primary_1() {
+        let engine = KnitrEngine::new();
+        assert_eq!(engine.claims_language("r", None), LanguageClaim::Primary(1));
+    }
+
+    #[test]
+    fn test_knitr_claims_language_python_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("python", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_sql_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("sql", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_bash_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("bash", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_sh_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("sh", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_julia_is_none() {
+        let engine = KnitrEngine::new();
+        assert_eq!(engine.claims_language("julia", None), LanguageClaim::None);
     }
 
     // === Resource Tests ===

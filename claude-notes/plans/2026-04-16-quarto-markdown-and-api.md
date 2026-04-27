@@ -1,439 +1,148 @@
-# Plan 2: @quarto/api (text, markdown, utilities) + QuartoAPI assembly
+# Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
-**Depends on:** Phases 2A, 2B, 2D are independent. Phase 2C (wiring into engine-host) requires Plan 1b to have created the `@quarto/engine-host-deno` package.
-**Blocks:** Plan 3 (@quarto/api/jupyter) is gated on Phase 2A (package skeleton). Plan 4 (Julia Validation) needs all of Plan 2.
-**Estimated sessions:** 1-2
-
-## Overview
-
-Create the `@quarto/api` TypeScript package and populate the `text/`,
-`markdown/`, `format/`, `path/`, `system/`, `console/`, and `crypto/`
-subpaths. Flesh out the QuartoAPI assembly in `@quarto/engine-host-deno` that
-Plan 1a stubbed.
-
-This plan covers everything in the QuartoAPI surface except `quarto.jupyter`
-(which lives under `@quarto/api/jupyter` and is the subject of Plan 3).
-
-## Package layout
-
-A single `@quarto/api` package with subpath exports. Everything lives under
-`ts-packages/quarto-api/src/`:
-
-```
-text/                ← MappedString + text utilities
-markdown/            ← extractYaml, partition, getLanguages, breakQuartoMd
-format/              ← isHtmlCompatible, isLatexOutput, …
-path/                ← dirAndStem, isQmdFile, toForwardSlashes, …
-system/              ← execProcess, pandoc, tempContext, …
-console/             ← info, warning, error, withSpinner
-crypto/              ← md5Hash
-jupyter/             ← Plan 3
-
-platform.ts          ← PlatformHost interface (see below)
-```
-
-One `package.json`, one version, one dep list, `exports` map for targeted imports.
-
-## Cross-environment portability: `PlatformHost`
-
-`@quarto/api` must run in two environments without modification:
-
-1. **Deno subprocess** (`@quarto/engine-host-deno`) — the harness built in
-   Plan 1a. Has full Deno APIs.
-2. **q2's WASM runtime in hub-client** (future, not in this plan) — file I/O
-   goes through q2's VFS (`vfsReadFile`, `vfsAddFile`, …), no subprocesses,
-   no `Deno` global.
-
-To keep both targets viable, every I/O-touching submodule takes a
-`PlatformHost` parameter instead of calling `Deno.*` directly. Pure submodules
-(`markdown/`, most of `text/`, `format/`, `console/`, `crypto/`, most of
-`jupyter/`) have no host dependency and work in any JS environment.
-
-### `src/platform.ts`
-
-```typescript
-export interface PlatformHost {
-    fs: {
-        readTextFileSync(path: string): string;
-        writeFileSync(path: string, content: string | Uint8Array): void;
-        exists(path: string): boolean;
-    };
-    process?: {            // undefined → execProcess throws "not supported"
-        exec(cmd: string, args: string[], opts?: ExecOptions): Promise<ExecResult>;
-    };
-    realPath?(path: string): string;   // undefined → absolute() returns path as-is
-    isInteractive: boolean;
-    isCI: boolean;
-}
-```
-
-### Submodules that take a host (factories)
-
-| Submodule | Export shape |
-|---|---|
-| `text/mapped-from-file.ts` | `createMappedStringFromFile(host)` returning `(path) => MappedString` |
-| `path/index.ts` | `createPath(host)` for `absolute()`; pure path-string helpers remain direct exports |
-| `system/index.ts` | `createSystem(host)` returning the full system namespace |
-
-### Submodules with no host (pure exports)
-
-`markdown/`, `text/mapped.ts` + `text/text.ts` + `text/ranged.ts` + `text/binary-search.ts`,
-`format/`, `console/`, `crypto/`, `jupyter/` (the conversion logic; figure
-writes from `jupyter/assets.ts` go through the host).
-
-### What this plan implements
-
-- [ ] `src/platform.ts` — the `PlatformHost` interface, no implementations.
-- [ ] All factory exports listed above.
-- [ ] A `denoHost: PlatformHost` in `@quarto/engine-host-deno`, wiring
-  `Deno.readTextFileSync`, `Deno.Command`, etc.
-
-### What this plan does NOT implement
-
-- A WASM-side host. That's a future piece of work and needs its own package
-  (working name: `@quarto/engine-host-wasm`). Design invariant for this plan:
-  nothing in `@quarto/api` prevents that from being written later.
-- A decision about *how* TS engine extensions run in the browser (Web
-  Worker? Sandbox? Different mechanism entirely?). See
-  `crates/quarto-system-runtime` and the deepwiki analysis
-  (2026-04-22 discussion) for context. The `PlatformHost` abstraction is
-  necessary but not sufficient for browser hosting.
-
-## Work Items
-
-### Phase 2A: Package skeleton + @quarto/api/markdown
-
-- [ ] Create `ts-packages/quarto-api/package.json`:
-  ```json
-  {
-    "name": "@quarto/api",
-    "version": "0.1.0",
-    "type": "module",
-    "exports": {
-      ".": "./src/index.ts",
-      "./text":     "./src/text/index.ts",
-      "./markdown": "./src/markdown/index.ts",
-      "./jupyter":  "./src/jupyter/index.ts",
-      "./format":   "./src/format/index.ts",
-      "./path":     "./src/path/index.ts",
-      "./system":   "./src/system/index.ts",
-      "./console":  "./src/console/index.ts",
-      "./crypto":   "./src/crypto/index.ts"
-    },
-    "dependencies": { "yaml": "^2.0.0" }
-  }
-  ```
-  Run `npm install` from the repo root after creating the package.
-
-- [ ] Create `ts-packages/quarto-api/tsconfig.json` matching the repo's existing
-  ts-packages conventions.
-
-- [ ] Create `src/index.ts` (optional aggregate re-export — convenience for
-  callers who want everything under one import).
-
-- [ ] Create `src/markdown/` — clean reimplementations of the markdown
-  utilities. These power `quarto.markdownRegex.*` on the API surface.
-
-  - [ ] `src/markdown/extract-yaml.ts` — `extractYaml(markdown: string) → Metadata`:
-    - Find YAML front matter between `---` delimiters
-    - Parse with `yaml` package
-    - Support the `!expr` YAML tag (Quarto convention: treat as raw string)
-    - Handle edge cases: no front matter, empty front matter, malformed YAML
-    - Reference: Quarto 1's `readYamlFromMarkdown` in `src/core/yaml.ts`
-    - ~50 lines + tests
-
-  - [ ] `src/markdown/pandoc-attr.ts` — `pandocAttrParseText(text: string) → PandocAttr | null`:
-    - Parse Pandoc-style attributes on code blocks (`{#id .class key=value}`)
-    - Used by `partition.ts`
-    - Reference: Quarto 1's `pandocAttrParseText` in `src/core/pandoc/pandoc-partition.ts`
-
-  - [ ] `src/markdown/partition.ts` — `partition(markdown: string) → PartitionedMarkdown`:
-    - Split markdown into: yaml front matter, heading (first heading if present), body
-    - Uses `extractYaml` for the YAML part
-    - Reference: Quarto 1's `partitionMarkdown` in `src/core/pandoc/pandoc-partition.ts`
-    - ~200 lines + tests
-
-  - [ ] `src/markdown/languages.ts` — `getLanguages(markdown: string) → Set<string>`:
-    - Extract language specifiers from fenced code blocks via regex
-    - Match `` ```{language} `` patterns
-    - Pure regex, zero dependencies
-    - Reference: Quarto 1's `languagesInMarkdown` — literally a copy, it's self-contained
-    - ~30 lines + tests
-
-  - [ ] `src/markdown/break-quarto-md.ts` — `breakQuartoMd(markdown: string) → QuartoMdCell[]`:
-    - Split markdown into alternating code cells and markdown cells
-    - Parse cell options from YAML comments within code blocks
-    - **Simplified from Quarto 1**: use `yaml` package directly for cell
-      options, no schema validation, no tree-sitter
-    - Handle: fenced code blocks, shortcodes, raw blocks
-    - Reference: Quarto 1's `breakQuartoMd` in `src/core/lib/break-quarto-md.ts`
-    - Note: the Julia engine does NOT use this method, but the engine
-      template does and other engines will
-    - ~300 lines + tests
-
-  - [ ] `src/markdown/index.ts` — barrel re-export.
-
-- [ ] Write unit tests for each function. Check existing ts-packages for the
-  test runner convention (likely Vitest, since that's what the Rust monorepo's
-  other ts-packages use). If nothing is set up yet, use Vitest and add a
-  `test` script to `package.json`.
-
-### Phase 2B: @quarto/api/text (including MappedString)
-
-In q2's design, `quarto.text` and `quarto.mappedString` are **two separate
-QuartoAPI namespaces** (Q1 compat) powered by a **single underlying module**,
-`@quarto/api/text`. Layout mirrors Q1's groupings in `@quarto/types/src/text.ts`.
-
-- [ ] `src/text/types.ts` — types only (matches Q1's
-  `@quarto/types/src/text.ts`):
-  ```typescript
-  export interface Range { start: number; end: number; }
-  export interface MappedString {
-      readonly value: string;
-      readonly fileName?: string;
-      readonly map: (index: number, closest?: boolean) => StringMapResult;
-  }
-  export type StringMapResult = {
-      index: number;
-      originalString: MappedString;
-  } | undefined;
-  export type EitherString = string | MappedString;
-  export interface RangedSubstring { substring: string; range: Range; }
-  export type StringChunk = string | Range | MappedString;
-  ```
-
-- [ ] `src/text/binary-search.ts` — `glb(arr, value)` helper (copy from Q1's
-  `src/core/lib/binary-search.ts`, trivially small).
-
-- [ ] `src/text/ranged.ts` — `RangedSubstring`, `rangedLines` (internal,
-  used by `mapped.ts`). Copy from Q1's `src/core/lib/ranged-text.ts`.
-
-- [ ] `src/text/text.ts` — plain-string utilities that power `quarto.text.*`:
-  - `lines(text)` → `text.split("\n")`
-  - `trimEmptyLines(lines, trim)` → filter empty lines from start/end
-  - `lineBreakPositions(text)`, `indexToLineCol(text)`, `matchAll` (internal
-    helpers used by `mapped.ts`, also exposed)
-
-- [ ] `src/text/yaml-text.ts` — `asYamlText(metadata)` → `yaml.dump(metadata)`.
-
-- [ ] `src/text/html-preserve.ts` — `postProcessRestorePreservedHtml(options)`
-  — replace preservation markers with original HTML.
-
-- [ ] `src/text/mapped.ts` — core `MappedString` implementation. Direct
-  port of Q1's `src/core/lib/mapped-text.ts` (~200 lines):
-  - `asMappedString(str, fileName?)` — base with identity `.map()`
-  - `mappedSubstring(source, start, end)` — shifted view that delegates to source
-  - `mappedConcat(strings)` — concatenation with binary-search `.map()`
-  - `mappedString(source, pieces, fileName?)` — sugar over the above
-  - `mappedLines(ms, keepNewLines?)`, `mappedNormalizeNewlines(ms)`,
-    `mappedIndexToLineCol(ms)`
-
-- [ ] `src/text/mapped-from-file.ts` — factory for FS-backed MappedString:
-  ```typescript
-  import type { PlatformHost } from "../platform.ts";
-  export function createMappedStringFromFile(host: PlatformHost) {
-      return (path: string): MappedString =>
-          asMappedString(host.fs.readTextFileSync(path), path);
-  }
-  ```
-  The only FS-touching function in `text/` — isolating it behind the host
-  factory keeps the rest of `text/` (MappedString algebra, text utilities)
-  pure and portable.
-
-- [ ] `src/text/index.ts` — barrel re-export.
-
-- [ ] Write tests for the text utilities and the MappedString algebra
-  (including `.map()` composition through multiple `mappedConcat`/
-  `mappedSubstring` layers).
-
-**Note on source-map rehydration:** The `fromSourceMap` function that
-constructs a MappedString from `TsSourceMapEntry[]` byte ranges does
-**not** live in `@quarto/api/text`. It is q2-specific (needed because
-`source_map` crossed the protocol boundary) and lives in
-`@quarto/engine-host-deno/src/mapped-source.ts`. It is built on top of the
-primitives from `@quarto/api/text` (`asMappedString`, `mappedConcat`) and
-maintains a base-per-file cache so all pieces sharing a source file share
-one base `MappedString` object. See Plan 1b for the algorithm.
-
-### Phase 2C: Remaining @quarto/api submodules + engine-host wiring
-
-Populate the remaining `@quarto/api` submodules, then flesh out the stub
-`quarto-api.ts` in `@quarto/engine-host-deno` that Plan 1a created.
-
-**Construction model** — no registry pattern, and I/O runs through a
-`PlatformHost` plugged in by the consumer:
-
-```typescript
-// engine-host-deno/src/deno-host.ts
-import type { PlatformHost } from "@quarto/api/platform";
-export const denoHost: PlatformHost = {
-    fs: {
-        readTextFileSync: Deno.readTextFileSync,
-        writeFileSync: (p, c) => Deno.writeFileSync(p,
-            typeof c === "string" ? new TextEncoder().encode(c) : c),
-        exists: (p) => { try { Deno.statSync(p); return true; } catch { return false; } },
-    },
-    process: {
-        exec: async (cmd, args, opts) =>
-            await new Deno.Command(cmd, { args, ...opts }).output(),
-    },
-    realPath: Deno.realPathSync,
-    isInteractive: Deno.stdin.isTerminal(),
-    isCI: !!Deno.env.get("CI"),
-};
-
-// engine-host-deno/src/quarto-api.ts
-import { denoHost } from "./deno-host.ts";
-import * as text from "@quarto/api/text";
-import { createMappedStringFromFile } from "@quarto/api/text/mapped-from-file";
-import * as markdown from "@quarto/api/markdown";
-import * as format from "@quarto/api/format";
-import * as pathMod from "@quarto/api/path";
-import { createPath } from "@quarto/api/path";
-import { createSystem } from "@quarto/api/system";
-import * as quartoConsole from "@quarto/api/console";
-import * as crypto from "@quarto/api/crypto";
-// jupyter wired in by Plan 3
-
-export function buildQuartoAPI(context: EngineHostContext): QuartoAPI {
-    const mappedStringFromFile = createMappedStringFromFile(denoHost);
-    const pathNamespace = { ...pathMod, ...createPath(denoHost) };
-    const systemNamespace = createSystem(denoHost);
-    return {
-        text:          buildTextNamespace(text),
-        mappedString:  buildMappedStringNamespace(text, mappedStringFromFile),
-        markdownRegex: buildMarkdownRegexNamespace(markdown),
-        format:        buildFormatNamespace(format, context),
-        path:          buildPathNamespace(pathNamespace, context),
-        system:        buildSystemNamespace(systemNamespace, context),
-        console:       buildConsoleNamespace(quartoConsole),
-        crypto:        buildCryptoNamespace(crypto),
-        jupyter:       buildJupyterNamespace(...),  // Plan 3
-    };
-}
-```
-
-Direct construction, plain nested object. Quarto 1's
-`QuartoAPIRegistry`/`register.ts` infrastructure is **not** being ported.
-The same pattern in a future `@quarto/engine-host-wasm` replaces `denoHost`
-with a VFS-backed host and leaves the rest of the assembly identical.
-
-#### src/format/
-
-- [ ] `src/format/index.ts` — pure computation from `format.pandoc.to` string.
-  Each method accepts an optional `format` parameter (Q1 compat) and falls back
-  to a context-provided default:
-  ```typescript
-  export function isHtmlCompatible(format, defaultTo: string): boolean {
-      const to = format?.pandoc?.to ?? defaultTo;
-      return ["html", "html4", "html5", "revealjs", "s5", "slideous", "slidy",
-              "epub", "epub2", "epub3"].some(f => to.startsWith(f));
-  }
-  export function isLatexOutput(format, defaultTo: string): boolean { … }
-  // etc.
-  ```
-  Engine-host's `buildFormatNamespace` closes over `context.format.pandocTo`
-  to provide the default.
-
-#### src/path/
-
-Pure path-string helpers are direct exports (no host dependency):
-- [ ] `toForwardSlashes(path)` → `path.replace(/\\/g, "/")`
-- [ ] `dirAndStem(file)` → `[dirname(file), basename(file, extname(file))]`
-- [ ] `inputFilesDir(input)` → `join(dirname(input), basename(input, ext) + "_files")`
-- [ ] `isQmdFile(file)` → check extension
-
-Host-dependent piece is a factory:
-- [ ] `createPath(host)` → returns an `absolute(path)` that uses
-  `host.realPath` when available, otherwise returns `path` unchanged. The
-  WASM-host implementation of `absolute` will typically be identity (VFS
-  paths are already canonical); the Deno host delegates to `Deno.realPathSync`.
-
-Engine-host-deno's `buildPathNamespace` composes these with the
-`runtime(subdir)` and `resource(...parts)` closures that use
-`context.runtimeDir` / `context.resourceDir`.
-
-#### src/system/
-
-All of `system/` is host-dependent — expose as a factory:
-
-- [ ] `createSystem(host: PlatformHost)` returning:
-  - `execProcess(options)` → uses `host.process.exec()` if available, else throws
-    `"execProcess is not available in this environment"`
-  - `tempContext()` — creates temp dir via `host.fs` (Deno: `Deno.makeTempDirSync`;
-    browser: a VFS-scoped directory). Returns a cleanup helper.
-  - `onCleanup(handler)` — pure JS; registers in a module-level list processed
-    on exit / dispose.
-  - `isInteractiveSession()` → `host.isInteractive`
-  - `runningInCI()` → `host.isCI`
-
-Engine-host-deno's `buildSystemNamespace` wraps the factory output with a
-`pandoc(args, stdin?)` convenience that uses `context.pandocPath`. (In the
-future WASM host, `pandoc` can't be spawned — either route through a WASM
-build of pandoc or throw unsupported.)
-
-#### src/console/
-
-- [ ] `src/console/index.ts`:
-  - `info(message, options?)` → `console.error("[INFO]", message)` (goes to stderr)
-  - `warning(message, options?)` → `console.error("[WARN]", message)`
-  - `error(message, options?)` → `console.error("[ERROR]", message)`
-  - `withSpinner(options, fn)` → log start/end, call fn (no actual spinner in subprocess)
-
-  The `options` parameter (`{ bold, newline, indent, ... }`) is accepted but
-  formatting hints are best-effort in a subprocess context (no terminal control).
-
-#### src/crypto/
-
-- [ ] `src/crypto/index.ts` — `md5Hash(content)`. Note: Web Crypto doesn't
-  natively support MD5. Options: `npm:md5`, `node:crypto` (available in
-  Deno), or a small pure-JS MD5.
-
-#### Wire-up in engine-host
-
-- [ ] Update `@quarto/engine-host-deno/src/quarto-api.ts` to import from
-  `@quarto/api/*` and assemble the QuartoAPI object as shown above.
-- [ ] Add `@quarto/api` as a dependency of `@quarto/engine-host-deno`.
-- [ ] Write a smoke test that invokes each namespace method with trivial
-  inputs to verify the wiring.
-
-### Phase 2D: @quarto/types and import map
+**Depends on:** Plan 2A — both the **foundation** (`@quarto/api` shell + `./config` + vendored `@quarto/types`) and **§2aa** (the runtime surface: the `text`/`markdownRegex`/`mappedString`/`format`/`path`/`system`/`console`/`crypto` namespaces + `@quarto/api/platform`), both implemented. Phase B (types) is otherwise independent. Phase A fills stubs that §2aa shipped, so it follows §2aa.
+**Blocks:** Plan 4 (Julia Validation) needs all of Plan 2.
+**Estimated sessions:** ~1 (down from 1-2 — the namespace creation moved to §2aa and is done).
+
+## Scope (reconciled after §2aa landed)
+
+This plan originally owned "create the `@quarto/api` namespaces + assemble the
+QuartoAPI." Since then, **Plan 2A §2aa** (the runtime-surface section of Plan 2A)
+implemented the namespaces and the `platform` seam, and **Plan 1b** owns the
+QuartoAPI assembly. So most of the original Plan 2 is **already delivered
+elsewhere** and is no longer in scope here:
+
+- The eight pure/host-only namespaces — `text`, `markdownRegex`, `mappedString`,
+  `format`, `path`, `system`, `console`, `crypto` — live under
+  `ts-packages/quarto-api/src/` (§2aa). (Q1's names: it is `markdownRegex`, not
+  `markdown`, and `mappedString` is its own top-level namespace, not part of
+  `text`.) The former **Phase 2B** (`markdown/`) and **Phase 2C** (`text/` +
+  MappedString) are done here.
+- `@quarto/api/platform` defines the q2-original `PlatformHost`. The
+  **authoritative** interface is the landed
+  `ts-packages/quarto-api/src/platform/index.ts` (`fs` with
+  `readTextFileSync`/`writeFileSync`/`exists`/`makeTempFile`/`makeTempDir`,
+  `process.exec` via `ExecOptions`/`ExecResult`, `realPath`, `env`,
+  `isInteractive`, `isCI`). Do **not** re-spec it; read the source.
+- `denoHost: PlatformHost` and the state-machine `buildQuartoAPI(...)` assembly
+  **with gating** live in **`@quarto/engine-host-deno`** (Plan 1b:
+  `deno-host.ts`, `quarto-api.ts`). The old "Plan 2 wires the namespaces /
+  replaces Plan 1b's stubs" model is gone: §2aa ships real namespace bodies and
+  Plan 1b wires + gates them. Plan 2 does **not** own the assembly.
+
+What **remains** in Plan 2 is two things, below.
+
+> The detailed method-by-method specs that used to live here (extract-yaml,
+> partition, breakQuartoMd, MappedString `.map()`, etc.) are realized in §2aa;
+> they're recoverable from git history at the §2aa implementation commits if a
+> requirement needs re-checking. The reusable rationale survives under "Design
+> Notes" below.
+
+## Phase A — deferred launch-context bodies (fill §2aa's stubs)
+
+§2aa shipped these methods as `async` "not yet implemented" stubs (they reject
+rather than throw synchronously — see the §2aa final-review fixes) because they
+need render-service or environment/filesystem context. Give them real bodies.
+They plug into the existing §2aa namespace modules and take their IO through the
+injected `PlatformHost`. **These are exactly the methods Plan 1b gates until
+`launchEngine`** — Phase A is the "returns a real value after launch" side of
+Plan 1b's gated-method contract test.
+
+- [ ] `system.pandoc` — locate and invoke the pandoc binary (Q1:
+  `pandocBinaryPath` + `execProcess`), routed through `PlatformHost.process.exec`.
+- [ ] `system.checkRender` — the `quarto check` render probe; needs a
+  render-service/launch context, so it stays behind the gate.
+- [ ] `system.runExternalPreviewServer` — spawn the external preview server via
+  the host's `process.exec`. No q2 caller yet; keep for Q1 parity, gated.
+- [ ] `path.runtime`, `path.resource`, `path.dataDir` — resolve the quarto
+  runtime/resource/data directories via `PlatformHost.env`/`realPath` (the §2aa
+  `platform/index.ts` comment reserves `env.get` + `realPath` for exactly these).
+  Q1: `quartoRuntimeDir` / `resourcePath` / `quartoDataDir`.
+- [ ] Unit tests for each, injecting a fake `PlatformHost` (mirrors §2aa's
+  namespace tests).
+
+> The pure/host-only methods these sit beside (`path.absolute`,
+> `path.dirAndStem`, `system.execProcess`, `system.tempContext`, …) are already
+> real in §2aa; only the context-dependent bodies above are deferred here.
+
+## Phase B — @quarto/types and import map (was Phase 2E)
 
 Following Quarto 1's model, engine extensions import types via
 `import type { ... } from "@quarto/types"`. These are erased during the
 build step (bundling), so no runtime code is needed — just a `.d.ts` file
 referenced by the import map.
 
-- [ ] Define our type definitions in `ts-packages/quarto-types/` (or
-  `resources/extension-build/quarto-types.d.ts`):
+- [ ] Refine the q2-specific type surface in `@quarto/types` — the package is
+  **vendored from Q1 by Plan 2A** (`ts-packages/quarto-types/`); this phase
+  adjusts and extends that baseline to match q2's signatures:
   - `ExecutionEngineDiscovery`, `ExecutionEngineInstance`
   - `ExecuteOptions`, `ExecuteResult`, `ExecutionTarget`
   - `QuartoAPI` (with our namespace signatures)
   - `MappedString`, `PartitionedMarkdown`, `Metadata`
   - `EngineProjectContext`
+  - **`LanguageClaim`** — the kind-tagged claim returned by `claimsLanguage`:
+    `{ kind: "primary" | "interop" | "fallback"; priority?: number }`.
+    `ExecutionEngineDiscovery.claimsLanguage`'s return type widens to
+    `boolean | number | LanguageClaim | null` — the `boolean`/`number` forms
+    stay Q1-compatible (the harness normalizes them; a bare `number` is always
+    a `primary`, never interop), and `interop`/`fallback` are reachable only via
+    the object. This is the one deliberate Q1-API extension in the epic; see
+    plan1b's normalization and `claude-notes/designs/engine-resolution.md` §3.2.
+- [ ] **Anchor the pure/host-only/gated classification as jsdoc on `QuartoAPI`.**
+  Plan 1b's "Engine API contract" table (which methods are pure, host-only, or
+  gated-until-`launchEngine`) is currently the sole source of truth. Record it
+  as jsdoc on the `QuartoAPI` type here so the harness's gating (Plan 1b) and
+  the namespace bodies (§2aa) agree against a written contract rather than by
+  convention. Plan 1b's table remains canonical; this mirrors it.
+- [ ] **Claim constructors live in `@quarto/api` (runtime), not `@quarto/types`
+  (erased).** Add tiny helpers `primary(priority?)`, `interop(priority?)`,
+  `fallback(priority?)` that return the corresponding `LanguageClaim` objects,
+  so authors write `claimsLanguage: (lang) => lang === "julia" ? primary() :
+  null` instead of hand-writing tags. Export from `@quarto/api` (a small
+  `@quarto/api/claims` subpath or the package root); pure data, no host
+  dependency.
 - [ ] For compatibility with Quarto 1 extensions: our type names should match
   Quarto 1's.
-- [ ] Create `resources/extension-build/import-map.json`:
-  ```json
-  {
-    "imports": {
-      "@quarto/types": "./quarto-types.d.ts",
-      "path": "jsr:@std/path",
-      "fs/exists": "jsr:@std/fs/exists",
-      "encoding/base64": "jsr:@std/encoding/base64"
-    }
-  }
-  ```
-- [ ] Create `resources/extension-build/deno.json`:
+- [ ] **Document the state-machine init() timing in the
+  `ExecutionEngineDiscovery.init` jsdoc.** Plan 1b introduces a
+  q2-specific lifecycle deviation from Q1: the QuartoAPI is built once
+  at `loadEngine` over a shared `HostState`, but its
+  context-dependent methods are gated until the first `launchEngine`.
+  Update the `init?` jsdoc to spell out:
+  - When `init()` runs (during `loadEngine` handling, after the
+    module's exports are validated).
+  - What's available immediately (pure namespaces — `text`,
+    `markdownRegex`, `console`, `crypto` — and host-only namespaces —
+    `mappedString`, most of `path`, most of `system`).
+  - What's gated until `launchEngine` (`path.runtime`,
+    `path.resource`, `system.pandoc`, and `format.*` when called
+    without an explicit format argument).
+  - The contract that engines may NOT access `quarto.*` at module
+    top-level — only from inside methods.
+  - That `init()` is sync per Q1's contract, but the harness `await`s
+    its return defensively, so an `async init()` works correctly.
+  - That throwing/rejecting from `init()` is a fatal load failure.
+  Cross-reference Plan 1b's "Engine API contract" section as the
+  canonical source for the gated/available method table.
+- [ ] Create a template `resources/extension-build/deno.json` that engine
+  authors copy/extend. Its imports reference the **published** SDK and std lib
+  (no q2-local import map for the SDK):
   ```json
   {
     "compilerOptions": { "strict": true, "lib": ["deno.ns", "DOM", "ES2021"] },
-    "importMap": "./import-map.json"
+    "imports": {
+      "@quarto/api": "jsr:@quarto/api",
+      "@quarto/types": "jsr:@quarto/types",
+      "@std/path": "jsr:@std/path",
+      "@std/fs": "jsr:@std/fs",
+      "@std/encoding": "jsr:@std/encoding"
+    }
   }
   ```
-- [ ] Copy `quarto-types.d.ts` into `resources/extension-build/` during the
-  build process.
+  Within the q2 repo, a workspace mapping resolves `@quarto/api` /
+  `@quarto/types` to `ts-packages/…` for dev builds against unpublished
+  changes.
 
 ## Portability constraints
 
@@ -458,13 +167,18 @@ consumed by Quarto 1. To keep that option cheap, the plan commits to:
    from `@quarto/engine-host-deno` — the dependency runs only one direction.
    q2-specific glue (protocol types, source-map rehydration) lives in
    `@quarto/engine-host-deno`, not here.
-6. **Publish target deferred, but shape committed.** We don't publish to npm
-   or jsr yet. When we do, no structural changes should be needed — just add
-   a `publishConfig` and a version.
+6. **Published to a registry.** `@quarto/api` (and `@quarto/types`) are
+   published to jsr.io or npmjs.com as appropriate — this is how engine authors
+   get the SDK (see the grand plan's "Distribution of the engine-author SDK").
+   The package carries a `version`, plus a `publishConfig` for npm.
 7. **Scope naming.** `@quarto/api` is intended to coexist with Q1's existing
    `@quarto/types`. If Q1's package layout changes, we coordinate naming.
 
 ## Design Notes
+
+These rationales are now **realized in §2aa** (the namespaces were rewritten,
+not extracted, in a single `@quarto/api` package); they are kept as the
+durable justification for those choices.
 
 ### Why rewrite instead of extract?
 
@@ -476,13 +190,12 @@ The logic itself is straightforward — it's the plumbing that's tangled.
 
 ### Why a single `@quarto/api` package?
 
-Earlier drafts of this plan proposed `@quarto/markdown`, `@quarto/jupyter`,
-and `@quarto/engine-host-deno` as sibling packages. We consolidated to a single
-`@quarto/api` package with subpath exports because:
+We use a single `@quarto/api` package with subpath exports rather than separate
+`@quarto/markdown` / `@quarto/jupyter` sibling packages because:
 
 - One `package.json`, one version, one dep list (`yaml` lives once).
-- Q1 adopts once (`import { ... } from "@quarto/api/markdown"`), not three times.
-- MappedString has a natural home (`@quarto/api/text`) without debate over which
+- Q1 adopts once (`import { ... } from "@quarto/api/markdownRegex"`), not three times.
+- MappedString has a natural home (`@quarto/api/mappedString`) without debate over which
   sibling owns it.
 - Cross-submodule deps (if any) don't require version coordination.
 - Tree-shaking via subpath exports gives the same bundle cost as separate packages.
@@ -494,8 +207,8 @@ source-map rehydration).
 ### YAML cell options: simplified approach
 
 Quarto 1's `partitionCellOptions` uses the full YAML schema system to
-validate cell options. Our `breakQuartoMd` skips validation and just parses
-YAML with `js-yaml`. This means:
+validate cell options. The §2aa `markdownRegex`/`breakQuartoMd` skips validation
+and just parses YAML with `js-yaml`. This means:
 - Cell options with typos won't be caught at parse time
 - That's fine — validation happens elsewhere in q2's pipeline
 - The engine extension just needs the parsed options as a plain object
@@ -503,27 +216,36 @@ YAML with `js-yaml`. This means:
 ### Future: Quarto 1 adoption
 
 `@quarto/api` is designed so that Q1 could import it in place of its own
-tangled implementations (`src/core/lib/mapped-text.ts`,
-`src/core/pandoc/pandoc-partition.ts`, etc.). The API signatures match Q1's
+tangled implementations (`external-sources/quarto-cli/src/core/lib/mapped-text.ts`,
+`external-sources/quarto-cli/src/core/pandoc/pandoc-partition.ts`, etc.). The API signatures match Q1's
 existing interfaces. If/when Q1 adopts it, Q1's `QuartoAPIRegistry` keeps
 its existing shape but providers delegate to `@quarto/api` submodules.
 
 ## Success Criteria
 
-- [ ] `@quarto/api` package exists with package.json, tsconfig, exports map
-- [ ] `@quarto/api/platform` defines the `PlatformHost` interface
-- [ ] No `Deno.*` or `node:*` references anywhere inside `@quarto/api`
-  (verified by a simple grep check in CI or xtask lint)
-- [ ] `@quarto/api/markdown` with extractYaml, partition, getLanguages, breakQuartoMd
-- [ ] `@quarto/api/text` with MappedString + helpers (full `.map()` provenance),
-  `createMappedStringFromFile(host)` factory for FS-backed construction
-- [ ] `@quarto/api/format`, `/path`, `/system`, `/console`, `/crypto` all implemented;
-  `path` and `system` expose host-factory constructors (`createPath`, `createSystem`)
-- [ ] `@quarto/engine-host-deno` provides a `denoHost: PlatformHost` and uses it
-  to build every namespace
-- [ ] All QuartoAPI namespaces except jupyter wired into engine-host-deno's
-  `quarto-api.ts` via direct construction (no registry)
-- [ ] `fromSourceMap` in engine-host-deno reconstructs provenance from
-  byte-range entries
-- [ ] `@quarto/types` definitions in place for engine extension imports
-- [ ] All tests pass
+Delivered elsewhere (cross-reference, not this plan): the `@quarto/api`
+namespaces, `@quarto/api/platform`/`PlatformHost`, the parity tests, and the
+`No Deno.*/node:*` invariant are **§2aa**; `denoHost`, the `buildQuartoAPI`
+assembly with gating, and `fromSourceMap` source-map rehydration are **Plan 1b**.
+
+This plan:
+
+- [ ] **Phase A:** `system.pandoc`, `system.checkRender`,
+  `system.runExternalPreviewServer`, and `path.runtime`/`path.resource`/
+  `path.dataDir` have real implementations (no longer "not yet implemented"
+  stubs), each routed through `PlatformHost` and covered by a fake-host unit
+  test. After these land, Plan 1b's gated-method contract test sees real values
+  post-`launchEngine`.
+- [ ] **Phase B:** `@quarto/types` carries the q2-refined signatures
+  (`ExecutionEngineDiscovery`/`Instance`, `ExecuteOptions`/`Result`/`Target`,
+  `QuartoAPI` with namespace signatures + the pure/host-only/gated jsdoc
+  classification, `MappedString`, `EngineProjectContext`, `LanguageClaim`).
+- [ ] `LanguageClaim` claim constructors (`primary`/`interop`/`fallback`)
+  exported from `@quarto/api`.
+- [ ] `ExecutionEngineDiscovery.init` jsdoc documents the q2 state-machine
+  timing (loadEngine call site, available-immediately vs. gated-until-launch
+  namespaces, module-top-level prohibition, sync/defensive-await behavior,
+  load-failure-on-throw).
+- [ ] A published-SDK `resources/extension-build/deno.json` template referencing
+  `jsr:@quarto/api` / `jsr:@quarto/types`.
+- [ ] All tests pass.

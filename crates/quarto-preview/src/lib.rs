@@ -92,7 +92,7 @@ pub struct PreviewConfig {
     /// the integration suite doesn't need a real R / Python runtime.
     /// Production callers leave this `None` to use the default
     /// (`markdown` + native engines).
-    pub engine_registry: Option<EngineRegistry>,
+    pub engine_registry: Option<std::sync::Arc<EngineRegistry>>,
     /// Engine policy resolved from `preview.engine` in the project's
     /// `_quarto.yml` (Phase C.6). Default is [`EnginePolicy::Manual`],
     /// matching pre-C.6 behaviour. The CLI reads this once at session

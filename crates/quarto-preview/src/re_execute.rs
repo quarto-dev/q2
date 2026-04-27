@@ -124,7 +124,7 @@ pub async fn re_execute_handler(
 pub(crate) async fn re_execute_with_registry_and_cache(
     ctx: SharedContext,
     body: ReExecuteRequest,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: &Path,
 ) -> Response {
     let rel_path = body.path;
@@ -178,7 +178,7 @@ pub(crate) async fn re_execute_with_registry_and_cache(
 pub(crate) fn trigger_auto_re_execute(
     ctx: SharedContext,
     rel_path: String,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: PathBuf,
 ) {
     match claim_and_spawn(ctx, rel_path.clone(), registry, cache_dir) {
@@ -207,7 +207,7 @@ enum ClaimOutcome {
 fn claim_and_spawn(
     ctx: SharedContext,
     rel_path: String,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: PathBuf,
 ) -> ClaimOutcome {
     let in_flight_set = in_flight();
@@ -290,7 +290,7 @@ fn claim_and_spawn(
 async fn perform_re_execute(
     ctx: SharedContext,
     rel_path: &str,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: &Path,
 ) -> Result<(), String> {
     let project_root = ctx
@@ -378,10 +378,10 @@ mod tests {
         }
     }
 
-    fn make_registry() -> EngineRegistry {
+    fn make_registry() -> Arc<EngineRegistry> {
         let mut r = EngineRegistry::new();
         r.register(Arc::new(PassthroughTestEngine));
-        r
+        Arc::new(r)
     }
 
     async fn build_ctx_with_file(content: &str) -> (TempDir, SharedContext) {

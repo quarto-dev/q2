@@ -1,7 +1,7 @@
 # Plan 3: @quarto/api/jupyter
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
-**Depends on:** Plan 2 Phase 2A (package skeleton). Phases 3A-3D and 3F otherwise independent. Phase 3E (wiring into engine-host) requires Plan 1b to have created the `@quarto/engine-host-deno` package.
+**Depends on:** Plan 2A (the `@quarto/api` package skeleton). Phases 3A-3D and 3F otherwise independent. Phase 3E (wiring into engine-host) requires Plan 1b to have created the `@quarto/engine-host-deno` package.
 **Blocks:** Plan 4 (Julia Validation)
 **Estimated sessions:** 2-3
 
@@ -18,10 +18,10 @@ straightforward: walk notebook cells, format outputs as markdown, handle
 figures and HTML preservation.
 
 **Reference:** The Quarto 1 implementations to study are in
-`~/src/quarto-cli/src/core/jupyter/` (a separate repository —
-quarto-dev/quarto-cli). Key files: `jupyter.ts` (main toMarkdown),
-`display-data.ts`, `tags.ts`, `labels.ts`, `preserve.ts`, `widgets.ts`,
-`types.ts`.
+`external-sources/quarto-cli/src/core/jupyter/` (the in-repo symlink to
+quarto-dev/quarto-cli — reference/parity only, never an import). Key files:
+`jupyter.ts` (main toMarkdown), `display-data.ts`, `tags.ts`, `labels.ts`,
+`preserve.ts`, `widgets.ts`, `types.ts`.
 
 ## Package location
 
@@ -100,10 +100,10 @@ Plan 2: one entry point per subpath, consistent wiring in
   }
   type MimeBundle = Record<string, string | string[] | object>;
   ```
-  Reference: Quarto 1's `src/core/jupyter/types.ts`
+  Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/types.ts`
 
 - [ ] Create `src/jupyter/constants.ts` — MIME type constants, cell option
-  keys, etc. Reference: Quarto 1's `src/config/constants.ts` (just the
+  keys, etc. Reference: Quarto 1's `external-sources/quarto-cli/src/config/constants.ts` (just the
   subset we need).
 
 ### Phase 3B: Supporting modules
@@ -114,40 +114,40 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
   - `displayDataMimeType(output, options)` — select best MIME type from bundle
   - `displayDataIsImage(output)`, `displayDataIsTextPlain(output)`, etc.
   - MIME priority order: text/html > image/svg+xml > image/png > image/jpeg > text/markdown > text/latex > text/plain
-  - Reference: Quarto 1's `src/core/jupyter/display-data.ts`
+  - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/display-data.ts`
   - ~150 lines
 
 - [ ] Create `src/jupyter/tags.ts` — cell visibility logic:
   - `hideCell(options)`, `hideCode(options)`, `hideOutput(options)`, `hideWarnings(options)`
   - `includeCell(cell, options)`, `includeCode(cell, options)`, `includeOutput(cell, options)`
   - Based on cell-level `echo`, `include`, `output`, `warning` options
-  - Reference: Quarto 1's `src/core/jupyter/tags.ts`
+  - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/tags.ts`
   - ~100 lines
 
 - [ ] Create `src/jupyter/labels.ts` — cell label and caption handling:
   - `cellLabel(cell)` — extract label from cell metadata or options
   - `cellLabelClass(label)` — generate CSS class from label
   - `resolveCaptions(cell)` — extract fig-cap, tbl-cap, etc.
-  - Reference: Quarto 1's `src/core/jupyter/labels.ts`
+  - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/labels.ts`
   - ~100 lines
 
 - [ ] Create `src/jupyter/preserve.ts` — HTML preservation:
   - `removeAndPreserveHtml(output)` — replace raw HTML with placeholder UUIDs
   - Returns `{ output: string, preserved: Record<string, string> }`
   - Used to protect HTML from Pandoc's markdown processing
-  - Reference: Quarto 1's `src/core/jupyter/preserve.ts`
+  - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/preserve.ts`
   - ~80 lines
 
 - [ ] Create `src/jupyter/widgets.ts` — Jupyter widget dependency extraction:
   - `widgetDependencies(outputs)` — find widget state in output MIME bundles
   - `widgetDependencyIncludes(deps, tempDir)` — generate script tags for widgets
-  - Reference: Quarto 1's `src/core/jupyter/widgets.ts`
+  - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/widgets.ts`
   - ~100 lines
 
 - [ ] Create `src/jupyter/pandoc-id.ts` — identifier generation:
   - `pandocAutoIdentifier(text)` — generate Pandoc-style IDs from heading text
   - Pure string manipulation, no dependencies
-  - Reference: Quarto 1's `src/core/pandoc/pandoc-id.ts`
+  - Reference: Quarto 1's `external-sources/quarto-cli/src/core/pandoc/pandoc-id.ts`
   - Note: lives under `jupyter/` for now because jupyter is the only
     consumer. If other consumers emerge, promote to a top-level `pandoc/`
     subpath — cheap move, cheap rename.
@@ -238,7 +238,7 @@ markdown string.
   - Simple regex replacement (not full ANSI→HTML conversion like Quarto 1's deno-dom approach)
   - Can add HTML conversion later if needed
 
-- [ ] Reference: Quarto 1's `src/core/jupyter/jupyter.ts` function `jupyterToMarkdown` (~lines 380-700)
+- [ ] Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/jupyter.ts` function `jupyterToMarkdown` (~lines 380-700)
 
 ### Phase 3D: Utility functions
 
@@ -257,7 +257,7 @@ The simpler methods that the Julia engine also calls.
     - Other content → code cells
   - The public `createJupyter(host)` factory binds `host` so callers see the
     natural 1-arg / 2-arg signatures.
-  - Reference: Quarto 1's `src/core/jupyter/percent.ts`
+  - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/percent.ts`
   - ~80 lines
 
 - [ ] Create `src/jupyter/assets.ts`:
@@ -312,7 +312,7 @@ Wire `@quarto/api/jupyter` into the `quarto.jupyter` namespace in
 
 - [ ] Update `@quarto/engine-host-deno/src/quarto-api.ts` to call the
   `createJupyter` factory with the same `denoHost` used for the other
-  namespaces in Plan 2C:
+  namespaces in Plan 2 Phase 2D:
   ```typescript
   import { createJupyter } from "@quarto/api/jupyter";
   import { denoHost } from "./deno-host.ts";
@@ -326,7 +326,7 @@ Wire `@quarto/api/jupyter` into the `quarto.jupyter` namespace in
   (e.g. resolving `context.tempDir` for `resultIncludes`) can be
   composed around the factory output.
 - [ ] `@quarto/api` is already a dependency of `@quarto/engine-host-deno`
-  (added in Plan 2C) — no new dependency needed.
+  (added in Plan 2 Phase 2D) — no new dependency needed.
 
 ### Phase 3F: Testing
 
@@ -396,9 +396,9 @@ Same rules as Plan 2 (see "Portability constraints" in that plan):
 ### Future: Quarto 1 adoption
 
 `@quarto/api/jupyter` is designed to be importable by Quarto 1, replacing:
-- `src/core/jupyter/jupyter.ts` (the `jupyterToMarkdown` function)
-- `src/core/jupyter/display-data.ts`, `tags.ts`, `labels.ts`, `preserve.ts`, `widgets.ts`
-- Parts of `src/core/jupyter/jupyter-shared.ts`
+- `external-sources/quarto-cli/src/core/jupyter/jupyter.ts` (the `jupyterToMarkdown` function)
+- `external-sources/quarto-cli/src/core/jupyter/display-data.ts`, `tags.ts`, `labels.ts`, `preserve.ts`, `widgets.ts`
+- Parts of `external-sources/quarto-cli/src/core/jupyter/jupyter-shared.ts`
 
 The API signatures are compatible. Quarto 1 would need to adapt its options
 types to match our flattened `JupyterToMarkdownOptions`.

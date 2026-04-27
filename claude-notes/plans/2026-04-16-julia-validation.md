@@ -14,7 +14,8 @@ This plan is primarily integration debugging. If Plans 1a, 1b, 1c, 2, and 3 are 
 ## Prerequisites
 
 - [ ] Plans 1a, 1b, and 1c complete: Rust subprocess infrastructure + Deno harness + extension integration, echo engine passes
-- [ ] Plan 2 complete: `@quarto/api` package with text/markdown/format/path/system/console/crypto subpaths, all QuartoAPI namespaces except `jupyter` wired in
+- [ ] Plan 2A complete: the `@quarto/api` package skeleton (`package.json`, `tsconfig.json`, exports map) and the `./config` key-list subpath are in place
+- [ ] Plan 2 complete: the remaining QuartoAPI surface built on that skeleton — `@quarto/api`'s text/markdown/format/path/system/console/crypto subpaths, all QuartoAPI namespaces except `jupyter` wired in
 - [ ] Plan 3 complete: `@quarto/api/jupyter` with `toMarkdown` working and wired into engine-host
 - [ ] Julia installed on the test machine (`julia` in PATH)
 
@@ -24,7 +25,7 @@ This plan is primarily integration debugging. If Plans 1a, 1b, 1c, 2, and 3 are 
 
 - [ ] Copy Julia engine from Quarto 1's **source/development version** (NOT the pkg-working version):
   ```
-  ~/src/quarto-cli/src/resources/extension-subtrees/julia-engine/
+  external-sources/quarto-cli/src/resources/extension-subtrees/julia-engine/
   ```
   Use this version because it resolves resource files via `import.meta.url` (relative to the JS file), rather than the distributed version which uses `quarto.path.resource()` pointing to Quarto's global `share/` directory.
 
@@ -50,7 +51,15 @@ This plan is primarily integration debugging. If Plans 1a, 1b, 1c, 2, and 3 are 
     engines:
       - name: julia
         path: src/julia-engine.ts
+        claims:
+          julia: { kind: primary, priority: 1 }   # static claim → zero-load resolution
   ```
+  With the static `claims:` declared, q2 resolves `{julia}` cells to this
+  engine **without loading the Deno subprocess** — it spawns only to execute,
+  once Julia has won ownership (see `claude-notes/designs/engine-resolution.md`
+  §3.3). `julia-engine.ts`'s dynamic `claimsLanguage` (returning `primary()`)
+  is the back-compat path, validated against the static claim on first load.
+  This is the validation case for "resolution loads no engine it doesn't run."
 - [ ] Identify needed modifications to `julia-engine.ts`:
   - Import paths: change `@quarto/types` imports if our type names differ
   - API calls: verify all `quarto.*` calls match our implementation signatures
@@ -151,6 +160,53 @@ The simplest possible Julia document.
 - [ ] Run `cargo xtask verify` for full validation
 - [ ] File issues (via `br create`) for any gaps discovered
 
+### Phase 4H: Website-project integration
+
+Validates that the TS engine subsystem cooperates with the two-pass
+project orchestrator (`ProjectPipeline`) that landed on `main` after
+these plans were drafted. The Julia engine itself has no project-
+specific logic, so this phase is a smoke test of the integration.
+
+- [ ] Create a minimal website fixture with a Julia page and a
+  markdown page:
+  ```
+  tests/fixtures/extensions/julia-website/
+    _quarto.yml             # project.type: website
+    _extensions/julia-engine -> ../julia-engine    # symlink
+    index.qmd               # markdown only
+    plot.qmd                # ```{julia} plot(...) ``` with figures
+  ```
+- [ ] Run `cargo run -- render <project-dir>` and verify:
+  - [ ] `_site/index.html` and `_site/plot.html` both produced
+  - [ ] `_site/site_libs/` contains shared assets (theme CSS, etc.)
+  - [ ] Julia-emitted figures land at the expected per-page location
+        (`plot_files/figure-html/...`), **not** in `site_libs/`
+  - [ ] If Julia emits any `htmlDependency` (Plotly etc.), it lands
+        in `site_libs/libs/{name}/...` (deduped, project-scoped)
+  - [ ] Sidebar/navbar transforms run normally; Julia engine doesn't
+        interfere with them
+- [ ] Verify the `Arc<TsEngineHost>` is shared across both files'
+  renders: instrument the harness to log subprocess PID; render the
+  fixture; confirm one PID, not two.
+
+### Phase 4I: Pass-1 cost audit
+
+Pass 1 advances every project file to the `DocumentProfile`
+checkpoint without running engines. For Julia documents this means
+parse + metadata-merge only. Verify the Julia subprocess is **not**
+started during Pass 1 in the common case (Julia engine claims by
+language only; no `claims_file` for `.jl` percent scripts in v1).
+
+- [ ] In a website fixture with multiple Julia pages, instrument
+  the harness or the Rust `TsEngineHost` to log "subprocess
+  spawned" events with timestamps.
+- [ ] Render with `cargo run -- render <fixture>`.
+- [ ] Verify: subprocess spawn happens at most once, *after* Pass 1
+  completes and before the first Pass-2 Julia engine execute.
+- [ ] If `claims_file` is wired for `.jl` percent scripts later, the
+  subprocess will spawn during Pass 1 — note that as expected
+  behavior, not a regression.
+
 ### Phase 4G: Adaptation documentation
 
 - [ ] Write a summary of all changes needed to `julia-engine.ts`
@@ -199,5 +255,13 @@ Julia engine tests should be:
 - [ ] Multiple cells with shared state work
 - [ ] Error handling produces useful messages
 - [ ] All modifications to julia-engine.ts documented
+- [ ] Website-project integration: a multi-page project with both
+  markdown and Julia pages renders to `_site/`, with Julia figures in
+  per-page directories and any Julia HTML dependencies deduped under
+  `site_libs/`
+- [ ] Pass-1 cost audit: Deno subprocess is not spawned during Pass 1
+  unless an engine claims a non-QMD file via `claims_file`
+- [ ] `Arc<TsEngineHost>` is shared across all files in a project
+  render (one Deno PID across N pages)
 - [ ] No regressions in existing tests
 - [ ] `cargo xtask verify` passes

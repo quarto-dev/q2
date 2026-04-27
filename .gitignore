@@ -25,6 +25,14 @@ node_modules/
 **/.quarto/hub/hub.json
 ts-packages/*/dist/
 ts-packages/*/dist-bundle/
+# Exception: the engine-host-deno bundle is embedded into the q2 binary via
+# include_str! (plan1a-host "Bundle embedding"), so the single bundle file must
+# be tracked even though it lives under an otherwise-ignored dist/. A committed
+# placeholder lets fresh clones compile; Plan 1b overwrites it with the real
+# esbuild output (same path, new bytes). Other dist/ artifacts stay ignored.
+!ts-packages/quarto-engine-host-deno/dist/
+ts-packages/quarto-engine-host-deno/dist/*
+!ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js
 ts-packages/*/*.tsbuildinfo
 q2-demos/*/dist/
 crates/wasm-quarto-hub-client/pkg/

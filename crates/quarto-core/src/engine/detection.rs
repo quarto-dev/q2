@@ -21,9 +21,12 @@
 //!
 //! # Future Enhancements
 //!
-//! In future phases, detection will also consider:
-//! - Code block languages (`{python}` → jupyter, `{r}` → knitr)
 //! - File extension (`.ipynb` → jupyter, `.Rmd` → knitr)
+//!
+//! Code block languages (`{python}` → jupyter, `{r}` → knitr) are now
+//! handled in `engine/resolution.rs` via `computational_languages` + the
+//! four-tier resolver. This module remains metadata-only (the explicit
+//! `engine:`/`engines:` list); the language axis lives in `resolution.rs`.
 
 use quarto_pandoc_types::ConfigValue;
 

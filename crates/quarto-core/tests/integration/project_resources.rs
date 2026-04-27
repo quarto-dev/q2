@@ -614,7 +614,7 @@ mod orchestrator_engine_channel {
                     .unwrap();
 
             let probe_options = RenderToFileOptions {
-                engine_registry_override: Some(probe_registry),
+                engine_registry_override: Some(std::sync::Arc::new(probe_registry)),
                 ..Default::default()
             };
 
