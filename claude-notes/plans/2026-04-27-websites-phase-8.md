@@ -219,9 +219,6 @@ sha256(
       | path                  (length-prefixed)
       | bytes                 (length-prefixed)
   | _quarto.yml bytes         (length-prefixed; "" if absent)
-  | for each include in IncludeEntry list:
-      | path                  (length-prefixed)
-      | content_bytes         (length-prefixed)
   | for each format-extension contribution, sorted by name:
       | name                  (length-prefixed)
       | metadata bytes        (length-prefixed)
@@ -231,6 +228,28 @@ sha256(
 SHA-256 hex (64 chars). Crate: `sha2`. The `PROFILE_KEY_VERSION`
 constant is the manual-override lever; `quarto_build_id()` is the
 automatic one.
+
+**Where transitive includes fit in.** During implementation it
+became clear that putting the include set in the lookup key
+creates a chicken-and-egg: to look up the cache *before* running
+Pass-1 we'd need to know what files the document includes, but
+discovering that is exactly Pass-1's job. **Resolved:** the cache
+key omits the include set; the cached profile carries
+`includes: Vec<IncludeEntry>` (Phase 8.0a's `bd-r82e`); on load,
+`profile_cache::load` verifies each cached include's recorded
+content_hash against the file's current bytes via a resolver
+the orchestrator passes in. Any unreadable file or mismatched
+hash degrades the load to a miss. Net invalidation behavior is
+identical to the original plan; just check-on-load instead of
+bake-into-key.
+
+**Format-extension contributions.** In v1 these are passed
+empty by the orchestrator. A user adding or changing a format
+extension's metadata won't invalidate the cache automatically;
+`--clean` (sub-phase 8.4) is the documented escape hatch. A
+follow-up bead can add proper extension hashing once the
+extension-discovery code path is convenient to consume from
+the orchestrator.
 
 ### Decision 3 — Quarto version baked into the cache key
 
@@ -1016,33 +1035,47 @@ None — inline asserts cover the vocabulary.
 - [x] `cargo xtask lint` and `cargo fmt --check` clean.
 
 ### Sub-phase 8.1 — Cache infrastructure
-- [ ] `cache_key.rs`: `pass1_key`, `nav_config_hash`,
-      `quarto_build_id` helpers via `sha2`.
-- [ ] `profile_cache.rs`: `load(runtime, key)`,
-      `save(runtime, key, &profile)`.
-- [ ] Tests 13–30.
+- [x] `cache_key.rs`: `pass1_key` (sha256 with length-prefixed
+      encoding) + `quarto_build_id` (CARGO_PKG_VERSION) +
+      `hex_encode` helpers via `sha2`. (Note: `nav_config_hash`
+      deferred — Phase 8 doesn't act on it per Decision 8;
+      will land if a future refinement needs it.)
+- [x] `profile_cache.rs`: `load(runtime, key, include_resolver)`
+      verifies cached profile's includes against current bytes;
+      `save(runtime, key, &profile)`. Both swallow recoverable
+      errors so the orchestrator never aborts on cache hiccups.
+- [x] 30 tests (15 cache_key + 15 profile_cache including the
+      4 include-verification tests).
 
 ### Sub-phase 8.2 — Dependency graph + render mode selection
-- [ ] `dependency_graph.rs`: `ProjectDependencyGraph` struct
+- [x] `dependency_graph.rs`: `ProjectDependencyGraph` struct
       with forward `edges` and `reverse_edges` (built in one
       pass over the index).
-- [ ] Builder consuming `ProjectIndex` + sidebar membership
+- [x] Builder consuming `ProjectIndex` + sidebar membership
       (via lifted helper) + body-link targets (via profile) +
       user-declared `project.nav-dependencies`.
-- [ ] `force_render` includes pages with
+- [x] `force_render` includes pages with
       `project.always-render: true`.
-- [ ] `transitive_deps(targets)` query using `reverse_edges`.
-- [ ] `implicit_targets` augmentation for Mode B:
-      `force_render` pages whose reverse-deps intersect
-      `targets` join the render set.
-- [ ] Orchestrator: distinguish Mode A vs Mode B from CLI args.
+- [x] `forward_closure(targets)` and `reverse_closure(targets)`
+      queries.
+- [x] `augment_targets_with_always_render(targets)` Mode B
+      augmentation: `force_render` pages whose reverse-closure
+      intersects `targets` join the render set.
+- [x] Orchestrator profile cache wiring: `pass_one` calls
+      `profile_with_cache`, which computes the cache key from
+      source bytes + layered _metadata.yml + _quarto.yml +
+      format id + source path, looks up via
+      `profile_cache::load` (with include verification), and
+      falls back to a live head pipeline on miss.
+- [x] 13 dependency_graph unit tests + 6 incremental-rebuild
+      integration tests.
+- [ ] Distinguish Mode A vs Mode B from CLI args.
 - [ ] Mode A wiring: `pass_one` over all pages with profile
       cache; build graph (informational); `pass_two` over all.
 - [ ] Mode B wiring: `pass_one` over `targets`; build graph;
       `pass_one` over `needed_profiles - targets`; augment
       targets with implicit always-render dependents; `pass_two`
       over augmented targets.
-- [ ] Tests 31–40.
 
 ### Sub-phase 8.3 — Sitemap merge (closes `bd-pphv`)
 - [ ] `website_post_render::write_sitemap` reads existing,
