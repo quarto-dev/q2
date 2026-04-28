@@ -52,8 +52,11 @@ with a Pass-1 (profile) cache. Concretely:
 5. **Sitemap incremental merge.** Read existing
    `_site/sitemap.xml`, replace entries for re-rendered pages,
    preserve entries for non-targets. Closes Phase 7's `bd-pphv`.
-6. **CLI surface.** `--clean` wipes the `<project>/.quarto/`
-   cache before rendering. No `--full`, no `--no-cache` — Mode
+6. **CLI surface.** `--clean-cache` wipes the `<project>/.quarto/`
+   cache before rendering. (Renamed from the original `--clean`
+   to avoid conflict with the `make clean` connotation that
+   would suggest wiping `_site/`.) No `--full`, no `--no-cache`
+   — Mode
    A is already the full render, and disabling the profile cache
    adds failure modes without removing meaningful ones.
 
@@ -177,7 +180,8 @@ profile-version bump.
     `<project>/.quarto/cache/` for SASS in
     `commands/render.rs:108-110`.
   - `crates/quarto/src/commands/render.rs:97-127` — CLI flag
-    surface. Phase 8 adds `--full` and `--clean`.
+    surface. Phase 8 adds `--clean-cache` (no `--full`,
+    no `--no-cache`).
 - **Q1 reference (negative space):** Q1's `--incremental` is
   user-pointed (the user lists which files to re-render); Q1 has
   no automatic dependency analysis. Phase 8's auto-detect
@@ -246,7 +250,7 @@ bake-into-key.
 **Format-extension contributions.** In v1 these are passed
 empty by the orchestrator. A user adding or changing a format
 extension's metadata won't invalidate the cache automatically;
-`--clean` (sub-phase 8.4) is the documented escape hatch. A
+`--clean-cache` (sub-phase 8.4) is the documented escape hatch. A
 follow-up bead can add proper extension hashing once the
 extension-discovery code path is convenient to consume from
 the orchestrator.
@@ -351,17 +355,13 @@ co-listing implies mutual dependency. This is approximately
 "O(sidebar-size²) edges per sidebar," which is fine — sidebars
 are tens of entries, not thousands.
 
-**force_render contents.** A page lands in `force_render` if any
-of:
-
-1. `profile.always_render == true`.
-2. The project's nav config (the slices in `_quarto.yml` that
-   affect every page: sidebar definitions, navbar, footer,
-   website meta) changed since the previous run. We track this
-   by hashing those slices and comparing against a one-line
-   `<project>/.quarto/cache/nav-config-hash` file. Mismatch ⇒
-   every page goes into `force_render`.
-3. The user passed `--full`.
+**force_render contents.** A page lands in `force_render` when
+`profile.always_render == true`. (Original plan also mentioned
+nav-config-hash mismatch and a `--full` flag; both were dropped
+during implementation. Mode A re-renders everything anyway —
+there's no Pass-2-skip path to override — so `--full` was
+unneeded. Nav-config-hash is informational only in Phase 8;
+see Decision 8.)
 
 `force_render` is a coarse hammer; the dependency-graph edges are
 the fine-grained mechanism. Both are needed.
@@ -576,19 +576,25 @@ recorded for two purposes:
 If the file is missing on read, that's not an error — the next
 run writes it.
 
-### Decision 9 — `--clean` semantics; no other new flags
+### Decision 9 — `--clean-cache` semantics; no other new flags
 
 | flag | profiles/ cache | nav-config-hash | this run reads cache | this run writes cache |
 |---|---|---|---|---|
 | (default) | kept | kept | yes | yes |
-| `--clean` | wiped | wiped | yes (empty) | yes |
+| `--clean-cache` | wiped | wiped | yes (empty) | yes |
 
-**`--clean` semantics.** Wipes `profiles/` and the
+**Why `--clean-cache` and not `--clean`.** The bare word
+`--clean` carries strong `make clean` connotations — users would
+reasonably expect it to wipe `_site/` (matching Q1's flag of the
+same name with similar semantics). `--clean-cache` is more
+verbose but unambiguous. (Resolved 2026-04-27.)
+
+**`--clean-cache` semantics.** Wipes `profiles/` and the
 `nav-config-hash` file. Preserves `sass/` (SCSS recompiles are
 expensive and almost never the source of incorrectness). Effect:
 cold cache; every page's profile re-extracts; in Mode A every
-page renders Pass-2 anyway, so `--clean` is mostly meaningful as
-"throw away cached state I no longer trust."
+page renders Pass-2 anyway, so `--clean-cache` is mostly
+meaningful as "throw away cached state I no longer trust."
 
 **No `--full` flag.** Mode A (full-project `quarto render`)
 already re-renders every page's Pass-2 unconditionally — there's
@@ -598,7 +604,7 @@ page" intent is just "run `quarto render` with no path argument."
 **No `--no-cache` flag.** Without a Pass-2 cache, the only thing
 `--no-cache` could disable is the profile cache. Disabling that
 saves a tiny amount of work and creates more failure modes than
-it removes. `--clean` covers the "throw away cached state"
+it removes. `--clean-cache` covers the "throw away cached state"
 intent.
 
 **Per-page `always-render: true`.** Still meaningful in Mode B:
@@ -710,7 +716,7 @@ crates/quarto-core/src/transforms/link_rewrite.rs
                            # rewrite stays in Pass-2 (mutation). See Decision 7.
 
 crates/quarto/src/commands/render.rs
-                           # MODIFIED — --full, --clean flags;
+                           # MODIFIED — --clean-cache flag;
                            #            partial-render summary line
 ```
 
@@ -913,8 +919,8 @@ Every test authored before the code that makes it pass.
 
 ### Integration tests — cache behavior, common to both modes
 
-53. `pipeline_clean_flag_wipes_profile_cache_and_nav_hash` —
-    pre-populate cache → `--clean` → cache empty before render.
+53. `pipeline_clean_cache_flag_wipes_profile_cache_and_nav_hash` —
+    pre-populate cache → `--clean-cache` → cache empty before render.
 54. `pipeline_corrupt_profile_cache_falls_through_to_live_extract`.
 55. `pipeline_sitemap_merge_preserves_skipped_entries` —
     Mode B edit-one-render-one → other pages' sitemap
@@ -955,8 +961,9 @@ Every test authored before the code that makes it pass.
     6. `quarto render foo/` (Mode B, directory) on a fixture
        with `foo/x.qmd` and `foo/y.qmd`. Assert: only those
        two render.
-    7. `quarto render --clean` then `quarto render` (Mode A).
-       Assert: cache wiped before render; full re-render.
+    7. `quarto render --clean-cache` then `quarto render`
+       (Mode A). Assert: cache wiped before render; full
+       re-render.
     8. Add `project.always-render: true` to d.qmd; add d.qmd to
        a's body links (so reverse-edges connect them);
        `quarto render a.qmd` (Mode B). Assert: d is also
@@ -965,7 +972,7 @@ Every test authored before the code that makes it pass.
     Record observed outputs and summary lines in close-out.
 
 59. **Regression smokes**: re-run `/tmp/q2-phase{2..7}-smoke/`
-    after `--clean`; assert byte-identical output.
+    after `--clean-cache`; assert byte-identical output.
 
 60. **`bd-r82e` smoke**: parent → child include; Mode A render;
     edit child only; Mode A re-render → parent's profile cache
@@ -1121,14 +1128,78 @@ None — inline asserts cover the vocabulary.
 - [x] Close `bd-pphv`.
 
 ### Sub-phase 8.4 — CLI surface
-- [ ] `--clean` flag: wipes `profiles/` and `nav-config-hash`,
-      preserves `sass/`.
-- [ ] CLI arg parsing: distinguish "no path arg" (Mode A) from
-      "one or more path args" (Mode B); directory-arg expansion
-      to constituent `.qmd` files.
-- [ ] Summary line:
-      - Mode A: `"5 of 5 rendered (4 profile-cache hits)"`.
-      - Mode B: `"2 of 5 rendered (3 untouched, 4 profile-cache hits)"`.
+
+**CLI design decisions (resolved 2026-04-27):**
+
+1. **Cache-wipe flag: `--clean-cache`** (not `--clean`). Avoids
+   the `make clean` connotation that `--clean` would carry —
+   users would reasonably expect `--clean` to wipe `_site/`,
+   matching Q1. `--clean-cache` is more verbose but unambiguous.
+2. **Mode dispatch: implicit-from-path-args** (option (a) from
+   the design discussion). `quarto render` (no arg) is Mode A
+   for projects, single-doc fallthrough for non-projects.
+   `quarto render foo.qmd` inside a `_quarto.yml` project is
+   Mode B with target=foo. Outside a project, single-doc as
+   today. The "is this in a project?" detection is what Phase 1
+   already does via `ProjectContext::discover`.
+3. **Directory-arg expansion: intersect with project render
+   list.** `quarto render foo/` expands to every `.qmd` under
+   `foo/`, then intersects with the project's render list.
+   When the project doesn't define a render list, the implicit
+   render list is "every `.qmd` under the project" — same
+   semantics, just no narrowing happens. Need to confirm
+   whether Phase 1 implemented Q1-style render lists; if not,
+   the expansion is a glob alone (and a `bd` follow-up tracks
+   render-list intersection once that lands). Glob arguments
+   work the same way as directories.
+4. **Summary line: keep simple.** `"N of M rendered"`. No
+   profile-cache-hit telemetry in the user-facing summary;
+   that's behind `QUARTO_PERF_STATS=1` for tooling. A future
+   epic will unify all CLI output formats — don't overengineer
+   it here.
+5. **Skipped-page list: not in CLI output.** Just the rendered
+   list. Future tooling-focused output will include skips in a
+   machine-readable form.
+
+**Tasks:**
+
+- [ ] `--clean-cache` flag: wipes `profiles/` namespace and
+      `nav-config-hash` file (when the latter exists).
+      Preserves `sass/` (no behavior change for SCSS cache).
+- [ ] `--clean-cache` execution point: in
+      `crates/quarto/src/commands/render.rs`, before
+      constructing `ProjectPipeline`. Invokes
+      `runtime.cache_clear_namespace("profiles")` and a
+      single `runtime.file_remove` for `nav-config-hash` (no-op
+      if absent).
+- [ ] CLI arg parsing in `commands/render.rs`:
+      - 0 path args (project context): Mode A.
+      - 0 path args (non-project): existing single-doc behavior
+        unchanged.
+      - 1+ path args inside a project: Mode B. Each arg is
+        expanded:
+        * `foo.qmd` → `{foo.qmd}`.
+        * `foo/` → set of `.qmd` files under `foo/` (recursive,
+          following Q1 conventions).
+        * `*.qmd` glob → matched files.
+      - Path args outside a project context fall through to
+        the existing single-doc render path (one arg only).
+- [ ] Render-list intersection: if Phase 1 / project-config
+      surfaces a project render list, intersect Mode B's
+      expanded targets with it. If not, the implicit render
+      list is "all discovered `.qmd` files" — intersection is
+      a no-op. **Verify which case applies before
+      implementing**; file follow-up bd if render lists aren't
+      yet wired through.
+- [ ] `RenderMode::Subset(targets)` set on `ProjectPipeline`
+      via `with_mode()` when targets are present.
+- [ ] Summary line: `"N of M rendered"` printed after
+      per-doc summaries, before project diagnostics.
+- [ ] No `--full` flag — `quarto render` (no path) is
+      already the full render.
+- [ ] No `--no-cache` flag — `--clean-cache` covers the
+      throw-away-state intent; profile-only-disable adds
+      failure modes without removing meaningful ones.
 
 ### Sub-phase 8.5 — Integration tests + smoke
 - [ ] Mode A tests 41–45.
@@ -1171,10 +1242,10 @@ None — inline asserts cover the vocabulary.
 
 - **Risk:** A user's Lua filter introduces a cross-doc dependency
   the graph builder can't see; warm renders show stale output.
-  *Mitigation:* `nav-dependencies` declaration channel; `--full`
-  escape hatch; `always-render: true` per-doc opt-out; `--clean`
-  nuclear option. Warn loudly in user docs about the situation
-  and the knobs.
+  *Mitigation:* `nav-dependencies` declaration channel;
+  `always-render: true` per-doc opt-out; `--clean-cache` nuclear
+  option. Warn loudly in user docs about the situation and the
+  knobs.
 
 - **Risk:** Body-link resolution has to run in Pass-1 (so
   `body_link_targets` lands on the profile), but
@@ -1226,8 +1297,8 @@ None — inline asserts cover the vocabulary.
   `changed` includes the page. Independent of the dependency
   graph entirely.
 
-- **Risk:** `--clean` implementation isn't atomic; partial wipe
-  leaves the cache in a half-state.
+- **Risk:** `--clean-cache` implementation isn't atomic; partial
+  wipe leaves the cache in a half-state.
   *Mitigation:* wipe `profiles/` first (removes the harder
   half), then `nav-config-hash` (a single file). If wipe fails,
   abort with a clear error.
@@ -1333,7 +1404,8 @@ None — inline asserts cover the vocabulary.
 8. Nav-config-hash file written every run for diagnostics /
    future use; **does not** force re-render in Phase 8 since
    Mode A renders everything anyway.
-9. `--clean` wipes `profiles/` + `nav-config-hash`, preserves
+9. `--clean-cache` (renamed from `--clean` to avoid `make clean`
+   confusion) wipes `profiles/` + `nav-config-hash`, preserves
    `sass/`. No `--full` (Mode A is the full render). No
    `--no-cache`.
 10. Sitemap fresh-write becomes read-merge-write; closes
