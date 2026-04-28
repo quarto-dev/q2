@@ -54,4 +54,21 @@ mod tests {
             .set_language(&LANGUAGE.into())
             .expect("Error loading Markdown grammar");
     }
+
+    // Builds CRLF in-process so Linux CI catches regressions — corpus
+    // fixtures are checked out as LF on Linux and miss this case.
+    #[test]
+    fn pipe_table_crlf_matches_lf() {
+        let lf = "before\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nafter\n";
+        let crlf = lf.replace('\n', "\r\n");
+
+        let mut parser = MarkdownParser::default();
+        let lf_tree = parser.parse(lf.as_bytes(), None).unwrap();
+        let crlf_tree = parser.parse(crlf.as_bytes(), None).unwrap();
+
+        assert_eq!(
+            lf_tree.block_tree().root_node().to_sexp(),
+            crlf_tree.block_tree().root_node().to_sexp(),
+        );
+    }
 }
