@@ -100,7 +100,9 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
 
-      # Free disk space on Linux runners (14 GB SSD is tight for Rust monorepo)
+      # Free disk space on Linux runners (14 GB SSD is tight for Rust monorepo).
+      # `remove_tool_cache: true` is safe — no step in this job uses /opt/hostedtoolcache/
+      # (no setup-node, setup-python, etc.). See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
       - name: Free disk space
         if: runner.os == 'Linux'
         uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1 # v3
@@ -108,6 +110,14 @@ jobs:
           remove_android: true
           remove_dotnet: true
           remove_haskell: true
+          remove_tool_cache: true
+
+      - name: Prune Docker images
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo docker image prune --all --force
+          sudo docker builder prune -a --force
 
       # Custom lint checks (before build to fail fast)
       - name: Run custom lints

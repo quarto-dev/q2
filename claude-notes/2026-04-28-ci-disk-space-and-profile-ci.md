@@ -12,6 +12,7 @@ If you stumbled here from a `target/` directory growing unexpectedly, or wondere
 - The default `dev` profile emits full debuginfo, which roughly **doubles** `target/` size on a workspace this big.
 - We added a `[profile.ci]` profile (inherits from `dev`, strips most debuginfo) and the CI workflow uses it via `cargo nextest run --cargo-profile ci`.
 - We also removed the redundant `cargo build` step from CI — `cargo nextest run` already builds everything `cargo build` does, plus the test artifacts.
+- We freed ~10 GB more on the runner by enabling `remove_tool_cache: true` on the existing free-disk-space step (no step uses `/opt/hostedtoolcache/`) and by pruning Docker images at the start of the job.
 - **Locally, nothing changed.** `cargo build`, `cargo test`, and `cargo nextest run` (without `--cargo-profile ci`) still use the default `dev` profile with full debuginfo.
 
 ## What triggered this
@@ -20,7 +21,9 @@ Run [25062065055](https://github.com/quarto-dev/q2/actions/runs/25062065055/job/
 
 The previous mitigation (PR #55, 2026-03-17) bought us several months of headroom; the workspace has since grown past it.
 
-## Two simultaneous changes
+## The two changes that need explaining
+
+The runner-side cleanup (tool_cache + docker prune) is mechanical — see the workflow file. The two changes worth documenting in detail are the Cargo profile and the workflow build/test consolidation.
 
 ### Change 1: `[profile.ci]` Cargo profile
 
@@ -113,17 +116,17 @@ And per the [Cargo book on `cargo test`](https://doc.rust-lang.org/cargo/command
 
 The Cargo book notes that bin compilation happens "as unit tests" by default and the **standalone bin artifact** is only built "if integration tests are built and required features are available". For a workspace with integration tests anywhere, this is non-issue — all binaries get compiled. We pass `--all-targets` to be explicit and remove the conditional.
 
-## Why we didn't also do this (yet)
+## All the cleanup levers we used
 
-For reference, when this got designed there were three Tier-1 options. We picked the first two:
-
-| Option | Disk saving | Why we did/didn't include it |
+| Lever | Disk saving | Status |
 |---|---|---|
-| A. `[profile.ci]` debuginfo strip | ~30–50% of `target/` | **Included.** Biggest single lever, preserves panic backtraces. |
-| B. Drop redundant `cargo build` | Multi-GB peak reduction | **Included.** Verified equivalent to current behavior with `--all-targets`. |
-| C. `tool_cache: true` on free-disk-space | ~6 GB | **Held in reserve.** Safe (test-suite job uses neither Node, Python, nor `/opt/hostedtoolcache/`), but if A+B is enough we don't need it. |
-
-If we hit space pressure again, the next step is C. After that, `swap_storage: true` (~4 GB, mild OOM risk for heavy linkers), `docker prune` (~3–8 GB), or finally a paid larger runner (Posit `ubuntu-latest-4x`, 150 GB SSD, $0.012/min) or `ubuntu-24.04-arm` (45 GB free, free for public repos, requires arm64 Rust toolchain).
+| A. `[profile.ci]` debuginfo strip | ~30–50% of `target/` | Done. Biggest single lever, preserves panic backtraces. |
+| B. Drop redundant `cargo build` | Multi-GB peak reduction | Done. Verified equivalent via `--all-targets`. |
+| C. `remove_tool_cache: true` on free-disk-space | ~6 GB | Done. Safe — no step uses `/opt/hostedtoolcache/`. |
+| D. `docker image prune` + `docker builder prune` | ~3–8 GB | Done. Pre-pulled docker images aren't used by this job. |
+| E. `remove_swap: true` on free-disk-space | ~4 GB | Held in reserve — small OOM risk for heavy linkers (deno_core, large LTO). |
+| F. `df -h` diagnostic step | 0 GB | Held in reserve — adds log noise; useful for next failure triage if disk pressure returns. |
+| G. Larger runner | 150 GB / 45 GB | Held in reserve — Posit `ubuntu-latest-4x` ($0.012/min) or `ubuntu-24.04-arm` (free for public repos, requires arm64 Rust toolchain). |
 
 ## Cross-references
 
