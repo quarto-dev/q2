@@ -63,10 +63,13 @@ use crate::error::QuartoError;
 use crate::format::Format;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::render_to_file::{RenderToFileOptions, RenderToFileResult, render_document_to_file};
+use crate::render_to_file::{RenderToFileOptions, RenderToFileResult};
 
 #[cfg(not(target_arch = "wasm32"))]
 use super::DocumentInfo;
+
+#[cfg(not(target_arch = "wasm32"))]
+use super::pass2_renderer::{Pass2Renderer, RenderToFileRenderer};
 
 // WASM-visible placeholder for `RenderToFileResult` so the trait can
 // still compile under `target_arch = "wasm32"`. Phase 9 replaces this
@@ -241,11 +244,19 @@ pub struct FileFailure {
     pub diagnostics: Vec<DiagnosticMessage>,
 }
 
-/// Result of a full project render.
+/// Result of a full project render, generic over the per-page
+/// output type produced by the configured
+/// [`Pass2Renderer`](super::pass2_renderer::Pass2Renderer).
+///
+/// The native `quarto render` path uses `O = RenderToFileResult`;
+/// the WASM hub-client path (Phase 9 sub-phase 9.2) uses
+/// `O = WasmPassTwoOutput`. Defaulting to `RenderToFileResult` on
+/// native keeps existing call sites source-compatible.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default)]
-pub struct ProjectRenderSummary {
+pub struct ProjectRenderSummary<O = RenderToFileResult> {
     /// Successful per-file outputs (in `project.files` order).
-    pub outputs: Vec<RenderToFileResult>,
+    pub outputs: Vec<O>,
     /// Pass-1 files that could not be profiled. These are dropped
     /// from the index but do not abort the run.
     pub pass1_failures: Vec<FileFailure>,
@@ -259,7 +270,8 @@ pub struct ProjectRenderSummary {
     pub project_diagnostics: Vec<DiagnosticMessage>,
 }
 
-impl ProjectRenderSummary {
+#[cfg(not(target_arch = "wasm32"))]
+impl<O> ProjectRenderSummary<O> {
     /// True if any file (Pass 1 or Pass 2) failed.
     pub fn has_failures(&self) -> bool {
         !self.pass1_failures.is_empty() || !self.pass2_failures.is_empty()
@@ -314,12 +326,11 @@ impl Default for RenderMode {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub struct ProjectPipeline<'a> {
+pub struct ProjectPipeline<'a, R: Pass2Renderer = RenderToFileRenderer<'a>> {
     project: &'a mut ProjectContext,
     project_type: Box<dyn ProjectType>,
     format: Format,
     format_str: String,
-    options: &'a RenderToFileOptions,
     runtime: Arc<dyn SystemRuntime>,
     /// Render mode. Default `Full`; CLI subset args (Mode B) set
     /// this via [`with_mode`](Self::with_mode) before `run()`.
@@ -339,10 +350,23 @@ pub struct ProjectPipeline<'a> {
     /// `claude-notes/plans/2026-04-24-websites-phase-5.md`
     /// Decision 2.
     project_artifacts: crate::artifact::ArtifactStore,
+    /// Per-page Pass-2 dispatch (Phase 9 sub-phase 9.0).
+    ///
+    /// Defaults to [`RenderToFileRenderer`] for the native CLI;
+    /// the WASM hub-client (Phase 9 sub-phase 9.2) supplies its
+    /// own implementation via [`Self::with_renderer`].
+    renderer: R,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl<'a> ProjectPipeline<'a> {
+impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
+    /// Build a pipeline that writes per-page output to disk via
+    /// [`crate::render_to_file::render_document_to_file`].
+    ///
+    /// This is the constructor every native call site (`quarto
+    /// render`, every integration test) uses. For non-disk
+    /// renderers (e.g. the Phase-9 WASM in-memory renderer) call
+    /// [`Self::with_renderer`] instead.
     pub fn new(
         project: &'a mut ProjectContext,
         project_type: Box<dyn ProjectType>,
@@ -351,15 +375,41 @@ impl<'a> ProjectPipeline<'a> {
         options: &'a RenderToFileOptions,
         runtime: Arc<dyn SystemRuntime>,
     ) -> Self {
+        Self::with_renderer(
+            project,
+            project_type,
+            format,
+            format_str,
+            runtime,
+            RenderToFileRenderer::new(options),
+        )
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
+    /// Build a pipeline with an explicit Pass-2 renderer.
+    ///
+    /// Used by Phase 9 to wire the WASM in-memory renderer; native
+    /// callers use [`Self::new`] which constructs a
+    /// [`RenderToFileRenderer`] for them.
+    pub fn with_renderer(
+        project: &'a mut ProjectContext,
+        project_type: Box<dyn ProjectType>,
+        format: Format,
+        format_str: impl Into<String>,
+        runtime: Arc<dyn SystemRuntime>,
+        renderer: R,
+    ) -> Self {
         Self {
             project,
             project_type,
             format,
             format_str: format_str.into(),
-            options,
             runtime,
             mode: RenderMode::Full,
             project_artifacts: crate::artifact::ArtifactStore::new(),
+            renderer,
         }
     }
 
@@ -379,7 +429,19 @@ impl<'a> ProjectPipeline<'a> {
     }
 
     /// Run Pass 1 → `pre_render` → Pass 2 → `post_render`.
-    pub async fn run(&mut self) -> Result<ProjectRenderSummary> {
+    ///
+    /// Currently bounded to renderers that produce
+    /// [`RenderToFileResult`] because
+    /// [`ProjectType::post_render`] consumes
+    /// `&[RenderToFileResult]` (its native body needs
+    /// per-page output paths to drive the sitemap merge). Phase 9
+    /// sub-phase 9.2 relaxes this once `post_render` is rephrased
+    /// in terms of an extracted output-path slice that both native
+    /// and WASM renderers can produce.
+    pub async fn run(&mut self) -> Result<ProjectRenderSummary<R::Output>>
+    where
+        R: Pass2Renderer<Output = RenderToFileResult>,
+    {
         let (profiles, pass1_failures) = self.pass_one().await;
         let index = Arc::new(ProjectIndex::new(profiles));
 
@@ -757,7 +819,7 @@ impl<'a> ProjectPipeline<'a> {
         index: Arc<ProjectIndex>,
         skip: &std::collections::HashSet<std::path::PathBuf>,
         render_set: Option<&std::collections::HashSet<std::path::PathBuf>>,
-    ) -> (Vec<RenderToFileResult>, Vec<FileFailure>) {
+    ) -> (Vec<R::Output>, Vec<FileFailure>) {
         let mut outputs = Vec::with_capacity(self.project.files.len());
         let mut failures = Vec::new();
         // Snapshot the file list to avoid borrowing `self.project`
@@ -774,15 +836,25 @@ impl<'a> ProjectPipeline<'a> {
                     continue;
                 }
             }
-            match render_document_to_file(
-                &doc_info.input,
-                &self.format_str,
-                self.options,
-                Some(self.project),
-                self.runtime.clone(),
-                Some(index.clone()),
-                Some(&mut self.project_artifacts),
-            ) {
+            // Phase 9 sub-phase 9.0: dispatch through `Pass2Renderer`
+            // so the orchestrator no longer hard-codes the
+            // disk-writing path. Native callers pass
+            // `RenderToFileRenderer` (preserving today's behavior);
+            // the WASM hub-client (sub-phase 9.2) supplies its own
+            // in-memory implementation.
+            match self
+                .renderer
+                .render(
+                    doc_info,
+                    &self.format,
+                    &self.format_str,
+                    self.project,
+                    index.clone(),
+                    self.runtime.clone(),
+                    &mut self.project_artifacts,
+                )
+                .await
+            {
                 Ok(result) => outputs.push(result),
                 Err(e) => failures.push(FileFailure {
                     input: doc_info.input.clone(),

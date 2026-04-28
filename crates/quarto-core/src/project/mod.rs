@@ -28,6 +28,7 @@ pub mod dependency_graph;
 pub mod discovery;
 pub mod index;
 pub mod orchestrator;
+pub mod pass2_renderer;
 pub mod profile_cache;
 pub mod sidebar_membership;
 pub mod website_config;
