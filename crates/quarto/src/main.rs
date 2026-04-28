@@ -21,8 +21,11 @@ struct Cli {
 enum Commands {
     /// Render files or projects to various document types
     Render {
-        /// Input file or project
-        input: Option<String>,
+        /// Input files, directories, or project root. Zero arguments
+        /// means "render the project rooted at the current working
+        /// directory." Multiple arguments are required to share a
+        /// single project (one project per render).
+        inputs: Vec<String>,
 
         /// Specify output format(s)
         #[arg(short = 't', long)]
@@ -88,6 +91,12 @@ enum Commands {
         #[arg(long)]
         no_clean: bool,
 
+        /// Wipe the Pass-1 profile cache (`<project>/.quarto/cache/profiles/`)
+        /// and `nav-config-hash` before rendering. Preserves the SCSS
+        /// `sass/` cache. (Phase 8.)
+        #[arg(long)]
+        clean_cache: bool,
+
         /// Leave intermediate files in place after render
         #[arg(long)]
         debug: bool,
@@ -112,8 +121,10 @@ enum Commands {
         #[arg(long)]
         profile: Vec<String>,
 
-        /// Additional pandoc command line arguments
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        /// Additional pandoc command line arguments. Pass after `--`
+        /// so they don't collide with `inputs`. Example:
+        /// `quarto render index.qmd -- --metadata foo=bar`.
+        #[arg(last = true, allow_hyphen_values = true)]
         pandoc_args: Vec<String>,
     },
 
@@ -483,18 +494,20 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Render {
-            input,
+            inputs,
             to,
             output,
             output_dir,
+            clean_cache,
             quiet,
             debug,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
-            input,
+            inputs,
             to,
             output,
             output_dir,
+            clean_cache,
             quiet,
             debug,
         }),

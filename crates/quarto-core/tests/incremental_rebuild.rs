@@ -571,3 +571,258 @@ fn mode_b_with_no_targets_renders_nothing() {
         "no target ⇒ no page touched"
     );
 }
+
+// === Phase 8.5: additional integration tests =========================
+
+/// Test 51: Mode B with a multi-element target set renders each
+/// targeted page and leaves the rest untouched.
+#[test]
+fn mode_b_multi_target_renders_union() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(&project_dir.join("a.qmd"), "---\ntitle: A\n---\n\nA.\n");
+    write(&project_dir.join("b.qmd"), "---\ntitle: B\n---\n\nB.\n");
+    write(&project_dir.join("c.qmd"), "---\ntitle: C\n---\n\nC.\n");
+
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+
+    let c_mtime_before = output_mtime(&project_dir.join("_site/c.html")).expect("c exists");
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    // Mode B: render {a, b}.
+    let targets = [project_dir.join("a.qmd"), project_dir.join("b.qmd")];
+    let summary = render_mode_b(&project_dir, runtime, &targets);
+    assert_eq!(
+        summary.outputs.len(),
+        2,
+        "Mode B with 2 targets should render both pages; got {} outputs",
+        summary.outputs.len()
+    );
+
+    let c_mtime_after = output_mtime(&project_dir.join("_site/c.html")).expect("c exists");
+    assert_eq!(
+        c_mtime_before, c_mtime_after,
+        "c.html was not in the target set; mtime should not advance"
+    );
+}
+
+/// Test 48: A user-declared `project.nav-dependencies` on a target
+/// page does not cause the render to fail even when the target
+/// of the declaration is unresolved or absent. (The graph
+/// builder silently drops unresolved edges per Decision 5; a
+/// follow-up bead tracks emitting a diagnostic.)
+#[test]
+fn mode_b_user_declared_nav_dependency_does_not_fail() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(
+        &project_dir.join("foo.qmd"),
+        "---\ntitle: Foo\nproject:\n  nav-dependencies:\n    - bar.qmd\n---\n\nFoo body.\n",
+    );
+    write(
+        &project_dir.join("bar.qmd"),
+        "---\ntitle: Bar\n---\n\nBar body.\n",
+    );
+
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+
+    // Mode B: render only foo. Declared nav-dependency on bar is
+    // a hint to the graph; bar is not itself rendered.
+    let summary = render_mode_b(&project_dir, runtime, &[project_dir.join("foo.qmd")]);
+    assert_eq!(
+        summary.outputs.len(),
+        1,
+        "Mode B should render exactly the user-named target"
+    );
+    assert!(
+        summary.pass2_failures.is_empty(),
+        "render should succeed: {:?}",
+        summary.pass2_failures
+    );
+}
+
+/// Test 57: An unresolved `project.nav-dependencies` declaration
+/// (target file does not exist in the project) does not abort
+/// the render. The graph builder drops the edge; the render
+/// proceeds.
+#[test]
+fn unresolved_nav_dependency_does_not_fail() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(
+        &project_dir.join("foo.qmd"),
+        "---\ntitle: Foo\nproject:\n  nav-dependencies:\n    - missing.qmd\n---\n\nFoo.\n",
+    );
+
+    let runtime = runtime_with_cache(&project_dir);
+    let summary = render_project(&project_dir, runtime);
+    assert_eq!(summary.outputs.len(), 1);
+    assert!(summary.pass2_failures.is_empty());
+}
+
+/// Test 44 variant: editing `<subdir>/_metadata.yml` invalidates
+/// only the profile-cache entries of pages in that subtree.
+/// Pages outside the subtree keep their cache entries.
+#[test]
+fn editing_metadata_yml_invalidates_subtree_only() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(
+        &project_dir.join("top.qmd"),
+        "---\ntitle: Top\n---\n\nTop.\n",
+    );
+    write(&project_dir.join("sub/a.qmd"), "---\ntitle: A\n---\n\nA.\n");
+    write(&project_dir.join("sub/b.qmd"), "---\ntitle: B\n---\n\nB.\n");
+
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+    let cold_names: std::collections::BTreeSet<_> =
+        list_cache_files(&project_dir.join(".quarto/cache/profiles"))
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_owned()))
+            .collect();
+    assert_eq!(cold_names.len(), 3);
+
+    // Add `sub/_metadata.yml` — affects only sub/a and sub/b.
+    write(
+        &project_dir.join("sub/_metadata.yml"),
+        "format:\n  html:\n    toc: true\n",
+    );
+
+    let _ = render_project(&project_dir, runtime);
+    let warm_names: std::collections::BTreeSet<_> =
+        list_cache_files(&project_dir.join(".quarto/cache/profiles"))
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_owned()))
+            .collect();
+
+    // Cold: 3 entries. After _metadata.yml edit: top's entry survives,
+    // sub/a and sub/b each get a new entry. The two old subtree entries
+    // are orphaned but still present. Total: 3 + 2 = 5.
+    assert_eq!(
+        warm_names.len(),
+        5,
+        "_metadata.yml edit should add 2 new entries (sub/a, sub/b) and preserve top's"
+    );
+    assert!(
+        cold_names.is_subset(&warm_names),
+        "all cold entries should still exist (no in-place mutation)"
+    );
+
+    // Specifically: top's cache entry is shared between cold and warm.
+    let still_present = cold_names.intersection(&warm_names).count();
+    assert_eq!(
+        still_present, 3,
+        "top's entry plus the two now-orphaned subtree entries should remain"
+    );
+}
+
+/// Test 45 / 60: editing a transitive include's bytes invalidates
+/// the parent profile's cache entry (`bd-r82e`).
+#[test]
+fn editing_include_invalidates_parent_profile() {
+    // The include is named `_partial.qmd` so the underscore-rule
+    // excludes it from `project.files`. Only `parent.qmd` is in the
+    // render list, so the cold cache has exactly one entry. After
+    // editing the partial, the cached parent profile's
+    // include-verification step (`profile_cache::load`) should
+    // detect the changed bytes and miss, prompting a fresh
+    // extraction.
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(
+        &project_dir.join("parent.qmd"),
+        "---\ntitle: Parent\n---\n\n{{< include _partial.qmd >}}\n",
+    );
+    write(
+        &project_dir.join("_partial.qmd"),
+        "Partial content version 1.\n",
+    );
+
+    let runtime = runtime_with_cache(&project_dir);
+    let summary = render_project(&project_dir, runtime.clone());
+    assert_eq!(summary.outputs.len(), 1, "only parent.qmd is renderable");
+
+    let cache_files = list_cache_files(&project_dir.join(".quarto/cache/profiles"));
+    assert_eq!(cache_files.len(), 1, "exactly one profile in cold cache");
+    // The pass1_key is a function of source bytes + layered metadata,
+    // *not* of include contents (Decision 2). Editing the partial
+    // does not change parent's key — the cache entry is overwritten
+    // in place. So after editing the partial, the same on-disk file
+    // should contain *different bytes* (a freshly extracted profile
+    // with the new include content_hash recorded).
+    let cold_bytes = std::fs::read(&cache_files[0]).expect("read cold cache file");
+    let cold_path = cache_files[0].clone();
+
+    // Edit the included partial only.
+    write(
+        &project_dir.join("_partial.qmd"),
+        "Partial content version 2 — REVISED.\n",
+    );
+
+    let _ = render_project(&project_dir, runtime);
+    let warm_files = list_cache_files(&project_dir.join(".quarto/cache/profiles"));
+    assert_eq!(
+        warm_files.len(),
+        1,
+        "include edit doesn't change the parent's pass1_key (Decision 2); \
+         the cache file is rewritten in place"
+    );
+    assert_eq!(warm_files[0], cold_path, "same cache key");
+
+    let warm_bytes = std::fs::read(&warm_files[0]).expect("read warm cache file");
+    assert_ne!(
+        cold_bytes, warm_bytes,
+        "include edit must invalidate the cached profile and re-extract \
+         (parent's profile records the include's content_hash; new content \
+         ⇒ new hash ⇒ new bytes on disk)"
+    );
+}
+
+/// Test 54: a corrupt profile-cache file falls through to live
+/// extraction and the render succeeds.
+#[test]
+fn corrupt_profile_cache_falls_through() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minimal_website(&project_dir);
+
+    // Cold render to populate the cache.
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+
+    // Corrupt every profile-cache file by overwriting with garbage.
+    let cache_dir = project_dir.join(".quarto/cache/profiles");
+    for entry in std::fs::read_dir(&cache_dir).unwrap().flatten() {
+        std::fs::write(entry.path(), b"\x00\x01\x02 not json").unwrap();
+    }
+
+    // Render again — the corrupt bytes should be ignored and live
+    // extraction should produce correct profiles.
+    let summary = render_project(&project_dir, runtime);
+    assert_eq!(summary.outputs.len(), 2);
+    assert!(summary.pass1_failures.is_empty());
+    assert!(summary.pass2_failures.is_empty());
+}

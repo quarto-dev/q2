@@ -639,7 +639,22 @@ phases above.
       (brand-aware favicon), `bd-4zdf` (multi-format favicon),
       `bd-1hdz` (draft-mode sitemap), `bd-97yc` (home-page
       title carve-out), `bd-82dn` (empty-index sitemap filter).
-- [ ] **Phase 8:** Incremental rebuilds.
+- [x] **Phase 8:** Incremental rebuilds.
+      Closed `bd-fegm` on `feature/websites`.
+      Sub-plan: `claude-notes/plans/2026-04-27-websites-phase-8.md`.
+      Sub-phases 8.0 (DocumentProfile v2 — `includes`,
+      `nav_dependencies`, `always_render`, `body_link_targets`;
+      `DOCUMENT_PROFILE_VERSION` 1 → 2), 8.1 (cache infrastructure
+      — `cache_key`, `profile_cache`), 8.2 (dependency graph +
+      Mode B render selection + orchestrator profile cache wiring),
+      8.3 (sitemap incremental merge — closes `bd-pphv`),
+      8.4 (CLI surface — `inputs: Vec<String>`, `--clean-cache`,
+      mode dispatch via `classify_inputs`, summary line), 8.5
+      (integration + CLI e2e tests at the binary level), 8.6
+      (WASM/hub-client cache-no-op audit). Closes `bd-r82e`
+      (DocumentProfile.includes) and `bd-pphv` (sitemap merge).
+      Follow-ups filed at close-out: `bd-par3`, `bd-nv5c`,
+      `bd-pp89`, `bd-k8ol`, `bd-nqcv`, `bd-3a0o`, `bd-o505`.
 - [ ] **Phase 9:** Hub-client project rendering.
 
 Documentation is tracked separately as `bd-tr81`.
@@ -821,4 +836,28 @@ when it files an issue):
   - `bd-82dn` — Empty-`index.html` filter in sitemap.
     Coordinate with `bd-r82e` (`DocumentProfile.includes`
     enrichment is the natural place to add `is_empty`). P4.
-- Phases 8–9: TBD.
+- **Phase 8 (`bd-fegm`, closed).** Follow-ups filed at close-out
+  (each `discovered-from:bd-fegm`, parent-child to `bd-0tr6`):
+  - `bd-par3` — Smart Mode B nav-config-change detection.
+    When the nav-config-hash sentinel differs from the last
+    successful run, augment Mode B's render set with sidebar
+    members of the targets so their nav HTML stays fresh. P3.
+  - `bd-nv5c` — Opt-in Pass-2 cache for filter-pure projects.
+    User-asserts-purity opt-in surface (e.g.
+    `pass2-cache: trusted`). Out of website-epic scope. P4.
+  - `bd-pp89` — Native glob expansion for CLI render args.
+    Cross-platform parity (Windows / quoted args). Phase 1's
+    `discovery::expand_patterns` is the obvious reuse. P3.
+  - `bd-k8ol` — Mode B partial Pass-1 walk. Today Mode B does
+    full Pass-1 (cache makes it cheap on warm path); plan
+    originally called for partial walk, blocked by sidebar
+    `auto:` chicken-and-egg. Decoupling auto-resolver from
+    index unblocks. P3.
+  - `bd-nqcv` — Glob support in `project.nav-dependencies`
+    (`[posts/*.qmd]`). Open question 5. P4.
+  - `bd-3a0o` — Diagnostic for unresolved nav-dependency.
+    Decision 12 calls for it; graph builder currently silent.
+    Test 57 verifies render-proceeds half only. P3.
+  - `bd-o505` — Wire nav-config-hash file write at end of
+    project render (consumer is `bd-par3`). P4.
+- Phase 9: TBD.

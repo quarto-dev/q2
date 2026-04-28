@@ -1161,58 +1161,118 @@ None — inline asserts cover the vocabulary.
    list. Future tooling-focused output will include skips in a
    machine-readable form.
 
+**Resolutions discovered during implementation (2026-04-27):**
+
+- **Render-list intersection — already implemented.** Phase 1's
+  `discover_project_files` honors `project.render` globs from
+  `_quarto.yml`. After discovery, `project.files` is already
+  render-list-filtered. Mode B's classification just intersects
+  user-named `.qmd` paths with `project.files`. The follow-up
+  bd flagged in the original task is unnecessary.
+- **Multi-arg outside-project policy — error.** "One project per
+  render" rule (resolved with user 2026-04-27): multiple stand-alone
+  `.qmd` paths outside a `_quarto.yml` project ⇒ `MultiArgNonProject`
+  error. Multiple paths spanning two different projects ⇒
+  `MultiProjectArgs` error.
+- **Render-list-excluded `.qmd` arg — error per file.** Tailored
+  error variants: `NotInRenderList` for explicit `.qmd` args
+  (covers both `project.render` exclusions and the
+  underscore/hidden/README discovery rules); `NoRenderableMatches`
+  for directory args expanding to empty.
+- **Subset covering all files collapses to Mode A.** When the
+  user enumerates every project file, we return `RenderTarget::FullProject`
+  to skip the dependency-graph augmentation step. Functionally
+  identical, slightly cheaper.
+- **`pandoc_args` positional collision.** Adding `inputs: Vec<String>`
+  next to the existing `pandoc_args: Vec<String>` triggered a clap
+  ambiguity. Fix: `pandoc_args` is now `last(true)` so it only
+  captures arguments after `--`.
+
 **Tasks:**
 
-- [ ] `--clean-cache` flag: wipes `profiles/` namespace and
+- [x] `--clean-cache` flag: wipes `profiles/` namespace and
       `nav-config-hash` file (when the latter exists).
       Preserves `sass/` (no behavior change for SCSS cache).
-- [ ] `--clean-cache` execution point: in
-      `crates/quarto/src/commands/render.rs`, before
-      constructing `ProjectPipeline`. Invokes
-      `runtime.cache_clear_namespace("profiles")` and a
-      single `runtime.file_remove` for `nav-config-hash` (no-op
-      if absent).
-- [ ] CLI arg parsing in `commands/render.rs`:
-      - 0 path args (project context): Mode A.
-      - 0 path args (non-project): existing single-doc behavior
-        unchanged.
-      - 1+ path args inside a project: Mode B. Each arg is
-        expanded:
-        * `foo.qmd` → `{foo.qmd}`.
-        * `foo/` → set of `.qmd` files under `foo/` (recursive,
-          following Q1 conventions).
-        * `*.qmd` glob → matched files.
-      - Path args outside a project context fall through to
-        the existing single-doc render path (one arg only).
-- [ ] Render-list intersection: if Phase 1 / project-config
-      surfaces a project render list, intersect Mode B's
-      expanded targets with it. If not, the implicit render
-      list is "all discovered `.qmd` files" — intersection is
-      a no-op. **Verify which case applies before
-      implementing**; file follow-up bd if render lists aren't
-      yet wired through.
-- [ ] `RenderMode::Subset(targets)` set on `ProjectPipeline`
-      via `with_mode()` when targets are present.
-- [ ] Summary line: `"N of M rendered"` printed after
-      per-doc summaries, before project diagnostics.
-- [ ] No `--full` flag — `quarto render` (no path) is
+      Implemented as `run_clean_cache(runtime, project_dir)` in
+      `commands/render.rs`.
+- [x] `--clean-cache` execution point: invoked at the top of
+      `execute_project` before `ProjectContext::discover` from
+      the project root. Multi-file projects only; no-op for
+      single-doc fallthrough (no cache_dir wired).
+- [x] CLI arg parsing: `inputs: Vec<String>` positional in
+      `Commands::Render`. Classification logic lives in
+      `commands::render::classify_inputs`, returning a
+      `RenderTarget` enum: `SingleDoc(PathBuf)`,
+      `FullProject { project_dir }`, or `Subset { project_dir, targets }`.
+      Per-arg expansion: file → singleton; directory at project
+      root → FullProject; subdirectory → Subset filtered to
+      `project.files` under it; subset covering every file →
+      collapses back to FullProject.
+- [x] Render-list intersection: handled by Phase 1's
+      `discover_project_files`. `project.files` is already filtered;
+      `classify_inputs` intersects user paths against it and
+      surfaces `NotInRenderList` for explicit-file misses.
+- [x] `RenderMode::Subset(targets)` set on `ProjectPipeline`
+      via `with_mode()` when classification returns `Subset`.
+- [x] Summary line: `render_summary_line(is_single_file, total, rendered)`
+      returns `Option<String>` (suppressed for single-file).
+      `execute_project` calls it after per-doc diagnostics.
+- [x] No `--full` flag — `quarto render` (no path) is
       already the full render.
-- [ ] No `--no-cache` flag — `--clean-cache` covers the
+- [x] No `--no-cache` flag — `--clean-cache` covers the
       throw-away-state intent; profile-only-disable adds
       failure modes without removing meaningful ones.
+- [x] 25 unit tests in `commands::render::tests` covering
+      `classify_inputs` (13), `run_clean_cache` (4),
+      `render_summary_line` (4), plus the 4 pre-existing
+      format-resolution tests.
 
 ### Sub-phase 8.5 — Integration tests + smoke
-- [ ] Mode A tests 41–45.
-- [ ] Mode B tests 46–52.
-- [ ] Cache-behavior tests 53–57.
-- [ ] CLI smoke (test 58) at `/tmp/q2-phase8-smoke/`.
-- [ ] Regression smokes (test 59).
-- [ ] `bd-r82e` smoke (test 60).
+- [x] Mode A tests 41–45 (cold + warm + body-edit + _metadata.yml
+      subtree + transitive-include invalidation). Land in
+      `crates/quarto-core/tests/incremental_rebuild.rs` —
+      pre-existing 8.2 coverage was extended with
+      `editing_metadata_yml_invalidates_subtree_only`,
+      `editing_include_invalidates_parent_profile`, and
+      `corrupt_profile_cache_falls_through`.
+- [x] Mode B tests 46–52 (target-only render, multi-target
+      union, sitemap merge preserves siblings, no-target edge,
+      always-render augmentation, user-declared nav-dependency,
+      unresolved nav-dependency). New additions:
+      `mode_b_multi_target_renders_union`,
+      `mode_b_user_declared_nav_dependency_does_not_fail`,
+      `unresolved_nav_dependency_does_not_fail`.
+- [x] Cache-behavior tests 53–57. `--clean-cache` end-to-end
+      coverage lives at the CLI integration level
+      (`tests/render_cli_e2e.rs::clean_cache_flag_wipes_then_renders`);
+      corrupt-cache fall-through covered by the new
+      orchestrator test; sitemap-merge by the existing
+      Phase-8.3 test.
+- [x] CLI integration smoke at the binary level:
+      `crates/quarto/tests/render_cli_e2e.rs` covers
+      `--clean-cache`, multi-target Mode B, directory-arg Mode B,
+      explicit-render-list-exclusion error,
+      empty-directory-arg error, multi-arg-outside-project
+      error, plus the full sequenced smoke
+      (`cli_smoke_full_sequence`).
+- [x] `bd-r82e` smoke covered by
+      `editing_include_invalidates_parent_profile`.
+- [ ] Regression smokes (test 59 — re-running phases 2–7
+      smoke fixtures after `--clean-cache`). Not automated
+      (those fixtures were ephemeral `/tmp/q2-phase{N}-smoke/`
+      directories not checked into the repo). Run manually
+      during close-out verification if any concern surfaces.
 
 ### Sub-phase 8.6 — Hub-client / WASM impact check
-- [ ] Audit `crates/wasm-quarto-hub-client/src/`: confirm new
-      cache paths are no-ops on WASM.
-- [ ] Confirm new profile fields don't break WASM build.
+- [x] Audit `crates/wasm-quarto-hub-client/src/`: no Phase 8
+      modules referenced (no use of `profile_cache`,
+      `cache_key`, `dependency_graph`, `RenderMode`, or
+      `ProjectPipeline`). The orchestrator and clean-cache
+      surface are gated `cfg(not(target_arch = "wasm32"))`.
+      `WasmRuntime` already provides `cache_get`/`cache_set`
+      via JS shims (pre-Phase-8 sass-cache plumbing) — Phase 9
+      can wire hub-client through them without further design.
+- [x] WASM build clean (`hub-client && npm run build:wasm`).
 
 ### Verification and close-out
 - [ ] `cargo build --workspace` clean.
