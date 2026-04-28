@@ -788,18 +788,33 @@ relaxes `ProjectType::post_render`'s output-slice contract.
 
 ### Sub-phase 9.1 — Un-gate `ProjectPipeline` for WASM
 
-- [ ] Remove `#[cfg(not(target_arch = "wasm32"))]` from
+- [x] Remove `#[cfg(not(target_arch = "wasm32"))]` from
       `ProjectPipeline`, `pass_one`, `pass_two`,
       `compute_augmented_render_set`, `profile_with_cache`,
       and the helpers.
-- [ ] Keep `RenderMode`, `ProjectRenderSummary`, `FileFailure`
-      (already cross-platform).
-- [ ] Add `RenderToFileResult` placeholder for `target_arch =
-      "wasm32"` (already present in current code; verify).
+- [x] Keep `RenderMode`, `ProjectRenderSummary`, `FileFailure`
+      cross-platform (`ProjectRenderSummary` was native-only after
+      9.0; gates lifted now that it's generic on output type).
+- [x] `RenderToFileResult` placeholder for `target_arch =
+      "wasm32"` retained (orchestrator-local unit struct).
 - [ ] Make `WebsiteProjectType::post_render` `#[cfg(target_arch =
-      "wasm32")]` companion (Decision 4).
-- [ ] **Verification gate:** `cargo xtask verify` passes (full
-      verify since WASM build is in scope).
+      "wasm32")]` companion (Decision 4) — **deferred to 9.2**: the
+      WASM body lands together with `flush_site_libs_to_vfs` and the
+      resolver-plumbing refactor.
+- [x] **Verification gate:** `cargo xtask verify` passes (Rust +
+      hub-client WASM build + all tests). 8062 workspace tests
+      green.
+
+**Notes.** The cross-platform impl block
+`impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R>` now compiles on
+WASM. The native-only impl block
+`impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>>` (containing
+`new()`) stays gated because it depends on
+`crate::render_to_file::RenderToFileOptions`. The default generic
+parameter `R = RenderToFileRenderer<'a>` was dropped — all native
+callers go through `ProjectPipeline::new()` and benefit from
+constructor-driven type inference, so the default added no real
+ergonomics and would have needed cfg-gating to work on WASM.
 
 ### Sub-phase 9.2 — WASM Pass-2 renderer + post-render
 

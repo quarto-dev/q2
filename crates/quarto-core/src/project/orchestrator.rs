@@ -47,33 +47,40 @@ use crate::Result;
 use super::index::ProjectIndex;
 use super::{ProjectContext, ProjectKind};
 
-// Native-only bits: the Pass-2 path calls `render_document_to_file`,
-// which isn't compiled for WASM. Hub-client orchestration (Phase 9)
-// will wire its own VFS-aware entry points.
-#[cfg(not(target_arch = "wasm32"))]
+// Phase 9 sub-phase 9.1 lifted these from `cfg(not(wasm32))` so
+// `ProjectPipeline` can drive Pass-1 / Pass-2 on WASM as well as
+// natively. The orchestration logic is now platform-agnostic; only
+// the disk-writing renderer (`RenderToFileRenderer`) and the
+// disk-writing post-render hooks (`copy_favicon`, `write_sitemap`,
+// `write_robots_txt`) stay native-only.
 use std::sync::Arc;
 
-#[cfg(not(target_arch = "wasm32"))]
 use quarto_system_runtime::SystemRuntime;
 
-#[cfg(not(target_arch = "wasm32"))]
 use crate::error::QuartoError;
 
-#[cfg(not(target_arch = "wasm32"))]
 use crate::format::Format;
 
+use super::DocumentInfo;
+
+use super::pass2_renderer::Pass2Renderer;
+
+// `RenderToFileOptions` and `RenderToFileRenderer` reference
+// `render_document_to_file`, which is native-only. Stay gated to
+// native; WASM callers wire their own renderer through
+// `ProjectPipeline::with_renderer`.
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render_to_file::{RenderToFileOptions, RenderToFileResult};
 
 #[cfg(not(target_arch = "wasm32"))]
-use super::DocumentInfo;
+use super::pass2_renderer::RenderToFileRenderer;
 
-#[cfg(not(target_arch = "wasm32"))]
-use super::pass2_renderer::{Pass2Renderer, RenderToFileRenderer};
-
-// WASM-visible placeholder for `RenderToFileResult` so the trait can
-// still compile under `target_arch = "wasm32"`. Phase 9 replaces this
-// with a VFS-aware output type.
+// WASM-visible placeholder for `RenderToFileResult` so the
+// `ProjectType::post_render` trait signature
+// (`outputs: &[RenderToFileResult]`) compiles on WASM. The slice is
+// always empty there because the WASM Pass-2 renderer's `Output` is
+// a `WasmPassTwoOutput` (sub-phase 9.2) and the orchestrator's
+// `run_wasm` driver substitutes `&[]` when calling `post_render`.
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug)]
 pub struct RenderToFileResult;
@@ -252,7 +259,6 @@ pub struct FileFailure {
 /// the WASM hub-client path (Phase 9 sub-phase 9.2) uses
 /// `O = WasmPassTwoOutput`. Defaulting to `RenderToFileResult` on
 /// native keeps existing call sites source-compatible.
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default)]
 pub struct ProjectRenderSummary<O = RenderToFileResult> {
     /// Successful per-file outputs (in `project.files` order).
@@ -270,7 +276,6 @@ pub struct ProjectRenderSummary<O = RenderToFileResult> {
     pub project_diagnostics: Vec<DiagnosticMessage>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl<O> ProjectRenderSummary<O> {
     /// True if any file (Pass 1 or Pass 2) failed.
     pub fn has_failures(&self) -> bool {
@@ -325,8 +330,17 @@ impl Default for RenderMode {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-pub struct ProjectPipeline<'a, R: Pass2Renderer = RenderToFileRenderer<'a>> {
+/// Two-pass project render driver.
+///
+/// Generic over [`Pass2Renderer`] so the same orchestration logic
+/// drives both native renders (writing HTML to disk via
+/// [`RenderToFileRenderer`]) and the WASM hub-client live preview
+/// (returning HTML in-memory via `RenderToHtmlRenderer`,
+/// sub-phase 9.2). Pass-1 caching, the dependency-graph
+/// `RenderMode::Subset` augmentation, and `pre_render`/`post_render`
+/// dispatch are platform-agnostic — only the per-doc Pass-2 step
+/// varies between back-ends.
+pub struct ProjectPipeline<'a, R: Pass2Renderer> {
     project: &'a mut ProjectContext,
     project_type: Box<dyn ProjectType>,
     format: Format,
@@ -352,9 +366,10 @@ pub struct ProjectPipeline<'a, R: Pass2Renderer = RenderToFileRenderer<'a>> {
     project_artifacts: crate::artifact::ArtifactStore,
     /// Per-page Pass-2 dispatch (Phase 9 sub-phase 9.0).
     ///
-    /// Defaults to [`RenderToFileRenderer`] for the native CLI;
-    /// the WASM hub-client (Phase 9 sub-phase 9.2) supplies its
-    /// own implementation via [`Self::with_renderer`].
+    /// Native callers wire [`RenderToFileRenderer`] via
+    /// [`Self::new`]; the WASM hub-client (Phase 9 sub-phase 9.2)
+    /// supplies its own implementation via
+    /// [`Self::with_renderer`].
     renderer: R,
 }
 
@@ -386,7 +401,6 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     /// Build a pipeline with an explicit Pass-2 renderer.
     ///
