@@ -277,6 +277,17 @@ lua-src = { path = "crates/lua-src-wasm" }
 # https://github.com/wasm-bindgen/wasm-bindgen/issues/3451#issuecomment-1562982835
 opt-level = "s"
 
+# CI-only profile (used by `.github/workflows/test-suite.yml`). Strips
+# debuginfo to fit GHA disk. Locally, omit `--cargo-profile ci` to get
+# full debuginfo via the default `dev` profile.
+# See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
+[profile.ci]
+inherits = "dev"
+debug = "line-tables-only"
+
+[profile.ci.package."*"]
+debug = false
+
 # Release-like profile with debug info preserved for profilers (samply, etc.).
 # Used by perf-harness drivers; see claude-notes/instructions/performance-profiling.md.
 [profile.release-perf]
