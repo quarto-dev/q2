@@ -1,0 +1,6 @@
+---
+title: First Post
+---
+
+Body of the first post. Edit this and re-run Mode B with
+`posts/first.qmd` as the only argument; only this page rebuilds.

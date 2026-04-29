@@ -1,0 +1,25 @@
+---
+title: Home
+---
+
+This example demonstrates **project-scoped artifact sharing**. The
+theme CSS (Bootstrap + Quarto's defaults compiled together) is
+identical for every page; rather than write a copy next to each
+page's HTML, Quarto writes it **once** to
+`_site/site_libs/quarto/quarto-theme-<hash>.css` and points every
+page's `<head>` at that single file.
+
+The clever part is that `<link rel="stylesheet">` hrefs are
+**relativized to each page's depth**:
+
+- From `_site/index.html` (root), the link reads
+  `site_libs/quarto/quarto-theme-<hash>.css`.
+- From `_site/docs/api.html` (one deep), the link reads
+  `../site_libs/quarto/quarto-theme-<hash>.css`.
+- From `_site/docs/internals/architecture.html` (two deep), the
+  link reads `../../site_libs/quarto/quarto-theme-<hash>.css`.
+
+Same shared file, three different relative paths. This is the work
+of the project-scoped artifact store — every artifact has a
+**scope** (`Page` or `Project`) and a resolver that turns
+`(scope, path, current_page)` into the right URL.

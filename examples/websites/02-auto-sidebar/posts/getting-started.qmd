@@ -1,0 +1,7 @@
+---
+title: Getting Started
+order: 1
+---
+
+This is the first post. It has `order: 1` in its frontmatter, so it
+appears first in the sidebar regardless of its filename or title.

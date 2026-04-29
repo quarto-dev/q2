@@ -1,0 +1,12 @@
+---
+title: About
+---
+
+The about page. In the hub-client preview, opening this file
+should:
+
+- Show the same sidebar as the home page, with "About" marked
+  active.
+- Re-render within one debounce cycle when you edit the body.
+- Reflect changes to *other* pages' titles within the next render
+  cycle (sibling sidebar entries pick up updated titles).

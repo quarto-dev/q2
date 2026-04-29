@@ -1,0 +1,31 @@
+project:
+  type: website
+
+website:
+  title: "Navbar &amp; Footer"
+
+navbar:
+  title: "Demo Site"
+  left:
+    - href: index.qmd
+      text: Home
+    - about.qmd
+    - text: Tools
+      menu:
+        - href: tools/index.qmd
+          text: Overview
+        - href: tools/converter.qmd
+          text: Converter
+  right:
+    - icon: github
+      href: https://github.com/quarto-dev/q2
+      aria-label: GitHub repository
+
+page-footer:
+  left: "Built with Quarto 2"
+  center:
+    - href: about.qmd
+      text: About
+    - href: tools/index.qmd
+      text: Tools
+  right: "© 2026 Example"

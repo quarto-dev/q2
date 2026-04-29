@@ -1,0 +1,26 @@
+---
+title: Home
+---
+
+This example demonstrates a sidebar populated **automatically** from
+a directory walk, rather than enumerated by hand.
+
+The relevant `_quarto.yml` fragment:
+
+```yaml
+website:
+  sidebar:
+    contents:
+      - section: "Posts"
+        contents:
+          - auto: posts/
+```
+
+Quarto walks `posts/`, finds every renderable `.qmd`, and turns each
+into a sidebar entry. Pages with `draft: true` in their frontmatter
+are excluded. Order is controlled by an `order:` frontmatter key
+(numeric); when no `order:` is set, entries fall back to
+title-alphabetical.
+
+See the posts directory for a sample, including one out-of-natural-
+sort page and one excluded draft.

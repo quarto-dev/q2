@@ -1,0 +1,13 @@
+---
+title: About
+---
+
+A second page. Edit this page's body and re-run with just this file
+as an argument:
+
+```bash
+quarto render about.qmd
+```
+
+Only `_site/about.html` should change on disk. All other
+`_site/*.html` files have their `mtime` preserved.

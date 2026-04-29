@@ -1,0 +1,12 @@
+---
+title: Architecture
+---
+
+A page two directories deep. Its `<link rel="stylesheet">` should
+read `../../site_libs/quarto/quarto-theme-<hash>.css`.
+
+The hash in the filename is content-derived: change the theme
+config (e.g. `theme: cosmo` in `_quarto.yml`) and the hash flips,
+but pages that don't change continue to point at *the same shared
+file*. This makes the URL stable across rebuilds when the theme
+hasn't changed.

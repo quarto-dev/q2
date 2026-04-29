@@ -1,0 +1,13 @@
+---
+title: Tools
+---
+
+This page is reached through the **Tools dropdown** in the navbar.
+The dropdown menu lists two entries:
+
+- *Overview* (this page)
+- *[Converter](converter.qmd)*
+
+Both menu items are configured in `_quarto.yml` under
+`navbar.left[*].menu`. Each item's `href` is a project-relative
+`.qmd` path; the Render step rewrites it to `.html`.

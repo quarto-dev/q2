@@ -1,0 +1,9 @@
+---
+title: Converter
+---
+
+A second tools page, reached through the same navbar dropdown.
+
+When this page is the active page, the navbar's "Tools" parent gets
+its dropdown menu open by default and the *Converter* item carries
+the `active` class.

@@ -1,0 +1,10 @@
+---
+title: Tuning
+page-navigation: false
+---
+
+This page **opts out** of the prev / next strip with
+`page-navigation: false` in its frontmatter. You should see no
+pagination links at the bottom — even though this page is the last
+entry in the User Guide sidebar and would normally have a "prev"
+link to [First Steps](first-steps.qmd).

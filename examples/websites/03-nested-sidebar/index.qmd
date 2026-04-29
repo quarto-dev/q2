@@ -1,0 +1,29 @@
+---
+title: Nested Sidebar
+---
+
+This example has **two sidebars**, each rooted in its own
+subdirectory:
+
+- The **User Guide** sidebar covers pages under `guide/`. It
+  contains nested `Getting Started` and `Advanced` sections.
+- The **Reference** sidebar covers pages under `reference/`. It is
+  flat.
+
+Quarto picks the right sidebar for the page being rendered by
+looking at which sidebar's contents reference the current source
+path. There is no per-page configuration — the containment is
+implicit.
+
+Visit the [User Guide](guide/index.qmd) or the
+[Reference](reference/index.qmd) to see them in action. As you move
+between the two subtrees, the sidebar swaps. Each page also gets a
+**prev / next** strip at the bottom, derived from the resolved
+sidebar's flattened order.
+
+## What this page sees
+
+This top-level `index.qmd` does **not** belong to either sidebar's
+contents, so neither sidebar applies. The page renders without one.
+That's a useful corner of the design: the same code path produces
+"no sidebar" without a special flag.

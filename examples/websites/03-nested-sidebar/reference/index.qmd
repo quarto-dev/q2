@@ -1,0 +1,8 @@
+---
+title: Reference
+---
+
+The Reference section's landing page. The sidebar swaps when you
+arrive here from anywhere in the [User Guide](../guide/index.qmd) —
+this page belongs to the **Reference** sidebar, not the guide
+sidebar.

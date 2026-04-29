@@ -1,0 +1,18 @@
+---
+title: Home
+---
+
+This example is shaped to be **opened in the Quarto Hub web
+client**, not just rendered to disk. It exercises the live preview
+path: when you edit a file in the hub editor, the preview iframe
+re-renders the active page **with the project's full website
+chrome** — sidebar, navbar, prev/next, cross-doc links — instead
+of just the bare body.
+
+The hub-client invokes a WASM build of Quarto under the hood. Its
+preview entry point is `render_page_in_project`: it does the same
+project discovery `quarto render` does, runs Pass 1 across all
+files in the project (cache-warm via IndexedDB after the first
+edit), then renders only the active page in Pass 2.
+
+See [About](about.qmd) and the [first post](posts/first.qmd).

@@ -1,0 +1,8 @@
+---
+title: Advanced Topics
+order: 2
+---
+
+The second post. It has `order: 2`, so it follows the first post
+even though "Advanced Topics" comes alphabetically before "Getting
+Started".

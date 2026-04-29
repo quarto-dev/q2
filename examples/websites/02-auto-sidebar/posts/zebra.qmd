@@ -1,0 +1,7 @@
+---
+title: Zebra
+---
+
+This page has no `order:` set. It sorts after all the explicitly
+ordered pages, by title (case-insensitive). With "Zebra" as the only
+remaining title, it lands at the end.

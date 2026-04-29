@@ -1,0 +1,8 @@
+---
+title: First Steps
+---
+
+Last page of the *Getting Started* section. The prev link points
+back at [Installation](installation.qmd); the next link crosses the
+section boundary into *Advanced*, landing on
+[Tuning](tuning.qmd).

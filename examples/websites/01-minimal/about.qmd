@@ -1,0 +1,21 @@
+---
+title: About
+---
+
+This page exists to round out the minimal website. Together with the
+[Home page](index.qmd), it demonstrates three things:
+
+1. **Multi-page project rendering.** Running `quarto render` on the
+   project directory walks every `.qmd`, builds a project-wide index
+   of document profiles, and renders each page with that index in
+   scope.
+2. **Manual sidebar configuration.** A `website.sidebar.contents:`
+   list whose entries are bare `.qmd` paths produces a working
+   sidebar with one entry per page. The visible label comes from
+   the target page's `title:`.
+3. **Cross-document link rewriting.** When you write
+   `[About](about.qmd)` in a paragraph, the rendered HTML contains
+   `<a href="about.html">`. The same is true of the link back to
+   `[Home](index.qmd)` above. You don't need to write the `.html`
+   extension yourself — and you shouldn't, because the source path
+   is what's stable across format choices.

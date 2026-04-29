@@ -1,0 +1,25 @@
+project:
+  type: website
+
+website:
+  title: "Nested Sidebar"
+  sidebar:
+    - id: guide
+      title: "User Guide"
+      style: docked
+      contents:
+        - guide/index.qmd
+        - section: "Getting Started"
+          contents:
+            - guide/installation.qmd
+            - guide/first-steps.qmd
+        - section: "Advanced"
+          contents:
+            - guide/tuning.qmd
+    - id: reference
+      title: "Reference"
+      style: docked
+      contents:
+        - reference/index.qmd
+        - reference/api.qmd
+        - reference/cli.qmd

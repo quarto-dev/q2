@@ -1,0 +1,21 @@
+---
+title: Home
+---
+
+This example demonstrates the **site-level metadata** features:
+
+- **Title prefix.** Each page's `<title>` becomes
+  `<page title> – <website.title>`. This page's `<title>` should
+  read `Home – My Site`.
+- **`site-url`.** When `website.site-url` is set, Quarto emits a
+  `_site/sitemap.xml` listing every rendered page with absolute
+  URLs derived from the site URL, plus a `_site/robots.txt`
+  pointing search engines at the sitemap.
+- **Favicon.** `website.favicon: favicon.svg` causes Quarto to
+  copy the favicon to `_site/favicon.svg` and add
+  `<link rel="icon">` to every page's `<head>`.
+- **Canonical URL.** Each page's `<head>` contains
+  `<link rel="canonical">` pointing at its absolute URL — useful
+  when content might be reachable through several paths.
+
+See [Guides](guides.qmd) and [API](api.qmd).

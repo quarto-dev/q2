@@ -1,0 +1,24 @@
+---
+title: Home
+---
+
+This is the **minimal** Quarto 2 website example. It contains two
+pages and one sidebar.
+
+The sidebar is configured manually in `_quarto.yml`:
+
+```yaml
+website:
+  sidebar:
+    contents:
+      - index.qmd
+      - about.qmd
+```
+
+Both entries are bare paths. Their visible text comes from each
+page's `title:` frontmatter — no explicit `text:` is needed. The
+sidebar links resolve to the rendered HTML (`about.html`), not the
+source path (`about.qmd`).
+
+Visit the [About page](about.qmd) to read about the features this
+example demonstrates.

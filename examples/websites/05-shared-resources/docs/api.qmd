@@ -1,0 +1,6 @@
+---
+title: API
+---
+
+A page one directory deep. Its `<link rel="stylesheet">` should
+read `../site_libs/quarto/quarto-theme-<hash>.css`.

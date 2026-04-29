@@ -1,0 +1,5 @@
+---
+title: API Reference
+---
+
+A third page so the sitemap has more than two entries to enumerate.

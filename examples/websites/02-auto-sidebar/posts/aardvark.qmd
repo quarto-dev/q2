@@ -1,0 +1,7 @@
+---
+title: Aardvark
+---
+
+This page also has no `order:` — and its title comes alphabetically
+before "Zebra", so it appears immediately after the explicitly
+ordered pages and before "Zebra".

@@ -1,0 +1,7 @@
+---
+title: CLI
+---
+
+The last page of the Reference sidebar. The prev link points to
+[API](api.qmd); there is no next link because this is the last
+entry.

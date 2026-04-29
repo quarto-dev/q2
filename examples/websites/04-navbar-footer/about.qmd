@@ -1,0 +1,12 @@
+---
+title: About
+---
+
+The "About" entry in the navbar is now marked **active**. In the
+rendered HTML you'll see `class="nav-link active"` on the link.
+
+The active marking is derived from the page's source path, not its
+output href. That's deliberate: the navbar Generate transform
+records the active item by source-path comparison so the same
+metadata structure works across output formats. The Render step
+then emits format-specific class names.

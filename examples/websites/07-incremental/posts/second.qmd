@@ -1,0 +1,6 @@
+---
+title: Second Post
+---
+
+A sibling post. Useful for confirming that Mode B leaves it alone
+when only `first.qmd` is targeted.

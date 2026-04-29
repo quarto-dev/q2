@@ -1,0 +1,8 @@
+---
+title: Guides
+---
+
+The `<title>` of this page should read `Guides – My Site`.
+
+The `<link rel="canonical">` should be
+`https://example.com/my-site/guides.html`.

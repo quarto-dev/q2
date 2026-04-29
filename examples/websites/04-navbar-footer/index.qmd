@@ -1,0 +1,26 @@
+---
+title: Home
+---
+
+This example demonstrates the **navbar** and **page-footer** —
+two pieces of per-document chrome that live at the top level of
+metadata (not under `website.`), so they work the same whether
+the document stands alone or sits inside a multi-page project.
+
+The navbar at the top of this page has:
+
+- A **brand label** ("Demo Site") that falls through
+  `navbar.title → website.title → document.title`. The first
+  non-empty wins; `website.title` is the next fallback if you
+  remove `navbar.title:`.
+- Three **left-side items**: Home, About, and a Tools dropdown.
+- One **right-side item**: a GitHub icon link to an external URL.
+- An **active highlight** on the currently-rendered page.
+
+The page-footer at the bottom has three regions (left / center /
+right). Footer items pointing at `.qmd` source paths are rewritten
+to `.html`. Footer items don't get an active highlight — they're
+static cross-site chrome.
+
+See the [About](about.qmd) page or open the
+[Tools dropdown](tools/index.qmd).

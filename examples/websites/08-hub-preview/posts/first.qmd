@@ -1,0 +1,8 @@
+---
+title: First Post
+---
+
+A subdirectory page. Useful for confirming that the preview's
+`<link rel="stylesheet">` resolves to the project-shared theme CSS
+through the VFS path that hub-client uses
+(`/.quarto/project-artifacts/...`), not a 404.

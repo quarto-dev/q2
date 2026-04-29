@@ -1,0 +1,9 @@
+---
+title: Work in Progress
+draft: true
+---
+
+This page is marked `draft: true`. It still renders to HTML, but it
+is **excluded from the auto-generated sidebar**. You will not see a
+sidebar entry for it after rendering — even though `work-in-progress.html`
+itself exists in `_site/posts/`.

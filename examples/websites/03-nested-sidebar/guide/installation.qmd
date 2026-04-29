@@ -1,0 +1,7 @@
+---
+title: Installation
+---
+
+Installation lives under *Getting Started* in the sidebar. The prev
+link points back at the [User Guide](index.qmd) home; the next link
+points at [First Steps](first-steps.qmd).

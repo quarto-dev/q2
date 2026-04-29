@@ -1,0 +1,9 @@
+project:
+  type: website
+
+website:
+  title: "Minimal Website"
+  sidebar:
+    contents:
+      - index.qmd
+      - about.qmd

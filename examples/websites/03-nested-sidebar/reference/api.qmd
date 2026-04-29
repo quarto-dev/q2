@@ -1,0 +1,6 @@
+---
+title: API
+---
+
+A flat reference page. The Reference sidebar has no nested sections
+— just three entries in series.

@@ -1,0 +1,6 @@
+---
+title: Third Post
+---
+
+A third post. Three posts total makes the sidebar sequence
+non-trivial.

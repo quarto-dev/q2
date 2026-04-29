@@ -1,0 +1,29 @@
+---
+title: Home
+---
+
+This example demonstrates **incremental rebuilds**. Quarto 2 has
+two render modes:
+
+- **Mode A — full project render.** Triggered by
+  `quarto render <project-dir>` (or just `quarto render` with no
+  args from inside the project). Re-runs Pass 2 (the body render)
+  for every page. Pass 1 (the static profile) hits a content-hash
+  keyed cache, so unchanged inputs aren't re-extracted.
+- **Mode B — subset render.** Triggered by naming specific files:
+  `quarto render posts/first.qmd`. Only the named files re-run
+  Pass 2. The sidebar / navbar / cross-doc indices are still
+  consistent because Pass 1 still runs over every project file
+  (warm from cache for unchanged inputs).
+
+Pass 2 is **never** cached. The reason: Pass 2 runs user-supplied
+Lua filters and language engines, which can have side effects
+(network calls, time, randomness). Caching the bytes they produce
+would silently break reproducibility for any non-pure filter. The
+narrower `freeze` feature (separate epic, opt-in per chunk) caches
+engine output explicitly when the user knows it's safe.
+
+The win from Mode B isn't "Pass 2 was cached" — it's "Pass 2 didn't
+need to run for unaffected pages."
+
+See [About](about.qmd) and the [first post](posts/first.qmd).

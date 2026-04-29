@@ -1,0 +1,12 @@
+---
+title: User Guide
+---
+
+This is the entry point of the User Guide. The sidebar on the left
+is the **User Guide** sidebar, with nested sections for
+*Getting Started* and *Advanced*.
+
+The bottom of every page in the guide carries a small prev / next
+strip linking to the next sidebar entry in flattened order. From
+this page, "next" should land on
+[Installation](installation.qmd).
