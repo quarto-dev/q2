@@ -76,12 +76,12 @@ Each rendered page should contain:
 
 ## Things you may notice
 
-- Empty `_site/<stem>_files/` directories appear next to each
-  rendered page. They are reserved for per-page artifacts (engine
-  outputs, figures), and for an all-prose document like this one,
-  they end up empty. Cleanup is tracked as a follow-up
-  (`bd-78ud`) and is harmless for now.
-- The pages also include a small **prev / next** strip at the
-  bottom, even though this example doesn't configure one. That's
+- The pages include a small **prev / next** strip at the bottom,
+  even though this example doesn't configure one. That's
   page-navigation derived automatically from sidebar position.
   Project `03-nested-sidebar` exercises it explicitly.
+- Each page would normally get its own `_site/<stem>_files/`
+  directory for engine outputs (figures, cached plots, etc.). For
+  prose-only pages like these, no per-page artifacts are produced
+  and the directory is **not** created — the per-page artifact dir
+  is materialised lazily, only when something needs to live there.

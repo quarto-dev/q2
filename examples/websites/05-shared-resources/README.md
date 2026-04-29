@@ -81,8 +81,10 @@ grep 'rel="stylesheet"' _site/docs/internals/architecture.html
 ## Notes
 
 - Page-scoped artifact directories (`_site/<stem>_files/`) are
-  created next to each rendered page even when empty. Cleanup of
-  empty ones is tracked as `bd-78ud`.
+  created lazily — only when a page produces a per-page artifact
+  (e.g. an engine-rendered figure). Prose-only pages don't
+  produce one, so for the three pages in this example you'll see
+  no `index_files/`, `api_files/`, or `architecture_files/`.
 - The directory name `site_libs` is currently hard-coded.
   Override via a future `project.lib-dir:` (tracked as `bd-apvo`).
 - Extension dependencies (CSS/JS contributed by Quarto extensions
