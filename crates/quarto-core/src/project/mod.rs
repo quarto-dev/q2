@@ -32,7 +32,10 @@ pub mod pass2_renderer;
 pub mod profile_cache;
 pub mod sidebar_membership;
 pub mod website_config;
-#[cfg(not(target_arch = "wasm32"))]
+// Phase 9 sub-phase 9.2 lifted the cfg gate so `flush_site_libs`
+// can run cross-platform (its destination is now resolver-driven).
+// Other hooks inside this module remain `#[cfg(not(wasm32))]` per
+// function.
 pub mod website_post_render;
 
 use std::path::{Path, PathBuf};

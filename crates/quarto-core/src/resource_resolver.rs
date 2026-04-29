@@ -94,6 +94,34 @@ impl ResourceResolverContext {
         }
     }
 
+    /// Construct a resolver suitable for *project-level* hooks that
+    /// only consult `Project`-scope queries (e.g.
+    /// [`crate::project::website_post_render::flush_site_libs`]).
+    ///
+    /// Page-specific fields (page output, `{stem}_files/`) are
+    /// stubbed out — calling [`Self::html_url_for`] with
+    /// [`ArtifactScope::Page`] on the result returns a nonsense
+    /// path. Only [`Self::on_disk_path_for`] /
+    /// [`Self::html_url_for`] with [`ArtifactScope::Project`] are
+    /// well-defined.
+    ///
+    /// Used by [`crate::project::orchestrator::ProjectPipeline`]
+    /// when invoking [`crate::project::orchestrator::ProjectType::post_render`]
+    /// — the project-wide flush only needs to know where
+    /// [`ArtifactScope::Project`] artifacts go, which is determined
+    /// by `(site_root, lib_dir)` alone.
+    pub fn project_root(site_root: impl Into<PathBuf>, lib_dir: impl Into<String>) -> Self {
+        let site_root = site_root.into();
+        let dummy_page_output = site_root.join("__post_render__.html");
+        Self {
+            site_root,
+            page_output: dummy_page_output,
+            lib_dir: lib_dir.into(),
+            page_files_dir: String::new(),
+            vfs_root_mode: None,
+        }
+    }
+
     /// Construct a resolver for an in-memory / VFS-backed
     /// render where artifacts live at synthetic absolute paths
     /// (the WASM hub-client convention). All artifacts —

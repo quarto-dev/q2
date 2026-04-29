@@ -39,7 +39,8 @@ use quarto_core::project::orchestrator::{
     DefaultProjectType, ProjectPipeline, ProjectType, project_type_for,
 };
 use quarto_core::project::{ProjectConfig, ProjectKind};
-use quarto_core::render_to_file::{RenderToFileOptions, RenderToFileResult};
+use quarto_core::render_to_file::RenderToFileOptions;
+use quarto_core::resource_resolver::ResourceResolverContext;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn canonical(path: &std::path::Path) -> PathBuf {
@@ -131,8 +132,9 @@ impl ProjectType for CountingProjectType {
         &self,
         _project: &ProjectContext,
         _index: &ProjectIndex,
-        _outputs: &[RenderToFileResult],
+        _output_paths: &[PathBuf],
         _project_artifacts: &quarto_core::ArtifactStore,
+        _resolver: &ResourceResolverContext,
         _runtime: &dyn SystemRuntime,
         _diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
     ) -> quarto_core::Result<()> {
@@ -216,12 +218,13 @@ impl ProjectType for CountingProjectTypeWrapper {
         &self,
         p: &ProjectContext,
         i: &ProjectIndex,
-        o: &[RenderToFileResult],
+        o: &[PathBuf],
         a: &quarto_core::ArtifactStore,
+        rs: &ResourceResolverContext,
         r: &dyn SystemRuntime,
         d: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
     ) -> quarto_core::Result<()> {
-        self.inner.post_render(p, i, o, a, r, d).await
+        self.inner.post_render(p, i, o, a, rs, r, d).await
     }
 }
 

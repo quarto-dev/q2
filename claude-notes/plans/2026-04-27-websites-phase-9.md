@@ -818,14 +818,46 @@ ergonomics and would have needed cfg-gating to work on WASM.
 
 ### Sub-phase 9.2 — WASM Pass-2 renderer + post-render
 
-- [ ] Add `pass2_renderer_wasm.rs` with the `RenderToHtmlRenderer`
-      impl (calls `render_qmd_to_html`, drains artifacts).
-- [ ] Add `website_post_render_wasm.rs` with
-      `flush_site_libs_to_vfs`.
-- [ ] Wire the WASM `WebsiteProjectType::post_render` body to
-      call `flush_site_libs_to_vfs`.
-- [ ] Unit tests 5–7.
-- [ ] **Verification gate:** `cargo xtask verify`.
+- [x] Add `RenderToHtmlRenderer` (calls `render_qmd_to_html`,
+      drains artifacts). Lives in `pass2_renderer.rs` alongside the
+      native `RenderToFileRenderer` rather than a separate
+      `_wasm` module — both impls are short and the file stays
+      well under 300 lines.
+- [x] Single resolver-driven `flush_site_libs` (Decision 4 final).
+      No companion `_wasm` module: the same function is the only
+      flush implementation, native vs WASM differ only in which
+      resolver they pass. `website_post_render.rs`'s file-level
+      cfg gate was lifted; non-flush hooks (`copy_favicon`,
+      `write_sitemap`, `write_robots_txt`) carry per-function
+      `#[cfg(not(target_arch = "wasm32"))]`.
+- [x] `WebsiteProjectType::post_render` is now cross-platform.
+      Body calls `flush_site_libs(project_artifacts, resolver,
+      runtime)?` always, then runs the native-only hooks behind a
+      `#[cfg(not(target_arch = "wasm32"))]` block. The trait
+      signature gained a `resolver` parameter and the legacy
+      `outputs: &[RenderToFileResult]` became `output_paths:
+      &[PathBuf]` (only on-disk paths were ever consumed; the WASM
+      caller passes an empty slice).
+- [x] Unit tests 5–7 (refraled around the unified flush): the
+      vfs_root resolver routes artifacts under `<vfs_root>/<path>`,
+      the empty store is a no-op, and the native website resolver
+      routes under `{site_root}/{lib_dir}/`. A fourth test pins
+      the §Decision 4 invariant (`html_url_for ↔ on_disk_path_for`
+      round-trip under vfs_root).
+- [x] **Verification gate:** `cargo xtask verify` passes (Rust +
+      hub-client WASM build + tests).
+
+**Notes.** `Pass2Renderer` gained two methods:
+`output_path(&output) -> Option<&Path>` (extracts the on-disk
+target so the orchestrator can build the `output_paths` slice for
+post_render) and `build_project_resolver(&self, project, lib_dir)`
+(returns the resolver flavor that matches the renderer's I/O —
+`project_root` for native, `vfs_root` for WASM). `ProjectPipeline::run()`
+is now fully cross-platform: the `R::Output = RenderToFileResult`
+bound is gone. A new `ResourceResolverContext::project_root`
+constructor was added for the native side; it stubs out
+page-specific fields (only `Project`-scope queries are
+well-defined on the result).
 
 ### Sub-phase 9.3 — `render_page_in_project` WASM entry point
 

@@ -30,42 +30,62 @@
 //!
 //! [`WebsiteProjectType`]: super::orchestrator::WebsiteProjectType
 
-#![cfg(not(target_arch = "wasm32"))]
+// Phase 9 sub-phase 9.2 lifted the module-level
+// `#![cfg(not(target_arch = "wasm32"))]` so `flush_site_libs` can run
+// in WASM (the hub-client preview's "deduplicate theme CSS into a
+// shared lib dir" pass). The remaining hooks (`copy_favicon`,
+// `write_sitemap`, `write_robots_txt`) stay native-only — they
+// write into the project's on-disk output directory which doesn't
+// exist in the in-browser preview.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::SystemTime;
 
+#[cfg(not(target_arch = "wasm32"))]
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::Result;
 use crate::artifact::ArtifactStore;
 use crate::error::QuartoError;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::project::ProjectContext;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::project::index::ProjectIndex;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::project::website_config::{normalize_favicon_path, website_favicon, website_site_url};
+use crate::resource_resolver::ResourceResolverContext;
 
 // ═══════════════════════════════════════════════════════════════════
-// Site libs (Phase 5 — moved here from orchestrator.rs)
+// Site libs (Phase 5; resolver-driven since Phase 9 sub-phase 9.2)
 // ═══════════════════════════════════════════════════════════════════
 
 /// Flush every Project-scoped artifact accumulated across Pass-2
-/// renders to disk under `<output_dir>/<lib_dir>/`.
+/// renders to its resolver-determined on-disk (or VFS) location.
 ///
-/// Each artifact's relative `path` is joined onto
-/// `{output_dir}/{lib_dir}/`. Iteration is in sorted-key order so
-/// the on-disk write order is deterministic across runs.
+/// The resolver decides the destination: native website renders
+/// pass a [`ResourceResolverContext::project_root`] resolver
+/// (artifacts land under `{output_dir}/{lib_dir}/{path}`); the
+/// WASM hub-client passes a [`ResourceResolverContext::vfs_root`]
+/// resolver (artifacts land under `/{vfs_root}/{path}`).
+///
+/// Decoupling the destination from the function's logic enforces
+/// the construction-level invariant from the Phase 9 plan
+/// §Decision 4: the URL embedded in HTML by `html_url_for(Project,
+/// p)` and the on-disk write path returned by
+/// `on_disk_path_for(Project, p)` must round-trip through the same
+/// resolver. Iteration is in sorted-key order so the write order
+/// is deterministic across runs.
 pub(super) fn flush_site_libs(
-    project: &ProjectContext,
     project_artifacts: &ArtifactStore,
-    lib_dir: &str,
+    resolver: &ResourceResolverContext,
     runtime: &dyn SystemRuntime,
 ) -> Result<()> {
     if project_artifacts.is_empty() {
         return Ok(());
     }
-
-    let lib_root = project.output_dir.join(lib_dir);
 
     let mut entries: Vec<(&str, &crate::artifact::Artifact)> = project_artifacts.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -74,7 +94,7 @@ pub(super) fn flush_site_libs(
         let Some(path) = &artifact.path else {
             continue;
         };
-        let on_disk = lib_root.join(path);
+        let on_disk = resolver.on_disk_path_for(crate::artifact::ArtifactScope::Project, path);
         if let Some(parent) = on_disk.parent() {
             runtime.dir_create(parent, true).map_err(|e| {
                 QuartoError::other(format!(
@@ -98,7 +118,7 @@ pub(super) fn flush_site_libs(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Favicon (Phase 7)
+// Favicon (Phase 7) — native-only
 // ═══════════════════════════════════════════════════════════════════
 
 /// Copy the user-configured favicon from the project root to the
@@ -109,6 +129,7 @@ pub(super) fn flush_site_libs(
 /// - `project.config.metadata` is unavailable (single-doc render).
 /// - The source file is missing — emits a warning diagnostic into
 ///   `diagnostics` but does not error so the render completes.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn copy_favicon(
     project: &ProjectContext,
     runtime: &dyn SystemRuntime,
@@ -167,6 +188,7 @@ pub(super) fn copy_favicon(
 // ═══════════════════════════════════════════════════════════════════
 
 /// One entry of a sitemap urlset.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SitemapEntry {
     /// The fully-qualified URL of the page (XML-escaped).
@@ -199,10 +221,11 @@ struct SitemapEntry {
 ///
 /// If the existing sitemap can't be read or parsed, the merge
 /// degrades to a fresh-write — same shape as Phase 7.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn write_sitemap(
     project: &ProjectContext,
     index: &ProjectIndex,
-    outputs: &[crate::render_to_file::RenderToFileResult],
+    output_paths: &[std::path::PathBuf],
     runtime: &dyn SystemRuntime,
 ) -> Result<()> {
     let Some(meta) = project.config.metadata.as_ref() else {
@@ -217,7 +240,7 @@ pub(super) fn write_sitemap(
     // Used to decide whether a profile's lastmod should refresh
     // (rendered) or preserve from the existing sitemap (skipped).
     let rendered_outputs: std::collections::HashSet<&Path> =
-        outputs.iter().map(|r| r.output_path.as_path()).collect();
+        output_paths.iter().map(|p| p.as_path()).collect();
 
     // Try to read the existing sitemap. Failure is non-fatal —
     // we fall back to fresh-write.
@@ -293,6 +316,7 @@ pub(super) fn write_sitemap(
 /// `loc` strings are returned in their XML-escaped form (the same
 /// form the writer compares against), so callers can map directly
 /// from the freshly-computed escaped loc to the prior `lastmod`.
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_sitemap_locs(xml: &str) -> std::collections::HashMap<String, String> {
     let mut out = std::collections::HashMap::new();
     let mut cursor = 0;
@@ -323,6 +347,7 @@ fn parse_sitemap_locs(xml: &str) -> std::collections::HashMap<String, String> {
 /// Extract the text between `<tag>` and `</tag>` in `block`.
 /// Returns `None` if either tag is missing. Doesn't unescape the
 /// XML entities — the caller compares against escaped strings.
+#[cfg(not(target_arch = "wasm32"))]
 fn extract_inner_tag<'a>(block: &'a str, tag: &str) -> Option<&'a str> {
     let open = format!("<{tag}>");
     let close = format!("</{tag}>");
@@ -334,6 +359,7 @@ fn extract_inner_tag<'a>(block: &'a str, tag: &str) -> Option<&'a str> {
 /// Read an input file's mtime as an ISO-8601 UTC string with
 /// second precision. Returns `None` if the metadata is unreadable
 /// or has no mtime.
+#[cfg(not(target_arch = "wasm32"))]
 fn read_input_mtime(path: &Path, runtime: &dyn SystemRuntime) -> Option<String> {
     let metadata = runtime.path_metadata(path).ok()?;
     metadata.modified.map(format_iso8601_utc)
@@ -344,6 +370,7 @@ fn read_input_mtime(path: &Path, runtime: &dyn SystemRuntime) -> Option<String> 
 /// Manual algorithm so we don't pull in `chrono`. Computes
 /// civil-date components from the POSIX seconds-since-epoch using
 /// the Howard Hinnant calendar formulas (proleptic Gregorian).
+#[cfg(not(target_arch = "wasm32"))]
 fn format_iso8601_utc(time: SystemTime) -> String {
     let secs = match time.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(d) => d.as_secs() as i64,
@@ -368,6 +395,7 @@ fn format_iso8601_utc(time: SystemTime) -> String {
 ///
 /// `days` is days since 1970-01-01. Returns (year, month, day) in
 /// the proleptic Gregorian calendar.
+#[cfg(not(target_arch = "wasm32"))]
 fn civil_from_days(days: i64) -> (i32, u32, u32) {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -386,6 +414,7 @@ fn civil_from_days(days: i64) -> (i32, u32, u32) {
 ///
 /// Escapes `&`, `<`, `>`, `"`, `'`. Keeps the helper inline so we
 /// don't pull in an XML library for ~5 characters of substitution.
+#[cfg(not(target_arch = "wasm32"))]
 fn escape_xml_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -405,6 +434,7 @@ fn escape_xml_text(s: &str) -> String {
 ///
 /// Format matches Q1's
 /// `external-sources/quarto-cli/src/resources/projects/website/templates/sitemap.ejs.xml`.
+#[cfg(not(target_arch = "wasm32"))]
 fn render_sitemap_xml(entries: &[SitemapEntry]) -> String {
     let mut out = String::new();
     out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -436,6 +466,7 @@ fn render_sitemap_xml(entries: &[SitemapEntry]) -> String {
 /// 2. Else if `website.site-url` is set → write
 ///    `Sitemap: <site-url>/sitemap.xml\n`.
 /// 3. Else → no-op.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn write_robots_txt(
     project: &ProjectContext,
     runtime: &dyn SystemRuntime,
@@ -507,7 +538,128 @@ pub(super) fn write_robots_txt(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(target_arch = "wasm32"))]
     use std::time::Duration;
+
+    // === Phase 9 sub-phase 9.2 — resolver-driven flush_site_libs ===
+
+    /// Plan test 5 (refraled): `flush_site_libs` with a `vfs_root`
+    /// resolver writes Project-scoped artifacts to
+    /// `<vfs_root>/<artifact_path>`. The hub-client convention is
+    /// `vfs_root == "/.quarto/project-artifacts"`.
+    #[test]
+    fn flush_site_libs_vfs_root_writes_under_vfs_root() {
+        use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
+        use crate::resource_resolver::ResourceResolverContext;
+        use quarto_system_runtime::NativeRuntime;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let vfs_root = temp.path().join(".quarto/project-artifacts");
+        let resolver = ResourceResolverContext::vfs_root(vfs_root.clone());
+
+        let mut store = ArtifactStore::new();
+        let artifact = Artifact::from_bytes(b"body { color: red; }".to_vec(), "text/css")
+            .with_path("quarto/theme.css")
+            .with_scope(ArtifactScope::Project);
+        store.store("theme", artifact);
+
+        let runtime = NativeRuntime::new();
+        flush_site_libs(&store, &resolver, &runtime).unwrap();
+
+        // The artifact landed at <vfs_root>/quarto/theme.css.
+        let written = vfs_root.join("quarto/theme.css");
+        let bytes = std::fs::read(&written).unwrap_or_else(|e| {
+            panic!("expected artifact at {}: {}", written.display(), e);
+        });
+        assert_eq!(bytes, b"body { color: red; }");
+    }
+
+    /// Plan test 6: empty artifact store → no-op (no spurious
+    /// directories created).
+    #[test]
+    fn flush_site_libs_empty_store_is_noop() {
+        use crate::artifact::ArtifactStore;
+        use crate::resource_resolver::ResourceResolverContext;
+        use quarto_system_runtime::NativeRuntime;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let vfs_root = temp.path().join("vfs");
+        let resolver = ResourceResolverContext::vfs_root(vfs_root.clone());
+
+        let store = ArtifactStore::new();
+        let runtime = NativeRuntime::new();
+        flush_site_libs(&store, &resolver, &runtime).unwrap();
+
+        // The vfs root directory was never created.
+        assert!(!vfs_root.exists(), "no-op flush should not touch FS");
+    }
+
+    /// Plan test 7 (refraled): native website resolver routes
+    /// project-scope artifacts under `{site_root}/{lib_dir}/`.
+    /// Confirms native and WASM use the same `flush_site_libs`
+    /// function but produce different on-disk targets via the
+    /// resolver — Phase 9 §Decision 4 invariant.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn flush_site_libs_native_website_routes_under_site_libs() {
+        use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
+        use crate::resource_resolver::ResourceResolverContext;
+        use quarto_system_runtime::NativeRuntime;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let site_root = temp.path().join("_site");
+        let resolver = ResourceResolverContext::project_root(site_root.clone(), "site_libs");
+
+        let mut store = ArtifactStore::new();
+        let artifact =
+            Artifact::from_bytes(b"kbd { font-family: monospace; }".to_vec(), "text/css")
+                .with_path("libs/kbd/kbd.css")
+                .with_scope(ArtifactScope::Project);
+        store.store("kbd", artifact);
+
+        let runtime = NativeRuntime::new();
+        flush_site_libs(&store, &resolver, &runtime).unwrap();
+
+        let written = site_root.join("site_libs/libs/kbd/kbd.css");
+        assert!(
+            written.exists(),
+            "expected artifact at {}",
+            written.display()
+        );
+    }
+
+    /// Phase 9 §Decision 4 invariant: for every artifact, the URL
+    /// embedded in HTML by `html_url_for(Project, p)` and the
+    /// write target computed by `on_disk_path_for(Project, p)`
+    /// must round-trip through the *same* resolver.
+    ///
+    /// On VFS-root mode the html_url is absolute (`/<vfs_root>/<p>`)
+    /// and the on-disk path is the same with the leading `/`
+    /// dropped (since paths are absolute already). The browser
+    /// fetches the URL and the hub-client serves from VFS at the
+    /// matching synthetic path. This test pins that contract:
+    /// regression-proofs against a future patch that changes one
+    /// computation but not the other.
+    #[test]
+    fn vfs_root_resolver_url_matches_on_disk_path() {
+        use crate::artifact::ArtifactScope;
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+        let p = std::path::Path::new("quarto/theme.css");
+
+        let url = resolver.html_url_for(ArtifactScope::Project, p);
+        let on_disk = resolver.on_disk_path_for(ArtifactScope::Project, p);
+        let on_disk_str = on_disk.to_string_lossy().replace('\\', "/");
+
+        assert_eq!(
+            url, on_disk_str,
+            "html URL and on-disk path must match under vfs_root mode"
+        );
+    }
 
     fn entry_loc(loc: &str, lastmod: Option<&str>) -> SitemapEntry {
         SitemapEntry {

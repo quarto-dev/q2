@@ -33,9 +33,12 @@
 //!
 //! [`ProjectPipeline`]: crate::project::orchestrator::ProjectPipeline
 
+use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use quarto_error_reporting::DiagnosticMessage;
+use quarto_source_map::SourceContext;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::Result;
@@ -43,6 +46,7 @@ use crate::artifact::ArtifactStore;
 use crate::format::Format;
 use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
+use crate::resource_resolver::ResourceResolverContext;
 
 /// Per-page Pass-2 dispatch.
 ///
@@ -74,7 +78,7 @@ pub trait Pass2Renderer {
     /// - Native ([`RenderToFileRenderer`]):
     ///   [`crate::render_to_file::RenderToFileResult`] (output paths
     ///   plus the full [`crate::pipeline::RenderOutput`]).
-    /// - WASM (Phase 9 sub-phase 9.2): a `WasmPassTwoOutput`
+    /// - WASM ([`RenderToHtmlRenderer`]): [`WasmPassTwoOutput`]
     ///   carrying HTML + diagnostics + drained per-page artifacts.
     type Output;
 
@@ -94,6 +98,43 @@ pub trait Pass2Renderer {
         runtime: Arc<dyn SystemRuntime>,
         project_artifacts: &mut ArtifactStore,
     ) -> Result<Self::Output>;
+
+    /// Extract the output's on-disk (or synthetic-VFS) path for
+    /// downstream hooks that key off "which pages were rendered
+    /// this run" (e.g. the sitemap merge in
+    /// [`crate::project::website_post_render::write_sitemap`]).
+    ///
+    /// Returns `None` for renderers that produce no path-shaped
+    /// artifact (the WASM in-memory renderer is the only such
+    /// case today).
+    fn output_path(output: &Self::Output) -> Option<&Path>;
+
+    /// Build a resolver suitable for project-level post-render
+    /// hooks like
+    /// [`crate::project::website_post_render::flush_site_libs`].
+    ///
+    /// - Native ([`RenderToFileRenderer`]): produces a
+    ///   [`ResourceResolverContext::project_root`] resolver from
+    ///   the project's `output_dir` and the project type's
+    ///   `lib_dir` so `on_disk_path_for(Project, p)` returns
+    ///   `{output_dir}/{lib_dir}/{p}`.
+    /// - WASM ([`RenderToHtmlRenderer`]): produces a
+    ///   [`ResourceResolverContext::vfs_root`] resolver pointing at
+    ///   the synthetic project-artifacts root (e.g.
+    ///   `/.quarto/project-artifacts`), matching the URLs Pass-2
+    ///   already embedded in HTML.
+    ///
+    /// The construction-level invariant from Phase 9 §Decision 4
+    /// applies: the URL embedded in HTML by `html_url_for(Project,
+    /// p)` and the on-disk write path returned by
+    /// `on_disk_path_for(Project, p)` must round-trip through this
+    /// resolver. Otherwise `flush_site_libs` writes artifacts to a
+    /// place the rendered HTML never references.
+    fn build_project_resolver(
+        &self,
+        project: &ProjectContext,
+        lib_dir: &str,
+    ) -> ResourceResolverContext;
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -155,5 +196,173 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
             Some(index),
             Some(project_artifacts),
         )
+    }
+
+    fn output_path(output: &Self::Output) -> Option<&Path> {
+        Some(&output.output_path)
+    }
+
+    fn build_project_resolver(
+        &self,
+        project: &ProjectContext,
+        lib_dir: &str,
+    ) -> ResourceResolverContext {
+        ResourceResolverContext::project_root(project.output_dir.clone(), lib_dir.to_string())
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// WASM impl: keeps HTML + drained artifacts in memory, no disk I/O.
+// ───────────────────────────────────────────────────────────────────
+
+/// Output of a single Pass-2 render under
+/// [`RenderToHtmlRenderer`]. Carries everything the orchestrator
+/// (and ultimately the WASM caller) needs to surface back to the
+/// hub-client preview.
+///
+/// Cross-platform on purpose: native code rarely wants this shape,
+/// but the type's `RenderToHtmlRenderer` impl block is gated to
+/// targets where [`crate::pipeline::render_qmd_to_html`] is
+/// reachable. The struct itself is gate-free so tests on native
+/// can construct fixtures.
+#[derive(Debug)]
+pub struct WasmPassTwoOutput {
+    /// Source `.qmd` path (as the orchestrator received it).
+    pub source_path: std::path::PathBuf,
+    /// Rendered HTML for the active page.
+    pub html: String,
+    /// Per-page diagnostics emitted by the head pipeline plus
+    /// every Pass-2 stage.
+    pub diagnostics: Vec<DiagnosticMessage>,
+    /// Source-context handle for translating diagnostic offsets
+    /// into line/column positions on the JS side.
+    pub source_context: SourceContext,
+    /// Per-page (Page-scoped) artifacts produced during the
+    /// render. The orchestrator's project-scoped accumulator
+    /// receives Project-scoped artifacts separately (Phase 5
+    /// invariant).
+    pub page_artifacts: ArtifactStore,
+}
+
+/// In-memory Pass-2 renderer used by the WASM hub-client live
+/// preview.
+///
+/// Wraps [`crate::pipeline::render_qmd_to_html`] with a per-page
+/// VFS-root resolver and produces a [`WasmPassTwoOutput`] that the
+/// orchestrator returns to JS through the
+/// `render_page_in_project` entry point (sub-phase 9.3).
+///
+/// The renderer is `Send`-free in keeping with the rest of the
+/// `?Send` pipeline; on WASM this matches the single-threaded
+/// `wasm-bindgen-futures` executor.
+pub struct RenderToHtmlRenderer {
+    /// Synthetic VFS root under which every artifact (page and
+    /// project scope alike) lives in WASM. `RenderResolverContext::vfs_root`
+    /// will be constructed with this root.
+    vfs_root: std::path::PathBuf,
+}
+
+impl RenderToHtmlRenderer {
+    /// Build a renderer that resolves artifacts under the given
+    /// synthetic VFS root.
+    pub fn new(vfs_root: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            vfs_root: vfs_root.into(),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Pass2Renderer for RenderToHtmlRenderer {
+    type Output = WasmPassTwoOutput;
+
+    async fn render(
+        &mut self,
+        doc_info: &DocumentInfo,
+        format: &Format,
+        _format_str: &str,
+        project: &ProjectContext,
+        index: Arc<ProjectIndex>,
+        runtime: Arc<dyn SystemRuntime>,
+        project_artifacts: &mut ArtifactStore,
+    ) -> Result<Self::Output> {
+        use crate::pipeline::{HtmlRenderConfig, render_qmd_to_html};
+        use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
+
+        // Read source bytes from the runtime (VFS in WASM, native
+        // FS in native test runs).
+        let input_bytes = runtime.file_read(&doc_info.input).map_err(|e| {
+            crate::error::QuartoError::other(format!(
+                "Failed to read {} for Pass-2 render: {}",
+                doc_info.input.display(),
+                e
+            ))
+        })?;
+
+        // Build a per-page resolver. In the hub-client all artifact
+        // URLs land under `/.quarto/project-artifacts/...` (the
+        // post-processor reads from VFS at the matching path); see
+        // Phase 5 sub-plan §"`ResourceResolverContext::vfs_root`".
+        let resolver = ResourceResolverContext::vfs_root(self.vfs_root.clone());
+
+        let binaries = BinaryDependencies::new();
+        let options = RenderOptions {
+            verbose: false,
+            execute: false,
+            use_freeze: false,
+            output_path: None,
+        };
+        let mut ctx =
+            RenderContext::new(project, doc_info, format, &binaries).with_options(options);
+        ctx.project_index = Some(index);
+        ctx.resource_resolver = Some(resolver.clone());
+
+        let config = HtmlRenderConfig::with_resolver(resolver);
+        let source_name = doc_info.input.to_string_lossy().to_string();
+
+        let render_output =
+            render_qmd_to_html(&input_bytes, &source_name, &mut ctx, &config, runtime).await?;
+
+        // Drain Project-scoped artifacts into the orchestrator's
+        // accumulator (Phase 5 invariant). The remaining artifacts
+        // on `ctx.artifacts` are Page-scoped and travel back to JS
+        // alongside the HTML.
+        let drained = ctx.artifacts.drain_project_scoped();
+        project_artifacts.merge_into_project(drained).map_err(|e| {
+            crate::error::QuartoError::other(format!(
+                "Project-scoped artifact merge failed for {}: {}",
+                doc_info.input.display(),
+                e
+            ))
+        })?;
+
+        Ok(WasmPassTwoOutput {
+            source_path: doc_info.input.clone(),
+            html: render_output.html,
+            diagnostics: render_output.diagnostics,
+            source_context: render_output.source_context,
+            page_artifacts: ctx.artifacts,
+        })
+    }
+
+    fn output_path(_output: &Self::Output) -> Option<&Path> {
+        // The WASM renderer doesn't write to disk — there's no
+        // path for `write_sitemap` to key off of, and the hub-client
+        // doesn't run the sitemap hook anyway.
+        None
+    }
+
+    fn build_project_resolver(
+        &self,
+        _project: &ProjectContext,
+        _lib_dir: &str,
+    ) -> ResourceResolverContext {
+        // The WASM resolver collapses every artifact under
+        // `{vfs_root}/{path}` regardless of scope (Phase 5's
+        // `vfs_root_mode` flag), which matches the URLs Pass-2
+        // already embeds in HTML. `lib_dir` is intentionally
+        // ignored — the post-processor just needs to find the
+        // bytes at the URL's path.
+        ResourceResolverContext::vfs_root(self.vfs_root.clone())
     }
 }

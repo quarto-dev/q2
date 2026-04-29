@@ -137,21 +137,36 @@ pub trait ProjectType {
     /// **Phase 5:** receives the orchestrator's project-wide
     /// artifact accumulator (filled by per-doc Pass-2 renders
     /// merging their drained Project-scoped artifacts). Website
-    /// projects flush this to `{output_dir}/{lib_dir}/...`.
-    /// Default projects ignore it (single-doc renders flush
-    /// per-doc inside [`render_document_to_file`] when no
-    /// orchestrator is involved).
+    /// projects flush this through `resolver.on_disk_path_for(...)`,
+    /// which routes to either `{output_dir}/{lib_dir}/...` (native)
+    /// or `{vfs_root}/...` (WASM hub-client). Default projects
+    /// ignore it (single-doc renders flush per-doc inside
+    /// [`render_document_to_file`] when no orchestrator is
+    /// involved).
     ///
     /// **Phase 7:** `diagnostics` is a project-level diagnostic
     /// channel surfaced through [`ProjectRenderSummary`]. The
     /// website hook uses it for non-fatal warnings (e.g.
     /// `website.favicon` references a missing source file).
+    ///
+    /// **Phase 9 sub-phase 9.2:** the `outputs` parameter became
+    /// `output_paths: &[PathBuf]` (just the on-disk render targets,
+    /// the only field native sitemap merge actually needed) so the
+    /// trait remains cross-platform when WASM renderers (whose
+    /// `Pass2Renderer::Output` is not `RenderToFileResult`) use it.
+    /// Native renders extract paths via `R::output_path`; WASM
+    /// renders pass an empty slice. The resolver argument is new
+    /// — Phase 9 §Decision 4. It's the single source of truth for
+    /// "where do Project-scope artifacts live on disk / VFS", so
+    /// hooks like `flush_site_libs` no longer reconstruct the path
+    /// math themselves.
     async fn post_render(
         &self,
         _project: &ProjectContext,
         _index: &ProjectIndex,
-        _outputs: &[RenderToFileResult],
+        _output_paths: &[std::path::PathBuf],
         _project_artifacts: &crate::artifact::ArtifactStore,
+        _resolver: &crate::resource_resolver::ResourceResolverContext,
         _runtime: &dyn quarto_system_runtime::SystemRuntime,
         _diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
@@ -192,10 +207,19 @@ impl ProjectType for WebsiteProjectType {
         "site_libs".to_string()
     }
 
-    /// Run the four website post-render hooks in order:
+    /// Run the website post-render hooks.
     ///
-    /// 1. **`flush_site_libs`** (Phase 5) — drain Project-scoped
-    ///    artifacts to `<output_dir>/site_libs/`.
+    /// **Cross-platform** (Phase 9 sub-phase 9.2):
+    /// 1. **`flush_site_libs`** (Phase 5; resolver-driven) — drain
+    ///    Project-scoped artifacts to whatever destination the
+    ///    resolver decides — `<output_dir>/site_libs/...` natively
+    ///    or `/.quarto/project-artifacts/...` in the hub-client
+    ///    VFS.
+    ///
+    /// **Native-only** (the rest write into the on-disk
+    /// `<output_dir>` which doesn't exist in the in-browser
+    /// preview):
+    ///
     /// 2. **`copy_favicon`** (Phase 7) — copy `website.favicon`
     ///    from the project root to the output dir.
     /// 3. **`write_sitemap`** (Phase 7) — emit `sitemap.xml` when
@@ -207,23 +231,35 @@ impl ProjectType for WebsiteProjectType {
     /// Each hook short-circuits cleanly when its triggering config
     /// is absent, so a website project that opts in to none of
     /// these features just runs the site_libs flush.
-    #[cfg(not(target_arch = "wasm32"))]
     async fn post_render(
         &self,
         project: &ProjectContext,
         index: &ProjectIndex,
-        outputs: &[RenderToFileResult],
+        output_paths: &[std::path::PathBuf],
         project_artifacts: &crate::artifact::ArtifactStore,
-        runtime: &dyn SystemRuntime,
+        resolver: &crate::resource_resolver::ResourceResolverContext,
+        runtime: &dyn quarto_system_runtime::SystemRuntime,
         diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
-        use super::website_post_render::{
-            copy_favicon, flush_site_libs, write_robots_txt, write_sitemap,
-        };
-        flush_site_libs(project, project_artifacts, &self.lib_dir(), runtime)?;
-        copy_favicon(project, runtime, diagnostics)?;
-        write_sitemap(project, index, outputs, runtime)?;
-        write_robots_txt(project, runtime)?;
+        use super::website_post_render::flush_site_libs;
+        flush_site_libs(project_artifacts, resolver, runtime)?;
+        // The remaining hooks write to the on-disk output dir,
+        // which only exists natively. WASM hub-client renders skip
+        // them — see Phase 9 plan §Decision 4.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use super::website_post_render::{copy_favicon, write_robots_txt, write_sitemap};
+            copy_favicon(project, runtime, diagnostics)?;
+            write_sitemap(project, index, output_paths, runtime)?;
+            write_robots_txt(project, runtime)?;
+        }
+        // Suppress unused-warnings on WASM where the cfg block above
+        // is empty. The signature is fixed by the trait, and these
+        // arguments are real (just unused on this target).
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (project, index, output_paths, diagnostics);
+        }
         Ok(())
     }
 }
@@ -444,18 +480,13 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
 
     /// Run Pass 1 → `pre_render` → Pass 2 → `post_render`.
     ///
-    /// Currently bounded to renderers that produce
-    /// [`RenderToFileResult`] because
-    /// [`ProjectType::post_render`] consumes
-    /// `&[RenderToFileResult]` (its native body needs
-    /// per-page output paths to drive the sitemap merge). Phase 9
-    /// sub-phase 9.2 relaxes this once `post_render` is rephrased
-    /// in terms of an extracted output-path slice that both native
-    /// and WASM renderers can produce.
-    pub async fn run(&mut self) -> Result<ProjectRenderSummary<R::Output>>
-    where
-        R: Pass2Renderer<Output = RenderToFileResult>,
-    {
+    /// Cross-platform since Phase 9 sub-phase 9.2: every step
+    /// dispatches through the [`Pass2Renderer`] (for per-doc
+    /// rendering, output-path extraction, and project-resolver
+    /// construction) and the [`ProjectType`] trait (for the
+    /// pre/post hooks). Native and WASM share the same body — only
+    /// the renderer and project-type implementations differ.
+    pub async fn run(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
         let (profiles, pass1_failures) = self.pass_one().await;
         let index = Arc::new(ProjectIndex::new(profiles));
 
@@ -482,13 +513,25 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             .pass_two(index.clone(), &skip, augmented_render_set.as_ref())
             .await;
 
+        // Phase 9 sub-phase 9.2: extract on-disk paths from the
+        // per-doc outputs (`None` for in-memory WASM renders) and
+        // build a project-level resolver for the `post_render`
+        // hook to consume.
+        let output_paths: Vec<std::path::PathBuf> = outputs
+            .iter()
+            .filter_map(|o| R::output_path(o).map(|p| p.to_path_buf()))
+            .collect();
+        let lib_dir = self.project_type.lib_dir();
+        let resolver = self.renderer.build_project_resolver(self.project, &lib_dir);
+
         let mut project_diagnostics: Vec<DiagnosticMessage> = Vec::new();
         self.project_type
             .post_render(
                 self.project,
                 &index,
-                &outputs,
+                &output_paths,
                 &self.project_artifacts,
+                &resolver,
                 self.runtime.as_ref(),
                 &mut project_diagnostics,
             )
@@ -913,6 +956,10 @@ mod tests {
         let t = DefaultProjectType;
         let index = ProjectIndex::default();
         let project_artifacts = crate::artifact::ArtifactStore::new();
+        let resolver = crate::resource_resolver::ResourceResolverContext::project_root(
+            PathBuf::from("/p"),
+            "",
+        );
 
         assert!(t.pre_render(&mut project, &index).await.is_ok());
         let mut diags: Vec<DiagnosticMessage> = Vec::new();
@@ -922,6 +969,7 @@ mod tests {
                 &index,
                 &[],
                 &project_artifacts,
+                &resolver,
                 &runtime,
                 &mut diags,
             )
