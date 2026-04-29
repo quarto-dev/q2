@@ -18,6 +18,7 @@ mod build_trace_viewer;
 mod dev_setup;
 mod lint;
 mod test;
+mod treesitter_crlf;
 mod verify;
 
 use anyhow::Result;
@@ -112,6 +113,10 @@ enum Command {
         #[arg(long)]
         skip_treesitter_tests: bool,
 
+        /// Skip the CRLF parity run of tree-sitter grammar tests.
+        #[arg(long)]
+        skip_treesitter_crlf_tests: bool,
+
         /// Include hub-client e2e tests (slower, requires browser).
         #[arg(long)]
         e2e: bool,
@@ -188,6 +193,7 @@ fn main() -> Result<()> {
             skip_trace_viewer_build,
             skip_trace_viewer_tests,
             skip_treesitter_tests,
+            skip_treesitter_crlf_tests,
             e2e,
             no_deny_warnings,
         } => {
@@ -199,6 +205,7 @@ fn main() -> Result<()> {
                 skip_trace_viewer_build,
                 skip_trace_viewer_tests,
                 skip_treesitter_tests,
+                skip_treesitter_crlf_tests,
                 include_e2e: e2e,
                 no_deny_warnings,
             };
