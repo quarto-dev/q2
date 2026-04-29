@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-04-28
+
+- [`a3ef5e8f`](https://github.com/quarto-dev/q2/commits/a3ef5e8f): Phase 9 sub-phases 9.3–9.4 — `renderToHtml` now drives the new `render_page_in_project` WASM entry point so the live preview renders the active page in the context of its surrounding project (sidebar, navbar, prev/next, cross-doc link rewriting, deduplicated theme CSS); single-file projects fall through to the same path `renderQmd` used to take, so behavior is byte-identical there. `Preview` now re-renders on any sibling-file edit (Decision 6) by depending on the `fileContents` Map identity threaded through `PreviewRouter`.
+
 ### 2026-04-24
 
 - [`542a1686`](https://github.com/quarto-dev/q2/commits/542a1686): Defer remote edit application and presence notifications while the tab is hidden to avoid replay-animation on refocus
