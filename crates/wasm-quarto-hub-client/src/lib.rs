@@ -401,6 +401,22 @@ pub fn vfs_list_files() -> String {
 /// This clears project files while preserving embedded resources
 /// (Bootstrap SCSS files under `/__quarto_resources__/`).
 ///
+/// # ⚠️  Session-teardown only
+///
+/// **Do not call between renders.** Phase 9 (hub-client project
+/// rendering) makes the VFS load-bearing across renders:
+/// `WebsiteProjectType::post_render` flushes Project-scoped
+/// artifacts (theme CSS, shared JS) to
+/// `/.quarto/project-artifacts/...`, and the iframe post-processor
+/// reads those entries back from VFS by absolute path. Clearing
+/// mid-session loses these artifacts and breaks the next preview
+/// (broken `<link rel="stylesheet">` to theme CSS, missing
+/// quarto-nav JS).
+///
+/// Safe call sites: session disconnect, project switch, end-to-end
+/// test teardown. See
+/// `claude-notes/plans/2026-04-27-websites-phase-9.md` §Decision 7.
+///
 /// # Returns
 /// JSON: `{ "success": true }`
 #[wasm_bindgen]

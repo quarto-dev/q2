@@ -655,7 +655,22 @@ phases above.
       (DocumentProfile.includes) and `bd-pphv` (sitemap merge).
       Follow-ups filed at close-out: `bd-par3`, `bd-nv5c`,
       `bd-pp89`, `bd-k8ol`, `bd-nqcv`, `bd-3a0o`, `bd-o505`.
-- [ ] **Phase 9:** Hub-client project rendering.
+- [x] **Phase 9:** Hub-client project rendering.
+      Sub-plan `claude-notes/plans/2026-04-27-websites-phase-9.md`.
+      Sub-phases 9.0 (Pass2Renderer trait extraction), 9.1
+      (un-gate `ProjectPipeline` for WASM), 9.2 (WASM Pass-2
+      renderer + cross-platform `flush_site_libs` driven by the
+      resolver), 9.3 (`render_page_in_project` WASM entry point
+      with new `RenderMode::ActivePage` variant), 9.4 (hub-client
+      switch — `renderToHtml` now drives the project-aware
+      renderer; `Preview`'s re-render `useEffect` depends on
+      `fileContents` so any sibling edit triggers a re-render),
+      9.5 (hub-smoke fixture + native integration tests
+      pinning the WASM code path), 9.6 (close-out). Closes
+      `bd-ayj6`. Browser smoke GIF + manual recipe deferred to a
+      follow-up session; the native integration test
+      (`crates/quarto-core/tests/render_page_in_project.rs`)
+      exercises the same Rust code path the browser would.
 
 Documentation is tracked separately as `bd-tr81`.
 

@@ -969,13 +969,33 @@ it interactively or a future session can script it):
 
 ### Sub-phase 9.6 — Close-out
 
-- [ ] Update epic plan §"Work items" to mark Phase 9 done.
-- [ ] File follow-ups discovered during implementation
-      (`discovered-from:bd-ayj6`, `parent-child:bd-0tr6`).
-- [ ] Per-CLAUDE.md: snapshot file count + summary; explicit
-      callouts for any surprising changes.
-- [ ] Run `cargo xtask verify` one more time clean.
-- [ ] Stage commits, ask user before pushing.
+- [x] Updated epic plan §"Work items" to mark Phase 9 done.
+- [x] Filed follow-ups (all `discovered-from:bd-ayj6`,
+      `parent-child:bd-0tr6`):
+      - `bd-ts8j` — browser smoke recipe + GIF capture (P2).
+      - `bd-izfv` — thread `user_grammars` through
+        `RenderToHtmlRenderer` (P3).
+      - `bd-brn3` — vitest unit tests for `render_page_in_project`
+        (P3).
+      - `bd-zerg` — parallel Pass-1 over project files (P3).
+      - `bd-c3jh` — GC stale VFS artifacts at session end (P4).
+      - `bd-lekl` — deprecate `render_qmd` once
+        `render_page_in_project` is the universal entry point
+        (P4).
+- [x] Decision 7 footgun guards in place:
+      - Doc-comment on `vfs_clear` spelling out the
+        session-teardown-only contract.
+      - `crates/wasm-quarto-hub-client/CLAUDE.md` documenting
+        the VFS state contract + render entry points.
+- [x] Snapshot files: zero added/modified/removed (this phase
+      didn't touch the existing snapshot suites).
+- [x] No surprising changes: every new test asserts an
+      expected contract, every existing test runs unmodified.
+- [x] `cargo xtask verify` passes (Rust workspace + hub-client
+      WASM build + hub-client vitest suite + trace-viewer
+      vitest suite). 8072 workspace tests + 74 hub-client tests
+      green.
+- [ ] Stage commits and ask user before pushing.
 
 ## Risks and mitigations
 
