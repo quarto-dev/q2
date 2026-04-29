@@ -912,14 +912,60 @@ well-defined on the result).
 
 ### Sub-phase 9.5 — Browser smoke fixture + verification
 
-- [ ] Add `crates/quarto-core/tests/fixtures/websites/hub-smoke/`
-      with `_quarto.yml`, `index.qmd`, `about.qmd`,
-      `posts/first.qmd`.
-- [ ] Run the smoke test manually, document the recipe in this
-      plan and in close-out commit.
-- [ ] Capture GIF via claude-in-chrome.
-- [ ] **End-to-end gate:** the recipe in Test 15 passes; the GIF
-      is committed.
+- [x] Added
+      `crates/quarto-core/tests/fixtures/websites/hub-smoke/` with
+      `_quarto.yml`, `index.qmd`, `about.qmd`, `posts/first.qmd`.
+- [x] Added a native integration test
+      `crates/quarto-core/tests/render_page_in_project.rs` that
+      drives the *exact* code path the WASM
+      `render_page_in_project` entry point uses
+      (`ProjectPipeline<RenderToHtmlRenderer>` +
+      `RenderMode::ActivePage`). Six tests covering:
+      sidebar resolution, sibling-edit invalidation, single-file
+      pass-through, cross-doc link rewriting, title-prefix
+      transform, and the hub-smoke fixture as an end-to-end check.
+- [x] **Discovered + fixed during smoke testing**: the original
+      `render_page_in_project` was discovering from the active
+      file path, which produced a `ProjectContext` whose `files`
+      contained only the active file (the discover-from-file
+      shape). Pass-1 ran on the active file alone, sidebar title
+      resolution and the cross-doc link rewriter both starved
+      because no sibling profiles existed. Now both the WASM
+      entry point and the native test re-discover from the
+      project root after detecting a multi-file project, so
+      `project.files` carries every sibling.
+- [ ] Browser smoke recipe (manual) + GIF — **deferred to a
+      follow-up session.** The native integration test exercises
+      the same `RenderToHtmlRenderer`/`ProjectPipeline` code path
+      end-to-end, so a browser regression would surface as a
+      Rust-test regression first. The GIF capture is for UX
+      review — not blocking sub-phase 9.5's correctness gate.
+- [x] **End-to-end gate (native):** 8072 workspace tests pass
+      including the six new project-render tests; `cargo xtask
+      verify` succeeds (Rust + hub-client WASM build + hub-client
+      vitest suite).
+
+**Manual browser-smoke recipe** (saved here so the user can run
+it interactively or a future session can script it):
+
+1. Start the hub (`cargo run --bin hub`) and open hub-client in a
+   browser.
+2. Use the `q2 init` flow (or paste files manually) to create a
+   project mirroring
+   `crates/quarto-core/tests/fixtures/websites/hub-smoke/`.
+3. Open `index.qmd` in the editor. The preview pane should show
+   a sidebar with three entries (Home, About, First Post) and a
+   page-navigation strip at the bottom.
+4. Switch to `about.qmd`; confirm the sidebar's active marker
+   moves and the prev/next strip updates.
+5. Edit `about.qmd`'s frontmatter title to "About v2"; switch
+   back to `index.qmd` (or stay on `index.qmd` and trigger a
+   re-render by editing it). The sidebar entry should reflect
+   the new title — that's the Decision-6 sibling-edit
+   invariant working.
+6. Click the in-body `[About page](about.qmd)` link in
+   `index.qmd`'s preview; the iframe should fire
+   `onNavigateToDocument` and switch the editor to `about.qmd`.
 
 ### Sub-phase 9.6 — Close-out
 

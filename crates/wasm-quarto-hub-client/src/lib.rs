@@ -1196,6 +1196,9 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
         }
     };
 
+    // Discover from the active path first to find any
+    // `_quarto.yml` ancestor and learn whether this is a
+    // single-file or multi-file project.
     let project = match ProjectContext::discover(path, runtime) {
         Ok(p) => p,
         Err(e) => {
@@ -1210,8 +1213,18 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
         return render_single_doc_to_response(path, &content, &project, user_grammars).await;
     }
 
-    // Multi-doc project: drive the orchestrator with the WASM
-    // renderer and `ActivePage` mode.
+    // Multi-doc project. The discover-from-file form returns a
+    // project whose `files` is just `[active]`, which would
+    // starve Pass-1 of every sibling's profile and break the
+    // sidebar's title resolution / cross-doc link rewriter.
+    // Re-discover from the project root so we get the full
+    // sibling list.
+    let project = match ProjectContext::discover(&project.dir, runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            return error_response(format!("Failed to enumerate project files: {}", e));
+        }
+    };
     render_project_active_page_to_response(&path_buf, &content, project, user_grammars).await
 }
 
@@ -1325,6 +1338,13 @@ async fn render_project_active_page_to_response(
     let project_type = project_type_for(&project);
     let renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
 
+    // Canonicalize the active path so it matches the form
+    // `project.files` was filled with (Pass-2's `RenderMode::ActivePage`
+    // filter compares absolute-path equality against `DocumentInfo.input`).
+    let active_canonical = get_runtime()
+        .canonicalize(active_path)
+        .unwrap_or_else(|_| active_path.to_path_buf());
+
     let mut pipeline = ProjectPipeline::with_renderer(
         &mut project,
         project_type,
@@ -1333,7 +1353,7 @@ async fn render_project_active_page_to_response(
         Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>,
         renderer,
     )
-    .with_mode(RenderMode::ActivePage(active_path.to_path_buf()));
+    .with_mode(RenderMode::ActivePage(active_canonical));
 
     let summary = match pipeline.run().await {
         Ok(s) => s,

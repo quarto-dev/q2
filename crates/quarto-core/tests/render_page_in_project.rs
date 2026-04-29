@@ -1,0 +1,350 @@
+/*
+ * tests/render_page_in_project.rs
+ * Copyright (c) 2026 Posit, PBC
+ *
+ * Phase 9 sub-phase 9.5: end-to-end native test of the same
+ * code path the WASM `render_page_in_project` entry point drives
+ * — `ProjectPipeline<RenderToHtmlRenderer>` with
+ * `RenderMode::ActivePage(target)`.
+ */
+
+//! Integration tests for the WASM Pass-2 renderer.
+//!
+//! These run on **native** (using the same `NativeRuntime` the
+//! CLI uses) but exercise the *exact* renderer the WASM
+//! `render_page_in_project` entry point uses — `RenderToHtmlRenderer`
+//! returning [`WasmPassTwoOutput`] in-memory rather than writing to
+//! disk. The HTML is inspected for sidebar entries, cross-document
+//! link rewriting, page-scope artifacts, and project-scope artifact
+//! flush via `flush_site_libs`.
+//!
+//! Pinning native coverage on this code path means a regression in
+//! the project-rendering machinery surfaces in `cargo nextest run`
+//! before it reaches the browser. The browser smoke (sub-phase 9.5)
+//! then confirms the same path works against MorphIframe + Monaco.
+//!
+//! See `claude-notes/plans/2026-04-27-websites-phase-9.md` §Tests
+//! 11–14 (refraled around the unified entry point).
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use tempfile::TempDir;
+
+use quarto_core::format::Format;
+use quarto_core::project::ProjectContext;
+use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
+use quarto_core::project::pass2_renderer::{RenderToHtmlRenderer, WasmPassTwoOutput};
+use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+
+fn write(path: &Path, contents: &str) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(path, contents).unwrap();
+}
+
+fn canonical(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Drive `ProjectPipeline<RenderToHtmlRenderer>` with
+/// `RenderMode::ActivePage(active)`. Mirrors what the WASM
+/// `render_page_in_project` entry point does, just against the
+/// native filesystem instead of the in-memory VFS.
+///
+/// `vfs_root` is the path the WASM renderer would synthesize as
+/// the artifact root. In WASM that's an absolute path under the
+/// in-memory VFS (`/.quarto/project-artifacts`). On native
+/// `NativeRuntime`, we point it at a real subdirectory of the
+/// temp test fixture so `flush_site_libs` can actually write
+/// without bumping into read-only system paths.
+fn render_active_page(project_dir: &Path, active: &Path) -> WasmPassTwoOutput {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    // Discover from the active file first — that locates the
+    // `_quarto.yml` and tells us whether this is a single-file or
+    // multi-file project. When it's multi-file, re-discover from
+    // the project root so `project.files` contains every sibling
+    // (the active-file form returns just `[active]`, which would
+    // starve Pass-1 of every other file's profile and break the
+    // sidebar's title resolution and the cross-doc link rewriter).
+    let mut project = ProjectContext::discover(active, runtime.as_ref()).unwrap();
+    if !project.is_single_file {
+        project = ProjectContext::discover(&project.dir, runtime.as_ref()).unwrap();
+    }
+    let _ = project_dir; // canonicalization happens via `project.dir`
+
+    let project_type = project_type_for(&project);
+    let vfs_root = project.dir.join(".quarto/project-artifacts");
+    let renderer = RenderToHtmlRenderer::new(&vfs_root);
+
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        Format::html(),
+        "html",
+        runtime.clone(),
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active.to_path_buf()));
+
+    let summary = pollster::block_on(pipeline.run()).expect("pipeline run");
+    assert!(
+        summary.pass1_failures.is_empty(),
+        "unexpected pass-1 failures: {:?}",
+        summary.pass1_failures,
+    );
+    assert!(
+        summary.pass2_failures.is_empty(),
+        "unexpected pass-2 failures: {:?}",
+        summary.pass2_failures,
+    );
+    assert_eq!(
+        summary.outputs.len(),
+        1,
+        "ActivePage mode should produce exactly one output"
+    );
+    summary.outputs.into_iter().next().unwrap()
+}
+
+/// Plan test 8 (refraled): a two-file website fixture renders the
+/// active page with the sibling listed in the sidebar.
+#[test]
+fn website_sidebar_includes_sibling_pages() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  title: Test\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello.\n",
+    );
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\nAbout this site.\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page(&project_dir, &active);
+
+    assert!(
+        output.html.contains("class=\"sidebar"),
+        "rendered HTML should contain the sidebar block; got {}",
+        snippet(&output.html)
+    );
+    assert!(
+        output.html.contains(">About<") || output.html.contains(">About\n<"),
+        "sidebar should reference the sibling 'About' entry; got {}",
+        snippet(&output.html)
+    );
+    // The vfs_root resolver makes URLs absolute under the synthetic
+    // root; the cross-doc link rewriter still resolves the page
+    // identity to `about.html`, just prefixed with the vfs root.
+    assert!(
+        output.html.contains("about.html\""),
+        "sidebar entry for about.qmd should rewrite to about.html; got {}",
+        snippet(&output.html)
+    );
+}
+
+/// Plan test 9 (refraled): editing a sibling's frontmatter title
+/// changes the rendered sidebar entry on the next render. The
+/// hub-client's "any-edit triggers re-render" behavior relies on
+/// this.
+#[test]
+fn sibling_title_edit_reflects_in_sidebar() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello.\n",
+    );
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About v1\n---\n\nFirst version.\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let first = render_active_page(&project_dir, &active);
+    assert!(
+        first.html.contains(">About v1<"),
+        "first render should show 'About v1'; got {}",
+        snippet(&first.html)
+    );
+
+    // Edit about.qmd's title and re-render the (unchanged) index.
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About v2\n---\n\nFirst version.\n",
+    );
+    let second = render_active_page(&project_dir, &active);
+    assert!(
+        second.html.contains(">About v2<"),
+        "second render should reflect the new sibling title; got {}",
+        snippet(&second.html)
+    );
+    assert!(
+        !second.html.contains(">About v1<"),
+        "second render should *not* still show the old title; got {}",
+        snippet(&second.html)
+    );
+}
+
+/// Plan test 10 (refraled): single-file render (no `_quarto.yml`)
+/// produces HTML with no sidebar block.
+#[test]
+fn single_file_no_sidebar() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("only.qmd"),
+        "---\ntitle: Only\n---\n\nA single document.\n",
+    );
+
+    let active = canonical(&project_dir.join("only.qmd"));
+    let output = render_active_page(&project_dir, &active);
+
+    assert!(
+        !output.html.contains("class=\"sidebar"),
+        "single-file render should have no sidebar; got {}",
+        snippet(&output.html)
+    );
+    assert!(
+        output.html.contains("Only"),
+        "rendered HTML should contain the page title; got {}",
+        snippet(&output.html)
+    );
+}
+
+/// Plan test 12: cross-document link rewriting. `[link](b.qmd)` in
+/// the active page renders as `href="b.html"`.
+#[test]
+fn cross_document_link_rewrites_to_html() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nSee [about](about.qmd).\n",
+    );
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\nA.\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page(&project_dir, &active);
+
+    assert!(
+        output.html.contains("href=\"about.html\""),
+        "[link](about.qmd) should rewrite to href=\"about.html\"; got {}",
+        snippet(&output.html)
+    );
+}
+
+/// Plan test 14: per-page transforms still fire under the WASM
+/// renderer — title prefix is applied (`<title>Home – Test</title>`).
+#[test]
+fn title_prefix_applied_in_website_render() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  title: Test Site\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello.\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page(&project_dir, &active);
+
+    // Phase-7 title-prefix transform: the page title is suffixed
+    // with the website title separated by an en-dash.
+    assert!(
+        output.html.contains("<title>Home – Test Site</title>"),
+        "title prefix should be applied; got {}",
+        snippet(&output.html)
+    );
+}
+
+/// Plan test 15-equivalent (the 'hub-smoke' fixture): the
+/// committed fixture under
+/// `crates/quarto-core/tests/fixtures/websites/hub-smoke/` renders
+/// the active `index.qmd` cleanly — sidebar contains all three
+/// entries, cross-doc link rewrites, no failures.
+#[test]
+fn hub_smoke_fixture_renders_cleanly() {
+    // Copy the fixture into a temp dir so canonicalize can resolve
+    // it without the read-only `target/` interleaving.
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    copy_fixture("websites/hub-smoke", &project_dir);
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page(&project_dir, &active);
+
+    // Sidebar lists all three pages (rewritten to .html).
+    assert!(
+        output.html.contains("href=\"about.html\""),
+        "sidebar should link to about.html; got {}",
+        snippet(&output.html)
+    );
+    assert!(
+        output.html.contains("href=\"posts/first.html\""),
+        "sidebar should link to posts/first.html; got {}",
+        snippet(&output.html)
+    );
+
+    // Cross-doc body link from index.qmd's body rewrites too.
+    let about_links = output.html.matches("href=\"about.html\"").count();
+    assert!(
+        about_links >= 2,
+        "expected at least one body href + one sidebar href to about.html; got {} matches",
+        about_links
+    );
+}
+
+fn copy_fixture(rel: &str, dst: &Path) {
+    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(rel);
+    copy_dir_recursive(&src, dst);
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for entry in std::fs::read_dir(src).unwrap() {
+        let entry = entry.unwrap();
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if from.is_dir() {
+            copy_dir_recursive(&from, &to);
+        } else {
+            std::fs::copy(&from, &to).unwrap();
+        }
+    }
+}
+
+fn snippet(s: &str) -> String {
+    if s.len() <= 200 {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..200])
+    }
+}

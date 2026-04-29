@@ -1,0 +1,9 @@
+---
+title: Home
+---
+
+Welcome to the Phase 9 hub-smoke website. This page is the landing
+page for the smoke fixture.
+
+See the [About page](about.qmd) for more, or read the
+[first post](posts/first.qmd).

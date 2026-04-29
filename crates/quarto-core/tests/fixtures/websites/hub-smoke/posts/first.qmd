@@ -1,0 +1,10 @@
+---
+title: First Post
+---
+
+# First Post
+
+This is a deeply-nested page (`posts/first.qmd`). The active
+sidebar entry should highlight on this page; the cross-document
+[link back to Home](../index.qmd) should resolve to `../index.html`
+through the Phase 6 `LinkRewriteTransform`.

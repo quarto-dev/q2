@@ -1,0 +1,8 @@
+---
+title: About
+---
+
+This fixture exercises the hub-client live preview against a small
+website project. Edit any page's frontmatter title or body and the
+sidebar on [the Home page](index.qmd) should reflect the change on
+the next render.
