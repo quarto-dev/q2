@@ -341,13 +341,20 @@ impl<O> ProjectRenderSummary<O> {
 ///   plus any always-render pages whose reverse dependencies
 ///   intersect them. Used by `quarto render foo.qmd`,
 ///   `quarto render foo/`, and `quarto render a.qmd b.qmd c.qmd`.
+/// - [`RenderMode::ActivePage`] (Phase 9) — render exactly the
+///   named page. No dependency-graph augmentation: the hub-client
+///   live preview only ever has one page on screen, so always-
+///   render-dependent siblings are out of scope (the user can't
+///   see them). This is the default mode for the WASM
+///   `render_page_in_project` entry point.
 ///
-/// Both modes still do a full Pass-1 over every project page —
+/// All modes still do a full Pass-1 over every project page —
 /// the dependency graph builder needs every profile to derive
 /// sidebar / body-link / nav-dependency edges correctly, and the
 /// Phase 8 profile cache makes the warm-path Pass-1 cost
 /// negligible. Mode B's optimization is in Pass-2: only the
 /// augmented target set runs filters, engines, and rendering.
+/// Mode `ActivePage` further restricts Pass-2 to a single file.
 ///
 /// A later optimization may reduce Mode B's Pass-1 to a partial
 /// walk (target → sibling closure), but doing so safely requires
@@ -358,6 +365,7 @@ impl<O> ProjectRenderSummary<O> {
 pub enum RenderMode {
     Full,
     Subset(std::collections::HashSet<std::path::PathBuf>),
+    ActivePage(std::path::PathBuf),
 }
 
 impl Default for RenderMode {
@@ -802,6 +810,10 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     ///   pages whose reverse-closure intersects them, and returns
     ///   the result as absolute paths matching `DocumentInfo.input`
     ///   on each project file.
+    /// - [`RenderMode::ActivePage(path)`] (Phase 9) → returns the
+    ///   single named page, no graph augmentation. Hub-client live
+    ///   preview only renders the page on screen; always-render
+    ///   siblings aren't user-visible.
     ///
     /// `targets` are absolute paths (CLI args have been canonicalized
     /// by the caller). They're translated to project-relative paths
@@ -812,6 +824,14 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         &self,
         index: &Arc<ProjectIndex>,
     ) -> Option<std::collections::HashSet<std::path::PathBuf>> {
+        // Phase 9: ActivePage skips graph augmentation entirely —
+        // the hub-client preview renders exactly one page.
+        if let RenderMode::ActivePage(target) = &self.mode {
+            let mut set = std::collections::HashSet::new();
+            set.insert(target.clone());
+            return Some(set);
+        }
+
         let RenderMode::Subset(target_abs_paths) = &self.mode else {
             return None;
         };

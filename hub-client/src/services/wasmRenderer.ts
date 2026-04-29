@@ -45,6 +45,14 @@ interface WasmModuleExtended {
     templateBundle: string,
     user_grammars?: unknown,
   ) => Promise<string>;
+  // Phase 9: project-aware render. Discovers the surrounding
+  // `_quarto.yml` (if any) and either falls through to the
+  // single-doc path (no project) or drives `ProjectPipeline`
+  // with `RenderMode::ActivePage(path)`.
+  render_page_in_project: (
+    path: string,
+    user_grammars?: unknown,
+  ) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
@@ -347,6 +355,27 @@ export async function renderQmd(
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   return JSON.parse(await wasm.render_qmd(path, userGrammars));
+}
+
+/**
+ * Render a single page **in the context of its surrounding project**.
+ *
+ * Phase 9 entry point: discovers the surrounding `_quarto.yml` from
+ * the VFS and either falls through to the single-doc render (no
+ * project ancestor) or drives `ProjectPipeline` with
+ * `RenderMode::ActivePage(path)` so the active page renders with
+ * project-level affordances (sidebar, navbar, prev/next strip,
+ * cross-document link rewriting, deduplicated theme CSS).
+ *
+ * Returns the same `RenderResponse` shape as `renderQmd`; the
+ * project flavor is opaque to callers.
+ */
+export async function renderPageInProject(
+  path: string,
+  userGrammars?: unknown,
+): Promise<RenderResponse> {
+  const wasm = getWasm();
+  return JSON.parse(await wasm.render_page_in_project(path, userGrammars));
 }
 
 /**
@@ -840,8 +869,14 @@ export async function renderToHtml(
       grammarsHandle = await prepareUserGrammarsHandle(userGrammars);
     }
 
-    // Render from VFS with full project context
-    const result: RenderResponse = await renderQmd(documentPath, grammarsHandle);
+    // Phase 9: render with full project context. The WASM side
+    // handles project discovery itself — single-file projects fall
+    // through to the same path `renderQmd` used to take, so this
+    // switch is unconditional.
+    const result: RenderResponse = await renderPageInProject(
+      documentPath,
+      grammarsHandle,
+    );
 
     if (result.success) {
       // Compute CSS version from the pipeline's CSS artifact in VFS.

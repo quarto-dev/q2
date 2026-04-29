@@ -1155,6 +1155,275 @@ pub async fn render_qmd_content(
     }
 }
 
+/// Render a single page **in the context of its surrounding project**.
+///
+/// Phase 9 entry point used by the hub-client live preview. The
+/// flow:
+///
+/// 1. Read the source from VFS.
+/// 2. Discover the project context (walks parent dirs for
+///    `_quarto.yml`).
+/// 3. **Single-file** (no `_quarto.yml` ancestor) → fall through
+///    to the existing single-doc render path. Output is byte-
+///    identical to `render_qmd`.
+/// 4. **Multi-file project** → drive `ProjectPipeline` with the
+///    WASM `RenderToHtmlRenderer` and `RenderMode::ActivePage(…)`.
+///    Pass-1 runs over every project file (cache-backed via the
+///    Phase-8 `cache_get`/`cache_set` infra), `pre_render` runs,
+///    Pass-2 renders just the active page, and `post_render`
+///    flushes Project-scoped artifacts to VFS via the same
+///    resolver Pass-2 used.
+///
+/// In both branches the response shape is the same `RenderResponse`
+/// JSON `render_qmd` returns today — the JS layer doesn't need a
+/// new type.
+///
+/// # Arguments
+/// * `path` - Path to the active QMD file in VFS.
+/// * `user_grammars` - Optional user-grammar provider; same
+///   semantics as for [`render_qmd`].
+#[wasm_bindgen]
+pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
+    let runtime = get_runtime();
+    let path_buf = std::path::PathBuf::from(path);
+    let path = path_buf.as_path();
+
+    // Read the file from VFS up front. Both branches need it.
+    let content = match runtime.file_read(path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return error_response(format!("Failed to read file: {}", e));
+        }
+    };
+
+    let project = match ProjectContext::discover(path, runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            return error_response(format!("Failed to discover project context: {}", e));
+        }
+    };
+
+    // Single-file: no `_quarto.yml` was found in any ancestor.
+    // Behavior is byte-identical to `render_qmd` — same single-doc
+    // pipeline, same VFS-root resolver, same VFS artifact dump.
+    if project.is_single_file {
+        return render_single_doc_to_response(path, &content, &project, user_grammars).await;
+    }
+
+    // Multi-doc project: drive the orchestrator with the WASM
+    // renderer and `ActivePage` mode.
+    render_project_active_page_to_response(&path_buf, &content, project, user_grammars).await
+}
+
+/// Single-doc render path — used by `render_qmd` directly and by
+/// `render_page_in_project` when no `_quarto.yml` ancestor exists.
+///
+/// Returns the [`RenderResponse`] JSON string the JS layer expects.
+async fn render_single_doc_to_response(
+    path: &Path,
+    content: &[u8],
+    project: &ProjectContext,
+    user_grammars: Option<JsUserGrammars>,
+) -> String {
+    let doc = DocumentInfo::from_path(path);
+    let binaries = BinaryDependencies::new();
+
+    let content_str = std::str::from_utf8(content).unwrap_or("");
+    let format_str = detect_format_from_content(content_str);
+    let format = match Format::from_format_string(&format_str) {
+        Ok(f) => f,
+        Err(e) => return error_response(e),
+    };
+
+    let options = RenderOptions {
+        verbose: false,
+        execute: false,
+        use_freeze: false,
+        output_path: None,
+    };
+
+    let mut ctx = RenderContext::new(project, &doc, &format, &binaries).with_options(options);
+    if let Some(provider) = user_grammars {
+        ctx.user_grammar_provider = Some(Box::new(provider));
+    }
+
+    // Phase 5 VFS-root resolver — every artifact resolves under
+    // `/.quarto/project-artifacts/...` so the post-processor can
+    // read them from VFS at the matching path.
+    let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+    ctx.resource_resolver = Some(resolver.clone());
+    let config = HtmlRenderConfig::with_resolver(resolver.clone());
+    let source_name = path.to_string_lossy();
+
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
+
+    match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
+        Ok(output) => {
+            // Populate VFS with artifacts — Phase 5 routes both
+            // page- and project-scope artifacts under the same
+            // synthetic root in vfs_root mode.
+            let runtime = get_runtime();
+            for (_key, artifact) in ctx.artifacts.iter() {
+                if let Some(artifact_path) = &artifact.path {
+                    let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
+                    runtime.add_file(&vfs_path, artifact.content.clone());
+                }
+            }
+
+            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
+            serde_json::to_string(&RenderResponse {
+                success: true,
+                error: None,
+                html: Some(output.html),
+                diagnostics: None,
+                warnings: if warnings.is_empty() {
+                    None
+                } else {
+                    Some(warnings)
+                },
+            })
+            .unwrap()
+        }
+        Err(e) => render_error_response(e),
+    }
+}
+
+/// Project-scoped render path — drives the orchestrator with
+/// `RenderToHtmlRenderer` to produce just the active page in the
+/// context of its surrounding project (sidebar, navbar, cross-doc
+/// links, deduplicated theme CSS).
+async fn render_project_active_page_to_response(
+    active_path: &Path,
+    _content: &[u8],
+    mut project: ProjectContext,
+    user_grammars: Option<JsUserGrammars>,
+) -> String {
+    use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
+    use quarto_core::project::pass2_renderer::RenderToHtmlRenderer;
+
+    // Detect format from the *active* file's content. (Pass 1 in
+    // the orchestrator re-reads each file's bytes — for the active
+    // file, those bytes are the freshly-edited buffer in VFS.)
+    let active_bytes = match get_runtime().file_read(active_path) {
+        Ok(b) => b,
+        Err(e) => return error_response(format!("Failed to read active file: {}", e)),
+    };
+    let content_str = std::str::from_utf8(&active_bytes).unwrap_or("");
+    let format_str = detect_format_from_content(content_str);
+    let format = match Format::from_format_string(&format_str) {
+        Ok(f) => f,
+        Err(e) => return error_response(e),
+    };
+
+    // Note: `user_grammars` is currently dropped on the orchestrator
+    // path because the renderer constructs its own RenderContext
+    // per page. Threading user grammars through the renderer is a
+    // sub-phase 9.4 follow-up — file as bd-XXXX on close-out.
+    let _ = user_grammars;
+
+    let project_type = project_type_for(&project);
+    let renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
+
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        format,
+        format_str,
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>,
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active_path.to_path_buf()));
+
+    let summary = match pipeline.run().await {
+        Ok(s) => s,
+        Err(e) => return render_error_response(e),
+    };
+
+    // Locate the active page's output. With `RenderMode::ActivePage`
+    // the orchestrator emits exactly one entry — the active page.
+    let active_output = match summary.outputs.into_iter().next() {
+        Some(o) => o,
+        None => {
+            // No output usually means Pass-2 failed for the active
+            // page. Surface the first failure (if any) instead.
+            if let Some(failure) = summary.pass2_failures.into_iter().next() {
+                return error_response(format!(
+                    "Pass 2 failed for {}: {}",
+                    failure.input.display(),
+                    failure.error
+                ));
+            }
+            return error_response("Project render produced no output for the active page");
+        }
+    };
+
+    // Populate VFS with the active page's Page-scoped artifacts.
+    // (Project-scoped artifacts were already flushed to VFS by
+    // `WebsiteProjectType::post_render` → `flush_site_libs` via
+    // the WASM renderer's vfs_root resolver.)
+    let runtime = get_runtime();
+    let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+    for (_key, artifact) in active_output.page_artifacts.iter() {
+        if let Some(artifact_path) = &artifact.path {
+            let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
+            runtime.add_file(&vfs_path, artifact.content.clone());
+        }
+    }
+
+    // Per-page diagnostics + project-level diagnostics flow into a
+    // single `warnings` array (Phase 9 §Decision 12). The JS layer
+    // converts these to Monaco markers.
+    let mut all_diags = active_output.diagnostics.clone();
+    all_diags.extend(summary.project_diagnostics);
+    let warnings = diagnostics_to_json(&all_diags, &active_output.source_context);
+
+    serde_json::to_string(&RenderResponse {
+        success: true,
+        error: None,
+        html: Some(active_output.html),
+        diagnostics: None,
+        warnings: if warnings.is_empty() {
+            None
+        } else {
+            Some(warnings)
+        },
+    })
+    .unwrap()
+}
+
+/// Build a `success: false` response with no diagnostics.
+fn error_response(msg: impl Into<String>) -> String {
+    serde_json::to_string(&RenderResponse {
+        success: false,
+        error: Some(msg.into()),
+        html: None,
+        diagnostics: None,
+        warnings: None,
+    })
+    .unwrap()
+}
+
+/// Build a `success: false` response, attaching parser diagnostics
+/// when available.
+fn render_error_response(e: QuartoError) -> String {
+    let (error_msg, diagnostics) = match &e {
+        QuartoError::Parse(parse_error) => {
+            let diags = diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
+            (e.to_string(), Some(diags))
+        }
+        _ => (e.to_string(), None),
+    };
+    serde_json::to_string(&RenderResponse {
+        success: false,
+        error: Some(error_msg),
+        html: None,
+        diagnostics,
+        warnings: None,
+    })
+    .unwrap()
+}
+
 /// Get a built-in template as a JSON bundle.
 ///
 /// # Arguments

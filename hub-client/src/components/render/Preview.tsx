@@ -27,6 +27,15 @@ interface PreviewProps {
   content: string;
   currentFile: FileEntry | null;
   files: FileEntry[];
+  /**
+   * Phase 9 (Decision 6): a fresh `Map` identity is produced on
+   * every Automerge edit (`App.tsx::setFileContents`). Passing it
+   * as a `useEffect` dep is what makes the project-aware preview
+   * re-render when *any* sibling file changes — a sibling's title
+   * edit can shift the active page's sidebar HTML, and the user
+   * expects to see that live.
+   */
+  fileContents: Map<string, string>;
   scrollSyncEnabled: boolean;
   editorRef: React.RefObject<Monaco.editor.IStandaloneCodeEditor | null>;
   editorReady: boolean;
@@ -118,6 +127,7 @@ export default function Preview({
   content,
   currentFile,
   files,
+  fileContents,
   scrollSyncEnabled,
   editorRef,
   editorReady,
@@ -264,7 +274,17 @@ export default function Preview({
     }, 20);
   }, [doRenderWithStateManagement]);
 
-  // Re-render when content changes
+  // Re-render when the active page's content changes OR when any
+  // sibling file's content changes (Phase 9 Decision 6). For
+  // single-file projects this is identical to "active content
+  // changed" — the map only contains the active file. For website
+  // projects, a sibling title edit shifts the rendered sidebar
+  // HTML, so the active page must re-render.
+  //
+  // The `fileContents` Map gets a fresh identity on every Automerge
+  // edit (App.tsx:370-377), so depending on it lets React fire this
+  // effect without us doing any change detection ourselves. The
+  // 20ms debounce inside `updatePreview` absorbs burst edits.
   useEffect(() => {
     const filePath = currentFile?.path;
 
@@ -276,7 +296,7 @@ export default function Preview({
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
     // The WASM layer will use VFS path normalization to resolve relative paths correctly.
     updatePreview(content, filePath);
-  }, [content, updatePreview, currentFile?.path]);
+  }, [content, fileContents, updatePreview, currentFile?.path]);
 
   // Reset preview state when file changes
   useEffect(() => {

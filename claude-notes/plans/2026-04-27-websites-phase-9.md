@@ -861,32 +861,54 @@ well-defined on the result).
 
 ### Sub-phase 9.3 — `render_page_in_project` WASM entry point
 
-- [ ] Extract the body of current `render_qmd` into a private
-      helper `render_qmd_single(path, content, runtime,
-      user_grammars) -> RenderResponse`.
-- [ ] Add `render_page_in_project(path, user_grammars)` that:
-      - discovers project context,
-      - falls through to `render_qmd_single` for single-file,
-      - otherwise constructs `ProjectPipeline<RenderToHtmlRenderer>`
-        with `RenderMode::Full` plus a single-target filter,
-      - returns the same `RenderResponse` shape.
-- [ ] Unit tests 8–14 (vitest under hub-client).
-- [ ] Confirm the existing `render_qmd` still works
-      (call-compat check).
-- [ ] **Verification gate:** `cargo xtask verify` + hub-client
-      vitest suite.
+- [x] Add `render_page_in_project(path, user_grammars)` in
+      `crates/wasm-quarto-hub-client/src/lib.rs`. Discovers project
+      context; falls through to `render_single_doc_to_response`
+      (a small private helper extracted alongside the existing
+      `render_qmd` call) when no `_quarto.yml` ancestor exists;
+      otherwise drives `ProjectPipeline<RenderToHtmlRenderer>`
+      with the new `RenderMode::ActivePage(path)` so Pass-2
+      renders only the active page (no graph augmentation — see
+      below). Per-page artifacts get manually written to VFS;
+      project-scoped artifacts are flushed by `post_render`'s
+      cross-platform `flush_site_libs`.
+- [x] Added a new `RenderMode::ActivePage(PathBuf)` variant to
+      `crates/quarto-core/src/project/orchestrator.rs`. The
+      hub-client live preview only ever has one page on screen,
+      so always-render-dependent siblings (Mode B's
+      augmentation) are out of scope. `compute_augmented_render_set`
+      handles the new variant before falling through to the Mode B
+      logic.
+- [x] Existing `render_qmd` left intact (Decision 10) — its
+      single-doc body is still the path the helper takes for
+      single-file projects.
+- [ ] Unit tests 8–14 (vitest under hub-client) — **deferred**
+      to a follow-up task before close-out. The smoke fixture
+      (sub-phase 9.5) provides a stronger test of the same
+      contract; vitest tests assert the JSON response shape but
+      don't exercise the post-processor.
+- [x] **Verification gate:** `cargo xtask verify` passes (Rust
+      workspace + hub-client WASM build + hub-client vitest suite).
 
 ### Sub-phase 9.4 — Hub-client switch (`wasmRenderer.ts`)
 
-- [ ] Add `render_page_in_project` to the `WasmModuleExtended`
-      interface.
-- [ ] Add a `renderPageInProject` TS function mirroring `renderQmd`.
-- [ ] Switch `renderToHtml`'s call from `renderQmd` to
-      `renderPageInProject`.
-- [ ] Update the `Preview.tsx` `useEffect` deps to include
-      `files` so any sibling edit triggers a re-render.
-- [ ] **Verification gate:** `cd hub-client && npm run build:all
-      && npm run test:ci` passes.
+- [x] Added `render_page_in_project` to `WasmModuleExtended`.
+- [x] Added a `renderPageInProject` TS function mirroring
+      `renderQmd`.
+- [x] Switched `renderToHtml`'s dispatch from `renderQmd` to
+      `renderPageInProject` unconditionally — the single-file
+      classification lives on the WASM side so the TS layer
+      stays a thin pass-through.
+- [x] Threaded `fileContents: Map<string, string>` through
+      `PreviewRouter` → `Preview` and added it to the
+      `useEffect` deps that trigger re-render. Per Decision 6,
+      every Automerge edit produces a fresh Map identity, so the
+      effect now fires on any sibling change without explicit
+      change-detection logic on our side. The Phase-8 cache key
+      handles the actual invalidation work — sibling edits hit
+      the cache for unchanged files; the active page re-runs.
+- [x] **Verification gate:** `npm run build:all` +
+      `npm run test:ci` pass (74 hub-client tests green).
 
 ### Sub-phase 9.5 — Browser smoke fixture + verification
 
