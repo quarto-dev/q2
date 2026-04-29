@@ -11,7 +11,7 @@ If you stumbled here from a `target/` directory growing unexpectedly, or wondere
 - CI on `ubuntu-latest` has very little disk space (~14 GB free after the runner image, partially recovered by a cleanup action).
 - The default `dev` profile emits full debuginfo, which roughly **doubles** `target/` size on a workspace this big.
 - We added a `[profile.ci]` profile (inherits from `dev`, strips most debuginfo) and the CI workflow uses it via `cargo nextest run --cargo-profile ci`.
-- We also removed the redundant `cargo build` step from CI — `cargo nextest run` already builds everything `cargo build` does, plus the test artifacts.
+- We also removed the redundant `cargo build` step from CI — `cargo nextest run --tests` already builds everything `cargo build` does, plus the test artifacts. (We initially tried `--all-targets` but that pulls in `harness = false` benches which nextest can't enumerate as tests; `--tests` is the correct flag.)
 - We freed ~10 GB more on the runner by enabling `remove_tool_cache: true` on the existing free-disk-space step (no step uses `/opt/hostedtoolcache/`) and by pruning Docker images at the start of the job.
 - **Locally, nothing changed.** `cargo build`, `cargo test`, and `cargo nextest run` (without `--cargo-profile ci`) still use the default `dev` profile with full debuginfo.
 
@@ -97,24 +97,32 @@ Per the [nextest design docs](https://nexte.st/docs/design/how-it-works/):
 
 > "cargo-nextest first builds all test binaries with `cargo test --no-run`"
 
-And per the [Cargo book on `cargo test`](https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection), the default target selection includes `--lib --bins --tests`. Adding `--all-targets` makes the equivalence to `cargo build --all-targets` explicit:
+And per the [Cargo book on `cargo build`](https://doc.rust-lang.org/cargo/commands/cargo-build.html#target-selection), `--tests` builds "all targets that have the `test = true` manifest flag set. By default this includes the library and binaries built as unittests, and integration tests. Be aware that this will also build any required dependencies, so the lib target may be built twice (once as a unittest, and once as a dependency for binaries, integration tests, etc.)."
+
+That last clause is the key one — it confirms test-mode and non-test-mode rlibs are separate artifacts, which is what `cargo nextest run --tests` produces in one shot:
 
 ```yaml
 - name: Test Rust code
-  run: cargo nextest run --all-targets --cargo-profile ci
+  run: cargo nextest run --tests --cargo-profile ci
   env:
     RUSTFLAGS: "-D warnings"
 ```
 
-#### Why this is safe (verified)
+#### Why `--tests`, not `--all-targets`
 
-1. **Compilation coverage is the same.** `cargo nextest run --all-targets` builds `--lib --bins --tests --benches --examples` — a strict superset of what `cargo build --all-targets` builds. Removing `cargo build` does not skip any compilation.
+`--all-targets` is officially defined as `--lib --bins --tests --benches --examples`. We tried it first, but it caused CI to fail on `quarto-yaml`'s benches: `crates/quarto-yaml/benches/{memory_overhead,scaling_overhead}.rs` are declared `harness = false` and print prose reports rather than libtest output. Nextest enumerates each bench binary with `--list --format terse` and errors on the unrecognized output (`line "..." did not end with the string ": test" or ": benchmark"`).
+
+The previous CI never built benches anyway — plain `cargo build` excludes them by default — so `--tests` matches the prior coverage exactly while still consolidating compilation into one nextest-driven step.
+
+#### Why this is safe (verified against Cargo docs)
+
+1. **Compilation coverage matches what `cargo build` was producing.** `cargo nextest run --tests` builds the lib (both as unittest and as a non-test dep for bins/integration tests), all bins (also as unittests), and all integration tests. That is a strict superset of plain `cargo build`'s default targets (lib + bins, non-test). Examples without `test = true` and benches were not built before either.
 2. **`-D warnings` still fires.** `RUSTFLAGS` is a rustc env var, applied to every rustc invocation regardless of which cargo subcommand drives the build. Nextest invokes `cargo test --no-run` internally, which picks up `RUSTFLAGS` exactly as `cargo build` would.
 3. **The redundancy that disappears:** `cargo build` and `cargo nextest run` share `target/debug/` (or in our case `target/ci/`) but **not artifacts** — library crates compiled with `--cfg test` have a different fingerprint and produce **separate `.rlib`s** alongside the dev-build ones. With ~35 crates, that duplication ran into multi-GB at peak disk.
 
 #### Edge case to be aware of
 
-The Cargo book notes that bin compilation happens "as unit tests" by default and the **standalone bin artifact** is only built "if integration tests are built and required features are available". For a workspace with integration tests anywhere, this is non-issue — all binaries get compiled. We pass `--all-targets` to be explicit and remove the conditional.
+`--tests` skips any target whose manifest sets `test = false`. The only such target in this repo is `crates/pampa/fuzz` (libfuzzer-sys is Linux/macOS only, so the crate is `exclude`d from the workspace — `cargo build` at workspace level wasn't building it either). If a future bin is added with `test = false` and is expected to be compile-checked in CI, either drop the `test = false`, add a separate `cargo build` step for that bin, or revisit this decision.
 
 ## All the cleanup levers we used
 

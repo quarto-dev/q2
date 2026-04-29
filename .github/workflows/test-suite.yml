@@ -130,10 +130,12 @@ jobs:
           cd crates/tree-sitter-qmd/tree-sitter-markdown
           tree-sitter test
 
-      # `ci` profile + `--all-targets` makes a separate `cargo build` redundant.
+      # `ci` profile + `--tests` makes a separate `cargo build` redundant.
+      # `--tests` (not `--all-targets`) excludes benches — `quarto-yaml` declares
+      # `harness = false` benches that nextest can't enumerate as tests.
       # See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
       - name: Test Rust code
         shell: bash
-        run: cargo nextest run --all-targets --cargo-profile ci
+        run: cargo nextest run --tests --cargo-profile ci
         env:
           RUSTFLAGS: "-D warnings"
