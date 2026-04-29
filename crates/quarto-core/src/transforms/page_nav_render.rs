@@ -79,6 +79,7 @@ impl AstTransform for PageNavRenderTransform {
             if let Some(href) = item.href.as_mut() {
                 *href = resolve_href_for_html(
                     href,
+                    ctx.resource_resolver.as_ref(),
                     ctx.project_index.as_deref(),
                     Some("Page navigation"),
                     &mut local_diags,
@@ -89,6 +90,7 @@ impl AstTransform for PageNavRenderTransform {
             if let Some(href) = item.href.as_mut() {
                 *href = resolve_href_for_html(
                     href,
+                    ctx.resource_resolver.as_ref(),
                     ctx.project_index.as_deref(),
                     Some("Page navigation"),
                     &mut local_diags,
@@ -398,5 +400,64 @@ mod tests {
         // Suppress dead-code warnings on the unused NavigationItem
         // import without rewiring the test scaffolding.
         let _ = NavigationItem::default();
+    }
+
+    /// bd-swpy regression — prev/next strip from a depth-1 page
+    /// must relativize to the current page. Without the fix, both
+    /// hrefs were emitted in project-root-relative form.
+    #[tokio::test]
+    async fn page_nav_render_relativizes_hrefs_via_resolver_at_depth_one() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let mut meta = config_map(vec![]);
+        meta.insert_path(
+            &["navigation", "page_navigation"],
+            page_nav_cv(Some("about.qmd"), Some("guide/intro.qmd")),
+        );
+        let index = Arc::new(ProjectIndex::new(vec![
+            make_profile("about.qmd", "About"),
+            make_profile("guide/intro.qmd", "Intro"),
+        ]));
+
+        // Page lives at `_site/docs/api.html`.
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/docs/api.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/docs/api.html",
+            "site_libs",
+            "api",
+        );
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries)
+            .with_project_index(index)
+            .with_resource_resolver(resolver);
+        PageNavRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "page_navigation"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        // Root-level prev: walk up one.
+        assert!(
+            html.contains("href=\"../about.html\""),
+            "expected ../about.html for prev; got: {}",
+            html
+        );
+        // Different-subdir next: walk up then descend.
+        assert!(
+            html.contains("href=\"../guide/intro.html\""),
+            "expected ../guide/intro.html for next; got: {}",
+            html
+        );
     }
 }

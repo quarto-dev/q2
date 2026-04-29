@@ -248,9 +248,22 @@ fn cross_document_link_rewrites_to_html() {
     let active = canonical(&project_dir.join("index.qmd"));
     let output = render_active_page(&project_dir, &active);
 
+    // Under the WASM `vfs_root` resolver every internal href is
+    // emitted as an absolute URL prefixed with the synthetic root
+    // (`/{vfs_root}/about.html`). The cross-doc rewrite is what
+    // resolves `about.qmd` → `about.html`; the prefix is the
+    // resolver's job. Match on the suffix to stay agnostic to the
+    // prefix while still asserting the .qmd → .html rewrite.
     assert!(
-        output.html.contains("href=\"about.html\""),
-        "[link](about.qmd) should rewrite to href=\"about.html\"; got {}",
+        output.html.contains("about.html\""),
+        "[link](about.qmd) should rewrite to ...about.html; got {}",
+        snippet(&output.html)
+    );
+    // And there must be NO `about.qmd` reference left in the body —
+    // every internal-doc reference must have been rewritten.
+    assert!(
+        !output.html.contains("about.qmd\""),
+        "no rewritten about.qmd should remain in body; got {}",
         snippet(&output.html)
     );
 }
@@ -299,23 +312,30 @@ fn hub_smoke_fixture_renders_cleanly() {
     let active = canonical(&project_dir.join("index.qmd"));
     let output = render_active_page(&project_dir, &active);
 
-    // Sidebar lists all three pages (rewritten to .html).
+    // Under the WASM `vfs_root` resolver, all internal hrefs
+    // (sidebar, body links, page-nav, …) are emitted as absolute
+    // URLs prefixed by the synthetic root. Match on the suffix to
+    // stay agnostic to the prefix.
     assert!(
-        output.html.contains("href=\"about.html\""),
-        "sidebar should link to about.html; got {}",
+        output.html.contains("about.html\""),
+        "sidebar should link to ...about.html; got {}",
         snippet(&output.html)
     );
     assert!(
-        output.html.contains("href=\"posts/first.html\""),
-        "sidebar should link to posts/first.html; got {}",
+        output.html.contains("posts/first.html\""),
+        "sidebar should link to ...posts/first.html; got {}",
         snippet(&output.html)
     );
 
-    // Cross-doc body link from index.qmd's body rewrites too.
-    let about_links = output.html.matches("href=\"about.html\"").count();
+    // Cross-doc body link from index.qmd's body rewrites too —
+    // expect at least two `about.html` references (one body, one
+    // sidebar). Both forms now route through `page_url_for` so the
+    // emitted URL is identical at both call sites; counting suffix
+    // matches stays robust to the resolver flavor.
+    let about_links = output.html.matches("about.html\"").count();
     assert!(
         about_links >= 2,
-        "expected at least one body href + one sidebar href to about.html; got {} matches",
+        "expected at least one body href + one sidebar href ending in about.html; got {} matches",
         about_links
     );
 }

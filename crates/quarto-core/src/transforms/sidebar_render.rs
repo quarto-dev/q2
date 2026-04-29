@@ -32,6 +32,7 @@ use quarto_source_map::SourceInfo;
 use crate::Result;
 use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
+use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_href::resolve_href_for_html;
@@ -84,6 +85,7 @@ impl AstTransform for SidebarRenderTransform {
             .unwrap_or_else(|| "Sidebar".to_string());
         rewrite_hrefs(
             &mut sidebar.contents,
+            ctx.resource_resolver.as_ref(),
             ctx.project_index.as_deref(),
             Some(label.as_str()),
             &mut local_diags,
@@ -102,9 +104,12 @@ impl AstTransform for SidebarRenderTransform {
 }
 
 /// Walk the sidebar, rewriting each entry's href from source-path to
-/// output-href via the project index.
+/// output-href via the project index, and relativizing the result
+/// to the current page via the resolver. See bd-swpy /
+/// `claude-notes/plans/2026-04-29-bd-swpy-nav-href-relativization.md`.
 fn rewrite_hrefs(
     entries: &mut [SidebarEntry],
+    resolver: Option<&ResourceResolverContext>,
     index: Option<&ProjectIndex>,
     source_label: Option<&str>,
     diagnostics: &mut Vec<DiagnosticMessage>,
@@ -113,14 +118,14 @@ fn rewrite_hrefs(
         match entry {
             SidebarEntry::Link { item } => {
                 if let Some(href) = item.href.as_mut() {
-                    *href = resolve_href_for_html(href, index, source_label, diagnostics);
+                    *href = resolve_href_for_html(href, resolver, index, source_label, diagnostics);
                 }
             }
             SidebarEntry::Section { href, contents, .. } => {
                 if let Some(h) = href.as_mut() {
-                    *h = resolve_href_for_html(h, index, source_label, diagnostics);
+                    *h = resolve_href_for_html(h, resolver, index, source_label, diagnostics);
                 }
-                rewrite_hrefs(contents, index, source_label, diagnostics);
+                rewrite_hrefs(contents, resolver, index, source_label, diagnostics);
             }
             SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
         }
@@ -458,6 +463,68 @@ mod tests {
         assert!(
             html.contains("href=\"about.html#bio\""),
             "expected fragment preserved; got: {}",
+            html
+        );
+    }
+
+    /// bd-swpy regression — when the page being rendered is one
+    /// directory deep and a resolver is attached, sidebar hrefs to
+    /// root-level targets must walk up one level. Without the fix,
+    /// the helper emitted bare `about.html` (project-root-relative),
+    /// which a browser at `/_site/guide/installation.html` would
+    /// resolve as `/_site/guide/about.html` and 404.
+    #[tokio::test]
+    async fn render_relativizes_sidebar_hrefs_via_resolver_at_depth_one() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["about.qmd"]),
+        );
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+
+        // Build the same context the project pipeline would: page
+        // lives at `/project/_site/guide/installation.html`.
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/guide/installation.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/guide/installation.html",
+            "site_libs",
+            "installation",
+        );
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries)
+            .with_project_index(index)
+            .with_resource_resolver(resolver);
+        SidebarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("href=\"../about.html\""),
+            "expected page-relative href ../about.html; got: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"about.html\""),
+            "bare project-relative href should NOT appear; got: {}",
             html
         );
     }

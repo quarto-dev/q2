@@ -216,6 +216,19 @@ impl<'a> RenderContext<'a> {
         self
     }
 
+    /// Attach a [`ResourceResolverContext`] to this context.
+    ///
+    /// Production callers receive their resolver through the
+    /// `StageContext` ↔ `RenderContext` bridge inside the
+    /// pipeline; this builder is primarily for test scaffolding
+    /// and out-of-band callers (e.g. unit tests that drive a
+    /// single Render transform directly without standing up a
+    /// full pipeline).
+    pub fn with_resource_resolver(mut self, resolver: ResourceResolverContext) -> Self {
+        self.resource_resolver = Some(resolver);
+        self
+    }
+
     /// Create with custom options
     pub fn with_options(mut self, options: RenderOptions) -> Self {
         self.options = options;

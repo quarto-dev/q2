@@ -33,6 +33,7 @@ use quarto_source_map::SourceInfo;
 use crate::Result;
 use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
+use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_href::resolve_href_for_html;
@@ -81,16 +82,19 @@ impl AstTransform for FooterRenderTransform {
         let mut local_diags = std::mem::take(&mut ctx.diagnostics);
         rewrite_region_hrefs(
             &mut footer.left,
+            ctx.resource_resolver.as_ref(),
             ctx.project_index.as_deref(),
             &mut local_diags,
         );
         rewrite_region_hrefs(
             &mut footer.center,
+            ctx.resource_resolver.as_ref(),
             ctx.project_index.as_deref(),
             &mut local_diags,
         );
         rewrite_region_hrefs(
             &mut footer.right,
+            ctx.resource_resolver.as_ref(),
             ctx.project_index.as_deref(),
             &mut local_diags,
         );
@@ -109,27 +113,29 @@ impl AstTransform for FooterRenderTransform {
 
 fn rewrite_region_hrefs(
     region: &mut FooterRegion,
+    resolver: Option<&ResourceResolverContext>,
     index: Option<&ProjectIndex>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
     if let FooterRegion::Items(items) = region {
-        rewrite_items_hrefs(items, index, diagnostics);
+        rewrite_items_hrefs(items, resolver, index, diagnostics);
     }
 }
 
 fn rewrite_items_hrefs(
     items: &mut [NavigationItem],
+    resolver: Option<&ResourceResolverContext>,
     index: Option<&ProjectIndex>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
     for item in items.iter_mut() {
         if let Some(href) = item.href.as_mut() {
-            *href = resolve_href_for_html(href, index, Some("Page footer"), diagnostics);
+            *href = resolve_href_for_html(href, resolver, index, Some("Page footer"), diagnostics);
         }
         // Footer items rarely nest `menu`, but the type allows it —
         // handle symmetrically with navbar.
         if !item.menu.is_empty() {
-            rewrite_items_hrefs(&mut item.menu, index, diagnostics);
+            rewrite_items_hrefs(&mut item.menu, resolver, index, diagnostics);
         }
     }
 }
@@ -389,5 +395,64 @@ mod tests {
             .unwrap();
         assert!(html.contains("href=\"about.qmd\""));
         assert!(diags.is_empty());
+    }
+
+    /// bd-swpy regression — footer item hrefs relativize to the
+    /// current page when a resolver is attached. Same shape as the
+    /// navbar / sidebar regression: page is one directory deep,
+    /// item targets a root-level page; output must walk up one
+    /// level.
+    #[tokio::test]
+    async fn footer_render_relativizes_hrefs_via_resolver_at_depth_one() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let footer = PageFooter {
+            center: FooterRegion::Items(vec![NavigationItem {
+                href: Some("about.qmd".to_string()),
+                text: Some(s("About")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/docs/api.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/docs/api.html",
+            "site_libs",
+            "api",
+        );
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries)
+            .with_project_index(index)
+            .with_resource_resolver(resolver);
+        FooterRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("href=\"../about.html\""),
+            "expected ../about.html; got: {}",
+            html
+        );
     }
 }

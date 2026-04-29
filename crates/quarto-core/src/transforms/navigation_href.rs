@@ -32,7 +32,12 @@ use crate::resource_resolver::ResourceResolverContext;
 ///   unchanged.
 /// - Project-relative source paths are rewritten to the referenced
 ///   document's output href via [`ProjectIndex::lookup_by_source`].
-///   Query strings and fragments are preserved across the rewrite.
+///   When `resolver` is attached the result is page-relative (via
+///   [`ResourceResolverContext::page_url_for`]); without one, the
+///   bare `output_href` is returned (defensive fallback for unit
+///   tests / out-of-band callers — production callers always pass
+///   a resolver). Query strings and fragments are preserved across
+///   the rewrite.
 /// - Source-path-shaped misses (looks like `*.qmd` but no matching
 ///   profile) emit a warning diagnostic naming the `source_label` and
 ///   the missing target. The raw href is preserved in the output so
@@ -41,8 +46,18 @@ use crate::resource_resolver::ResourceResolverContext;
 /// `source_label` is a human-readable tag (`"Sidebar 'docs'"`,
 /// `"Navbar"`, `"Page footer"`) — it appears verbatim in the
 /// diagnostic so the user can locate the offending config.
+///
+/// **Symmetry with body links.** Phase 6's
+/// [`resolve_doc_relative_href`] handles body-content links the
+/// same way: lookup-then-relativize-via-resolver. The two helpers
+/// differ only in input normalization — body links arrive
+/// source-doc-relative and require [`resolve_to_project_root`]
+/// first; nav hrefs arrive already project-root-relative (Phase 2
+/// Decision 7/8). bd-swpy threaded the resolver here in 2026-04-29
+/// to fix nav links 404-ing from pages in subdirectories.
 pub fn resolve_href_for_html(
     raw: &str,
+    resolver: Option<&ResourceResolverContext>,
     index: Option<&ProjectIndex>,
     source_label: Option<&str>,
     diagnostics: &mut Vec<DiagnosticMessage>,
@@ -59,7 +74,16 @@ pub fn resolve_href_for_html(
 
     if let Some(idx) = index {
         if let Some(profile) = idx.lookup_by_source(Path::new(path_part)) {
-            return format!("{}{}", profile.output_href, tail);
+            let url = match resolver {
+                Some(r) => r.page_url_for(&profile.output_href),
+                // No resolver: fall back to the bare project-relative
+                // output href. Production callers always pass a
+                // resolver; this branch is defensive (unit tests /
+                // out-of-band callers may construct a RenderContext
+                // without one).
+                None => profile.output_href.clone(),
+            };
+            return format!("{}{}", url, tail);
         }
         // An index is present but the path didn't resolve — the user
         // has a project context and this looks like an intended
@@ -138,16 +162,19 @@ pub fn resolve_doc_relative_target(raw: &str, source_relative: &str) -> Option<P
 ///
 /// Companion to [`resolve_href_for_html`] for **body** content
 /// (the inline `Link` nodes parsed from markdown). The two helpers
-/// differ in their input/output normalization:
+/// differ only in input normalization; both produce page-relative
+/// URLs when a resolver is attached:
 ///
-/// | Helper | Input | Output |
-/// |--------|-------|--------|
-/// | `resolve_href_for_html` | project-root-relative | project-root-relative |
+/// | Helper | Input | Output (with resolver) |
+/// |--------|-------|------------------------|
+/// | `resolve_href_for_html` | project-root-relative | page-relative |
 /// | `resolve_doc_relative_href` | source-doc-relative | page-relative |
 ///
 /// Phase 6 of the website-projects epic. See
 /// `claude-notes/plans/2026-04-24-websites-phase-6.md` Decisions 3,
-/// 4, 9, 10.
+/// 4, 9, 10. (The nav helper picked up its resolver argument later
+/// — see bd-swpy /
+/// `claude-notes/plans/2026-04-29-bd-swpy-nav-href-relativization.md`.)
 ///
 /// Algorithm:
 /// 1. External URLs and fragment-only anchors pass through.
@@ -286,15 +313,15 @@ mod tests {
     fn external_urls_pass_through_unchanged() {
         let mut diags = Vec::new();
         assert_eq!(
-            resolve_href_for_html("https://example.com", None, None, &mut diags),
+            resolve_href_for_html("https://example.com", None, None, None, &mut diags),
             "https://example.com"
         );
         assert_eq!(
-            resolve_href_for_html("mailto:a@b.c", None, None, &mut diags),
+            resolve_href_for_html("mailto:a@b.c", None, None, None, &mut diags),
             "mailto:a@b.c"
         );
         assert_eq!(
-            resolve_href_for_html("//cdn.example.com/x", None, None, &mut diags),
+            resolve_href_for_html("//cdn.example.com/x", None, None, None, &mut diags),
             "//cdn.example.com/x"
         );
         assert!(diags.is_empty());
@@ -304,18 +331,21 @@ mod tests {
     fn fragment_anchors_pass_through_unchanged() {
         let mut diags = Vec::new();
         assert_eq!(
-            resolve_href_for_html("#section", None, None, &mut diags),
+            resolve_href_for_html("#section", None, None, None, &mut diags),
             "#section"
         );
         assert!(diags.is_empty());
     }
 
+    /// Today's defensive no-resolver hit: returns bare `output_href`.
+    /// (Production callers always pass a resolver — see the new
+    /// `nav_href_relativizes_via_resolver_*` tests below.)
     #[test]
     fn qmd_href_rewrites_via_index() {
         let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
         let mut diags = Vec::new();
         assert_eq!(
-            resolve_href_for_html("about.qmd", Some(&idx), None, &mut diags),
+            resolve_href_for_html("about.qmd", None, Some(&idx), None, &mut diags),
             "about.html"
         );
         assert!(diags.is_empty());
@@ -325,7 +355,8 @@ mod tests {
     fn qmd_miss_emits_diagnostic_with_source_label() {
         let idx = ProjectIndex::new(vec![]);
         let mut diags = Vec::new();
-        let out = resolve_href_for_html("missing.qmd", Some(&idx), Some("Navbar"), &mut diags);
+        let out =
+            resolve_href_for_html("missing.qmd", None, Some(&idx), Some("Navbar"), &mut diags);
         // Href preserved so the dangling link renders visibly.
         assert_eq!(out, "missing.qmd");
         assert_eq!(diags.len(), 1);
@@ -339,7 +370,7 @@ mod tests {
     fn miss_without_source_label_uses_generic_tag() {
         let idx = ProjectIndex::new(vec![]);
         let mut diags = Vec::new();
-        let _ = resolve_href_for_html("missing.qmd", Some(&idx), None, &mut diags);
+        let _ = resolve_href_for_html("missing.qmd", None, Some(&idx), None, &mut diags);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].title.starts_with("Navigation"));
     }
@@ -349,11 +380,11 @@ mod tests {
         let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
         let mut diags = Vec::new();
         assert_eq!(
-            resolve_href_for_html("about.qmd#bio", Some(&idx), None, &mut diags),
+            resolve_href_for_html("about.qmd#bio", None, Some(&idx), None, &mut diags),
             "about.html#bio"
         );
         assert_eq!(
-            resolve_href_for_html("about.qmd?x=1", Some(&idx), None, &mut diags),
+            resolve_href_for_html("about.qmd?x=1", None, Some(&idx), None, &mut diags),
             "about.html?x=1"
         );
     }
@@ -364,7 +395,7 @@ mod tests {
         // A .qmd-shaped href without an index is NOT a miss — there's
         // simply no lookup possible. Pass through; no diagnostic.
         assert_eq!(
-            resolve_href_for_html("about.qmd", None, None, &mut diags),
+            resolve_href_for_html("about.qmd", None, None, None, &mut diags),
             "about.qmd"
         );
         assert!(diags.is_empty());
@@ -376,7 +407,7 @@ mod tests {
         // resolve as an ordinary static resource.
         let idx = ProjectIndex::new(vec![]);
         let mut diags = Vec::new();
-        let out = resolve_href_for_html("assets/logo.png", Some(&idx), None, &mut diags);
+        let out = resolve_href_for_html("assets/logo.png", None, Some(&idx), None, &mut diags);
         assert_eq!(out, "assets/logo.png");
         assert!(diags.is_empty());
     }
@@ -871,5 +902,106 @@ mod tests {
                 core
             );
         }
+    }
+
+    // ---- bd-swpy: navigation hrefs relativized via resolver ----
+    //
+    // Mirrors the body-link path: when a `ProjectIndex` lookup
+    // succeeds and a `ResourceResolverContext` is attached, the
+    // returned URL must be page-relative (the same shape
+    // `resolve_doc_relative_href` produces). Without this the nav
+    // helper emits project-root-relative output that 404s from
+    // pages in subdirectories. See
+    // `claude-notes/plans/2026-04-29-bd-swpy-nav-href-relativization.md`.
+
+    /// bd-swpy test 1 — depth-1 page links to a root-level target
+    /// via the resolver. Output must walk up one level.
+    #[test]
+    fn nav_href_relativizes_via_resolver_at_depth_one() {
+        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html("about.qmd", Some(&r), Some(&idx), None, &mut diags),
+            "../about.html"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-swpy test 2 — depth-2 page links to a target one
+    /// directory deep. Output walks up two levels then descends.
+    #[test]
+    fn nav_href_relativizes_via_resolver_at_depth_two() {
+        let idx = ProjectIndex::new(vec![profile(
+            "guide/installation.qmd",
+            "guide/installation.html",
+        )]);
+        let r = website_resolver("docs/internals/architecture.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "guide/installation.qmd",
+                Some(&r),
+                Some(&idx),
+                None,
+                &mut diags
+            ),
+            "../../guide/installation.html"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-swpy test 3 — depth-1 page in one subtree links to a
+    /// target in a sibling subtree (the multi-sidebar swap case
+    /// from `examples/websites/03-nested-sidebar`).
+    #[test]
+    fn nav_href_relativizes_subdir_to_subdir() {
+        let idx = ProjectIndex::new(vec![profile("reference/api.qmd", "reference/api.html")]);
+        let r = website_resolver("guide/installation.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html("reference/api.qmd", Some(&r), Some(&idx), None, &mut diags),
+            "../reference/api.html"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-swpy test 4 — defensive no-resolver fallback. With no
+    /// resolver attached, hits return the bare project-root-relative
+    /// `output_href` (today's behaviour). Production callers always
+    /// pass a resolver; this branch covers unit tests / out-of-band
+    /// callers.
+    #[test]
+    fn nav_href_no_resolver_falls_back_to_bare_output_href() {
+        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html("about.qmd", None, Some(&idx), None, &mut diags),
+            "about.html"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-swpy test 5 — query / fragment tail is preserved across
+    /// the resolver-relativized rewrite. Tail is appended *after*
+    /// the resolver call, identical to the body-link helper.
+    #[test]
+    fn nav_href_preserves_query_and_fragment_through_resolver() {
+        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html("about.qmd#bio", Some(&r), Some(&idx), None, &mut diags),
+            "../about.html#bio"
+        );
+        assert_eq!(
+            resolve_href_for_html("about.qmd?x=1", Some(&r), Some(&idx), None, &mut diags),
+            "../about.html?x=1"
+        );
+        assert_eq!(
+            resolve_href_for_html("about.qmd?x=1#bio", Some(&r), Some(&idx), None, &mut diags),
+            "../about.html?x=1#bio"
+        );
+        assert!(diags.is_empty());
     }
 }

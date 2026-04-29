@@ -31,6 +31,7 @@ use quarto_source_map::SourceInfo;
 use crate::Result;
 use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
+use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::AstTransform;
 use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_href::resolve_href_for_html;
@@ -79,12 +80,14 @@ impl AstTransform for NavbarRenderTransform {
         let mut local_diags = std::mem::take(&mut ctx.diagnostics);
         rewrite_navigation_item_hrefs(
             &mut navbar.left,
+            ctx.resource_resolver.as_ref(),
             ctx.project_index.as_deref(),
             "Navbar",
             &mut local_diags,
         );
         rewrite_navigation_item_hrefs(
             &mut navbar.right,
+            ctx.resource_resolver.as_ref(),
             ctx.project_index.as_deref(),
             "Navbar",
             &mut local_diags,
@@ -106,19 +109,27 @@ impl AstTransform for NavbarRenderTransform {
 /// Walk navbar items (including dropdown `menu` children), rewriting
 /// each `href` from source-path to output-href via the shared
 /// resolver. Items without an `href` (pure dropdowns) are skipped for
-/// the lookup but still descended.
+/// the lookup but still descended. The `resolver` arg makes the
+/// emitted URLs page-relative (bd-swpy).
 fn rewrite_navigation_item_hrefs(
     items: &mut [NavigationItem],
+    resolver: Option<&ResourceResolverContext>,
     index: Option<&ProjectIndex>,
     source_label: &str,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
     for item in items.iter_mut() {
         if let Some(href) = item.href.as_mut() {
-            *href = resolve_href_for_html(href, index, Some(source_label), diagnostics);
+            *href = resolve_href_for_html(href, resolver, index, Some(source_label), diagnostics);
         }
         if !item.menu.is_empty() {
-            rewrite_navigation_item_hrefs(&mut item.menu, index, source_label, diagnostics);
+            rewrite_navigation_item_hrefs(
+                &mut item.menu,
+                resolver,
+                index,
+                source_label,
+                diagnostics,
+            );
         }
     }
 }
@@ -520,5 +531,87 @@ mod tests {
             .unwrap();
         assert!(html.contains("href=\"about.qmd\""), "got: {}", html);
         assert!(diags.is_empty(), "no diagnostic without index");
+    }
+
+    /// bd-swpy regression — depth-1 page with resolver attached.
+    /// Navbar hrefs (left, right, dropdown menu items) must
+    /// relativize to the current page. Without the fix, an `about.qmd`
+    /// link from a page at `_site/tools/converter.html` rendered as
+    /// `about.html` and 404'd.
+    #[tokio::test]
+    async fn navbar_render_relativizes_hrefs_via_resolver_at_depth_one() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let navbar = Navbar {
+            left: vec![
+                NavigationItem {
+                    href: Some("about.qmd".to_string()),
+                    text: Some(s("About")),
+                    ..NavigationItem::default()
+                },
+                NavigationItem {
+                    text: Some(s("Tools")),
+                    menu: vec![NavigationItem {
+                        href: Some("tools/index.qmd".to_string()),
+                        text: Some(s("Overview")),
+                        ..NavigationItem::default()
+                    }],
+                    ..NavigationItem::default()
+                },
+            ],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![
+            profile("about.qmd", "about.html", "About"),
+            profile("tools/index.qmd", "tools/index.html", "Tools"),
+        ]));
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/tools/converter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/tools/converter.html",
+            "site_libs",
+            "converter",
+        );
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries)
+            .with_project_index(index)
+            .with_resource_resolver(resolver);
+        NavbarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        // Root-level target seen from depth-1 page → walk up one level.
+        assert!(
+            html.contains("href=\"../about.html\""),
+            "expected ../about.html; got: {}",
+            html
+        );
+        // Subdir target (sibling within the same dir) → just the leaf.
+        assert!(
+            html.contains("href=\"index.html\""),
+            "expected index.html for sibling tools/index.qmd; got: {}",
+            html
+        );
+        // Bare project-relative form must NOT appear.
+        assert!(
+            !html.contains("href=\"about.html\"") || html.contains("href=\"../about.html\""),
+            "bare about.html should not be present without ../ prefix; got: {}",
+            html
+        );
     }
 }
