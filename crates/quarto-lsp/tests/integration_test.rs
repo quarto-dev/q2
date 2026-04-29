@@ -104,21 +104,20 @@ impl LspTestHarness {
     }
 
     /// Get the quarto binary path.
-    /// Expects the binary to already be built (e.g. by `cargo build` or
-    /// `cargo nextest run`). Avoids running `cargo build` here because
-    /// nextest runs each test in a separate process, so the OnceLock
-    /// doesn't help — each process would redundantly check all
-    /// dependencies for staleness, adding ~30-60s per test.
+    /// Derives the profile directory from the test binary's own location
+    /// (`target/<profile>/deps/<test>`), so it works under any cargo profile
+    /// (`dev`, `ci`, `release`, …) without hardcoding `debug`.
+    /// See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
     fn get_binary_path() -> &'static PathBuf {
         BINARY_PATH.get_or_init(|| {
-            let manifest_dir = env!("CARGO_MANIFEST_DIR");
-            let workspace_root = std::path::Path::new(manifest_dir)
+            let binary_path = std::env::current_exe()
+                .expect("current_exe failed")
                 .parent()
-                .unwrap()
+                .expect("test binary has no parent dir")
                 .parent()
-                .unwrap();
-
-            let binary_path = workspace_root.join("target").join("debug").join("q2");
+                .expect("deps/ has no parent dir")
+                .join("q2")
+                .with_extension(std::env::consts::EXE_EXTENSION);
             assert!(
                 binary_path.exists(),
                 "q2 binary not found at {:?}. Run `cargo build -p quarto` first.",

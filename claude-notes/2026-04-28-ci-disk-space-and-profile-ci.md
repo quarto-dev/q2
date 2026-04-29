@@ -124,6 +124,38 @@ The previous CI never built benches anyway — plain `cargo build` excludes them
 
 `--tests` skips any target whose manifest sets `test = false`. The only such target in this repo is `crates/pampa/fuzz` (libfuzzer-sys is Linux/macOS only, so the crate is `exclude`d from the workspace — `cargo build` at workspace level wasn't building it either). If a future bin is added with `test = false` and is expected to be compile-checked in CI, either drop the `test = false`, add a separate `cargo build` step for that bin, or revisit this decision.
 
+### Change 3: Profile-aware binary discovery in `quarto-lsp` integration test
+
+`crates/quarto-lsp/tests/integration_test.rs` spawns the `q2` binary as a subprocess. The previous code hardcoded `target/debug/q2`, which broke under `--cargo-profile ci` (binary lands at `target/ci/q2`).
+
+#### Why this isn't a misuse of profiles
+
+`[profile.ci]` is a fully-supported Cargo pattern. The test was simply unaware of profiles. Cargo's `CARGO_BIN_EXE_<name>` env var would normally provide the production-bin path, but it's **package-scoped** — set only for integration tests in the same package as the bin. Our LSP test lives in `quarto-lsp` while the bin is defined in `quarto`, so that env var is never set here.
+
+#### The fix
+
+Derive the profile directory from the test binary's own location:
+
+```rust
+let binary_path = std::env::current_exe()
+    .unwrap()
+    .parent().unwrap()   // target/<profile>/deps
+    .parent().unwrap()   // target/<profile>
+    .join("q2")
+    .with_extension(std::env::consts::EXE_EXTENSION);
+```
+
+Cargo always places the test binary in `target/<profile>/deps/`, so backing up two parents lands in the same `target/<profile>/` directory where the production `q2` is built. Profile-correct on Linux/macOS/Windows without env-var coupling or mtime heuristics.
+
+#### Why not `assert_cmd`
+
+`assert_cmd::cargo::cargo_bin("q2")` is the idiomatic crate-based answer and does exactly the same thing internally (with friendlier error handling and Windows `.exe` suffix logic). We chose the stdlib version for this fix because:
+
+- The LSP test does **not** use any of `assert_cmd`'s value — no `.assert()`, no stdout/stderr matchers, no exit-code checks. It speaks JSON-RPC over stdio.
+- The only function we'd touch is `cargo_bin()`, replacing 4 lines of stdlib with one dev-dep.
+
+If a future test wants `cargo run --` style command-driving with output assertions, **switch to `assert_cmd` then** — `cargo_bin()` is its standard binary-discovery helper and pays for itself once `.assert()` joins the picture.
+
 ## All the cleanup levers we used
 
 | Lever | Disk saving | Status |
