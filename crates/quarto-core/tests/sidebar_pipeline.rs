@@ -177,6 +177,61 @@ fn pipeline_renders_sidebar_for_two_page_website() {
     assert!(
         !about_html.contains("href=\"index.html\" class=\"sidebar-item-text sidebar-link active\"")
     );
+
+    // bd-mgoh — body class drives the SCSS grid layout. With a Floating
+    // sidebar, the body must carry `nav-sidebar floating`; without these
+    // classes the grid mixin produces no left sidebar column and the
+    // sidebar falls below the page content.
+    assert!(
+        index_html.contains("<body class=\"nav-sidebar floating\">"),
+        "index page body must carry nav-sidebar+floating classes; \
+         got body tag: {}",
+        index_html
+            .find("<body")
+            .map(|i| &index_html[i..(i + 80).min(index_html.len())])
+            .unwrap_or("<no body tag>")
+    );
+    assert!(
+        about_html.contains("<body class=\"nav-sidebar floating\">"),
+        "about page body must carry nav-sidebar+floating classes; \
+         got body tag: {}",
+        about_html
+            .find("<body")
+            .map(|i| &about_html[i..(i + 80).min(about_html.len())])
+            .unwrap_or("<no body tag>")
+    );
+
+    // bd-mgoh — the sidebar nav must be a direct grid child of
+    // #quarto-content, not wrapped in a `quarto-sidebar-container`
+    // div. The SCSS in resources/scss targets `#quarto-sidebar`
+    // directly; an intervening wrapper would intercept grid placement.
+    assert!(
+        !index_html.contains("quarto-sidebar-container"),
+        "wrapper div should not appear in rendered HTML"
+    );
+    assert!(
+        !index_html.contains("class=\"sidebar-column\""),
+        "sidebar-column wrapper class should not appear"
+    );
+
+    // The sidebar must appear between #quarto-content's opening tag
+    // and <main>. (Sufficient signal of "direct child"; a stricter
+    // structural assertion would need a DOM parser.)
+    let content_idx = index_html
+        .find("id=\"quarto-content\"")
+        .expect("#quarto-content opening tag");
+    let sidebar_idx = index_html
+        .find("<nav id=\"quarto-sidebar\"")
+        .expect("sidebar nav present");
+    let main_idx = index_html.find("<main").expect("main element");
+    assert!(
+        content_idx < sidebar_idx && sidebar_idx < main_idx,
+        "sidebar must sit between #quarto-content opening and <main>; \
+         content={}, sidebar={}, main={}",
+        content_idx,
+        sidebar_idx,
+        main_idx
+    );
 }
 
 // === Test 37 ==============================================================

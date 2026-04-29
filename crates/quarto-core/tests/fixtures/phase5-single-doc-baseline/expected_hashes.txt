@@ -10,5 +10,10 @@
 # To re-capture (if intentional changes to default theme / template
 # land), render `doc.qmd` and run:
 #   shasum -a 256 doc.html doc_files/styles.css
-doc.html 7026c8c5357f7261d725eedd29fc3b7bc794509bf92f4e9b420f37dcbdd5cc28
+#
+# Re-captured 2026-04-29 (bd-mgoh): doc.html hash updated because
+# `#quarto-content` now carries the `quarto-container` class for parity
+# with Q1 (no SCSS rule selects on it; it's a defensive addition that
+# anchors the website-sidebar layout fix in template.rs).
+doc.html 1ce582da03349ec421b96d42a89d3589e3e8ed753a9d6802e6454a255ea67ae1
 doc_files/styles.css 3536a93eba680c9bd74acd4efba42fcd643981b1bc9d4128a3c09c8b278bbd15

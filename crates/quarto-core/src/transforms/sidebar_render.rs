@@ -7,10 +7,17 @@
 //!
 //! Reads the resolved `navigation.sidebar` (populated by
 //! [`SidebarGenerateTransform`](super::SidebarGenerateTransform) or
-//! a user override), rewrites any project-relative `.qmd` hrefs to
-//! their output hrefs via the [`ProjectIndex`], and emits the result
-//! as HTML at `rendered.navigation.sidebar` for the template to
-//! inject.
+//! a user override) and produces two pieces of rendered metadata for
+//! the template:
+//!
+//! - `rendered.navigation.sidebar` — the sidebar HTML fragment, with
+//!   project-relative `.qmd` hrefs rewritten to their output hrefs
+//!   via the [`ProjectIndex`].
+//! - `rendered.navigation.body-classes` — the CSS classes the body
+//!   element needs so the SCSS grid layout produces a left sidebar
+//!   column. Currently `"nav-sidebar floating"` (or `"nav-sidebar
+//!   docked"`), driven by [`Sidebar::style`]. Without these classes
+//!   the sidebar falls below the page content; see bd-mgoh.
 //!
 //! This transform **is** format-specific — it's the stage where the
 //! format-agnostic `Sidebar` is committed to HTML output. See
@@ -18,10 +25,14 @@
 //!
 //! ## Skip conditions
 //!
-//! - `sidebar: false` at the document level.
-//! - `rendered.navigation.sidebar` already populated (user
-//!   pre-rendered HTML).
-//! - `navigation.sidebar` absent.
+//! - `sidebar: false` at the document level → neither output is set.
+//! - `navigation.sidebar` absent → neither output is set.
+//! - `rendered.navigation.sidebar` already populated → the HTML
+//!   output is left alone (user override). The body-classes output
+//!   is computed independently with its own user-override check, so
+//!   a user filter can replace one without losing the other.
+//! - `rendered.navigation.body-classes` already populated → the
+//!   body-classes output is left alone (user override).
 
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html};
@@ -61,6 +72,31 @@ impl AstTransform for SidebarRenderTransform {
         if is_feature_disabled(&ast.meta, "sidebar") {
             return Ok(());
         }
+
+        let Some(sidebar_cv) = ast.meta.get_path(&["navigation", "sidebar"]) else {
+            return Ok(());
+        };
+
+        let mut sidebar = Sidebar::from_config_value(sidebar_cv);
+
+        // Body classes drive the SCSS grid layout (see
+        // resources/scss/bootstrap/_bootstrap-rules.scss: body.floating
+        // selects the page-columns-float-wide() mixin which provides
+        // the left sidebar column). Compute independently of the
+        // sidebar HTML so a user filter can override one without losing
+        // the other; honor any pre-existing override.
+        if !ast
+            .meta
+            .contains_path(&["rendered", "navigation", "body-classes"])
+        {
+            let body_classes = format!("nav-sidebar {}", sidebar.style.as_str());
+            ast.meta.insert_path(
+                &["rendered", "navigation", "body-classes"],
+                ConfigValue::new_string(&body_classes, SourceInfo::default()),
+            );
+        }
+
+        // Sidebar HTML — skip if already pre-rendered (user override).
         if ast
             .meta
             .contains_path(&["rendered", "navigation", "sidebar"])
@@ -68,11 +104,6 @@ impl AstTransform for SidebarRenderTransform {
             return Ok(());
         }
 
-        let Some(sidebar_cv) = ast.meta.get_path(&["navigation", "sidebar"]) else {
-            return Ok(());
-        };
-
-        let mut sidebar = Sidebar::from_config_value(sidebar_cv);
         let sidebar_id = sidebar.id.clone();
 
         // Rewrite hrefs in-place via ProjectIndex. Diagnostics land in
@@ -139,7 +170,7 @@ mod tests {
     use crate::format::Format;
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
-    use quarto_navigation::{NavigationItem, Sidebar, SidebarEntry};
+    use quarto_navigation::{NavigationItem, Sidebar, SidebarEntry, SidebarStyle};
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_source_map::SourceInfo;
@@ -527,5 +558,100 @@ mod tests {
             "bare project-relative href should NOT appear; got: {}",
             html
         );
+    }
+
+    /// `bd-mgoh` — body-class derivation: a Floating sidebar yields
+    /// `nav-sidebar floating` at `rendered.navigation.body-classes`.
+    /// Q1's body-class set drives the SCSS grid layout (see
+    /// resources/scss/bootstrap/_bootstrap-rules.scss); without these
+    /// classes the sidebar lacks a left column and falls below the
+    /// page content.
+    #[tokio::test]
+    async fn sidebar_render_writes_body_classes_floating() {
+        let mut meta = ConfigValue::default();
+        let sb = Sidebar {
+            style: SidebarStyle::Floating,
+            contents: vec![SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("about.qmd".to_string()),
+                    text: Some(s("About")),
+                    ..NavigationItem::default()
+                },
+            }],
+            ..Sidebar::with_defaults()
+        };
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let (out, _) = run_render(meta, None).await;
+        let body_classes = out
+            .get_path(&["rendered", "navigation", "body-classes"])
+            .and_then(|v| v.as_plain_text());
+        assert_eq!(body_classes.as_deref(), Some("nav-sidebar floating"));
+    }
+
+    /// `bd-mgoh` — Docked sidebar yields `nav-sidebar docked`.
+    #[tokio::test]
+    async fn sidebar_render_writes_body_classes_docked() {
+        let mut meta = ConfigValue::default();
+        let sb = Sidebar {
+            style: SidebarStyle::Docked,
+            contents: vec![SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("about.qmd".to_string()),
+                    text: Some(s("About")),
+                    ..NavigationItem::default()
+                },
+            }],
+            ..Sidebar::with_defaults()
+        };
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let (out, _) = run_render(meta, None).await;
+        let body_classes = out
+            .get_path(&["rendered", "navigation", "body-classes"])
+            .and_then(|v| v.as_plain_text());
+        assert_eq!(body_classes.as_deref(), Some("nav-sidebar docked"));
+    }
+
+    /// `bd-mgoh` — when `sidebar: false` suppresses the feature, no
+    /// body-classes are written either.
+    #[tokio::test]
+    async fn sidebar_render_skips_body_classes_when_disabled() {
+        let mut meta = config_map(vec![("sidebar", b(false))]);
+        let sb = Sidebar {
+            contents: vec![SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("a.qmd".to_string()),
+                    text: Some(s("A")),
+                    ..NavigationItem::default()
+                },
+            }],
+            ..Sidebar::with_defaults()
+        };
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let (out, _) = run_render(meta, None).await;
+        assert!(
+            !out.contains_path(&["rendered", "navigation", "body-classes"]),
+            "body-classes must not be set when sidebar feature is disabled"
+        );
+    }
+
+    /// `bd-mgoh` — a pre-populated `rendered.navigation.body-classes`
+    /// (e.g. from a user filter) survives. Mirrors the existing
+    /// `rendered.navigation.sidebar` user-override behavior.
+    #[tokio::test]
+    async fn sidebar_render_honors_user_body_classes_override() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["about.qmd"]),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            s("user-override-class"),
+        );
+        let (out, _) = run_render(meta, None).await;
+        let body_classes = out
+            .get_path(&["rendered", "navigation", "body-classes"])
+            .and_then(|v| v.as_plain_text());
+        assert_eq!(body_classes.as_deref(), Some("user-override-class"));
     }
 }

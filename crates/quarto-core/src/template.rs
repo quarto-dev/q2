@@ -116,7 +116,11 @@ $endfor$
 /// - `$author$` - document author(s)
 /// - `$date$` - publication date
 /// - `$abstract$` - document abstract
-/// - `$body-classes$` - CSS classes for body element
+/// - `$body-classes$` - CSS classes for body element. When set, replaces
+///   the `fullcontent` default entirely. Typically computed by
+///   `SidebarRenderTransform` (which writes `rendered.navigation.body-classes`)
+///   and copied into `body-classes` by `render_with_compiled_template`,
+///   but a user filter or template variable can override it.
 /// - `$page-layout$` - page layout type (article, full, etc.)
 /// - `$version$` - Quarto version for generator meta tag
 /// - `$rendered.navigation.toc$` - Rendered TOC HTML (if toc: true)
@@ -159,7 +163,7 @@ $for(header-includes)$
 $header-includes$
 $endfor$
 </head>
-<body class="fullcontent$if(body-classes)$ $body-classes$$endif$">
+<body class="$if(body-classes)$$body-classes$$else$fullcontent$endif$">
 $if(rendered.navigation.navbar)$
 $rendered.navigation.navbar$
 $endif$
@@ -167,11 +171,9 @@ $for(include-before)$
 $include-before$
 $endfor$
 
-<div id="quarto-content" class="page-columns page-rows-contents page-layout-$page-layout$">
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-$page-layout$">
 $if(rendered.navigation.sidebar)$
-<div id="quarto-sidebar-container" class="sidebar-column">
 $rendered.navigation.sidebar$
-</div>
 $endif$
 $if(rendered.navigation.toc)$
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
@@ -374,6 +376,18 @@ pub fn render_with_compiled_template(
     );
     if ctx.get("page-layout").is_none() {
         ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+    }
+
+    // Promote the rendered body-classes (computed by SidebarRenderTransform)
+    // into the top-level `body-classes` template variable, unless the user
+    // already supplied one via metadata. See bd-mgoh and the
+    // SidebarRenderTransform module doc-comment.
+    if ctx.get("body-classes").is_none()
+        && let Some(s) = meta
+            .get_path(&["rendered", "navigation", "body-classes"])
+            .and_then(|v| v.as_plain_text())
+    {
+        ctx.insert("body-classes", TemplateValue::String(s));
     }
 
     template
@@ -1592,7 +1606,117 @@ mod tests {
 
         let html = template.render(&ctx).unwrap();
 
-        assert!(html.contains("<body class=\"fullcontent my-class another-class\">"));
+        // body-classes is the full class list — no hardcoded `fullcontent` prefix.
+        assert!(html.contains("<body class=\"my-class another-class\">"));
+    }
+
+    #[test]
+    fn test_full_template_default_body_class_is_fullcontent() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        // no body-classes set
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(
+            html.contains("<body class=\"fullcontent\">"),
+            "expected default body class fullcontent; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    #[test]
+    fn test_full_template_no_sidebar_wrapper() {
+        // Sidebar HTML must appear as a direct child of #quarto-content,
+        // not inside a `<div id="quarto-sidebar-container">` wrapper.
+        // The SCSS rules in resources/scss target `#quarto-sidebar`
+        // directly as a grid child; a wrapper would intercept the
+        // grid placement.
+        use std::collections::HashMap;
+
+        let template = full_html_template().unwrap();
+
+        let mut nav_map = HashMap::new();
+        nav_map.insert(
+            "sidebar".to_string(),
+            TemplateValue::String(
+                "<nav id=\"quarto-sidebar\" class=\"sidebar sidebar-navigation sidebar-floating\"><span>SIDEBAR_BODY</span></nav>"
+                    .to_string(),
+            ),
+        );
+        let mut rendered_map = HashMap::new();
+        rendered_map.insert("navigation".to_string(), TemplateValue::Map(nav_map));
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        ctx.insert("rendered", TemplateValue::Map(rendered_map));
+
+        let html = template.render(&ctx).unwrap();
+
+        // Sidebar HTML rendered.
+        assert!(
+            html.contains("<nav id=\"quarto-sidebar\""),
+            "expected sidebar HTML in output; got: {}",
+            html
+        );
+        // No wrapper div.
+        assert!(
+            !html.contains("quarto-sidebar-container"),
+            "wrapper div should be gone; got: {}",
+            html
+        );
+        assert!(
+            !html.contains("class=\"sidebar-column\""),
+            "sidebar-column class should be gone; got: {}",
+            html
+        );
+
+        // The sidebar must appear *between* `<div id="quarto-content"` and
+        // `<main`. That confirms it's a direct grid child of #quarto-content,
+        // not nested inside <main> or anywhere else.
+        let content_idx = html
+            .find("id=\"quarto-content\"")
+            .expect("quarto-content div present");
+        let sidebar_idx = html
+            .find("<nav id=\"quarto-sidebar\"")
+            .expect("sidebar nav present");
+        let main_idx = html.find("<main").expect("main element present");
+        assert!(
+            content_idx < sidebar_idx && sidebar_idx < main_idx,
+            "sidebar must sit between #quarto-content opening and <main>; \
+             content_idx={}, sidebar_idx={}, main_idx={}",
+            content_idx,
+            sidebar_idx,
+            main_idx
+        );
+    }
+
+    #[test]
+    fn test_full_template_quarto_container_class() {
+        // For parity with Q1, #quarto-content carries `quarto-container`
+        // alongside the page-columns / page-layout classes.
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+
+        let html = template.render(&ctx).unwrap();
+
+        // Match either order; grep for the substring as a class token.
+        assert!(
+            html.contains("id=\"quarto-content\" class=\"quarto-container ")
+                || html.contains("class=\"quarto-container ") && html.contains("quarto-content"),
+            "expected quarto-container class on #quarto-content; got: {}",
+            &html[..html.len().min(800)]
+        );
     }
 
     // === render_with_format tests ===
