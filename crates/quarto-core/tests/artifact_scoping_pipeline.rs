@@ -156,6 +156,46 @@ fn three_page_fixture(project_dir: &Path) {
 
 // === Test 18 ================================================================
 
+/// bd-78ud regression: prose-only pages in a website project
+/// should NOT leave empty `{stem}_files/` directories behind. The
+/// theme CSS lives in `site_libs/`, not per-page; per-page artifact
+/// dirs are reserved for engine outputs (figures, cached plots),
+/// which prose-only pages never produce. Eagerly creating the
+/// per-page dir at render start (and never filling it) clutters
+/// the output for projects with many docs per directory.
+#[test]
+fn website_render_omits_empty_stem_files_dirs() {
+    let project_dir = render_website(three_page_fixture);
+    let site = project_dir.join("_site");
+
+    // No `{stem}_files/` should exist next to a prose-only page.
+    for stem in &["index", "about"] {
+        let files_dir = site.join(format!("{}_files", stem));
+        assert!(
+            !files_dir.exists(),
+            "expected no empty _site/{}_files/ but found one at {}",
+            stem,
+            files_dir.display()
+        );
+    }
+    // Same for the subdir page.
+    let api_files = site.join("docs").join("api_files");
+    assert!(
+        !api_files.exists(),
+        "expected no empty _site/docs/api_files/ but found one at {}",
+        api_files.display()
+    );
+
+    // Sanity: the rendered HTML still exists and the shared theme
+    // CSS is still in site_libs/. (This is the inverse of test 18 —
+    // we want to confirm nothing about the legitimate output broke.)
+    assert!(site.join("index.html").exists());
+    assert!(site.join("about.html").exists());
+    assert!(site.join("docs").join("api.html").exists());
+    let site_libs = site.join("site_libs").join("quarto");
+    assert!(site_libs.exists(), "site_libs/quarto/ should still exist");
+}
+
 /// Plan test 18: a 3-page website renders one shared theme CSS
 /// file under `_site/site_libs/quarto/quarto-theme-*.css`.
 #[test]

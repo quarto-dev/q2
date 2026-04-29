@@ -141,35 +141,40 @@ pub fn resource_dir_name(stem: &str) -> String {
     format!("{}_files", stem)
 }
 
-/// Prepare the HTML resource directory without writing CSS.
+/// Compute the HTML resource directory name and CSS path without
+/// touching the filesystem.
 ///
-/// Creates the `{stem}_files/` directory and returns the resource paths,
-/// but does not write any CSS file. The caller is responsible for writing
-/// CSS content after the render pipeline produces it.
+/// Returns the path the per-page resource directory *would* take
+/// (i.e. `{output_dir}/{stem}_files/`) and the relative URL the
+/// template should emit for the CSS link, but does **not** create
+/// the directory. The directory is created lazily by
+/// [`crate::render_to_file::write_artifacts`] (via
+/// `dir_create(parent, true)` on each artifact's on-disk path)
+/// only when there is something to put in it.
+///
+/// This avoids leaving empty `{stem}_files/` dirs behind for
+/// prose-only pages in website projects, where Project-scoped
+/// artifacts go to `site_libs/` instead and there are no Page-
+/// scoped artifacts to write. See bd-78ud.
 ///
 /// # Arguments
 /// * `output_dir` - Directory containing the output HTML file
 /// * `stem` - The stem of the output filename (e.g., "document" for "document.html")
-/// * `runtime` - The system runtime for file operations
+/// * `_runtime` - Retained for API compatibility; no longer used
+///   (no I/O happens here). The argument is unused but kept so
+///   callers don't break.
 ///
 /// # Returns
 /// Paths to the resource locations, relative to the output HTML file.
 pub fn prepare_html_resources(
     output_dir: &Path,
     stem: &str,
-    runtime: &dyn SystemRuntime,
+    _runtime: &dyn SystemRuntime,
 ) -> Result<HtmlResourcePaths> {
-    // Create resource directory: {stem}_files/
+    // Compute resource directory name: {stem}_files/. We deliberately
+    // do NOT create it here — see the doc comment.
     let resource_dir_name = format!("{}_files", stem);
     let resource_dir = output_dir.join(&resource_dir_name);
-
-    runtime.dir_create(&resource_dir, true).map_err(|e| {
-        crate::error::QuartoError::other(format!(
-            "Failed to create resource directory {}: {}",
-            resource_dir.display(),
-            e
-        ))
-    })?;
 
     // Build relative paths for template (CSS file will be written later)
     let css_filename = "styles.css";
@@ -242,13 +247,23 @@ mod tests {
         assert!(paths.js.is_empty());
     }
 
+    /// bd-78ud: `prepare_html_resources` no longer creates the
+    /// `{stem}_files/` directory. The path is computed and
+    /// returned, but the directory is only materialised lazily by
+    /// `write_artifacts` when there is a Page-scoped artifact to
+    /// write into it. This avoids leaving empty `_files/` dirs
+    /// scattered through `_site/` for prose-only pages.
     #[test]
-    fn test_prepare_html_resources_creates_directory() {
+    fn test_prepare_html_resources_does_not_create_directory() {
         let runtime = NativeRuntime::new();
         let temp = TempDir::new().unwrap();
         let paths = prepare_html_resources(temp.path(), "document", &runtime).unwrap();
 
-        assert!(paths.resource_dir.exists());
+        assert!(
+            !paths.resource_dir.exists(),
+            "prepare_html_resources should not create the directory eagerly; got {}",
+            paths.resource_dir.display()
+        );
         assert!(paths.resource_dir.ends_with("document_files"));
     }
 
