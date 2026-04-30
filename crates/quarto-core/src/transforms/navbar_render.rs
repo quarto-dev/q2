@@ -74,9 +74,10 @@ impl AstTransform for NavbarRenderTransform {
 
         let mut navbar = Navbar::from_config_value(navbar_cv);
 
-        // Rewrite .qmd → .html hrefs (including inside dropdown menus)
-        // when a ProjectIndex is attached. Borrow diagnostics out of
-        // ctx so the helper can push without a borrow cycle.
+        // Rewrite .qmd → .html hrefs (including inside dropdown menus
+        // and the brand's logo-href) when a ProjectIndex is attached.
+        // Borrow diagnostics out of ctx so the helper can push without
+        // a borrow cycle.
         let mut local_diags = std::mem::take(&mut ctx.diagnostics);
         rewrite_navigation_item_hrefs(
             &mut navbar.left,
@@ -92,10 +93,30 @@ impl AstTransform for NavbarRenderTransform {
             "Navbar",
             &mut local_diags,
         );
+        // Brand `logo-href` (bd-jgeu) — same treatment as ordinary
+        // nav items so user-supplied .qmd / project-relative paths
+        // resolve and relativize.
+        if let Some(href) = navbar.logo_href.as_mut() {
+            *href = resolve_href_for_html(
+                href,
+                ctx.resource_resolver.as_ref(),
+                ctx.project_index.as_deref(),
+                Some("Navbar"),
+                &mut local_diags,
+            );
+        }
         ctx.diagnostics = local_diags;
 
         let fallback = brand_title_fallback(&ast.meta);
-        let html = navbar_to_html(&navbar, fallback.as_deref());
+        // Page-relative URL of the site root directory; brand falls
+        // back to this when no logo-href is set. Without a resolver
+        // (single-doc / out-of-band) fall back to `./`.
+        let home_url = ctx
+            .resource_resolver
+            .as_ref()
+            .map(|r| r.page_url_for_site_root_dir())
+            .unwrap_or_else(|| "./".to_string());
+        let html = navbar_to_html(&navbar, fallback.as_deref(), &home_url);
 
         ast.meta.insert_path(
             &["rendered", "navigation", "navbar"],
@@ -611,6 +632,166 @@ mod tests {
         assert!(
             !html.contains("href=\"about.html\"") || html.contains("href=\"../about.html\""),
             "bare about.html should not be present without ../ prefix; got: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 15 — when no `logo_href` is set, the brand
+    /// anchor falls back to the page-relative URL of the site root
+    /// directory. From a depth-1 page, this is `../`. Replaces the
+    /// previous absolute `/` fallback (deployment-fragile).
+    #[tokio::test]
+    async fn navbar_render_brand_relativizes_home_link_at_depth_one() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/tools/converter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/tools/converter.html",
+            "site_libs",
+            "converter",
+        );
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_resource_resolver(resolver);
+        NavbarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("<a class=\"navbar-brand\" href=\"../\">"),
+            "brand should fall back to page-relative ../; got: {}",
+            html
+        );
+        assert!(
+            !html.contains("<a class=\"navbar-brand\" href=\"/\">"),
+            "absolute / fallback must not appear; got: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 16 — user-supplied `logo-href: about.qmd`
+    /// gets the same .qmd → .html rewrite + page-relative URL
+    /// treatment as ordinary nav items. From a depth-1 page,
+    /// `about.qmd` resolves to `../about.html`.
+    #[tokio::test]
+    async fn navbar_render_brand_rewrites_user_logo_href_qmd() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            logo_href: Some("about.qmd".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "about.qmd",
+            "about.html",
+            "About",
+        )]));
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/tools/converter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/tools/converter.html",
+            "site_libs",
+            "converter",
+        );
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries)
+            .with_project_index(index)
+            .with_resource_resolver(resolver);
+        NavbarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("<a class=\"navbar-brand\" href=\"../about.html\">"),
+            "logo-href: about.qmd should resolve to ../about.html; got: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"about.qmd\""),
+            "raw .qmd href must not survive; got: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 17 — external URLs in `logo-href` pass
+    /// through unchanged.
+    #[tokio::test]
+    async fn navbar_render_brand_external_logo_href_passes_through() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            logo_href: Some("https://example.com/".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/tools/converter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/tools/converter.html",
+            "site_libs",
+            "converter",
+        );
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_resource_resolver(resolver);
+        NavbarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("<a class=\"navbar-brand\" href=\"https://example.com/\">"),
+            "external logo_href should pass through unchanged; got: {}",
             html
         );
     }

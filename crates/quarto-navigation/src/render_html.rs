@@ -35,7 +35,16 @@ use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 /// Callers typically pass the document's `title` metadata field; if no
 /// fallback is available, pass `None` and the `<a class="navbar-brand">`
 /// element is omitted entirely.
-pub fn navbar_to_html(navbar: &Navbar, document_title_fallback: Option<&str>) -> String {
+///
+/// `home_url` is the page-relative URL the brand falls back to when
+/// `navbar.logo_href` is unset (the website root directory). Callers
+/// compute it via `ResourceResolverContext::page_url_for_site_root_dir`;
+/// pass `"./"` in unit tests / single-doc fallbacks. See bd-jgeu.
+pub fn navbar_to_html(
+    navbar: &Navbar,
+    document_title_fallback: Option<&str>,
+    home_url: &str,
+) -> String {
     let mut html = String::new();
 
     let expand_class = format!("navbar-expand-{}", navbar.collapse_below.as_str());
@@ -74,7 +83,7 @@ pub fn navbar_to_html(navbar: &Navbar, document_title_fallback: Option<&str>) ->
     html.push_str("  <div class=\"container-fluid\">\n");
 
     // Brand (title + logo).
-    if let Some(brand_html) = render_brand(navbar, document_title_fallback) {
+    if let Some(brand_html) = render_brand(navbar, document_title_fallback, home_url) {
         html.push_str("    ");
         html.push_str(&brand_html);
         html.push('\n');
@@ -181,10 +190,15 @@ pub fn page_footer_to_html(footer: &PageFooter) -> String {
 /// `quarto-navigation` format-agnostic (see
 /// `claude-notes/plans/2026-04-24-websites-phase-2.md` §Decision 7/8).
 ///
+/// `home_url` is the page-relative URL the sidebar title's anchor
+/// links to (the website root directory). Callers compute it via
+/// `ResourceResolverContext::page_url_for_site_root_dir`; pass `"./"`
+/// in unit tests / single-doc fallbacks. See bd-jgeu.
+///
 /// Phase 2 emits structurally-correct collapse markup (`data-bs-*`
 /// attributes, `aria-expanded`), but the actual JS glue lives in
 /// Phase 5 (`site_libs/`); until then the chevrons are inert.
-pub fn sidebar_to_html(sidebar: &Sidebar) -> String {
+pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
     let mut html = String::new();
 
     let style_class = match sidebar.style {
@@ -208,7 +222,8 @@ pub fn sidebar_to_html(sidebar: &Sidebar) -> String {
     if let SidebarTitle::Text(ref title_cv) = sidebar.title {
         html.push_str("  <div class=\"sidebar-header pt-lg-2 mt-2 text-left\">\n");
         html.push_str(&format!(
-            "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"./\">{}</a></div>\n",
+            "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"{}\">{}</a></div>\n",
+            escape_attr(home_url),
             render_text(title_cv)
         ));
         html.push_str("  </div>\n");
@@ -293,8 +308,8 @@ fn render_page_nav_side(html: &mut String, side: &str, item: Option<&NavigationI
 
 // --- Private helpers ---------------------------------------------------------
 
-fn render_brand(navbar: &Navbar, fallback: Option<&str>) -> Option<String> {
-    let href = navbar.logo_href.as_deref().unwrap_or("/");
+fn render_brand(navbar: &Navbar, fallback: Option<&str>, home_url: &str) -> Option<String> {
+    let href = navbar.logo_href.as_deref().unwrap_or(home_url);
     let logo_img = navbar.logo.as_deref().map(|logo| {
         let alt = navbar
             .logo_alt
@@ -897,10 +912,11 @@ mod tests {
             }],
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("<nav class=\"navbar navbar-expand-lg bg-primary\""));
         assert!(html.contains("data-bs-theme=\"dark\""));
-        assert!(html.contains("<a class=\"navbar-brand\" href=\"/\">My Site</a>"));
+        // Brand href falls back to the supplied home_url when no logo_href.
+        assert!(html.contains("<a class=\"navbar-brand\" href=\"./\">My Site</a>"));
         assert!(html.contains("href=\"index.qmd\""));
         assert!(html.contains("Home"));
     }
@@ -908,7 +924,7 @@ mod tests {
     #[test]
     fn navbar_falls_back_to_document_title() {
         let navbar = Navbar::with_defaults();
-        let html = navbar_to_html(&navbar, Some("Doc Title"));
+        let html = navbar_to_html(&navbar, Some("Doc Title"), "./");
         assert!(html.contains("Doc Title"));
         assert!(html.contains("navbar-brand"));
     }
@@ -919,9 +935,70 @@ mod tests {
             title: NavbarTitle::Hidden,
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, Some("Doc Title"));
+        let html = navbar_to_html(&navbar, Some("Doc Title"), "./");
         assert!(!html.contains("Doc Title"));
         assert!(!html.contains("navbar-brand"));
+    }
+
+    /// bd-jgeu test 9 — `home_url` is the brand's anchor when no
+    /// `logo_href` is set. From a depth-1 page the caller passes
+    /// `"../"` and the brand should reflect that.
+    #[test]
+    fn navbar_render_brand_uses_home_url_when_no_logo_href() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "../");
+        assert!(
+            html.contains("<a class=\"navbar-brand\" href=\"../\">"),
+            "brand should fall back to home_url ../; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"/\""),
+            "the absolute / fallback should not appear; html: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 10 — explicit `logo_href` wins over `home_url`.
+    /// User-supplied values take precedence; the resolver-derived
+    /// home_url is only the fallback.
+    #[test]
+    fn navbar_render_brand_prefers_explicit_logo_href_over_home_url() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            logo_href: Some("about.html".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "../");
+        assert!(
+            html.contains("<a class=\"navbar-brand\" href=\"about.html\">"),
+            "explicit logo_href wins; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"../\""),
+            "home_url must not be used when logo_href is set; html: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 11 — defensive: arbitrary characters in
+    /// `home_url` must be HTML-attribute-escaped on emission.
+    #[test]
+    fn navbar_render_brand_home_url_is_attribute_escaped() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "../with\"&here/");
+        assert!(
+            html.contains("href=\"../with&quot;&amp;here/\""),
+            "home_url must be attribute-escaped; html: {}",
+            html
+        );
     }
 
     #[test]
@@ -946,7 +1023,7 @@ mod tests {
             }],
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("nav-item dropdown"));
         assert!(html.contains("dropdown-menu"));
         assert!(html.contains("dropdown-item"));
@@ -960,7 +1037,7 @@ mod tests {
             search: true,
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("<div class=\"quarto-search\"></div>"));
     }
 
@@ -975,7 +1052,7 @@ mod tests {
             }],
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("<i class=\"bi bi-github\"></i>"));
         assert!(html.contains("aria-label=\"GitHub repository\""));
         assert!(html.contains("href=\"https://github.com/\""));
@@ -987,7 +1064,7 @@ mod tests {
             collapse_below: CollapseBelow::Xl,
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("navbar-expand-xl"));
     }
 
@@ -997,7 +1074,7 @@ mod tests {
             toggle_position: TogglePosition::Right,
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("navbar-toggler ms-auto"));
     }
 
@@ -1007,7 +1084,7 @@ mod tests {
             title: NavbarTitle::Text(s("A & B <script>")),
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("A &amp; B &lt;script&gt;"));
         assert!(!html.contains("<script>"));
     }
@@ -1034,7 +1111,7 @@ mod tests {
             title: NavbarTitle::Text(ConfigValue::new_inlines(inlines, SourceInfo::default())),
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("A <strong>bold</strong> Title"));
     }
 
@@ -1079,7 +1156,7 @@ mod tests {
         // Sanity-check the navbar's existing container wrapper; same
         // rationale as the footer, and guards against regressions.
         let navbar = Navbar::with_defaults();
-        let html = navbar_to_html(&navbar, Some("Doc"));
+        let html = navbar_to_html(&navbar, Some("Doc"), "./");
         assert!(
             html.contains("<div class=\"container-fluid\">"),
             "navbar should wrap body in .container-fluid: {}",
@@ -1216,7 +1293,7 @@ mod tests {
             }],
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(
             html.contains("class=\"nav-link active\""),
             "expected nav-link active class; got: {}",
@@ -1236,7 +1313,7 @@ mod tests {
             }],
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(html.contains("class=\"nav-link\""));
         assert!(
             !html.contains("nav-link active"),
@@ -1269,7 +1346,7 @@ mod tests {
             }],
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, None);
+        let html = navbar_to_html(&navbar, None, "./");
         assert!(
             html.contains("class=\"dropdown-item active\""),
             "expected dropdown-item active for advanced leaf; got: {}",
@@ -1312,7 +1389,7 @@ mod tests {
             contents: vec![link("index.html", "Home"), link("about.html", "About")],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("<nav id=\"quarto-sidebar\""));
         assert!(html.contains("class=\"sidebar sidebar-navigation sidebar-floating\""));
         assert!(html.contains("<div class=\"sidebar-menu-container\">"));
@@ -1340,7 +1417,7 @@ mod tests {
             }],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("sidebar-item-section"));
         assert!(html.contains("aria-expanded=\"false\""));
         assert!(
@@ -1366,7 +1443,7 @@ mod tests {
             }],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("aria-expanded=\"true\""));
         assert!(html.contains("class=\"collapse list-unstyled sidebar-section depth1 show\""));
     }
@@ -1381,7 +1458,7 @@ mod tests {
             ],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         // The active leaf must have the `active` class.
         assert!(
             html.contains("href=\"about.html\" class=\"sidebar-item-text sidebar-link active\""),
@@ -1412,7 +1489,7 @@ mod tests {
             ],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("<hr class=\"sidebar-divider\">"));
     }
 
@@ -1424,7 +1501,7 @@ mod tests {
             contents: vec![SidebarEntry::Heading(s("Label"))],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(
             html.contains("<span class=\"menu-text\">Label</span>"),
             "heading should render as menu-text span; html: {}",
@@ -1451,7 +1528,7 @@ mod tests {
             style: SidebarStyle::Docked,
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("sidebar-docked"));
         assert!(!html.contains("sidebar-floating"));
     }
@@ -1471,7 +1548,7 @@ mod tests {
             }],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         // Header anchor points at the href and is NOT a toggle.
         assert!(
             html.contains("href=\"guides/index.html\" class=\"sidebar-item-text sidebar-link\"")
@@ -1496,7 +1573,7 @@ mod tests {
             }],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("sidebar-section depth1 show"));
         assert!(html.contains("sidebar-link active"));
     }
@@ -1512,7 +1589,7 @@ mod tests {
             ],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         let a_pos = html.find(">A<").unwrap();
         let sep_pos = html.find("sidebar-divider").unwrap();
         let b_pos = html.find(">B<").unwrap();
@@ -1532,7 +1609,7 @@ mod tests {
             ],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         // Still contains the real links.
         assert!(html.contains(">A<"));
         assert!(html.contains(">B<"));
@@ -1557,7 +1634,7 @@ mod tests {
             contents: vec![link("a.html", "A")],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(
             !html.contains("sidebar-header"),
             "Default title should produce no sidebar-header; html: {}",
@@ -1573,7 +1650,7 @@ mod tests {
             contents: vec![link("a.html", "A")],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(
             !html.contains("sidebar-header"),
             "Hidden title should produce no sidebar-header; html: {}",
@@ -1589,7 +1666,7 @@ mod tests {
             contents: vec![link("a.html", "A")],
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(
             html.contains("<div class=\"sidebar-header pt-lg-2 mt-2 text-left\">"),
             "expected header wrapper with utility classes; html: {}",
@@ -1613,7 +1690,7 @@ mod tests {
             title: SidebarTitle::Text(s("A & <B>")),
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(
             html.contains("<a href=\"./\">A &amp; &lt;B&gt;</a>"),
             "title text should be HTML-escaped inside the anchor; html: {}",
@@ -1641,10 +1718,51 @@ mod tests {
             title: SidebarTitle::Text(ConfigValue::new_inlines(inlines, SourceInfo::default())),
             ..Sidebar::with_defaults()
         };
-        let html = sidebar_to_html(&sb);
+        let html = sidebar_to_html(&sb, "./");
         assert!(
             html.contains("<a href=\"./\"><strong>bold</strong> site</a>"),
             "inline markup should survive through the anchor; html: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 6 — the `home_url` argument is what the sidebar
+    /// title's anchor uses. From a depth-1 page, the caller passes
+    /// `"../"` and the anchor should reflect that.
+    #[test]
+    fn sidebar_render_title_home_link_uses_provided_home_url() {
+        let sb = Sidebar {
+            title: SidebarTitle::Text(s("Site")),
+            contents: vec![link("a.html", "A")],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb, "../");
+        assert!(
+            html.contains("<a href=\"../\">Site</a>"),
+            "title link should use the supplied home_url ../; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"./\""),
+            "the hardcoded ./ fallback should not appear; html: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 7 — defensive: arbitrary characters in `home_url`
+    /// must be HTML-attribute-escaped on emission.
+    #[test]
+    fn sidebar_render_title_home_url_is_attribute_escaped() {
+        let sb = Sidebar {
+            title: SidebarTitle::Text(s("Site")),
+            contents: vec![link("a.html", "A")],
+            ..Sidebar::with_defaults()
+        };
+        // Pass a value containing `"` and `&` to confirm escaping.
+        let html = sidebar_to_html(&sb, "../with\"&here/");
+        assert!(
+            html.contains("href=\"../with&quot;&amp;here/\""),
+            "home_url must be attribute-escaped; html: {}",
             html
         );
     }

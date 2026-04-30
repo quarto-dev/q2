@@ -217,6 +217,28 @@ impl ResourceResolverContext {
         rel_to_url(&rel)
     }
 
+    /// Page-relative URL pointing at the **site root directory**
+    /// (the directory `index.html` lives in). Always ends with `/`,
+    /// so HTML attributes can use it as a directory href that the
+    /// browser resolves against the host's index document.
+    ///
+    /// - Root page → `"./"`
+    /// - Depth-1 page → `"../"`
+    /// - Depth-N page → `"../"` × N
+    /// - VFS-root mode (hub-client) → `"/{vfs_root}/"`
+    /// - Single-doc mode → `"./"` (degenerate but harmless)
+    ///
+    /// Used by sidebar / navbar renderers for the "home" link in
+    /// the title header / brand. See bd-jgeu.
+    pub fn page_url_for_site_root_dir(&self) -> String {
+        let base = self.page_url_for("");
+        if base.ends_with('/') {
+            base
+        } else {
+            format!("{}/", base)
+        }
+    }
+
     /// Compute the absolute on-disk path where an artifact's bytes
     /// should be written. In VFS-root mode this is `{vfs_root}/{artifact_path}`
     /// regardless of scope.
@@ -522,6 +544,63 @@ mod tests {
     fn page_url_for_single_doc_returns_target_verbatim() {
         let r = ResourceResolverContext::single_doc("/tmp/doc.html", "doc");
         assert_eq!(r.page_url_for("about.html"), "about.html");
+    }
+
+    // ---- bd-jgeu tests for `page_url_for_site_root_dir` ----
+    //
+    // These exercise the helper used by sidebar/navbar rendering to emit
+    // the page-relative URL of the site root directory (where
+    // `index.html` lives). Always ends with `/` so HTML attributes can
+    // use it as a directory href that the browser resolves against the
+    // host's index document. See
+    // `claude-notes/plans/2026-04-30-sidebar-title-home-link-relativize.md`.
+
+    #[test]
+    fn page_url_for_site_root_dir_root_page() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/index.html",
+            "site_libs",
+            "index",
+        );
+        assert_eq!(r.page_url_for_site_root_dir(), "./");
+    }
+
+    #[test]
+    fn page_url_for_site_root_dir_nested_page() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/posts/aardvark.html",
+            "site_libs",
+            "aardvark",
+        );
+        assert_eq!(r.page_url_for_site_root_dir(), "../");
+    }
+
+    #[test]
+    fn page_url_for_site_root_dir_deep_nesting() {
+        let r = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/a/b/c/d.html",
+            "site_libs",
+            "d",
+        );
+        assert_eq!(r.page_url_for_site_root_dir(), "../../../");
+    }
+
+    #[test]
+    fn page_url_for_site_root_dir_vfs_root_mode() {
+        let r = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
+        assert_eq!(
+            r.page_url_for_site_root_dir(),
+            "/.quarto/project-artifacts/"
+        );
+    }
+
+    #[test]
+    fn page_url_for_site_root_dir_single_doc() {
+        let r = ResourceResolverContext::single_doc("/tmp/doc.html", "doc");
+        assert_eq!(r.page_url_for_site_root_dir(), "./");
     }
 
     #[test]

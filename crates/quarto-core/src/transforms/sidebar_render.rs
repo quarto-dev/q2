@@ -123,7 +123,16 @@ impl AstTransform for SidebarRenderTransform {
         );
         ctx.diagnostics = local_diags;
 
-        let html = sidebar_to_html(&sidebar);
+        // Compute the page-relative URL of the site root directory
+        // for the sidebar title's home link. Without a resolver
+        // (single-doc / out-of-band callers) fall back to `./`,
+        // which is correct at the project root. See bd-jgeu.
+        let home_url = ctx
+            .resource_resolver
+            .as_ref()
+            .map(|r| r.page_url_for_site_root_dir())
+            .unwrap_or_else(|| "./".to_string());
+        let html = sidebar_to_html(&sidebar, &home_url);
 
         ast.meta.insert_path(
             &["rendered", "navigation", "sidebar"],
@@ -556,6 +565,99 @@ mod tests {
         assert!(
             !html.contains("href=\"about.html\""),
             "bare project-relative href should NOT appear; got: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 13 — sidebar title's home link is page-relative.
+    /// Page lives at depth 1; the title anchor must point to `../`,
+    /// not the hardcoded `./` (which would loop back into the same
+    /// directory).
+    #[tokio::test]
+    async fn render_relativizes_sidebar_title_home_link_at_depth_one() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let mut meta = ConfigValue::default();
+        // Sidebar with an explicit text title — required for the
+        // header to be emitted at all.
+        let sb = Sidebar {
+            title: quarto_navigation::SidebarTitle::Text(s("Site")),
+            contents: vec![SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("about.qmd".to_string()),
+                    text: Some(s("About")),
+                    ..NavigationItem::default()
+                },
+            }],
+            ..Sidebar::with_defaults()
+        };
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/guide/installation.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/guide/installation.html",
+            "site_libs",
+            "installation",
+        );
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_resource_resolver(resolver);
+        SidebarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("<a href=\"../\">Site</a>"),
+            "title home link should be page-relative ../; got: {}",
+            html
+        );
+        assert!(
+            !html.contains("<a href=\"./\">Site</a>"),
+            "the hardcoded ./ fallback should not appear; got: {}",
+            html
+        );
+    }
+
+    /// bd-jgeu test 14 — when no resolver is attached (single-doc
+    /// fallback / out-of-band callers) the title anchor falls back
+    /// to `./` so behavior at the project root is preserved.
+    #[tokio::test]
+    async fn render_uses_dot_slash_home_link_when_no_resolver() {
+        let mut meta = ConfigValue::default();
+        let sb = Sidebar {
+            title: quarto_navigation::SidebarTitle::Text(s("Site")),
+            contents: vec![SidebarEntry::Link {
+                item: NavigationItem {
+                    href: Some("about.qmd".to_string()),
+                    text: Some(s("About")),
+                    ..NavigationItem::default()
+                },
+            }],
+            ..Sidebar::with_defaults()
+        };
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let (out, _) = run_render(meta, None).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("<a href=\"./\">Site</a>"),
+            "no-resolver fallback should be ./; got: {}",
             html
         );
     }
