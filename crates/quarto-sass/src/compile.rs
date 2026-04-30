@@ -159,6 +159,78 @@ pub fn compile_theme_css(
     })
 }
 
+/// Compile theme CSS with an additional doc-derived SassLayer of
+/// `$variable: value;` assignments prepended to the user layers.
+///
+/// This is the entry point used by `CompileThemeCssStage` to thread
+/// per-document metadata (e.g. `$sidebar-border` for docked sidebars,
+/// future `$sidebar-bg` / `$navbar-bg` / etc.) into the SCSS bundle.
+///
+/// `doc_vars` slots in as the **last** user layer so it lands at the
+/// front of the merged-defaults section and wins the `!default` race
+/// against the framework's defaults — no `!default` flag needed in
+/// `doc_vars` itself. Mirrors Q1's `format-html-scss.ts` synthesis.
+///
+/// When `doc_vars.is_empty()`, this is byte-equivalent to:
+/// - `compile_default_css(...)` if `!config.has_themes()`,
+/// - `compile_theme_css(config, context)` otherwise.
+///
+/// Notably, when `doc_vars` is non-empty the in-process
+/// `DEFAULT_CSS_CACHE` is **bypassed** because the compiled output now
+/// depends on metadata. Cross-session caching is the caller's
+/// responsibility (the stage handles it via `cache_get_lru` /
+/// `cache_set_lru` keyed on a hash that includes doc-vars).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn compile_with_doc_vars(
+    config: &ThemeConfig,
+    context: &ThemeContext<'_>,
+    doc_vars: &crate::SassLayer,
+) -> Result<String, SassError> {
+    use crate::bundle::{load_highlight_layer, load_title_block_layer};
+    use crate::themes::process_theme_specs;
+    use quarto_system_runtime::sass_native::compile_scss_with_embedded;
+
+    // Fast paths: no doc-vars to inject — defer to existing entry points
+    // so we keep the OnceLock cache for the no-theme case.
+    if doc_vars.is_empty() {
+        if config.has_themes() {
+            return compile_theme_css(config, context);
+        }
+        return compile_default_css(context.runtime(), config.minified);
+    }
+
+    // Build user layers: title-block + highlight (always-present built-ins,
+    // matching `compile_default_css` and `assemble_theme_scss`), then any
+    // theme layers, then doc_vars LAST so it lands at the top of the
+    // merged-defaults section and wins the `!default` race.
+    let title_block_layer = load_title_block_layer()?;
+    let highlight_layer = load_highlight_layer()?;
+    let mut user_layers = vec![title_block_layer, highlight_layer];
+
+    let mut load_paths = default_load_paths();
+    if config.has_themes() {
+        let result = process_theme_specs(&config.themes, context)?;
+        user_layers.extend(result.layers);
+        load_paths.extend(result.load_paths);
+    }
+    load_paths.extend(context.load_paths().iter().cloned());
+
+    user_layers.push(doc_vars.clone());
+
+    let scss = crate::assemble_with_user_layers(&user_layers)?;
+    let resources = all_resources();
+    compile_scss_with_embedded(
+        context.runtime(),
+        &resources,
+        &scss,
+        &load_paths,
+        config.minified,
+    )
+    .map_err(|e| SassError::CompilationFailed {
+        message: e.to_string(),
+    })
+}
+
 /// Compile CSS from ConfigValue directly.
 ///
 /// This is a convenience function that combines config extraction and compilation.
@@ -326,6 +398,49 @@ pub async fn compile_theme_css(
     let (scss, load_paths) = assemble_theme_scss(config, context)?;
 
     // Compile via JS bridge
+    context
+        .runtime()
+        .compile_sass(&scss, &load_paths, config.minified)
+        .await
+        .map_err(|e| SassError::CompilationFailed {
+            message: e.to_string(),
+        })
+}
+
+/// WASM mirror of [`compile_with_doc_vars`]. See native version for full
+/// documentation on the doc-vars layer's role in the user-layer ordering.
+#[cfg(target_arch = "wasm32")]
+pub async fn compile_with_doc_vars(
+    config: &ThemeConfig,
+    context: &ThemeContext<'_>,
+    doc_vars: &crate::SassLayer,
+) -> Result<String, SassError> {
+    use crate::bundle::{load_highlight_layer, load_title_block_layer};
+    use crate::themes::process_theme_specs;
+
+    if doc_vars.is_empty() {
+        if config.has_themes() {
+            return compile_theme_css(config, context).await;
+        }
+        return compile_default_css(context.runtime(), config.minified).await;
+    }
+
+    let title_block_layer = load_title_block_layer()?;
+    let highlight_layer = load_highlight_layer()?;
+    let mut user_layers = vec![title_block_layer, highlight_layer];
+
+    let mut load_paths = default_load_paths();
+    if config.has_themes() {
+        let result = process_theme_specs(&config.themes, context)?;
+        user_layers.extend(result.layers);
+        load_paths.extend(result.load_paths);
+    }
+    load_paths.extend(context.load_paths().iter().cloned());
+
+    user_layers.push(doc_vars.clone());
+
+    let scss = crate::assemble_with_user_layers(&user_layers)?;
+
     context
         .runtime()
         .compile_sass(&scss, &load_paths, config.minified)
@@ -649,5 +764,121 @@ mod tests {
 
         // Should have custom rule
         assert!(css.contains(".custom-rule"));
+    }
+
+    /// Phase 1 of the sidebar-vertical-border port (bd-k8y0).
+    ///
+    /// Q1 emits `.sidebar.sidebar-navigation:not(.rollup) { border-right:
+    /// 1px solid $table-border-color !important; }` when `$sidebar-border`
+    /// is truthy (`quarto-cli/.../quarto-nav.scss:552-556`). The rule is
+    /// what produces the faint vertical line between a docked sidebar and
+    /// main content on every Q1 docked-sidebar website.
+    ///
+    /// `$sidebar-border` defaults to `false !default` in
+    /// `_bootstrap-variables.scss:173`, so this test injects an
+    /// unconditional `$sidebar-border: true;` via a user layer (which lands
+    /// before the framework defaults — see `assemble_with_user_layers`
+    /// ordering in `bundle.rs:283-295`). That is exactly the seam Phase 2
+    /// of the plan will use to thread doc-derived variables through.
+    #[test]
+    fn test_sidebar_border_rule_emits_when_variable_is_true() {
+        use crate::bundle::assemble_with_user_layers;
+        use crate::layer::parse_layer_from_parts;
+        use quarto_system_runtime::sass_native::compile_scss_with_embedded;
+
+        let runtime = NativeRuntime::new();
+        let resources = all_resources();
+        let load_paths = default_load_paths();
+
+        // Doc-vars layer: a non-`!default` assignment, like Q1's
+        // synthesized `$sidebar-border: <bool>;` snippet from
+        // format-html-scss.ts. No `!default` so it is unconditional and
+        // wins against the framework's `$sidebar-border: false !default;`.
+        let doc_vars = parse_layer_from_parts("", "$sidebar-border: true;", "", "", "");
+        let scss = assemble_with_user_layers(&[doc_vars]).unwrap();
+
+        let css =
+            compile_scss_with_embedded(&runtime, &resources, &scss, &load_paths, true).unwrap();
+
+        // The rule should fire. Match on the selector + the property so
+        // we don't hinge the test on the exact color (which inherits from
+        // `$table-border-color` and may shift if the framework default
+        // changes).
+        assert!(
+            css.contains(".sidebar.sidebar-navigation:not(.rollup)"),
+            "$sidebar-border=true must produce a .sidebar.sidebar-navigation:not(.rollup) rule"
+        );
+        // Look for the border-right within the surrounding rule body.
+        let rule_idx = css
+            .find(".sidebar.sidebar-navigation:not(.rollup)")
+            .expect("selector present");
+        let rule_tail = &css[rule_idx..rule_idx.saturating_add(400).min(css.len())];
+        assert!(
+            rule_tail.contains("border-right:1px solid")
+                || rule_tail.contains("border-right: 1px solid"),
+            "rule body must declare a 1px border-right, got: {}",
+            rule_tail
+        );
+        assert!(
+            rule_tail.contains("!important"),
+            "rule must carry !important to match Q1, got: {}",
+            rule_tail
+        );
+    }
+
+    /// Mirror of the previous test for the off path: when the framework
+    /// default `$sidebar-border: false !default;` is left untouched (no
+    /// doc-vars layer overriding it), no rule should be emitted. This
+    /// guards against accidentally hardcoding the rule.
+    #[test]
+    fn test_sidebar_border_rule_absent_when_variable_is_false() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        assert!(
+            !css.contains(".sidebar.sidebar-navigation:not(.rollup)"),
+            "no .sidebar.sidebar-navigation:not(.rollup) rule should appear when \
+             $sidebar-border is false (its framework default)"
+        );
+    }
+
+    /// Q1 parity: `#quarto-sidebar > * { padding-right: 1em }` puts a
+    /// 1em gutter between the sidebar content (toggle dongles, links)
+    /// and the right edge of the sidebar column — visually separating
+    /// the controls from the `$sidebar-border` separator. See
+    /// `quarto-cli/.../quarto-nav.scss:623-628`.
+    #[test]
+    fn test_quarto_sidebar_children_have_right_padding() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        // grass minifies whitespace, but the selector + property pair
+        // should appear together in some form. We tolerate the variants
+        // grass might emit (with or without a space inside `1em`).
+        let needle1 = "#quarto-sidebar>*{padding-right:1em}";
+        let needle2 = "#quarto-sidebar > * { padding-right: 1em }";
+        assert!(
+            css.contains(needle1) || css.contains(needle2),
+            "missing `#quarto-sidebar > * {{ padding-right: 1em }}` (Q1 parity), \
+             expected to find `{}` (or expanded form) in compiled default CSS",
+            needle1
+        );
+    }
+
+    /// Q1 parity: `.quarto-container { min-height: calc(100vh - 132px) }`
+    /// stretches the page area (and therefore the sidebar grid cell)
+    /// to at least viewport-height minus the navbar/footer composite.
+    /// Without it, a short page leaves the sidebar (and its border)
+    /// stopping partway down the viewport. See
+    /// `quarto-cli/.../quarto-nav.scss:53-55`.
+    #[test]
+    fn test_quarto_container_min_height_fills_viewport() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        // Tolerate grass's spacing variations inside the calc() expr.
+        assert!(
+            css.contains(".quarto-container{min-height:calc(100vh - 132px)}")
+                || css.contains(".quarto-container{min-height:calc(100vh-132px)}")
+                || css.contains(".quarto-container { min-height: calc(100vh - 132px) }"),
+            "missing `.quarto-container {{ min-height: calc(100vh - 132px) }}` (Q1 parity)"
+        );
     }
 }

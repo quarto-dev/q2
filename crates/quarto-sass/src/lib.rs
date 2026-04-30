@@ -59,6 +59,7 @@ pub use bundle::{
 };
 pub use compile::{
     assemble_theme_scss, compile_css_from_config, compile_default_css, compile_theme_css,
+    compile_with_doc_vars,
 };
 pub use config::ThemeConfig;
 pub use error::SassError;

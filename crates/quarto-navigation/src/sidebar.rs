@@ -344,6 +344,14 @@ pub struct Sidebar {
     /// Collapse depth. Defaults to `2` (Q1 convention).
     pub collapse_level: u32,
     pub background: Option<String>,
+    /// Override for the vertical separator between the sidebar and main
+    /// content. `Some(true)` forces it on; `Some(false)` forces it off;
+    /// `None` lets the implicit default apply (`style == Docked`). Q1
+    /// parity for the `sidebar.border:` YAML knob (see
+    /// `quarto-cli/.../format-html-scss.ts:631-642`); the value is
+    /// consumed by `quarto-core::derive_doc_scss_layer` to emit
+    /// `$sidebar-border` per-document.
+    pub border: Option<bool>,
     pub contents: Vec<SidebarEntry>,
     pub pinned: bool,
 }
@@ -363,6 +371,7 @@ impl Sidebar {
             style: SidebarStyle::default(),
             collapse_level: 2,
             background: None,
+            border: None,
             contents: Vec::new(),
             pinned: false,
         }
@@ -385,6 +394,7 @@ impl Sidebar {
         }
         sb.subtitle = cv.get("subtitle").cloned();
         sb.background = cv.get("background").and_then(|v| v.as_plain_text());
+        sb.border = cv.get("border").and_then(|v| v.as_bool());
         sb.pinned = cv.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false);
         if let Some(style) = cv
             .get("style")
@@ -450,6 +460,9 @@ impl Sidebar {
         }
         if let Some(ref bg) = self.background {
             entries.push(string_entry("background", bg, &info));
+        }
+        if let Some(border) = self.border {
+            entries.push(bool_entry("border", border, &info));
         }
         if self.pinned {
             entries.push(bool_entry("pinned", true, &info));
@@ -950,6 +963,7 @@ mod tests {
             style: SidebarStyle::Docked,
             collapse_level: 3,
             background: Some("light".to_string()),
+            border: Some(true),
             pinned: true,
             contents: vec![
                 SidebarEntry::Link {
@@ -1084,6 +1098,65 @@ mod tests {
         let cv = map(vec![("style", s("docked"))]);
         let sb = Sidebar::from_config_value(&cv);
         assert_eq!(sb.style, SidebarStyle::Docked);
+    }
+
+    // --- `border:` (Phase 3 of bd-k8y0) ---
+    //
+    // Q1 parity: `sidebar.border: true|false` lets users force the
+    // vertical border on/off independently of `style`. Absent ⇒ `None`,
+    // and `derive_doc_scss_layer` falls back to `(style == "docked")`.
+
+    #[test]
+    fn parse_sidebar_border_absent_is_none() {
+        let cv = map(vec![("style", s("docked"))]);
+        let sb = Sidebar::from_config_value(&cv);
+        assert_eq!(
+            sb.border, None,
+            "absent `border:` should remain None so the implicit default applies"
+        );
+    }
+
+    #[test]
+    fn parse_sidebar_border_true() {
+        let cv = map(vec![("border", b(true))]);
+        let sb = Sidebar::from_config_value(&cv);
+        assert_eq!(sb.border, Some(true));
+    }
+
+    #[test]
+    fn parse_sidebar_border_false() {
+        let cv = map(vec![("border", b(false))]);
+        let sb = Sidebar::from_config_value(&cv);
+        assert_eq!(sb.border, Some(false));
+    }
+
+    #[test]
+    fn sidebar_border_round_trip() {
+        let cv_in = map(vec![("style", s("floating")), ("border", b(true))]);
+        let sb = Sidebar::from_config_value(&cv_in);
+        assert_eq!(sb.border, Some(true));
+        let cv_out = sb.to_config_value();
+        // `border:` should re-emit when explicitly set
+        let entries = cv_out.as_map_entries().expect("map");
+        let border_entry = entries
+            .iter()
+            .find(|e| e.key == "border")
+            .expect("explicit border must round-trip through to_config_value");
+        assert_eq!(border_entry.value.as_bool(), Some(true));
+    }
+
+    #[test]
+    fn sidebar_border_round_trip_omitted_when_none() {
+        let cv_in = map(vec![("style", s("docked"))]);
+        let sb = Sidebar::from_config_value(&cv_in);
+        assert_eq!(sb.border, None);
+        let cv_out = sb.to_config_value();
+        let entries = cv_out.as_map_entries().expect("map");
+        assert!(
+            entries.iter().all(|e| e.key != "border"),
+            "absent border must not appear in to_config_value output \
+             (otherwise we'd round-trip None → false)"
+        );
     }
 
     /// A separator that's shorter than three dashes is treated as a

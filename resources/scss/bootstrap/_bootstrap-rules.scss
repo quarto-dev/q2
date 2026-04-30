@@ -28,6 +28,15 @@ body {
   margin: 0;
 }
 
+// Stretch the page area to at least viewport-height minus the navbar
+// + footer composite (~132px in default Bootstrap). Without this, a
+// short page leaves the docked sidebar (and its `$sidebar-border`
+// separator) stopping partway down the viewport, which looks broken.
+// Ported from `quarto-cli/.../quarto-nav.scss:53-55`.
+.quarto-container {
+  min-height: calc(100vh - 132px);
+}
+
 // If we're applying display: grid, we're losing our display: border-box
 // behavior, so we need to reset bottom margin for title block
 main.page-columns > header > h1.title {
@@ -297,6 +306,29 @@ body.docked {
   .sidebar.sidebar-navigation {
     grid-column: screen-start / body-start;
     grid-row: content-top / page-bottom;
+  }
+}
+
+// Faint vertical separator between a docked sidebar and the main
+// content. Gated on `$sidebar-border` (default `false` in
+// `_bootstrap-variables.scss`); per-document config layers (Phase 2 of
+// the bd-k8y0 port) flip it to `true` for `style: docked`. The color
+// follows `$table-border-color` so any Bootswatch / user theme that
+// retints table borders retints the separator automatically. Ported
+// from quarto-cli `quarto-nav.scss:552-556`.
+@if $sidebar-border {
+  .sidebar.sidebar-navigation:not(.rollup) {
+    border-right: 1px solid $table-border-color !important;
+  }
+}
+
+// 1em right-side gutter between sidebar content (toggle dongles, links)
+// and the right edge of the sidebar column — visually separates the
+// controls from the `$sidebar-border` separator. Ported from
+// `quarto-cli/.../quarto-nav.scss:623-628`.
+#quarto-sidebar {
+  > * {
+    padding-right: 1em;
   }
 }
 

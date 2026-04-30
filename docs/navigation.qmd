@@ -60,6 +60,33 @@ navbar:
 Use `navbar: false` to suppress the navbar — for example, in a specific
 document that should opt out of a project-wide navbar.
 
+## Sidebar appearance
+
+A docked sidebar — `website.sidebar.style: docked` — is rendered with
+a faint vertical separator (a `1px` border on the right) between the
+sidebar column and the main content. A floating sidebar gets no
+separator. Both defaults match Quarto 1.
+
+Use the `border:` key to override the implicit default:
+
+``` yaml
+website:
+  sidebar:
+    style: docked
+    border: false   # suppress the separator on this docked sidebar
+```
+
+| Configuration                            | Separator drawn? |
+|------------------------------------------|------------------|
+| `style: docked` (no `border:`)           | yes              |
+| `style: floating` (no `border:`)         | no               |
+| `border: true` (any `style`)             | yes              |
+| `border: false` (any `style`)            | no               |
+
+The separator color follows the active theme's `$table-border-color`,
+so a Bootswatch theme or custom SCSS layer that retints table borders
+retints the separator automatically — no extra wiring needed.
+
 ## Page navigation (prev/next)
 
 Long websites and books often want a "previous / next" strip at the

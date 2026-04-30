@@ -38,5 +38,15 @@
 # … }` rule from Q1's `quarto-nav.scss:281` so the website's site-title
 # at the top of the sidebar reads as a heading instead of inheriting
 # the small sidebar-link font-size.
+#
+# Re-captured 2026-04-30 (bd-k8y0, sidebar appearance polish): added
+# `.quarto-container { min-height: calc(100vh - 132px) }` (so a docked
+# sidebar's vertical separator extends to the bottom of the viewport
+# on short pages) and `#quarto-sidebar > * { padding-right: 1em }` (so
+# toggle dongles aren't flush against the sidebar's right border).
+# Both ported from Q1's `quarto-nav.scss` (lines 53-55 and 623-628).
+# doc.html hash unchanged: neither selector matches anything in a
+# single-doc body (no `.quarto-container` and no `#quarto-sidebar`),
+# but they appear in the compiled CSS so the `styles.css` hash shifts.
 doc.html 1ce582da03349ec421b96d42a89d3589e3e8ed753a9d6802e6454a255ea67ae1
-doc_files/styles.css 345008c71cc058752bd5b67fd9d5e00f9c13bbd3e8eead241dbed7ea35bb81f8
+doc_files/styles.css f098b8cbb1132c699e87698a613e883967211211e4861888d87e5849e9f835cd
