@@ -70,8 +70,8 @@ use crate::transforms::{
     NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
-    TocGenerateTransform, TocRenderTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -581,6 +581,9 @@ pub async fn render_qmd_to_html(
 ///     into the rendered `<title>` (Phase 7)
 /// 4b. `WebsiteFaviconTransform` - Append `<link rel="icon">` for `website.favicon`
 ///     to the page's `header-includes` (Phase 7)
+/// 4b'. `WebsiteBootstrapIconsTransform` - For website projects, ship the
+///     vendored `bootstrap-icons.{css,woff}` to `_site/site_libs/bootstrap/`
+///     and append a `<link rel="stylesheet">` so `bi-*` icons render (bd-bsut)
 /// 4c. `WebsiteCanonicalUrlTransform` - Set `canonical-url` from
 ///     `website.site-url + output_href` (Phase 7)
 /// 5. `TitleBlockTransform` - Add title header from metadata if not present
@@ -637,6 +640,7 @@ pub fn build_transform_pipeline(
     // §Decision 3.
     pipeline.push(Box::new(WebsiteTitlePrefixTransform::new()));
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
+    pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
     pipeline.push(Box::new(TitleBlockTransform::new()));
     pipeline.push(Box::new(SectionizeTransform::new()));

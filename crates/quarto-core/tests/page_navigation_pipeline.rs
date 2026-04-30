@@ -124,12 +124,16 @@ fn page_nav_block<'a>(html: &'a str) -> &'a str {
 
 /// Test 39 — three-page website with a linear sidebar. Page 1 has
 /// only `next`, page 2 has both, page 3 has only `prev`.
+///
+/// (Updated for bd-bsut: page-navigation defaults to off for
+/// websites in Q2; the fixture now opts in.)
 #[test]
 fn pipeline_page_nav_three_page_website() {
     let (_dir, outputs) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
             "project:\n  type: website\n  output-dir: _site\n\
+             page-navigation: true\n\
              website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n      - docs.qmd\n",
         );
         write(
@@ -192,12 +196,16 @@ fn pipeline_page_nav_three_page_website() {
 
 /// Test 40 — `page-navigation: false` at doc level disables on that
 /// page only; sibling pages keep their page-nav.
+///
+/// (Updated for bd-bsut: project must opt in for the sibling pages
+/// to keep their nav.)
 #[test]
 fn pipeline_page_nav_disabled_at_doc_level() {
     let (_dir, outputs) = render_project(|project_dir| {
         write(
             &project_dir.join("_quarto.yml"),
             "project:\n  type: website\n  output-dir: _site\n\
+             page-navigation: true\n\
              website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n      - docs.qmd\n",
         );
         write(
@@ -308,6 +316,7 @@ fn pipeline_page_nav_cross_contamination_guard() {
         write(
             &project_dir.join("_quarto.yml"),
             "project:\n  type: website\n  output-dir: _site\n\
+             page-navigation: true\n\
              website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n      - docs.qmd\n",
         );
         write(
@@ -370,5 +379,231 @@ fn pipeline_single_doc_no_page_nav() {
         !doc_html.contains("<nav class=\"page-navigation\">"),
         "no sidebar → no page-nav (default-on requires a sidebar); got:\n{}",
         &doc_html[..doc_html.len().min(1500)]
+    );
+}
+
+// === bd-bsut: Q1 page-navigation parity ===================================
+
+/// Three-page website with a sidebar, no `page-navigation` setting
+/// anywhere → matches Quarto 1's default of off for websites; no
+/// `<nav class="page-navigation">` strip should be emitted on any
+/// page.
+#[test]
+fn pipeline_page_nav_default_off_for_websites() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n      - docs.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+        write(
+            &project_dir.join("docs.qmd"),
+            "---\ntitle: Docs\n---\n\nDocumentation.\n",
+        );
+    });
+
+    for (stem, html) in &outputs {
+        assert!(
+            !html.contains("<nav class=\"page-navigation\">"),
+            "{}.html should not have a page-nav strip when page-navigation is unset (Q1 default for websites is off)",
+            stem
+        );
+    }
+}
+
+/// Top-level `page-navigation: true` in `_quarto.yml` enables the
+/// strip on pages that have neighbors.
+#[test]
+fn pipeline_page_nav_top_level_true_enables() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             page-navigation: true\n\
+             website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n      - docs.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+        write(
+            &project_dir.join("docs.qmd"),
+            "---\ntitle: Docs\n---\n\nDocumentation.\n",
+        );
+    });
+
+    let about_html = find_html(&outputs, "about");
+    assert!(
+        about_html.contains("<nav class=\"page-navigation\">"),
+        "about.html must have a page-nav strip when top-level `page-navigation: true` is set",
+    );
+    let about_pn = page_nav_block(about_html);
+    assert!(about_pn.contains("href=\"index.html\""));
+    assert!(about_pn.contains("href=\"docs.html\""));
+}
+
+/// `website.page-navigation: true` (scoped placement) also enables
+/// the strip — same semantics as top-level, modulo metadata-merge
+/// precedence.
+#[test]
+fn pipeline_page_nav_website_scope_true_enables() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  page-navigation: true\n\
+             \n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n      - docs.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+        write(
+            &project_dir.join("docs.qmd"),
+            "---\ntitle: Docs\n---\n\nDocumentation.\n",
+        );
+    });
+
+    let about_html = find_html(&outputs, "about");
+    assert!(
+        about_html.contains("<nav class=\"page-navigation\">"),
+        "about.html must have a page-nav strip when `website.page-navigation: true` is set",
+    );
+}
+
+/// Project default is off; one page sets `page-navigation: true` in
+/// frontmatter → that page (and only that page) gets the strip.
+#[test]
+fn pipeline_page_nav_doc_overrides_project_default_off() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n      - docs.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\npage-navigation: true\n---\n\nAbout us.\n",
+        );
+        write(
+            &project_dir.join("docs.qmd"),
+            "---\ntitle: Docs\n---\n\nDocumentation.\n",
+        );
+    });
+
+    let index_html = find_html(&outputs, "index");
+    let about_html = find_html(&outputs, "about");
+    let docs_html = find_html(&outputs, "docs");
+
+    assert!(
+        !index_html.contains("<nav class=\"page-navigation\">"),
+        "index.html: no doc-level override + project default off → no strip",
+    );
+    assert!(
+        about_html.contains("<nav class=\"page-navigation\">"),
+        "about.html: doc-level `page-navigation: true` should override project default off",
+    );
+    assert!(
+        !docs_html.contains("<nav class=\"page-navigation\">"),
+        "docs.html: no doc-level override + project default off → no strip",
+    );
+}
+
+/// When page-nav is enabled, the website's compiled CSS bundle
+/// contains the Q1 layout rule (`display: flex` on
+/// `.page-navigation`). Regression guard against losing the SCSS
+/// port.
+#[test]
+fn pipeline_page_nav_emits_layout_css() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             page-navigation: true\n\
+             website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+    });
+
+    let site_libs = project_dir.join("_site").join("site_libs").join("quarto");
+    let css_path = std::fs::read_dir(&site_libs)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.starts_with("quarto-theme-") && s.ends_with(".css"))
+                .unwrap_or(false)
+        })
+        .expect("expected a quarto-theme-*.css under site_libs/quarto/");
+    let css = read(&css_path);
+    let stripped: String = css.split_whitespace().collect();
+    assert!(
+        stripped.contains(".page-navigation{display:flex")
+            || stripped.contains(".page-navigation{justify-content:space-between"),
+        "expected the Q1 .page-navigation flex rule in compiled CSS; first 4KB:\n{}",
+        &css[..css.len().min(4096)]
+    );
+}
+
+/// When the website Sass bundle is in play, the rendered page's
+/// `<head>` links to a bootstrap-icons stylesheet so the
+/// `bi bi-arrow-*-short` glyphs in the page-nav strip render.
+#[test]
+fn pipeline_page_nav_links_bootstrap_icons() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             page-navigation: true\n\
+             website:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+    });
+
+    let about_html = find_html(&outputs, "about");
+    let head_end = about_html
+        .find("</head>")
+        .expect("page should have a </head>");
+    let head = &about_html[..head_end];
+    assert!(
+        head.contains("bootstrap-icons"),
+        "expected a bootstrap-icons stylesheet link in <head>; got head:\n{}",
+        head
     );
 }

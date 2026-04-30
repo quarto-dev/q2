@@ -399,3 +399,102 @@ fn pipeline_unresolved_sidebar_entry_keeps_raw_qmd() {
             .unwrap_or("<no sidebar found>")
     );
 }
+
+// === SidebarTitle defaults end-to-end (sidebar-default-title) =============
+
+/// `website.title` set, no per-sidebar `title:` → sidebar header
+/// renders the website title wrapped in a home link, mirroring Q1.
+#[test]
+fn pipeline_renders_website_title_in_sidebar_header_by_default() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"Site\"\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+    });
+
+    let index_html = find_html(&outputs, "index");
+    assert!(
+        index_html.contains("<div class=\"sidebar-header pt-lg-2 mt-2 text-left\">"),
+        "expected sidebar-header block; got first 1200 chars: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+    assert!(
+        index_html.contains("<div class=\"sidebar-title mb-0 py-0\"><a href=\"./\">Site</a></div>"),
+        "expected website title wrapped in home link inside sidebar-title; \
+         got: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+}
+
+/// `sidebar.title: false` suppresses the header even when `website.title`
+/// is set. Matches the explicit Hidden semantics.
+#[test]
+fn pipeline_omits_sidebar_header_when_title_false() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"Site\"\n  sidebar:\n    title: false\n    contents:\n      - index.qmd\n      - about.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+    });
+
+    let index_html = find_html(&outputs, "index");
+    assert!(
+        !index_html.contains("sidebar-header"),
+        "title: false must suppress the sidebar header; \
+         got first 1200 chars: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+    assert!(!index_html.contains("sidebar-title"));
+}
+
+/// `sidebar.title: "Custom"` renders literally and wins over
+/// `website.title`.
+#[test]
+fn pipeline_renders_explicit_sidebar_title_literally() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"Site\"\n  sidebar:\n    title: \"Custom\"\n    contents:\n      - index.qmd\n      - about.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+    });
+
+    let index_html = find_html(&outputs, "index");
+    assert!(
+        index_html.contains("<a href=\"./\">Custom</a>"),
+        "explicit sidebar.title should render literally; \
+         got first 1200 chars: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+    assert!(
+        !index_html.contains("<a href=\"./\">Site</a>"),
+        "website.title must not appear when sidebar.title is explicit"
+    );
+}

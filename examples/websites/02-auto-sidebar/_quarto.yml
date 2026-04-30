@@ -3,6 +3,7 @@ project:
 
 website:
   title: "Auto Sidebar"
+  page-navigation: true
   sidebar:
     contents:
       - section: "Posts"

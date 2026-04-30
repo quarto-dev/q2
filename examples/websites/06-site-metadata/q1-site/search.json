@@ -1,0 +1,32 @@
+[
+  {
+    "objectID": "guides.html",
+    "href": "guides.html",
+    "title": "Guides",
+    "section": "",
+    "text": "The &lt;title&gt; of this page should read Guides – My Site.\nThe &lt;link rel=\"canonical\"&gt; should be https://example.com/my-site/guides.html.",
+    "crumbs": [
+      "Guides"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Home",
+    "section": "",
+    "text": "This example demonstrates the site-level metadata features:\n\nTitle prefix. Each page’s &lt;title&gt; becomes &lt;page title&gt; – &lt;website.title&gt;. This page’s &lt;title&gt; should read Home – My Site.\nsite-url. When website.site-url is set, Quarto emits a _site/sitemap.xml listing every rendered page with absolute URLs derived from the site URL, plus a _site/robots.txt pointing search engines at the sitemap.\nFavicon. website.favicon: favicon.svg causes Quarto to copy the favicon to _site/favicon.svg and add &lt;link rel=\"icon\"&gt; to every page’s &lt;head&gt;.\nCanonical URL. Each page’s &lt;head&gt; contains &lt;link rel=\"canonical\"&gt; pointing at its absolute URL — useful when content might be reachable through several paths.\n\nSee Guides and API.",
+    "crumbs": [
+      "Home"
+    ]
+  },
+  {
+    "objectID": "api.html",
+    "href": "api.html",
+    "title": "API Reference",
+    "section": "",
+    "text": "A third page so the sitemap has more than two entries to enumerate.",
+    "crumbs": [
+      "API Reference"
+    ]
+  }
+]

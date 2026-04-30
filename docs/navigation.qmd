@@ -1,12 +1,12 @@
 ---
-title: "Navbars and Page Footers"
+title: "Navbars, Page Footers, and Prev/Next Navigation"
 ---
 
-Quarto 2 lets a single HTML document declare its own top-level navbar and
-page footer through YAML metadata, using the same mental model as the table
-of contents. Configuration can live in the document's frontmatter, in a
-directory `_metadata.yml`, or in `_quarto.yml`; the usual metadata-merge
-rules resolve conflicts.
+Quarto 2 lets a single HTML document declare its own top-level navbar,
+page footer, and prev/next page navigation through YAML metadata, using
+the same mental model as the table of contents. Configuration can live in
+the document's frontmatter, in a directory `_metadata.yml`, or in
+`_quarto.yml`; the usual metadata-merge rules resolve conflicts.
 
 ## Navbar
 
@@ -59,6 +59,75 @@ navbar:
 
 Use `navbar: false` to suppress the navbar — for example, in a specific
 document that should opt out of a project-wide navbar.
+
+## Page navigation (prev/next)
+
+Long websites and books often want a "previous / next" strip at the
+bottom of each page so readers can move through the content without
+jumping back to the sidebar. Quarto 2 emits this as a `<nav class=
+"page-navigation">` containing two anchors styled into a single row,
+left-aligned for the previous page and right-aligned for the next.
+
+### Enabling
+
+Page navigation is **off by default for websites** — matching Quarto 1
+— and on by default for books (currently unreachable in Quarto 2 but
+the hook is wired). Opt in by setting `page-navigation: true` at one
+of these layers:
+
+``` yaml
+# _quarto.yml — top level
+page-navigation: true
+
+# _quarto.yml — under website:
+website:
+  page-navigation: true
+```
+
+Both placements have the same effect; the top-level form composes
+naturally with document-frontmatter overrides through Quarto 2's
+metadata merge.
+
+### Per-document overrides
+
+Set `page-navigation` in a document's frontmatter to override the
+project default for that page:
+
+``` yaml
+---
+title: My Page
+page-navigation: false   # suppress the strip on this page only
+---
+```
+
+The doc-level value takes precedence over `website.page-navigation`
+and the project top-level setting.
+
+### How prev/next are chosen
+
+When the strip is enabled, Quarto walks the **sidebar** that contains
+the current page and picks the immediately-adjacent entries:
+
+- The sidebar is flattened depth-first, with section headers
+  (`section: …`) taking part in the sequence iff they have an `href`
+  of their own.
+- Duplicate entries (same `href` appearing more than once) are
+  collapsed to the first occurrence before adjacency is computed.
+- A `--- ` separator is a hard boundary: a page sitting next to a
+  separator gets `None` on that side, never the entry past the
+  separator.
+
+A page that doesn't appear in any sidebar gets no strip — even when
+`page-navigation: true` is set. The same is true if the strip would be
+empty on both sides (a "lonely" page).
+
+### When to leave it off
+
+Sites built around a navbar and a few top-level pages (like a
+brochure or a small docs landing page) usually don't benefit from
+prev/next. The Quarto 1 default of `false` for websites reflects
+that. Turn it on when you have a meaningful linear reading order —
+typically a sidebar with a curated sequence of pages.
 
 ## Page footer
 

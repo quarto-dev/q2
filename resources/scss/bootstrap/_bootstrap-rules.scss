@@ -321,6 +321,157 @@ body.docked {
   grid-row: content-bottom / page-bottom;
 }
 
+// Page-navigation strip layout (prev/next links). Ported from Q1's
+// `projects/website/navigation/quarto-nav.scss:740-768`. The `.nav-page`
+// markup is only emitted on website pages, so these rules are no-ops on
+// non-website renders. When a second website-only ruleset arrives,
+// consider promoting these into a dedicated website Sass bundle (bd-bsut).
+.page-navigation {
+  display: flex;
+  justify-content: space-between;
+}
+
+.nav-page {
+  padding-bottom: 0.75em;
+}
+
+.nav-page .bi {
+  font-size: 1.8rem;
+  vertical-align: middle;
+}
+
+.nav-page .nav-page-text {
+  padding-left: 0.25em;
+  padding-right: 0.25em;
+}
+
+.nav-page a {
+  color: $text-muted;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+
+.nav-page a:hover {
+  color: $link-hover-color;
+}
+
+@media print {
+  .nav-page {
+    display: none;
+  }
+}
+
+// Sidebar navigation styling. Ported from Q1's
+// `projects/website/navigation/quarto-nav.scss:315-410, 464-541`. As with
+// the `.nav-page` rules above, the `.sidebar-navigation`/`.sidebar-link`
+// markup is only emitted on website pages, so these rules are no-ops on
+// non-website renders. (See bd-bsut for the followup task to promote
+// these into a dedicated website Sass bundle once a second website-only
+// ruleset arrives.)
+
+// Strip the default `<a>` underline from any link inside the sidebar
+// navigation list, including the `.sidebar-logo-link` "site title".
+.sidebar-logo-link {
+  text-decoration: none;
+}
+
+.sidebar-navigation a {
+  // Anchors inherit the surrounding container's color rather than the
+  // default Bootstrap link blue. The active/hover variants are scoped
+  // to `div.sidebar-item-container` further below.
+  color: inherit;
+}
+
+.sidebar-navigation li a {
+  text-decoration: none;
+}
+
+// Site title at the top of the sidebar (`<div class="sidebar-title">`).
+// Q1 sets it 1.3rem/1.6rem so it reads as a heading, not a sidebar
+// item. The Bootstrap utility `py-0`/`mb-0` already on the rendered
+// element zeros the vertical padding/margin, but the font sizing here
+// is what makes the title visually distinct from the link list below.
+.sidebar-title {
+  margin-top: 0.25rem;
+  padding-bottom: 0.5rem;
+  font-size: 1.3rem;
+  line-height: 1.6rem;
+  visibility: visible;
+}
+
+.sidebar-title > a {
+  font-size: inherit;
+  text-decoration: none;
+}
+
+// Sidebar item layout (vertical rhythm and section indent).
+$sidebar-items-gap-spacing: 0.2em !default;
+$sidebar-section-indent: 0.5em !default;
+$sidebar-section-bottom-margin: 0.2em !default;
+
+.sidebar.sidebar-navigation > * {
+  padding-top: 1em;
+}
+
+.sidebar-item {
+  margin-bottom: $sidebar-items-gap-spacing;
+  line-height: 1rem;
+  margin-top: 0.4rem;
+}
+
+.sidebar-section {
+  padding-left: $sidebar-section-indent;
+  padding-bottom: $sidebar-section-bottom-margin;
+}
+
+.sidebar-item .sidebar-item-container {
+  // Position the link and its expand/collapse "dongle" on opposite
+  // ends of the row.
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.sidebar-item-text {
+  width: 100%;
+}
+
+// Sidebar text colors. The link itself inherits `color` from the
+// surrounding `div.sidebar-item-container`; the active/hover/disabled
+// states are scoped to that container too. The four `$sidebar-*-color`
+// variables are derived once here so theme overrides in
+// `_bootstrap-variables.scss` (the `$sidebar-fg`/`$sidebar-bg` pair)
+// flow through naturally.
+$sidebar-hl: if(
+  $sidebar-hl,
+  $sidebar-hl,
+  theme-contrast($nav-link-color, $sidebar-bg)
+) !default;
+$sidebar-color: rgba($sidebar-fg, 1) !default;
+$sidebar-hover-color: rgba($sidebar-hl, 0.8) !default;
+$sidebar-active-color: $sidebar-hl !default;
+$sidebar-disabled-color: rgba($sidebar-fg, 0.75) !default;
+
+div.sidebar-item-container {
+  color: $sidebar-color;
+
+  &:hover,
+  &:focus {
+    color: $sidebar-hover-color;
+  }
+
+  &.disabled {
+    color: $sidebar-disabled-color;
+  }
+
+  .active,
+  .show > .nav-link,
+  .sidebar-link > code {
+    color: $sidebar-active-color;
+  }
+}
+
 .page-columns .footer {
   grid-column: screen-start / screen-end;
   grid-row: contents-bottom / page-bottom;

@@ -24,7 +24,7 @@
 //! - `navigation.sidebar` already populated — treat as user override.
 //! - `website.sidebar` absent — nothing to resolve.
 
-use quarto_navigation::{Sidebar, resolve_active_state, sidebar_for_page};
+use quarto_navigation::{Sidebar, SidebarTitle, resolve_active_state, sidebar_for_page};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
@@ -87,6 +87,19 @@ impl AstTransform for SidebarGenerateTransform {
         };
 
         let mut resolved: Sidebar = picked.clone();
+
+        // Resolve `SidebarTitle::Default` against `website.title` so
+        // `navigation.sidebar` is fully resolved by the time the render
+        // transform runs. We pass through the `ConfigValue` verbatim
+        // (rather than flattening with `website_title()`) so PandocInlines
+        // — the common Pass-2 shape for titles — survive into the
+        // renderer, where `render_text` walks them as inlines instead of
+        // string scalars. Explicit `Text` and `Hidden` are left alone.
+        if matches!(resolved.title, SidebarTitle::Default) {
+            if let Some(title_cv) = ast.meta.get_path(&["website", "title"]).cloned() {
+                resolved.title = SidebarTitle::Text(title_cv);
+            }
+        }
 
         // Pull diagnostics out of RenderContext temporarily so
         // helpers can borrow it mutably. We put them back before
@@ -420,5 +433,114 @@ mod tests {
             .and_then(|v| v.as_plain_text())
             .unwrap();
         assert_eq!(text, "User Text");
+    }
+
+    // --- SidebarTitle resolution from website.title (sidebar-default-title)
+    //
+    // The transform owns the `Default → Text(website.title)` substitution
+    // so `navigation.sidebar` is fully resolved by the time the render
+    // transform runs. Explicit `Text` and `Hidden` are preserved. With
+    // no `website.title`, `Default` stays `Default` (renderer drops the
+    // header).
+
+    #[tokio::test]
+    async fn sidebar_generate_resolves_default_title_from_website_title() {
+        let sidebar_cv = config_map(vec![("contents", arr(vec![s("about.qmd")]))]);
+        let meta = config_map(vec![(
+            "website",
+            config_map(vec![("title", s("My Site")), ("sidebar", sidebar_cv)]),
+        )]);
+        let (out, _diags) = run_transform_with(meta, None, "about.qmd").await;
+        let stored = out.get_path(&["navigation", "sidebar"]).unwrap();
+        let title = stored
+            .get("title")
+            .and_then(|v| v.as_plain_text())
+            .expect("Default title should resolve to website.title");
+        assert_eq!(title, "My Site");
+    }
+
+    #[tokio::test]
+    async fn sidebar_generate_keeps_explicit_title_text() {
+        let sidebar_cv = config_map(vec![
+            ("title", s("Hello")),
+            ("contents", arr(vec![s("about.qmd")])),
+        ]);
+        let meta = config_map(vec![(
+            "website",
+            config_map(vec![("title", s("My Site")), ("sidebar", sidebar_cv)]),
+        )]);
+        let (out, _diags) = run_transform_with(meta, None, "about.qmd").await;
+        let stored = out.get_path(&["navigation", "sidebar"]).unwrap();
+        let title = stored
+            .get("title")
+            .and_then(|v| v.as_plain_text())
+            .expect("explicit title should be preserved");
+        assert_eq!(title, "Hello", "explicit title must win over website.title");
+    }
+
+    #[tokio::test]
+    async fn sidebar_generate_keeps_hidden_title() {
+        let sidebar_cv = config_map(vec![
+            ("title", b(false)),
+            ("contents", arr(vec![s("about.qmd")])),
+        ]);
+        let meta = config_map(vec![(
+            "website",
+            config_map(vec![("title", s("My Site")), ("sidebar", sidebar_cv)]),
+        )]);
+        let (out, _diags) = run_transform_with(meta, None, "about.qmd").await;
+        let stored = out.get_path(&["navigation", "sidebar"]).unwrap();
+        let title_bool = stored.get("title").and_then(|v| v.as_bool());
+        assert_eq!(
+            title_bool,
+            Some(false),
+            "Hidden must serialize as `title: false` and not be overwritten by website.title"
+        );
+    }
+
+    #[tokio::test]
+    async fn sidebar_generate_default_title_no_website_title() {
+        let sidebar_cv = config_map(vec![("contents", arr(vec![s("about.qmd")]))]);
+        let meta = config_map(vec![("website", config_map(vec![("sidebar", sidebar_cv)]))]);
+        let (out, _diags) = run_transform_with(meta, None, "about.qmd").await;
+        let stored = out.get_path(&["navigation", "sidebar"]).unwrap();
+        // Default round-trips as no `title:` key.
+        assert!(
+            stored.get("title").is_none(),
+            "no website.title means Default stays Default → no `title:` key emitted; got: {:?}",
+            stored
+        );
+    }
+
+    #[tokio::test]
+    async fn sidebar_generate_resolves_default_title_when_website_title_is_inlines() {
+        // PandocInlines arrive in Pass-2 metadata. The resolver should
+        // copy the ConfigValue verbatim so markdown formatting survives
+        // through to the renderer.
+        use quarto_pandoc_types::inline::Inline;
+        let inlines = vec![Inline::Str(quarto_pandoc_types::inline::Str {
+            text: "Site".to_string(),
+            source_info: SourceInfo::default(),
+        })];
+        let title_cv = ConfigValue::new_inlines(inlines, SourceInfo::default());
+        let sidebar_cv = config_map(vec![("contents", arr(vec![s("about.qmd")]))]);
+        let meta = config_map(vec![(
+            "website",
+            config_map(vec![("title", title_cv), ("sidebar", sidebar_cv)]),
+        )]);
+        let (out, _diags) = run_transform_with(meta, None, "about.qmd").await;
+        let stored = out.get_path(&["navigation", "sidebar"]).unwrap();
+        let title = stored
+            .get("title")
+            .expect("Default should resolve to website.title");
+        // The resolved title must still be the same kind (PandocInlines)
+        // so render_text walks it as inlines, not as a string scalar.
+        use quarto_pandoc_types::config_value::ConfigValueKind;
+        assert!(
+            matches!(title.value, ConfigValueKind::PandocInlines(_)),
+            "expected PandocInlines preserved; got: {:?}",
+            title
+        );
+        assert_eq!(title.as_plain_text().as_deref(), Some("Site"));
     }
 }

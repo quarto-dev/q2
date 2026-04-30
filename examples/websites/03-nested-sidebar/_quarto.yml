@@ -3,6 +3,7 @@ project:
 
 website:
   title: "Nested Sidebar"
+  page-navigation: true
   sidebar:
     - id: guide
       title: "User Guide"

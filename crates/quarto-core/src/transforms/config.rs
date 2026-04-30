@@ -24,6 +24,27 @@ pub fn is_feature_disabled(meta: &ConfigValue, key: &str) -> bool {
     meta.get(key).and_then(|v| v.as_bool()) == Some(false)
 }
 
+/// Resolve a website-style boolean feature flag that can be set at
+/// either the top level (`page-navigation:`) or under `website.`
+/// (`website.page-navigation:`) of `_quarto.yml`. Document frontmatter
+/// is naturally merged into top-level metadata, so a frontmatter-level
+/// override appears at the top-level path and wins.
+///
+/// Precedence (first match wins):
+/// 1. Top-level `<key>` in the merged metadata (covers doc frontmatter
+///    *and* project top-level placement).
+/// 2. `website.<key>` (covers project `website:` scope placement).
+/// 3. The supplied `default`.
+pub fn resolve_website_bool(meta: &ConfigValue, key: &str, default: bool) -> bool {
+    if let Some(v) = meta.get(key).and_then(|v| v.as_bool()) {
+        return v;
+    }
+    if let Some(v) = meta.get_path(&["website", key]).and_then(|v| v.as_bool()) {
+        return v;
+    }
+    default
+}
+
 /// Where footnotes/references should be placed.
 ///
 /// Corresponds to the `reference-location` option in Quarto schema.
@@ -162,6 +183,40 @@ mod tests {
             ConfigValue::new_string("auto", SourceInfo::default()),
         );
         assert!(!is_feature_disabled(&meta, "toc"));
+    }
+
+    #[test]
+    fn resolve_website_bool_returns_default_when_absent() {
+        let meta = ConfigValue::default();
+        assert!(!resolve_website_bool(&meta, "page-navigation", false));
+        assert!(resolve_website_bool(&meta, "page-navigation", true));
+    }
+
+    #[test]
+    fn resolve_website_bool_top_level_wins() {
+        let meta = meta_with("page-navigation", bool_value(true));
+        assert!(resolve_website_bool(&meta, "page-navigation", false));
+    }
+
+    #[test]
+    fn resolve_website_bool_website_scope_used_when_top_level_absent() {
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["website", "page-navigation"], bool_value(true));
+        assert!(resolve_website_bool(&meta, "page-navigation", false));
+    }
+
+    #[test]
+    fn resolve_website_bool_top_level_overrides_website_scope() {
+        // Frontmatter / project top-level beats website scope.
+        let mut meta = meta_with("page-navigation", bool_value(false));
+        meta.insert_path(&["website", "page-navigation"], bool_value(true));
+        assert!(!resolve_website_bool(&meta, "page-navigation", true));
+    }
+
+    #[test]
+    fn resolve_website_bool_top_level_false_disables() {
+        let meta = meta_with("page-navigation", bool_value(false));
+        assert!(!resolve_website_bool(&meta, "page-navigation", true));
     }
 
     #[test]

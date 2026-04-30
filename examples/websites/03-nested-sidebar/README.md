@@ -17,12 +17,15 @@ page.
 - **Nested sections.** The User Guide sidebar groups pages under
   *Getting Started* and *Advanced* via `section:` entries. The
   active page's ancestor sections are marked `expanded: true`.
-- **Prev / next strip.** Every page in a sidebar gets a
-  `pagination-link` strip at the bottom, derived from the
-  flattened sidebar order.
+- **Prev / next strip.** With `website.page-navigation: true` set,
+  every page in a sidebar gets a `pagination-link` strip at the
+  bottom, derived from the flattened sidebar order. (Quarto-1
+  parity: page-navigation is off by default for websites; this
+  example opts in. See [docs/navigation.qmd](../../../docs/navigation.qmd)
+  for the full precedence rules.)
 - **Per-page page-navigation override.** `guide/tuning.qmd` sets
   `page-navigation: false` in its frontmatter, suppressing the
-  strip on that page only.
+  strip on that page only — doc-level wins over the project opt-in.
 
 ## How to run
 

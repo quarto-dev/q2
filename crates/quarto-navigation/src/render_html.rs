@@ -26,7 +26,7 @@ use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::NavigationItem;
 use crate::navbar::{Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
-use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle};
+use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 
 /// Render a complete navbar element.
 ///
@@ -198,12 +198,17 @@ pub fn sidebar_to_html(sidebar: &Sidebar) -> String {
         style_class
     ));
 
-    // Title header — only emitted if a title is present. Subtitle is
-    // parsed but not rendered in Phase 2 (follow-up).
-    if let Some(ref title_cv) = sidebar.title {
-        html.push_str("  <div class=\"sidebar-header\">\n");
+    // Title header — emitted only when the title resolved to a concrete
+    // value (`Text`). `Default` reaching the renderer means the resolver
+    // had nothing to substitute (no `website.title`); `Hidden` is an
+    // explicit `title: false`. Either way, no header. The Bootstrap
+    // utility classes match Q1's spacing/alignment for visual parity;
+    // they live here, not in the data model, so we can swap them out
+    // when SCSS evolves. Subtitle is parsed but not rendered yet.
+    if let SidebarTitle::Text(ref title_cv) = sidebar.title {
+        html.push_str("  <div class=\"sidebar-header pt-lg-2 mt-2 text-left\">\n");
         html.push_str(&format!(
-            "    <div class=\"sidebar-title\">{}</div>\n",
+            "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"./\">{}</a></div>\n",
             render_text(title_cv)
         ));
         html.push_str("  </div>\n");
@@ -1276,7 +1281,7 @@ mod tests {
 
     // --- Sidebar rendering tests (Phase 2) ------------------------------
 
-    use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle};
+    use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 
     fn link(href: &str, text: &str) -> SidebarEntry {
         SidebarEntry::Link {
@@ -1533,6 +1538,115 @@ mod tests {
         assert!(html.contains(">B<"));
         // No auto artifact leaks out.
         assert!(!html.contains("auto"));
+    }
+
+    // --- SidebarTitle rendering (sidebar-default-title) -----------------
+    //
+    // The header is emitted only on `Text(...)`. `Default` and `Hidden`
+    // both produce no header — `Default` reaches the renderer only when
+    // resolution couldn't find a website.title (transform's job, not
+    // ours). The header wraps the title in a home link `<a href="./">…</a>`
+    // and applies Bootstrap utility classes (`pt-lg-2 mt-2 text-left`,
+    // `mb-0 py-0`) at render time so the data model stays utility-class
+    // free.
+
+    #[test]
+    fn sidebar_render_default_title_emits_no_header() {
+        let sb = Sidebar {
+            title: SidebarTitle::Default,
+            contents: vec![link("a.html", "A")],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(
+            !html.contains("sidebar-header"),
+            "Default title should produce no sidebar-header; html: {}",
+            html
+        );
+        assert!(!html.contains("sidebar-title"));
+    }
+
+    #[test]
+    fn sidebar_render_hidden_title_emits_no_header() {
+        let sb = Sidebar {
+            title: SidebarTitle::Hidden,
+            contents: vec![link("a.html", "A")],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(
+            !html.contains("sidebar-header"),
+            "Hidden title should produce no sidebar-header; html: {}",
+            html
+        );
+        assert!(!html.contains("sidebar-title"));
+    }
+
+    #[test]
+    fn sidebar_render_text_title_emits_header_with_link() {
+        let sb = Sidebar {
+            title: SidebarTitle::Text(s("Site")),
+            contents: vec![link("a.html", "A")],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(
+            html.contains("<div class=\"sidebar-header pt-lg-2 mt-2 text-left\">"),
+            "expected header wrapper with utility classes; html: {}",
+            html
+        );
+        assert!(
+            html.contains("<div class=\"sidebar-title mb-0 py-0\">"),
+            "expected title wrapper with utility classes; html: {}",
+            html
+        );
+        assert!(
+            html.contains("<a href=\"./\">Site</a>"),
+            "expected title wrapped in home link; html: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn sidebar_render_text_title_escapes_text() {
+        let sb = Sidebar {
+            title: SidebarTitle::Text(s("A & <B>")),
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(
+            html.contains("<a href=\"./\">A &amp; &lt;B&gt;</a>"),
+            "title text should be HTML-escaped inside the anchor; html: {}",
+            html
+        );
+        assert!(!html.contains("<a href=\"./\">A & <B>"));
+    }
+
+    #[test]
+    fn sidebar_render_text_title_supports_inline_markup() {
+        // `title: "**bold** site"` parsed in document context arrives as
+        // PandocInlines; render_text already walks them. The link wrap
+        // must keep the inline markup intact.
+        let inlines = vec![
+            Inline::Strong(Strong {
+                content: vec![str_inline("bold")],
+                source_info: SourceInfo::default(),
+            }),
+            Inline::Space(quarto_pandoc_types::inline::Space {
+                source_info: SourceInfo::default(),
+            }),
+            str_inline("site"),
+        ];
+        let sb = Sidebar {
+            title: SidebarTitle::Text(ConfigValue::new_inlines(inlines, SourceInfo::default())),
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb);
+        assert!(
+            html.contains("<a href=\"./\"><strong>bold</strong> site</a>"),
+            "inline markup should survive through the anchor; html: {}",
+            html
+        );
     }
 
     // --- Phase 4: page-navigation rendering -------------------------------

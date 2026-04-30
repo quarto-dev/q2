@@ -277,9 +277,9 @@ fn website_render_emits_two_themes_when_docs_differ() {
     let methods_html = read(&project_dir.join("_site").join("methods.html"));
     let appendix_html = read(&project_dir.join("_site").join("appendix.html"));
 
-    let intro_href = extract_first_stylesheet_href(&intro_html);
-    let methods_href = extract_first_stylesheet_href(&methods_html);
-    let appendix_href = extract_first_stylesheet_href(&appendix_html);
+    let intro_href = extract_theme_stylesheet_href(&intro_html);
+    let methods_href = extract_theme_stylesheet_href(&methods_html);
+    let appendix_href = extract_theme_stylesheet_href(&appendix_html);
 
     assert_eq!(
         intro_href, methods_href,
@@ -299,7 +299,7 @@ fn website_render_emits_two_themes_when_docs_differ() {
 fn website_nested_page_links_css_with_relative_path() {
     let project_dir = render_website(three_page_fixture);
     let api_html = read(&project_dir.join("_site").join("docs").join("api.html"));
-    let href = extract_first_stylesheet_href(&api_html);
+    let href = extract_theme_stylesheet_href(&api_html);
     assert!(
         href.starts_with("../site_libs/quarto/quarto-theme-"),
         "nested page must use `../site_libs/...` href; got {}",
@@ -320,7 +320,7 @@ fn website_nested_page_links_css_with_relative_path() {
 fn website_root_page_links_css_with_direct_path() {
     let project_dir = render_website(three_page_fixture);
     let index_html = read(&project_dir.join("_site").join("index.html"));
-    let href = extract_first_stylesheet_href(&index_html);
+    let href = extract_theme_stylesheet_href(&index_html);
     assert!(
         href.starts_with("site_libs/quarto/quarto-theme-"),
         "root page must use direct `site_libs/...` href; got {}",
@@ -333,16 +333,26 @@ fn website_root_page_links_css_with_direct_path() {
     );
 }
 
-// === Helper: extract first <link rel="stylesheet"> href =====================
+// === Helper: extract the href of the per-page theme stylesheet ==============
 
-fn extract_first_stylesheet_href(html: &str) -> String {
+/// Extract the href of the `<link rel="stylesheet">` that points at the
+/// per-page theme CSS file (matches `site_libs/quarto/quarto-theme-`
+/// or `../site_libs/quarto/quarto-theme-`). Websites also ship
+/// `bootstrap-icons.css` and other website-wide stylesheets, so the
+/// "first stylesheet" isn't a stable handle for the theme.
+fn extract_theme_stylesheet_href(html: &str) -> String {
+    let mut search = html;
     let needle = "<link rel=\"stylesheet\" href=\"";
-    let start = html
-        .find(needle)
-        .unwrap_or_else(|| panic!("no <link rel=\"stylesheet\"> in HTML"));
-    let after = &html[start + needle.len()..];
-    let end = after
-        .find('"')
-        .expect("malformed <link>: missing closing quote on href");
-    after[..end].to_string()
+    while let Some(start) = search.find(needle) {
+        let after = &search[start + needle.len()..];
+        let end = after
+            .find('"')
+            .expect("malformed <link>: missing closing quote on href");
+        let href = &after[..end];
+        if href.contains("/quarto/quarto-theme-") {
+            return href.to_string();
+        }
+        search = &after[end..];
+    }
+    panic!("no theme stylesheet <link> in HTML");
 }

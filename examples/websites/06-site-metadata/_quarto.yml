@@ -10,3 +10,8 @@ website:
       - index.qmd
       - guides.qmd
       - api.qmd
+  page-navigation: true
+
+format:
+  html:
+    theme: cosmo

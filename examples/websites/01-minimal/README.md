@@ -76,10 +76,12 @@ Each rendered page should contain:
 
 ## Things you may notice
 
-- The pages include a small **prev / next** strip at the bottom,
-  even though this example doesn't configure one. That's
-  page-navigation derived automatically from sidebar position.
-  Project `03-nested-sidebar` exercises it explicitly.
+- The pages do **not** include a prev / next strip at the bottom,
+  even though they sit in a sidebar with a clear sequence. That's
+  the Quarto-1-compatible default for websites: page-navigation is
+  off unless the project opts in with `page-navigation: true` (top
+  level or under `website:`). Project `03-nested-sidebar` exercises
+  the opt-in explicitly.
 - Each page would normally get its own `_site/<stem>_files/`
   directory for engine outputs (figures, cached plots, etc.). For
   prose-only pages like these, no per-page artifacts are produced

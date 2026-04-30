@@ -15,5 +15,28 @@
 # `#quarto-content` now carries the `quarto-container` class for parity
 # with Q1 (no SCSS rule selects on it; it's a defensive addition that
 # anchors the website-sidebar layout fix in template.rs).
+#
+# Re-captured 2026-04-30 (bd-bsut): doc_files/styles.css hash updated
+# because the page-nav layout SCSS (`.page-navigation { display: flex; …
+# }`, `.nav-page` family, `@media print { .nav-page { display: none } }`)
+# was ported from Q1 into `_bootstrap-rules.scss`. doc.html hash is
+# unchanged: the new selectors don't match anything in a single-doc
+# render's body, and `<head>` is unaffected (no <link> changes for
+# single-doc).
+#
+# Re-captured 2026-04-30 (bd-bsut, sidebar-link parity follow-up):
+# doc_files/styles.css hash updated again because the sidebar-link
+# styling SCSS (`.sidebar-navigation a { color: inherit }`,
+# `.sidebar-title > a`, `.sidebar-item`, `.sidebar-section`,
+# `div.sidebar-item-container { color/hover/active/disabled }`, …) was
+# ported from Q1 into `_bootstrap-rules.scss` next to the page-nav
+# block. doc.html hash unchanged for the same reason as before — none
+# of the `.sidebar-*` selectors match anything in a single-doc body.
+#
+# Re-captured 2026-04-30 (bd-bsut, .sidebar-title font-sizing): added
+# the missing `.sidebar-title { font-size: 1.3rem; line-height: 1.6rem;
+# … }` rule from Q1's `quarto-nav.scss:281` so the website's site-title
+# at the top of the sidebar reads as a heading instead of inheriting
+# the small sidebar-link font-size.
 doc.html 1ce582da03349ec421b96d42a89d3589e3e8ed753a9d6802e6454a255ea67ae1
-doc_files/styles.css 3536a93eba680c9bd74acd4efba42fcd643981b1bc9d4128a3c09c8b278bbd15
+doc_files/styles.css 345008c71cc058752bd5b67fd9d5e00f9c13bbd3e8eead241dbed7ea35bb81f8

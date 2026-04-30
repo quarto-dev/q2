@@ -73,6 +73,27 @@ impl SidebarStyle {
     }
 }
 
+/// Title treatment for a sidebar.
+///
+/// Mirrors [`crate::navbar::NavbarTitle`]. The transform layer
+/// (`SidebarGenerateTransform`) is responsible for resolving
+/// [`SidebarTitle::Default`] into a concrete title using
+/// `website.title`; if no website title is available the variant
+/// stays `Default` and the renderer emits no header.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum SidebarTitle {
+    /// No explicit title field; the resolver may substitute the
+    /// website title before render. If still `Default` at render
+    /// time, no header is emitted.
+    #[default]
+    Default,
+    /// Explicitly suppressed via `title: false`. Never substituted.
+    Hidden,
+    /// Title text. Preserved as a `ConfigValue` so document-context
+    /// markdown survives.
+    Text(ConfigValue),
+}
+
 /// An `auto:` directive expands into concrete sidebar entries at
 /// Generate time, by consulting the project's set of discovered
 /// documents.
@@ -317,7 +338,7 @@ impl SidebarEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sidebar {
     pub id: Option<String>,
-    pub title: Option<ConfigValue>,
+    pub title: SidebarTitle,
     pub subtitle: Option<ConfigValue>,
     pub style: SidebarStyle,
     /// Collapse depth. Defaults to `2` (Q1 convention).
@@ -337,7 +358,7 @@ impl Sidebar {
     pub fn with_defaults() -> Self {
         Self {
             id: None,
-            title: None,
+            title: SidebarTitle::Default,
             subtitle: None,
             style: SidebarStyle::default(),
             collapse_level: 2,
@@ -351,7 +372,17 @@ impl Sidebar {
     pub fn from_config_value(cv: &ConfigValue) -> Self {
         let mut sb = Self::with_defaults();
         sb.id = cv.get("id").and_then(|v| v.as_plain_text());
-        sb.title = cv.get("title").cloned();
+        if let Some(title_cv) = cv.get("title") {
+            sb.title = if title_cv.as_bool() == Some(false) {
+                SidebarTitle::Hidden
+            } else if title_cv.as_bool() == Some(true) {
+                // `title: true` keeps the default behavior (fall back to
+                // website title at resolve time). Mirrors NavbarTitle.
+                SidebarTitle::Default
+            } else {
+                SidebarTitle::Text(title_cv.clone())
+            };
+        }
         sb.subtitle = cv.get("subtitle").cloned();
         sb.background = cv.get("background").and_then(|v| v.as_plain_text());
         sb.pinned = cv.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -395,8 +426,14 @@ impl Sidebar {
         if let Some(ref id) = self.id {
             entries.push(string_entry("id", id, &info));
         }
-        if let Some(ref title) = self.title {
-            entries.push(cv_entry("title", title.clone(), &info));
+        match &self.title {
+            SidebarTitle::Default => {}
+            SidebarTitle::Hidden => entries.push(ConfigMapEntry {
+                key: "title".to_string(),
+                key_source: info.clone(),
+                value: ConfigValue::new_bool(false, info.clone()),
+            }),
+            SidebarTitle::Text(cv) => entries.push(cv_entry("title", cv.clone(), &info)),
         }
         if let Some(ref sub) = self.subtitle {
             entries.push(cv_entry("subtitle", sub.clone(), &info));
@@ -909,7 +946,7 @@ mod tests {
     fn roundtrip_sidebar_to_config_value() {
         let original = Sidebar {
             id: Some("main".to_string()),
-            title: Some(s("Docs")),
+            title: SidebarTitle::Text(s("Docs")),
             style: SidebarStyle::Docked,
             collapse_level: 3,
             background: Some("light".to_string()),
@@ -1060,6 +1097,117 @@ mod tests {
                 assert_eq!(item.href.as_deref(), Some("--"));
             }
             other => panic!("expected Link for two-dash string, got {:?}", other),
+        }
+    }
+
+    // --- SidebarTitle tri-state parsing (sidebar-default-title) ------------
+    //
+    // Mirrors NavbarTitle::{Default, Hidden, Text}: the per-sidebar `title:`
+    // field can be absent (→ Default, the renderer/transform falls back to
+    // website.title), `false` (→ Hidden, no header), `true` (→ Default,
+    // matches Navbar semantics), or a value (→ Text(value)).
+
+    #[test]
+    fn parse_sidebar_title_default_when_absent() {
+        let cv = map(vec![]);
+        let sb = Sidebar::from_config_value(&cv);
+        assert!(
+            matches!(sb.title, SidebarTitle::Default),
+            "absent title should parse as Default; got {:?}",
+            sb.title
+        );
+    }
+
+    #[test]
+    fn parse_sidebar_title_false_is_hidden() {
+        let cv = map(vec![("title", b(false))]);
+        let sb = Sidebar::from_config_value(&cv);
+        assert!(
+            matches!(sb.title, SidebarTitle::Hidden),
+            "title: false should parse as Hidden; got {:?}",
+            sb.title
+        );
+    }
+
+    #[test]
+    fn parse_sidebar_title_true_is_default() {
+        let cv = map(vec![("title", b(true))]);
+        let sb = Sidebar::from_config_value(&cv);
+        assert!(
+            matches!(sb.title, SidebarTitle::Default),
+            "title: true should parse as Default (Navbar parity); got {:?}",
+            sb.title
+        );
+    }
+
+    #[test]
+    fn parse_sidebar_title_string_is_text() {
+        let cv = map(vec![("title", s("Hello"))]);
+        let sb = Sidebar::from_config_value(&cv);
+        match &sb.title {
+            SidebarTitle::Text(cv) => {
+                assert_eq!(cv.as_plain_text().as_deref(), Some("Hello"));
+            }
+            other => panic!("title: \"Hello\" should parse as Text; got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn roundtrip_sidebar_title_default() {
+        // Default round-trips as "no title key emitted" → re-parse stays
+        // Default. We construct a Sidebar with Default and verify both the
+        // emitted ConfigValue lacks a `title:` key and the re-parsed value
+        // is Default.
+        let sb = Sidebar {
+            title: SidebarTitle::Default,
+            ..Sidebar::with_defaults()
+        };
+        let cv = sb.to_config_value();
+        assert!(
+            cv.get("title").is_none(),
+            "Default should emit no `title:` key; got cv: {:?}",
+            cv
+        );
+        let reparsed = Sidebar::from_config_value(&cv);
+        assert!(matches!(reparsed.title, SidebarTitle::Default));
+    }
+
+    #[test]
+    fn roundtrip_sidebar_title_hidden() {
+        let sb = Sidebar {
+            title: SidebarTitle::Hidden,
+            ..Sidebar::with_defaults()
+        };
+        let cv = sb.to_config_value();
+        assert_eq!(
+            cv.get("title").and_then(|v| v.as_bool()),
+            Some(false),
+            "Hidden should emit `title: false`; got cv: {:?}",
+            cv
+        );
+        let reparsed = Sidebar::from_config_value(&cv);
+        assert!(matches!(reparsed.title, SidebarTitle::Hidden));
+    }
+
+    #[test]
+    fn roundtrip_sidebar_title_text() {
+        let sb = Sidebar {
+            title: SidebarTitle::Text(s("My Site")),
+            ..Sidebar::with_defaults()
+        };
+        let cv = sb.to_config_value();
+        assert_eq!(
+            cv.get("title").and_then(|v| v.as_plain_text()).as_deref(),
+            Some("My Site"),
+            "Text should emit `title: <value>`; got cv: {:?}",
+            cv
+        );
+        let reparsed = Sidebar::from_config_value(&cv);
+        match &reparsed.title {
+            SidebarTitle::Text(cv) => {
+                assert_eq!(cv.as_plain_text().as_deref(), Some("My Site"));
+            }
+            other => panic!("expected Text after roundtrip; got {:?}", other),
         }
     }
 

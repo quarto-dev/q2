@@ -18,10 +18,24 @@
 //! See `claude-notes/plans/2026-04-24-websites-phase-4.md` §Decision 4
 //! for the flatten algorithm and §Decision 5 for the skip conditions.
 //!
-//! ## Skip conditions
+//! ## Enable / skip conditions
 //!
-//! - `page-navigation: false` at the document level (affirmative
-//!   disable; flows through metadata merge).
+//! Whether the strip is generated is gated by
+//! [`resolve_website_bool`](crate::transforms::resolve_website_bool)
+//! for the `page-navigation` flag. Precedence (most-specific wins):
+//!
+//! 1. Top-level `page-navigation` in the merged metadata — covers
+//!    document frontmatter overrides and project top-level placement
+//!    in `_quarto.yml`.
+//! 2. `website.page-navigation` in `_quarto.yml`.
+//! 3. The project-type default returned by
+//!    [`page_nav_default_for_kind`]. Websites default to `false`
+//!    (matching Quarto 1's `websiteConfigBoolean(kSitePageNavigation,
+//!    false, …)` at `website-shared.ts:228`); books default to `true`
+//!    once they land.
+//!
+//! Even when the flag is enabled, the transform still skips when:
+//!
 //! - `navigation.page_navigation` already populated — user override.
 //! - `navigation.sidebar` absent — no sidebar to flatten.
 //! - The current page's source path doesn't appear in the flat list.
@@ -32,10 +46,22 @@ use quarto_navigation::sidebar::{FlatEntry, Sidebar, flatten_for_page_nav};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
+use crate::project::ProjectKind;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
-use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_active::page_relative_source;
+use crate::transforms::resolve_website_bool;
+
+/// Project-type default for `page-navigation`. Mirrors Quarto 1:
+/// websites default off (`website-shared.ts:228`); books default on
+/// (`book-config.ts:161`). Books aren't yet wired up in Q2 but we
+/// keep the case here so the flip is one line when they land.
+fn page_nav_default_for_kind(kind: ProjectKind) -> bool {
+    match kind {
+        ProjectKind::Book => true,
+        ProjectKind::Website | ProjectKind::Manuscript | ProjectKind::Default => false,
+    }
+}
 
 pub struct PageNavGenerateTransform;
 
@@ -58,7 +84,8 @@ impl AstTransform for PageNavGenerateTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        if is_feature_disabled(&ast.meta, "page-navigation") {
+        let default = page_nav_default_for_kind(ctx.project.project_kind());
+        if !resolve_website_bool(&ast.meta, "page-navigation", default) {
             return Ok(());
         }
         if ast.meta.contains_path(&["navigation", "page_navigation"]) {
@@ -174,7 +201,19 @@ mod tests {
 
     /// Run the transform with the given meta + page; returns the
     /// resulting `ast.meta`.
-    async fn run(meta: ConfigValue, page: &str) -> ConfigValue {
+    ///
+    /// Auto-enables `page-navigation` at the top level if the meta
+    /// hasn't already set it. The default for [`ProjectKind::Default`]
+    /// (used by `make_project`) is `false`, but most of these unit
+    /// tests exercise the flatten/neighbor logic rather than the
+    /// gating, so they want the strip generated. Tests that
+    /// specifically exercise the disable path (e.g.
+    /// `page_nav_generate_skips_when_feature_disabled`) set the flag
+    /// themselves and this helper preserves their override.
+    async fn run(mut meta: ConfigValue, page: &str) -> ConfigValue {
+        if !meta.contains_path(&["page-navigation"]) {
+            meta.insert_path(&["page-navigation"], b(true));
+        }
         let mut ast = Pandoc {
             meta,
             blocks: vec![],
@@ -468,6 +507,90 @@ mod tests {
                 .as_deref(),
             Some("Charlie")
         );
+    }
+
+    /// bd-bsut: project-type default for websites is `false`, so a
+    /// website project that doesn't set `page-navigation` produces no
+    /// strip. Drives the helper directly with a `Website` project
+    /// instead of via the auto-enable `run()` shim.
+    #[tokio::test]
+    async fn page_nav_generate_default_off_for_website_kind() {
+        let mut meta = config_map(vec![]);
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["a.qmd", "b.qmd"]),
+        );
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let mut project = make_project();
+        project.config.project_kind = ProjectKind::Website;
+        let doc = DocumentInfo::from_path("/project/a.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        PageNavGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert!(
+            !ast.meta.contains_path(&["navigation", "page_navigation"]),
+            "website default is off; no project/doc opt-in → no strip"
+        );
+    }
+
+    /// bd-bsut: top-level `page-navigation: true` enables the strip
+    /// even on a `Website` project (which defaults to off).
+    #[tokio::test]
+    async fn page_nav_generate_top_level_true_enables_for_website() {
+        let mut meta = config_map(vec![("page-navigation", b(true))]);
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["a.qmd", "b.qmd"]),
+        );
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let mut project = make_project();
+        project.config.project_kind = ProjectKind::Website;
+        let doc = DocumentInfo::from_path("/project/a.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        PageNavGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert!(ast.meta.contains_path(&["navigation", "page_navigation"]));
+    }
+
+    /// bd-bsut: `website.page-navigation: true` (scoped) also enables
+    /// the strip on a `Website` project.
+    #[tokio::test]
+    async fn page_nav_generate_website_scope_true_enables_for_website() {
+        let mut meta = config_map(vec![]);
+        meta.insert_path(&["website", "page-navigation"], b(true));
+        meta.insert_path(
+            &["navigation", "sidebar"],
+            sidebar_with_links(&["a.qmd", "b.qmd"]),
+        );
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let mut project = make_project();
+        project.config.project_kind = ProjectKind::Website;
+        let doc = DocumentInfo::from_path("/project/a.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        PageNavGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert!(ast.meta.contains_path(&["navigation", "page_navigation"]));
     }
 
     /// Test 30 — section header with an href can be a neighbor.
