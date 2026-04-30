@@ -125,7 +125,11 @@ typedef enum {
 
     PANDOC_LINE_BREAK,
 
-    TRIPLE_STAR, // simply for good error reporting
+    // KNOWN LIMITATION: QMD does not support `***foo***` (triple-asterisk
+    // strong+emph). Emitted from `***` followed by non-whitespace content
+    // so the parser raises Q-2-32 with the `**_foo_**` workaround.
+    // See grammar.js (`_triple_star_error`) and CONTRIBUTING.md.
+    TRIPLE_STAR,
 } TokenType;
 
 #ifdef SCAN_DEBUG

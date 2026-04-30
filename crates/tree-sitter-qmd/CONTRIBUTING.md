@@ -46,6 +46,24 @@ Tests are located in the `test/corpus` subfolder:
 * `extension_<>.txt` are covering specific extensions. Some of these are also
   taken from the GFM spec.
 
+## Known limitations
+
+These are intentional non-supports — please do not file them as bugs or
+"fix" them without discussion. They exist either because the syntax is
+ambiguous in QMD's authoring model, or because supporting them would
+require parser changes that aren't worth the complexity.
+
+* **Triple-asterisk strong+emph (`***foo***`) is not supported.** Use
+  `**_foo_**` instead. The scanner emits `TRIPLE_STAR` (see
+  `tree-sitter-markdown/src/scanner.c` and the `_triple_star_error`
+  external token in `grammar.js`) so the parser raises the user-facing
+  error code Q-2-32 with the workaround. The error definition lives in
+  `crates/pampa/resources/error-corpus/Q-2-32.json`.
+
+When adding a new intentional non-support, list it here with: the
+syntax, the suggested workaround, the emission point in the scanner /
+grammar, and the user-facing error code if one exists.
+
 ## Pull Requests
 
 I will happily accept any pull requests.

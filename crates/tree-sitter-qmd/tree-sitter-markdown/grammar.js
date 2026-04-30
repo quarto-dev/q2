@@ -1029,7 +1029,14 @@ module.exports = grammar({
 
         $._pandoc_line_break, // we need to do this in the external lexer to avoid eating the actual newline.
 
-        $._triple_star_error, // we do this simply to issue a good error message.
+        // KNOWN LIMITATION: QMD does not support triple-asterisk strong+emph
+        // (`***foo***`). The scanner emits this token when it sees `***`
+        // immediately followed by non-whitespace content so the parser can
+        // raise the user-facing error Q-2-32 ("Triple star emphasis disallowed",
+        // see crates/pampa/resources/error-corpus/Q-2-32.json) suggesting the
+        // workaround `**_foo_**`. Emission site: scanner.c, EMIT_TOKEN(TRIPLE_STAR).
+        // See CONTRIBUTING.md "Known limitations" for the full list.
+        $._triple_star_error,
     ],
     precedences: $ => [],
     extras: $ => [],
