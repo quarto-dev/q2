@@ -1,0 +1,5 @@
+title: Quarto Doc API Test
+author: Test
+contributes:
+  shortcodes:
+    - doc-api.lua

@@ -51,6 +51,7 @@ export type CodeInline = { t: 'Code'; c: [[string, string[], [string, string][]]
 export type LinkInline = { t: 'Link'; c: [[string, string[], [string, string][]], InlineNode[], [string, string]] };
 export type ImageInline = { t: 'Image'; c: [[string, string[], [string, string][]], InlineNode[], [string, string]] };
 export type SpanInline = { t: 'Span'; c: [[string, string[], [string, string][]], InlineNode[]] };
+export type QuotedInline = { t: 'Quoted'; c: [{ t: 'SingleQuote' | 'DoubleQuote' }, InlineNode[]] };
 export type UnknownInline = { t: string; c?: unknown };
 
 export type InlineNode =
@@ -64,6 +65,7 @@ export type InlineNode =
     | LinkInline
     | ImageInline
     | SpanInline
+    | QuotedInline
     | UnknownInline;
 
 interface PandocAstRendererProps {
@@ -177,6 +179,16 @@ const renderChildrenRegistry: Record<string, (args: {
                     const newChildren = [...(node as SpanInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
                     setLocalAst({ t: 'Span', c: [(node as SpanInline).c[0], newChildren] });
+                }}
+            />
+        )),
+    Quoted: ({ node, setLocalAst, onNavigateToDocument }) =>
+        (node as QuotedInline).c[1].map((child, i) => (
+            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+                setLocalAst={(newChild: BlockNode | InlineNode) => {
+                    const newChildren = [...(node as QuotedInline).c[1]];
+                    newChildren[i] = newChild as InlineNode;
+                    setLocalAst({ t: 'Quoted', c: [(node as QuotedInline).c[0], newChildren] });
                 }}
             />
         )),
@@ -497,6 +509,12 @@ const Span = (args: NodeArgs<SpanInline>) => (
     </span>
 );
 
+const Quoted = (args: NodeArgs<QuotedInline>) => (
+    <span style={inlineStyle}>
+        <strong>Quoted({args.node.c[0].t}):</strong> {renderChildren(args)}
+    </span>
+);
+
 // Temporary inline components registry (will be merged into UnifiedRegistry below)
 const InlineComponents: Record<string, (props: any) => React.ReactNode> = {
     Str,
@@ -509,6 +527,7 @@ const InlineComponents: Record<string, (props: any) => React.ReactNode> = {
     Link,
     Image,
     Span,
+    Quoted,
 };
 
 const Inline = (args: NodeArgs<InlineNode>) => {

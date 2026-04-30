@@ -13,6 +13,14 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-04-30
+
+- [`2859733b`](https://github.com/quarto-dev/q2/commits/2859733b): Harden silent auth refresh — buffer extended from 5 to 15 minutes to absorb background-tab timer throttling, and a coalesced `triggerRefresh()` lets callers recover from mid-session 401s without logout
+
+### 2026-04-29
+
+- [`dcac202d`](https://github.com/quarto-dev/q2/commits/dcac202d): Fix replay drawer toggle so clicking the chevron or title closes the drawer
+
 ### 2026-04-28
 
 - [`a3ef5e8f`](https://github.com/quarto-dev/q2/commits/a3ef5e8f): Phase 9 sub-phases 9.3–9.4 — `renderToHtml` now drives the new `render_page_in_project` WASM entry point so the live preview renders the active page in the context of its surrounding project (sidebar, navbar, prev/next, cross-doc link rewriting, deduplicated theme CSS); single-file projects fall through to the same path `renderQmd` used to take, so behavior is byte-identical there. `Preview` now re-renders on any sibling-file edit (Decision 6) by depending on the `fileContents` Map identity threaded through `PreviewRouter`.

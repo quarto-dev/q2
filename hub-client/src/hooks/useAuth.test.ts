@@ -29,12 +29,14 @@ vi.mock('../services/authService', () => ({
   refreshToken: vi.fn(),
 }));
 
-import { useAuth } from './useAuth';
+import { useAuth, REFRESH_BUFFER_MS } from './useAuth';
 import {
   fetchAuthMe,
   logout as serverLogout,
   refreshToken,
 } from '../services/authService';
+
+const COOKIE_MAX_AGE_MS = 3600 * 1000;
 
 const mockFetchAuthMe = vi.mocked(fetchAuthMe);
 const mockServerLogout = vi.mocked(serverLogout);
@@ -289,19 +291,19 @@ describe('useAuth', () => {
         expect(result.current.auth).toEqual(user),
       );
 
-      // Advance past the refresh point (55 min). The refresh timer sets
+      // Advance past the refresh point. The refresh timer sets
       // isRefreshing=true and enables One Tap. Simulate One Tap failing
       // (no active Google session), which resets isRefreshing=false.
       await act(async () => {
-        vi.advanceTimersByTime(55 * 60 * 1000 + 100);
+        vi.advanceTimersByTime(COOKIE_MAX_AGE_MS - REFRESH_BUFFER_MS + 100);
       });
       await act(async () => {
         oneTapCallbacks.onError?.();
       });
 
-      // Advance past cookie max-age (remaining ~5 min)
+      // Advance past cookie max-age (remaining buffer).
       await act(async () => {
-        vi.advanceTimersByTime(5 * 60 * 1000 + 100);
+        vi.advanceTimersByTime(REFRESH_BUFFER_MS + 100);
       });
 
       await vi.waitFor(() =>
@@ -333,6 +335,128 @@ describe('useAuth', () => {
       await vi.waitFor(() =>
         expect(result.current.auth).toEqual(freshUser),
       );
+    });
+  });
+
+  // ── 401-triggered refresh (fake timers) ───────────────────
+
+  describe('triggerRefresh', () => {
+    beforeEach(() => {
+      cleanup();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('enables One Tap when called while auth is still considered valid', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValue(user);
+
+      const { result } = renderHook(() => useAuth());
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Cookie freshly set on mount — One Tap initially disabled.
+      expect(oneTapCallbacks.disabled).toBe(true);
+
+      act(() => {
+        result.current.triggerRefresh();
+      });
+
+      expect(oneTapCallbacks.disabled).toBe(false);
+    });
+
+    it('coalesces concurrent triggerRefresh() calls into a single One Tap attempt', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValue(user);
+
+      const { result } = renderHook(() => useAuth());
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Multiple concurrent calls (e.g. parallel fetchActorId 401s).
+      act(() => {
+        result.current.triggerRefresh();
+        result.current.triggerRefresh();
+        result.current.triggerRefresh();
+      });
+
+      // One Tap is enabled exactly once; refreshEnabled stayed true.
+      expect(oneTapCallbacks.disabled).toBe(false);
+
+      // Resolve the One Tap success path; isRefreshing resets, One Tap disables.
+      mockRefreshToken.mockResolvedValue(user);
+      await act(async () => {
+        oneTapCallbacks.onSuccess?.({ credential: 'fresh.jwt' });
+      });
+      await vi.waitFor(() => expect(oneTapCallbacks.disabled).toBe(true));
+
+      // A subsequent triggerRefresh re-enables (proving the gate cleared).
+      act(() => {
+        result.current.triggerRefresh();
+      });
+      expect(oneTapCallbacks.disabled).toBe(false);
+    });
+
+    it('updates auth and refreshes cookieSetAt on successful One Tap', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      const refreshedUser = {
+        email: 'a@b.com',
+        name: 'A Refreshed',
+        picture: null,
+      };
+      mockFetchAuthMe.mockResolvedValue(user);
+
+      const { result } = renderHook(() => useAuth());
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Pretend cookie has aged most of the way to expiry. After successful
+      // refresh, cookieSetAt should be reset to "now" so the next refresh
+      // timer fires ~ (max-age - buffer) from this moment, not immediately.
+      await act(async () => {
+        vi.advanceTimersByTime(COOKIE_MAX_AGE_MS - REFRESH_BUFFER_MS - 60_000);
+      });
+
+      act(() => {
+        result.current.triggerRefresh();
+      });
+
+      mockRefreshToken.mockResolvedValue(refreshedUser);
+      await act(async () => {
+        oneTapCallbacks.onSuccess?.({ credential: 'fresh.jwt' });
+      });
+
+      await vi.waitFor(() =>
+        expect(result.current.auth).toEqual(refreshedUser),
+      );
+
+      // Drive time forward past the *old* expiry. If cookieSetAt was refreshed,
+      // auth survives. If it wasn't, the expiry timer would have already cleared it.
+      mockFetchAuthMe.mockResolvedValue(refreshedUser);
+      await act(async () => {
+        vi.advanceTimersByTime(60_000 + 100);
+      });
+      expect(result.current.auth).toEqual(refreshedUser);
+    });
+
+    it('does not clear auth on One Tap onError when the cookie is still valid', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValue(user);
+
+      const { result } = renderHook(() => useAuth());
+      await vi.waitFor(() => expect(result.current.auth).toEqual(user));
+
+      // Cookie was just set on mount, so cookieExpired() is false.
+      act(() => {
+        result.current.triggerRefresh();
+      });
+
+      await act(async () => {
+        oneTapCallbacks.onError?.();
+      });
+
+      // Auth should be preserved — Google session may be gone but our cookie is still good.
+      expect(result.current.auth).toEqual(user);
     });
   });
 });

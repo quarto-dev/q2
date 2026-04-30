@@ -2260,7 +2260,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             if (lexer->lookahead != '\n' && lexer->lookahead != '\r' && valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                 EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
             }
-            if ((lexer->lookahead == '\n' || lexer->lookahead != '\r') && valid_symbols[PIPE_TABLE_LINE_ENDING]) {
+            if ((lexer->lookahead == '\n' || lexer->lookahead == '\r') && valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                 EMIT_TOKEN(LINE_ENDING);
             }
 

@@ -179,6 +179,12 @@ describe('ReplayDrawer', () => {
       expect(controls.exit).toHaveBeenCalled();
     });
 
+    it('clicking the toggle calls controls.exit()', () => {
+      render(<ReplayDrawer state={activeState} controls={controls} />);
+      fireEvent.click(screen.getByText('Replay'));
+      expect(controls.exit).toHaveBeenCalled();
+    });
+
     it('header row does not exit on click', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
       // Clicking the position text in the header should not trigger exit

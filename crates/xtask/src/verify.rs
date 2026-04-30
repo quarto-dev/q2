@@ -34,6 +34,8 @@ pub struct VerifyConfig {
     pub skip_trace_viewer_tests: bool,
     /// Skip tree-sitter grammar tests.
     pub skip_treesitter_tests: bool,
+    /// Skip the CRLF parity run of tree-sitter grammar tests.
+    pub skip_treesitter_crlf_tests: bool,
     /// Run hub-client e2e tests (slower, requires browser).
     pub include_e2e: bool,
     /// Do not set RUSTFLAGS="-D warnings" (allows warnings during iteration).
@@ -50,6 +52,7 @@ impl Default for VerifyConfig {
             skip_trace_viewer_build: false,
             skip_trace_viewer_tests: false,
             skip_treesitter_tests: false,
+            skip_treesitter_crlf_tests: false,
             include_e2e: false,
             no_deny_warnings: false,
         }
@@ -107,13 +110,35 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
                 ""
             }
         );
+        // On Windows, Cargo cannot re-link target/debug/xtask.exe while the
+        // currently-running xtask holds a file lock on it. Linux/macOS
+        // tolerate overwriting a running binary.
+        #[cfg(windows)]
+        let build_args: &[&str] = &["build", "--workspace", "--exclude", "xtask"];
+        #[cfg(not(windows))]
+        let build_args: &[&str] = &["build", "--workspace"];
+
         run_command(
             "cargo",
-            &["build", "--workspace"],
+            build_args,
             &project_root,
             rustflags,
             "Rust build failed",
         )?;
+
+        // On Windows we excluded xtask above; `cargo check -p xtask` still
+        // gives xtask the `-D warnings` pass without relinking the running
+        // exe (cargo check doesn't produce a binary). This keeps xtask
+        // validated even under `cargo xtask verify --skip-rust-tests`.
+        #[cfg(windows)]
+        run_command(
+            "cargo",
+            &["check", "-p", "xtask"],
+            &project_root,
+            rustflags,
+            "xtask check failed",
+        )?;
+
         println!("✓ Rust build complete");
     } else {
         println!("\n━━━ Step 3/{}: Skipping Rust build ━━━\n", TOTAL_STEPS);
@@ -134,6 +159,15 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             "Tree-sitter grammar tests failed",
         )?;
         println!("✓ Tree-sitter grammar tests complete");
+
+        if !config.skip_treesitter_crlf_tests {
+            println!("\n  ↳ Re-running with CRLF line endings...");
+            crate::treesitter_crlf::run_parity_check(&ts_dir)
+                .context("Tree-sitter CRLF parity check failed")?;
+            println!("  ✓ CRLF parity check complete");
+        } else {
+            println!("\n  ↳ Skipping CRLF parity check");
+        }
     } else {
         println!(
             "\n━━━ Step 4/{}: Skipping tree-sitter grammar tests ━━━\n",

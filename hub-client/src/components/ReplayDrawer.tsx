@@ -159,10 +159,15 @@ export default function ReplayDrawer({ state, controls, disabled, identities }: 
       tabIndex={0}
     >
       <div className="replay-drawer__header">
-        <span className="replay-drawer__toggle">
+        <button
+          type="button"
+          className="replay-drawer__toggle"
+          onClick={controls.exit}
+          aria-label="Collapse replay"
+        >
           <span className="replay-drawer__chevron">&#x25BC;</span>
           <span>Replay</span>
-        </span>
+        </button>
 
         <button
           className="replay-drawer__handle"
