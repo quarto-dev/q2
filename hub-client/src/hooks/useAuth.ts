@@ -68,6 +68,14 @@ export function useAuth() {
   const cookieExpired = () =>
     cookieSetAt.current > 0 && Date.now() >= cookieSetAt.current + COOKIE_MAX_AGE_MS;
 
+  // Single entry point for activating One Tap. Coalesces concurrent
+  // triggers (e.g. N parallel 401s) into one refresh attempt.
+  const triggerRefresh = useCallback(() => {
+    if (isRefreshing.current) return;
+    isRefreshing.current = true;
+    setRefreshEnabled(true);
+  }, []);
+
   // One Tap: disabled until refreshEnabled is set. When enabled with
   // auto_select, it silently returns a credential if the user has an
   // active Google session — no UI shown.
@@ -121,8 +129,7 @@ export function useAuth() {
             setAuth(me);
           } else {
             // Cookie expired — try One Tap refresh before logging out.
-            isRefreshing.current = true;
-            setRefreshEnabled(true);
+            triggerRefresh();
           }
         })
         .catch(() => {
@@ -134,7 +141,7 @@ export function useAuth() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [auth]);
+  }, [auth, triggerRefresh]);
 
   // Schedule silent refresh and hard expiry based on cookie lifetime.
   useEffect(() => {
@@ -153,10 +160,7 @@ export function useAuth() {
     // Schedule silent refresh attempt before expiry.
     const msUntilRefresh = msUntilExpiry - REFRESH_BUFFER_MS;
     if (msUntilRefresh > 0) {
-      refreshTimer.current = setTimeout(() => {
-        isRefreshing.current = true;
-        setRefreshEnabled(true);
-      }, msUntilRefresh);
+      refreshTimer.current = setTimeout(triggerRefresh, msUntilRefresh);
     }
 
     // Hard expiry: re-check auth when the cookie should have expired.
@@ -179,22 +183,13 @@ export function useAuth() {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       if (expiryTimer.current) clearTimeout(expiryTimer.current);
     };
-  }, [auth]);
+  }, [auth, triggerRefresh]);
 
   const logout = useCallback(() => {
     serverLogout().catch(() => {
       // Best-effort server logout; clear client state regardless.
     });
     setAuth(null);
-  }, []);
-
-  // Imperative refresh trigger for callers that detect a mid-session 401
-  // on an authenticated REST request. Coalesces concurrent calls so that
-  // N parallel 401s produce a single One Tap attempt.
-  const triggerRefresh = useCallback(() => {
-    if (isRefreshing.current) return;
-    isRefreshing.current = true;
-    setRefreshEnabled(true);
   }, []);
 
   return { auth, loading, logout, triggerRefresh };
