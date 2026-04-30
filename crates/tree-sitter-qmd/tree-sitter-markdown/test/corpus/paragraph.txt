@@ -50,5 +50,108 @@ World
         (pandoc_paragraph
           (pandoc_str)
           (pandoc_line_break)
-          (pandoc_soft_break)          
+          (pandoc_soft_break)
           (pandoc_str))))
+================================================================================
+paragraph.txt 4: bd-af1e — single backtick at start of continuation line
+================================================================================
+foo bar
+`code` more text
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 5: bd-af1e — single backtick at start of list-item continuation
+================================================================================
+- foo bar
+  `code` more text
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter))
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
+================================================================================
+paragraph.txt 6: bd-af1e — double-backtick code span at start of continuation
+================================================================================
+foo bar
+``co`de`` more
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 7: bd-af1e — triple-backtick at start of continuation closes paragraph
+================================================================================
+foo bar
+```
+body
+```
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)))))
+================================================================================
+paragraph.txt 8: bd-af1e — four-backtick fence still closes paragraph
+================================================================================
+foo bar
+````
+body
+````
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)))))

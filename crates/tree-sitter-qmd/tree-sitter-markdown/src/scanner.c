@@ -2260,13 +2260,47 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 EMIT_TOKEN(LINE_ENDING);
             }
 
-            if ((!(s->state & STATE_INSIDE_ATX)) && 
-                lexer->lookahead != '*' && lexer->lookahead != '-' && 
-                lexer->lookahead != '+' && lexer->lookahead != '>' && 
-                lexer->lookahead != ':' && lexer->lookahead != '#' && lexer->lookahead != '`' &&
-                lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+            // bd-af1e: only 3+ consecutive backticks open a fenced code
+            // block (CommonMark); fewer is an inline code span and should
+            // soft-break. Peek-count up to 3 backticks. We do NOT mark_end
+            // during the peek: tree-sitter rewinds to the last mark_end
+            // (set at line 2247, pre-indent) between scan calls, so the
+            // advance is undone for the LINE_ENDING fall-through path.
+            int32_t first_lookahead = lexer->lookahead;
+            bool first_starts_with_fence = false;
+            if (lexer->lookahead == '`') {
+                int level = 0;
+                while (lexer->lookahead == '`' && level < 3) {
+                    advance(s, lexer);
+                    level++;
+                }
+                first_starts_with_fence = (level >= 3);
+            }
+
+            if ((!(s->state & STATE_INSIDE_ATX)) &&
+                first_lookahead != '*' && first_lookahead != '-' &&
+                first_lookahead != '+' && first_lookahead != '>' &&
+                first_lookahead != ':' && first_lookahead != '#' &&
+                !first_starts_with_fence &&
+                first_lookahead > ' ' && !(first_lookahead >= '0' && first_lookahead <= '9')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
-                lexer->mark_end(lexer);
+                if (first_lookahead == '`') {
+                    // Peek-advanced past indent + backticks; SOFT_LINE_ENDING
+                    // token range is pre-indent (mark from line 2247). Set
+                    // STATE_MATCHING so the indent is emitted as
+                    // block_continuation on the next scan via match_line.
+                    s->matched = 0;
+                    s->indentation = 0;
+                    if (s->open_blocks.size > 0) {
+                        s->state |= STATE_MATCHING;
+                    } else {
+                        s->state &= (~STATE_MATCHING);
+                    }
+                } else {
+                    // No peek; mark_end at post-indent so the token absorbs
+                    // the indent (original behavior).
+                    lexer->mark_end(lexer);
+                }
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
                 EMIT_TOKEN(SOFT_LINE_ENDING);
             }
@@ -2288,12 +2322,36 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
             // allow these characters to interrupt blocks.
-            if (valid_symbols[SOFT_LINE_ENDING] && might_be_soft_break && all_will_be_matched && 
-                (lexer->lookahead != '*' && lexer->lookahead != '-' && 
-                 lexer->lookahead != '+' && lexer->lookahead != '>' && 
-                 lexer->lookahead != ':' && lexer->lookahead != '#' && lexer->lookahead != '`' &&
-                 lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && 
-                 lexer->lookahead <= '9'))) {
+            // bd-af1e: same backtick rule as first gate, but at the
+            // post-match_line position (after block prefixes like `> `).
+            // The first peek already consumed the leading backticks if
+            // first_lookahead was '`' (level>=3 case — otherwise the
+            // first gate would have returned).
+            int32_t second_lookahead;
+            bool second_starts_with_fence;
+            if (first_lookahead == '`') {
+                second_lookahead = first_lookahead;
+                second_starts_with_fence = first_starts_with_fence;
+            } else {
+                second_lookahead = lexer->lookahead;
+                second_starts_with_fence = false;
+                if (lexer->lookahead == '`') {
+                    int level = 0;
+                    while (lexer->lookahead == '`' && level < 3) {
+                        advance(s, lexer);
+                        level++;
+                    }
+                    second_starts_with_fence = (level >= 3);
+                }
+            }
+
+            if (valid_symbols[SOFT_LINE_ENDING] && might_be_soft_break && all_will_be_matched &&
+                (second_lookahead != '*' && second_lookahead != '-' &&
+                 second_lookahead != '+' && second_lookahead != '>' &&
+                 second_lookahead != ':' && second_lookahead != '#' &&
+                 !second_starts_with_fence &&
+                 second_lookahead > ' ' && !(second_lookahead >= '0' &&
+                 second_lookahead <= '9'))) {
                 s->indentation = 0;
                 s->column = 0;
                 // If the last line break ended a paragraph and no new block opened,
@@ -2310,7 +2368,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
-                lexer->mark_end(lexer);
+                if (second_lookahead != '`') {
+                    // No peek-advance; mark_end at current position
+                    // (original behavior).
+                    lexer->mark_end(lexer);
+                }
                 EMIT_TOKEN(SOFT_LINE_ENDING);
             }
         }
