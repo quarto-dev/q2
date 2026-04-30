@@ -63,7 +63,7 @@ const AUTH_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 
 function App() {
-  const { auth, loading: authLoading, logout } = useAuth();
+  const { auth, loading: authLoading, logout, triggerRefresh } = useAuth();
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -84,13 +84,19 @@ function App() {
   const projectSetStateRef = useRef(projectSetState);
   projectSetStateRef.current = projectSetState;
 
-  // Fetch per-project actor ID; calls logout and returns null on session expiry.
+  // Fetch per-project actor ID. On 401 (mid-session expiry), trigger a
+  // silent refresh and return undefined — the caller's action is abandoned
+  // for this attempt, while One Tap either restores the session in place
+  // or eventually clears auth via its onError path.
   const resolveActorId = useCallback(async (indexDocId: string): Promise<string | undefined | null> => {
     if (!AUTH_ENABLED) return undefined;
     const id = await fetchActorId(indexDocId);
-    if (id === null) logout();
+    if (id === null) {
+      triggerRefresh();
+      return undefined;
+    }
     return id;
-  }, [logout]);
+  }, [triggerRefresh]);
 
   // Capture auth error from redirect query param (once, before URL is cleaned).
   const [authError] = useState(() => {
