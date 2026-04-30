@@ -155,3 +155,124 @@ body
       (block_continuation)
       (code_fence_content
         (block_continuation)))))
+================================================================================
+paragraph.txt 9: bd-1xph — single-asterisk emphasis at start of continuation
+================================================================================
+foo bar
+*emph* baz
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 10: bd-1xph — double-asterisk strong at start of continuation
+================================================================================
+foo bar
+**strong** baz
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_strong
+        (strong_emphasis_delimiter)
+        (pandoc_str)
+        (strong_emphasis_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 11: bd-1xph — mixed asterisks at start of continuation soft-break
+================================================================================
+foo bar
+**strong *with emph* inside** baz
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_strong
+        (strong_emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_emph
+          (emphasis_delimiter)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (emphasis_delimiter))
+        (pandoc_space)
+        (pandoc_str)
+        (strong_emphasis_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 12: bd-1xph — single-asterisk emphasis in list-item continuation
+================================================================================
+- foo bar
+  *emph* more
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_space)
+          (pandoc_str))))))
+================================================================================
+paragraph.txt 13: bd-1xph — list marker '* item' still interrupts paragraph
+================================================================================
+foo bar
+* item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+paragraph.txt 14: bd-1xph — thematic break '***' still interrupts paragraph
+================================================================================
+foo bar
+***
+baz
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))

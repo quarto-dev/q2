@@ -2266,8 +2266,18 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             // during the peek: tree-sitter rewinds to the last mark_end
             // (set at line 2247, pre-indent) between scan calls, so the
             // advance is undone for the LINE_ENDING fall-through path.
+            //
+            // bd-1xph: similarly, '*' at line start only interrupts a
+            // paragraph in two contexts:
+            //   - level==1 followed by whitespace: list marker
+            //   - level>=3 followed by whitespace/eol: thematic break
+            // Otherwise it opens an inline emphasis ('*emph*'), strong
+            // ('**strong**'), or strong+emph ('***both***') and should
+            // soft-break. Same peek-without-mark_end pattern as backticks.
             int32_t first_lookahead = lexer->lookahead;
             bool first_starts_with_fence = false;
+            bool first_starts_with_star_block = false;
+            bool first_peeked = false;
             if (lexer->lookahead == '`') {
                 int level = 0;
                 while (lexer->lookahead == '`' && level < 3) {
@@ -2275,20 +2285,40 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     level++;
                 }
                 first_starts_with_fence = (level >= 3);
+                first_peeked = true;
+            } else if (lexer->lookahead == '*') {
+                int level = 0;
+                while (lexer->lookahead == '*') {
+                    advance(s, lexer);
+                    level++;
+                }
+                bool trailing_ws_or_eol = (lexer->lookahead == ' ' ||
+                                           lexer->lookahead == '\t' ||
+                                           lexer->lookahead == '\n' ||
+                                           lexer->lookahead == '\r' ||
+                                           lexer->eof(lexer));
+                if (level == 1 && trailing_ws_or_eol) {
+                    first_starts_with_star_block = true;  // list marker
+                } else if (level >= 3 && trailing_ws_or_eol) {
+                    first_starts_with_star_block = true;  // thematic break
+                }
+                first_peeked = true;
             }
 
             if ((!(s->state & STATE_INSIDE_ATX)) &&
-                first_lookahead != '*' && first_lookahead != '-' &&
+                (first_lookahead != '*' || !first_starts_with_star_block) &&
+                first_lookahead != '-' &&
                 first_lookahead != '+' && first_lookahead != '>' &&
                 first_lookahead != ':' && first_lookahead != '#' &&
                 !first_starts_with_fence &&
                 first_lookahead > ' ' && !(first_lookahead >= '0' && first_lookahead <= '9')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
-                if (first_lookahead == '`') {
-                    // Peek-advanced past indent + backticks; SOFT_LINE_ENDING
-                    // token range is pre-indent (mark from line 2247). Set
-                    // STATE_MATCHING so the indent is emitted as
-                    // block_continuation on the next scan via match_line.
+                if (first_peeked) {
+                    // Peek-advanced past indent + delimiter run;
+                    // SOFT_LINE_ENDING token range is pre-indent (mark from
+                    // line 2247). Set STATE_MATCHING so the indent is
+                    // emitted as block_continuation on the next scan via
+                    // match_line.
                     s->matched = 0;
                     s->indentation = 0;
                     if (s->open_blocks.size > 0) {
@@ -2322,19 +2352,24 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
             // allow these characters to interrupt blocks.
-            // bd-af1e: same backtick rule as first gate, but at the
-            // post-match_line position (after block prefixes like `> `).
-            // The first peek already consumed the leading backticks if
-            // first_lookahead was '`' (level>=3 case — otherwise the
-            // first gate would have returned).
+            // bd-af1e / bd-1xph: same backtick + asterisk rules as first
+            // gate, but at the post-match_line position (after block
+            // prefixes like `> `). The first peek already consumed the
+            // leading delimiters if first_lookahead was '`' or '*' — the
+            // first gate would have returned earlier in the soft-break
+            // case, so reaching here means the first peek determined the
+            // line opens a block.
             int32_t second_lookahead;
             bool second_starts_with_fence;
-            if (first_lookahead == '`') {
+            bool second_starts_with_star_block;
+            if (first_peeked) {
                 second_lookahead = first_lookahead;
                 second_starts_with_fence = first_starts_with_fence;
+                second_starts_with_star_block = first_starts_with_star_block;
             } else {
                 second_lookahead = lexer->lookahead;
                 second_starts_with_fence = false;
+                second_starts_with_star_block = false;
                 if (lexer->lookahead == '`') {
                     int level = 0;
                     while (lexer->lookahead == '`' && level < 3) {
@@ -2342,11 +2377,28 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                         level++;
                     }
                     second_starts_with_fence = (level >= 3);
+                } else if (lexer->lookahead == '*') {
+                    int level = 0;
+                    while (lexer->lookahead == '*') {
+                        advance(s, lexer);
+                        level++;
+                    }
+                    bool trailing_ws_or_eol = (lexer->lookahead == ' ' ||
+                                               lexer->lookahead == '\t' ||
+                                               lexer->lookahead == '\n' ||
+                                               lexer->lookahead == '\r' ||
+                                               lexer->eof(lexer));
+                    if (level == 1 && trailing_ws_or_eol) {
+                        second_starts_with_star_block = true;
+                    } else if (level >= 3 && trailing_ws_or_eol) {
+                        second_starts_with_star_block = true;
+                    }
                 }
             }
 
             if (valid_symbols[SOFT_LINE_ENDING] && might_be_soft_break && all_will_be_matched &&
-                (second_lookahead != '*' && second_lookahead != '-' &&
+                ((second_lookahead != '*' || !second_starts_with_star_block) &&
+                 second_lookahead != '-' &&
                  second_lookahead != '+' && second_lookahead != '>' &&
                  second_lookahead != ':' && second_lookahead != '#' &&
                  !second_starts_with_fence &&
@@ -2368,7 +2420,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
-                if (second_lookahead != '`') {
+                if (second_lookahead != '`' && second_lookahead != '*') {
                     // No peek-advance; mark_end at current position
                     // (original behavior).
                     lexer->mark_end(lexer);
