@@ -340,6 +340,104 @@ fn hub_smoke_fixture_renders_cleanly() {
     );
 }
 
+/// Drive `ProjectPipeline<RenderToHtmlRenderer>` like
+/// `render_active_page` but tolerate Pass-1 failures so callers
+/// can inspect the failure record. Returns the full
+/// `ProjectRenderSummary` rather than a single output. Used by
+/// the bd-mwtf regression tests.
+fn run_active_page_summary(
+    active: &Path,
+) -> quarto_core::project::orchestrator::ProjectRenderSummary<WasmPassTwoOutput> {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(active, runtime.as_ref()).unwrap();
+    if !project.is_single_file {
+        project = ProjectContext::discover(&project.dir, runtime.as_ref()).unwrap();
+    }
+    let project_type = project_type_for(&project);
+    let vfs_root = project.dir.join(".quarto/project-artifacts");
+    let renderer = RenderToHtmlRenderer::new(&vfs_root);
+
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        Format::html(),
+        "html",
+        runtime.clone(),
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active.to_path_buf()));
+
+    pollster::block_on(pipeline.run()).expect("pipeline run")
+}
+
+/// Regression for bd-mwtf: when the active page itself fails
+/// Pass-1 (parse error), the orchestrator surfaces it via
+/// `pass1_failures`, with **structured** diagnostics + a
+/// SourceContext attached. The hub-client's WASM entry point
+/// uses these to render the parse error in the preview overlay
+/// instead of falling through to the generic "no output" string.
+#[test]
+fn pass1_parse_error_on_active_page_carries_diagnostics() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    // Two-file website where `about.qmd` contains an unescaped
+    // apostrophe Q2 reads as a Q-2-10 quote-mark error
+    // (`pages'` in `*other* pages' titles`).
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello.\n",
+    );
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages' titles within the next render\n",
+    );
+
+    let active = canonical(&project_dir.join("about.qmd"));
+    let summary = run_active_page_summary(&active);
+
+    // Active page is dropped from outputs; pass-2 runs but has
+    // nothing to render for the active page.
+    assert_eq!(
+        summary.outputs.len(),
+        0,
+        "outputs should be empty when the active page fails Pass-1"
+    );
+    assert_eq!(
+        summary.pass1_failures.len(),
+        1,
+        "expected exactly one Pass-1 failure for about.qmd"
+    );
+
+    let failure = &summary.pass1_failures[0];
+    assert_eq!(failure.input, active);
+    assert!(
+        !failure.diagnostics.is_empty(),
+        "FileFailure.diagnostics should be populated for parse errors; \
+         got error string: {}",
+        failure.error,
+    );
+    assert!(
+        failure.source_context.is_some(),
+        "FileFailure.source_context should be Some for parse errors so \
+         JsonDiagnostic can map offsets to line/column",
+    );
+
+    // The user-facing error string still contains the rendered
+    // ariadne snippet (since `e.to_string()` for QuartoError::Parse
+    // calls ParseError::Display); the CLI's text path depends on
+    // this remaining intact.
+    assert!(
+        failure.error.contains("Q-2-10") || failure.error.to_lowercase().contains("quote"),
+        "error string should mention the quote-mark diagnostic; got: {}",
+        failure.error,
+    );
+}
+
 fn copy_fixture(rel: &str, dst: &Path) {
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")

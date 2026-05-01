@@ -30,6 +30,7 @@ import {
 } from './services/automergeSync';
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
+import { installDebugApi } from './services/debugApi';
 import { getUserIdentity, updateUserName } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useProjectSet } from './hooks/useProjectSet';
@@ -133,6 +134,42 @@ function App() {
     navigateToProject,
     navigateToFile,
   } = useRouting();
+
+  // Live refs for the dev-only console debug API. The API itself
+  // is installed once (per the gate below) and reads current state
+  // through these refs, so it doesn't churn on every project /
+  // route change. See `services/debugApi.ts` and bd-2rv8.
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const filesRef = useRef<FileEntry[]>(files);
+  filesRef.current = files;
+  const routeRef = useRef<Route>(route);
+  routeRef.current = route;
+  const navigateToFileRef = useRef(navigateToFile);
+  navigateToFileRef.current = navigateToFile;
+
+  useEffect(() => {
+    const enabled =
+      import.meta.env.DEV ||
+      (typeof localStorage !== 'undefined' &&
+        localStorage.getItem('quartoDebug') === '1');
+    if (!enabled) return;
+    return installDebugApi({
+      getProject: () => projectRef.current,
+      getFiles: () => filesRef.current,
+      getActiveFile: () => {
+        const r = routeRef.current;
+        return r.type === 'file' ? r.filePath : null;
+      },
+      setActiveFile: (path: string) => {
+        const p = projectRef.current;
+        if (!p) {
+          throw new Error('quartoDebug.setActiveFile: no project loaded');
+        }
+        navigateToFileRef.current(p.id, path);
+      },
+    });
+  }, []);
 
   // Handle browser back/forward navigation
   // We use a separate effect instead of the onRouteChange callback to avoid

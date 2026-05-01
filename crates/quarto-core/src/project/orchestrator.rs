@@ -279,12 +279,44 @@ pub fn project_type_for(project: &ProjectContext) -> Box<dyn ProjectType> {
     }
 }
 
-/// Error reported for a single file whose Pass-2 render failed.
+/// Error reported for a single file whose Pass-1 profile or
+/// Pass-2 render failed.
+///
+/// `diagnostics` and `source_context` are populated when the
+/// underlying error is a structured [`crate::error::ParseError`]
+/// — i.e. the parser attached source-located diagnostics to it.
+/// For other error variants (`Io`, `Other`, …) `diagnostics` is
+/// empty and `source_context` is `None`; the user-facing message
+/// still surfaces through `error`.
+///
+/// The `error` string is `e.to_string()`, which for
+/// `QuartoError::Parse` already includes the rendered ariadne
+/// snippet — so the CLI's text path doesn't need to consult the
+/// structured fields. The hub-client / WASM path uses the
+/// structured fields to produce Monaco markers and the in-app
+/// preview overlay (bd-mwtf, bd-rqba).
 #[derive(Debug)]
 pub struct FileFailure {
     pub input: std::path::PathBuf,
     pub error: String,
     pub diagnostics: Vec<DiagnosticMessage>,
+    pub source_context: Option<quarto_source_map::SourceContext>,
+}
+
+/// Build a [`FileFailure`] from a [`QuartoError`], extracting
+/// structured diagnostics + source context when the error is a
+/// [`ParseError`](crate::error::ParseError).
+fn file_failure_from_error(input: std::path::PathBuf, e: QuartoError) -> FileFailure {
+    let (diagnostics, source_context) = match &e {
+        QuartoError::Parse(pe) => (pe.diagnostics.clone(), Some(pe.source_context.clone())),
+        _ => (Vec::new(), None),
+    };
+    FileFailure {
+        error: e.to_string(),
+        input,
+        diagnostics,
+        source_context,
+    }
 }
 
 /// Result of a full project render, generic over the per-page
@@ -573,11 +605,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         for doc_info in &self.project.files {
             match self.profile_with_cache(doc_info).await {
                 Ok(profile) => profiles.push(profile),
-                Err(e) => failures.push(FileFailure {
-                    input: doc_info.input.clone(),
-                    error: e.to_string(),
-                    diagnostics: Vec::new(),
-                }),
+                Err(e) => failures.push(file_failure_from_error(doc_info.input.clone(), e)),
             }
         }
         (profiles, failures)
@@ -933,11 +961,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 .await
             {
                 Ok(result) => outputs.push(result),
-                Err(e) => failures.push(FileFailure {
-                    input: doc_info.input.clone(),
-                    error: e.to_string(),
-                    diagnostics: Vec::new(),
-                }),
+                Err(e) => failures.push(file_failure_from_error(doc_info.input.clone(), e)),
             }
         }
         (outputs, failures)

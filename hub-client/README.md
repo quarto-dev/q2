@@ -99,3 +99,59 @@ The hub-client uses a WASM module (`wasm-quarto-hub-client`) that provides:
 - **QMD Rendering** - Full Quarto rendering pipeline (parsing, transforms, HTML generation)
 
 The WASM module is symlinked from `crates/wasm-quarto-hub-client/pkg/`.
+
+## Console debug API (`window.quartoDebug`)
+
+When a project is loaded, hub-client installs a small read/write
+debug API on `window.quartoDebug`. It is intended for developers
+and agents who want to script the editor from DevTools without
+clicking through menus.
+
+### Gating
+
+The API is installed only when **either** condition is true:
+
+- `import.meta.env.DEV` — i.e., a Vite dev build (`npm run dev`,
+  `npm run dev:fresh`).
+- `localStorage.quartoDebug === '1'` — manual opt-in for one-off
+  debugging against a production build. Set it from DevTools:
+
+  ```js
+  localStorage.setItem('quartoDebug', '1');
+  // reload the page
+  ```
+
+  Remove with `localStorage.removeItem('quartoDebug')`.
+
+This means production builds ship the API code (~1 KB) but never
+expose `window.quartoDebug` unless the localStorage flag is set.
+
+### Surface
+
+```ts
+window.quartoDebug = {
+  project(): { id, description, indexDocId, syncServer } | null;
+  listFiles(): string[];
+  readFile(path): string | Uint8Array | null;
+  writeFile(path, contents: string | Uint8Array, options?: { mimeType?: string }): Promise<void>;
+  rerender(): Promise<{ documentPath, result, at }>;
+  getActiveFile(): string | null;
+  setActiveFile(path: string): void;
+  lastRenderResponse(): { documentPath, result, at } | null;
+  vfsList(prefix?: string): string[];
+  vfsRead(path: string): Uint8Array | null;
+};
+```
+
+`writeFile` routes through the same Automerge mutation path the
+editor uses, so sync, presence, and the live preview all observe
+the change. `lastRenderResponse()` returns the most recent render
+response — including renders triggered by editor keystrokes, not
+just `rerender()` calls.
+
+For binary writes that overwrite an existing path, the API
+deletes the old document first so the file keeps its name (the
+underlying `createBinaryFile` is content-addressed and would
+otherwise rename to `name-<hash>.ext`).
+
+Source: `src/services/debugApi.ts`.

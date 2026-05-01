@@ -340,6 +340,29 @@ export function setScrollSyncEnabled(enabled: boolean): void {
 // ============================================================================
 
 /**
+ * Listener invoked after every {@link renderToHtml} call.
+ *
+ * Wired up by the dev-only `quartoDebug` console API
+ * (`services/debugApi.ts`) so an agent or developer can read the most
+ * recent render response from DevTools without having to instrument
+ * the editor by hand. Listener is at most one — installing replaces
+ * any previous registration; passing `null` unregisters.
+ *
+ * Listeners must not throw and must not block; the renderer logs and
+ * swallows any thrown error to avoid degrading the live preview.
+ */
+export type RenderListener = (
+  result: RenderResult,
+  options: RenderToHtmlOptions,
+) => void;
+
+let renderListener: RenderListener | null = null;
+
+export function setRenderListener(listener: RenderListener | null): void {
+  renderListener = listener;
+}
+
+/**
  * Render a QMD file from the virtual filesystem.
  *
  * `userGrammars`, when provided, routes any code block whose language
@@ -854,6 +877,20 @@ export function _resetUserGrammarCacheForTest(): void {
  */
 export async function renderToHtml(
   options: RenderToHtmlOptions
+): Promise<RenderResult> {
+  const result = await renderToHtmlInner(options);
+  if (renderListener) {
+    try {
+      renderListener(result, options);
+    } catch (err) {
+      console.warn('[renderToHtml] render listener threw; ignoring:', err);
+    }
+  }
+  return result;
+}
+
+async function renderToHtmlInner(
+  options: RenderToHtmlOptions,
 ): Promise<RenderResult> {
   try {
     await initWasm();

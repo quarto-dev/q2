@@ -1369,7 +1369,7 @@ async fn render_project_active_page_to_response(
         Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>,
         renderer,
     )
-    .with_mode(RenderMode::ActivePage(active_canonical));
+    .with_mode(RenderMode::ActivePage(active_canonical.clone()));
 
     let summary = match pipeline.run().await {
         Ok(s) => s,
@@ -1381,8 +1381,25 @@ async fn render_project_active_page_to_response(
     let active_output = match summary.outputs.into_iter().next() {
         Some(o) => o,
         None => {
-            // No output usually means Pass-2 failed for the active
-            // page. Surface the first failure (if any) instead.
+            // No output. Three reasons in priority order:
+            //   1. The active page itself failed Pass-1 (parse
+            //      error / metadata error). The orchestrator
+            //      drops the page from the index and Pass-2
+            //      never sees it. Surface the structured
+            //      diagnostics so the overlay can show the
+            //      parse error instead of a generic message
+            //      (bd-mwtf).
+            //   2. Pass-2 failed (rare for the active-page
+            //      mode but possible for renderer errors).
+            //   3. Genuinely empty — fall through to the
+            //      catch-all message.
+            if let Some(failure) = summary
+                .pass1_failures
+                .iter()
+                .find(|f| f.input == active_canonical)
+            {
+                return pass_failure_response("Pass 1", failure);
+            }
             if let Some(failure) = summary.pass2_failures.into_iter().next() {
                 return error_response(format!(
                     "Pass 2 failed for {}: {}",
@@ -1453,6 +1470,39 @@ fn render_error_response(e: QuartoError) -> String {
     serde_json::to_string(&RenderResponse {
         success: false,
         error: Some(error_msg),
+        html: None,
+        diagnostics,
+        warnings: None,
+    })
+    .unwrap()
+}
+
+/// Build a `success: false` response from a [`FileFailure`] when a
+/// project-render pass dropped the active page (Pass-1 parse error
+/// or Pass-2 render error). The structured diagnostics, when
+/// present, become Monaco markers + the in-app preview overlay
+/// snippet (bd-mwtf).
+///
+/// `phase` is a short label like "Pass 1" / "Pass 2" prepended to
+/// the error string.
+fn pass_failure_response(
+    phase: &str,
+    failure: &quarto_core::project::orchestrator::FileFailure,
+) -> String {
+    let diagnostics = match &failure.source_context {
+        Some(ctx) if !failure.diagnostics.is_empty() => {
+            Some(diagnostics_to_json(&failure.diagnostics, ctx))
+        }
+        _ => None,
+    };
+    serde_json::to_string(&RenderResponse {
+        success: false,
+        error: Some(format!(
+            "{} failed for {}: {}",
+            phase,
+            failure.input.display(),
+            failure.error
+        )),
         html: None,
         diagnostics,
         warnings: None,
