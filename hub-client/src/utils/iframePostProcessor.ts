@@ -196,8 +196,13 @@ function injectPreviewStyles(doc: Document): void {
   style.setAttribute('data-hub-client', 'true');
   style.textContent = `
     /* Hub-client preview overrides */
-    /* Hide TOC - it doesn't work well in narrow iframe containers */
-    nav[role="doc-toc"] {
+    /* Hide the page-level TOC — it doesn't work well in narrow
+       iframe containers. Quarto's website sidebar shares the
+       \`role="doc-toc"\` ARIA role (it's the document's
+       table-of-contents navigation), so we exclude
+       \`.sidebar-navigation\` to avoid collateral-killing the
+       sidebar (bd-f5yi). */
+    nav[role="doc-toc"]:not(.sidebar-navigation) {
       display: none !important;
     }
 
