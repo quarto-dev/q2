@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-01
 
+- [`f8234d00`](https://github.com/quarto-dev/q2/commits/f8234d00): Fix bd-f5yi — narrow the iframe `nav[role="doc-toc"]` hide override to `:not(.sidebar-navigation)` so the website sidebar isn't collateral-killed by the TOC-hiding rule
 - [`d656559a`](https://github.com/quarto-dev/q2/commits/d656559a): Surface sibling-page Pass-1 failures in the preview overlay with source-file attribution (bd-rqba), plus rename the misleading "references unknown document" warning to "references missing document information for"
 - [`0f103490`](https://github.com/quarto-dev/q2/commits/0f103490): Surface active-page parse errors in the preview overlay (bd-mwtf) and add a dev-only `window.quartoDebug` console API for scripting projects from DevTools (bd-2rv8)
 
