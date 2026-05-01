@@ -388,3 +388,16 @@ prod for one-off debugging.
   - [ ] Reproduce in Chrome via dev tools plugin; capture DOM + computed styles
   - [ ] If cause is in a different subsystem, split fix into its own ticket and session (D3)
   - [ ] Fix + regression test
+
+  **Status (end of 2026-05-01 session):** Deferred to next session.
+  Initial repro attempt via the user's URL failed because a fresh
+  browser context has no project-set in IndexedDB and the route
+  guard redirects to the project-set setup screen. The user's
+  project ID lives in the user's own browser. Next session
+  options:
+  - Bootstrap a project-set in the MCP browser, create a fresh
+    website project, then use the new `window.quartoDebug` API
+    to populate it with the `08-hub-preview` fixture content
+    (the enabler exists exactly so this is one-shot scriptable).
+  - Or have the user share the project-set link / a specific
+    repro state that survives a fresh-browser load.
