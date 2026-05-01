@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, Component } from 'react';
+import { useMemo, Component } from 'react';
 import type { ReactNode } from 'react';
 import type { FileEntry } from '../../types/project';
-import { Ast, componentRegistry } from '../render/ReactAstDebugRenderer';
+import { AstIframe } from './AstIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
-import { transpileAndImportTSX } from '../../services/tsxTranspiler';
+import { transpileTSX } from '../../services/tsxTranspiler';
 
 // Simple error boundary to catch errors in custom components
 class ErrorBoundary extends Component<
@@ -82,38 +82,6 @@ interface ReactRendererProps {
 }
 
 /**
- * Load and transpile custom TSX components from the VFS
- */
-async function loadCustomComponents(
-  componentPaths: string[],
-  fileContents: Map<string, string>
-): Promise<Record<string, React.ComponentType<any>>> {
-  let allComponents: Record<string, React.ComponentType<any>> = {};
-
-  for (const path of componentPaths) {
-    try {
-      // Get file content from the map
-      const tsxCode = fileContents.get(path);
-
-      if (!tsxCode) {
-        console.warn(`[ReactRenderer] Component file not found: ${path}`);
-        continue;
-      }
-
-      // Transpile and import the components
-      const exports = await transpileAndImportTSX(tsxCode);
-
-      allComponents = { ...allComponents, ...(exports as Record<string, React.ComponentType<any>>) };
-
-    } catch (err) {
-      console.error(`[ReactRenderer] Failed to load component ${path}:`, err);
-    }
-  }
-
-  return allComponents;
-}
-
-/**
  * React-based renderer that displays Pandoc AST as React components.
  *
  * Unlike the HTML/iframe-based preview, this renders the AST directly
@@ -130,33 +98,47 @@ function ReactRenderer({
   onSlideChange,
   format,
 }: ReactRendererProps) {
-  const [customComponents, setCustomComponents] = useState<Record<string, React.ComponentType<any>>>({});
-
-  // Extract component paths from AST as a stable string for comparison
+  // Extract component paths - only recompute when the list of paths changes
   const componentPathsKey = useMemo(() => {
     if (format !== 'q2-debug') {
       return '';
     }
-    const ast = JSON.parse(astJson);
-    const paths = ast?.meta?.['render-components']?.c?.map?.((o: any) => o?.c?.[0]?.c) ?? [];
-    return JSON.stringify(paths);
-  }, [astJson, format]);
 
-  // Load custom components only when the component paths change
-  useEffect(() => {
+    const ast = JSON.parse(astJson);
+    const componentPaths = ast?.meta?.['render-components']?.c?.map?.((o: any) => o?.c?.[0]?.c) ?? [];
+
+    return JSON.stringify(componentPaths);
+  }, [format, astJson]);
+
+  // Transpile components - only when component paths list changes (not when their contents change)
+  const customComponentsCode = useMemo(() => {
     if (!componentPathsKey) {
-      setCustomComponents({});
-      return;
+      return {};
     }
 
     const componentPaths = JSON.parse(componentPathsKey) as string[];
-    loadCustomComponents(componentPaths, fileContents).then(setCustomComponents);
+
+    // Transpile each component using the latest fileContents from the ref
+    const componentsCode: Record<string, string> = {};
+    for (const path of componentPaths) {
+      const tsxCode = fileContents.get(path);
+      if (!tsxCode) {
+        console.warn(`[ReactRenderer] Component file not found: ${path}`);
+        continue;
+      }
+
+      try {
+        const jsCode = transpileTSX(tsxCode);
+        componentsCode[path] = jsCode;
+      } catch (err) {
+        console.error(`[ReactRenderer] Failed to transpile component ${path}:`, err);
+      }
+    }
+
+    return componentsCode;
   }, [componentPathsKey]);
 
   if (format === 'q2-debug') {
-    // Merge custom components with defaults (custom overrides defaults)
-    const mergedRegistry = { ...componentRegistry, ...customComponents } as Record<string, (props: any) => React.ReactNode>;
-
     return (
       <ErrorBoundary>
         <div style={{
@@ -167,14 +149,13 @@ function ReactRenderer({
           left: 0,
           right: 0,
           bottom: 0,
-          overflowY: 'scroll'
         }}>
-          <Ast
+          <AstIframe
             astJson={astJson}
             currentFilePath={currentFilePath}
             onNavigateToDocument={onNavigateToDocument}
             setAst={setAst}
-            registry={mergedRegistry}
+            customComponentsCode={customComponentsCode}
           />
         </div>
       </ErrorBoundary>

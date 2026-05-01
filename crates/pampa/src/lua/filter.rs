@@ -2049,7 +2049,6 @@ mod unit_tests {
         use crate::pandoc::{AttrSourceInfo, Inline, InlineAttr, TargetSourceInfo};
         use hashlink::LinkedHashMap;
         use quarto_source_map::SourceInfo;
-        use std::collections::HashMap;
 
         let source_info = SourceInfo::default();
 
@@ -2212,7 +2211,7 @@ mod unit_tests {
                     is_escaped: false,
                     name: String::new(),
                     positional_args: vec![],
-                    keyword_args: HashMap::new(),
+                    keyword_args: LinkedHashMap::new(),
                     source_info: source_info.clone()
                 }
             )),

@@ -336,8 +336,9 @@ impl<'a> XmlParser<'a> {
         let text_owned = text.into_owned();
 
         if let Some(node) = self.stack.last_mut() {
-            // Skip whitespace-only text between elements
-            if text_owned.trim().is_empty() && !node.children.is_empty() {
+            // Skip whitespace-only text between elements.
+            // ASCII-only per XML 1.0 §2.3 (S = #x20|#x9|#xD|#xA).
+            if text_owned.trim_ascii().is_empty() && !node.children.is_empty() {
                 return Ok(());
             }
 
@@ -449,9 +450,10 @@ impl<'a> XmlParser<'a> {
             let mut chars = after_name.chars().peekable();
             let mut offset = 0;
 
-            // Skip whitespace
+            // Skip whitespace (ASCII-only per XML 1.0 §2.3:
+            // S = #x20|#x9|#xD|#xA).
             while let Some(&c) = chars.peek() {
-                if c.is_whitespace() {
+                if c.is_ascii_whitespace() {
                     offset += c.len_utf8();
                     chars.next();
                 } else {
@@ -465,9 +467,9 @@ impl<'a> XmlParser<'a> {
                 chars.next();
             }
 
-            // Skip whitespace after '='
+            // Skip whitespace after '=' (ASCII-only per XML 1.0 §2.3).
             while let Some(&c) = chars.peek() {
-                if c.is_whitespace() {
+                if c.is_ascii_whitespace() {
                     offset += c.len_utf8();
                     chars.next();
                 } else {
@@ -496,9 +498,10 @@ impl<'a> XmlParser<'a> {
                         )
                     }
                 } else {
-                    // Unquoted value (find end at whitespace or >)
+                    // Unquoted value (find end at whitespace or >).
+                    // ASCII-only per XML 1.0 §2.3 (S = #x20|#x9|#xD|#xA).
                     let value_end_rel = search_area[value_start_rel..]
-                        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+                        .find(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/')
                         .map_or(search_area.len(), |p| value_start_rel + p);
                     (
                         content_start + search_start + value_start_rel,

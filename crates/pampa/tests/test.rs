@@ -915,3 +915,92 @@ fn test_empty_blockquote_roundtrip() {
         panic!("Empty blockquote roundtrip consistency test failed");
     }
 }
+
+#[test]
+fn test_qmd_to_qmd_shortcode_roundtrip() {
+    // Direct qmd -> qmd roundtrip: ensures `write_shortcode` itself round-trips.
+    //
+    // The qmd-json-qmd suite (test_qmd_roundtrip_consistency) does NOT exercise
+    // write_shortcode, because the JSON writer converts Inline::Shortcode to
+    // Inline::Span via shortcode_to_span before serialization. This test
+    // closes that gap by going qmd -> qmd directly.
+    //
+    // Equivalence is checked by writing both the original and regenerated docs
+    // to JSON (which canonicalizes shortcode -> span, dropping the difference
+    // between, e.g., quoted vs naked string args) and comparing the JSON with
+    // location fields stripped.
+    let cases = [
+        ("name-only", "{{< meta >}}\n"),
+        ("positional-url", "{{< video https://youtu.be/abc >}}\n"),
+        (
+            "keyword-args",
+            "{{< video https://youtu.be/abc width=\"800\" height=\"450\" >}}\n",
+        ),
+        ("escaped", "{{{< meta >}}}\n"),
+        ("naked-string", "{{< meta foo >}}\n"),
+        ("quoted-string-with-space", "{{< meta \"foo bar\" >}}\n"),
+    ];
+
+    let mut failures = Vec::new();
+    for (name, original_qmd) in cases {
+        let (doc1, context1, _warnings) = readers::qmd::read(
+            original_qmd.as_bytes(),
+            false,
+            "<test>",
+            &mut std::io::sink(),
+            true,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("[{}] failed to parse original QMD: {:?}", name, e));
+
+        let mut qmd_buf = Vec::new();
+        writers::qmd::write(&doc1, &mut qmd_buf)
+            .unwrap_or_else(|e| panic!("[{}] failed to write QMD: {:?}", name, e));
+        let regenerated_qmd = String::from_utf8(qmd_buf).expect("Invalid UTF-8 in regenerated QMD");
+
+        let (doc2, context2, _warnings) = readers::qmd::read(
+            regenerated_qmd.as_bytes(),
+            false,
+            "<regenerated>",
+            &mut std::io::sink(),
+            true,
+            None,
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "[{}] failed to parse regenerated QMD ({:?}): {:?}",
+                name, regenerated_qmd, e
+            )
+        });
+
+        let mut json1_buf = Vec::new();
+        writers::json::write(&doc1, &context1, &mut json1_buf)
+            .unwrap_or_else(|e| panic!("[{}] failed to write JSON1: {:?}", name, e));
+        let mut json1_value: serde_json::Value =
+            serde_json::from_slice(&json1_buf).expect("Failed to parse JSON1");
+        remove_location_fields(&mut json1_value);
+
+        let mut json2_buf = Vec::new();
+        writers::json::write(&doc2, &context2, &mut json2_buf)
+            .unwrap_or_else(|e| panic!("[{}] failed to write JSON2: {:?}", name, e));
+        let mut json2_value: serde_json::Value =
+            serde_json::from_slice(&json2_buf).expect("Failed to parse JSON2");
+        remove_location_fields(&mut json2_value);
+
+        if json1_value != json2_value {
+            failures.push(format!(
+                "[{}] roundtrip mismatch\n  original    : {:?}\n  regenerated : {:?}",
+                name,
+                original_qmd.trim_end(),
+                regenerated_qmd.trim_end(),
+            ));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} shortcode roundtrip case(s) failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}

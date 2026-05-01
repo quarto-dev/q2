@@ -36,9 +36,12 @@ pub fn process_quoted(
 
             if first_delimiter {
                 // Opening delimiter - check for leading space
-                if text.starts_with(char::is_whitespace) {
+                if text.starts_with(|c: char| c.is_ascii_whitespace()) {
                     // Count leading whitespace characters
-                    let leading_ws_count = text.chars().take_while(|c| c.is_whitespace()).count();
+                    let leading_ws_count = text
+                        .chars()
+                        .take_while(|c: &char| c.is_ascii_whitespace())
+                        .count();
                     // Calculate the range for just the leading whitespace
                     let ws_end_offset = range.start.offset + leading_ws_count;
                     leading_space_range = Some(quarto_source_map::Range {
@@ -57,10 +60,13 @@ pub fn process_quoted(
                 first_delimiter = false;
             } else {
                 // Closing delimiter - check for trailing space
-                if text.ends_with(char::is_whitespace) {
+                if text.ends_with(|c: char| c.is_ascii_whitespace()) {
                     // Count trailing whitespace characters
-                    let trailing_ws_count =
-                        text.chars().rev().take_while(|c| c.is_whitespace()).count();
+                    let trailing_ws_count = text
+                        .chars()
+                        .rev()
+                        .take_while(|c: &char| c.is_ascii_whitespace())
+                        .count();
                     // Calculate the range for just the trailing whitespace
                     let ws_start_offset = range.end.offset - trailing_ws_count;
                     trailing_space_range = Some(quarto_source_map::Range {

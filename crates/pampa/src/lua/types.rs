@@ -2597,7 +2597,6 @@ mod tests {
     };
     // Rename pandoc Table to avoid conflict with mlua Table
     use crate::pandoc::Table as PandocTable;
-    use std::collections::HashMap;
 
     // Helper to create default SourceInfo
     fn si() -> quarto_source_map::SourceInfo {
@@ -2838,7 +2837,7 @@ mod tests {
             is_escaped: false,
             name: "test".into(),
             positional_args: vec![],
-            keyword_args: HashMap::new(),
+            keyword_args: hashlink::LinkedHashMap::new(),
             source_info: si(),
         });
         assert_eq!(LuaInline::new(inline).tag_name(), "Shortcode");

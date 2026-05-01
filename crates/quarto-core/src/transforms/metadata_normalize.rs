@@ -787,7 +787,7 @@ mod tests {
                 name: "test".to_string(),
                 is_escaped: false,
                 positional_args: vec![],
-                keyword_args: std::collections::HashMap::new(),
+                keyword_args: hashlink::LinkedHashMap::new(),
                 source_info: dummy_source_info(),
             }),
             Inline::Str(Str {

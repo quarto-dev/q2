@@ -1,0 +1,5 @@
+---
+source: crates/pampa/tests/test.rs
+expression: output
+---
+{{< meta foo >}}

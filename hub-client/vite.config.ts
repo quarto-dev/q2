@@ -22,7 +22,10 @@ const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000';
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [react(), wasm()],
+  plugins: [
+    react(),
+    wasm()
+  ],
   define: {
     __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
     __GIT_COMMIT_DATE__: JSON.stringify(gitInfo.commitDate),
@@ -45,6 +48,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         debug: path.resolve(__dirname, 'debug.html'),
+        'ast-renderer': path.resolve(__dirname, 'public/ast-renderer.html'),
       },
     },
   },

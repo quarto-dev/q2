@@ -1392,7 +1392,7 @@ mod tests {
             is_escaped: false,
             name: "test".to_string(),
             positional_args: vec![],
-            keyword_args: std::collections::HashMap::new(),
+            keyword_args: hashlink::LinkedHashMap::new(),
             source_info: si(),
         });
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);

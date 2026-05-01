@@ -627,7 +627,7 @@ fn gen_shortcode_inner(depth: usize) -> impl Strategy<Value = Shortcode> {
             is_escaped,
             name,
             positional_args,
-            keyword_args,
+            keyword_args: keyword_args.into_iter().collect(),
             source_info: quarto_source_map::SourceInfo::default(),
         },
     )

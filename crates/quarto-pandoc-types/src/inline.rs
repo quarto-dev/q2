@@ -1407,7 +1407,7 @@ mod tests {
             is_escaped: false,
             name: "include".into(),
             positional_args: vec![],
-            keyword_args: std::collections::HashMap::new(),
+            keyword_args: hashlink::LinkedHashMap::new(),
             source_info: si.clone(),
         });
         assert_eq!(inline.source_info(), &si);

@@ -745,11 +745,15 @@ fn native_visitor<T: Write>(
             // Tree-sitter may include leading whitespace in the node
             let text = node.utf8_text(input_bytes).unwrap();
 
-            // Check for leading whitespace before trimming
-            let has_leading_space = text.starts_with(char::is_whitespace);
+            // Check for leading whitespace before trimming.
+            // ASCII-only by intent: per Pandoc-compat policy in
+            // claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
+            // (bd-rmx3, bd-8oe4), non-ASCII whitespace is content, not
+            // whitespace, so it must not be peeled off into a Space node here.
+            let has_leading_space = text.starts_with(|c: char| c.is_ascii_whitespace());
 
             // Trim to extract the actual reference
-            let trimmed = text.trim();
+            let trimmed = text.trim_ascii();
 
             // Verify format and extract ID
             if trimmed.starts_with("[^") && trimmed.ends_with(']') {

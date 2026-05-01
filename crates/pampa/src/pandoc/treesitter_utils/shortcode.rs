@@ -9,8 +9,8 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::{Inline, Shortcode, ShortcodeArg, Space};
+use hashlink::LinkedHashMap;
 use quarto_source_map::SourceInfo;
-use std::collections::HashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -53,12 +53,16 @@ pub fn process_shortcode(
 ) -> PandocNativeIntermediate {
     let is_escaped = node.kind() == "shortcode_escaped";
 
-    // Check for leading whitespace (tree-sitter scanner may include it in the node)
+    // Check for leading whitespace (tree-sitter scanner may include it in the node).
+    // ASCII-only by intent: per Pandoc-compat policy in
+    // claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
+    // (bd-rmx3, bd-8oe4), non-ASCII whitespace is content, not
+    // whitespace, so it must not be peeled off into a Space node here.
     let text = node.utf8_text(input_bytes).unwrap();
-    let has_leading_space = text.starts_with(char::is_whitespace);
+    let has_leading_space = text.starts_with(|c: char| c.is_ascii_whitespace());
 
     // Calculate the number of leading whitespace bytes
-    let leading_space_len = text.len() - text.trim_start().len();
+    let leading_space_len = text.len() - text.trim_ascii_start().len();
 
     // Calculate source info for the shortcode (excluding leading space if present)
     let source_info = if has_leading_space {
@@ -84,7 +88,7 @@ pub fn process_shortcode(
 
     let mut name = String::new();
     let mut positional_args: Vec<ShortcodeArg> = Vec::new();
-    let mut keyword_args: HashMap<String, ShortcodeArg> = HashMap::new();
+    let mut keyword_args: LinkedHashMap<String, ShortcodeArg> = LinkedHashMap::new();
     for (child_node, child) in children {
         match (child_node.as_str(), child) {
             (

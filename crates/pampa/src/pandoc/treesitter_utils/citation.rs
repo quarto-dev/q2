@@ -54,10 +54,14 @@ where
         }
     }
 
-    // Get the citation text and check for leading whitespace
+    // Get the citation text and check for leading whitespace.
+    // ASCII-only by intent: per the policy in
+    // claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
+    // (bd-rmx3, bd-8oe4), non-ASCII whitespace is content, not
+    // whitespace, so it must not be peeled off into a Space node here.
     let text = node_text();
-    let has_leading_space = text.starts_with(char::is_whitespace);
-    let trimmed_text = text.trim().to_string();
+    let has_leading_space = text.starts_with(|c: char| c.is_ascii_whitespace());
+    let trimmed_text = text.trim_ascii().to_string();
 
     let cite = Inline::Cite(Cite {
         citations: vec![Citation {

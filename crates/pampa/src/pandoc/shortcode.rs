@@ -182,7 +182,7 @@ mod tests {
             is_escaped: false,
             name: "meta".to_string(),
             positional_args: vec![],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -201,7 +201,7 @@ mod tests {
             is_escaped: false,
             name: "meta".to_string(),
             positional_args: vec![ShortcodeArg::String("title".to_string())],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -219,7 +219,7 @@ mod tests {
             is_escaped: false,
             name: "index".to_string(),
             positional_args: vec![ShortcodeArg::Number(42.5)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -236,7 +236,7 @@ mod tests {
             is_escaped: false,
             name: "flag".to_string(),
             positional_args: vec![ShortcodeArg::Boolean(true)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -253,7 +253,7 @@ mod tests {
             is_escaped: false,
             name: "flag".to_string(),
             positional_args: vec![ShortcodeArg::Boolean(false)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -270,7 +270,7 @@ mod tests {
             is_escaped: false,
             name: "inner".to_string(),
             positional_args: vec![],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -278,7 +278,7 @@ mod tests {
             is_escaped: false,
             name: "outer".to_string(),
             positional_args: vec![ShortcodeArg::Shortcode(inner)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -311,7 +311,7 @@ mod tests {
             is_escaped: false,
             name: "embed".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -333,7 +333,7 @@ mod tests {
             is_escaped: false,
             name: "image".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -354,7 +354,7 @@ mod tests {
             is_escaped: false,
             name: "feature".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -375,7 +375,7 @@ mod tests {
             is_escaped: false,
             name: "feature".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn test_keyword_arg_string() {
         // Tests keyword_args with String value
-        let mut kwargs = HashMap::new();
+        let mut kwargs = LinkedHashMap::new();
         kwargs.insert(
             "format".to_string(),
             ShortcodeArg::String("pdf".to_string()),
@@ -413,7 +413,7 @@ mod tests {
 
     #[test]
     fn test_keyword_arg_number() {
-        let mut kwargs = HashMap::new();
+        let mut kwargs = LinkedHashMap::new();
         kwargs.insert("scale".to_string(), ShortcodeArg::Number(1.5));
 
         let sc = Shortcode {
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_keyword_arg_boolean_true() {
-        let mut kwargs = HashMap::new();
+        let mut kwargs = LinkedHashMap::new();
         kwargs.insert("verbose".to_string(), ShortcodeArg::Boolean(true));
 
         let sc = Shortcode {
@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn test_keyword_arg_boolean_false() {
         // Tests keyword_args with Boolean(false) value
-        let mut kwargs = HashMap::new();
+        let mut kwargs = LinkedHashMap::new();
         kwargs.insert("verbose".to_string(), ShortcodeArg::Boolean(false));
 
         let sc = Shortcode {
@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn test_mixed_args() {
         // Test with multiple positional and keyword args
-        let mut kwargs = HashMap::new();
+        let mut kwargs = LinkedHashMap::new();
         kwargs.insert(
             "output".to_string(),
             ShortcodeArg::String("html".to_string()),
@@ -510,7 +510,7 @@ mod tests {
             is_escaped: true,
             name: "raw".to_string(),
             positional_args: vec![],
-            keyword_args: HashMap::new(),
+            keyword_args: LinkedHashMap::new(),
             source_info: si(),
         };
 

@@ -29,18 +29,24 @@ pub fn process_uri_autolink(
     let text = &input_bytes[node_range.start.offset..node_range.end.offset];
     let text_str = std::str::from_utf8(text).unwrap();
 
-    // Count leading whitespace characters
-    let leading_ws_count = text_str.chars().take_while(|c| c.is_whitespace()).count();
+    // Count leading/trailing whitespace characters.
+    // ASCII-only by intent: per Pandoc-compat policy in
+    // claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
+    // (bd-rmx3, bd-8oe4), non-ASCII whitespace is content, not
+    // whitespace, so it must not be peeled off into a Space node here.
+    let leading_ws_count = text_str
+        .chars()
+        .take_while(|c| c.is_ascii_whitespace())
+        .count();
 
-    // Count trailing whitespace characters
     let trailing_ws_count = text_str
         .chars()
         .rev()
-        .take_while(|c| c.is_whitespace())
+        .take_while(|c| c.is_ascii_whitespace())
         .count();
 
     // Extract the actual autolink text (trimmed)
-    let autolink_text = text_str.trim();
+    let autolink_text = text_str.trim_ascii();
 
     // Validate it's a proper autolink with angle brackets
     if autolink_text.len() < 2 || !autolink_text.starts_with('<') || !autolink_text.ends_with('>') {

@@ -811,7 +811,6 @@ mod tests {
     fn test_quarto_warn_with_shortcode_element_uses_source_info() {
         use crate::pandoc::Inline;
         use quarto_pandoc_types::shortcode::Shortcode;
-        use std::collections::HashMap;
 
         let lua = Lua::new();
         register_quarto_namespace(&lua).unwrap();
@@ -821,7 +820,7 @@ mod tests {
             is_escaped: false,
             name: "test".to_string(),
             positional_args: vec![],
-            keyword_args: HashMap::new(),
+            keyword_args: hashlink::LinkedHashMap::new(),
             source_info: quarto_source_map::SourceInfo::original(
                 quarto_source_map::FileId(0),
                 10,

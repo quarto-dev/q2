@@ -850,7 +850,6 @@ mod tests {
     #[test]
     fn test_shortcode_silently_dropped() {
         use quarto_pandoc_types::Shortcode;
-        use std::collections::HashMap;
 
         let inlines = vec![
             make_str("before"),
@@ -858,7 +857,7 @@ mod tests {
                 is_escaped: false,
                 name: "include".to_string(),
                 positional_args: vec![],
-                keyword_args: HashMap::new(),
+                keyword_args: hashlink::LinkedHashMap::new(),
                 source_info: dummy_source_info(),
             }),
             make_str("after"),

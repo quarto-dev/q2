@@ -48,7 +48,10 @@ pub fn process_pandoc_code_span(
                         let text =
                             std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
                                 .unwrap();
-                        has_leading_space = text.starts_with(char::is_whitespace);
+                        // ASCII-only by intent (Pandoc-compat policy —
+                        // see plan doc bd-rmx3/bd-8oe4): non-ASCII
+                        // whitespace is content, not delimiter padding.
+                        has_leading_space = text.starts_with(|c: char| c.is_ascii_whitespace());
                     }
                     checked_opening_delimiter = true;
                 }

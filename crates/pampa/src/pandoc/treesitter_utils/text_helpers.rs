@@ -273,9 +273,12 @@ pub fn extract_delimiter_space_info(
             if first_delimiter {
                 first_delimiter_range = Some(range.clone());
                 // Opening delimiter - check for leading space
-                if text.starts_with(char::is_whitespace) {
+                if text.starts_with(|c: char| c.is_ascii_whitespace()) {
                     // Count leading whitespace characters
-                    leading_ws_count = text.chars().take_while(|c| c.is_whitespace()).count();
+                    leading_ws_count = text
+                        .chars()
+                        .take_while(|c: &char| c.is_ascii_whitespace())
+                        .count();
                     // Calculate the range for just the leading whitespace
                     let ws_end_offset = range.start.offset + leading_ws_count;
                     leading_space_range = Some(quarto_source_map::Range {
@@ -295,10 +298,13 @@ pub fn extract_delimiter_space_info(
             } else {
                 last_delimiter_range = Some(range.clone());
                 // Closing delimiter - check for trailing space
-                if text.ends_with(char::is_whitespace) {
+                if text.ends_with(|c: char| c.is_ascii_whitespace()) {
                     // Count trailing whitespace characters
-                    trailing_ws_count =
-                        text.chars().rev().take_while(|c| c.is_whitespace()).count();
+                    trailing_ws_count = text
+                        .chars()
+                        .rev()
+                        .take_while(|c: &char| c.is_ascii_whitespace())
+                        .count();
                     // Calculate the range for just the trailing whitespace
                     let ws_start_offset = range.end.offset - trailing_ws_count;
                     trailing_space_range = Some(quarto_source_map::Range {

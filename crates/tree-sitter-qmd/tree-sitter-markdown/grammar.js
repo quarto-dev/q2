@@ -52,8 +52,21 @@ const PANDOC_SMART_QUOTES = "\\u{2018}\\u{2019}\\u{201A}\\u{201B}\\u{201C}\\u{20
 const regexBracket = (str) => `(?:${str})`;
 const regexOr = (...groups) => regexBracket(groups.join("|"));
 
+// Non-ASCII Unicode `White_Space=Yes` codepoints. Per Pandoc 3.9.0.2's
+// `markdown` and `commonmark_x` readers, these are folded into the
+// surrounding `Str` node — they are content, not whitespace separators
+// or break markers. ASCII whitespace (U+0009, U+000A, U+000B, U+000C,
+// U+000D, U+0020) is excluded because it has established meaning in
+// the qmd grammar. U+0085 (NEXT LINE) is intentionally omitted: its
+// behavior was not characterised in the Pandoc experiment.
+//
+// See claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
+// (beads bd-rmx3, bd-8oe4) for the policy and experiment record.
+const PANDOC_NON_ASCII_WHITESPACE =
+    "\\u{00A0}\\u{1680}\\u{2000}-\\u{200A}\\u{2028}\\u{2029}\\u{202F}\\u{205F}\\u{3000}";
+
 const startStrRegex = regexOr(
-    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]"); 
+    "[" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]");
 const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
 
 // Thanks, Claude
@@ -74,7 +87,7 @@ const PANDOC_REGEX_STR =
             "[>.,;!?]",
             startStrRegex +
             regexOr(
-                "[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
+                "[!,.;?" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
                 // "\\\\.",
                 "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
                 regexBracket("[_]" + afterUnderscoreRegex)

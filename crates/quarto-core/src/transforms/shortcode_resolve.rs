@@ -1118,7 +1118,6 @@ mod tests {
     use crate::render::BinaryDependencies;
     use quarto_pandoc_types::config_value::ConfigMapEntry;
     use quarto_source_map::{FileId, Location, Range};
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     fn dummy_source_info() -> SourceInfo {
@@ -1157,7 +1156,7 @@ mod tests {
                 .into_iter()
                 .map(|s| ShortcodeArg::String(s.to_string()))
                 .collect(),
-            keyword_args: HashMap::new(),
+            keyword_args: hashlink::LinkedHashMap::new(),
             source_info: dummy_source_info(),
         }
     }
@@ -1291,7 +1290,7 @@ mod tests {
             is_escaped: true,
             name: "meta".to_string(),
             positional_args: vec![ShortcodeArg::String("title".to_string())],
-            keyword_args: HashMap::new(),
+            keyword_args: hashlink::LinkedHashMap::new(),
             source_info: dummy_source_info(),
         };
 
@@ -1645,7 +1644,7 @@ mod tests {
                     is_escaped: true,
                     name: "meta".to_string(),
                     positional_args: vec![ShortcodeArg::String("title".to_string())],
-                    keyword_args: HashMap::new(),
+                    keyword_args: hashlink::LinkedHashMap::new(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),

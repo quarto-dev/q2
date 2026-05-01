@@ -718,12 +718,55 @@ fn write_horizontalrule(
     Ok(())
 }
 
+/// Detect the "implicit figure" shape produced by the qmd reader's
+/// single-image-paragraph desugaring (postprocess.rs:884). Such a Figure
+/// has caption == image alt text, a single `Plain[Image]` content block,
+/// and an attr-split where the figure carries only an id and the image
+/// carries only classes/kvs. When this exact shape holds we can round-
+/// trip by emitting just the bare image syntax with the figure's id
+/// merged into the image's attr.
+fn match_implicit_figure_shape(figure: &Figure) -> Option<&crate::pandoc::Image> {
+    let [Block::Plain(plain)] = figure.content.as_slice() else {
+        return None;
+    };
+    let [Inline::Image(image)] = plain.content.as_slice() else {
+        return None;
+    };
+    if figure.caption.short.is_some() {
+        return None;
+    }
+    let long = figure.caption.long.as_ref()?;
+    let [Block::Plain(caption_plain)] = long.as_slice() else {
+        return None;
+    };
+    if caption_plain.content != image.content {
+        return None;
+    }
+    let (_fig_id, fig_classes, fig_kvs) = &figure.attr;
+    if !fig_classes.is_empty() || !fig_kvs.is_empty() {
+        return None;
+    }
+    let (img_id, _, _) = &image.attr;
+    if !img_id.is_empty() {
+        return None;
+    }
+    Some(image)
+}
+
 fn write_figure(
     figure: &Figure,
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    // Write figure using div syntax with fig- class
+    if let Some(image) = match_implicit_figure_shape(figure) {
+        let mut merged = image.clone();
+        merged.attr.0 = figure.attr.0.clone();
+        return write_image(&merged, buf, ctx);
+    }
+
+    // Non-implicit shapes fall through to a fenced-div form. The current
+    // reader has no rule that turns this back into a Figure, so this
+    // branch does not round-trip — tracked in bd-emr4 (follow-up).
     write!(buf, "::: ")?;
     write_attr(&figure.attr, buf, ctx)?;
     writeln!(buf)?;
@@ -1241,9 +1284,15 @@ fn escape_markdown(text: &str) -> String {
             '|' => result.push_str("\\|"),   // Tables
             '~' => result.push_str("\\~"),   // Subscript, strikeout
             '^' => result.push_str("\\^"),   // Superscript
+            '@' => result.push_str("\\@"),   // Citations: every bare @ in
+            // a Str is either a citation start (when followed by alnum/_/{)
+            // or an outright parse error (any other position). Always escape.
+            '{' => result.push_str("\\{"), // Attribute span open: bare { in
+            '}' => result.push_str("\\}"), // a Str body is always a parse
+            // error in qmd. Always escape.
 
             // Characters that don't need escaping in most contexts:
-            // . , - + ! ? @ = : ; / ( ) { } % & ' "
+            // . , - + ! ? = : ; / ( ) % & ' "
             // These are only special in very specific contexts and escaping them
             // everywhere would make output unnecessarily verbose.
             _ => result.push(ch),
@@ -1716,9 +1765,225 @@ fn write_notereference(
 fn write_shortcode(
     shortcode: &crate::pandoc::Shortcode,
     buf: &mut dyn std::io::Write,
-    _ctx: &mut QmdWriterContext,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    write!(buf, "{{{{{}}}}}", shortcode.name)
+    let (open, close) = if shortcode.is_escaped {
+        ("{{{<", ">}}}")
+    } else {
+        ("{{<", ">}}")
+    };
+    write!(buf, "{} {}", open, shortcode.name)?;
+    for arg in &shortcode.positional_args {
+        write!(buf, " ")?;
+        write_shortcode_arg(arg, buf, ctx)?;
+    }
+    for (key, value) in &shortcode.keyword_args {
+        write!(buf, " {}=", key)?;
+        write_shortcode_arg(value, buf, ctx)?;
+    }
+    write!(buf, " {}", close)
+}
+
+fn write_shortcode_arg(
+    arg: &crate::pandoc::ShortcodeArg,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    use crate::pandoc::ShortcodeArg;
+    match arg {
+        ShortcodeArg::String(s) => write_shortcode_string_value(s, buf),
+        ShortcodeArg::Number(n) => write!(buf, "{}", n),
+        ShortcodeArg::Boolean(b) => write!(buf, "{}", b),
+        ShortcodeArg::Shortcode(inner) => write_shortcode(inner, buf, ctx),
+        ShortcodeArg::KeyValue(map) => {
+            // Positional `key=value` pair(s). The qmd parser doesn't currently
+            // produce this variant from source — it's reachable only via Lua
+            // filters or programmatic construction — so the round-trip
+            // contract is best-effort.
+            let mut first = true;
+            for (k, v) in map {
+                if !first {
+                    write!(buf, " ")?;
+                }
+                first = false;
+                write!(buf, "{}=", k)?;
+                write_shortcode_arg(v, buf, ctx)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Emit a `ShortcodeArg::String` value, quoting on demand. Quoting rules
+/// mirror the qmd grammar (`tree-sitter-qmd/tree-sitter-markdown/grammar.js`,
+/// `shortcode_naked_string` and `shortcode_number`):
+/// - empty string → must be quoted (parser would fail to match)
+/// - matches `shortcode_number` exactly → must be quoted (otherwise
+///   re-parses as `ShortcodeArg::Number`, changing the AST type)
+/// - any character outside the naked-string set → must be quoted
+fn write_shortcode_string_value(s: &str, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    if shortcode_string_needs_quoting(s) {
+        buf.write_all(b"\"")?;
+        for c in s.chars() {
+            match c {
+                '"' => buf.write_all(b"\\\"")?,
+                '\\' => buf.write_all(b"\\\\")?,
+                _ => write!(buf, "{}", c)?,
+            }
+        }
+        buf.write_all(b"\"")
+    } else {
+        buf.write_all(s.as_bytes())
+    }
+}
+
+fn shortcode_string_needs_quoting(s: &str) -> bool {
+    if s.is_empty() {
+        return true;
+    }
+    if shortcode_string_looks_like_number(s) {
+        return true;
+    }
+    !s.chars().all(is_shortcode_naked_char)
+}
+
+/// Characters allowed in a `shortcode_naked_string` token. Mirrors the
+/// regex `[A-Za-z0-9_.~:/?#\]@!$%&()+,;-]|\[` from grammar.js. Whitespace,
+/// `>`, `<`, `{`, `}`, `'`, `"`, `\`, `*`, `=`, `^`, `|` are deliberately
+/// excluded.
+fn is_shortcode_naked_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+        || matches!(
+            c,
+            '_' | '.'
+                | '~'
+                | ':'
+                | '/'
+                | '?'
+                | '#'
+                | ']'
+                | '@'
+                | '!'
+                | '$'
+                | '%'
+                | '&'
+                | '('
+                | ')'
+                | '+'
+                | ','
+                | ';'
+                | '-'
+                | '['
+        )
+}
+
+/// Mirrors the `shortcode_number` regex
+/// `-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?` from grammar.js. A string
+/// matching this pattern would re-parse as `ShortcodeArg::Number`, so we
+/// quote it to keep the AST stable across a write/read round-trip.
+fn shortcode_string_looks_like_number(s: &str) -> bool {
+    let mut chars = s.chars().peekable();
+    if chars.peek() == Some(&'-') {
+        chars.next();
+    }
+    match chars.next() {
+        Some('0') => {}
+        Some(c) if c.is_ascii_digit() => {
+            // c is '1'..='9' — consume remaining digits
+            while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+                chars.next();
+            }
+        }
+        _ => return false,
+    }
+    if chars.peek() == Some(&'.') {
+        chars.next();
+        let mut had = false;
+        while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+            chars.next();
+            had = true;
+        }
+        if !had {
+            return false;
+        }
+    }
+    if matches!(chars.peek(), Some('e' | 'E')) {
+        chars.next();
+        if matches!(chars.peek(), Some('+' | '-')) {
+            chars.next();
+        }
+        let mut had = false;
+        while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+            chars.next();
+            had = true;
+        }
+        if !had {
+            return false;
+        }
+    }
+    chars.next().is_none()
+}
+
+#[cfg(test)]
+mod shortcode_writer_tests {
+    use super::{shortcode_string_looks_like_number, shortcode_string_needs_quoting};
+
+    #[test]
+    fn naked_string_does_not_need_quoting() {
+        assert!(!shortcode_string_needs_quoting("foo"));
+        assert!(!shortcode_string_needs_quoting("https://youtu.be/abc"));
+        assert!(!shortcode_string_needs_quoting("a-b_c.d"));
+        // `?` alone is in the naked-string set; `=` is not (the grammar only
+        // permits `=` in the second segment after a `?`, and we conservatively
+        // quote any `=`).
+        assert!(!shortcode_string_needs_quoting("path/to?query"));
+    }
+
+    #[test]
+    fn empty_must_be_quoted() {
+        assert!(shortcode_string_needs_quoting(""));
+    }
+
+    #[test]
+    fn whitespace_must_be_quoted() {
+        assert!(shortcode_string_needs_quoting("foo bar"));
+        assert!(shortcode_string_needs_quoting(" leading"));
+        assert!(shortcode_string_needs_quoting("trailing "));
+        assert!(shortcode_string_needs_quoting("a\tb"));
+    }
+
+    #[test]
+    fn delimiter_chars_must_be_quoted() {
+        assert!(shortcode_string_needs_quoting(">closing"));
+        assert!(shortcode_string_needs_quoting("a>b"));
+        assert!(shortcode_string_needs_quoting("{a}"));
+        assert!(shortcode_string_needs_quoting("a\"b"));
+        assert!(shortcode_string_needs_quoting("a'b"));
+        assert!(shortcode_string_needs_quoting("a=b"));
+    }
+
+    #[test]
+    fn number_strings_must_be_quoted() {
+        // would otherwise re-parse as ShortcodeArg::Number
+        assert!(shortcode_string_needs_quoting("0"));
+        assert!(shortcode_string_needs_quoting("800"));
+        assert!(shortcode_string_needs_quoting("-1"));
+        assert!(shortcode_string_needs_quoting("3.14"));
+        assert!(shortcode_string_needs_quoting("1e10"));
+        assert!(shortcode_string_needs_quoting("-2.5e-3"));
+    }
+
+    #[test]
+    fn near_numbers_are_naked() {
+        // Strings that resemble numbers but don't match the regex
+        // can stay naked.
+        assert!(!shortcode_string_looks_like_number("01")); // leading zero with more digits
+        assert!(!shortcode_string_looks_like_number("1.")); // dot but no fraction
+        assert!(!shortcode_string_looks_like_number("1e")); // exponent without digits
+        assert!(!shortcode_string_looks_like_number(""));
+        assert!(!shortcode_string_looks_like_number("abc"));
+        assert!(!shortcode_string_looks_like_number("-"));
+    }
 }
 fn write_insert(
     insert: &crate::pandoc::Insert,
