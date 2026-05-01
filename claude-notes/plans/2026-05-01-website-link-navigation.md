@@ -270,55 +270,65 @@ End-to-end (manual, via Chrome DevTools MCP):
 - "No website" (sanity check) → existing `.qmd` link still
   works (no regression).
 
-## Open questions for the user
+## Resolved decisions (2026-05-01)
 
-1. **Renderable-extension list.** Today only `.qmd` exists. I
-   propose making the click handler iterate a small list (`.qmd`
-   for now) so adding `.md` / `.ipynb` in the future is a
-   one-line change. Acceptable, or do you want to keep it as a
-   bare `.qmd` substitution?
-2. **Scope.** Option A intercepts artifact-rooted `.html` links.
-   Future website features may emit links to other
-   artifact-rooted resources (e.g. `index.html` for a
-   sub-listing, or `404.html`). Should the click handler treat
-   *all* artifact-rooted `.html` links the same way (reverse-map
-   if a source exists, otherwise fall back to default
-   behavior), or be stricter and only intercept links that map
-   to a known source file?
-3. **Anchor handling within rewritten links.** A future case:
-   a body link `[Section](about.qmd#intro)` gets rewritten to
-   `about.html#intro`. Current `parseLink` splits on `#`; the
-   `reverseMapArtifactHref` sketch above preserves the anchor
-   correctly. Just confirming that the existing
-   `handleNavigateToDocument(path, anchor)` path handles
-   anchor scrolling after the file switch — I believe it does
-   (the comment on line 207-208 says "DoubleBufferedIframe will
-   handle the anchor scrolling after swap"), but the cross-doc
-   anchor case may not be exercised yet. Want me to add a test
-   for this even if it's not the main fix?
-4. **Hard-coded artifact root.** The `/.quarto/project-artifacts/`
-   prefix is hard-coded today in
-   `wasm-quarto-hub-client/src/lib.rs:1417` (passed to
-   `RenderToHtmlRenderer::new`). If we want to avoid duplicating
-   it on the hub-client side, we could either (a) export it as
-   a constant from the WASM bridge, or (b) add a `vfs_root`
-   field to the WASM render response so hub-client knows where
-   the artifact root currently is. Probably overkill for this
-   bug; flagging it as a code-smell to potentially address
-   alongside the JS-loading work (`bd-e7b7`).
+1. **Renderable-extension list.** Iterate a list (`['.qmd']` for
+   now); adding `.md` / `.ipynb` later is a one-line change.
+2. **Scope: strict.** Only intercept artifact-rooted `.html`
+   links whose reverse-mapped path matches a real `FileEntry` in
+   the project. Other artifact-rooted `.html` links (e.g. a
+   future `index.html` listing page, or `404.html`) are left
+   alone — the iframe falls back to default behavior, which in
+   `about:srcdoc` is effectively no-op. The user noted that
+   `DocumentProfile` info could refine the call. For this fix,
+   the project file list (drawn from the same Automerge state
+   that powers the editor sidebar) is the right source of truth:
+   it's the *editor's* model of "files I can switch to". Profile
+   data adds nothing the file list doesn't already encode for
+   this specific decision (which `.qmd` files exist). If a
+   future feature emits cross-doc links to non-file targets
+   (e.g. listing pages backed only by metadata, not a `.qmd`),
+   we'd revisit then.
+3. **Anchor handling.** Yes, exercise it in tests. The fix
+   preserves anchors through `parseLink`; the existing
+   `handleNavigateToDocument(path, anchor)` claims to handle
+   anchor scrolling after swap. Adding a regression test now
+   prevents the anchored cross-doc case from silently regressing.
+4. **Hard-coded artifact root.** Flag for later. The
+   `/.quarto/project-artifacts/` prefix gets duplicated on the
+   hub-client side for this fix; we'll consolidate when the
+   service-worker resource-resolution work (`bd-msp0`) lands —
+   that work needs the same value and is the natural place to
+   hoist it into a single constant. Adding a `// bd-msp0:`
+   comment at the duplication site so we can grep-find it.
+
+### Service-worker context (recorded so we don't conflate)
+
+User asked whether a service worker could subsume both this bug
+and the in-project image-redirect bug. Conclusion: SW handles
+**resource resolution** (CSS / images / JS bundles), but it
+**cannot** handle click → editor navigation. `about:srcdoc`
+iframes drop link clicks before any fetch is issued, so a SW
+sitting between fetches and the network never sees them. The
+click handler in `iframePostProcessor.ts` is load-bearing
+regardless of whether the SW arc lands. Filed `bd-msp0` as the
+parent epic for the SW direction; this fix proceeds independently.
 
 ## Work items
 
-- [ ] Resolve open questions above.
-- [ ] Implement `reverseMapArtifactHref` + `PostProcessOptions`
+- [x] Resolve open questions above.
+- [x] Implement `reverseMapArtifactHref` + `PostProcessOptions`
       extension in `iframePostProcessor.ts`.
-- [ ] Plumb `projectFilePaths` through `useIframePostProcessor`
-      / `Preview.tsx` / `MorphIframe`.
-- [ ] Unit tests for the helper.
-- [ ] Integration test against `iframePostProcessor` exercising
-      both `.qmd` and `.html` link forms.
-- [ ] In-browser verification on "test website" and "No website"
-      via Chrome DevTools MCP.
+- [x] Plumb `projectFilePaths` through `useIframePostProcessor`
+      / `Preview.tsx` / `MorphIframe` / `DoubleBufferedIframe`.
+- [x] Unit tests for the helper (10 cases, all pass).
+- [x] Integration test against `iframePostProcessor` exercising
+      both `.qmd` and `.html` link forms (7 cases, all pass).
+- [x] In-browser verification on "test website" and "No website"
+      via Chrome DevTools MCP. All three end-to-end cases work:
+      `about.html` → `about.qmd`, `posts/first.html` →
+      `posts/first.qmd`, and the non-website `.qmd` path still
+      works as before.
 
 ## References
 

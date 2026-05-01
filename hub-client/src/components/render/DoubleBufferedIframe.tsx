@@ -13,6 +13,11 @@ interface DoubleBufferedIframeProps {
   html: string;
   // Current file path for resolving relative links
   currentFilePath: string;
+  // Project file paths (no leading slash). Used by the iframe
+  // post-processor to reverse-map artifact-rooted .html links
+  // back to source .qmd files for cross-doc click navigation
+  // (bd-lnd3).
+  projectFilePaths?: readonly string[];
   // Callback when user navigates to a different document (with optional anchor)
   // Parent (Preview) handles file lookup and switching
   onNavigateToDocument: (targetPath: string, anchor: string | null) => void;
@@ -113,6 +118,7 @@ function isElementVisible(element: HTMLElement): boolean {
 function DoubleBufferedIframe({
   html,
   currentFilePath,
+  projectFilePaths,
   onNavigateToDocument,
   onScroll,
   onClick,
@@ -160,9 +166,10 @@ function DoubleBufferedIframe({
   const internalPostProcess = useCallback((iframe: HTMLIFrameElement) => {
     postProcessIframe(iframe, {
       currentFilePath,
+      projectFilePaths,
       onQmdLinkClick: handleQmdLinkClick,
     });
-  }, [currentFilePath, handleQmdLinkClick]);
+  }, [currentFilePath, projectFilePaths, handleQmdLinkClick]);
 
   // When new HTML arrives, load it into the inactive iframe and mark swap as pending
   useEffect(() => {

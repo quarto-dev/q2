@@ -4,19 +4,98 @@
  * This module handles browser-specific transformations:
  * - Replaces /.quarto/ resource links with data URIs from VFS
  * - Converts .qmd links to click handlers for internal navigation
+ * - Reverse-maps website-rewritten artifact-rooted .html links
+ *   back to their source-side .qmd path so cross-doc clicks
+ *   switch the active editor file (bd-lnd3).
  */
 
 import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
 
+/**
+ * VFS path under which the website renderer flushes its
+ * project-scoped artifacts. Cross-doc links emitted by
+ * `quarto-core`'s navigation / body-link transforms are rooted
+ * here in their output-side `.html` form (e.g.
+ * `/.quarto/project-artifacts/about.html`). Hub-client's click
+ * handler reverse-maps these to the source-side `.qmd` file.
+ *
+ * bd-msp0: this constant is duplicated in
+ * `crates/wasm-quarto-hub-client/src/lib.rs` (`RenderToHtmlRenderer::new`
+ * argument). When the service-worker resource-resolution work
+ * lands, hoist this into a single shared constant exposed across
+ * the WASM bridge.
+ */
+const ARTIFACT_ROOT = '/.quarto/project-artifacts/';
+
+/**
+ * Source-file extensions that the website renderer rewrites to
+ * `.html` in its output. When reverse-mapping a clicked
+ * artifact-rooted `.html` URL, we try each of these extensions
+ * in order and intercept iff the resulting project path matches
+ * a real `FileEntry`.
+ *
+ * Today only `.qmd` is renderable; `.md` / `.ipynb` are reserved
+ * for when Q2 supports them.
+ */
+const RENDERABLE_EXTS: readonly string[] = ['.qmd'];
+
 export interface PostProcessOptions {
   /** Current file path for resolving relative links */
   currentFilePath: string;
+  /**
+   * Project file paths (no leading slash). Used to reverse-map
+   * artifact-rooted `.html` URLs to their source-side `.qmd`
+   * (or future `.md` / `.ipynb`) so cross-document clicks
+   * switch the active editor file. The lookup is **strict**:
+   * we only intercept artifact-rooted `.html` clicks if the
+   * reverse-mapped path matches a known project file. Other
+   * artifact-rooted `.html` links (e.g. a future listing page
+   * with no `.qmd` source) are left alone.
+   *
+   * bd-lnd3.
+   */
+  projectFilePaths?: readonly string[];
   /**
   * Callback when user clicks a .qmd link or anchor link.
   * - targetPath - The resolved path to the target file
   * - anchor - The anchor/fragment identifier (without #)
   */
   onQmdLinkClick?: (arg: { path: string, anchor: string | null } | { anchor: string }) => void;
+}
+
+/**
+ * Reverse-map an artifact-rooted `.html` URL to a source-side
+ * project path, or return `null` if the URL doesn't look like a
+ * cross-doc website link or doesn't correspond to a known
+ * project file.
+ *
+ * Examples (with `projectFilePaths = ['index.qmd', 'about.qmd', 'posts/first.qmd']`):
+ *
+ *   /.quarto/project-artifacts/about.html         → { path: 'about.qmd',         anchor: null  }
+ *   /.quarto/project-artifacts/about.html#intro   → { path: 'about.qmd',         anchor: 'intro' }
+ *   /.quarto/project-artifacts/posts/first.html   → { path: 'posts/first.qmd',   anchor: null  }
+ *   /.quarto/project-artifacts/notes.html         → null  (no notes.qmd in project)
+ *   /.quarto/project-artifacts/styles.css         → null  (not .html)
+ *   ./about.qmd                                   → null  (not artifact-rooted)
+ *
+ * Exported for unit testing.
+ */
+export function reverseMapArtifactHref(
+  href: string,
+  projectFilePaths: readonly string[],
+): { path: string; anchor: string | null } | null {
+  if (!href.startsWith(ARTIFACT_ROOT)) return null;
+  const stripped = href.slice(ARTIFACT_ROOT.length);
+  const { path: stem, anchor } = parseLink(stripped);
+  if (!stem || !stem.endsWith('.html')) return null;
+  const base = stem.slice(0, -'.html'.length);
+  for (const ext of RENDERABLE_EXTS) {
+    const candidate = base + ext;
+    if (projectFilePaths.includes(candidate)) {
+      return { path: candidate, anchor };
+    }
+  }
+  return null;
 }
 
 /** Parsed components of a link href */
@@ -170,6 +249,27 @@ export function postProcessIframe(
         });
       }
     });
+
+    // Handle website cross-doc links: the `navigation_href.rs` /
+    // body-link transforms rewrite `[A](about.qmd)` into
+    // `<a href="/.quarto/project-artifacts/about.html">`. We
+    // reverse-map back to the source `.qmd` so the editor
+    // switches files (bd-lnd3). Strict: only intercept if the
+    // reverse-mapped path matches a known project file.
+    const filePaths = options.projectFilePaths;
+    if (filePaths && filePaths.length > 0) {
+      doc.querySelectorAll(`a[href^="${ARTIFACT_ROOT}"]`).forEach((anchor) => {
+        const href = anchor.getAttribute('href');
+        if (!href) return;
+        const mapped = reverseMapArtifactHref(href, filePaths);
+        if (!mapped) return;
+        anchor.addEventListener('click', (e) => {
+          e.preventDefault();
+          options.onQmdLinkClick!({ path: mapped.path, anchor: mapped.anchor });
+        });
+        anchor.setAttribute('data-internal-link', 'true');
+      });
+    }
   }
 
   // Intercept Ctrl+S / Cmd+S in iframe and notify parent

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../../types/project';
 import type { Diagnostic } from '../../types/diagnostic';
@@ -192,6 +192,15 @@ export default function Preview({
   // Rendered HTML to display in iframe
   const [renderedHtml, setRenderedHtml] = useState<string>('');
 
+  // Project file paths in a stable, memoized form. Used by the
+  // iframe post-processor to reverse-map artifact-rooted .html
+  // links back to source .qmd files for cross-doc click
+  // navigation (bd-lnd3).
+  const projectFilePaths = useMemo(
+    () => files.map((f) => f.path),
+    [files],
+  );
+
   // Debounce rendering
   const renderTimeoutRef = useRef<number | null>(null);
   const lastContentRef = useRef<string>('');
@@ -261,7 +270,6 @@ export default function Preview({
     // any user-defined tree-sitter grammars under `_quarto/grammars/*`.
     // The discovery step is pure + cache-backed so this is ~free when
     // grammars haven't changed since the last render.
-    const projectFilePaths = files.map((f) => f.path);
     const result = await doRender(documentPath, projectFilePaths);
     if (qmdContent !== lastContentRef.current) return;
 
@@ -304,7 +312,7 @@ export default function Preview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [onDiagnosticsChange, files]);
+  }, [onDiagnosticsChange, projectFilePaths]);
 
   // Debounced render update
   const updatePreview = useCallback((newContent: string, documentPath: string) => {
@@ -359,6 +367,7 @@ export default function Preview({
             qmdContent={content}
             html={renderedHtml}
             currentFilePath={currentFile?.path ?? ''}
+            projectFilePaths={projectFilePaths}
             onNavigateToDocument={handleNavigateToDocument}
             onScroll={handlePreviewScroll}
             onClick={handlePreviewClick}

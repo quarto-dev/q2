@@ -30,9 +30,10 @@ export function useIframePostProcessor(
   const memoizedOptions = useMemo(
     () => ({
       currentFilePath: options.currentFilePath,
+      projectFilePaths: options.projectFilePaths,
       onQmdLinkClick: options.onQmdLinkClick,
     }),
-    [options.currentFilePath, options.onQmdLinkClick]
+    [options.currentFilePath, options.projectFilePaths, options.onQmdLinkClick]
   );
 
   // Handler just signals "iframe loaded" - no work here

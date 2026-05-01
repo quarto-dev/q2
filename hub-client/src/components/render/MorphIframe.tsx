@@ -17,6 +17,11 @@ interface MorphIframeProps {
   html: string;
   // Current file path for resolving relative links
   currentFilePath: string;
+  // Project file paths (no leading slash). Used by the iframe
+  // post-processor to reverse-map artifact-rooted .html links
+  // back to source .qmd files for cross-doc click navigation
+  // (bd-lnd3).
+  projectFilePaths?: readonly string[];
 
   qmdContent: string;
   // Callback when user navigates to a different document (with optional anchor)
@@ -234,6 +239,7 @@ function addOffsetToPosition(
 function MorphIframe({
   html,
   currentFilePath,
+  projectFilePaths,
   qmdContent,
   onNavigateToDocument,
   onScroll,
@@ -271,9 +277,10 @@ function MorphIframe({
   const internalPostProcess = useCallback((iframe: HTMLIFrameElement) => {
     postProcessIframe(iframe, {
       currentFilePath,
+      projectFilePaths,
       onQmdLinkClick: handleQmdLinkClick,
     });
-  }, [currentFilePath, handleQmdLinkClick]);
+  }, [currentFilePath, projectFilePaths, handleQmdLinkClick]);
 
   // Update iframe content when HTML changes
   useEffect(() => {
