@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-01
 
+- [`2441ad8d`](https://github.com/quarto-dev/q2/commits/2441ad8d): Fix bd-lnd3 — cross-document link clicks now switch the editor in website projects. The website pipeline rewrites `[About](about.qmd)` to `/.quarto/project-artifacts/about.html`; the iframe click handler reverse-maps that back to the source file for in-editor navigation.
 - [`c8dcbcf6`](https://github.com/quarto-dev/q2/commits/c8dcbcf6): Hide the floating sidebar below the `lg` (992px) breakpoint instead of letting it collapse to a 26px-wide ghost column at half-pane previews and 768–991px viewports
 - [`f8234d00`](https://github.com/quarto-dev/q2/commits/f8234d00): Fix bd-f5yi — narrow the iframe `nav[role="doc-toc"]` hide override to `:not(.sidebar-navigation)` so the website sidebar isn't collateral-killed by the TOC-hiding rule
 - [`d656559a`](https://github.com/quarto-dev/q2/commits/d656559a): Surface sibling-page Pass-1 failures in the preview overlay with source-file attribution (bd-rqba), plus rename the misleading "references unknown document" warning to "references missing document information for"
