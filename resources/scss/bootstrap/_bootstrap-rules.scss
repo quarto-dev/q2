@@ -164,6 +164,23 @@ main.page-columns > header > h1.title {
     .page-columns {
       @include page-columns-float-mid();
     }
+    // bd-f5yi follow-up: the `page-columns-float-mid` grid
+    // template merges `[page-start page-start-inset
+    // body-start-outset body-start]` into a single zero-width
+    // line. The author's stated intent at
+    // `_bootstrap-mixins.scss:225` ("No sidebar, only margins")
+    // was for the floating sidebar to disappear in the mid
+    // range — but no rule actually hides it, so it collapses
+    // to a ~26px ghost column with a vertical scrollbar.
+    //
+    // Hiding it explicitly matches the intent and the runtime
+    // behavior. See
+    // `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`
+    // (Decision A, Resolution 2026-05-01) for why we ship this
+    // small fix instead of porting Q1's full hamburger rollup.
+    .sidebar.sidebar-navigation {
+      display: none;
+    }
   }
 
   body.docked {

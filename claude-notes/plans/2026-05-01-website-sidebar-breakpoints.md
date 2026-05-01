@@ -279,40 +279,69 @@ are at half-width (around 850 px) with the editor on the left.
 has full width — instead of broken. Once **B** lands, the
 sidebar reappears as a collapsible stripe even in that view.
 
-## Open questions for the user
+## Resolved decisions (2026-05-01)
 
-1. Is **A** an acceptable interim fix, or do you want to skip
-   straight to **B**? (A is reversible; B is more work but
-   matches Q1.)
-2. For **B**, is it acceptable for the hub-client preview iframe
-   to ship the hamburger toggle UX? It would mean clicking inside
-   the iframe to open the sidebar — works fine but adds a tiny
-   amount of interactive complexity to the preview.
-3. The `docked` and `toc-left` configurations have analogous mid
-   defects (`page-columns-docked-mid`,
-   `page-columns-tocleft-mid` follow the same "no sidebar"
-   structure). Should the fix cover them in the same change, or
-   ship floating-only first and tackle the others when an
-   example actually exercises them?
-4. Are there printer-friendly / PDF-print considerations we
-   should capture before changing the breakpoint behavior?
-   (Print overrides live around line 391 + 2298 in
-   `_bootstrap-rules.scss` and reset many of these rules.)
+1. **Ship A now.** Floating-only. B is deferred behind a JS-
+   loading prerequisite (see #2 below). C is rejected (band-aid).
+2. **B is not feasible yet.** B's hamburger-toggle UX likely
+   requires Bootstrap's JS bundle to be loaded. Q2 doesn't yet
+   have a story for shipping JS modules with website renders —
+   and the hub-client preview adds an additional constraint:
+   modules must not be re-parsed/re-executed on every
+   incremental HTML re-render. So the dependency chain for B is:
+   - Fix A (this plan).
+   - Design how Q2 websites load JS libraries, both natively
+     and in the hub-client live-preview path (separate plan).
+   - Implement Bootstrap JS bundling on top of that.
+   - Then design + implement B.
+   File a beads ticket for "JS library loading for Q2 websites"
+   when this work is unblocked; reference it from the followup
+   to bd-f5yi.
+3. **Floating-only for now.** Don't touch `docked` or `toc-left`
+   in this change — only `body.floating .sidebar.sidebar-navigation`.
+   The `docked` and `toc-left` mid defects are real but not
+   exercised by any current example fixture. Recorded here so
+   future-us can find them quickly:
+   - `_bootstrap-mixins.scss:1058+` (`page-columns-docked-mid` and
+     friends) collapse the same way.
+   - `_bootstrap-mixins.scss` (`page-columns-tocleft-mid`)
+     equally collapses the toc-left column.
+   - When an example exercises one of these, port the same
+     `display: none` gate (or the eventual Q1-rollup parity
+     work) to the relevant body-class branch.
+4. **Print media**: skip for now. Most print-media CSS is
+   already broken; we'll address it as a separate cross-cutting
+   pass.
 
-## Work items (when the user gives the green light)
+## Work items
 
-- [ ] Decide A vs B vs C (open question 1).
-- [ ] Implement chosen approach.
-- [ ] Add visual snapshot tests at the relevant widths
-      (1200 / 992 / 900 / 800 / 700) for at least the
-      `08-hub-preview` fixture, both native render and
-      hub-client preview.
-- [ ] Update the screenshots under
-      `claude-notes/2026-05-01-sidebar-breakpoints/` after the
-      fix lands so the empirical map reflects the new behavior.
-- [ ] If choosing **B**, file a beads ticket for the markup
-      change (sidebar render emits `nav.quarto-secondary-nav` +
-      hamburger toggle).
+- [ ] Implement A: hide `body.floating .sidebar.sidebar-navigation`
+      under `media-breakpoint-down(lg)` in
+      `resources/scss/bootstrap/_bootstrap-rules.scss`.
+- [ ] Native render test: `examples/websites/08-hub-preview/`
+      at viewport 800 px renders without the 26px-ghost
+      sidebar artifact.
+- [ ] Re-capture screenshots at 800 / 900 / 992 / 1200 px under
+      `claude-notes/2026-05-01-sidebar-breakpoints/` (post-fix
+      filenames) for the empirical map.
+- [ ] File a follow-up beads ticket: "Q2 website JS library
+      loading (native + hub-client incremental-stable)" — the
+      prerequisite for B. Reference bd-f5yi.
+- [ ] After (3): file a beads ticket for B (port Q1's
+      `position: static` rollup + hamburger markup), blocked on
+      the JS-loading work above.
+
+### Future deferred work (recorded so we can find it)
+
+- **Docked sidebar mid defect**: same zero-width collapse in
+  `page-columns-docked-mid` (and slimcontent / fullcontent /
+  listing variants). Apply the same gate when an example
+  exercises a docked sidebar.
+- **`toc-left` mid defect**: same zero-width collapse in
+  `page-columns-tocleft-mid`. Apply the same gate when an
+  example exercises toc-left.
+- **B (full Q1 rollup parity)**: see Resolved Decision 2 above.
+- **Print media**: see Resolved Decision 4 above.
 
 ## References
 
