@@ -48,5 +48,13 @@
 # doc.html hash unchanged: neither selector matches anything in a
 # single-doc body (no `.quarto-container` and no `#quarto-sidebar`),
 # but they appear in the compiled CSS so the `styles.css` hash shifts.
+#
+# Re-captured 2026-05-01 (bd-f5yi follow-up, c8dcbcf6): added
+# `body.floating .sidebar.sidebar-navigation { display: none }` under
+# `media-breakpoint-down(lg)` so a floating sidebar disappears in the
+# 768–991 px range instead of collapsing to a 26-px ghost column.
+# doc.html hash unchanged: the new selector doesn't match anything in
+# a single-doc body (no `body.floating`), but it appears in the
+# compiled CSS so the `styles.css` hash shifts.
 doc.html 1ce582da03349ec421b96d42a89d3589e3e8ed753a9d6802e6454a255ea67ae1
-doc_files/styles.css f098b8cbb1132c699e87698a613e883967211211e4861888d87e5849e9f835cd
+doc_files/styles.css 21263bc958169528a85545d23c07b2f0d12de92344b026b08546c766e84b759e
