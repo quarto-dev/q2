@@ -1,9 +1,21 @@
 import type { Diagnostic } from '../../types/diagnostic';
+import type { Pass1Failure } from '../../services/wasmRenderer';
 import { stripAnsi } from '../../utils/stripAnsi';
 import { usePreference } from '../../hooks/usePreference';
 
 interface PreviewErrorOverlayProps {
-  error: { message: string; diagnostics?: Diagnostic[] } | null;
+  error: {
+    message: string;
+    diagnostics?: Diagnostic[];
+    /**
+     * Sibling-page Pass-1 failures (bd-rqba). Rendered as a
+     * separate section under the main error so each failing
+     * file's parse diagnostic is attributed to its source. May
+     * be present even when `diagnostics` is empty (the active
+     * page rendered fine but a sibling didn't).
+     */
+    pass1Failures?: Pass1Failure[];
+  } | null;
   visible: boolean;
 }
 
@@ -57,6 +69,37 @@ export function PreviewErrorOverlay({ error, visible }: PreviewErrorOverlayProps
               </li>
             ))}
           </ul>
+        )}
+        {error.pass1Failures && error.pass1Failures.length > 0 && (
+          <div className="preview-error-pass1-failures">
+            {error.pass1Failures.map((f, i) => (
+              <div className="preview-error-pass1-failure" key={i}>
+                <div className="diagnostic-source-file">
+                  <span className="diagnostic-icon">&#9888;</span>{' '}
+                  <code>{f.source_file}</code> failed to parse
+                </div>
+                {f.diagnostics.length > 0 ? (
+                  <ul className="preview-error-diagnostics">
+                    {f.diagnostics.map((d, j) => (
+                      <li key={j}>
+                        {d.start_line != null && (
+                          <span className="diagnostic-line">Line {d.start_line}: </span>
+                        )}
+                        <span className="diagnostic-title">{d.title}</span>
+                        {d.problem && (
+                          <span className="diagnostic-problem"> - {d.problem}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <pre className="preview-error-message">
+                    {stripAnsi(f.error)}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

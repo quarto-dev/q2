@@ -39,6 +39,18 @@ export interface Diagnostic {
 }
 
 /**
+ * A Pass-1 failure (parse / metadata error) for a project file
+ * other than the active page (bd-rqba). See `services/wasmRenderer.ts`
+ * `Pass1Failure` for the canonical definition; this is a
+ * minimal mirror so this header type stays self-contained.
+ */
+export interface Pass1Failure {
+  source_file: string;
+  error: string;
+  diagnostics: Diagnostic[];
+}
+
+/**
  * Render response from WASM with structured diagnostics.
  */
 export interface RenderResponse {
@@ -49,4 +61,6 @@ export interface RenderResponse {
   diagnostics?: Diagnostic[];
   /** Structured warnings with line/column information for Monaco. */
   warnings?: Diagnostic[];
+  /** Sibling-page Pass-1 failures (bd-rqba). */
+  pass1_failures?: Pass1Failure[];
 }

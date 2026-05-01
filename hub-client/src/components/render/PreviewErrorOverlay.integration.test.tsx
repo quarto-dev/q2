@@ -101,6 +101,72 @@ describe('PreviewErrorOverlay (bd-mwtf parse-error display)', () => {
     expect(document.querySelector('.preview-error-diagnostics')).toBeNull();
   });
 
+  it('renders sibling pass-1 failures with source-file attribution (bd-rqba)', () => {
+    collapsedState = false;
+    render(
+      <PreviewErrorOverlay
+        error={{
+          message: "Sibling page 'about.qmd' failed to parse",
+          pass1Failures: [
+            {
+              source_file: 'about.qmd',
+              error: '[Q-2-10] Closed Quote Without Matching Open Quote',
+              diagnostics: [parseDiagnostic],
+            },
+          ],
+        }}
+        visible={true}
+      />,
+    );
+
+    // Source-file attribution ribbon ("about.qmd failed to parse").
+    const sourceEls = document.querySelectorAll('.diagnostic-source-file');
+    expect(sourceEls.length).toBe(1);
+    expect(sourceEls[0].textContent).toMatch(/about\.qmd/);
+    expect(sourceEls[0].textContent).toMatch(/failed to parse/);
+
+    // Inner diagnostic gets line + title rendered same as the
+    // active-page case.
+    expect(screen.getByText(/Line 11:/)).toBeTruthy();
+    const titleEls = document.querySelectorAll('.diagnostic-title');
+    // One in the per-failure list (no top-level diagnostics here).
+    expect(Array.from(titleEls).some((el) => el.textContent?.includes('Q-2-10'))).toBe(true);
+  });
+
+  it('renders multiple pass-1 failures, each attributed to its source', () => {
+    collapsedState = false;
+    render(
+      <PreviewErrorOverlay
+        error={{
+          message: '2 sibling pages failed to parse',
+          pass1Failures: [
+            {
+              source_file: 'about.qmd',
+              error: 'parse error 1',
+              diagnostics: [parseDiagnostic],
+            },
+            {
+              source_file: 'posts/first.qmd',
+              error: 'parse error 2',
+              diagnostics: [],
+            },
+          ],
+        }}
+        visible={true}
+      />,
+    );
+
+    const sourceEls = document.querySelectorAll('.diagnostic-source-file');
+    expect(sourceEls.length).toBe(2);
+    expect(sourceEls[0].textContent).toMatch(/about\.qmd/);
+    expect(sourceEls[1].textContent).toMatch(/posts\/first\.qmd/);
+
+    // The second failure has no structured diagnostics → falls
+    // back to the raw error text in a <pre>.
+    const failureBlocks = document.querySelectorAll('.preview-error-pass1-failure');
+    expect(failureBlocks[1].querySelector('pre')?.textContent).toMatch(/parse error 2/);
+  });
+
   it('shows collapsed indicator (no diagnostic list) when collapsed', () => {
     collapsedState = true;
     render(

@@ -664,6 +664,28 @@ export async function convert(
 /**
  * Result of rendering QMD content to HTML.
  */
+/**
+ * A Pass-1 failure (parse error / metadata error) for a project
+ * file that is not the active page (bd-rqba). Carries the failing
+ * file's path, the rendered error message (which includes the
+ * ariadne snippet for parse errors), and structured diagnostics
+ * for Monaco markers + the in-app overlay.
+ *
+ * Decision D1: this is a dedicated wire-shape field (not folded
+ * into `warnings`) so the engine can stay policy-free — the
+ * `quarto preview` / hub-client consumer renders these as
+ * warnings while the CLI consumer (bd-creo) treats them as a
+ * non-zero exit signal.
+ */
+export interface Pass1Failure {
+  /** Path of the file that failed Pass-1 (project-relative or absolute, same form as `FileEntry.path`). */
+  source_file: string;
+  /** User-facing error string, including the ariadne snippet for parse errors. */
+  error: string;
+  /** Structured diagnostics; empty for non-parse errors. */
+  diagnostics: Diagnostic[];
+}
+
 export interface RenderResult {
   html: string;
   success: boolean;
@@ -672,6 +694,15 @@ export interface RenderResult {
   diagnostics?: Diagnostic[];
   /** Structured warning diagnostics with line/column information for Monaco. */
   warnings?: Diagnostic[];
+  /**
+   * Pass-1 failures for sibling project files (bd-rqba). The
+   * overlay surfaces these with source-file attribution so a
+   * user opening `index.qmd` sees that `about.qmd` failed to
+   * parse, with line/column, instead of just the misleading
+   * navigation-side "missing document information for
+   * 'about.qmd'" warning.
+   */
+  pass1_failures?: Pass1Failure[];
 }
 
 /**
@@ -939,6 +970,7 @@ async function renderToHtmlInner(
         html: htmlWithCssVersion,
         success: true,
         warnings: result.warnings,
+        pass1_failures: result.pass1_failures,
       };
     } else {
       // Extract error message
@@ -950,6 +982,7 @@ async function renderToHtmlInner(
         error: errorMsg,
         diagnostics: result.diagnostics,
         warnings: result.warnings,
+        pass1_failures: result.pass1_failures,
       };
     }
   } catch (err) {

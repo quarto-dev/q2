@@ -91,7 +91,7 @@ pub fn resolve_href_for_html(
         if path_part.ends_with(".qmd") {
             let tag = source_label.unwrap_or("Navigation").to_string();
             diagnostics.push(DiagnosticMessage::warning(format!(
-                "{} references unknown document '{}'",
+                "{} references missing document information for '{}'",
                 tag, path_part
             )));
         }
@@ -236,7 +236,7 @@ pub fn resolve_doc_relative_href(
     if path_part.ends_with(".qmd") {
         let tag = source_label.unwrap_or("Body link").to_string();
         diagnostics.push(DiagnosticMessage::warning(format!(
-            "{} references unknown document '{}'",
+            "{} references missing document information for '{}'",
             tag, project_relative
         )));
     }

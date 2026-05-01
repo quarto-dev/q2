@@ -565,7 +565,39 @@ struct JsonDiagnostic {
     end_line: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     end_column: Option<u32>,
+    /// Source-file attribution for project-scoped diagnostics
+    /// (bd-rqba). When the project pipeline emits a warning that
+    /// originates in *another* file (e.g., a sidebar entry that
+    /// references a sibling page), this field carries that
+    /// sibling's path so the in-app overlay can label the warning
+    /// with its source instead of free-floating text. `None` for
+    /// page-local diagnostics whose location already pins them
+    /// to the active page's source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_file: Option<String>,
     details: Vec<JsonDiagnosticDetail>,
+}
+
+/// A Pass-1 failure (parse error or metadata error) in a project
+/// file *other than* the active page (bd-rqba). Active-page
+/// failures take the page-render error path; siblings flow through
+/// here so the overlay can render them with source attribution
+/// without forcing the lenient preview to abort.
+///
+/// Strict-vs-lenient policy lives at the consumer (Decision D1):
+/// `quarto preview` / hub-client surfaces these as warnings and
+/// keeps rendering; `quarto render` (CLI) treats any non-empty
+/// `pass1_failures` as a non-zero exit (`bd-creo`).
+#[derive(Serialize)]
+struct JsonPass1Failure {
+    /// Path of the failing file, lossy-stringified.
+    source_file: String,
+    /// User-facing error string (may include the rendered
+    /// ariadne snippet for parse errors).
+    error: String,
+    /// Structured diagnostics for Monaco markers + the in-app
+    /// overlay. Empty for non-`Parse` errors (`Io`, `Other`, …).
+    diagnostics: Vec<JsonDiagnostic>,
 }
 
 /// Convert a DiagnosticMessage to a JsonDiagnostic.
@@ -675,8 +707,49 @@ fn diagnostic_to_json(diag: &DiagnosticMessage, ctx: &SourceContext) -> JsonDiag
         start_column,
         end_line,
         end_column,
+        // Default unattributed; callers that know the source file
+        // (e.g., the Pass-1 failure path) tag it explicitly via
+        // `with_source_file`.
+        source_file: None,
         details,
     }
+}
+
+/// Tag a [`JsonDiagnostic`] with its source file (bd-rqba). Used
+/// when surfacing project-scoped warnings that originate in a
+/// file other than the active page.
+#[allow(dead_code)]
+fn with_source_file(mut diag: JsonDiagnostic, source_file: String) -> JsonDiagnostic {
+    diag.source_file = Some(source_file);
+    diag
+}
+
+/// Convert a list of [`FileFailure`]s into wire-shape
+/// [`JsonPass1Failure`]s, attaching structured diagnostics when
+/// the failure came from a [`ParseError`](quarto_core::error::ParseError).
+/// Used to surface non-active-page Pass-1 failures to the
+/// hub-client overlay (bd-rqba).
+fn pass1_failures_to_json(
+    failures: &[quarto_core::project::orchestrator::FileFailure],
+) -> Vec<JsonPass1Failure> {
+    failures
+        .iter()
+        .map(|failure| {
+            let source_file = failure.input.to_string_lossy().into_owned();
+            let diagnostics = match &failure.source_context {
+                Some(ctx) => diagnostics_to_json(&failure.diagnostics, ctx)
+                    .into_iter()
+                    .map(|d| with_source_file(d, source_file.clone()))
+                    .collect(),
+                None => Vec::new(),
+            };
+            JsonPass1Failure {
+                source_file,
+                error: failure.error.clone(),
+                diagnostics,
+            }
+        })
+        .collect()
 }
 
 /// Convert a slice of DiagnosticMessages to JsonDiagnostics.
@@ -688,7 +761,7 @@ fn diagnostics_to_json(diags: &[DiagnosticMessage], ctx: &SourceContext) -> Vec<
 // RENDERING API
 // ============================================================================
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 struct RenderResponse {
     success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -701,6 +774,15 @@ struct RenderResponse {
     /// Structured warnings with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
     warnings: Option<Vec<JsonDiagnostic>>,
+    /// Pass-1 failures for project files other than the active
+    /// page (bd-rqba). Carries the structured parse diagnostic so
+    /// the overlay can show "about.qmd had a parse error" with
+    /// line/column rather than the misleading
+    /// "Sidebar references missing document information for 'about.qmd'" alone.
+    /// Decision D1: dedicated field — engine policy-free, consumer
+    /// chooses strict vs lenient.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pass1_failures: Option<Vec<JsonPass1Failure>>,
 }
 
 /// Create a minimal project context for WASM rendering.
@@ -934,6 +1016,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
                 html: None,
                 diagnostics: None,
                 warnings: None,
+                pass1_failures: None,
             })
             .unwrap();
         }
@@ -949,6 +1032,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
                 html: None,
                 diagnostics: None,
                 warnings: None,
+                pass1_failures: None,
             })
             .unwrap();
         }
@@ -967,6 +1051,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
                 html: None,
                 diagnostics: None,
                 warnings: None,
+                pass1_failures: None,
             })
             .unwrap();
         }
@@ -1025,6 +1110,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
                 } else {
                     Some(warnings)
                 },
+                pass1_failures: None,
             })
             .unwrap()
         }
@@ -1045,6 +1131,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
                 html: None,
                 diagnostics,
                 warnings: None,
+                pass1_failures: None,
             })
             .unwrap()
         }
@@ -1085,6 +1172,7 @@ pub async fn render_qmd_content(
                 html: None,
                 diagnostics: None,
                 warnings: None,
+                pass1_failures: None,
             })
             .unwrap_or_default();
         }
@@ -1145,6 +1233,7 @@ pub async fn render_qmd_content(
                 } else {
                     Some(warnings)
                 },
+                pass1_failures: None,
             })
             .unwrap()
         }
@@ -1165,6 +1254,7 @@ pub async fn render_qmd_content(
                 html: None,
                 diagnostics,
                 warnings: None,
+                pass1_failures: None,
             })
             .unwrap()
         }
@@ -1311,6 +1401,7 @@ async fn render_single_doc_to_response(
                 } else {
                     Some(warnings)
                 },
+                pass1_failures: None,
             })
             .unwrap()
         }
@@ -1431,6 +1522,16 @@ async fn render_project_active_page_to_response(
     all_diags.extend(summary.project_diagnostics);
     let warnings = diagnostics_to_json(&all_diags, &active_output.source_context);
 
+    // Pass-1 failures for non-active-page files (bd-rqba). The
+    // active page's own Pass-1 failure shortcuts above via
+    // `pass_failure_response`, so anything reaching this branch
+    // belongs to a sibling. Surface them as a dedicated
+    // `pass1_failures` field — D1 in the plan: engine stays
+    // policy-free, the hub-client / preview consumer renders them
+    // as warnings while the CLI consumer (bd-creo) treats them
+    // as a non-zero exit.
+    let pass1_failures = pass1_failures_to_json(&summary.pass1_failures);
+
     serde_json::to_string(&RenderResponse {
         success: true,
         error: None,
@@ -1440,6 +1541,11 @@ async fn render_project_active_page_to_response(
             None
         } else {
             Some(warnings)
+        },
+        pass1_failures: if pass1_failures.is_empty() {
+            None
+        } else {
+            Some(pass1_failures)
         },
     })
     .unwrap()
@@ -1453,6 +1559,7 @@ fn error_response(msg: impl Into<String>) -> String {
         html: None,
         diagnostics: None,
         warnings: None,
+        pass1_failures: None,
     })
     .unwrap()
 }
@@ -1473,6 +1580,7 @@ fn render_error_response(e: QuartoError) -> String {
         html: None,
         diagnostics,
         warnings: None,
+        pass1_failures: None,
     })
     .unwrap()
 }
@@ -1506,6 +1614,7 @@ fn pass_failure_response(
         html: None,
         diagnostics,
         warnings: None,
+        pass1_failures: None,
     })
     .unwrap()
 }

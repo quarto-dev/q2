@@ -353,15 +353,25 @@ prod for one-off debugging.
   - [x] TS overlay test (`PreviewErrorOverlay.integration.test.tsx`):
         diagnostics array drives line-number + title + problem
         rendering when expanded.
-- [ ] **Bug 1** (`bd-rqba`): Surface cross-page Pass-1 errors with attribution
-  - [ ] Add dedicated `pass1_failures` field to `RenderResponse` (D1)
-  - [ ] Add `source_file?: string` to `JsonDiagnostic` (for project-scoped warnings)
-  - [ ] WASM: emit Pass-1 failures in the response with diagnostics
-  - [ ] PreviewErrorOverlay shows pass-1 failures with source-file attribution
-  - [ ] `navigation_href.rs`: change wording from
-        `"references unknown document"` to
-        `"missing document information for"` (D2). Update affected snapshots.
-  - [ ] Tests across WASM + TS
+- [x] **Bug 1** (`bd-rqba`): Surface cross-page Pass-1 errors with attribution
+  - [x] Add dedicated `pass1_failures` field to `RenderResponse` (D1)
+  - [x] Add `source_file?: string` to `JsonDiagnostic` (for project-scoped warnings)
+  - [x] WASM: emit non-active Pass-1 failures into `RenderResponse.pass1_failures`
+        via the new `pass1_failures_to_json` helper; tag inner diagnostics
+        with their source file
+  - [x] PreviewErrorOverlay renders `pass1Failures` as a separate
+        section with source-file attribution; new CSS rules in `Editor.css`.
+        Banner message ("Sibling page 'X' failed to parse") populated by
+        Preview on a successful active-page render.
+  - [x] `navigation_href.rs` D2: `"references unknown document"` →
+        `"references missing document information for"`. No snapshot
+        breakage in workspace tests (8166/8166 pass).
+  - [x] Native test: malformed sibling produces a structured
+        `pass1_failures` entry alongside successful active render,
+        and confirms the new D2 wording is in place.
+  - [x] TS overlay tests: pass1Failures section renders with
+        attribution, and falls back to the raw error string when
+        structured diagnostics are absent.
 - [ ] **CLI strictness** (new sibling — file beads ticket):
         `quarto render` exits non-zero on any `pass1_failures`
         entry; remove any string-matching of warning text; document

@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../../types/project';
 import type { Diagnostic } from '../../types/diagnostic';
-import { renderToHtml, isWasmReady, setScrollSyncEnabled } from '../../services/wasmRenderer';
+import { renderToHtml, isWasmReady, setScrollSyncEnabled, type Pass1Failure } from '../../services/wasmRenderer';
 import { getFileContent, getBinaryFileContent } from '../../services/automergeSync';
 import { useScrollSync } from '../../hooks/useScrollSync';
 import { useSelectionSync } from '../../hooks/useSelectionSync';
@@ -21,6 +21,15 @@ type PreviewState = 'START' | 'ERROR_AT_START' | 'GOOD' | 'ERROR_FROM_GOOD';
 interface CurrentError {
   message: string;
   diagnostics?: Diagnostic[];
+  /**
+   * Sibling-page Pass-1 failures (bd-rqba). Surfaced even on
+   * *successful* active-page renders so the user can see that a
+   * sidebar-referenced page failed to parse, with line/column,
+   * instead of just the misleading
+   * "missing document information for 'about.qmd'" warning that
+   * the navigation transform emits when its profile lookup fails.
+   */
+  pass1Failures?: Pass1Failure[];
 }
 
 interface PreviewProps {
@@ -54,10 +63,25 @@ type RenderResult = {
   success: true;
   html: string;
   diagnostics: Diagnostic[];
+  pass1Failures: Pass1Failure[];
 } | {
   success: false;
   error: string;
   diagnostics: Diagnostic[];
+  pass1Failures: Pass1Failure[];
+}
+
+/**
+ * Build a one-line summary for the pass-1-failure-only banner
+ * shown alongside a successful active-page render (bd-rqba).
+ * Single failure: "Sibling page 'about.qmd' failed to parse".
+ * Multiple: "N sibling pages failed to parse".
+ */
+function pass1FailuresBannerMessage(failures: Pass1Failure[]): string {
+  if (failures.length === 1) {
+    return `Sibling page '${failures[0].source_file}' failed to parse`;
+  }
+  return `${failures.length} sibling pages failed to parse`;
 }
 
 // Render a VFS document to HTML using WASM
@@ -73,6 +97,7 @@ async function doRender(
       success: false,
       error: 'WASM not ready',
       diagnostics: [],
+      pass1Failures: [],
     };
   }
 
@@ -92,12 +117,14 @@ async function doRender(
       ...(result.diagnostics ?? []),
       ...(result.warnings ?? []),
     ];
+    const pass1Failures = result.pass1_failures ?? [];
 
     if (result.success) {
       return {
         success: true,
         html: result.html,
         diagnostics: allDiagnostics,
+        pass1Failures,
       };
     } else {
       const errorMsg =
@@ -109,6 +136,7 @@ async function doRender(
         success: false,
         diagnostics: allDiagnostics,
         error: errorMsg,
+        pass1Failures,
       };
     }
   } catch (err) {
@@ -119,6 +147,7 @@ async function doRender(
       success: false,
       diagnostics: [],
       error: errorMsg,
+      pass1Failures: [],
     };
   }
 }
@@ -242,7 +271,19 @@ export default function Preview({
     if (result.success) {
       // Normal success: transition to GOOD state from any state
       setPreviewState('GOOD');
-      setCurrentError(null);
+      // Sibling-page Pass-1 failures (bd-rqba) ride alongside a
+      // successful active-page render — surface them as a banner
+      // so the user can see the actual parse error in the failing
+      // sibling instead of just the misleading
+      // "missing document information for 'about.qmd'" warning.
+      if (result.pass1Failures.length > 0) {
+        setCurrentError({
+          message: pass1FailuresBannerMessage(result.pass1Failures),
+          pass1Failures: result.pass1Failures,
+        });
+      } else {
+        setCurrentError(null);
+      }
       // Update rendered HTML
       setRenderedHtml(result.html);
     } else {
@@ -250,6 +291,7 @@ export default function Preview({
       setCurrentError({
         message: result.error,
         diagnostics: result.diagnostics,
+        pass1Failures: result.pass1Failures.length > 0 ? result.pass1Failures : undefined,
       });
 
       const currentState = previewStateRef.current;
@@ -322,11 +364,20 @@ export default function Preview({
             onClick={handlePreviewClick}
             onSelectionChange={handlePreviewSelection}
           />
-          {/* Error overlay shown when error occurs after successful render */}
+          {/* Overlay: shown when an error occurs after a successful
+              render OR when sibling pages failed Pass-1 even though
+              the active page rendered fine (bd-rqba). */}
           <PreviewErrorOverlay
             error={currentError}
-            visible={previewState === 'ERROR_FROM_GOOD'}
+            visible={
+              previewState === 'ERROR_FROM_GOOD' ||
+              (previewState === 'GOOD' && currentError !== null)
+            }
           />
+          {/* Hard-failure overlay isn't reachable in this branch —
+              ERROR_AT_START gets the full ErrorView above — but if
+              we ever decide to show a non-blocking pass-1 banner on
+              the error page too, this is where it'd hook in. */}
         </>
       )}
     </div>

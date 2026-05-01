@@ -482,3 +482,32 @@
 .preview-error-diagnostics .diagnostic-problem {
   color: var(--editor-note);
 }
+
+/* bd-rqba: sibling Pass-1 failures, attributed to their source file. */
+.preview-error-pass1-failures {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--error-overlay-border, rgba(0, 0, 0, 0.1));
+}
+
+.preview-error-pass1-failure {
+  margin-bottom: 8px;
+}
+
+.preview-error-pass1-failure:last-child {
+  margin-bottom: 0;
+}
+
+.preview-error-pass1-failure .diagnostic-source-file {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--editor-warning);
+  margin-bottom: 4px;
+}
+
+.preview-error-pass1-failure .diagnostic-source-file code {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 4px;
+  border-radius: 2px;
+}

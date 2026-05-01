@@ -370,6 +370,85 @@ fn run_active_page_summary(
     pollster::block_on(pipeline.run()).expect("pipeline run")
 }
 
+/// Regression for bd-rqba: when a *sibling* page fails Pass-1
+/// (parse error) but the active page itself parses fine, the
+/// active-page render still succeeds and the orchestrator
+/// surfaces the sibling's failure on `pass1_failures`. The
+/// WASM `render_page_in_project` entry point puts these in
+/// `RenderResponse.pass1_failures` so the overlay can show
+/// "about.qmd failed to parse" with line/column instead of
+/// just the misleading "missing document information for
+/// 'about.qmd'" navigation warning.
+#[test]
+fn pass1_parse_error_in_sibling_surfaces_alongside_active_render() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello.\n",
+    );
+    // Same Q-2-10 quote-mark error as the bd-mwtf test.
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages' titles within the next render\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let summary = run_active_page_summary(&active);
+
+    // Active page renders fine.
+    assert_eq!(
+        summary.outputs.len(),
+        1,
+        "active page should render successfully"
+    );
+    // Sibling pass-1 failure is reported.
+    assert_eq!(
+        summary.pass1_failures.len(),
+        1,
+        "expected exactly one Pass-1 failure for the sibling"
+    );
+    let failure = &summary.pass1_failures[0];
+    assert_eq!(failure.input, canonical(&project_dir.join("about.qmd")));
+    assert!(
+        !failure.diagnostics.is_empty(),
+        "sibling Pass-1 failure should carry structured diagnostics"
+    );
+    assert!(failure.source_context.is_some());
+
+    // The renamed nav warning (D2) is the project-scoped warning
+    // surfaced when the sidebar references the dropped sibling.
+    // Confirm the new wording is in place. It rides on a per-page
+    // render output's `diagnostics` *or* on `summary.project_diagnostics`
+    // depending on which transform emitted it; check both.
+    let active_output = &summary.outputs[0];
+    let combined: Vec<String> = active_output
+        .diagnostics
+        .iter()
+        .chain(summary.project_diagnostics.iter())
+        .map(|d| d.title.clone())
+        .collect();
+    assert!(
+        combined
+            .iter()
+            .any(|m| m.contains("missing document information")),
+        "expected the renamed 'missing document information' warning; got: {:?}",
+        combined,
+    );
+    assert!(
+        combined
+            .iter()
+            .all(|m| !m.contains("references unknown document")),
+        "old 'references unknown document' wording should be gone; got: {:?}",
+        combined,
+    );
+}
+
 /// Regression for bd-mwtf: when the active page itself fails
 /// Pass-1 (parse error), the orchestrator surfaces it via
 /// `pass1_failures`, with **structured** diagnostics + a
