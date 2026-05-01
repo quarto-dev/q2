@@ -372,11 +372,18 @@ prod for one-off debugging.
   - [x] TS overlay tests: pass1Failures section renders with
         attribution, and falls back to the raw error string when
         structured diagnostics are absent.
-- [ ] **CLI strictness** (new sibling — file beads ticket):
-        `quarto render` exits non-zero on any `pass1_failures`
-        entry; remove any string-matching of warning text; document
-        the strict-vs-lenient contract in
-        `claude-notes/designs/document-profile-contract.md`. (D1)
+- [x] **CLI strictness** (`bd-creo`):
+  - [x] `quarto render` exits non-zero on any `pass1_failures`
+        or `pass2_failures` entry — both `execute_qmd` and
+        `execute_project` paths.
+  - [x] Strict-vs-lenient consumer contract documented in
+        `claude-notes/designs/document-profile-contract.md`
+        ("Failure surface and the strict-vs-lenient consumer
+        contract" section).
+  - [x] CLI e2e regression test in `render_cli_e2e.rs` — a
+        project with a Pass-1 parse error produces a non-zero
+        exit and still emits the rich profile-pass-skipped
+        warning.
 - [ ] **Bug 3** (`bd-f5yi`): Sidebar missing in hub-client website preview
   - [ ] Reproduce in Chrome via dev tools plugin; capture DOM + computed styles
   - [ ] If cause is in a different subsystem, split fix into its own ticket and session (D3)

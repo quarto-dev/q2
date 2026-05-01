@@ -399,6 +399,47 @@ fn empty_directory_arg_errors_with_no_renderable_matches() {
     );
 }
 
+/// Regression for bd-creo (Decision D1): `quarto render` exits
+/// non-zero when any project file fails Pass-1 (parse / metadata
+/// error), even though sibling pages render successfully. The
+/// strict-vs-lenient policy lives at the consumer; the CLI is the
+/// strict path. The orchestrator's structured `pass1_failures`
+/// field is the authority — we don't string-match the warning
+/// printout.
+#[test]
+fn pass1_failure_triggers_non_zero_exit() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+
+    write_file(
+        &project.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\nwebsite:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write_file(
+        &project.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello.\n",
+    );
+    // Q-2-10 quote-mark error: unescaped apostrophe after a space.
+    write_file(
+        &project.join("about.qmd"),
+        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages' titles within the next render\n",
+    );
+
+    let out = run_q2(&project, &[]);
+    assert!(
+        !out.status.success(),
+        "render with a Pass-1 parse error should exit non-zero (bd-creo); \
+         stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("profile-pass skipped") && stderr.contains("about.qmd"),
+        "stderr should still contain the rich profile-pass-skipped \
+         warning; got: {stderr}"
+    );
+}
+
 /// Test (negative): multiple stand-alone `.qmd` files outside any
 /// project ⇒ "one project per render" error.
 #[test]

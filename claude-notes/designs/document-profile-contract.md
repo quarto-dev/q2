@@ -163,6 +163,94 @@ Phase 1 replaces that with a real consumer.
 4. Never add a branch on `ProjectContext::is_single_file` — see
    §"Project root invariant" in the Phase-0 plan.
 
+## Failure surface and the strict-vs-lenient consumer contract
+
+### Engine policy
+
+A document that fails to reach the checkpoint (parse error,
+metadata error, missing required `_metadata.yml`, …) is dropped
+from the project's `ProjectIndex` and surfaced as a
+`FileFailure` on the orchestrator's `ProjectRenderSummary`:
+
+```rust
+pub struct FileFailure {
+    pub input: PathBuf,
+    pub error: String,                 // pre-rendered ariadne text for parse errors
+    pub diagnostics: Vec<DiagnosticMessage>,        // structured form
+    pub source_context: Option<SourceContext>,      // for offset → line/column mapping
+}
+
+pub struct ProjectRenderSummary<O> {
+    pub outputs: Vec<O>,
+    pub pass1_failures: Vec<FileFailure>,           // profile-pass dropouts
+    pub pass2_failures: Vec<FileFailure>,           // renderer errors
+    pub project_diagnostics: Vec<DiagnosticMessage>,
+}
+```
+
+The orchestrator is **policy-free**: it does not decide whether
+a `pass1_failures` entry should abort the run, change the exit
+code, or be displayed inline. Pass-2 simply runs over whatever
+files succeeded Pass-1; any references to the dropped file from
+sibling navigation get the project-scoped warning
+`"<tag> references missing document information for '<path>'"`
+(emitted in `quarto_core::transforms::navigation_href`).
+
+### Consumer contract
+
+Two consumers exist today:
+
+| Consumer                                    | Policy   | What it does                                                                                                                                                                                                  |
+|---------------------------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `quarto render` (CLI / CI)                  | Strict   | Any non-empty `pass1_failures` *or* `pass2_failures` causes a non-zero exit. Headless renders must not silently drop pages.                                                                                  |
+| `quarto preview` / hub-client (interactive) | Lenient  | Surfaces failures in the preview overlay with source-file attribution; keeps rendering everything that did succeed. Partial progress lets a user fix one error at a time without losing live preview elsewhere. |
+
+The `RenderResponse` wire format the WASM hub-client returns
+mirrors the orchestrator surface:
+
+```ts
+interface RenderResponse {
+  success: boolean;             // active page render
+  error?: string;               // active-page failure message
+  html?: string;
+  diagnostics?: Diagnostic[];   // active-page errors
+  warnings?: Diagnostic[];      // page-local + project-scoped warnings
+  pass1_failures?: Pass1Failure[];  // sibling-page Pass-1 failures
+}
+
+interface Pass1Failure {
+  source_file: string;
+  error: string;                // ariadne snippet for parse errors
+  diagnostics: Diagnostic[];    // structured form for Monaco markers
+}
+```
+
+`Diagnostic` carries an optional `source_file` attribution for
+project-scoped warnings whose origin isn't pinned by their
+location (e.g. nav warnings).
+
+### Adding a new consumer
+
+A planned third consumer is a `quarto preview` binary that wraps
+hub-client infrastructure for local previews. New consumers must:
+
+1. **Not modify the engine.** Pass-1 failures, project
+   diagnostics, and per-page diagnostics all flow through
+   `ProjectRenderSummary` (native) or `RenderResponse` (WASM)
+   unchanged.
+2. **Choose a policy explicitly.** Strict is appropriate for
+   one-shot / CI-style consumers; lenient is appropriate for
+   live / iterative consumers.
+3. **Preserve attribution.** When showing a Pass-1 failure to
+   the user, name the failing file. The hub-client overlay's
+   "Sibling page 'X' failed to parse" pattern is the reference
+   implementation.
+
+Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
+`bd-rqba` (hub-client leniency + attribution),
+`bd-0tr6` (websites epic). Plan:
+`claude-notes/plans/2026-05-01-hub-client-website-render-ux.md`.
+
 ## Change log
 
 - **2026-04-23 — v1.** Initial version. Fields: `profile_version`,

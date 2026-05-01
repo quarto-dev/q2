@@ -497,7 +497,12 @@ fn execute_single_doc(
 
     print_render_diagnostics(&summary, args.quiet);
 
-    if !summary.pass2_failures.is_empty() {
+    // Strict policy for `quarto render` (Decision D1, bd-creo).
+    // Any file that failed Pass-1 (parse / metadata error) or
+    // Pass-2 (renderer error) is a non-zero exit. The orchestrator
+    // itself stays policy-free — partial-progress leniency lives
+    // in the `quarto preview` / hub-client consumer, not here.
+    if !summary.pass1_failures.is_empty() || !summary.pass2_failures.is_empty() {
         std::process::exit(1);
     }
     Ok(())
@@ -567,7 +572,12 @@ fn execute_project(
         info!("{}", line);
     }
 
-    if !summary.pass2_failures.is_empty() {
+    // Strict policy for `quarto render` (Decision D1, bd-creo).
+    // Any file that failed Pass-1 (parse / metadata error) or
+    // Pass-2 (renderer error) is a non-zero exit. The orchestrator
+    // itself stays policy-free — partial-progress leniency lives
+    // in the `quarto preview` / hub-client consumer, not here.
+    if !summary.pass1_failures.is_empty() || !summary.pass2_failures.is_empty() {
         std::process::exit(1);
     }
     Ok(())
