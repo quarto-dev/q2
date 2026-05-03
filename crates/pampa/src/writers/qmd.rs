@@ -1218,8 +1218,20 @@ fn write_table(
         && !long_caption.is_empty()
     {
         writeln!(buf)?; // Blank line before caption
-        for block in long_caption {
-            // Extract inline content from Plain or Paragraph blocks in caption
+
+        // The table's attribute block is parsed from a trailing {…} on the
+        // caption line (see pipe_table.rs:191-195), so on output we attach it
+        // to the last caption line that actually emits content.
+        let last_emittable_idx = long_caption
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(i, b)| match b {
+                Block::Plain(_) | Block::Paragraph(_) => Some(i),
+                _ => None,
+            });
+
+        for (i, block) in long_caption.iter().enumerate() {
             let content = match block {
                 Block::Plain(plain) => Some(&plain.content),
                 Block::Paragraph(para) => Some(&para.content),
@@ -1229,6 +1241,10 @@ fn write_table(
                 write!(buf, ": ")?;
                 for inline in inlines {
                     write_inline(inline, buf, ctx)?;
+                }
+                if Some(i) == last_emittable_idx && !is_empty_attr(&table.attr) {
+                    write!(buf, " ")?;
+                    write_attr(&table.attr, buf, ctx)?;
                 }
                 writeln!(buf)?;
             }

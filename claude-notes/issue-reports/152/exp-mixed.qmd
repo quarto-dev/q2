@@ -1,0 +1,5 @@
+| Col 1 | Col 2 |
+|-------|-------|
+| A     | B     |
+
+: Table caption {#tbl-mytable .special tbl-colwidths="[30,70]"}
