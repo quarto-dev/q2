@@ -90,6 +90,7 @@ pub async fn execute(args: ExecuteArgs<'_>) -> Result<PublishOutcome, PublishErr
     if ux.dry_run {
         let summary = crate::types::PublishSummary {
             commit: None,
+            deploy_id: None,
             file_count: prepared.files.files.len(),
             bytes: prepared
                 .files
@@ -262,6 +263,7 @@ mod tests {
                 admin_url: None,
                 summary: PublishSummary {
                     commit: Some("fakecommit".to_string()),
+                    deploy_id: None,
                     file_count: prepared.files.files.len(),
                     bytes: 0,
                 },

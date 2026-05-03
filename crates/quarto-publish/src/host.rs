@@ -13,6 +13,7 @@
 //!   their impls. WASM providers naturally lack the affordance.
 
 use async_trait::async_trait;
+use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 use crate::types::{PublishEvent, PublishOutcome};
@@ -135,17 +136,83 @@ impl PublishHost for NativeHost {
         eprintln!("{}", self.render_event(&event));
     }
 
-    async fn open_url(&self, _url: &str) -> Result<(), anyhow::Error> {
-        // Phase 0: refuse silently. Phase 1 wires up the platform
-        // opener.
-        Err(anyhow::anyhow!(
-            "browser open is not implemented in Phase 0"
-        ))
+    async fn open_url(&self, url: &str) -> Result<(), anyhow::Error> {
+        platform_open_url(url)
     }
 
-    async fn http_get(&self, _url: &str) -> Result<HttpResponse, anyhow::Error> {
-        // Phase 0: refuse. Phase 1 wires up `ureq`.
-        Err(anyhow::anyhow!("http_get is not implemented in Phase 0"))
+    async fn http_get(&self, url: &str) -> Result<HttpResponse, anyhow::Error> {
+        // ureq is sync; we're inside an `async fn` driven by
+        // pollster, so the synchronous call doesn't hurt — the only
+        // alternative is to pull in tokio + reqwest which is much
+        // heavier for the single-request `verify` step we have.
+        let url = url.to_string();
+        let response = std::thread::scope(|s| {
+            s.spawn(|| -> Result<HttpResponse, anyhow::Error> {
+                match ureq::get(&url).call() {
+                    Ok(resp) => {
+                        let status = resp.status();
+                        let mut body = Vec::new();
+                        resp.into_reader()
+                            .take(32 * 1024) // .nojekyll-sized response cap
+                            .read_to_end(&mut body)?;
+                        Ok(HttpResponse { status, body })
+                    }
+                    Err(ureq::Error::Status(status, resp)) => {
+                        // ureq reports non-2xx as `Status` errors.
+                        // We expose them as a regular response so
+                        // callers (the gh-pages probe) can match
+                        // on 404 vs 5xx.
+                        let mut body = Vec::new();
+                        let _ = resp.into_reader().take(32 * 1024).read_to_end(&mut body);
+                        Ok(HttpResponse { status, body })
+                    }
+                    Err(e) => Err(anyhow::anyhow!("http error: {e}")),
+                }
+            })
+            .join()
+            .map_err(|_| anyhow::anyhow!("http request panicked"))?
+        })?;
+        Ok(response)
+    }
+}
+
+/// Open `url` in the platform's default browser.
+fn platform_open_url(url: &str) -> Result<(), anyhow::Error> {
+    use std::process::Command;
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = Command::new("open");
+        c.arg(url);
+        c
+    };
+    #[cfg(target_os = "linux")]
+    let mut cmd = {
+        let mut c = Command::new("xdg-open");
+        c.arg(url);
+        c
+    };
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", "", url]);
+        c
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        let _ = url;
+        return Err(anyhow::anyhow!("no platform browser opener available"));
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+    {
+        let status = cmd.status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "browser opener exited non-zero (code {:?})",
+                status.code()
+            ))
+        }
     }
 }
 
@@ -261,6 +328,7 @@ mod tests {
             admin_url: None,
             summary: PublishSummary {
                 commit: Some("abc123".into()),
+                deploy_id: None,
                 file_count: 5,
                 bytes: 1024,
             },
@@ -288,6 +356,7 @@ mod tests {
             admin_url: None,
             summary: PublishSummary {
                 commit: Some("abc123".into()),
+                deploy_id: None,
                 file_count: 5,
                 bytes: 1024,
             },
@@ -310,6 +379,7 @@ mod tests {
             "gh-pages",
             PublishSummary {
                 commit: Some("abc123".into()),
+                deploy_id: None,
                 file_count: 5,
                 bytes: 1024,
             },

@@ -218,6 +218,12 @@ pub struct PublishSummary {
     /// git-backed).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub commit: Option<String>,
+    /// Provider-generated deploy identifier — used by `verify` to
+    /// confirm the *specific* deploy is live (vs. a stale prior
+    /// deploy at the same URL). gh-pages writes this to `.nojekyll`;
+    /// other providers may use it differently.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub deploy_id: Option<String>,
     /// Total number of files uploaded.
     pub file_count: usize,
     /// Total byte count of files uploaded.

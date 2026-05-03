@@ -17,9 +17,11 @@ anyhow.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url = "2.5"
+ureq = { version = "2", default-features = false, features = ["tls"] }
 uuid.workspace = true
 
 quarto-core.workspace = true
