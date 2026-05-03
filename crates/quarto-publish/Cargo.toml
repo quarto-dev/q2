@@ -1,0 +1,37 @@
+[package]
+name = "quarto-publish"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+description = "Publishing infrastructure for Quarto: provider trait, registry, gh-pages provider"
+
+[lib]
+name = "quarto_publish"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url = "2.5"
+uuid.workspace = true
+
+quarto-core.workspace = true
+quarto-util.workspace = true
+quarto-system-runtime.workspace = true
+quarto-config.workspace = true
+quarto-pandoc-types.workspace = true
+quarto-source-map.workspace = true
+quarto-error-reporting.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+tempfile = "3"
+quarto-pandoc-types.workspace = true
+quarto-source-map.workspace = true

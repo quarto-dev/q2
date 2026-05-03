@@ -304,11 +304,37 @@ enum Commands {
 
     /// Publish a document or project to a provider
     Publish {
-        /// Provider to publish to
+        /// Provider to publish to (e.g. `gh-pages`)
         provider: Option<String>,
 
-        /// Path to publish
+        /// Path to publish (defaults to current directory)
         path: Option<String>,
+
+        /// Do not render before publishing
+        #[arg(long = "no-render", action = clap::ArgAction::SetTrue)]
+        no_render: bool,
+
+        /// Do not prompt for input (errors if input is required)
+        #[arg(long = "no-prompt", action = clap::ArgAction::SetTrue)]
+        no_prompt: bool,
+
+        /// Do not open the browser to the published URL
+        #[arg(long = "no-browser", action = clap::ArgAction::SetTrue)]
+        no_browser: bool,
+
+        /// Do not wait for the deployment to be live (incompatible
+        /// with --browser; pass --no-browser too)
+        #[arg(long = "no-wait", action = clap::ArgAction::SetTrue)]
+        no_wait: bool,
+
+        /// Run prepare + render but do not push or upload anything
+        #[arg(long = "dry-run", action = clap::ArgAction::SetTrue)]
+        dry_run: bool,
+
+        /// Emit machine-readable output (implies --no-prompt;
+        /// final PublishOutcome on stdout, NDJSON events on stderr)
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        json: bool,
     },
 
     /// Verify correct functioning of Quarto installation
@@ -526,7 +552,25 @@ fn main() -> Result<()> {
         Commands::Install { .. } => commands::install::execute(),
         Commands::Uninstall { .. } => commands::uninstall::execute(),
         Commands::Tools => commands::tools::execute(),
-        Commands::Publish { .. } => commands::publish::execute(),
+        Commands::Publish {
+            provider,
+            path,
+            no_render,
+            no_prompt,
+            no_browser,
+            no_wait,
+            dry_run,
+            json,
+        } => commands::publish::execute(commands::publish::PublishArgs {
+            provider,
+            path,
+            no_render,
+            no_prompt,
+            no_browser,
+            no_wait,
+            dry_run,
+            json,
+        }),
         Commands::Check { .. } => commands::check::execute(),
         Commands::Call { function, args } => commands::call::execute(function, args),
         Commands::Lsp => commands::lsp::execute(),

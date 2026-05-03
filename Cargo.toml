@@ -170,6 +170,9 @@ path = "./crates/quarto-hub"
 [workspace.dependencies.quarto-navigation]
 path = "./crates/quarto-navigation"
 
+[workspace.dependencies.quarto-publish]
+path = "./crates/quarto-publish"
+
 [workspace.dependencies.quarto-test]
 path = "./crates/quarto-test"
 

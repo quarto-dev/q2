@@ -3568,6 +3568,7 @@ name = "quarto"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "pampa",
  "pollster",
@@ -3576,6 +3577,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-hub",
  "quarto-lsp",
+ "quarto-publish",
  "quarto-sass",
  "quarto-system-runtime",
  "quarto-test",
@@ -3897,6 +3899,29 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "quarto-publish"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pollster",
+ "quarto-config",
+ "quarto-core",
+ "quarto-error-reporting",
+ "quarto-pandoc-types",
+ "quarto-source-map",
+ "quarto-system-runtime",
+ "quarto-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]
