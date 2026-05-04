@@ -214,9 +214,44 @@ the wire format.
 
 ## Dependencies
 
-- Depends on: Plan 1 (the AST shape these components consume comes from
-  Plan 1's pipeline).
-- Blocks: nothing structurally; later plans (4-7) can land in parallel.
+### Hard dependencies
+
+- **Plan 1** — the q2-preview format and AST shape these components
+  consume don't exist until Plan 1 lands. Plan 2 cannot ship before Plan 1.
+
+### Soft / activation dependencies
+
+Plan 2 lands all its wiring at once after Plan 1. The Derived-detection
+and atomic-registry hooks are inert until later plans populate the AST
+shapes and registries they watch for. Each activates organically as the
+relevant plan lands:
+
+- **Plan 4** introduces the `Derived` variant. Until Plan 4 lands, no
+  inline can have Derived source_info, so `MaybeReadOnlyInline`'s
+  Derived-detection arm never fires. Compiles fine — `Derived` is just
+  a variant the wrapper checks for; nothing breaks if no value ever
+  matches.
+- **Plan 6** populates Derived source_info on shortcode resolutions.
+  Before Plan 6, the shortcode resolver still emits flat Strs with
+  `SourceInfo::default()`. After Plan 6, those Strs have Derived
+  source_info and `MaybeReadOnlyInline` activates for them.
+- **Plan 7** introduces `is_atomic_custom_node`. Until Plan 7 lands,
+  Plan 2's atomic-CustomNode dispatch hardcodes the initial set
+  (`["CrossrefResolvedRef"]` — the only atomic type that exists in the
+  AST today, via `CrossrefResolveTransform`). After Plan 7, the JS
+  side syncs against the Rust function's set.
+- **Plan 8** introduces `IncludeExpansion` CustomNode. Plan 2's
+  IncludeExpansion component is registered from the start; until Plan 8,
+  no IncludeExpansion CustomNodes appear in the AST so the component is
+  never instantiated.
+
+This dormant-wiring pattern is intentional. Plan 2's job is to lay down
+the React-side scaffolding for everything q2-preview will eventually
+need; later plans just plug in.
+
+### Blocks
+
+Nothing structurally. Later plans (4-7) can land in parallel.
 
 ## Risk areas
 

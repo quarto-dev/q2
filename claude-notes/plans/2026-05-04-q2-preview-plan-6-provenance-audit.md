@@ -167,10 +167,32 @@ comprehensive grep.
 
 ## Dependencies
 
-- Depends on: Plan 4 (Synthetic + Derived + By types).
-- Blocks: Plan 7 (writer needs the audit-fixed AST shape to walk preimages
-  correctly and detect Derived for atomic enforcement).
-- Independent of: Plan 8 (Plan 8 introduces its own wrapper for includes;
+### Hard dependencies
+
+- **Plan 4** — Plan 6's transforms use `By::shortcode(...)`,
+  `By::sectionize()`, `By::title_block()`, etc., plus the `Derived` and
+  `Synthetic` variants. Cannot compile without Plan 4.
+
+### Soft dependencies
+
+- **Plan 5** — Plan 6's source_info changes are visible to in-Rust
+  consumers as soon as Plan 6 lands. But for the changes to round-trip
+  through the JSON wire format (the path q2-preview takes when crossing
+  the WASM boundary to React and back), Plan 5's wire-format extension
+  is required. Without Plan 5, a Plan 6 AST that gets serialized to JSON
+  and deserialized loses the `Derived` and `Synthetic` shapes (decoded
+  via legacy code-3 fallback as Substring approximations).
+
+  Pragmatic implication: Plan 6 lands cleanly in-Rust without Plan 5,
+  but isn't observable in q2-preview without Plan 5. The plans can be
+  developed in parallel after Plan 4 lands; Plan 5 should land at or
+  before the q2-preview integration is exercised end-to-end.
+
+### Blocks
+
+- **Plan 7** — writer needs Plan 6's audit-fixed AST shape to walk
+  preimages correctly and to detect Derived for atomic enforcement.
+- Independent of Plan 8 (Plan 8 introduces its own wrapper for includes;
   shortcodes don't use that pattern).
 
 ## Risk areas

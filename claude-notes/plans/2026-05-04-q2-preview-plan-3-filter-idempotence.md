@@ -169,6 +169,29 @@ The plan IS the test plan. The deliverable is a test crate.
   We don't need this to *implement* those plans, but landing it before
   reviewing them gives us confidence the foundation is solid.
 
+### What happens when a fixture fails
+
+Plan 3 reports failures; the *fix* lands in the appropriate downstream
+plan, not in Plan 3. Three failure modes and where their fixes go:
+
+- **Non-idempotent built-in Lua filter**. The filter's contract is
+  broken. Fix: edit the filter's Lua source. Lands wherever the
+  filter lives (typically `resources/extensions/...`). Plan 3 just
+  surfaces the test.
+- **Non-deterministic transform attribute ordering**. A transform that
+  iterates a HashMap or similar and emits attrs in non-deterministic
+  order. Fix: change the transform to emit deterministically. Lands
+  in the transform's source file (typically a Plan 6-shaped fix even
+  though it's not strictly a provenance issue — provenance audit and
+  determinism audit are sister concerns).
+- **Source-info-related instability**. Should NOT happen because the
+  hash function excludes source_info. If somehow it does, Plan 4's
+  type changes are the place to investigate.
+
+If a fixture fails on first run, document the failure as a known issue
+in Plan 3's commit message and file the fix as a follow-up against the
+appropriate plan. Don't silently disable failing fixtures.
+
 ## Risk areas
 
 - **A built-in filter might fail the test on first run**. If so, we either
