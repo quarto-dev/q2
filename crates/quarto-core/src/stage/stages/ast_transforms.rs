@@ -12,7 +12,7 @@
 
 use async_trait::async_trait;
 
-use crate::pipeline::build_transform_pipeline;
+use crate::pipeline::{build_q2_preview_transform_pipeline, build_transform_pipeline};
 use crate::render::{BinaryDependencies, RenderContext};
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -114,7 +114,15 @@ impl PipelineStage for AstTransformsStage {
             ));
         };
 
-        // Build the JIT pipeline if no custom pipeline was provided
+        // Build the JIT pipeline if no custom pipeline was provided.
+        //
+        // Dispatch on `ctx.format.pipeline_kind` (added in Plan 1
+        // commit 3): `Some("preview")` builds the q2-preview transform
+        // list, everything else builds the standard HTML one. The
+        // `target_format` argument carries the original string
+        // (e.g. `"q2-preview"`, not the base `"html"`) so shortcode
+        // resolution and downstream transforms see the user-facing
+        // format identity, not the pseudo-format's base.
         let jit_pipeline;
         let pipeline = if let Some(ref p) = self.custom_pipeline {
             p
@@ -127,12 +135,20 @@ impl PipelineStage for AstTransformsStage {
                 .unwrap_or(std::path::Path::new("."));
             let shortcode_paths =
                 crate::transforms::extract_shortcode_paths(&doc.ast.meta, document_dir);
-            jit_pipeline = build_transform_pipeline(
-                shortcode_paths,
-                ctx.extensions.clone(),
-                ctx.runtime.clone(),
-                ctx.format.identifier.as_str().to_string(),
-            );
+            jit_pipeline = match ctx.format.pipeline_kind {
+                Some("preview") => build_q2_preview_transform_pipeline(
+                    shortcode_paths,
+                    ctx.extensions.clone(),
+                    ctx.runtime.clone(),
+                    ctx.format.target_format.clone(),
+                ),
+                _ => build_transform_pipeline(
+                    shortcode_paths,
+                    ctx.extensions.clone(),
+                    ctx.runtime.clone(),
+                    ctx.format.target_format.clone(),
+                ),
+            };
             &jit_pipeline
         };
 

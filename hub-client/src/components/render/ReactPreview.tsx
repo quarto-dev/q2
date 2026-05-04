@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../../types/project';
 import type { Diagnostic } from '../../types/diagnostic';
-import { parseQmdToAst, isWasmReady, incrementalWriteQmd } from '../../services/wasmRenderer';
+import { parseQmdToAst, renderPageInProject, isWasmReady, incrementalWriteQmd } from '../../services/wasmRenderer';
+import { pipelineKindForFormat } from '../../utils/pipelineKind';
 import { stripAnsi } from '../../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import ReactRenderer from './ReactRenderer';
@@ -36,7 +37,7 @@ interface PreviewProps {
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
   onContentRewrite: (content: string) => void;
-  format: string; // 'q2-slides' or 'q2-debug'
+  format: string; // 'q2-slides', 'q2-debug', or 'q2-preview'
 }
 
 // Result of rendering QMD content to AST
@@ -50,11 +51,23 @@ type RenderResult = {
   diagnostics: Diagnostic[];
 }
 
-// Parse QMD content to AST using WASM
-// Returns diagnostics and AST JSON string or error message
+// Render QMD content to AST JSON for the iframe-based preview.
+//
+// Dispatches on `pipelineKindForFormat(format)`:
+// - `'preview'` (q2-preview): calls `renderPageInProject(documentPath)`,
+//   which runs the full q2-preview pipeline in WASM (shortcodes, Lua
+//   filters, sectionize, crossref, sidebar/navbar metadata, etc.) and
+//   returns the post-pipeline AST as JSON via `RenderResponse.ast_json`.
+//   Requires a `documentPath` because the pipeline reads the file from
+//   VFS and discovers project context from it.
+// - any other format (q2-debug, q2-slides): calls `parseQmdToAst(content)`,
+//   which is path-less and skips the transform pipeline entirely — the
+//   raw parse-only AST.
+//
+// Returns diagnostics and an AST JSON string, or an error message.
 async function doRender(
   qmdContent: string,
-  _options: { scrollSyncEnabled: boolean; documentPath?: string }
+  options: { scrollSyncEnabled: boolean; documentPath?: string; format: string }
 ): Promise<RenderResult> {
   if (!isWasmReady()) {
     return {
@@ -64,7 +77,49 @@ async function doRender(
     };
   }
 
-  // Parse to AST
+  if (pipelineKindForFormat(options.format) === 'preview') {
+    if (!options.documentPath) {
+      return {
+        success: false,
+        error: 'q2-preview requires a document path (renderPageInProject reads from VFS)',
+        diagnostics: [],
+      };
+    }
+
+    const result = await renderPageInProject(options.documentPath);
+    const allDiagnostics: Diagnostic[] = [
+      ...(result.diagnostics ?? []),
+      ...(result.warnings ?? []),
+    ];
+
+    if (result.success) {
+      const astJson = result.ast_json;
+      if (astJson === undefined) {
+        return {
+          success: false,
+          error: 'q2-preview render succeeded but produced no ast_json — backend bug',
+          diagnostics: allDiagnostics,
+        };
+      }
+      return {
+        success: true,
+        astJson,
+        diagnostics: allDiagnostics,
+      };
+    } else {
+      const errorMsg =
+        typeof result.error === 'string'
+          ? result.error
+          : JSON.stringify(result.error, null, 2) || 'Unknown error';
+      return {
+        success: false,
+        diagnostics: allDiagnostics,
+        error: errorMsg,
+      };
+    }
+  }
+
+  // q2-debug / q2-slides path: parse-only, no transform pipeline.
   const result = await parseQmdToAst(qmdContent);
 
   // Collect all diagnostics from both success and error paths
@@ -152,7 +207,7 @@ export default function ReactPreview({
   const doRenderWithStateManagement = useCallback(async (qmdContent: string, documentPath?: string) => {
     lastContentRef.current = qmdContent;
 
-    const result = await doRender(qmdContent, { scrollSyncEnabled, documentPath });
+    const result = await doRender(qmdContent, { scrollSyncEnabled, documentPath, format });
     if (qmdContent !== lastContentRef.current) return;
 
     // Update diagnostics
@@ -183,7 +238,7 @@ export default function ReactPreview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [scrollSyncEnabled, onDiagnosticsChange]);
+  }, [scrollSyncEnabled, onDiagnosticsChange, onAstChange, format]);
 
   // Immediate render update (no debounce)
   const updatePreview = useCallback((newContent: string, documentPath?: string) => {
@@ -205,15 +260,29 @@ export default function ReactPreview({
     setCurrentError(null);
   }, [currentFile?.path]);
 
-  // Handler for AST modifications - converts AST back to QMD and updates content
+  // Handler for AST modifications - converts AST back to QMD and updates content.
+  //
+  // q2-preview is **read-only in v1** (Plan 1 §"Multi-plan contract:
+  // read-only mode lifts at Plan 7"). The post-pipeline AST diverges
+  // from source enough that a naive incrementalWriteQmd would
+  // corrupt the qmd; Plan 7 lifts this guard once the writer's
+  // round-trip machinery understands q2-preview's transform shapes
+  // (Synthetic / Derived / atomic CustomNodes). Component-driven
+  // edits (kanban drag, comment buttons in Plan 2) call this and
+  // silently no-op with a console.warn — that is the accepted
+  // post-Plan-2 UX gap until Plan 7 ships.
   const handleSetAst = useCallback((newAst: any) => {
+    if (pipelineKindForFormat(format) === 'preview') {
+      console.warn('q2-preview is read-only in v1; AST edit dropped (Plan 7 lifts this guard)');
+      return;
+    }
     try {
       const newQmd = incrementalWriteQmd(content, newAst);
       onContentRewrite(newQmd);
     } catch (err) {
       console.error('Failed to write AST back to QMD:', err);
     }
-  }, [content, onContentRewrite]);
+  }, [content, onContentRewrite, format]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>

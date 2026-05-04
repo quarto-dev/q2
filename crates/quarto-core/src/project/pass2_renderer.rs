@@ -238,10 +238,49 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
 // WASM impl: keeps HTML + drained artifacts in memory, no disk I/O.
 // ───────────────────────────────────────────────────────────────────
 
+/// The rendered payload produced by a Pass-2 WASM renderer.
+///
+/// `RenderToHtmlRenderer` produces [`Pass2Payload::Html`]; the
+/// q2-preview renderer (added in a later commit) produces
+/// [`Pass2Payload::AstJson`]. Both variants share the rest of
+/// [`WasmPassTwoOutput`]'s fields (source path, diagnostics,
+/// source context, page artifacts) so the orchestrator can drive
+/// either renderer through the same code path and only branch on
+/// the payload at the response-building tail.
+#[derive(Debug)]
+pub enum Pass2Payload {
+    /// Rendered HTML, ready for the iframe post-processor.
+    Html(String),
+    /// Serialized Pandoc AST JSON, ready for the React-side
+    /// q2-preview renderer.
+    AstJson(String),
+}
+
+impl Pass2Payload {
+    /// Returns the HTML string when this is [`Pass2Payload::Html`],
+    /// otherwise `None`. Convenience for callers that statically
+    /// know they invoked the HTML renderer (e.g. native tests).
+    pub fn as_html(&self) -> Option<&str> {
+        match self {
+            Pass2Payload::Html(s) => Some(s.as_str()),
+            Pass2Payload::AstJson(_) => None,
+        }
+    }
+
+    /// Returns the AST JSON string when this is
+    /// [`Pass2Payload::AstJson`], otherwise `None`.
+    pub fn as_ast_json(&self) -> Option<&str> {
+        match self {
+            Pass2Payload::AstJson(s) => Some(s.as_str()),
+            Pass2Payload::Html(_) => None,
+        }
+    }
+}
+
 /// Output of a single Pass-2 render under
-/// [`RenderToHtmlRenderer`]. Carries everything the orchestrator
-/// (and ultimately the WASM caller) needs to surface back to the
-/// hub-client preview.
+/// [`RenderToHtmlRenderer`] (or, in a later commit, the q2-preview
+/// renderer). Carries everything the orchestrator (and ultimately
+/// the WASM caller) needs to surface back to the hub-client preview.
 ///
 /// Cross-platform on purpose: native code rarely wants this shape,
 /// but the type's `RenderToHtmlRenderer` impl block is gated to
@@ -252,8 +291,9 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
 pub struct WasmPassTwoOutput {
     /// Source `.qmd` path (as the orchestrator received it).
     pub source_path: std::path::PathBuf,
-    /// Rendered HTML for the active page.
-    pub html: String,
+    /// The rendered payload — HTML for `RenderToHtmlRenderer`,
+    /// AST JSON for the q2-preview renderer.
+    pub payload: Pass2Payload,
     /// Per-page diagnostics emitted by the head pipeline plus
     /// every Pass-2 stage.
     pub diagnostics: Vec<DiagnosticMessage>,
@@ -265,6 +305,18 @@ pub struct WasmPassTwoOutput {
     /// receives Project-scoped artifacts separately (Phase 5
     /// invariant).
     pub page_artifacts: ArtifactStore,
+}
+
+impl WasmPassTwoOutput {
+    /// Returns the HTML payload, panicking if the payload is not
+    /// [`Pass2Payload::Html`]. Convenience for callers (notably
+    /// native test fixtures) that statically know they invoked
+    /// the HTML renderer.
+    pub fn html(&self) -> &str {
+        self.payload
+            .as_html()
+            .expect("WasmPassTwoOutput::html() called on non-Html payload")
+    }
 }
 
 /// In-memory Pass-2 renderer used by the WASM hub-client live
@@ -411,7 +463,7 @@ impl Pass2Renderer for RenderToHtmlRenderer {
 
         Ok(WasmPassTwoOutput {
             source_path: doc_info.input.clone(),
-            html: render_output.html,
+            payload: Pass2Payload::Html(render_output.html),
             diagnostics: render_output.diagnostics,
             source_context: render_output.source_context,
             page_artifacts: ctx.artifacts,
@@ -436,6 +488,133 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         // already embeds in HTML. `lib_dir` is intentionally
         // ignored — the post-processor just needs to find the
         // bytes at the URL's path.
+        ResourceResolverContext::vfs_root(self.vfs_root.clone())
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// q2-preview impl: produces AST JSON (not HTML), shares the same
+// page/project artifact handling and `WasmPassTwoOutput` shape via
+// the [`Pass2Payload`] enum.
+// ───────────────────────────────────────────────────────────────────
+
+/// In-memory Pass-2 renderer for the q2-preview format (Plan 1).
+///
+/// Sibling of [`RenderToHtmlRenderer`]. Wraps
+/// [`crate::pipeline::render_qmd_to_preview_ast`] with the same
+/// per-page VFS-root resolver pattern, and produces a
+/// [`WasmPassTwoOutput`] whose payload variant is
+/// [`Pass2Payload::AstJson`]. The orchestrator dispatches at the
+/// response tail; everything in between (artifact draining,
+/// diagnostics, source context, page artifacts) is identical to
+/// `RenderToHtmlRenderer`.
+pub struct RenderToPreviewAstRenderer {
+    /// Synthetic VFS root under which every artifact lives in WASM.
+    /// Same semantics as [`RenderToHtmlRenderer::new`].
+    vfs_root: std::path::PathBuf,
+}
+
+impl RenderToPreviewAstRenderer {
+    /// Build a q2-preview renderer that resolves artifacts under the
+    /// given synthetic VFS root.
+    pub fn new(vfs_root: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            vfs_root: vfs_root.into(),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Pass2Renderer for RenderToPreviewAstRenderer {
+    type Output = WasmPassTwoOutput;
+
+    async fn render(
+        &mut self,
+        doc_info: &DocumentInfo,
+        format: &Format,
+        _format_str: &str,
+        project: &ProjectContext,
+        index: Arc<ProjectIndex>,
+        runtime: Arc<dyn SystemRuntime>,
+        project_artifacts: &mut ArtifactStore,
+    ) -> Result<Self::Output> {
+        use crate::pipeline::render_qmd_to_preview_ast;
+        use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
+
+        // Read source bytes from the runtime (VFS in WASM, native FS
+        // for native test runs). Identical to `RenderToHtmlRenderer`.
+        let input_bytes = runtime.file_read(&doc_info.input).map_err(|e| {
+            crate::error::QuartoError::other(format!(
+                "Failed to read {} for Pass-2 q2-preview render: {}",
+                doc_info.input.display(),
+                e
+            ))
+        })?;
+
+        let resolver = ResourceResolverContext::vfs_root(self.vfs_root.clone());
+
+        let binaries = BinaryDependencies::new();
+        let options = RenderOptions {
+            verbose: false,
+            execute: false,
+            use_freeze: false,
+            output_path: None,
+        };
+        let mut ctx =
+            RenderContext::new(project, doc_info, format, &binaries).with_options(options);
+        ctx.project_index = Some(index);
+        ctx.resource_resolver = Some(resolver.clone());
+
+        let source_name = doc_info.input.to_string_lossy().to_string();
+
+        let preview_output =
+            render_qmd_to_preview_ast(&input_bytes, &source_name, &mut ctx, runtime.clone())
+                .await?;
+
+        // Drain Project-scoped artifacts. Identical branching to
+        // `RenderToHtmlRenderer` — shared lib dir merges into the
+        // accumulator (websites use `flush_site_libs` in
+        // `post_render`), no-lib-dir flushes in-place. The choice
+        // is artifact-flow, not payload-flow, so HTML and q2-preview
+        // share it verbatim.
+        let drained = ctx.artifacts.drain_project_scoped();
+        let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
+        if lib_dir.is_empty() {
+            super::website_post_render::flush_site_libs(&drained, &resolver, runtime.as_ref())?;
+        } else {
+            project_artifacts.merge_into_project(drained).map_err(|e| {
+                crate::error::QuartoError::other(format!(
+                    "Project-scoped artifact merge failed for {}: {}",
+                    doc_info.input.display(),
+                    e
+                ))
+            })?;
+        }
+
+        Ok(WasmPassTwoOutput {
+            source_path: doc_info.input.clone(),
+            payload: Pass2Payload::AstJson(preview_output.ast_json),
+            diagnostics: preview_output.diagnostics,
+            source_context: preview_output.source_context,
+            page_artifacts: ctx.artifacts,
+        })
+    }
+
+    fn output_path(_output: &Self::Output) -> Option<&Path> {
+        None
+    }
+
+    fn build_project_resolver(
+        &self,
+        _project: &ProjectContext,
+        _lib_dir: &str,
+    ) -> ResourceResolverContext {
+        // Same coordinate system as `RenderToHtmlRenderer` —
+        // `vfs_root` collapses every artifact under
+        // `{vfs_root}/{path}`. q2-preview's `ResourceCollectorTransform`
+        // (which runs in the q2-preview pipeline) embeds image URLs
+        // using this resolver, so the iframe sees URLs that resolve
+        // to the matching VFS path.
         ResourceResolverContext::vfs_root(self.vfs_root.clone())
     }
 }

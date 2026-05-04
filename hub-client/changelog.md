@@ -16,6 +16,10 @@ be in reverse chronological order (latest first).
 ### 2026-05-10
 
 - [`979982bd`](https://github.com/quarto-dev/q2/commits/979982bd): Custom syntax highlighting now works in Quarto Hub projects (bd-izfv) — user-supplied tree-sitter grammars under `_quarto/grammars/<lang>/` now apply to code blocks even when the qmd file lives under a `_quarto.yml` ancestor, matching the single-file render path.
+### 2026-05-06
+
+- [`a5e00b20`](https://github.com/quarto-dev/q2/commits/a5e00b20): Setting `format: q2-preview` in a document's YAML frontmatter now drives the live preview through the q2-preview pipeline — full shortcodes, Lua filters, sectionize, crossref, sidebar/navbar metadata, embedded image artifacts — rendered through the AstIframe alongside q2-debug. Read-only in v1: component-driven edits (kanban drag, future comment buttons) silently no-op with a console warning; Plan 7 lifts that guard.
+- [`845e8e71`](https://github.com/quarto-dev/q2/commits/845e8e71): Internal API extension for q2-preview Plan 1 — `RenderResult` gains an optional `ast_json?: string` field (paired with the existing `html?`). No user-visible behavior change yet; consumers of `renderQmd` / `renderPageInProject` see the same JSON envelope for HTML responses.
 
 ### 2026-05-05
 

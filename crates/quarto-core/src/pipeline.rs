@@ -150,6 +150,33 @@ pub struct AstOutput {
     pub source_context: SourceContext,
 }
 
+/// Output of [`render_qmd_to_preview_ast`] — the q2-preview entry-point
+/// sibling of [`render_qmd_to_html`].
+///
+/// Carries the **already-serialized** AST JSON (not the typed
+/// `Pandoc`) so the renderer can plumb it straight into
+/// `Pass2Payload::AstJson` without re-running the JSON writer.
+/// Compared to [`AstOutput`], `PreviewAstOutput` skips the typed
+/// `Pandoc` field — the q2-preview pipeline runs the full transform
+/// pipeline, which mutates the AST extensively, so the typed value
+/// is no longer interesting to callers; only the serialized form is.
+#[derive(Debug)]
+pub struct PreviewAstOutput {
+    /// The transformed Pandoc AST, serialized as JSON via
+    /// `pampa::writers::json::write_with_config` with
+    /// `include_inline_locations: true`. Ready to ship to the
+    /// React iframe.
+    pub ast_json: String,
+    /// Diagnostics emitted by the head pipeline plus every Pass-2
+    /// stage that ran. Pipe to `RenderResponse.warnings` after
+    /// translation via `diagnostics_to_json`.
+    pub diagnostics: Vec<DiagnosticMessage>,
+    /// Source-context handle for translating diagnostic offsets
+    /// into line/column positions on the JS side. Same shape as
+    /// [`RenderOutput::source_context`].
+    pub source_context: SourceContext,
+}
+
 /// Build the standard HTML pipeline stages.
 ///
 /// Returns the stages as a vector, allowing callers to customize before
@@ -286,6 +313,52 @@ pub fn build_html_pipeline_stages_with_options(
     };
     stages.push(Box::new(apply_stage));
     stages
+}
+
+/// Build the q2-preview pipeline stages (Plan 1).
+///
+/// Identical prefix to [`build_html_pipeline_stages_with_options`]
+/// through `ResourceReportStage`, then **stops** — the HTML-specific
+/// tail (`CodeHighlightStage`, `RenderHtmlBodyStage`,
+/// `ApplyTemplateStage`) is intentionally excluded because q2-preview
+/// returns the AST directly to the React iframe rather than rendering
+/// it to HTML. The exact stage list and order is asserted by a
+/// structural test (`build_q2_preview_pipeline_stages_structural`).
+///
+/// `AstTransformsStage` itself is shared with the HTML pipeline; it
+/// dispatches at run-time on `ctx.format.pipeline_kind` to choose
+/// between `build_transform_pipeline` (HTML) and
+/// `build_q2_preview_transform_pipeline` (q2-preview). The dispatch
+/// is added in a later commit; this function is a pure addition with
+/// no consumers yet.
+///
+/// `CompileThemeCssStage` is included so the compiled theme CSS
+/// lands in VFS at `/.quarto/project-artifacts/styles.css` after a
+/// q2-preview render. The artifact is unread by Plan 1 itself but
+/// honored as a forward-compat contract for Plan 2's stylesheet
+/// injection (Plan 1 §"Multi-plan contract: theme CSS artifact").
+pub fn build_q2_preview_pipeline_stages(
+    engine_registry: Option<crate::engine::EngineRegistry>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let engine_stage = match engine_registry {
+        Some(reg) => EngineExecutionStage::with_registry(reg),
+        None => EngineExecutionStage::new(),
+    };
+    vec![
+        Box::new(ParseDocumentStage::new()),
+        Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
+        Box::new(DocumentProfileStage::new()),
+        Box::new(LinkResolutionStage::new()),
+        Box::new(UnwrapProfileStage::new()),
+        Box::new(PreEngineSugaringStage::new()),
+        Box::new(engine_stage),
+        Box::new(CompileThemeCssStage::new()),
+        Box::new(UserFiltersStage::pre()),
+        Box::new(AstTransformsStage::new()),
+        Box::new(UserFiltersStage::post()),
+        Box::new(ResourceReportStage::new()),
+    ]
 }
 
 /// Build the standard HTML pipeline.
@@ -691,6 +764,94 @@ pub async fn render_qmd_to_html(
     })
 }
 
+/// Render QMD content to AST JSON for the q2-preview format (Plan 1).
+///
+/// Sibling of [`render_qmd_to_html`]. Drives the q2-preview stage
+/// list (everything through `ResourceReportStage`, no HTML
+/// rendering) and serializes the resulting Pandoc AST to JSON via
+/// `pampa::writers::json::write_with_config` so the React iframe
+/// can render it directly.
+///
+/// # Arguments
+///
+/// * `content` - The QMD source content as bytes
+/// * `source_name` - Name of the source file (for error messages
+///   and the `ASTContext::filenames` slot the JSON writer reads)
+/// * `ctx` - Render context. Should have a `resource_resolver`
+///   set so `ResourceCollectorTransform` rewrites image URLs to
+///   the same path the consumer (e.g. `RenderToPreviewAstRenderer`)
+///   uses when flushing artifacts to VFS.
+/// * `runtime` - System runtime for filesystem operations
+///
+/// # Returns
+///
+/// A [`PreviewAstOutput`] carrying the serialized AST plus
+/// diagnostics and source context.
+///
+/// # Errors
+///
+/// Returns an error if parsing fails, transforms fail, or the JSON
+/// serialization fails (e.g. due to a non-UTF-8 byte sequence in
+/// the writer output, which would indicate a writer bug).
+pub async fn render_qmd_to_preview_ast(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<PreviewAstOutput> {
+    // The q2-preview stage list excludes `CodeHighlightStage` /
+    // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
+    // pipeline returns `DocumentAst`, not `RenderedOutput`.
+    // `EngineExecutionStage` uses the default registry; an
+    // override is not currently exposed (no consumer needs it
+    // for v1).
+    let stages = build_q2_preview_pipeline_stages(None);
+
+    let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    let ast = output.into_document_ast().ok_or_else(|| {
+        crate::error::QuartoError::Other(
+            "q2-preview pipeline did not produce DocumentAst".to_string(),
+        )
+    })?;
+
+    // Source context for translating diagnostic offsets into
+    // line/column on the JS side.
+    let mut source_context = SourceContext::new();
+    let content_str = String::from_utf8_lossy(content).to_string();
+    source_context.add_file(source_name.to_string(), Some(content_str));
+
+    // Build an `ASTContext` from the source context — the JSON
+    // writer needs this to emit `[file_id, start, end]` source-
+    // location triples for inlines (`include_inline_locations:
+    // true`). This shape is lifted verbatim from the q2-debug
+    // entry point (`wasm-quarto-hub-client/src/lib.rs:914-916`)
+    // so q2-preview's JSON envelope matches q2-debug's at the
+    // wire level.
+    let ast_context = pampa::pandoc::ASTContext {
+        filenames: vec![source_name.to_string()],
+        example_list_counter: std::cell::Cell::new(1),
+        source_context: source_context.clone(),
+        parent_source_info: None,
+    };
+    let json_config = pampa::writers::json::JsonConfig {
+        include_inline_locations: true,
+    };
+    let mut buf = Vec::new();
+    pampa::writers::json::write_with_config(&ast.ast, &ast_context, &mut buf, &json_config)
+        .map_err(|e| {
+            crate::error::QuartoError::Other(format!("q2-preview JSON serialization failed: {e:?}"))
+        })?;
+    let ast_json = String::from_utf8(buf).map_err(|e| {
+        crate::error::QuartoError::Other(format!("q2-preview JSON output was not valid UTF-8: {e}"))
+    })?;
+
+    Ok(PreviewAstOutput {
+        ast_json,
+        diagnostics,
+        source_context,
+    })
+}
+
 /// Build the standard transform pipeline.
 ///
 /// The transforms are applied in this order:
@@ -861,6 +1022,85 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
+    pipeline.push(Box::new(ResourceCollectorTransform::new()));
+
+    pipeline
+}
+
+/// Build the q2-preview transform pipeline (Plan 1).
+///
+/// This is a fresh, explicit list — *not* a filtered view of
+/// [`build_transform_pipeline`]. Same constructor signature so the
+/// drift-protection helper (`assert_filtered_subset`) can compare
+/// the two pipelines apples-to-apples; same transform constructions
+/// (notably `ShortcodeResolveTransform::with_lua_support`) so
+/// shortcode-and-Lua semantics match the HTML pipeline.
+///
+/// The 19 transforms below are everything from [`build_transform_pipeline`]
+/// minus 12 explicitly excluded ones (see the drift test for the
+/// exclusion list and rationale). Three categories of exclusion:
+///
+/// 1. **Preserve CustomNodes for React** — `CalloutResolveTransform`,
+///    `CrossrefRenderTransform`. The wrappers stay so React's
+///    type-specific components (Plan 2) can render Callout / Theorem
+///    / Proof / FloatRefTarget / Equation / CrossrefResolvedRef.
+/// 2. **Synthesize-with-no-preimage** — `TitleBlockTransform`,
+///    `FootnotesTransform`, `AppendixStructureTransform`. These
+///    construct containers with no source backing; deferred to a
+///    future plan with wrapper-CustomNode round-trip support.
+/// 3. **HTML-pipeline-specific outputs** — `TocRenderTransform`,
+///    `NavbarRenderTransform`, `SidebarRenderTransform`,
+///    `PageNavRenderTransform`, `FooterRenderTransform`,
+///    `LinkRewriteTransform`, `WebsiteFaviconTransform`. These
+///    produce HTML strings or `.qmd → .html` rewrites that React
+///    consumes from structured metadata directly.
+///
+/// `AstTransformsStage::run()` dispatches between this and
+/// `build_transform_pipeline` based on `ctx.format.pipeline_kind`
+/// (added in a later commit). This function is a pure addition with
+/// no consumers yet.
+pub fn build_q2_preview_transform_pipeline(
+    shortcode_paths: Vec<std::path::PathBuf>,
+    extensions: Vec<crate::extension::types::Extension>,
+    runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
+    target_format: String,
+) -> TransformPipeline {
+    let mut pipeline: TransformPipeline = TransformPipeline::new();
+
+    // === NORMALIZATION PHASE ===
+    pipeline.push(Box::new(CalloutTransform::new()));
+    pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
+        shortcode_paths,
+        extensions,
+        runtime,
+        target_format,
+    )));
+    pipeline.push(Box::new(MetadataNormalizeTransform::new()));
+    pipeline.push(Box::new(WebsiteTitlePrefixTransform::new()));
+    pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
+    pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    pipeline.push(Box::new(SectionizeTransform::new()));
+    pipeline.push(Box::new(TheoremSugarTransform::new()));
+    pipeline.push(Box::new(ProofSugarTransform::new()));
+    pipeline.push(Box::new(FloatRefTargetSugarTransform::new()));
+    pipeline.push(Box::new(EquationLabelTransform::new()));
+
+    // === CROSSREF PHASE ===
+    pipeline.push(Box::new(CrossrefIndexTransform::new()));
+    pipeline.push(Box::new(CrossrefResolveTransform::new()));
+
+    // === NAVIGATION PHASE ===
+    // All five Generate transforms run; the corresponding Render
+    // transforms are excluded because React consumes structured
+    // navigation metadata directly. The Generate transforms no-op
+    // when no `ProjectIndex` is present (single-file q2-preview).
+    pipeline.push(Box::new(TocGenerateTransform::new()));
+    pipeline.push(Box::new(NavbarGenerateTransform::new()));
+    pipeline.push(Box::new(SidebarGenerateTransform::new()));
+    pipeline.push(Box::new(PageNavGenerateTransform::new()));
+    pipeline.push(Box::new(FooterGenerateTransform::new()));
+
+    // === FINALIZATION PHASE ===
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
     pipeline
@@ -1656,6 +1896,171 @@ mod tests {
             !output.html.contains("Original body"),
             "rendered HTML must not contain the original body — replay should override; got:\n{}",
             &output.html,
+        );
+    }
+
+    // ─── q2-preview pipeline (Plan 1) ────────────────────────────
+
+    /// Drift-protection helper for subset transform pipelines.
+    ///
+    /// Asserts that `subset` is exactly `full` filtered by
+    /// `expected_excluded`, preserving order. Catches every drift
+    /// mode in one shot: a transform added to `full`, renamed,
+    /// reordered on either side, or removed from `subset`.
+    ///
+    /// `drift_doc_pointer` is included in failure messages to
+    /// direct the reader to the rationale (a plan section, a
+    /// design doc, etc.).
+    ///
+    /// Assumes `subset ⊆ full` — if a transform appears in `subset`
+    /// that's not in `full`, the order assertion fails with a
+    /// useful diff.
+    fn assert_filtered_subset(
+        full: &TransformPipeline,
+        subset: &TransformPipeline,
+        expected_excluded: &[&str],
+        drift_doc_pointer: &str,
+    ) {
+        use std::collections::HashSet;
+
+        let full_names: Vec<&str> = full.iter().map(|t| t.name()).collect();
+        let subset_names: Vec<&str> = subset.iter().map(|t| t.name()).collect();
+        let excluded: HashSet<&str> = expected_excluded.iter().copied().collect();
+
+        // Catch typos / renames in the exclusion list early.
+        let unknown: Vec<_> = expected_excluded
+            .iter()
+            .filter(|n| !full_names.contains(n))
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "expected_excluded names not in full pipeline: {unknown:?}. \
+             See {drift_doc_pointer}."
+        );
+
+        let computed: Vec<&str> = full_names
+            .iter()
+            .copied()
+            .filter(|n| !excluded.contains(n))
+            .collect();
+        assert_eq!(
+            subset_names, computed,
+            "Subset pipeline drift. See {drift_doc_pointer}."
+        );
+    }
+
+    /// Drift-protection: q2-preview's transform list must be
+    /// exactly the HTML transform list minus the 12 excluded
+    /// transforms. New transforms added to `build_transform_pipeline`
+    /// without an explicit decision (include in q2-preview, or add
+    /// to the exclusion list) trip this test.
+    ///
+    /// See `claude-notes/plans/2026-05-04-q2-preview-plan-1-pipeline.md`
+    /// §"Transform list for q2-preview" for the rationale of each
+    /// exclusion.
+    #[test]
+    fn build_q2_preview_transform_pipeline_is_subset_of_html() {
+        // Same constructor args as `build_transform_pipeline` — the
+        // helper iterates pipelines by name, so the actual runtime
+        // / extension list / target_format don't matter here.
+        let runtime = make_test_runtime();
+        let html = build_transform_pipeline(vec![], vec![], runtime.clone(), "html".to_string());
+        let preview =
+            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+
+        let expected_excluded = &[
+            "callout-resolve",
+            "website-favicon",
+            "title-block",
+            "footnotes",
+            "toc-render",
+            "navbar-render",
+            "sidebar-render",
+            "page-nav-render",
+            "footer-render",
+            "link-rewrite",
+            "appendix-structure",
+            "crossref-render",
+        ];
+        assert_filtered_subset(
+            &html,
+            &preview,
+            expected_excluded,
+            "Plan 1 §\"Transform list for q2-preview\"",
+        );
+    }
+
+    /// `render_qmd_to_preview_ast` runs the q2-preview pipeline
+    /// (CalloutTransform sugar, no CalloutResolveTransform) so a
+    /// callout survives as a `__quarto_custom_node` wrapper Div in
+    /// the serialized JSON. This is the contract Plan 2 (React
+    /// CustomNode components) consumes.
+    #[test]
+    fn render_qmd_to_preview_ast_preserves_callout_custom_node() {
+        let content = b"---\ntitle: Test\nformat: q2-preview\n---\n\n\
+                        ::: {.callout-warning}\n## Watch Out\n\nBe careful!\n:::\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime,
+        ))
+        .expect("q2-preview render");
+
+        let snippet = || &output.ast_json[..output.ast_json.len().min(800)];
+
+        // JSON should contain the wrapper Div class + the
+        // type-name attribute pampa emits for CustomNodes.
+        assert!(
+            output.ast_json.contains("__quarto_custom_node"),
+            "expected wrapper class in q2-preview JSON; got:\n{}",
+            snippet()
+        );
+        assert!(
+            output.ast_json.contains("data-custom-type"),
+            "expected data-custom-type attribute; got:\n{}",
+            snippet()
+        );
+        assert!(
+            output.ast_json.contains("Callout"),
+            "expected Callout type-name in JSON; got:\n{}",
+            snippet()
+        );
+    }
+
+    /// Structural test for `build_q2_preview_pipeline_stages` —
+    /// asserts the exact stage list and order. The stage list ends
+    /// after `resource-report`; the HTML-specific tail
+    /// (`code-highlight`, `render-html-body`, `apply-template`) is
+    /// excluded.
+    #[test]
+    fn build_q2_preview_pipeline_stages_structural() {
+        let stages = build_q2_preview_pipeline_stages(None);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "parse-document",
+                "metadata-merge",
+                "include-expansion",
+                "document-profile",
+                "link-resolution",
+                "unwrap-profile",
+                "pre-engine-sugaring",
+                "engine-execution",
+                "compile-theme-css",
+                "user-filters-pre",
+                "ast-transforms",
+                "user-filters-post",
+                "resource-report",
+            ],
+            "q2-preview stage list drift; see Plan 1 §Scope and \
+             §\"Resolved decisions\""
         );
     }
 }

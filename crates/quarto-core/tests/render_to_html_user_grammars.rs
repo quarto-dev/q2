@@ -139,14 +139,14 @@ fn project_render_threads_user_grammar_provider() {
     let output = render_with_provider(&active, provider);
 
     assert!(
-        output.html.contains("<span class=\"hl-marker\""),
+        output.html().contains("<span class=\"hl-marker\""),
         "expected the stub provider's hl-marker span to appear in rendered HTML; got:\n{}",
-        snippet(&output.html),
+        snippet(output.html()),
     );
     assert!(
-        !output.html.contains("data-hl-spans="),
+        !output.html().contains("data-hl-spans="),
         "raw data-hl-spans attribute should not leak into the rendered HTML; got:\n{}",
-        snippet(&output.html),
+        snippet(output.html()),
     );
 }
 

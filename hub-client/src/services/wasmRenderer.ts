@@ -690,6 +690,14 @@ export interface RenderResult {
   html: string;
   success: boolean;
   error?: string;
+  /**
+   * Serialized Pandoc AST JSON for the q2-preview format.
+   * Populated by the q2-preview pipeline branch (added in a
+   * later commit), `undefined` for HTML / error responses.
+   * Consumers dispatch on which of `html` / `ast_json` is
+   * present.
+   */
+  ast_json?: string;
   /** Structured error diagnostics with line/column information for Monaco. */
   diagnostics?: Diagnostic[];
   /** Structured warning diagnostics with line/column information for Monaco. */

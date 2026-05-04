@@ -32,6 +32,7 @@ use std::sync::{Arc, OnceLock};
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
     QuartoError, RenderContext, RenderOptions, ResourceResolverContext, render_qmd_to_html,
+    render_qmd_to_preview_ast,
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
@@ -768,8 +769,18 @@ struct RenderResponse {
     success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    /// Rendered HTML for the active page. Populated by the
+    /// HTML-pipeline branch (single-doc and project-active),
+    /// `None` for q2-preview / error responses.
     #[serde(skip_serializing_if = "Option::is_none")]
     html: Option<String>,
+    /// Serialized Pandoc AST JSON for the q2-preview format.
+    /// Populated by the q2-preview pipeline branch (added in a
+    /// later commit), `None` for HTML / error responses. The JS
+    /// layer dispatches on which of `html` / `ast_json` is
+    /// present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ast_json: Option<String>,
     /// Structured diagnostics (errors) with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
     diagnostics: Option<Vec<JsonDiagnostic>>,
@@ -1011,133 +1022,16 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
     // Read the file from VFS
     let content = match runtime.file_read(path) {
         Ok(bytes) => bytes,
-        Err(e) => {
-            return serde_json::to_string(&RenderResponse {
-                success: false,
-                error: Some(format!("Failed to read file: {}", e)),
-                html: None,
-                diagnostics: None,
-                warnings: None,
-                pass1_failures: None,
-            })
-            .unwrap();
-        }
+        Err(e) => return error_response(format!("Failed to read file: {}", e)),
     };
 
     // Discover project context from VFS (finds _quarto.yml in parent directories)
     let project = match ProjectContext::discover(path, runtime) {
         Ok(p) => p,
-        Err(e) => {
-            return serde_json::to_string(&RenderResponse {
-                success: false,
-                error: Some(format!("Failed to discover project context: {}", e)),
-                html: None,
-                diagnostics: None,
-                warnings: None,
-                pass1_failures: None,
-            })
-            .unwrap();
-        }
-    };
-    let doc = DocumentInfo::from_path(path);
-    let binaries = BinaryDependencies::new();
-
-    let content_str = std::str::from_utf8(&content).unwrap_or("");
-    let format_str = detect_format_from_content(content_str);
-    let format = match Format::from_format_string(&format_str) {
-        Ok(f) => f,
-        Err(e) => {
-            return serde_json::to_string(&RenderResponse {
-                success: false,
-                error: Some(e),
-                html: None,
-                diagnostics: None,
-                warnings: None,
-                pass1_failures: None,
-            })
-            .unwrap();
-        }
+        Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
     };
 
-    let options = RenderOptions {
-        verbose: false,
-        execute: false,
-        use_freeze: false,
-        output_path: None,
-    };
-
-    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
-    if let Some(provider) = user_grammars {
-        ctx.user_grammar_provider = Some(Rc::new(RefCell::new(provider)));
-    }
-
-    // Use the unified async pipeline (same as CLI). Phase 5:
-    // attach a VFS-root resolver so artifacts (theme CSS,
-    // extension deps) get URLs of the form
-    // `/.quarto/project-artifacts/<artifact_path>` and the
-    // browser-side post-processor reads them from VFS at the
-    // matching synthetic path.
-    let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
-    // Phase 6: also expose the resolver to AST transforms via
-    // RenderContext for body-link rewriting.
-    ctx.resource_resolver = Some(resolver.clone());
-    let config = HtmlRenderConfig::with_resolver(resolver.clone());
-    let source_name = path.to_string_lossy();
-
-    // Share the global VFS runtime with the pipeline
-    let runtime_arc: Arc<dyn SystemRuntime> =
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
-
-    match render_qmd_to_html(&content, &source_name, &mut ctx, &config, runtime_arc).await {
-        Ok(output) => {
-            // Populate VFS with artifacts so post-processor can resolve them.
-            // Phase 5: route every artifact through the resolver so the
-            // VFS path matches the URL embedded in HTML.
-            for (_key, artifact) in ctx.artifacts.iter() {
-                if let Some(artifact_path) = &artifact.path {
-                    let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
-                    runtime.add_file(&vfs_path, artifact.content.clone());
-                }
-            }
-
-            // Convert warnings to structured JSON with line/column info
-            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
-            serde_json::to_string(&RenderResponse {
-                success: true,
-                error: None,
-                html: Some(output.html),
-                diagnostics: None,
-                warnings: if warnings.is_empty() {
-                    None
-                } else {
-                    Some(warnings)
-                },
-                pass1_failures: None,
-            })
-            .unwrap()
-        }
-        Err(e) => {
-            // Extract structured diagnostics from parse errors
-            let (error_msg, diagnostics) = match &e {
-                QuartoError::Parse(parse_error) => {
-                    let diags =
-                        diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
-                    (e.to_string(), Some(diags))
-                }
-                _ => (e.to_string(), None),
-            };
-
-            serde_json::to_string(&RenderResponse {
-                success: false,
-                error: Some(error_msg),
-                html: None,
-                diagnostics,
-                warnings: None,
-                pass1_failures: None,
-            })
-            .unwrap()
-        }
-    }
+    render_single_doc_to_response(path, &content, &project, user_grammars).await
 }
 
 /// Render QMD content directly (without reading from VFS).
@@ -1156,111 +1050,11 @@ pub async fn render_qmd_content(
     _template_bundle: &str,
     user_grammars: Option<JsUserGrammars>,
 ) -> String {
-    // Create a virtual path for this content
+    // Synthetic path for path-less render. Source diagnostics
+    // surface as `/input.qmd` to the JS layer.
     let path = Path::new("/input.qmd");
-
-    // Create minimal project context for WASM
     let project = create_wasm_project_context(path);
-    let doc = DocumentInfo::from_path(path);
-    let binaries = BinaryDependencies::new();
-
-    let format_str = detect_format_from_content(content);
-    let format = match Format::from_format_string(&format_str) {
-        Ok(f) => f,
-        Err(e) => {
-            return serde_json::to_string(&RenderResponse {
-                success: false,
-                error: Some(e),
-                html: None,
-                diagnostics: None,
-                warnings: None,
-                pass1_failures: None,
-            })
-            .unwrap_or_default();
-        }
-    };
-
-    let options = RenderOptions {
-        verbose: false,
-        execute: false,
-        use_freeze: false,
-        output_path: None,
-    };
-
-    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
-    if let Some(provider) = user_grammars {
-        ctx.user_grammar_provider = Some(Rc::new(RefCell::new(provider)));
-    }
-
-    // Use the unified async pipeline (same as CLI). Phase 5:
-    // VFS-root resolver (see render_qmd above for context).
-    // TODO: Support custom templates via template_bundle parameter
-    let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
-    let config = HtmlRenderConfig::with_resolver(resolver.clone());
-
-    // Share the global VFS runtime with the pipeline
-    let runtime_arc: Arc<dyn SystemRuntime> =
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
-
-    let result = render_qmd_to_html(
-        content.as_bytes(),
-        "/input.qmd",
-        &mut ctx,
-        &config,
-        runtime_arc,
-    )
-    .await;
-
-    match result {
-        Ok(output) => {
-            // Populate VFS with artifacts so post-processor can resolve them.
-            // Phase 5: route through the resolver so VFS path matches HTML URL.
-            let runtime = get_runtime();
-            for (_key, artifact) in ctx.artifacts.iter() {
-                if let Some(path) = &artifact.path {
-                    let vfs_path = resolver.on_disk_path_for(artifact.scope, path);
-                    runtime.add_file(&vfs_path, artifact.content.clone());
-                }
-            }
-
-            // Convert warnings to structured JSON with line/column info
-            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
-            serde_json::to_string(&RenderResponse {
-                success: true,
-                error: None,
-                html: Some(output.html),
-                diagnostics: None,
-                warnings: if warnings.is_empty() {
-                    None
-                } else {
-                    Some(warnings)
-                },
-                pass1_failures: None,
-            })
-            .unwrap()
-        }
-        Err(e) => {
-            // Extract structured diagnostics from parse errors
-            let (error_msg, diagnostics) = match &e {
-                QuartoError::Parse(parse_error) => {
-                    let diags =
-                        diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
-                    (e.to_string(), Some(diags))
-                }
-                _ => (e.to_string(), None),
-            };
-
-            serde_json::to_string(&RenderResponse {
-                success: false,
-                error: Some(error_msg),
-                html: None,
-                diagnostics,
-                warnings: None,
-                pass1_failures: None,
-            })
-            .unwrap()
-        }
-    }
+    render_single_doc_to_response(path, content.as_bytes(), &project, user_grammars).await
 }
 
 /// Render a single page **in the context of its surrounding project**.
@@ -1365,7 +1159,7 @@ async fn render_single_doc_to_response(
 
     let mut ctx = RenderContext::new(project, &doc, &format, &binaries).with_options(options);
     if let Some(provider) = user_grammars {
-        ctx.user_grammar_provider = Some(Rc::new(RefCell::new(provider)));
+        ctx.user_grammar_provider = Some(std::rc::Rc::new(std::cell::RefCell::new(provider)));
     }
 
     // Phase 5 VFS-root resolver — every artifact resolves under
@@ -1373,42 +1167,69 @@ async fn render_single_doc_to_response(
     // read them from VFS at the matching path.
     let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
     ctx.resource_resolver = Some(resolver.clone());
-    let config = HtmlRenderConfig::with_resolver(resolver.clone());
     let source_name = path.to_string_lossy();
 
     let runtime_arc: Arc<dyn SystemRuntime> =
         Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
-    match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
-        Ok(output) => {
-            // Populate VFS with artifacts — Phase 5 routes both
-            // page- and project-scope artifacts under the same
-            // synthetic root in vfs_root mode.
-            let runtime = get_runtime();
-            for (_key, artifact) in ctx.artifacts.iter() {
-                if let Some(artifact_path) = &artifact.path {
-                    let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
-                    runtime.add_file(&vfs_path, artifact.content.clone());
-                }
+    // Dispatch on `format.pipeline_kind`: q2-preview runs the
+    // q2-preview entry point and returns AST JSON; everything else
+    // runs the HTML pipeline. Both branches share the same prelude
+    // (RenderContext + resolver) and tail (VFS artifact flush +
+    // RenderResponse construction with `skip_serializing_if = None`
+    // on the unused payload field).
+    let (html, ast_json, diagnostics, source_context) = match format.pipeline_kind {
+        Some("preview") => {
+            match render_qmd_to_preview_ast(content, &source_name, &mut ctx, runtime_arc).await {
+                Ok(out) => (
+                    None,
+                    Some(out.ast_json),
+                    out.diagnostics,
+                    out.source_context,
+                ),
+                Err(e) => return render_error_response(e),
             }
-
-            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
-            serde_json::to_string(&RenderResponse {
-                success: true,
-                error: None,
-                html: Some(output.html),
-                diagnostics: None,
-                warnings: if warnings.is_empty() {
-                    None
-                } else {
-                    Some(warnings)
-                },
-                pass1_failures: None,
-            })
-            .unwrap()
         }
-        Err(e) => render_error_response(e),
+        _ => {
+            let config = HtmlRenderConfig::with_resolver(resolver.clone());
+            match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
+                Ok(out) => (Some(out.html), None, out.diagnostics, out.source_context),
+                Err(e) => return render_error_response(e),
+            }
+        }
+    };
+
+    // Populate VFS with artifacts — Phase 5 routes both
+    // page- and project-scope artifacts under the same
+    // synthetic root in vfs_root mode. Format-agnostic: both the
+    // HTML pipeline's `RenderHtmlBodyStage` and the q2-preview
+    // pipeline's `ResourceCollectorTransform` accumulate artifacts
+    // on `ctx.artifacts` using the same resolver, so the iframe
+    // (HTML or AST-iframe) finds the bytes at the matching VFS
+    // path either way.
+    let runtime = get_runtime();
+    for (_key, artifact) in ctx.artifacts.iter() {
+        if let Some(artifact_path) = &artifact.path {
+            let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
+            runtime.add_file(&vfs_path, artifact.content.clone());
+        }
     }
+
+    let warnings = diagnostics_to_json(&diagnostics, &source_context);
+    serde_json::to_string(&RenderResponse {
+        success: true,
+        error: None,
+        html,
+        ast_json,
+        diagnostics: None,
+        warnings: if warnings.is_empty() {
+            None
+        } else {
+            Some(warnings)
+        },
+        pass1_failures: None,
+    })
+    .unwrap()
 }
 
 /// Project-scoped render path — drives the orchestrator with
@@ -1422,7 +1243,9 @@ async fn render_project_active_page_to_response(
     user_grammars: Option<JsUserGrammars>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
-    use quarto_core::project::pass2_renderer::RenderToHtmlRenderer;
+    use quarto_core::project::pass2_renderer::{
+        Pass2Payload, RenderToHtmlRenderer, RenderToPreviewAstRenderer,
+    };
 
     // Detect format from the *active* file's content. (Pass 1 in
     // the orchestrator re-reads each file's bytes — for the active
@@ -1438,11 +1261,15 @@ async fn render_project_active_page_to_response(
         Err(e) => return error_response(e),
     };
 
+    // Wrap once so both pipeline branches can clone the same `Rc`
+    // into their renderer (bd-izfv). Plan 1's dispatch-on-`pipeline_kind`
+    // refactor moved the `RenderToHtmlRenderer::new(...)` call into the
+    // `_ =>` arm; the bd-izfv fix lives here as the per-renderer
+    // attachment.
+    let user_grammars_rc: Option<Rc<RefCell<JsUserGrammars>>> =
+        user_grammars.map(|g| Rc::new(RefCell::new(g)));
+
     let project_type = project_type_for(&project);
-    let mut renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
-    if let Some(provider) = user_grammars {
-        renderer = renderer.with_user_grammars(Rc::new(RefCell::new(provider)));
-    }
 
     // Canonicalize the active path so it matches the form
     // `project.files` was filled with (Pass-2's `RenderMode::ActivePage`
@@ -1451,19 +1278,53 @@ async fn render_project_active_page_to_response(
         .canonicalize(active_path)
         .unwrap_or_else(|_| active_path.to_path_buf());
 
-    let mut pipeline = ProjectPipeline::with_renderer(
-        &mut project,
-        project_type,
-        format,
-        format_str,
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>,
-        renderer,
-    )
-    .with_mode(RenderMode::ActivePage(active_canonical.clone()));
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
-    let summary = match pipeline.run().await {
-        Ok(s) => s,
-        Err(e) => return render_error_response(e),
+    // Dispatch on `format.pipeline_kind`. `pipeline_kind` is
+    // `Option<&'static str>` (Copy), so reading it doesn't move
+    // `format`, leaving it free to consume in the chosen branch.
+    // Both renderers have `type Output = WasmPassTwoOutput;`
+    // (commit 2's enum-payload payoff), so the resulting
+    // `ProjectRenderSummary<WasmPassTwoOutput>` unifies across
+    // arms and the downstream summary-handling code is shared.
+    let kind = format.pipeline_kind;
+    let summary = match kind {
+        Some("preview") => {
+            let renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
+            let mut pipeline = ProjectPipeline::with_renderer(
+                &mut project,
+                project_type,
+                format,
+                format_str,
+                runtime_arc,
+                renderer,
+            )
+            .with_mode(RenderMode::ActivePage(active_canonical.clone()));
+            match pipeline.run().await {
+                Ok(s) => s,
+                Err(e) => return render_error_response(e),
+            }
+        }
+        _ => {
+            let mut renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
+            if let Some(ref provider) = user_grammars_rc {
+                renderer = renderer.with_user_grammars(provider.clone());
+            }
+            let mut pipeline = ProjectPipeline::with_renderer(
+                &mut project,
+                project_type,
+                format,
+                format_str,
+                runtime_arc,
+                renderer,
+            )
+            .with_mode(RenderMode::ActivePage(active_canonical.clone()));
+            match pipeline.run().await {
+                Ok(s) => s,
+                Err(e) => return render_error_response(e),
+            }
+        }
     };
 
     // Locate the active page's output. With `RenderMode::ActivePage`
@@ -1531,10 +1392,20 @@ async fn render_project_active_page_to_response(
     // as a non-zero exit.
     let pass1_failures = pass1_failures_to_json(&summary.pass1_failures);
 
+    // Dispatch on the renderer's payload shape: HTML render fills
+    // `html`, q2-preview render (added in a later commit) fills
+    // `ast_json`. The shared orchestrator code above doesn't care
+    // which.
+    let (html, ast_json) = match active_output.payload {
+        Pass2Payload::Html(s) => (Some(s), None),
+        Pass2Payload::AstJson(s) => (None, Some(s)),
+    };
+
     serde_json::to_string(&RenderResponse {
         success: true,
         error: None,
-        html: Some(active_output.html),
+        html,
+        ast_json,
         diagnostics: None,
         warnings: if warnings.is_empty() {
             None
@@ -1556,6 +1427,7 @@ fn error_response(msg: impl Into<String>) -> String {
         success: false,
         error: Some(msg.into()),
         html: None,
+        ast_json: None,
         diagnostics: None,
         warnings: None,
         pass1_failures: None,
@@ -1577,6 +1449,7 @@ fn render_error_response(e: QuartoError) -> String {
         success: false,
         error: Some(error_msg),
         html: None,
+        ast_json: None,
         diagnostics,
         warnings: None,
         pass1_failures: None,
@@ -1611,6 +1484,7 @@ fn pass_failure_response(
             failure.error
         )),
         html: None,
+        ast_json: None,
         diagnostics,
         warnings: None,
         pass1_failures: None,
