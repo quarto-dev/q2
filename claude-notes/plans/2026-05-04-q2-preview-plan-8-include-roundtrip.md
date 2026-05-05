@@ -329,6 +329,16 @@ component renders the slot's content using the same dispatch.
   back into flat blocks for the HTML writer to handle normally.
 
   Symmetric with `CalloutResolveTransform`. Same shape.
+- **Extension-registration forward-compat**: Plan 8 adds
+  `IncludeExpansion` to the hardcoded `pub const ATOMIC_CUSTOM_NODES`
+  set in `quarto-core`. After the future extension-registration
+  follow-up plan (see Plan 7 §Open questions
+  "is_atomic_custom_node lookup — extension forward-compat"),
+  `IncludeExpansion` will be declared in a built-in's `_extension.yml`
+  via `contributes.custom-nodes: [{type: IncludeExpansion, atomic: true}]`
+  rather than hardcoded in `quarto-core`. The const-based registry
+  Plan 8 ships is forward-compatible — the migration is a data-source
+  change, not a code change.
 
 ## Estimated scope
 

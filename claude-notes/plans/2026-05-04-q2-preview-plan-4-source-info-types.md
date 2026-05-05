@@ -131,7 +131,18 @@ impl By {
 - **Original**: literal source bytes. The default. Most parser output.
 - **Substring**: a textual slice of another SourceInfo. Existing pattern.
 - **Concat**: concatenation of SourceInfos (e.g., from AttrSourceInfo's
-  combine_all). Existing pattern.
+  combine_all). Existing pattern. **Contiguity expectation**: writer
+  paths that need to Verbatim-copy a Concat (Plan 7's `preimage_in`)
+  return `Some(range)` only when all pieces resolve into the target
+  file AND are byte-contiguous in source order (`pieces[i].end ==
+  pieces[i+1].start`). Non-contiguous Concats (rare; would arise if a
+  transform composed source-info from disparate file regions) return
+  `None` from `preimage_in`, and Plan 7's coarsen falls through to
+  Rewrite for that node. This is a Plan 7 invariant, not a Plan 4
+  type-system invariant — Plan 4 doesn't forbid gappy Concats. If a
+  future use case needs to construct a gappy Concat intentionally, no
+  Plan 4 change is required; Plan 7's writer behavior already handles
+  the case.
 - **Synthetic**: NO source preimage. The node was created from nothing.
   Sectionize wrappers, filter constructions, synthesized title h1s.
   Writer omits or recurses (Plan 7).

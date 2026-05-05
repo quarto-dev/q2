@@ -133,6 +133,16 @@ edits in q2-preview round-trip correctly.
   set: `["IncludeExpansion", "CrossrefResolvedRef"]`. Note:
   `ShortcodeResolution` is NOT in this set — shortcode atomicity is
   handled via the `Derived` source_info path, not via a wrapper.
+
+  **Migration path for extension-contributed atomic types**: the
+  hand-mirror is the right shape for built-ins. Extension-contributed
+  atomic types (a future plan; see §Open questions
+  "is_atomic_custom_node lookup — extension forward-compat") will
+  replace the JS const with a `wasm_bindgen` runtime lookup populated
+  per-render from loaded extensions. The migration changes the JS
+  data source but not the React-side dispatch logic — components
+  continue to call `isAtomicCustomNode(typeName)`; the function's
+  implementation switches from a const lookup to a context lookup.
 - `assemble`:
   - Walks Transparent entries by emitting each child's bytes with
     separators computed from the children's original positions.
@@ -409,9 +419,50 @@ copies the shortcode token from source.
 - **Concat-with-gaps**: if a Concat's pieces resolve to non-contiguous
   ranges, `preimage_in` returns None per the algorithm above. Coarsen
   falls through to Rewrite. Confirm this is the right semantics.
-- **The `is_atomic_custom_node` lookup**: today's hardcoded function works.
-  Future extensions might want to register their own atomic types. Defer
-  the registration mechanism — add when needed.
+- **The `is_atomic_custom_node` lookup — extension forward-compat**:
+  today's hardcoded `pub const ATOMIC_CUSTOM_NODES: &[&str]` works for
+  built-in atomic types. Future extensions (including the eventual
+  TSX-extension story) will need to register their own atomic types
+  without modifying `quarto-core`.
+
+  The forward-compat design (deferred to a follow-up plan; commits
+  the *shape* now without writing implementation code):
+
+  - **YAML schema** in `_extension.yml`:
+    ```yaml
+    contributes:
+      custom-nodes:
+        - { type: MyCustomBlock, atomic: true }
+        - { type: AnotherWidget }              # atomic defaults to false
+    ```
+  - **Rust runtime aggregation** mirrors `resolve_filters()`'s pattern:
+    `pub fn collect_atomic_custom_node_types(extensions: &[Extension]) -> HashSet<String>`
+    starts from the built-in set and adds extension-contributed entries
+    where `atomic == true`.
+  - **Function signature evolution**:
+    `is_atomic_custom_node(name)` →
+    `is_atomic_custom_node(name, &registry: &HashSet<String>)`. The
+    writer (in `pampa`) gets the registry from `StageContext` at coarsen
+    time. ~30 callers cascading; mechanical.
+  - **Rust→JS sync** for extension types (the genuinely-new piece —
+    the hand-mirror approach in Plan 7 doesn't work for extension
+    types because they aren't known at hub-client build time):
+    a `wasm_bindgen` export `get_atomic_custom_node_types()` is called
+    once per render after extensions are loaded; populates a React
+    context. The hand-mirrored TS const remains the fallback for the
+    no-extensions / WASM-initializing case and stays correct for
+    built-ins.
+  - **Plan 8's `IncludeExpansion`**: lands in the built-in set today
+    via `pub const ATOMIC_CUSTOM_NODES`. After the follow-up plan, the
+    set is built from a built-in's `_extension.yml` rather than
+    hardcoded — same effect via the same code path that user
+    extensions use, no privileged route.
+
+  This sketch commits the schema choice (`contributes.custom-nodes` with
+  `atomic: bool`) and the function-signature migration path. Plan 7
+  ships the const-based registry; the runtime aggregation, schema
+  parsing, and `wasm_bindgen` lookup all land in a follow-up when an
+  extension actually needs to register an atomic type.
 - **Sibling vs param**: Decision D was "param with default" but Plan 4 / 7
   could implement it either way. Confirm during implementation. Param is
   cleaner (one fewer entry point). Sibling is more isolated. Either works.

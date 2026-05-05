@@ -82,6 +82,29 @@ is informal.
     class output for the `<body>` element). ~20 lines.
   - Navbar **brand-title fallback** (`navbar.title || website.title || document.title`).
     ~5 lines.
+- **Iframe CSS loading from VFS** (resolves the §Risk note that was
+  previously deferred). Discussed with Elliot; the visual-fidelity
+  strategy is **class-compatible-with-bootstrap** — components emit
+  the same class names as Rust's HTML output, and the iframe loads
+  Quarto's compiled theme CSS so visuals match. Concretely:
+  - Modify `hub-client/public/ast-renderer.html` (or inject from
+    `ast-renderer-entry.tsx`) to load `/.quarto/project-artifacts/styles.css`
+    from VFS. Plan 1's "theme CSS artifact contract" guarantees this
+    artifact exists post-render.
+  - Bootstrap base (vendored at build time, not from VFS) bundled
+    with the iframe's HTML; theme CSS layered on top via injected
+    `<link rel="stylesheet">`.
+  - Account for the iframe's `sandbox="allow-scripts allow-same-origin"`
+    setting — VFS-served CSS reaches the iframe via the same channel
+    images do. ~30 lines of HTML/iframe-message work.
+- **Page-scoped artifact handling** (resolves Plan 1's §Open question).
+  q2-preview's `RenderToPreviewAstRenderer` mirrors `RenderToHtmlRenderer`'s
+  Page-scoped artifact handling: image artifacts produced by
+  `ResourceCollectorTransform` land in VFS under
+  `/.quarto/project-artifacts/`, served to the iframe as `<img src=...>`
+  via the same channel as theme CSS. Bootstrap-CSS-compatible markup
+  needs working images for figure rendering, so this default is
+  load-bearing for visual fidelity.
 
 ### Out of scope
 
@@ -255,11 +278,12 @@ Nothing structurally. Later plans (4-7) can land in parallel.
 
 ## Risk areas
 
-- **CSS theming**: q2-preview's iframe doesn't load Quarto's full CSS by
-  default (the iframe is sandboxed and self-contained). For visual fidelity
-  with HTML output, the iframe needs to load Bootstrap + Quarto's theme CSS.
-  Plan: extend the iframe's HTML to load CSS from `/.quarto/project-artifacts/`
-  (the synthetic VFS root the pipeline writes to). Confirm during integration.
+- **CSS theming** (resolved — see §Scope "Iframe CSS loading from VFS").
+  q2-preview's iframe loads Bootstrap + Quarto's compiled theme CSS so
+  components' bootstrap-compatible class names resolve to matching
+  visuals. Risk surface that remains during integration: the iframe's
+  `sandbox="allow-scripts allow-same-origin"` setting must permit the
+  `<link>` to a VFS-served URL; confirm during implementation.
 - **Math (KaTeX) inside Equation CustomNode**: Equation CustomNode in q2-preview
   contains a Math inline (with possibly `\tag{N}` appended by `CrossrefIndex`).
   Rendering goes through KaTeX (`window.katex` per the current iframe
