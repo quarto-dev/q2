@@ -415,27 +415,12 @@ copies the shortcode token from source.
 - **Sibling vs param**: Decision D was "param with default" but Plan 4 / 7
   could implement it either way. Confirm during implementation. Param is
   cleaner (one fewer entry point). Sibling is more isolated. Either works.
-- **Runtime user-filter idempotence detection**: Plan 3 verifies built-in
-  filters are idempotent at CI time. User filters can't be verified
-  statically (Lua filters can call out to stdlib, time, RNG, mutable
-  state — generally uncomputable). But runtime detection is tractable:
-  on the first edit per session, run the q2-preview pipeline twice on
-  the document and hash-compare the resulting ASTs (using
-  `compute_blocks_hash_fresh`, the same source-info-blind hash the
-  reconciler uses). If hashes differ, surface a non-blocking warning
-  identifying the offending filter when possible. Cached per-document
-  per session; cache invalidates when the filter list or filter source
-  changes. To attribute to a specific filter, run filters one at a
-  time and check after each — quadratic worst-case but filter chains
-  are short. The check fits naturally into Plan 7's
-  `pipeline_kind: Some("preview")` path: that path already runs the
-  q2-preview pipeline on the baseline; running it twice and comparing
-  is a small extension. Trade-off: this catches filters that are
-  non-idempotent on the inputs we test but not filters that happen
-  to be idempotent this run and won't be next session — that case is
-  inherent and we accept it. Diagnostic is informational, not
-  blocking — the user might genuinely need a non-idempotent filter
-  (timestamp, counter) and accept the round-trip implications.
+- **Runtime user-filter idempotence detection**: split out to Plan 7a.
+  See `claude-notes/plans/2026-05-04-q2-preview-plan-7a-filter-idempotence.md`
+  for the full design — round-trip idempotence check, per-filter
+  attribution, `idempotent: false` opt-out, Q-3-44 / Q-3-45
+  diagnostics. Plan 7a is a separable follow-up that builds on Plan 7's
+  `pipeline_kind: Some("preview")` machinery; it doesn't gate M3.
 
 ## References
 
@@ -552,6 +537,28 @@ copies the shortcode token from source.
   editor. Confirm Q-3-42 / Q-3-43 warnings reach the diagnostic panel
   and are visually distinguishable from pipeline warnings (or are
   acceptably co-mingled — TBD by hub-client UX).
+- **Autosave-context spam mitigation for Q-3-42 / Q-3-43**: hub-client
+  uses Automerge as the source-of-truth for qmd source — there's no
+  discrete "save" action; every keystroke triggers a debounced render
+  and incremental write. So a user persistently typing over a Derived
+  inline (resolved shortcode) would re-fire Q-3-42 on every render,
+  flooding the diagnostic panel with copies of the same warning.
+  Same for Q-3-43 if the user keeps editing inside an include.
+  Mitigation: **suppress-after-3** in the diagnostic banner. The
+  Monaco squiggle (yellow underline at the affected source range)
+  remains as the persistent signal; the side-panel banner shows the
+  first three occurrences per source range and silently drops the
+  rest. Implemented at the diagnostic-ingest layer in `Preview.tsx`
+  (or wherever warnings are processed for display), not at the
+  writer. Plan 7a's Q-3-44 doesn't have this issue — it's cached
+  once per document per session, so it fires at most once.
+  Imperative message text matters here too: Q-3-42 / Q-3-43 should
+  read as instructions ("To edit this content, open `<source_path>`")
+  rather than passive descriptions ("edit was dropped"), since the
+  user has no discrete-save affordance to discard the bad edit.
+  Plan 7's soft-drop is what guarantees the qmd source-of-truth
+  doesn't accept the bad edit even though the in-React AST briefly
+  held it.
 
 ## Estimated scope
 

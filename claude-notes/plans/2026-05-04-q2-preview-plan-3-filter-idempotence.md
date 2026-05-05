@@ -116,6 +116,66 @@ Failure modes the test does NOT catch:
   consistent — needs other testing).
 - A filter that's idempotent for one input but non-idempotent for another
   (need representative fixtures).
+- **Round-trip non-idempotence** — see next section.
+
+### Two flavors of non-idempotence (and what this plan tests)
+
+There are two distinct properties that get loosely called "non-idempotence":
+
+1. **Pipeline non-determinism**: `pipeline(x)` produces different output
+   on repeat calls with the same input. Caused by filters that depend
+   on time, RNG, mutable global state, or undefined-order iteration.
+   **This is what Plan 3's current test catches** — running
+   `run_pipeline(fixture)` twice on the same source and comparing
+   hashes detects it cleanly.
+
+2. **Round-trip non-idempotence**: `pipeline(write(pipeline(x))) ≠ pipeline(x)`.
+   The filter is deterministic — same input always produces same
+   output — but applying the filter twice (once on source, once on
+   the qmd-writer-serialized output of the first pass) gives different
+   results. The classic case is `f(x) = x + "!"`: deterministic, but
+   `f(f(x)) ≠ f(x)`. **Plan 3's current test does NOT catch this**
+   because both runs are on the same source; the filter is applied
+   once to identical input, producing identical output.
+
+This second property is the one that actually breaks q2-preview's
+writer round-trip. When the user edits and saves, the writer Verbatim-
+copies unchanged blocks from source and Rewrites changed blocks via
+the qmd writer. The Rewrite path emits the *post-filter* AST node
+content as new source bytes; on the next pipeline run, the filter
+re-applies to those bytes, and `f(f(x)) ≠ f(x)` shows up as text
+drift on edited blocks.
+
+**Plan 7a's runtime check** (`claude-notes/plans/2026-05-04-q2-preview-plan-7a-filter-idempotence.md`)
+targets round-trip non-idempotence explicitly, with a check that runs
+the round-trip flavor: pipeline → write → pipeline, and hash-compares.
+That plan is for **user filters at runtime**.
+
+### Plan 3 strengthening — folding the round-trip flavor into CI
+
+Plan 3 should be amended to also check round-trip non-idempotence
+for built-in filters. The change is small:
+
+```rust
+// Existing test: pipeline determinism
+let ast_1 = run_pipeline(fixture, pipeline.clone(), runtime.clone());
+let ast_2 = run_pipeline(fixture, pipeline.clone(), runtime.clone());
+assert_eq!(blocks_hash(&ast_1), blocks_hash(&ast_2));
+
+// New test: round-trip idempotence
+let ast_a = run_pipeline(fixture, pipeline.clone(), runtime.clone());
+let qmd_a = qmd_write_to_string(&ast_a);
+let ast_b = run_pipeline(&qmd_a, pipeline, runtime);
+assert_eq!(blocks_hash(&ast_a), blocks_hash(&ast_b));
+```
+
+Per-fixture cost: one extra pipeline pass + one qmd writer call.
+Bounded; runs at CI time, not in the editor loop.
+
+This amendment is **in scope for Plan 3** (extends what's already a
+CI test for built-ins). User filters get the runtime version via
+Plan 7a. Add the second flavor to each fixture's assertion when
+implementing Plan 3.
 
 ## Open questions for implementation
 
@@ -168,6 +228,12 @@ The plan IS the test plan. The deliverable is a test crate.
 - Blocks: implicitly Plans 4-8 (round-trip work assumes this contract holds).
   We don't need this to *implement* those plans, but landing it before
   reviewing them gives us confidence the foundation is solid.
+- Related to Plan 7a (runtime user-filter idempotence check). Plan 3
+  is the **CI-time** half of the contract for built-in filters; Plan 7a
+  is the **runtime** half for user-supplied filters. The two share the
+  same hash function (`compute_blocks_hash_fresh`) and the same
+  round-trip-vs-non-determinism distinction. See §"Plan 3 strengthening"
+  above and Plan 7a's §"Plan 3 strengthening" section.
 
 ### What happens when a fixture fails
 
