@@ -360,6 +360,26 @@ impl DiagnosticMessageBuilder {
         self
     }
 
+    /// Add a faded detail with a source location.
+    ///
+    /// Rendered with the same dim grey colour Ariadne uses for unlabelled
+    /// source characters, so it visually "punches a hole" in any wider
+    /// label that also covers the same column range. Useful for excluding
+    /// block-quote prefixes or other prefix decorations from the highlight
+    /// of a multi-line span.
+    pub fn add_faded_at(
+        mut self,
+        content: impl Into<MessageContent>,
+        location: quarto_source_map::SourceInfo,
+    ) -> Self {
+        self.details.push(DetailItem {
+            kind: DetailKind::Faded,
+            content: content.into(),
+            location: Some(location),
+        });
+        self
+    }
+
     /// Add a hint for fixing the error.
     ///
     /// Following tidyverse guidelines, hints should:

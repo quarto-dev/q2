@@ -13,7 +13,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 229,
+          "lrState": 345,
           "sym": "[",
           "label": "span-start"
         }
@@ -30,7 +30,7 @@
     "name": "Q-2-1/simple"
   },
   {
-    "state": 746,
+    "state": 769,
     "sym": "_whitespace",
     "row": 0,
     "column": 2,
@@ -43,7 +43,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -60,7 +60,7 @@
     "name": "Q-2-10/simple"
   },
   {
-    "state": 693,
+    "state": 692,
     "sym": "_whitespace",
     "row": 0,
     "column": 4,
@@ -73,7 +73,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 693,
+          "lrState": 692,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -90,7 +90,7 @@
     "name": "Q-2-10/simple-1"
   },
   {
-    "state": 713,
+    "state": 714,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -103,7 +103,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 713,
+          "lrState": 714,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -120,7 +120,7 @@
     "name": "Q-2-10/simple-2"
   },
   {
-    "state": 739,
+    "state": 736,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -133,7 +133,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 739,
+          "lrState": 736,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -150,7 +150,7 @@
     "name": "Q-2-10/simple-3"
   },
   {
-    "state": 757,
+    "state": 767,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -163,7 +163,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 757,
+          "lrState": 767,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -180,7 +180,7 @@
     "name": "Q-2-10/simple-4"
   },
   {
-    "state": 715,
+    "state": 746,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -193,7 +193,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 715,
+          "lrState": 746,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -210,7 +210,7 @@
     "name": "Q-2-10/simple-5"
   },
   {
-    "state": 778,
+    "state": 725,
     "sym": "_whitespace",
     "row": 0,
     "column": 4,
@@ -223,7 +223,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 778,
+          "lrState": 725,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -240,7 +240,7 @@
     "name": "Q-2-10/simple-6"
   },
   {
-    "state": 739,
+    "state": 736,
     "sym": "_whitespace",
     "row": 0,
     "column": 4,
@@ -253,7 +253,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 739,
+          "lrState": 736,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -270,7 +270,7 @@
     "name": "Q-2-10/simple-7"
   },
   {
-    "state": 712,
+    "state": 701,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -283,7 +283,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 712,
+          "lrState": 701,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -300,7 +300,7 @@
     "name": "Q-2-10/simple-8"
   },
   {
-    "state": 761,
+    "state": 765,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -313,7 +313,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 761,
+          "lrState": 765,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -330,7 +330,7 @@
     "name": "Q-2-10/simple-9"
   },
   {
-    "state": 761,
+    "state": 765,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -343,7 +343,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 761,
+          "lrState": 765,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -360,7 +360,7 @@
     "name": "Q-2-10/simple-10"
   },
   {
-    "state": 761,
+    "state": 765,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -373,7 +373,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 761,
+          "lrState": 765,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -390,7 +390,7 @@
     "name": "Q-2-10/simple-11"
   },
   {
-    "state": 739,
+    "state": 736,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -403,7 +403,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 739,
+          "lrState": 736,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -420,7 +420,7 @@
     "name": "Q-2-10/simple-12"
   },
   {
-    "state": 776,
+    "state": 779,
     "sym": "_whitespace",
     "row": 0,
     "column": 7,
@@ -433,7 +433,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 776,
+          "lrState": 779,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -450,7 +450,7 @@
     "name": "Q-2-10/simple-13"
   },
   {
-    "state": 726,
+    "state": 689,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -463,7 +463,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 726,
+          "lrState": 689,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -510,7 +510,7 @@
     "name": "Q-2-10/simple-15"
   },
   {
-    "state": 746,
+    "state": 769,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -523,7 +523,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -540,7 +540,7 @@
     "name": "Q-2-10/simple-16"
   },
   {
-    "state": 771,
+    "state": 743,
     "sym": "_whitespace",
     "row": 0,
     "column": 2,
@@ -553,7 +553,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -572,7 +572,7 @@
     "name": "Q-2-11/simple-wrapped"
   },
   {
-    "state": 694,
+    "state": 693,
     "sym": "_whitespace",
     "row": 0,
     "column": 4,
@@ -585,7 +585,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 694,
+          "lrState": 693,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -604,7 +604,7 @@
     "name": "Q-2-11/simple-wrapped-1"
   },
   {
-    "state": 714,
+    "state": 715,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -617,7 +617,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 714,
+          "lrState": 715,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -636,7 +636,7 @@
     "name": "Q-2-11/simple-wrapped-2"
   },
   {
-    "state": 740,
+    "state": 737,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -649,7 +649,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 740,
+          "lrState": 737,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -668,7 +668,7 @@
     "name": "Q-2-11/simple-wrapped-3"
   },
   {
-    "state": 758,
+    "state": 768,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -681,7 +681,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 758,
+          "lrState": 768,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -700,7 +700,7 @@
     "name": "Q-2-11/simple-wrapped-4"
   },
   {
-    "state": 721,
+    "state": 752,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -713,7 +713,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 721,
+          "lrState": 752,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -732,7 +732,7 @@
     "name": "Q-2-11/simple-wrapped-5"
   },
   {
-    "state": 779,
+    "state": 726,
     "sym": "_whitespace",
     "row": 0,
     "column": 4,
@@ -745,7 +745,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 779,
+          "lrState": 726,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -764,7 +764,7 @@
     "name": "Q-2-11/simple-wrapped-6"
   },
   {
-    "state": 740,
+    "state": 737,
     "sym": "_whitespace",
     "row": 0,
     "column": 4,
@@ -777,7 +777,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 740,
+          "lrState": 737,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -796,7 +796,7 @@
     "name": "Q-2-11/simple-wrapped-7"
   },
   {
-    "state": 771,
+    "state": 743,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -828,7 +828,7 @@
     "name": "Q-2-11/simple-wrapped-8"
   },
   {
-    "state": 762,
+    "state": 766,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -841,7 +841,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 762,
+          "lrState": 766,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -860,7 +860,7 @@
     "name": "Q-2-11/simple-wrapped-9"
   },
   {
-    "state": 762,
+    "state": 766,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -873,7 +873,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 762,
+          "lrState": 766,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -892,7 +892,7 @@
     "name": "Q-2-11/simple-wrapped-10"
   },
   {
-    "state": 762,
+    "state": 766,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -905,7 +905,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 762,
+          "lrState": 766,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -924,7 +924,7 @@
     "name": "Q-2-11/simple-wrapped-11"
   },
   {
-    "state": 740,
+    "state": 737,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -937,7 +937,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 740,
+          "lrState": 737,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -956,7 +956,7 @@
     "name": "Q-2-11/simple-wrapped-12"
   },
   {
-    "state": 777,
+    "state": 780,
     "sym": "_whitespace",
     "row": 0,
     "column": 7,
@@ -969,7 +969,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 777,
+          "lrState": 780,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1052,7 +1052,7 @@
     "name": "Q-2-11/simple-wrapped-15"
   },
   {
-    "state": 711,
+    "state": 776,
     "sym": "_whitespace",
     "row": 0,
     "column": 3,
@@ -1065,7 +1065,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 711,
+          "lrState": 776,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1084,7 +1084,7 @@
     "name": "Q-2-11/simple-wrapped-16"
   },
   {
-    "state": 771,
+    "state": 743,
     "sym": "_whitespace",
     "row": 0,
     "column": 5,
@@ -1097,7 +1097,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1116,7 +1116,7 @@
     "name": "Q-2-11/simple-wrapped-17"
   },
   {
-    "state": 771,
+    "state": 743,
     "sym": "_whitespace",
     "row": 0,
     "column": 4,
@@ -1129,7 +1129,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1148,7 +1148,7 @@
     "name": "Q-2-11/stray-ending-quote"
   },
   {
-    "state": 771,
+    "state": 743,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -1161,7 +1161,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1180,7 +1180,7 @@
     "name": "Q-2-11/simple"
   },
   {
-    "state": 771,
+    "state": 743,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -1193,7 +1193,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1212,7 +1212,7 @@
     "name": "Q-2-11/simple-1"
   },
   {
-    "state": 740,
+    "state": 737,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -1225,7 +1225,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 740,
+          "lrState": 737,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1308,7 +1308,7 @@
     "name": "Q-2-11/simple-4"
   },
   {
-    "state": 740,
+    "state": 737,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -1321,7 +1321,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 740,
+          "lrState": 737,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1340,7 +1340,7 @@
     "name": "Q-2-11/simple-5"
   },
   {
-    "state": 762,
+    "state": 766,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -1353,7 +1353,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 762,
+          "lrState": 766,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1372,7 +1372,7 @@
     "name": "Q-2-11/simple-6"
   },
   {
-    "state": 758,
+    "state": 768,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -1385,7 +1385,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 758,
+          "lrState": 768,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1404,7 +1404,7 @@
     "name": "Q-2-11/simple-7"
   },
   {
-    "state": 721,
+    "state": 752,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -1417,7 +1417,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 721,
+          "lrState": 752,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1436,7 +1436,7 @@
     "name": "Q-2-11/simple-8"
   },
   {
-    "state": 779,
+    "state": 726,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -1449,7 +1449,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 779,
+          "lrState": 726,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1468,7 +1468,7 @@
     "name": "Q-2-11/simple-9"
   },
   {
-    "state": 711,
+    "state": 776,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -1481,7 +1481,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 711,
+          "lrState": 776,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1500,7 +1500,7 @@
     "name": "Q-2-11/simple-10"
   },
   {
-    "state": 714,
+    "state": 715,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -1513,7 +1513,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 714,
+          "lrState": 715,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1532,7 +1532,7 @@
     "name": "Q-2-11/simple-11"
   },
   {
-    "state": 694,
+    "state": 693,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -1545,7 +1545,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 694,
+          "lrState": 693,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1564,7 +1564,7 @@
     "name": "Q-2-11/simple-12"
   },
   {
-    "state": 777,
+    "state": 780,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -1577,7 +1577,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 777,
+          "lrState": 780,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1596,7 +1596,7 @@
     "name": "Q-2-11/simple-13"
   },
   {
-    "state": 771,
+    "state": 743,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -1609,7 +1609,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1641,7 +1641,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1673,7 +1673,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1705,7 +1705,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1737,7 +1737,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1769,7 +1769,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1801,7 +1801,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1833,7 +1833,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1865,7 +1865,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1897,7 +1897,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1929,7 +1929,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1961,7 +1961,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -1993,7 +1993,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2025,7 +2025,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2057,7 +2057,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2089,7 +2089,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2121,7 +2121,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2153,7 +2153,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2185,7 +2185,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2217,7 +2217,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 771,
+          "lrState": 743,
           "sym": "double_quote",
           "label": "quote-start"
         }
@@ -2236,7 +2236,7 @@
     "name": "Q-2-11/simple-33"
   },
   {
-    "state": 940,
+    "state": 944,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -2249,7 +2249,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 917,
+          "lrState": 882,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -2268,7 +2268,7 @@
     "name": "Q-2-12/stray-ending-star"
   },
   {
-    "state": 917,
+    "state": 882,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -2300,7 +2300,7 @@
     "name": "Q-2-12/simple"
   },
   {
-    "state": 903,
+    "state": 902,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -2332,7 +2332,7 @@
     "name": "Q-2-12/simple-1"
   },
   {
-    "state": 895,
+    "state": 894,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -2364,7 +2364,7 @@
     "name": "Q-2-12/simple-2"
   },
   {
-    "state": 879,
+    "state": 876,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -2396,7 +2396,7 @@
     "name": "Q-2-12/simple-3"
   },
   {
-    "state": 903,
+    "state": 902,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -2428,7 +2428,7 @@
     "name": "Q-2-12/simple-4"
   },
   {
-    "state": 809,
+    "state": 806,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -2460,7 +2460,7 @@
     "name": "Q-2-12/simple-5"
   },
   {
-    "state": 855,
+    "state": 851,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -2492,7 +2492,7 @@
     "name": "Q-2-12/simple-6"
   },
   {
-    "state": 846,
+    "state": 843,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -2524,7 +2524,7 @@
     "name": "Q-2-12/simple-7"
   },
   {
-    "state": 838,
+    "state": 835,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -2556,7 +2556,7 @@
     "name": "Q-2-12/simple-8"
   },
   {
-    "state": 821,
+    "state": 819,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -2588,7 +2588,7 @@
     "name": "Q-2-12/simple-9"
   },
   {
-    "state": 829,
+    "state": 827,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -2620,7 +2620,7 @@
     "name": "Q-2-12/simple-10"
   },
   {
-    "state": 863,
+    "state": 859,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -2652,7 +2652,7 @@
     "name": "Q-2-12/simple-11"
   },
   {
-    "state": 917,
+    "state": 882,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3260,7 +3260,7 @@
     "name": "Q-2-12/simple-30"
   },
   {
-    "state": 860,
+    "state": 865,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -3273,7 +3273,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3290,7 +3290,7 @@
     "name": "Q-2-13/simple"
   },
   {
-    "state": 860,
+    "state": 865,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -3303,7 +3303,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3320,7 +3320,7 @@
     "name": "Q-2-13/simple-1"
   },
   {
-    "state": 901,
+    "state": 900,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -3333,7 +3333,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 901,
+          "lrState": 900,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3350,7 +3350,7 @@
     "name": "Q-2-13/simple-2"
   },
   {
-    "state": 893,
+    "state": 892,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -3363,7 +3363,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 893,
+          "lrState": 892,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3380,7 +3380,7 @@
     "name": "Q-2-13/simple-3"
   },
   {
-    "state": 877,
+    "state": 874,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -3393,7 +3393,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 877,
+          "lrState": 874,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3410,7 +3410,7 @@
     "name": "Q-2-13/simple-4"
   },
   {
-    "state": 901,
+    "state": 900,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -3423,7 +3423,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 901,
+          "lrState": 900,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3440,7 +3440,7 @@
     "name": "Q-2-13/simple-5"
   },
   {
-    "state": 807,
+    "state": 804,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3453,7 +3453,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 807,
+          "lrState": 804,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3470,7 +3470,7 @@
     "name": "Q-2-13/simple-6"
   },
   {
-    "state": 853,
+    "state": 849,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -3483,7 +3483,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 853,
+          "lrState": 849,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3500,7 +3500,7 @@
     "name": "Q-2-13/simple-7"
   },
   {
-    "state": 844,
+    "state": 841,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -3513,7 +3513,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 844,
+          "lrState": 841,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3530,7 +3530,7 @@
     "name": "Q-2-13/simple-8"
   },
   {
-    "state": 836,
+    "state": 833,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -3543,7 +3543,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 836,
+          "lrState": 833,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3560,7 +3560,7 @@
     "name": "Q-2-13/simple-9"
   },
   {
-    "state": 819,
+    "state": 817,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -3573,7 +3573,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 819,
+          "lrState": 817,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3590,7 +3590,7 @@
     "name": "Q-2-13/simple-10"
   },
   {
-    "state": 827,
+    "state": 825,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -3603,7 +3603,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 827,
+          "lrState": 825,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3620,7 +3620,7 @@
     "name": "Q-2-13/simple-11"
   },
   {
-    "state": 861,
+    "state": 857,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -3633,7 +3633,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 861,
+          "lrState": 857,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3650,7 +3650,7 @@
     "name": "Q-2-13/simple-12"
   },
   {
-    "state": 860,
+    "state": 865,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -3663,7 +3663,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3693,7 +3693,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3723,7 +3723,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3753,7 +3753,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3783,7 +3783,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3813,7 +3813,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3843,7 +3843,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3873,7 +3873,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3903,7 +3903,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3933,7 +3933,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3963,7 +3963,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -3993,7 +3993,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4023,7 +4023,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4053,7 +4053,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4083,7 +4083,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4113,7 +4113,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4143,7 +4143,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4173,7 +4173,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4203,7 +4203,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 860,
+          "lrState": 865,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4220,7 +4220,7 @@
     "name": "Q-2-13/simple-31"
   },
   {
-    "state": 800,
+    "state": 789,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -4233,7 +4233,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4250,7 +4250,7 @@
     "name": "Q-2-15/simple"
   },
   {
-    "state": 800,
+    "state": 789,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -4263,7 +4263,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4280,7 +4280,7 @@
     "name": "Q-2-15/simple-1"
   },
   {
-    "state": 902,
+    "state": 901,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -4293,7 +4293,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 902,
+          "lrState": 901,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4310,7 +4310,7 @@
     "name": "Q-2-15/simple-2"
   },
   {
-    "state": 902,
+    "state": 901,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -4323,7 +4323,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 902,
+          "lrState": 901,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4340,7 +4340,7 @@
     "name": "Q-2-15/simple-3"
   },
   {
-    "state": 808,
+    "state": 805,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -4353,7 +4353,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 808,
+          "lrState": 805,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4370,7 +4370,7 @@
     "name": "Q-2-15/simple-4"
   },
   {
-    "state": 854,
+    "state": 850,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -4383,7 +4383,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 854,
+          "lrState": 850,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4400,7 +4400,7 @@
     "name": "Q-2-15/simple-5"
   },
   {
-    "state": 845,
+    "state": 842,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -4413,7 +4413,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 845,
+          "lrState": 842,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4430,7 +4430,7 @@
     "name": "Q-2-15/simple-6"
   },
   {
-    "state": 837,
+    "state": 834,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -4443,7 +4443,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 837,
+          "lrState": 834,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4460,7 +4460,7 @@
     "name": "Q-2-15/simple-7"
   },
   {
-    "state": 820,
+    "state": 818,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -4473,7 +4473,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 820,
+          "lrState": 818,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4490,7 +4490,7 @@
     "name": "Q-2-15/simple-8"
   },
   {
-    "state": 828,
+    "state": 826,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -4503,7 +4503,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 828,
+          "lrState": 826,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4520,7 +4520,7 @@
     "name": "Q-2-15/simple-9"
   },
   {
-    "state": 886,
+    "state": 884,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -4533,7 +4533,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 886,
+          "lrState": 884,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4550,7 +4550,7 @@
     "name": "Q-2-15/simple-10"
   },
   {
-    "state": 870,
+    "state": 867,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -4563,7 +4563,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 870,
+          "lrState": 867,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4580,7 +4580,7 @@
     "name": "Q-2-15/simple-11"
   },
   {
-    "state": 862,
+    "state": 858,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -4593,7 +4593,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 862,
+          "lrState": 858,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4610,7 +4610,7 @@
     "name": "Q-2-15/simple-12"
   },
   {
-    "state": 800,
+    "state": 789,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -4623,7 +4623,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4653,7 +4653,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4683,7 +4683,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4713,7 +4713,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4743,7 +4743,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4773,7 +4773,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4803,7 +4803,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4833,7 +4833,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4863,7 +4863,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4893,7 +4893,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4923,7 +4923,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4953,7 +4953,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -4983,7 +4983,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -5013,7 +5013,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -5043,7 +5043,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -5073,7 +5073,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -5103,7 +5103,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -5133,7 +5133,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -5163,7 +5163,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 800,
+          "lrState": 789,
           "sym": "strong_emphasis_delimiter",
           "label": "strong-start"
         }
@@ -5180,7 +5180,7 @@
     "name": "Q-2-15/simple-31"
   },
   {
-    "state": 813,
+    "state": 921,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -5193,7 +5193,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5210,7 +5210,7 @@
     "name": "Q-2-16/simple"
   },
   {
-    "state": 813,
+    "state": 921,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -5223,7 +5223,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5240,7 +5240,7 @@
     "name": "Q-2-16/simple-1"
   },
   {
-    "state": 892,
+    "state": 890,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -5253,7 +5253,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 892,
+          "lrState": 890,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5270,7 +5270,7 @@
     "name": "Q-2-16/simple-2"
   },
   {
-    "state": 876,
+    "state": 873,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5283,7 +5283,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 876,
+          "lrState": 873,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5300,7 +5300,7 @@
     "name": "Q-2-16/simple-3"
   },
   {
-    "state": 900,
+    "state": 899,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5313,7 +5313,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 900,
+          "lrState": 899,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5330,7 +5330,7 @@
     "name": "Q-2-16/simple-4"
   },
   {
-    "state": 806,
+    "state": 802,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -5343,7 +5343,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 806,
+          "lrState": 802,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5360,7 +5360,7 @@
     "name": "Q-2-16/simple-5"
   },
   {
-    "state": 843,
+    "state": 840,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -5373,7 +5373,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 843,
+          "lrState": 840,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5390,7 +5390,7 @@
     "name": "Q-2-16/simple-6"
   },
   {
-    "state": 834,
+    "state": 832,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5403,7 +5403,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 834,
+          "lrState": 832,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5420,7 +5420,7 @@
     "name": "Q-2-16/simple-7"
   },
   {
-    "state": 818,
+    "state": 815,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -5433,7 +5433,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 818,
+          "lrState": 815,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5450,7 +5450,7 @@
     "name": "Q-2-16/simple-8"
   },
   {
-    "state": 826,
+    "state": 824,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -5463,7 +5463,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 826,
+          "lrState": 824,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5480,7 +5480,7 @@
     "name": "Q-2-16/simple-9"
   },
   {
-    "state": 884,
+    "state": 881,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -5493,7 +5493,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 884,
+          "lrState": 881,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5510,7 +5510,7 @@
     "name": "Q-2-16/simple-10"
   },
   {
-    "state": 868,
+    "state": 864,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5523,7 +5523,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 868,
+          "lrState": 864,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5540,7 +5540,7 @@
     "name": "Q-2-16/simple-11"
   },
   {
-    "state": 859,
+    "state": 856,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5553,7 +5553,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 859,
+          "lrState": 856,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5570,7 +5570,7 @@
     "name": "Q-2-16/simple-12"
   },
   {
-    "state": 813,
+    "state": 921,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5583,7 +5583,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5613,7 +5613,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5643,7 +5643,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5673,7 +5673,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5703,7 +5703,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5733,7 +5733,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5763,7 +5763,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5793,7 +5793,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5823,7 +5823,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5853,7 +5853,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5883,7 +5883,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5913,7 +5913,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5943,7 +5943,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5973,7 +5973,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 813,
+          "lrState": 921,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5990,7 +5990,7 @@
     "name": "Q-2-16/simple-26"
   },
   {
-    "state": 812,
+    "state": 916,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -6003,7 +6003,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6020,7 +6020,7 @@
     "name": "Q-2-17/simple"
   },
   {
-    "state": 812,
+    "state": 916,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -6033,7 +6033,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6050,7 +6050,7 @@
     "name": "Q-2-17/simple-1"
   },
   {
-    "state": 899,
+    "state": 898,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6063,7 +6063,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 899,
+          "lrState": 898,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6080,7 +6080,7 @@
     "name": "Q-2-17/simple-2"
   },
   {
-    "state": 891,
+    "state": 889,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6093,7 +6093,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 891,
+          "lrState": 889,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6110,7 +6110,7 @@
     "name": "Q-2-17/simple-3"
   },
   {
-    "state": 875,
+    "state": 872,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -6123,7 +6123,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 875,
+          "lrState": 872,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6140,7 +6140,7 @@
     "name": "Q-2-17/simple-4"
   },
   {
-    "state": 899,
+    "state": 898,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -6153,7 +6153,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 899,
+          "lrState": 898,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6170,7 +6170,7 @@
     "name": "Q-2-17/simple-5"
   },
   {
-    "state": 805,
+    "state": 801,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -6183,7 +6183,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 805,
+          "lrState": 801,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6200,7 +6200,7 @@
     "name": "Q-2-17/simple-6"
   },
   {
-    "state": 850,
+    "state": 847,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6213,7 +6213,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 850,
+          "lrState": 847,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6230,7 +6230,7 @@
     "name": "Q-2-17/simple-7"
   },
   {
-    "state": 817,
+    "state": 814,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6243,7 +6243,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 817,
+          "lrState": 814,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6260,7 +6260,7 @@
     "name": "Q-2-17/simple-8"
   },
   {
-    "state": 825,
+    "state": 823,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6273,7 +6273,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 825,
+          "lrState": 823,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6290,7 +6290,7 @@
     "name": "Q-2-17/simple-9"
   },
   {
-    "state": 883,
+    "state": 880,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6303,7 +6303,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 883,
+          "lrState": 880,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6320,7 +6320,7 @@
     "name": "Q-2-17/simple-10"
   },
   {
-    "state": 867,
+    "state": 863,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -6333,7 +6333,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 867,
+          "lrState": 863,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6380,7 +6380,7 @@
     "name": "Q-2-17/simple-12"
   },
   {
-    "state": 812,
+    "state": 916,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -6393,7 +6393,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6423,7 +6423,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6453,7 +6453,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6483,7 +6483,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6513,7 +6513,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6543,7 +6543,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6573,7 +6573,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6603,7 +6603,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6633,7 +6633,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6663,7 +6663,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6693,7 +6693,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6723,7 +6723,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6753,7 +6753,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6783,7 +6783,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6813,7 +6813,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6843,7 +6843,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6873,7 +6873,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6903,7 +6903,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6933,7 +6933,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 812,
+          "lrState": 916,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6950,7 +6950,7 @@
     "name": "Q-2-17/simple-31"
   },
   {
-    "state": 802,
+    "state": 812,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6963,7 +6963,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -6980,7 +6980,7 @@
     "name": "Q-2-18/simple"
   },
   {
-    "state": 802,
+    "state": 812,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -6993,7 +6993,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7010,7 +7010,7 @@
     "name": "Q-2-18/simple-1"
   },
   {
-    "state": 898,
+    "state": 897,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7023,7 +7023,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 898,
+          "lrState": 897,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7040,7 +7040,7 @@
     "name": "Q-2-18/simple-2"
   },
   {
-    "state": 890,
+    "state": 888,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7053,7 +7053,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 890,
+          "lrState": 888,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7070,7 +7070,7 @@
     "name": "Q-2-18/simple-3"
   },
   {
-    "state": 874,
+    "state": 871,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -7083,7 +7083,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 874,
+          "lrState": 871,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7100,7 +7100,7 @@
     "name": "Q-2-18/simple-4"
   },
   {
-    "state": 898,
+    "state": 897,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -7113,7 +7113,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 898,
+          "lrState": 897,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7130,7 +7130,7 @@
     "name": "Q-2-18/simple-5"
   },
   {
-    "state": 804,
+    "state": 800,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -7143,7 +7143,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 804,
+          "lrState": 800,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7160,7 +7160,7 @@
     "name": "Q-2-18/simple-6"
   },
   {
-    "state": 849,
+    "state": 846,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7173,7 +7173,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 849,
+          "lrState": 846,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7190,7 +7190,7 @@
     "name": "Q-2-18/simple-7"
   },
   {
-    "state": 816,
+    "state": 813,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7203,7 +7203,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 816,
+          "lrState": 813,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7220,7 +7220,7 @@
     "name": "Q-2-18/simple-8"
   },
   {
-    "state": 824,
+    "state": 822,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7233,7 +7233,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 824,
+          "lrState": 822,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7250,7 +7250,7 @@
     "name": "Q-2-18/simple-9"
   },
   {
-    "state": 882,
+    "state": 879,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7263,7 +7263,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 882,
+          "lrState": 879,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7280,7 +7280,7 @@
     "name": "Q-2-18/simple-10"
   },
   {
-    "state": 866,
+    "state": 862,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -7293,7 +7293,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 866,
+          "lrState": 862,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7310,7 +7310,7 @@
     "name": "Q-2-18/simple-11"
   },
   {
-    "state": 858,
+    "state": 854,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -7323,7 +7323,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 858,
+          "lrState": 854,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7340,7 +7340,7 @@
     "name": "Q-2-18/simple-12"
   },
   {
-    "state": 802,
+    "state": 812,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -7353,7 +7353,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7383,7 +7383,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7413,7 +7413,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7443,7 +7443,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7473,7 +7473,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7503,7 +7503,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7533,7 +7533,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7563,7 +7563,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7593,7 +7593,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7623,7 +7623,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7653,7 +7653,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7683,7 +7683,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7713,7 +7713,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7743,7 +7743,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7773,7 +7773,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7803,7 +7803,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7833,7 +7833,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7863,7 +7863,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7893,7 +7893,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 802,
+          "lrState": 812,
           "sym": "strikeout_delimiter",
           "label": "strike-start"
         }
@@ -7910,7 +7910,7 @@
     "name": "Q-2-18/simple-31"
   },
   {
-    "state": 418,
+    "state": 510,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7923,7 +7923,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -7940,7 +7940,7 @@
     "name": "Q-2-19/simple"
   },
   {
-    "state": 418,
+    "state": 510,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -7953,7 +7953,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -7970,7 +7970,7 @@
     "name": "Q-2-19/simple-1"
   },
   {
-    "state": 551,
+    "state": 564,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -7983,7 +7983,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 551,
+          "lrState": 564,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8000,7 +8000,7 @@
     "name": "Q-2-19/simple-2"
   },
   {
-    "state": 545,
+    "state": 559,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -8013,7 +8013,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 545,
+          "lrState": 559,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8028,36 +8028,6 @@
       "hints": []
     },
     "name": "Q-2-19/simple-3"
-  },
-  {
-    "state": 533,
-    "sym": "_close_block",
-    "row": 0,
-    "column": 5,
-    "errorInfo": {
-      "code": "Q-2-19",
-      "title": "Unclosed Editorial Insert",
-      "message": "I reached the end of the block before finding a closing ']' for the editorial insert.",
-      "captures": [
-        {
-          "row": 0,
-          "column": 2,
-          "size": 3,
-          "lrState": 533,
-          "sym": "insert_delimiter",
-          "label": "insert-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[++' mark.",
-          "label": "insert-start",
-          "noteType": "simple"
-        }
-      ],
-      "hints": []
-    },
-    "name": "Q-2-19/simple-4"
   },
   {
     "state": 551,
@@ -8087,10 +8057,40 @@
       ],
       "hints": []
     },
+    "name": "Q-2-19/simple-4"
+  },
+  {
+    "state": 564,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "errorInfo": {
+      "code": "Q-2-19",
+      "title": "Unclosed Editorial Insert",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial insert.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 564,
+          "sym": "insert_delimiter",
+          "label": "insert-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[++' mark.",
+          "label": "insert-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
     "name": "Q-2-19/simple-5"
   },
   {
-    "state": 475,
+    "state": 513,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -8103,7 +8103,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 475,
+          "lrState": 513,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8120,7 +8120,7 @@
     "name": "Q-2-19/simple-6"
   },
   {
-    "state": 511,
+    "state": 533,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -8133,7 +8133,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 511,
+          "lrState": 533,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8150,7 +8150,7 @@
     "name": "Q-2-19/simple-7"
   },
   {
-    "state": 505,
+    "state": 529,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -8163,7 +8163,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 505,
+          "lrState": 529,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8180,7 +8180,7 @@
     "name": "Q-2-19/simple-8"
   },
   {
-    "state": 494,
+    "state": 520,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -8193,7 +8193,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 494,
+          "lrState": 520,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8210,7 +8210,7 @@
     "name": "Q-2-19/simple-9"
   },
   {
-    "state": 500,
+    "state": 524,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -8223,7 +8223,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 500,
+          "lrState": 524,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8240,7 +8240,7 @@
     "name": "Q-2-19/simple-10"
   },
   {
-    "state": 539,
+    "state": 555,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -8253,7 +8253,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 539,
+          "lrState": 555,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8270,7 +8270,7 @@
     "name": "Q-2-19/simple-11"
   },
   {
-    "state": 528,
+    "state": 547,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -8283,7 +8283,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 528,
+          "lrState": 547,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8300,7 +8300,7 @@
     "name": "Q-2-19/simple-12"
   },
   {
-    "state": 522,
+    "state": 542,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -8313,7 +8313,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 522,
+          "lrState": 542,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8330,7 +8330,7 @@
     "name": "Q-2-19/simple-13"
   },
   {
-    "state": 418,
+    "state": 510,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -8343,7 +8343,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8373,7 +8373,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8403,7 +8403,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8433,7 +8433,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8463,7 +8463,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8493,7 +8493,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8523,7 +8523,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8553,7 +8553,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8583,7 +8583,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8613,7 +8613,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8643,7 +8643,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8673,7 +8673,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8703,7 +8703,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8733,7 +8733,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8763,7 +8763,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8793,7 +8793,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8823,7 +8823,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8853,7 +8853,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8883,7 +8883,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8913,7 +8913,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8943,7 +8943,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 418,
+          "lrState": 510,
           "sym": "insert_delimiter",
           "label": "insert-start"
         }
@@ -8990,7 +8990,7 @@
     "name": "Q-2-2/simple"
   },
   {
-    "state": 419,
+    "state": 511,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -9003,7 +9003,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9020,7 +9020,7 @@
     "name": "Q-2-20/simple"
   },
   {
-    "state": 419,
+    "state": 511,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -9033,7 +9033,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9050,7 +9050,7 @@
     "name": "Q-2-20/simple-1"
   },
   {
-    "state": 552,
+    "state": 565,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -9063,7 +9063,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 552,
+          "lrState": 565,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9080,7 +9080,7 @@
     "name": "Q-2-20/simple-2"
   },
   {
-    "state": 546,
+    "state": 560,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -9093,7 +9093,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 546,
+          "lrState": 560,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9108,36 +9108,6 @@
       "hints": []
     },
     "name": "Q-2-20/simple-3"
-  },
-  {
-    "state": 534,
-    "sym": "_close_block",
-    "row": 0,
-    "column": 5,
-    "errorInfo": {
-      "code": "Q-2-20",
-      "title": "Unclosed Editorial Delete",
-      "message": "I reached the end of the block before finding a closing ']' for the editorial delete.",
-      "captures": [
-        {
-          "row": 0,
-          "column": 2,
-          "size": 3,
-          "lrState": 534,
-          "sym": "delete_delimiter",
-          "label": "delete-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[--' mark.",
-          "label": "delete-start",
-          "noteType": "simple"
-        }
-      ],
-      "hints": []
-    },
-    "name": "Q-2-20/simple-4"
   },
   {
     "state": 552,
@@ -9167,10 +9137,40 @@
       ],
       "hints": []
     },
+    "name": "Q-2-20/simple-4"
+  },
+  {
+    "state": 565,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "errorInfo": {
+      "code": "Q-2-20",
+      "title": "Unclosed Editorial Delete",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial delete.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 565,
+          "sym": "delete_delimiter",
+          "label": "delete-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[--' mark.",
+          "label": "delete-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
     "name": "Q-2-20/simple-5"
   },
   {
-    "state": 476,
+    "state": 514,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -9183,7 +9183,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 476,
+          "lrState": 514,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9200,7 +9200,7 @@
     "name": "Q-2-20/simple-6"
   },
   {
-    "state": 512,
+    "state": 534,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -9213,7 +9213,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 512,
+          "lrState": 534,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9230,7 +9230,7 @@
     "name": "Q-2-20/simple-7"
   },
   {
-    "state": 506,
+    "state": 530,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -9243,7 +9243,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 506,
+          "lrState": 530,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9260,7 +9260,7 @@
     "name": "Q-2-20/simple-8"
   },
   {
-    "state": 495,
+    "state": 521,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -9273,7 +9273,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 495,
+          "lrState": 521,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9290,7 +9290,7 @@
     "name": "Q-2-20/simple-9"
   },
   {
-    "state": 501,
+    "state": 525,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -9303,7 +9303,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 501,
+          "lrState": 525,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9320,7 +9320,7 @@
     "name": "Q-2-20/simple-10"
   },
   {
-    "state": 540,
+    "state": 556,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -9333,7 +9333,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 540,
+          "lrState": 556,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9350,7 +9350,7 @@
     "name": "Q-2-20/simple-11"
   },
   {
-    "state": 529,
+    "state": 548,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -9363,7 +9363,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 529,
+          "lrState": 548,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9380,7 +9380,7 @@
     "name": "Q-2-20/simple-12"
   },
   {
-    "state": 523,
+    "state": 543,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -9393,7 +9393,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 523,
+          "lrState": 543,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9410,7 +9410,7 @@
     "name": "Q-2-20/simple-13"
   },
   {
-    "state": 419,
+    "state": 511,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -9423,7 +9423,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9453,7 +9453,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9483,7 +9483,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9513,7 +9513,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9543,7 +9543,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9573,7 +9573,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9603,7 +9603,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9633,7 +9633,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9663,7 +9663,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9693,7 +9693,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9723,7 +9723,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9753,7 +9753,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9783,7 +9783,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9813,7 +9813,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9843,7 +9843,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9873,7 +9873,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9903,7 +9903,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9933,7 +9933,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9963,7 +9963,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -9993,7 +9993,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -10023,7 +10023,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 419,
+          "lrState": 511,
           "sym": "delete_delimiter",
           "label": "delete-start"
         }
@@ -10040,7 +10040,7 @@
     "name": "Q-2-20/simple-34"
   },
   {
-    "state": 420,
+    "state": 516,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -10053,7 +10053,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10070,7 +10070,7 @@
     "name": "Q-2-21/simple"
   },
   {
-    "state": 420,
+    "state": 516,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -10083,7 +10083,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10100,7 +10100,7 @@
     "name": "Q-2-21/simple-1"
   },
   {
-    "state": 553,
+    "state": 566,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -10113,7 +10113,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 553,
+          "lrState": 566,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10130,7 +10130,7 @@
     "name": "Q-2-21/simple-2"
   },
   {
-    "state": 547,
+    "state": 561,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -10143,7 +10143,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 547,
+          "lrState": 561,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10158,36 +10158,6 @@
       "hints": []
     },
     "name": "Q-2-21/simple-3"
-  },
-  {
-    "state": 535,
-    "sym": "_close_block",
-    "row": 0,
-    "column": 5,
-    "errorInfo": {
-      "code": "Q-2-21",
-      "title": "Unclosed Editorial Comment",
-      "message": "I reached the end of the block before finding a closing ']' for the editorial comment.",
-      "captures": [
-        {
-          "row": 0,
-          "column": 2,
-          "size": 3,
-          "lrState": 535,
-          "sym": "edit_comment_delimiter",
-          "label": "comment-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[>>' mark.",
-          "label": "comment-start",
-          "noteType": "simple"
-        }
-      ],
-      "hints": []
-    },
-    "name": "Q-2-21/simple-4"
   },
   {
     "state": 553,
@@ -10217,10 +10187,40 @@
       ],
       "hints": []
     },
+    "name": "Q-2-21/simple-4"
+  },
+  {
+    "state": 566,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "errorInfo": {
+      "code": "Q-2-21",
+      "title": "Unclosed Editorial Comment",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial comment.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 566,
+          "sym": "edit_comment_delimiter",
+          "label": "comment-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[>>' mark.",
+          "label": "comment-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
     "name": "Q-2-21/simple-5"
   },
   {
-    "state": 477,
+    "state": 515,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -10233,7 +10233,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 477,
+          "lrState": 515,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10250,7 +10250,7 @@
     "name": "Q-2-21/simple-6"
   },
   {
-    "state": 477,
+    "state": 515,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -10263,7 +10263,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 477,
+          "lrState": 515,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10280,7 +10280,7 @@
     "name": "Q-2-21/simple-7"
   },
   {
-    "state": 477,
+    "state": 515,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -10293,7 +10293,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 477,
+          "lrState": 515,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10310,7 +10310,7 @@
     "name": "Q-2-21/simple-8"
   },
   {
-    "state": 477,
+    "state": 515,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -10323,7 +10323,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 477,
+          "lrState": 515,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10340,7 +10340,7 @@
     "name": "Q-2-21/simple-9"
   },
   {
-    "state": 513,
+    "state": 535,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -10353,7 +10353,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 513,
+          "lrState": 535,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10370,7 +10370,7 @@
     "name": "Q-2-21/simple-10"
   },
   {
-    "state": 507,
+    "state": 531,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -10383,7 +10383,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 507,
+          "lrState": 531,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10400,7 +10400,7 @@
     "name": "Q-2-21/simple-11"
   },
   {
-    "state": 496,
+    "state": 522,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -10413,7 +10413,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 496,
+          "lrState": 522,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10430,7 +10430,7 @@
     "name": "Q-2-21/simple-12"
   },
   {
-    "state": 502,
+    "state": 526,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -10443,7 +10443,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 502,
+          "lrState": 526,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10460,7 +10460,7 @@
     "name": "Q-2-21/simple-13"
   },
   {
-    "state": 541,
+    "state": 557,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -10473,7 +10473,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 541,
+          "lrState": 557,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10490,7 +10490,7 @@
     "name": "Q-2-21/simple-14"
   },
   {
-    "state": 530,
+    "state": 549,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -10503,7 +10503,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 530,
+          "lrState": 549,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10520,7 +10520,7 @@
     "name": "Q-2-21/simple-15"
   },
   {
-    "state": 524,
+    "state": 544,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -10533,7 +10533,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 524,
+          "lrState": 544,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10550,7 +10550,7 @@
     "name": "Q-2-21/simple-16"
   },
   {
-    "state": 420,
+    "state": 516,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -10563,7 +10563,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10593,7 +10593,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10623,7 +10623,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10653,7 +10653,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10683,7 +10683,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10713,7 +10713,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10743,7 +10743,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10773,7 +10773,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10803,7 +10803,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10833,7 +10833,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10863,7 +10863,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10893,7 +10893,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10923,7 +10923,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10953,7 +10953,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -10983,7 +10983,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -11013,7 +11013,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -11043,7 +11043,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -11073,7 +11073,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -11103,7 +11103,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -11133,7 +11133,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -11163,7 +11163,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 420,
+          "lrState": 516,
           "sym": "edit_comment_delimiter",
           "label": "comment-start"
         }
@@ -11180,7 +11180,7 @@
     "name": "Q-2-21/simple-37"
   },
   {
-    "state": 582,
+    "state": 518,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -11193,7 +11193,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11210,7 +11210,7 @@
     "name": "Q-2-22/simple"
   },
   {
-    "state": 582,
+    "state": 518,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -11223,7 +11223,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11240,7 +11240,7 @@
     "name": "Q-2-22/simple-1"
   },
   {
-    "state": 550,
+    "state": 563,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -11253,7 +11253,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 550,
+          "lrState": 563,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11270,7 +11270,7 @@
     "name": "Q-2-22/simple-2"
   },
   {
-    "state": 544,
+    "state": 558,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -11283,7 +11283,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 544,
+          "lrState": 558,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11298,36 +11298,6 @@
       "hints": []
     },
     "name": "Q-2-22/simple-3"
-  },
-  {
-    "state": 532,
-    "sym": "_close_block",
-    "row": 0,
-    "column": 5,
-    "errorInfo": {
-      "code": "Q-2-22",
-      "title": "Unclosed Editorial Highlight",
-      "message": "I reached the end of the block before finding a closing ']' for the editorial highlight.",
-      "captures": [
-        {
-          "row": 0,
-          "column": 2,
-          "size": 3,
-          "lrState": 532,
-          "sym": "highlight_delimiter",
-          "label": "highlight-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[!!' mark.",
-          "label": "highlight-start",
-          "noteType": "simple"
-        }
-      ],
-      "hints": []
-    },
-    "name": "Q-2-22/simple-4"
   },
   {
     "state": 550,
@@ -11357,10 +11327,40 @@
       ],
       "hints": []
     },
+    "name": "Q-2-22/simple-4"
+  },
+  {
+    "state": 563,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "errorInfo": {
+      "code": "Q-2-22",
+      "title": "Unclosed Editorial Highlight",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial highlight.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 563,
+          "sym": "highlight_delimiter",
+          "label": "highlight-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[!!' mark.",
+          "label": "highlight-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
     "name": "Q-2-22/simple-5"
   },
   {
-    "state": 474,
+    "state": 512,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -11373,7 +11373,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 474,
+          "lrState": 512,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11390,7 +11390,7 @@
     "name": "Q-2-22/simple-6"
   },
   {
-    "state": 474,
+    "state": 512,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -11403,7 +11403,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 474,
+          "lrState": 512,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11420,7 +11420,7 @@
     "name": "Q-2-22/simple-7"
   },
   {
-    "state": 474,
+    "state": 512,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -11433,7 +11433,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 474,
+          "lrState": 512,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11450,7 +11450,7 @@
     "name": "Q-2-22/simple-8"
   },
   {
-    "state": 474,
+    "state": 512,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -11463,7 +11463,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 474,
+          "lrState": 512,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11480,7 +11480,7 @@
     "name": "Q-2-22/simple-9"
   },
   {
-    "state": 510,
+    "state": 495,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -11493,7 +11493,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 510,
+          "lrState": 495,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11510,7 +11510,7 @@
     "name": "Q-2-22/simple-10"
   },
   {
-    "state": 504,
+    "state": 528,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -11523,7 +11523,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 504,
+          "lrState": 528,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11540,7 +11540,7 @@
     "name": "Q-2-22/simple-11"
   },
   {
-    "state": 493,
+    "state": 519,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -11553,7 +11553,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 493,
+          "lrState": 519,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11570,7 +11570,7 @@
     "name": "Q-2-22/simple-12"
   },
   {
-    "state": 499,
+    "state": 523,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -11583,7 +11583,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 499,
+          "lrState": 523,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11600,7 +11600,7 @@
     "name": "Q-2-22/simple-13"
   },
   {
-    "state": 538,
+    "state": 554,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -11613,7 +11613,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 538,
+          "lrState": 554,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11630,7 +11630,7 @@
     "name": "Q-2-22/simple-14"
   },
   {
-    "state": 527,
+    "state": 546,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -11643,7 +11643,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 527,
+          "lrState": 546,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11660,7 +11660,7 @@
     "name": "Q-2-22/simple-15"
   },
   {
-    "state": 521,
+    "state": 541,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -11673,7 +11673,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 521,
+          "lrState": 541,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11690,7 +11690,7 @@
     "name": "Q-2-22/simple-16"
   },
   {
-    "state": 582,
+    "state": 518,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -11703,7 +11703,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11733,7 +11733,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11763,7 +11763,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11793,7 +11793,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11823,7 +11823,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11853,7 +11853,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11883,7 +11883,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11913,7 +11913,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11943,7 +11943,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -11973,7 +11973,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12003,7 +12003,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12033,7 +12033,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12063,7 +12063,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12093,7 +12093,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12123,7 +12123,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12153,7 +12153,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12183,7 +12183,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12213,7 +12213,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12243,7 +12243,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12273,7 +12273,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12303,7 +12303,7 @@
           "row": 0,
           "column": 0,
           "size": 3,
-          "lrState": 582,
+          "lrState": 518,
           "sym": "highlight_delimiter",
           "label": "highlight-start"
         }
@@ -12950,7 +12950,7 @@
     "name": "Q-2-24/simple"
   },
   {
-    "state": 230,
+    "state": 205,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -12963,7 +12963,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -12980,7 +12980,7 @@
     "name": "Q-2-25/simple"
   },
   {
-    "state": 230,
+    "state": 205,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -12993,7 +12993,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13010,7 +13010,7 @@
     "name": "Q-2-25/simple-1"
   },
   {
-    "state": 224,
+    "state": 329,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -13023,7 +13023,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 224,
+          "lrState": 329,
           "sym": "![",
           "label": "image-start"
         }
@@ -13040,7 +13040,7 @@
     "name": "Q-2-25/simple-2"
   },
   {
-    "state": 222,
+    "state": 327,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -13053,7 +13053,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 222,
+          "lrState": 327,
           "sym": "![",
           "label": "image-start"
         }
@@ -13070,7 +13070,7 @@
     "name": "Q-2-25/simple-3"
   },
   {
-    "state": 218,
+    "state": 323,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -13083,7 +13083,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 218,
+          "lrState": 323,
           "sym": "![",
           "label": "image-start"
         }
@@ -13100,7 +13100,7 @@
     "name": "Q-2-25/simple-4"
   },
   {
-    "state": 224,
+    "state": 329,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -13113,7 +13113,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 224,
+          "lrState": 329,
           "sym": "![",
           "label": "image-start"
         }
@@ -13130,7 +13130,7 @@
     "name": "Q-2-25/simple-5"
   },
   {
-    "state": 202,
+    "state": 290,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -13143,7 +13143,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 202,
+          "lrState": 290,
           "sym": "![",
           "label": "image-start"
         }
@@ -13160,7 +13160,7 @@
     "name": "Q-2-25/simple-6"
   },
   {
-    "state": 202,
+    "state": 290,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -13173,7 +13173,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 202,
+          "lrState": 290,
           "sym": "![",
           "label": "image-start"
         }
@@ -13190,7 +13190,7 @@
     "name": "Q-2-25/simple-7"
   },
   {
-    "state": 202,
+    "state": 290,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -13203,7 +13203,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 202,
+          "lrState": 290,
           "sym": "![",
           "label": "image-start"
         }
@@ -13220,7 +13220,7 @@
     "name": "Q-2-25/simple-8"
   },
   {
-    "state": 202,
+    "state": 290,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -13233,7 +13233,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 202,
+          "lrState": 290,
           "sym": "![",
           "label": "image-start"
         }
@@ -13250,7 +13250,7 @@
     "name": "Q-2-25/simple-9"
   },
   {
-    "state": 212,
+    "state": 317,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -13263,7 +13263,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 212,
+          "lrState": 317,
           "sym": "![",
           "label": "image-start"
         }
@@ -13280,7 +13280,7 @@
     "name": "Q-2-25/simple-10"
   },
   {
-    "state": 210,
+    "state": 315,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -13293,7 +13293,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 210,
+          "lrState": 315,
           "sym": "![",
           "label": "image-start"
         }
@@ -13310,7 +13310,7 @@
     "name": "Q-2-25/simple-11"
   },
   {
-    "state": 208,
+    "state": 313,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -13323,7 +13323,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 208,
+          "lrState": 313,
           "sym": "![",
           "label": "image-start"
         }
@@ -13340,7 +13340,7 @@
     "name": "Q-2-25/simple-12"
   },
   {
-    "state": 204,
+    "state": 309,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -13353,7 +13353,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 204,
+          "lrState": 309,
           "sym": "![",
           "label": "image-start"
         }
@@ -13370,7 +13370,7 @@
     "name": "Q-2-25/simple-13"
   },
   {
-    "state": 206,
+    "state": 311,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -13383,7 +13383,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 206,
+          "lrState": 311,
           "sym": "![",
           "label": "image-start"
         }
@@ -13400,7 +13400,7 @@
     "name": "Q-2-25/simple-14"
   },
   {
-    "state": 220,
+    "state": 325,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -13413,7 +13413,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 220,
+          "lrState": 325,
           "sym": "![",
           "label": "image-start"
         }
@@ -13430,7 +13430,7 @@
     "name": "Q-2-25/simple-15"
   },
   {
-    "state": 216,
+    "state": 321,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -13443,7 +13443,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 216,
+          "lrState": 321,
           "sym": "![",
           "label": "image-start"
         }
@@ -13460,7 +13460,7 @@
     "name": "Q-2-25/simple-16"
   },
   {
-    "state": 214,
+    "state": 319,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -13473,7 +13473,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 214,
+          "lrState": 319,
           "sym": "![",
           "label": "image-start"
         }
@@ -13490,7 +13490,7 @@
     "name": "Q-2-25/simple-17"
   },
   {
-    "state": 230,
+    "state": 205,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -13503,7 +13503,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13533,7 +13533,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13563,7 +13563,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13593,7 +13593,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13623,7 +13623,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13653,7 +13653,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13683,7 +13683,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13713,7 +13713,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13743,7 +13743,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13773,7 +13773,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13803,7 +13803,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13833,7 +13833,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13863,7 +13863,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13893,7 +13893,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13923,7 +13923,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13953,7 +13953,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -13983,7 +13983,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -14013,7 +14013,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -14043,7 +14043,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -14073,7 +14073,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -14103,7 +14103,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 230,
+          "lrState": 205,
           "sym": "![",
           "label": "image-start"
         }
@@ -14120,7 +14120,7 @@
     "name": "Q-2-25/simple-38"
   },
   {
-    "state": 600,
+    "state": 593,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -14133,7 +14133,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14150,7 +14150,7 @@
     "name": "Q-2-26/simple"
   },
   {
-    "state": 600,
+    "state": 593,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -14163,7 +14163,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14178,36 +14178,6 @@
       "hints": []
     },
     "name": "Q-2-26/simple-1"
-  },
-  {
-    "state": 611,
-    "sym": "_close_block",
-    "row": 0,
-    "column": 3,
-    "errorInfo": {
-      "code": "Q-2-26",
-      "title": "Unclosed Inline Footnote",
-      "message": "I reached the end of the block before finding a closing ']' for the inline footnote.",
-      "captures": [
-        {
-          "row": 0,
-          "column": 1,
-          "size": 2,
-          "lrState": 611,
-          "sym": "inline_note_delimiter",
-          "label": "footnote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '^[' mark.",
-          "label": "footnote-start",
-          "noteType": "simple"
-        }
-      ],
-      "hints": []
-    },
-    "name": "Q-2-26/simple-2"
   },
   {
     "state": 610,
@@ -14237,10 +14207,40 @@
       ],
       "hints": []
     },
+    "name": "Q-2-26/simple-2"
+  },
+  {
+    "state": 609,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 3,
+    "errorInfo": {
+      "code": "Q-2-26",
+      "title": "Unclosed Inline Footnote",
+      "message": "I reached the end of the block before finding a closing ']' for the inline footnote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 1,
+          "size": 2,
+          "lrState": 609,
+          "sym": "inline_note_delimiter",
+          "label": "footnote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '^[' mark.",
+          "label": "footnote-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
     "name": "Q-2-26/simple-3"
   },
   {
-    "state": 608,
+    "state": 607,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -14253,7 +14253,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 608,
+          "lrState": 607,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14270,7 +14270,7 @@
     "name": "Q-2-26/simple-4"
   },
   {
-    "state": 611,
+    "state": 610,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -14283,7 +14283,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 611,
+          "lrState": 610,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14300,7 +14300,7 @@
     "name": "Q-2-26/simple-5"
   },
   {
-    "state": 598,
+    "state": 599,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14313,7 +14313,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 598,
+          "lrState": 599,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14330,7 +14330,7 @@
     "name": "Q-2-26/simple-6"
   },
   {
-    "state": 598,
+    "state": 599,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14343,7 +14343,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 598,
+          "lrState": 599,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14360,7 +14360,7 @@
     "name": "Q-2-26/simple-7"
   },
   {
-    "state": 598,
+    "state": 599,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14373,7 +14373,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 598,
+          "lrState": 599,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14390,7 +14390,7 @@
     "name": "Q-2-26/simple-8"
   },
   {
-    "state": 598,
+    "state": 599,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14403,7 +14403,7 @@
           "row": 0,
           "column": 3,
           "size": 2,
-          "lrState": 598,
+          "lrState": 599,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14420,7 +14420,7 @@
     "name": "Q-2-26/simple-9"
   },
   {
-    "state": 604,
+    "state": 603,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -14433,7 +14433,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 604,
+          "lrState": 603,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14450,7 +14450,7 @@
     "name": "Q-2-26/simple-10"
   },
   {
-    "state": 603,
+    "state": 583,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -14463,7 +14463,7 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 603,
+          "lrState": 583,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14540,7 +14540,7 @@
     "name": "Q-2-26/simple-13"
   },
   {
-    "state": 609,
+    "state": 608,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -14553,7 +14553,7 @@
           "row": 0,
           "column": 1,
           "size": 2,
-          "lrState": 609,
+          "lrState": 608,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14568,36 +14568,6 @@
       "hints": []
     },
     "name": "Q-2-26/simple-14"
-  },
-  {
-    "state": 607,
-    "sym": "_close_block",
-    "row": 0,
-    "column": 4,
-    "errorInfo": {
-      "code": "Q-2-26",
-      "title": "Unclosed Inline Footnote",
-      "message": "I reached the end of the block before finding a closing ']' for the inline footnote.",
-      "captures": [
-        {
-          "row": 0,
-          "column": 2,
-          "size": 2,
-          "lrState": 607,
-          "sym": "inline_note_delimiter",
-          "label": "footnote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '^[' mark.",
-          "label": "footnote-start",
-          "noteType": "simple"
-        }
-      ],
-      "hints": []
-    },
-    "name": "Q-2-26/simple-15"
   },
   {
     "state": 606,
@@ -14627,10 +14597,10 @@
       ],
       "hints": []
     },
-    "name": "Q-2-26/simple-16"
+    "name": "Q-2-26/simple-15"
   },
   {
-    "state": 600,
+    "state": 605,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -14643,7 +14613,37 @@
           "row": 0,
           "column": 2,
           "size": 2,
-          "lrState": 600,
+          "lrState": 605,
+          "sym": "inline_note_delimiter",
+          "label": "footnote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '^[' mark.",
+          "label": "footnote-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-26/simple-16"
+  },
+  {
+    "state": 593,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 4,
+    "errorInfo": {
+      "code": "Q-2-26",
+      "title": "Unclosed Inline Footnote",
+      "message": "I reached the end of the block before finding a closing ']' for the inline footnote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14673,7 +14673,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14703,7 +14703,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14733,7 +14733,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14763,7 +14763,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14793,7 +14793,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14823,7 +14823,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14853,7 +14853,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14883,7 +14883,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14913,7 +14913,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14943,7 +14943,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -14973,7 +14973,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15003,7 +15003,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15033,7 +15033,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15063,7 +15063,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15093,7 +15093,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15123,7 +15123,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15153,7 +15153,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15183,7 +15183,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15213,7 +15213,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -15243,7 +15243,7 @@
           "row": 0,
           "column": 0,
           "size": 2,
-          "lrState": 600,
+          "lrState": 593,
           "sym": "inline_note_delimiter",
           "label": "footnote-start"
         }
@@ -17671,7 +17671,7 @@
           "row": 0,
           "column": 10,
           "size": 2,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17701,7 +17701,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 904,
+          "lrState": 903,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17718,7 +17718,7 @@
     "name": "Q-2-5/in-link"
   },
   {
-    "state": 835,
+    "state": 791,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -17731,7 +17731,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17748,7 +17748,7 @@
     "name": "Q-2-5/at-start"
   },
   {
-    "state": 835,
+    "state": 791,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -17761,7 +17761,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17778,7 +17778,7 @@
     "name": "Q-2-5/at-start-1"
   },
   {
-    "state": 904,
+    "state": 903,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -17791,7 +17791,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 904,
+          "lrState": 903,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17808,7 +17808,7 @@
     "name": "Q-2-5/at-start-2"
   },
   {
-    "state": 904,
+    "state": 903,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -17821,7 +17821,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 904,
+          "lrState": 903,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17838,7 +17838,7 @@
     "name": "Q-2-5/at-start-3"
   },
   {
-    "state": 810,
+    "state": 807,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -17851,7 +17851,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 810,
+          "lrState": 807,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17868,7 +17868,7 @@
     "name": "Q-2-5/at-start-4"
   },
   {
-    "state": 856,
+    "state": 852,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -17881,7 +17881,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 856,
+          "lrState": 852,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17898,7 +17898,7 @@
     "name": "Q-2-5/at-start-5"
   },
   {
-    "state": 847,
+    "state": 844,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -17911,7 +17911,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 847,
+          "lrState": 844,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17928,7 +17928,7 @@
     "name": "Q-2-5/at-start-6"
   },
   {
-    "state": 839,
+    "state": 836,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -17941,7 +17941,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 839,
+          "lrState": 836,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17958,7 +17958,7 @@
     "name": "Q-2-5/at-start-7"
   },
   {
-    "state": 822,
+    "state": 820,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -17971,7 +17971,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 822,
+          "lrState": 820,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -17988,7 +17988,7 @@
     "name": "Q-2-5/at-start-8"
   },
   {
-    "state": 830,
+    "state": 828,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -18001,7 +18001,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 830,
+          "lrState": 828,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18018,7 +18018,7 @@
     "name": "Q-2-5/at-start-9"
   },
   {
-    "state": 888,
+    "state": 886,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -18031,7 +18031,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 888,
+          "lrState": 886,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18048,7 +18048,7 @@
     "name": "Q-2-5/at-start-10"
   },
   {
-    "state": 872,
+    "state": 869,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -18061,7 +18061,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 872,
+          "lrState": 869,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18078,7 +18078,7 @@
     "name": "Q-2-5/at-start-11"
   },
   {
-    "state": 864,
+    "state": 860,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -18091,7 +18091,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 864,
+          "lrState": 860,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18108,7 +18108,7 @@
     "name": "Q-2-5/at-start-12"
   },
   {
-    "state": 835,
+    "state": 791,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -18121,7 +18121,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18151,7 +18151,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18181,7 +18181,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18211,7 +18211,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18241,7 +18241,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18271,7 +18271,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18301,7 +18301,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18331,7 +18331,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18361,7 +18361,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18391,7 +18391,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18421,7 +18421,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18451,7 +18451,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18481,7 +18481,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18511,7 +18511,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18541,7 +18541,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18571,7 +18571,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18601,7 +18601,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18631,7 +18631,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18661,7 +18661,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 835,
+          "lrState": 791,
           "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
@@ -18678,7 +18678,7 @@
     "name": "Q-2-5/at-start-31"
   },
   {
-    "state": 746,
+    "state": 769,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -18691,7 +18691,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18709,7 +18709,7 @@
     "name": "Q-2-7/simple"
   },
   {
-    "state": 746,
+    "state": 769,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -18722,7 +18722,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18740,7 +18740,7 @@
     "name": "Q-2-7/simple-1"
   },
   {
-    "state": 739,
+    "state": 736,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -18753,7 +18753,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 739,
+          "lrState": 736,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18771,7 +18771,7 @@
     "name": "Q-2-7/simple-2"
   },
   {
-    "state": 726,
+    "state": 689,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -18784,7 +18784,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 726,
+          "lrState": 689,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18833,7 +18833,7 @@
     "name": "Q-2-7/simple-4"
   },
   {
-    "state": 739,
+    "state": 736,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -18846,7 +18846,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 739,
+          "lrState": 736,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18864,7 +18864,7 @@
     "name": "Q-2-7/simple-5"
   },
   {
-    "state": 761,
+    "state": 765,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -18877,7 +18877,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 761,
+          "lrState": 765,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18895,7 +18895,7 @@
     "name": "Q-2-7/simple-6"
   },
   {
-    "state": 757,
+    "state": 767,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -18908,7 +18908,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 757,
+          "lrState": 767,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18926,7 +18926,7 @@
     "name": "Q-2-7/simple-7"
   },
   {
-    "state": 715,
+    "state": 746,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -18939,7 +18939,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 715,
+          "lrState": 746,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18957,7 +18957,7 @@
     "name": "Q-2-7/simple-8"
   },
   {
-    "state": 778,
+    "state": 725,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -18970,7 +18970,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 778,
+          "lrState": 725,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -18988,7 +18988,7 @@
     "name": "Q-2-7/simple-9"
   },
   {
-    "state": 712,
+    "state": 701,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -19001,7 +19001,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 712,
+          "lrState": 701,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19019,7 +19019,7 @@
     "name": "Q-2-7/simple-10"
   },
   {
-    "state": 713,
+    "state": 714,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -19032,7 +19032,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 713,
+          "lrState": 714,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19050,7 +19050,7 @@
     "name": "Q-2-7/simple-11"
   },
   {
-    "state": 693,
+    "state": 692,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -19063,7 +19063,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 693,
+          "lrState": 692,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19081,7 +19081,7 @@
     "name": "Q-2-7/simple-12"
   },
   {
-    "state": 776,
+    "state": 779,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -19094,7 +19094,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 776,
+          "lrState": 779,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19112,7 +19112,7 @@
     "name": "Q-2-7/simple-13"
   },
   {
-    "state": 746,
+    "state": 769,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -19125,7 +19125,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19156,7 +19156,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19187,7 +19187,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19218,7 +19218,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19249,7 +19249,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19280,7 +19280,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19311,7 +19311,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19342,7 +19342,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19373,7 +19373,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19404,7 +19404,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19435,7 +19435,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19466,7 +19466,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19497,7 +19497,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19528,7 +19528,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19559,7 +19559,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19590,7 +19590,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19621,7 +19621,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19652,7 +19652,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19683,7 +19683,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }
@@ -19714,7 +19714,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 746,
+          "lrState": 769,
           "sym": "single_quote",
           "label": "quote-start"
         }

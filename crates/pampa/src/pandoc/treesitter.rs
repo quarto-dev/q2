@@ -1057,6 +1057,119 @@ fn native_visitor<T: Write>(
         "pipe_table_cell" => process_pipe_table_cell(node, children, context),
         "caption" => process_caption(node, children, context),
         "pipe_table" => process_pipe_table(node, children, context),
+        "grid_table" => {
+            use crate::pandoc::location::{SourceInfoOptions, node_source_info_with_options};
+
+            let raw_text = node.utf8_text(input_bytes).unwrap();
+            let input_str = std::str::from_utf8(input_bytes).unwrap_or("");
+            let file_id = context.current_file_id();
+
+            // Layered Ariadne rendering:
+            //   1. Multi-line main label spans the whole grid table to
+            //      provide the `╭─▶ … ╰─` corner decoration and red
+            //      highlighting on the table content.
+            //   2. For every line *after* the opening border that has a
+            //      block-quote prefix (`>`/`> >` etc.), a high-priority
+            //      faded label covers just that prefix range. Ariadne
+            //      picks the shortest covering label per column, so the
+            //      faded label wins on prefix columns and overrides the
+            //      multi-line label's red with the dim grey it uses for
+            //      unlabelled text.
+            //   3. For interior body lines (lines that aren't the open or
+            //      close), an empty-message detail label spanning the
+            //      table content forces Ariadne to display the line —
+            //      otherwise the multi-line label's middle would be
+            //      elided to a single `┆` row.
+            let node_start = node.start_byte();
+            let node_end = node.end_byte();
+            let lines: Vec<&str> = raw_text.split('\n').collect();
+            let nonempty_count = lines.iter().filter(|s| !s.is_empty()).count();
+
+            let mut faded_prefixes: Vec<quarto_source_map::SourceInfo> = Vec::new();
+            let mut interior_contents: Vec<quarto_source_map::SourceInfo> = Vec::new();
+
+            let mut offset_in_node = 0usize;
+            let mut nonempty_idx = 0usize;
+            for line in &lines {
+                let line_global_start = node_start + offset_in_node;
+                offset_in_node += line.len() + 1;
+                if line.is_empty() {
+                    continue;
+                }
+                let is_first = nonempty_idx == 0;
+                let is_last = nonempty_idx + 1 == nonempty_count;
+                nonempty_idx += 1;
+
+                let content_offset = line.find(['+', '|']).unwrap_or(line.len());
+
+                // Faded label for the leading `>` prefix, but only when
+                // the multi-line main label actually covers it. On the
+                // opening line the main label starts at the first `+`,
+                // so the prefix is already outside every label.
+                if !is_first && content_offset > 0 {
+                    let prefix_start = line_global_start;
+                    let prefix_end = line_global_start + content_offset;
+                    if prefix_start >= node_start
+                        && prefix_end <= node_end
+                        && let (Some(start_loc), Some(end_loc)) = (
+                            quarto_source_map::utils::offset_to_location(input_str, prefix_start),
+                            quarto_source_map::utils::offset_to_location(input_str, prefix_end),
+                        )
+                    {
+                        faded_prefixes.push(quarto_source_map::SourceInfo::from_range(
+                            file_id,
+                            quarto_source_map::Range {
+                                start: start_loc,
+                                end: end_loc,
+                            },
+                        ));
+                    }
+                }
+
+                // Force interior lines to display by attaching a label.
+                // The opening line has the multi-line label's start margin
+                // and the closing line has its end margin, so neither
+                // needs an extra label.
+                if !is_first && !is_last {
+                    let content_start = line_global_start + content_offset;
+                    let content_end = line_global_start + line.len();
+                    if let (Some(start_loc), Some(end_loc)) = (
+                        quarto_source_map::utils::offset_to_location(input_str, content_start),
+                        quarto_source_map::utils::offset_to_location(input_str, content_end),
+                    ) {
+                        interior_contents.push(quarto_source_map::SourceInfo::from_range(
+                            file_id,
+                            quarto_source_map::Range {
+                                start: start_loc,
+                                end: end_loc,
+                            },
+                        ));
+                    }
+                }
+            }
+
+            let main_loc =
+                node_source_info_with_options(node, context, &SourceInfoOptions::trim_all());
+
+            let mut builder = DiagnosticMessageBuilder::error("Grid tables are not supported")
+                .with_code("Q-2-36")
+                .with_location(main_loc)
+                .problem("Grid tables aren't supported. Use a pipe table instead.");
+            for prefix_loc in &faded_prefixes {
+                builder = builder.add_faded_at("", prefix_loc.clone());
+            }
+            for content_loc in &interior_contents {
+                builder = builder.add_detail_at("", content_loc.clone());
+            }
+            let msg = builder.build();
+            error_collector.add(msg);
+
+            PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
+                format: "qmd-grid-table".to_string(),
+                text: raw_text.to_string(),
+                source_info: node_source_info_with_context(node, context),
+            }))
+        }
         "comment" => {
             // HTML comments (<!-- ... -->) are preserved as RawInline(html)
             // so they survive round-tripping through the AST and are not lost

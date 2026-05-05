@@ -96,6 +96,10 @@
           },
           {
             "type": "SYMBOL",
+            "name": "grid_table"
+          },
+          {
+            "type": "SYMBOL",
             "name": "caption"
           },
           {
@@ -5064,6 +5068,10 @@
     {
       "type": "SYMBOL",
       "name": "_triple_star_error"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "grid_table"
     }
   ],
   "inline": [],

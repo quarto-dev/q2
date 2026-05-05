@@ -122,6 +122,7 @@ module.exports = grammar({
             $.pandoc_div,
             $.pandoc_horizontal_rule,
             $.pipe_table,
+            $.grid_table,
             $.caption,
 
             prec(-1, alias($.minus_metadata, $.metadata)),
@@ -1050,6 +1051,14 @@ module.exports = grammar({
         // workaround `**_foo_**`. Emission site: scanner.c, EMIT_TOKEN(TRIPLE_STAR).
         // See CONTRIBUTING.md "Known limitations" for the full list.
         $._triple_star_error,
+
+        // KNOWN LIMITATION: QMD does not support Pandoc-style grid tables.
+        // The scanner emits a single multi-line GRID_TABLE token that spans
+        // the entire grid table (block-quote prefixes stripped) so pampa
+        // can surface a structured diagnostic carrying the captured text.
+        // Emission site: scanner.c, EMIT_TOKEN(GRID_TABLE) via
+        // parse_grid_table_after_first_plus().
+        $.grid_table,
     ],
     precedences: $ => [],
     extras: $ => [],

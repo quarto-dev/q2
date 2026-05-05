@@ -481,7 +481,8 @@ impl From<quarto_error_reporting::DetailKind> for DetailKind {
         match kind {
             quarto_error_reporting::DetailKind::Error => Self::Error,
             quarto_error_reporting::DetailKind::Info => Self::Info,
-            quarto_error_reporting::DetailKind::Note => Self::Note,
+            quarto_error_reporting::DetailKind::Note
+            | quarto_error_reporting::DetailKind::Faded => Self::Note,
         }
     }
 }
