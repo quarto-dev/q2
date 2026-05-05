@@ -13,6 +13,7 @@
 //!
 //! [`MetadataMergeStage`]: crate::stage::MetadataMergeStage
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use pampa::toc::{TocConfig, TocEntry, generate_toc};
@@ -34,7 +35,15 @@ use thiserror::Error;
 ///   `nav_dependencies` (user-declared cross-doc edges),
 ///   `always_render` (per-doc Pass-2 opt-out), and
 ///   `body_link_targets` (Pass-1-resolved cross-doc body link set).
-pub const DOCUMENT_PROFILE_VERSION: u32 = 3;
+/// - `3`: `bd-o8pr`. Adds `resources` (document-level `resources:`
+///   patterns from frontmatter; the post-render collector expands).
+/// - `4`: `bd-n8a4` (listings epic, L0). Adds `listing_item:
+///   ListingItemInfo` for the listings feature surface (curated typed
+///   fields plus `extra: BTreeMap<String, ConfigValue>` for custom
+///   templates) and `categories_raw: Option<ConfigValue>` so listing
+///   consumers can apply tag-aware merging via `MergedConfig` when
+///   combining top-level and listing-item categories.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 4;
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -90,6 +99,158 @@ impl IncludeEntry {
             path,
             content_hash: Self::hash_bytes(bytes),
         }
+    }
+}
+
+/// Per-document advertisement for listings consumers (`bd-n8a4`,
+/// listings epic L0).
+///
+/// **Scoped feature surface — listings only.** No other Quarto
+/// feature reads from this field. Non-listing consumers must use the
+/// top-level [`DocumentProfile`] fields (`title`, `description`,
+/// `image`, etc.). See the contract doc's §"Scoped feature surfaces."
+///
+/// # Authoring surface
+///
+/// Authors populate this struct via a top-level `listing-item:` key
+/// in YAML frontmatter:
+///
+/// ```yaml
+/// ---
+/// title: My post
+/// listing-item:
+///   reading-time-minutes: 15      # author override; auto-fill skipped
+///   extra:
+///     status: "draft"             # custom field for a custom template
+///     sponsors: [Foo, Bar]
+/// ---
+/// ```
+///
+/// Frontmatter keys are kebab-case (Quarto YAML convention); the
+/// corresponding Rust fields are snake_case. Extraction maps between
+/// the two with explicit lookups (e.g. `meta.get("reading-time-minutes")`
+/// → `reading_time_minutes`).
+///
+/// # Generate / render decomposition
+///
+/// L0 (this version): the field exists; `DocumentProfile::extract`
+/// reads it from frontmatter. Author-supplied values land here.
+/// L1 (planned, `bd-izqh`) introduces `ListingItemInfoStage` to
+/// auto-fill holes (description, image, word count, reading time,
+/// date-modified) from the AST. Author values always win; the stage
+/// only fills holes.
+///
+/// All fields are optional / collection-defaulted; an empty
+/// `ListingItemInfo` is the legitimate default for documents that
+/// don't participate in listings.
+///
+/// # `extra` and the open-shape exception
+///
+/// `extra` is the *only* open-shape field in `DocumentProfile`.
+/// Adding a key to `extra` does **not** require a profile-version
+/// bump: the outer struct shape is unchanged, and consumers (custom
+/// listing templates) opt in to specific keys.
+///
+/// Reaching into `extra` from outside the listings code path is
+/// forbidden by the contract doc. If a future feature finds itself
+/// wanting to read from `extra`, that is a design-review trigger,
+/// not a code-completion shortcut.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ListingItemInfo {
+    /// Override for the title displayed in listings. Defaults to
+    /// `profile.title` when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+
+    /// Override for the subtitle displayed in listings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+
+    /// Listing description (text shown under the title). L0 honors
+    /// an author-supplied value; L1's `ListingItemInfoStage` will
+    /// fill from the first plain-text paragraph of the post-include
+    /// AST when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    /// Listing image src. L0 honors an author-supplied value; L1
+    /// will fill from the first body `Image` node when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+
+    /// Alt text for the listing image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_alt: Option<String>,
+
+    /// Listing date (publication / display date).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+
+    /// Date the document was last modified. L1 will fill from
+    /// filesystem mtime when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_modified: Option<String>,
+
+    /// Listing categories, flattened to plain strings for the
+    /// primary consumer surface. The tagged form (with `!prefer` /
+    /// `!concat` merge tags preserved) lives in
+    /// [`Self::categories_raw`] for tag-aware merging via
+    /// [`quarto_config::MergedConfig`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
+
+    /// Tagged form of the `listing-item.categories:` value as
+    /// written by the author. Listings consumers feeding this into
+    /// `MergedConfig` alongside top-level
+    /// [`DocumentProfile::categories_raw`] get tag-aware merging:
+    /// default array semantics is `Concat`, and an author can write
+    /// `categories: !prefer [a, b]` for override semantics. See L0
+    /// sub-plan §"D7" and the contract doc's §"Scoped feature
+    /// surfaces."
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub categories_raw: Option<ConfigValue>,
+
+    /// Estimated reading time, in minutes. L1 will fill from
+    /// word-count divided by a 200 wpm constant when unset.
+    /// Display formatting (e.g. "15 minutes") is a render-time
+    /// concern in the listing template (L3+); this profile field
+    /// is the semantic source of truth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reading_time_minutes: Option<u32>,
+
+    /// Word count of the document body. L1 will fill from a
+    /// tokenized scan of the post-include AST when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word_count: Option<u32>,
+
+    /// Free-form fields advertised for custom listing templates.
+    /// Author-declared in `listing-item.extra:`. Outer profile shape
+    /// does **not** change when keys are added/removed, so no
+    /// `profile_version` bump is required for `extra` mutations.
+    /// `BTreeMap` over `HashMap` for deterministic serialization
+    /// (see CLAUDE.md §"HashMap and Determinism").
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra: BTreeMap<String, ConfigValue>,
+}
+
+impl ListingItemInfo {
+    /// True when no author-supplied or auto-filled data is present.
+    /// Used by [`DocumentProfile`]'s `serde(skip_serializing_if = …)`
+    /// to keep on-disk profiles small for non-participating
+    /// documents.
+    pub fn is_empty(&self) -> bool {
+        self.title.is_none()
+            && self.subtitle.is_none()
+            && self.description.is_none()
+            && self.image.is_none()
+            && self.image_alt.is_none()
+            && self.date.is_none()
+            && self.date_modified.is_none()
+            && self.categories.is_empty()
+            && self.categories_raw.is_none()
+            && self.reading_time_minutes.is_none()
+            && self.word_count.is_none()
+            && self.extra.is_empty()
     }
 }
 
@@ -223,6 +384,38 @@ pub struct DocumentProfile {
     /// v3.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<String>,
+
+    /// Tagged form of the top-level `categories:` value as written
+    /// by the author. Mirrors [`Self::categories`] but preserves
+    /// `ConfigValue` merge tags (`!prefer` / `!concat`) for
+    /// listings consumers that combine top-level and
+    /// `listing-item.categories` via
+    /// [`quarto_config::MergedConfig`]. Most consumers should keep
+    /// reading the flattened [`Self::categories`]; only listings
+    /// reach for this raw form.
+    ///
+    /// Default `None`; serializer omits when absent.
+    /// Added v3 → v4 (`bd-n8a4`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub categories_raw: Option<ConfigValue>,
+
+    /// Per-document advertisement for listings that include this
+    /// document. **Scoped feature surface — listings consumers only.**
+    /// Non-listing consumers must use the corresponding top-level
+    /// fields ([`Self::title`], [`Self::description`],
+    /// [`Self::image`], …). See [`ListingItemInfo`] and the contract
+    /// doc's §"Scoped feature surfaces."
+    ///
+    /// L0 (`bd-n8a4`) reads author-supplied values from
+    /// `meta.listing-item:` at extraction time. L1's planned
+    /// `ListingItemInfoStage` (`bd-izqh`) will fill holes
+    /// (description, image, word count, reading time, date-modified)
+    /// before the checkpoint.
+    ///
+    /// Default empty; serializer omits empty.
+    /// Added v3 → v4 (`bd-n8a4`).
+    #[serde(default, skip_serializing_if = "ListingItemInfo::is_empty")]
+    pub listing_item: ListingItemInfo,
 }
 
 /// Helper for `#[serde(skip_serializing_if = ...)]` on plain bool
@@ -273,6 +466,8 @@ impl Default for DocumentProfile {
             always_render: false,
             body_link_targets: Vec::new(),
             resources: Vec::new(),
+            categories_raw: None,
+            listing_item: ListingItemInfo::default(),
         }
     }
 }
@@ -328,6 +523,11 @@ impl DocumentProfile {
             always_render: meta_bool_path(meta, &["project", "always-render"]).unwrap_or(false),
             body_link_targets: Vec::new(),
             resources: crate::project_resources::extract_resource_patterns(meta, &["resources"]),
+            // L0 (`bd-n8a4`): both fields wired into extract below.
+            // Skeleton stage left explicit so TDD failure points at
+            // the wiring, not the field declarations.
+            categories_raw: extract_categories_raw(meta),
+            listing_item: extract_listing_item(meta),
         }
     }
 
@@ -353,6 +553,80 @@ impl DocumentProfile {
 /// markdown-inline values to text when necessary.
 fn plain_text_field(meta: &ConfigValue, key: &str) -> Option<String> {
     meta.get(key).and_then(|v| v.as_plain_text())
+}
+
+/// Capture the originating `ConfigValue` for the top-level
+/// `categories:` key — preserving any `!prefer` / `!concat` tags so a
+/// listings consumer can feed it (alongside
+/// `listing_item.categories_raw`) into [`MergedConfig`] for tag-aware
+/// merging.
+///
+/// Returns `None` if the key is absent. The flattened
+/// [`DocumentProfile::categories`] field is still produced from
+/// `extract_string_list` for the primary consumer surface.
+///
+/// [`MergedConfig`]: quarto_config::MergedConfig
+fn extract_categories_raw(meta: &ConfigValue) -> Option<ConfigValue> {
+    meta.get("categories").cloned()
+}
+
+/// Walk the `meta.listing-item:` map and produce a [`ListingItemInfo`]
+/// from author-supplied values. Unknown keys at the top level of
+/// `listing-item:` are dropped silently; type mismatches at known
+/// keys leave the field at its default. Strict diagnostics are L2's
+/// job (see L0 sub-plan §"C5").
+fn extract_listing_item(meta: &ConfigValue) -> ListingItemInfo {
+    let Some(li) = meta.get("listing-item") else {
+        return ListingItemInfo::default();
+    };
+
+    ListingItemInfo {
+        title: plain_text_field(li, "title"),
+        subtitle: plain_text_field(li, "subtitle"),
+        description: plain_text_field(li, "description"),
+        image: plain_text_field(li, "image"),
+        image_alt: plain_text_field(li, "image-alt"),
+        date: plain_text_field(li, "date"),
+        date_modified: plain_text_field(li, "date-modified"),
+        categories: extract_string_list(li, "categories"),
+        categories_raw: li.get("categories").cloned(),
+        reading_time_minutes: extract_u32_field(li, "reading-time-minutes"),
+        word_count: extract_u32_field(li, "word-count"),
+        extra: extract_listing_item_extra(li),
+    }
+}
+
+/// Read a non-negative integer field as `u32`. Returns `None` if the
+/// key is absent, the value isn't an integer, or the integer doesn't
+/// fit in `u32` (negative or oversized). Matches the graceful-drop
+/// pattern used elsewhere in this module.
+fn extract_u32_field(meta: &ConfigValue, key: &str) -> Option<u32> {
+    meta.get(key)
+        .and_then(|v| v.as_int())
+        .and_then(|i| u32::try_from(i).ok())
+}
+
+/// Walk `listing-item.extra:` and return its key-value entries as a
+/// `BTreeMap<String, ConfigValue>`. Returns an empty map if the key
+/// is absent or the value isn't a map.
+///
+/// Each entry's value is preserved verbatim — no flattening, no
+/// type coercion. Custom listing templates handle typed access at
+/// render time via `quarto-doctemplate`'s `TemplateValue` conversion.
+/// `BTreeMap` over `HashMap` for deterministic serialization (see
+/// CLAUDE.md §"HashMap and Determinism").
+fn extract_listing_item_extra(li: &ConfigValue) -> BTreeMap<String, ConfigValue> {
+    let Some(extra) = li.get("extra") else {
+        return BTreeMap::new();
+    };
+    let Some(entries) = extra.as_map_entries() else {
+        return BTreeMap::new();
+    };
+    let mut out = BTreeMap::new();
+    for entry in entries {
+        out.insert(entry.key.clone(), entry.value.clone());
+    }
+    out
 }
 
 /// Walk a dotted path of keys down a `ConfigValue` map and read a
@@ -847,5 +1121,386 @@ Body.
         // And it round-trips.
         let restored = DocumentProfile::from_json(&json).unwrap();
         assert_eq!(p, restored);
+    }
+
+    // === L0 — listings epic (`bd-n8a4`) ===============================
+    //
+    // Tests #1–#13 from the L0 sub-plan, plus the C6 namespace-distinct
+    // test (#9b), plus three D7 categories_raw tests. See
+    // `claude-notes/plans/2026-05-05-listings-L0-profile-extension.md`.
+
+    use quarto_pandoc_types::{ConfigValue, ConfigValueKind, MergeOp};
+    use quarto_source_map::SourceInfo;
+
+    fn make_string_config_value(s: &str) -> ConfigValue {
+        ConfigValue::new_string(s.to_string(), SourceInfo::default())
+    }
+
+    #[test]
+    fn listing_item_info_default_is_empty() {
+        assert!(ListingItemInfo::default().is_empty());
+    }
+
+    /// Setting any one curated field flips `is_empty()` to false. The
+    /// `skip_serializing_if` guard rests on this property — if any
+    /// field stops being checked, the on-disk profile silently grows.
+    #[test]
+    fn listing_item_info_partial_not_empty_per_field() {
+        let mut li = ListingItemInfo::default();
+        li.title = Some("X".into());
+        assert!(!li.is_empty(), "title set");
+
+        let mut li = ListingItemInfo::default();
+        li.subtitle = Some("X".into());
+        assert!(!li.is_empty(), "subtitle set");
+
+        let mut li = ListingItemInfo::default();
+        li.description = Some("X".into());
+        assert!(!li.is_empty(), "description set");
+
+        let mut li = ListingItemInfo::default();
+        li.image = Some("X".into());
+        assert!(!li.is_empty(), "image set");
+
+        let mut li = ListingItemInfo::default();
+        li.image_alt = Some("X".into());
+        assert!(!li.is_empty(), "image_alt set");
+
+        let mut li = ListingItemInfo::default();
+        li.date = Some("2026-01-01".into());
+        assert!(!li.is_empty(), "date set");
+
+        let mut li = ListingItemInfo::default();
+        li.date_modified = Some("2026-01-02".into());
+        assert!(!li.is_empty(), "date_modified set");
+
+        let mut li = ListingItemInfo::default();
+        li.categories = vec!["a".into()];
+        assert!(!li.is_empty(), "categories set");
+
+        let mut li = ListingItemInfo::default();
+        li.categories_raw = Some(make_string_config_value("a"));
+        assert!(!li.is_empty(), "categories_raw set");
+
+        let mut li = ListingItemInfo::default();
+        li.reading_time_minutes = Some(5);
+        assert!(!li.is_empty(), "reading_time_minutes set");
+
+        let mut li = ListingItemInfo::default();
+        li.word_count = Some(100);
+        assert!(!li.is_empty(), "word_count set");
+
+        let mut li = ListingItemInfo::default();
+        li.extra
+            .insert("status".into(), make_string_config_value("draft"));
+        assert!(!li.is_empty(), "extra entry set");
+    }
+
+    #[test]
+    fn listing_item_info_serde_roundtrip_empty() {
+        let li = ListingItemInfo::default();
+        let json = serde_json::to_string(&li).expect("serialize");
+        let restored: ListingItemInfo = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(li, restored);
+    }
+
+    #[test]
+    fn listing_item_info_serde_omits_empty_fields() {
+        let li = ListingItemInfo {
+            title: Some("Hello".into()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&li).expect("serialize");
+        // Only `title` should appear; every other field is empty/None
+        // and tagged `skip_serializing_if`.
+        assert!(json.contains("\"title\":\"Hello\""), "title present");
+        assert!(!json.contains("subtitle"));
+        assert!(!json.contains("description"));
+        assert!(!json.contains("image"));
+        assert!(!json.contains("image_alt"));
+        assert!(!json.contains("\"date\":"));
+        assert!(!json.contains("date_modified"));
+        assert!(!json.contains("categories"));
+        assert!(!json.contains("reading_time_minutes"));
+        assert!(!json.contains("word_count"));
+        assert!(!json.contains("extra"));
+    }
+
+    #[test]
+    fn listing_item_info_extra_roundtrip() {
+        let mut extra = BTreeMap::new();
+        extra.insert("status".into(), make_string_config_value("draft"));
+        extra.insert(
+            "sponsors".into(),
+            ConfigValue {
+                value: ConfigValueKind::Array(vec![
+                    make_string_config_value("Foo"),
+                    make_string_config_value("Bar"),
+                ]),
+                source_info: SourceInfo::default(),
+                merge_op: MergeOp::Concat,
+            },
+        );
+        let li = ListingItemInfo {
+            extra,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&li).expect("serialize");
+        let restored: ListingItemInfo = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(li, restored);
+        // Spot-check the structural shape of `extra` after round-trip.
+        assert_eq!(restored.extra.len(), 2);
+        assert!(restored.extra.contains_key("status"));
+        assert!(restored.extra.contains_key("sponsors"));
+        // BTreeMap iteration order is alphabetical; verify
+        // determinism via key order.
+        let keys: Vec<&String> = restored.extra.keys().collect();
+        assert_eq!(keys, vec![&"sponsors".to_string(), &"status".to_string()]);
+    }
+
+    #[test]
+    fn profile_default_listing_item_is_empty() {
+        let p = DocumentProfile::default();
+        assert!(p.listing_item.is_empty());
+        let json = p.to_json().expect("serialize");
+        // `listing_item` is `skip_serializing_if = ListingItemInfo::is_empty`,
+        // so a default profile must not emit any listing-item key.
+        assert!(
+            !json.contains("listing_item"),
+            "default profile must omit listing_item field; got JSON: {json}"
+        );
+    }
+
+    #[test]
+    fn profile_extract_no_listing_item_key() {
+        let ast = parse_qmd("---\ntitle: No listing\n---\n\nBody.\n");
+        let p = DocumentProfile::extract(&ast, Path::new("a.qmd"), "a.html", "html");
+        assert!(p.listing_item.is_empty());
+    }
+
+    #[test]
+    fn profile_extract_listing_item_curated_fields() {
+        let qmd = "\
+---
+title: Outer
+listing-item:
+  title: Listing title
+  subtitle: Listing subtitle
+  description: Listing desc
+  image: cover.png
+  image-alt: A cover
+  date: 2026-04-01
+  date-modified: 2026-04-15
+  reading-time-minutes: 15
+  word-count: 1234
+  categories: [a, b]
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let p = DocumentProfile::extract(&ast, Path::new("li.qmd"), "li.html", "html");
+        let li = &p.listing_item;
+        assert_eq!(li.title.as_deref(), Some("Listing title"));
+        assert_eq!(li.subtitle.as_deref(), Some("Listing subtitle"));
+        assert_eq!(li.description.as_deref(), Some("Listing desc"));
+        assert_eq!(li.image.as_deref(), Some("cover.png"));
+        assert_eq!(li.image_alt.as_deref(), Some("A cover"));
+        assert_eq!(li.date.as_deref(), Some("2026-04-01"));
+        assert_eq!(li.date_modified.as_deref(), Some("2026-04-15"));
+        assert_eq!(li.reading_time_minutes, Some(15));
+        assert_eq!(li.word_count, Some(1234));
+        assert_eq!(li.categories, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn profile_extract_listing_item_extra_passthrough() {
+        let qmd = "\
+---
+title: Has extras
+listing-item:
+  extra:
+    status: draft
+    sponsors: [Foo, Bar]
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let p = DocumentProfile::extract(&ast, Path::new("e.qmd"), "e.html", "html");
+        let extra = &p.listing_item.extra;
+        assert_eq!(extra.len(), 2, "two extras expected");
+        let status = extra.get("status").expect("status entry present");
+        assert_eq!(status.as_plain_text().as_deref(), Some("draft"));
+        let sponsors = extra.get("sponsors").expect("sponsors entry present");
+        let arr = sponsors.as_array().expect("sponsors is an array");
+        let names: Vec<String> = arr.iter().filter_map(|v| v.as_plain_text()).collect();
+        assert_eq!(names, vec!["Foo".to_string(), "Bar".to_string()]);
+    }
+
+    /// C6: curated fields and `extra` keys live in distinct namespaces.
+    /// `listing-item.title` populates `listing_item.title`; an entry
+    /// also named `title` inside `listing-item.extra` populates
+    /// `listing_item.extra["title"]` — they do not collide.
+    #[test]
+    fn profile_extract_listing_item_extra_namespace_distinct() {
+        let qmd = "\
+---
+title: Outer
+listing-item:
+  title: Curated
+  extra:
+    title: Custom
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let p = DocumentProfile::extract(&ast, Path::new("c.qmd"), "c.html", "html");
+        assert_eq!(p.listing_item.title.as_deref(), Some("Curated"));
+        let extra_title = p
+            .listing_item
+            .extra
+            .get("title")
+            .expect("extra.title present");
+        assert_eq!(extra_title.as_plain_text().as_deref(), Some("Custom"));
+    }
+
+    #[test]
+    fn profile_extract_listing_item_unknown_top_key_dropped() {
+        // Per L0 §"Diagnostics" / C5: unknown keys at the top level
+        // of `listing-item:` are silently dropped. Strict validation
+        // is L2's job.
+        let qmd = "\
+---
+title: T
+listing-item:
+  not-a-known-field: 42
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let p = DocumentProfile::extract(&ast, Path::new("u.qmd"), "u.html", "html");
+        assert!(p.listing_item.is_empty());
+    }
+
+    #[test]
+    fn profile_extract_listing_item_type_mismatch_dropped() {
+        // Per L0 §"Diagnostics" / C5: type mismatches at known keys
+        // leave the field at default rather than panic.
+        let qmd = "\
+---
+title: T
+listing-item:
+  reading-time-minutes: [bad, type]
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let p = DocumentProfile::extract(&ast, Path::new("tm.qmd"), "tm.html", "html");
+        assert_eq!(p.listing_item.reading_time_minutes, None);
+    }
+
+    #[test]
+    fn document_profile_version_is_4() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 4);
+    }
+
+    /// A v3 profile (the pre-listings shape) must be rejected by
+    /// `from_json`. The cache layer treats this as a regenerate signal.
+    #[test]
+    fn profile_v3_json_rejected_with_version_mismatch() {
+        let payload = r#"{
+            "profile_version": 3,
+            "source_path": "x.qmd",
+            "output_href": "x.html",
+            "format_id": "html",
+            "title": null,
+            "subtitle": null,
+            "description": null,
+            "authors": [],
+            "date": null,
+            "categories": [],
+            "keywords": [],
+            "image": null,
+            "draft": false,
+            "outline": []
+        }"#;
+        match DocumentProfile::from_json(payload) {
+            Err(DocumentProfileError::VersionMismatch { expected, found }) => {
+                assert_eq!(expected, DOCUMENT_PROFILE_VERSION);
+                assert_eq!(found, 3);
+            }
+            other => panic!("expected VersionMismatch from v3 payload, got {:?}", other),
+        }
+    }
+
+    // --- D7: tag-preserving `categories_raw` ----------------------------
+
+    /// When the author writes a top-level `categories:` key, the raw
+    /// `ConfigValue` is preserved on `profile.categories_raw` so a
+    /// listings consumer can feed it through `MergedConfig` for
+    /// tag-aware merging. The flattened `Vec<String>` form on
+    /// `profile.categories` is unchanged.
+    #[test]
+    fn profile_categories_raw_present_when_frontmatter_has_categories() {
+        let ast = parse_qmd("---\ntitle: T\ncategories: [a, b]\n---\n\nBody.\n");
+        let p = DocumentProfile::extract(&ast, Path::new("cr.qmd"), "cr.html", "html");
+        // Flattened form preserved.
+        assert_eq!(
+            p.categories,
+            vec!["a".to_string(), "b".to_string()],
+            "flattened categories preserved"
+        );
+        // Tagged form preserved.
+        let raw = p
+            .categories_raw
+            .as_ref()
+            .expect("categories_raw populated when frontmatter has categories");
+        let arr = raw.as_array().expect("categories raw is an array");
+        let names: Vec<String> = arr.iter().filter_map(|v| v.as_plain_text()).collect();
+        assert_eq!(names, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn profile_categories_raw_absent_when_frontmatter_has_none() {
+        let ast = parse_qmd("---\ntitle: T\n---\n\nBody.\n");
+        let p = DocumentProfile::extract(&ast, Path::new("nc.qmd"), "nc.html", "html");
+        assert!(p.categories.is_empty());
+        assert!(p.categories_raw.is_none());
+    }
+
+    /// Mirror of the top-level test: when the author writes
+    /// `listing-item.categories:`, the tagged `ConfigValue` is
+    /// preserved so a listings consumer can merge it with
+    /// `profile.categories_raw` via `MergedConfig`.
+    #[test]
+    fn profile_listing_item_categories_raw_preserved() {
+        let qmd = "\
+---
+title: T
+listing-item:
+  categories: [x, y]
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let p = DocumentProfile::extract(&ast, Path::new("lc.qmd"), "lc.html", "html");
+        assert_eq!(
+            p.listing_item.categories,
+            vec!["x".to_string(), "y".to_string()],
+            "flattened listing_item.categories preserved"
+        );
+        let raw = p
+            .listing_item
+            .categories_raw
+            .as_ref()
+            .expect("listing_item.categories_raw populated");
+        let arr = raw.as_array().expect("raw is an array");
+        let names: Vec<String> = arr.iter().filter_map(|v| v.as_plain_text()).collect();
+        assert_eq!(names, vec!["x".to_string(), "y".to_string()]);
     }
 }
