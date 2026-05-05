@@ -65,6 +65,91 @@ Read before writing code:
   `document-profile-contract.md` for the format used in earlier
   bumps.
 
+## Resolved clarifications (2026-05-05)
+
+User-confirmed answers to questions raised during sub-plan review;
+record here so reviewers don't relitigate.
+
+- **C1 — `reading-time` semantics: integer-minutes only.** Field is
+  `reading_time_minutes: Option<u32>`. Frontmatter key is
+  `reading-time-minutes` (kebab → snake). No display-string field;
+  rendering decides display formatting at the listing-render stage
+  (L3+). User reasoning: each document advertises a *semantic*
+  value; different listings on different host pages may format the
+  same value differently, so display formatting cannot live on the
+  per-document profile. The doc-comment YAML examples in this
+  sub-plan are corrected accordingly.
+- **C2 — Naming convention: kebab in YAML, snake in Rust.**
+  Quarto's general policy. Extraction does *manual* kebab-keyed
+  lookup inside `extract_listing_item` (matching `extract_authors`
+  and the rest of `document_profile.rs`); no `serde(rename_all =
+  "kebab-case")` on the struct. On-disk profile JSON uses the
+  Rust field name (`listing_item`, `reading_time_minutes`) —
+  matches existing fields like `date_modified`.
+- **C3 — Schema location: test-fixture only for L0.** Touch
+  `crates/pampa/test-fixtures/schemas/definitions.yml` and file
+  a follow-up bd issue for `quarto-yaml-validation` integration
+  if/when project-wide schema validation gets a runtime gate. Q2
+  has no production frontmatter-schema gate today; widening L0 to
+  cover that is out of scope.
+- **C4 — `categories` merge rule: delegate to
+  `MergedConfig`.** Merge tags ride with the `ConfigValue`s
+  themselves, so we don't need a special override-layer model.
+  The listings consumer (L1+) computes effective categories by:
+
+  ```rust
+  // pseudo-code, lives in listings consumer code, not L0
+  let merged = MergedConfig::new(vec![
+      &profile.categories_as_config_value,        // lower priority
+      &profile.listing_item.categories_as_cv,     // higher priority
+  ]);
+  let effective = merged.get_array(&[]);  // or equivalent extraction
+  ```
+
+  Behavior follows the existing tag rules: default for arrays is
+  `Concat`, so by default the two layers concatenate; an author
+  who writes `listing-item: { categories: !prefer [a, b] }`
+  gets override semantics for free. This is exactly the design
+  point of the tag-based merge system.
+
+  **L0 implications:**
+  - L0 stores `listing_item.categories` as written — `Vec<String>`
+    is fine for the curated field's surface, *but* L0 must
+    preserve the originating `ConfigValue` somewhere accessible
+    to listings consumers, otherwise the tag information is lost
+    at the profile boundary. Two options:
+    1. Keep `listing_item.categories: Vec<String>` plus a
+       parallel `listing_item.categories_raw: Option<ConfigValue>`
+       (or similar) carrying the tagged value.
+    2. Type the field as `Option<ConfigValue>` directly and
+       extract the string list at consumer side.
+    Sub-decision **D7** below picks option (1) for ergonomics —
+    most consumers want `Vec<String>`; only the categories merge
+    needs the tagged form. Confirm with user if that's wrong.
+  - The same question applies to top-level `profile.categories`:
+    today it's `Vec<String>`. For the merge to be tag-aware, the
+    `DocumentProfile::extract` path needs to *also* expose the
+    pre-flattened `ConfigValue` for `categories`. This is a
+    small additive change to `DocumentProfile` (new field
+    `categories_raw` or similar). Recorded as part of L0 scope;
+    if it turns out to require touching too many call sites,
+    pull back and resolve at L1 before L1's first listing
+    consumer needs the tag-aware merge.
+  - **Documentation:** the contract doc's new `listing_item` row
+    notes that `categories` is merged with top-level
+    `profile.categories` via `MergedConfig` at consumer time.
+
+  D3 below is updated to record this approach. No follow-up bd
+  issue needed; the merge machinery already does the work.
+- **C5 — Type-mismatch diagnostics: silent drop in L0; revisit at
+  L2.** Strict validation belongs in the schema layer. L0 follows
+  the existing graceful-degradation pattern.
+- **C6 — `extra` namespace is distinct from curated fields.**
+  `listing-item: { title: "A", extra: { title: "B" } }` produces
+  `listing_item.title = Some("A")` and
+  `listing_item.extra["title"] = ConfigValue::String("B")`. Two
+  namespaces, no collision. Test 9 is extended to cover this.
+
 ## Type design
 
 ### `ListingItemInfo` shape
@@ -106,12 +191,17 @@ use serde::{Deserialize, Serialize};
 /// ---
 /// title: My post
 /// listing-item:
-///   reading-time: "15 minutes"   # author override; auto-fill skipped
+///   reading-time-minutes: 15      # author override; auto-fill skipped
 ///   extra:
 ///     status: "draft"             # custom field for a custom template
 ///     sponsors: [Foo, Bar]
 /// ---
 /// ```
+///
+/// Frontmatter keys are kebab-case (Quarto YAML convention);
+/// the corresponding Rust fields are snake_case. Extraction maps
+/// between the two with explicit lookups (e.g.
+/// `meta.get("reading-time-minutes")` → `reading_time_minutes`).
 ///
 /// # Generate / render decomposition
 ///
@@ -464,7 +554,7 @@ confirmed.
     listing-item:
       title: "Listing title"
       description: "Listing desc"
-      reading-time: 15
+      reading-time-minutes: 15
       categories: [a, b]
     ```
     populates the corresponding fields.
@@ -476,8 +566,19 @@ confirmed.
         sponsors: [Foo, Bar]
     ```
     populates `extra` with the right `ConfigValue` shapes.
+9b. **`profile_extract_listing_item_extra_namespace_distinct`** —
+    per C6, frontmatter:
+    ```yaml
+    listing-item:
+      title: "Curated"
+      extra:
+        title: "Custom"
+    ```
+    produces `listing_item.title == Some("Curated")` *and*
+    `listing_item.extra["title"] == ConfigValue::String("Custom")`.
+    Confirms the two namespaces don't collide.
 10. **`profile_extract_listing_item_unknown_top_key_dropped`** — `listing-item: { not-a-known-field: 42 }` does not panic and produces an empty `ListingItemInfo` (the unknown key drops). Confirms graceful degradation per §Diagnostics.
-11. **`profile_extract_listing_item_type_mismatch_dropped`** — `listing-item: { reading-time: [bad, type] }` does not panic; `reading_time_minutes` stays `None`.
+11. **`profile_extract_listing_item_type_mismatch_dropped`** — `listing-item: { reading-time-minutes: [bad, type] }` does not panic; `reading_time_minutes` stays `None`. (Per C5, no diagnostic in L0; that's L2's job.)
 12. **`document_profile_version_is_4`** — `DOCUMENT_PROFILE_VERSION == 4`. Catches accidental version-bump regressions.
 13. **`profile_v3_json_rejected_with_version_mismatch`** — synthesize a JSON string with `"profile_version": 3`; assert `DocumentProfile::from_json` returns `DocumentProfileError::VersionMismatch { expected: 4, found: 3 }`.
 
@@ -663,10 +764,28 @@ disagrees with any, push back before implementation starts.
   epic plan stated. The epic was authored before recognizing
   `bd-o8pr` had already taken `3`. No change to the epic
   decision; just the integer.
-- **D3 (categories handling):** L1 may copy
-  `DocumentProfile::categories` into `listing_item.categories`
-  when the author hasn't supplied a listing-specific value.
-  L0 only reads what's written; v1 keeps both fields.
+- **D3 (categories handling):** Listings consumers (L1+) compute
+  effective categories by feeding `profile.categories` and
+  `profile.listing_item.categories` into `MergedConfig` and
+  letting the tag rules decide. Default array behavior is
+  concat; authors opt into override with `!prefer`. L0 stores
+  both fields as written — see C4 above and D7 below for the
+  tagged-value preservation requirement.
+- **D7 (preserving ConfigValue tags through the profile):** L0
+  preserves the originating `ConfigValue` for both
+  `profile.categories` and `profile.listing_item.categories`
+  alongside the flattened `Vec<String>` form, so the tag-aware
+  merge in D3 has tagged values to merge. Concretely: add a
+  field `categories_raw: Option<ConfigValue>` on
+  `DocumentProfile` *and* on `ListingItemInfo` (or, if the
+  existing extraction path conveniently keeps the raw value,
+  surface it without renaming). The flattened `Vec<String>`
+  remains the primary consumer surface; the raw form is a
+  secondary, listings-aware surface. Naming TBD during impl
+  (e.g. `categories_source`, `categories_raw`). If the change
+  requires touching many existing consumers of
+  `profile.categories`, *stop* and confer with the user — D7
+  may need to be lifted out of L0.
 - **D4 (extra field encoding):** `BTreeMap<String, ConfigValue>`,
   not a generic `serde_json::Value`. The profile's existing
   serde stack uses `ConfigValue`; consistency with the rest of
@@ -680,11 +799,19 @@ disagrees with any, push back before implementation starts.
 
 ## Open sub-questions (defer; do not block L0)
 
-- Should `listing_item.categories` *replace* or *augment* the
-  profile-level `categories` for listings consumers? L0
-  punts; L1 will decide. Default assumption: replace if
-  present, otherwise inherit from `profile.categories`. L1's
-  sub-plan must confirm.
+- **Naming for the tag-preserving raw fields (D7).**
+  `categories_raw`? `categories_source`? `raw_categories`? Pick
+  during impl based on what reads naturally next to the
+  flattened `categories: Vec<String>` field. Not a
+  decision-blocker.
+- **Should other curated `ListingItemInfo` fields also preserve
+  raw `ConfigValue` for tag-aware merging?** D7 only addresses
+  `categories` because that's the field with a clear
+  multi-source merge pattern (top-level + listing-item). Other
+  fields (`title`, `description`, etc.) are scalars and the
+  override semantics are unambiguous (when both are set, listings
+  consumers pick `listing_item.<field>`). If a future need
+  arises (e.g. structured author lists merging), revisit then.
 - Does the contract's §"Scoped feature surfaces" need a
   cross-link from each typed top-level field's doc comment
   ("see §Scoped feature surfaces for what listings get
