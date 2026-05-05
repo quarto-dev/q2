@@ -4,23 +4,42 @@
 **Status:** Filed. Epic `bd-61cd`. Sub-issues filed; ids inline in
 each phase header below.
 
-**bd issue mapping:**
+**bd issue mapping and sub-plan files:**
 
-| Phase | bd id     | Type    | Title                                                                  |
-|-------|-----------|---------|-------------------------------------------------------------------------|
-| Epic  | `bd-61cd` | epic    | Listings feature epic                                                  |
-| L0    | `bd-n8a4` | task    | ListingItemInfo profile extension                                      |
-| L1    | `bd-izqh` | feature | ListingItemInfoStage (auto-fill, pre-checkpoint)                       |
-| L2    | `bd-j60g` | task    | Listing data model + YAML schema                                       |
-| L3    | `bd-ml8z` | feature | ListingResolveTransform (Pass-2, built-ins via doctemplate)            |
-| L4    | `bd-b5jm` | task    | quarto-doctemplate enhancements (pipes, ConfigValue bridge, resolver)  |
-| L5    | `bd-5vsr` | feature | Categories sidebar                                                     |
-| L6    | `bd-xbnf` | task    | Dependency-graph integration (`listing_content_targets`)               |
-| L7    | `bd-qf7r` | feature | Post-render placeholder upgrade (engine-rendered previews; BRACKETED)  |
-| L8    | `bd-rqgx` | feature | Custom listing templates                                               |
-| L9    | `bd-o90m` | feature | RSS feeds                                                              |
-| L10   | `bd-hzsi` | task    | Q1 → Q2 listing template migration docs + LLM skill                    |
-| L11   | `bd-qb4o` | task    | Listings epic close-out                                                |
+Per CLAUDE.md, each phase gets its own `claude-notes/plans/YYYY-MM-DD-*.md`
+sub-plan **before** implementation begins. None of the per-phase
+sub-plans exist yet — they will be authored at the start of each
+phase's work session, resolving the open questions listed in this
+epic plan's §"Open questions". The dates in the filenames below are
+placeholders; the real date is the day the sub-plan is written.
+
+The epic-level open questions (custom-template extension naming,
+image-fallback heuristic, `list.min.js` defer, HTML-parser choice,
+schema placement, stage-file location) live in this epic plan,
+under §"Open questions (to resolve in sub-plans, not now)" — not
+in any per-phase sub-plan yet.
+
+This document — `claude-notes/plans/2026-05-05-listings-epic.md` —
+is the parent plan that every sub-plan will reference. The
+companion design rationale is
+`claude-notes/plans/2026-05-05-listings-design-discussion.md`.
+
+| Phase | bd id     | Type    | Title                                                                  | Sub-plan file                                        | Status              |
+|-------|-----------|---------|-------------------------------------------------------------------------|------------------------------------------------------|---------------------|
+| Epic  | `bd-61cd` | epic    | Listings feature epic                                                  | `2026-05-05-listings-epic.md` (this file)            | Filed               |
+| —     | —         | —       | Design discussion (rationale)                                           | `2026-05-05-listings-design-discussion.md`           | Filed               |
+| L0    | `bd-n8a4` | task    | ListingItemInfo profile extension                                      | `YYYY-MM-DD-listings-L0-profile-extension.md`        | not yet written     |
+| L1    | `bd-izqh` | feature | ListingItemInfoStage (auto-fill, pre-checkpoint)                       | `YYYY-MM-DD-listings-L1-autofill-stage.md`           | not yet written     |
+| L2    | `bd-j60g` | task    | Listing data model + YAML schema                                       | `YYYY-MM-DD-listings-L2-data-model.md`               | not yet written     |
+| L3    | `bd-ml8z` | feature | ListingResolveTransform (Pass-2, built-ins via doctemplate)            | `YYYY-MM-DD-listings-L3-resolve-transform.md`        | not yet written     |
+| L4    | `bd-b5jm` | task    | quarto-doctemplate enhancements (pipes, ConfigValue bridge, resolver)  | `YYYY-MM-DD-listings-L4-doctemplate-enhancements.md` | not yet written     |
+| L5    | `bd-5vsr` | feature | Categories sidebar                                                     | `YYYY-MM-DD-listings-L5-categories-sidebar.md`       | not yet written     |
+| L6    | `bd-xbnf` | task    | Dependency-graph integration (`listing_content_targets`)               | `YYYY-MM-DD-listings-L6-dep-graph.md`                | not yet written     |
+| L7    | `bd-qf7r` | feature | Post-render placeholder upgrade (engine-rendered previews; BRACKETED)  | `YYYY-MM-DD-listings-L7-postrender-upgrade.md`       | not yet written     |
+| L8    | `bd-rqgx` | feature | Custom listing templates                                               | `YYYY-MM-DD-listings-L8-custom-templates.md`         | not yet written     |
+| L9    | `bd-o90m` | feature | RSS feeds                                                              | `YYYY-MM-DD-listings-L9-rss-feeds.md`                | not yet written     |
+| L10   | `bd-hzsi` | task    | Q1 → Q2 listing template migration docs + LLM skill                    | `YYYY-MM-DD-listings-L10-migration-docs.md`          | not yet written     |
+| L11   | `bd-qb4o` | task    | Listings epic close-out                                                | `YYYY-MM-DD-listings-L11-close-out.md`               | not yet written     |
 **Parent design discussion:**
 `claude-notes/plans/2026-05-05-listings-design-discussion.md` —
 contains the rationale for every architectural decision below.
