@@ -173,14 +173,54 @@ impl By {
         let line = self.data.get("line")?.as_u64()? as usize;
         Some((path, line))
     }
+
+    /// True if a `Synthetic { by: <self> }` node should be treated as
+    /// atomic by the incremental writer. Atomic Synthetic nodes are
+    /// constructed by the pipeline with no source preimage and represent
+    /// content the user shouldn't edit through React (filter-constructed
+    /// inlines, synthesized title h1, tree-sitter-inserted spaces).
+    ///
+    /// The writer's coarsen step (Plan 7) uses this to decide:
+    /// - KeepBefore on atomic Synthetic → Omit (drop from output;
+    ///   pipeline regenerates next run).
+    /// - UseAfter / RecurseIntoContainer on atomic Synthetic → soft-drop
+    ///   substitution + Q-3-42 warning.
+    ///
+    /// Non-atomic Synthetic kinds are transparent containers (Sectionize,
+    /// Footnotes, Appendix wrappers) whose children carry their own
+    /// source preimage; the writer recurses into children rather than
+    /// dropping or substituting.
+    pub fn is_atomic_synthesizer(&self) -> bool {
+        matches!(
+            self.kind.as_str(),
+            "filter" | "title-block" | "tree-sitter-postprocess"
+        )
+    }
 }
 ```
 
+Atomic vs. transparent vs. editable Synthetic kinds (decided in
+conversation; the table in §Notes shows the full mapping):
+
+- **Atomic** (`is_atomic_synthesizer() == true`): `filter`, `title-block`,
+  `tree-sitter-postprocess`. Pipeline-generated content with no source
+  preimage; user can't edit honestly.
+- **Transparent** (`is_atomic_synthesizer() == false`, has children):
+  `sectionize`, `footnotes`, `appendix`. Container synthesis; children
+  are editable per their own provenance.
+- **Editable** (`is_atomic_synthesizer() == false`, materializable):
+  `user-edit`. Explicitly user-typed; qmd writer serializes via Rewrite.
+- **Escape hatch** (`raw`): not atomic by default; extensions that need
+  atomic behavior should namespace their kind under `ext/<name>/...` and
+  consider whether `is_atomic_synthesizer` needs to recognize their
+  kinds (open extension question; v1 doesn't address registration).
+
 Add more accessors as Plans 6/7 surface concrete repeated patterns. The
-above two cover the immediate needs (filter-provenance recovery in tests,
-generic kind matching in writer dispatch). Don't proliferate accessors
-preemptively — `as_shortcode()`, `as_sectionize()`, etc. can be added if
-their call sites prove repetitive.
+above three cover the immediate needs (filter-provenance recovery in
+tests, generic kind matching in writer dispatch, atomicity classification
+for the writer). Don't proliferate accessors preemptively —
+`as_shortcode()`, `as_sectionize()`, etc. can be added if their call
+sites prove repetitive.
 
 ## Builder list is extensible
 
