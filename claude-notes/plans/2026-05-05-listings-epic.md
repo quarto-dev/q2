@@ -28,8 +28,8 @@ companion design rationale is
 |-------|-----------|---------|-------------------------------------------------------------------------|------------------------------------------------------|---------------------|
 | Epic  | `bd-61cd` | epic    | Listings feature epic                                                  | `2026-05-05-listings-epic.md` (this file)            | Filed               |
 | —     | —         | —       | Design discussion (rationale)                                           | `2026-05-05-listings-design-discussion.md`           | Filed               |
-| L0    | `bd-n8a4` | task    | ListingItemInfo profile extension                                      | `2026-05-05-listings-L0-profile-extension.md`        | Filed (draft)       |
-| L1    | `bd-izqh` | feature | ListingItemInfoStage (auto-fill, pre-checkpoint)                       | `YYYY-MM-DD-listings-L1-autofill-stage.md`           | not yet written     |
+| L0    | `bd-n8a4` | task    | ListingItemInfo profile extension                                      | `2026-05-05-listings-L0-profile-extension.md`        | **Closed** (impl `ab28ea00`, merge `57671f9b`) |
+| L1    | `bd-izqh` | feature | ListingItemInfoStage (auto-fill, pre-checkpoint)                       | `2026-05-05-listings-L1-autofill-stage.md`           | Filed (draft)       |
 | L2    | `bd-j60g` | task    | Listing data model + YAML schema                                       | `YYYY-MM-DD-listings-L2-data-model.md`               | not yet written     |
 | L3    | `bd-ml8z` | feature | ListingResolveTransform (Pass-2, built-ins via doctemplate)            | `YYYY-MM-DD-listings-L3-resolve-transform.md`        | not yet written     |
 | L4    | `bd-b5jm` | task    | quarto-doctemplate enhancements (pipes, ConfigValue bridge, resolver)  | `YYYY-MM-DD-listings-L4-doctemplate-enhancements.md` | not yet written     |
@@ -76,7 +76,17 @@ These are inputs to this plan, not open questions:
    incremental rebuild edges, `WebsiteProjectType::post_render` for
    the placeholder-substitution step, sitemap-style emission for
    RSS feeds.
-7. **Placeholder substitution is bracketed as a website-only,
+7. **`DocumentProfile` is now at v4** (after L0 / `bd-n8a4`).
+   The original epic plan called for "v2 → v3"; in fact the
+   field already sat at v3 (`bd-o8pr` / `resources`), so L0
+   bumped to **v4**. L0 also added `categories_raw:
+   Option<ConfigValue>` on both `DocumentProfile` and
+   `DocumentProfile.listing_item` to preserve merge tags
+   (decision D7 in the L0 sub-plan); listings consumers feed
+   both into `MergedConfig` for tag-aware category merging
+   (default `Concat`, override via `!prefer`). Future bumps in
+   this epic target **v5+**.
+8. **Placeholder substitution is bracketed as a website-only,
    CLI-only feature (decided 2026-05-05).** The
    description-preview-from-rendered-content and
    preview-image-from-rendered-content features (Q1's
