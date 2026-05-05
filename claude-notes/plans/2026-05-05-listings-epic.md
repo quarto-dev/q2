@@ -127,11 +127,10 @@ These are inputs to this plan, not open questions:
 - **`field-required` validation diagnostics beyond a basic
   warning.** Q1 throws on missing required fields; v1 emits a
   diagnostic and drops the item. Stricter validation is a follow-up.
-- **Pagination JS / `list.js` interactivity** for the built-in
-  templates. Q1 ships `list.min.js` for client-side sort/filter;
-  v1 emits the markup but ships filter/sort UI as inert
-  presentation only. Adding the JS layer is a follow-up phase
-  *if* user demand justifies the bundled JS.
+- (Removed from "not delivered" 2026-05-05.) `list.min.js`
+  client-side sort/filter interactivity *is* in scope for L3
+  per decision 3. See L3 for the artifact-store integration
+  rules and the fallback path if integration proves invasive.
 - **Q1-to-Q2 migration tooling.** Documentation + LLM skill, not
   an automated converter.
 - **Multi-format listings.** HTML-only, mirroring Q1's
@@ -224,7 +223,9 @@ extracted profile carries that value.
 **bd type:** feature. Depends on L0.
 
 Scope:
-- New stage `crates/quarto-core/src/stage/stages/listing_item_info.rs`.
+- New stage at
+  `crates/quarto-core/src/stage/stages/listing_item_info.rs`
+  (decision 6 — matches sibling stage modules).
 - Pipeline position: after `IncludeExpansionStage`, before
   `DocumentProfileStage`. Insert into both
   `build_html_pipeline_stages_with_apply_config` and
@@ -244,11 +245,12 @@ Scope:
     (hub-client, `quarto preview`), this fallback is what the
     listing displays. Never `None` for a real document.
   - `image`: **always populate a fallback** from the AST. First
-    `Image` node `src` from the body, after include expansion.
-    If no images are present in the static AST, leave `None` —
-    the listing template will render its existing
-    `image-placeholder` empty-div fallback. Same role as
-    `description`: a safe baseline that L7 may later upgrade.
+    `Image` node `src` from the body, in document order, after
+    include expansion (decision 2 — confirmed). If no images are
+    present in the static AST, leave `None` — the listing
+    template will render its existing `image-placeholder`
+    empty-div fallback. Same role as `description`: a safe
+    baseline that L7 may later upgrade.
 - **Safeguard contract**: after L1, a document is *always*
   presentable as a listing item without any post-render
   upgrade. L7 is purely an enhancement. The CLI/website-render
@@ -282,10 +284,13 @@ Scope:
   `external-sources/quarto-cli/src/resources/schema/definitions.yml`
   `website-listing` and `website-listing-contents-object`
   definitions.
-- Surface `listing:` as a document-frontmatter key (matches Q1).
-- `template:` field accepts a path; the `.ejs.md` extension is
-  accepted with a deprecation diagnostic, otherwise we expect
-  `.qmd-template` (final extension TBD in L2's sub-plan).
+- Surface `listing:` as a top-level document-frontmatter key
+  (decision 5 — matches Q1 and Q2's current `navbar` placement;
+  reconcile with `bd-n9dr` if needed).
+- `template:` field accepts a path with canonical extension
+  `.template` (decision 1). `.ejs.md` is accepted with a
+  deprecation diagnostic surfacing the Q1-migration documentation
+  link.
 - No rendering yet; this is data plumbing only.
 - Tests: schema validation positive/negative cases, deserialization
   round-trip, default value coverage.
@@ -319,6 +324,15 @@ Scope:
   placeholders are emitted with the *same regex format* Q1 uses
   (`<!-- desc(5A0113B34292)[max=…]:path -->`,
   `<!-- img(9CEB782EFEE6)[…]:id:path -->`) — substituted in L7.
+- **Bundle `list.min.js`** for client-side sort/filter
+  interactivity (decision 3). The built-in templates emit the
+  same markup as Q1, so Q1's `list.min.js` slots in unchanged.
+  The script is registered as a `Project`-scoped artifact via
+  Phase-5's artifact store and emitted into `_site/site_libs/`
+  alongside other shared JS. L3's sub-plan must verify this is
+  a clean integration; if the artifact-store wiring forces
+  cross-cutting churn, fall back to deferring `list.min.js` to
+  a follow-up and re-open decision 3.
 - Glob expansion uses the project's existing deterministic
   glob expander (verify which one in L3's sub-plan; pampa or
   `quarto-core` likely already has one for `_quarto.yml`
@@ -444,10 +458,15 @@ after they exist. L7 is that step.
     file, extract `firstPara` + `previewImage`, substitute. If
     the sibling has neither (e.g. engine produced nothing
     visible), the L1 fallback remains in place.
-  - HTML parsing: pick a lightweight crate in L7's sub-plan
-    (`tl` / `scraper` / regex-only). WASM-compat is **not**
-    required — L7 is CLI-only by construction (see Bracketing
-    rules).
+  - HTML parsing: **`scraper`** (decision 4). Its CSS-selector
+    API maps directly to Q1's `querySelector(...)` patterns and
+    aligns with the user's planned future use in
+    `_quarto.tests`. L7's sub-plan must verify `scraper`'s
+    transitive dependencies do not break the existing WASM
+    build even though L7 itself is CLI-only — pulling
+    incompatible deps into `quarto-core` would break hub-client
+    via shared dep resolution. Fall back to `tl` only if a hard
+    blocker is found.
   - Cache: read each sibling once per `post_render` invocation.
 - Tests: placeholder upgrade against a real rendered fixture;
   L1-fallback preservation when sibling has no preview content;
@@ -532,7 +551,7 @@ the form of the trade-off.
 Scope:
 - Wire the `template:` config path through to
   `ListingResolveTransform`'s template resolver: when the user
-  sets `template: my-listing.qmd-template`, resolve via
+  sets `template: my-listing.template` (decision 1), resolve via
   `FileSystemResolver` rooted at the host-page directory, falling
   back to `MemoryResolver` for built-in partials referenced
   from within the custom template.
@@ -542,8 +561,8 @@ Scope:
   `listing.template_params` in the binding.
 - Diagnostic when `template:` points at a missing file (with
   source span on the YAML key).
-- Deprecation diagnostic when the path ends in `.ejs.md` —
-  documents the migration path.
+- Deprecation diagnostic when the path ends in `.ejs.md`,
+  pointing at the L10 migration documentation.
 - Tests: custom template rendering against a fixture; access to
   `item.extra`; access to `listing.template_params`; missing-file
   diagnostic; deprecated-extension diagnostic.
@@ -722,27 +741,50 @@ session.
   *Mitigation:* `cargo xtask verify` covers this. L4's sub-plan
   includes a WASM-build verification step.
 
-## Open questions (to resolve in sub-plans, not now)
+## Resolved decisions (formerly "open questions"; user confirmed 2026-05-05)
 
-1. **Final extension for custom templates** —
-   `.qmd-template`? `.q2-template`? `.qmt`? A single token to
-   pick at L2's sub-plan.
-2. **Image-from-first-body-image heuristic in L1.** Ship in v1
-   or defer? User's call.
-3. **Bundled `list.min.js` (interactivity).** Defer to a
-   dedicated post-epic phase, or include in L3? Recommendation:
-   defer; the markup is correct without JS, and JS bundling
-   touches Phase-5 artifact-store machinery.
-4. **HTML-parsing crate for L7** (`tl` vs. `scraper` vs.
-   regex-only) — needs a small evaluation pass.
-5. **Schema placement.** `listing:` is a top-level frontmatter
-   key in Q1; matches Q2's current `navbar` placement. Confirm
-   in L2's sub-plan that this lines up with the still-open
-   `bd-n9dr` nav-config-placement decision.
-6. **Where exactly does `ListingItemInfoStage` belong in
-   `quarto-core`?** Likely
-   `crates/quarto-core/src/stage/stages/listing_item_info.rs`,
-   matching siblings. Confirm in L1's sub-plan.
+All six epic-level open questions have been answered. Recording here
+for the audit trail; sub-plans inherit these as inputs.
+
+1. **Custom-template extension: `.template`.** Shortest readable
+   token. Acknowledges the relationship to Pandoc's templating
+   language without implying full compatibility (Q2 is currently a
+   strict subset of Pandoc doctemplate features, with extensions
+   under consideration). Schema accepts `.template` as the
+   canonical extension; `.ejs.md` is accepted with a deprecation
+   diagnostic for Q1 migration.
+2. **Image-from-first-body-image heuristic in L1: ship in v1.**
+   Common use case. L1's auto-fill scans the post-include AST for
+   the first `Image` node and uses its `src` as the listing-item
+   `image` fallback when the author hasn't supplied one. The
+   exact "first" semantics (literally first in document order)
+   are confirmed in L1's sub-plan; no scoring heuristic.
+3. **Bundled `list.min.js` interactivity: include in L3** unless
+   a strong technical reason emerges. The markup the built-in
+   templates emit is the same as Q1's, so the same `list.min.js`
+   slots in. JS bundling routes through Phase-5's artifact-store
+   `Project` scope. L3's sub-plan must verify the artifact-store
+   integration is straightforward; if it forces cross-cutting
+   churn, fall back to deferring `list.min.js` to a follow-up
+   and re-open this question.
+4. **HTML-parsing crate for L7: `scraper` (preferred).** The CSS
+   selector API matches Q1's `querySelector(...)` patterns
+   directly and the user has previously evaluated it for a future
+   `_quarto.tests` implementation, so adopting it here aligns
+   with that planned use. L7's sub-plan must verify WASM
+   compatibility — though L7 itself is CLI-only by construction
+   per the bracketing rules, the `scraper` crate must not pull
+   transitive dependencies that break the existing WASM build.
+   Fall back to `tl` only if a hard blocker is found.
+5. **Schema placement: top-level `listing:` frontmatter key.**
+   Matches Q1 and Q2's current `navbar` placement. L2's sub-plan
+   must reconcile with the still-open `bd-n9dr` nav-config-
+   placement decision; the listings work does not pre-empt that
+   decision but must be migratable if `bd-n9dr` ultimately
+   chooses a namespaced placement.
+6. **`ListingItemInfoStage` location:**
+   `crates/quarto-core/src/stage/stages/listing_item_info.rs`.
+   Matches sibling stage modules.
 
 ## Test-strategy threads (cross-cutting)
 
