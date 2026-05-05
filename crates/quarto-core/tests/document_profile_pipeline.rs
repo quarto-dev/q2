@@ -491,6 +491,46 @@ async fn profile_records_transitive_includes() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// L0 — listings epic (`bd-n8a4`): pipeline-level extraction of
+// `listing-item:` frontmatter. The full pipeline (MetadataMergeStage,
+// IncludeExpansionStage, DocumentProfileStage) runs end-to-end here;
+// the assertion is that author values land on
+// `profile.listing_item.*` after the checkpoint.
+// ---------------------------------------------------------------------------
+
+// NOTE: Do not use `\<newline>` line continuations inside this fixture
+// — they strip leading whitespace, which silently flattens the YAML
+// nesting into a malformed listing-item: null with sibling keys.
+const LISTING_ITEM_FIXTURE_QMD: &[u8] = b"---
+title: Outer
+listing-item:
+  title: Listing title
+  description: Listing desc
+  reading-time-minutes: 12
+  categories: [a, b]
+  extra:
+    status: draft
+---
+
+Body paragraph.
+";
+
+#[tokio::test]
+async fn pipeline_extracts_listing_item_from_frontmatter() {
+    let bundle = run_head_pipeline(LISTING_ITEM_FIXTURE_QMD).await;
+    let li = &bundle.profile.listing_item;
+    assert_eq!(li.title.as_deref(), Some("Listing title"));
+    assert_eq!(li.description.as_deref(), Some("Listing desc"));
+    assert_eq!(li.reading_time_minutes, Some(12));
+    assert_eq!(li.categories, vec!["a".to_string(), "b".to_string()]);
+    let status = li
+        .extra
+        .get("status")
+        .expect("status entry present in extra");
+    assert_eq!(status.as_plain_text().as_deref(), Some("draft"));
+}
+
 #[test]
 fn include_expansion_precedes_document_profile() {
     // Structural guard against future refactors silently reordering the
