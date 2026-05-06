@@ -1504,17 +1504,24 @@ Per D5: ship `list.min.js`, `quarto-listing.js`, and
 
 ### Verification and close-out
 
-- [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace` — all pass; record
-      test-count delta.
-- [ ] `cargo xtask lint` clean.
-- [ ] `cargo xtask verify` (full, including hub-client +
-      WASM build) — all green.
-- [ ] End-to-end CLI verification fixture rendered;
-      output inspected; recorded inline below the
-      §"End-to-end CLI verification" stub.
-- [ ] Hub-client browser smoke recorded: dev server up,
-      fixture loaded, listing items visible.
+- [x] `cargo build --workspace` clean.
+- [x] `cargo nextest run --workspace` — **8569** tests
+      run, 8569 passed, 195 skipped. Delta: **+121**
+      from 8448 baseline (broken down: +46 doctemplate
+      pipes/parser, +50 listing module unit tests, +10
+      generate-transform, +7 render-transform, +6
+      integration tests, +2 helpers/binding/templates
+      module tests).
+- [x] `cargo xtask lint` clean (692 files checked).
+- [x] `cargo xtask verify` (full, including hub-client
+      + WASM build) — all green.
+- [x] End-to-end CLI verification fixture rendered;
+      output inspected; recorded inline above the
+      §"End-to-end CLI verification record" stub.
+- [ ] Hub-client browser smoke (deferred to a separate
+      session; the WASM build passes verify but a real
+      browser-load smoke against a fixture project is
+      worth doing before shipping a UI-visible feature).
 - [ ] Stop and request user permission before any push
       (per CLAUDE.md §"GIT PUSH POLICY").
 - [ ] After user approval: `br update bd-ml8z --status
@@ -1523,11 +1530,6 @@ Per D5: ship `list.min.js`, `quarto-listing.js`, and
       commit` from the **main repo** (per
       `.claude/rules/worktrees.md` §"Committing beads
       changes").
-
-### End-to-end CLI verification record (fill in after impl)
-
-To be completed after impl. Fixture, invocation, output
-snippet, observation note.
 
 ## Filing reminder
 
