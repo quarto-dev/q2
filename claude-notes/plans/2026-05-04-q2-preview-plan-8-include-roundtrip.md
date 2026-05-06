@@ -16,7 +16,7 @@ anchor for the include token's source bytes — round-trip preserves
 
 This plan also adds the qmd-writer arm for `CustomNode("IncludeExpansion")`
 and the React component (transparent passthrough that doesn't propagate
-`setLocalAst` to slot children, registered with Plan 2). The writer's
+`setLocalAst` to slot children, registered with Plan 2B). The writer's
 atomic-violation logic from Plan 7 enforces the "edits inside an include
 are prohibited" contract — `IncludeExpansion` is registered in
 `is_atomic_custom_node`.
@@ -55,14 +55,22 @@ round-tripping; edits inside surfacing as diagnostics).
     arm includes `unreachable!("coarsen should have substituted KeepBefore
     for atomic CustomNode in RecurseIntoContainer; this branch indicates
     a coarsen bug")` as a debug assertion.
-- Add a React component for `IncludeExpansion` in custom.tsx (Plan 2's
-  registry):
+- Add a React component for `IncludeExpansion` in custom.tsx (Plan 2B's
+  registry; Plan 2B already lands an `IncludeExpansion` placeholder
+  component as dormant wiring — Plan 8 makes the underlying CustomNode
+  appear in the AST):
   - Transparent passthrough: render the content slot's blocks normally.
-  - Read-only: do not pass `setLocalAst` to slot children.
+  - Read-only: do not pass `setLocalAst` to slot children (enforced via
+    Plan 2B's atomic-aware dispatcher reading
+    `hub-client/src/utils/atomicCustomNodes.ts`).
   - Visual indicator (optional): subtle background tint or hover badge
     "from foo.qmd".
-- Register `"IncludeExpansion"` in `is_atomic_custom_node` (the function
-  Plan 7 introduces).
+- Register `"IncludeExpansion"` in **both** sides of the atomic registry:
+  Rust `ATOMIC_CUSTOM_NODES` const (Plan 7 introduces the const +
+  `is_atomic_custom_node()` function) and TypeScript hand-mirror
+  `hub-client/src/utils/atomicCustomNodes.ts` (Plan 2A introduces the
+  file with the initial `["CrossrefResolvedRef"]` set). Plan 8 amends
+  both to add `"IncludeExpansion"`.
 - Tests covering:
   - Untouched include: round-trip preserves `{{< include foo.qmd >}}`.
   - Edit outside include: that paragraph rewrites; include token preserved.
@@ -111,7 +119,8 @@ round-tripping; edits inside surfacing as diagnostics).
   parent-file include token. Round-trip semantics compose: untouched at any
   level → preserved; touched at any level → atomic-violation at the deepest
   affected wrapper.
-- **React component is read-only** (Plan 2's responsibility). The IncludeExpansion
+- **React component is read-only** (Plan 2B's responsibility, enforced
+  via Plan 2A's atomic-registry hand-mirror). The IncludeExpansion
   component does not pass `setLocalAst` to children. This is the primary
   enforcement; the writer's atomic-violation is the contract guarantor.
 
@@ -135,7 +144,7 @@ Block::Custom(CustomNode {
 
 The included blocks inside the slot keep their own FileId (set by the
 existing remap_file_ids logic in `IncludeExpansionStage`). They render
-correctly in q2-preview's React layer because Plan 2's IncludeExpansion
+correctly in q2-preview's React layer because Plan 2B's IncludeExpansion
 component renders the slot's content using the same dispatch.
 
 ## Round-trip walkthrough
@@ -248,8 +257,12 @@ component renders the slot's content using the same dispatch.
   prevents Derived from working.)
 - Plan 7 — coarsen logic (Verbatim, Transparent, Omit, soft-drop
   substitutions, is_atomic_custom_node registry).
-- Plan 2 — React component infrastructure (registers IncludeExpansion
-  component as a transparent read-only passthrough).
+- Plan 2A — `hub-client/src/utils/atomicCustomNodes.ts` (the JS-side
+  atomic registry that Plan 8 amends to add `"IncludeExpansion"`).
+- Plan 2B — React component infrastructure (registers IncludeExpansion
+  component as a transparent read-only passthrough; Plan 2B already
+  ships the placeholder component as dormant wiring before Plan 8
+  produces these CustomNodes).
 
 ## Test plan
 
@@ -277,7 +290,7 @@ component renders the slot's content using the same dispatch.
   preserved. Edit inside bar: `Q-3-43` warning with bar's wrapper source
   range; the inner edit is reverted via Plan 7's soft-drop, parent.qmd
   byte-equal to no-op edit.
-- **Plan 2 component test**: render an IncludeExpansion wrapper; assert
+- **Plan 2B component test**: render an IncludeExpansion wrapper; assert
   setLocalAst is not propagated to children (no edit affordance).
 - **Idempotence**: re-run Plan 3's idempotence test with includes. The
   wrapper should be deterministic across runs.
@@ -286,8 +299,8 @@ component renders the slot's content using the same dispatch.
 
 - Depends on: Plans 4, 6, 7 (Synthetic types not strictly needed since the
   wrapper uses Original; the audit pattern; the writer's atomic logic).
-- Plan 2 also depends on this for the IncludeExpansion component (which
-  Plan 8 confirms is needed).
+- Plan 2B also depends on this for the IncludeExpansion component (which
+  Plan 8 confirms is needed; Plan 2B ships the placeholder dormant).
 - Final plan in the sequence; nothing depends on it.
 
 ## Risk areas

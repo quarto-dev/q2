@@ -135,18 +135,23 @@ sites; see §Scope for the verification step.
   `DiagnosticMessage` — discriminants are in the code+notes.
 - `is_atomic_custom_node` registry, defined in **`quarto-core`** as
   `pub const ATOMIC_CUSTOM_NODES: &[&str]` plus
-  `pub fn is_atomic_custom_node(type_name: &str) -> bool`. Single
-  source of truth on the Rust side, consumed by the writer (`pampa`),
-  Plan 8 (extends the const), and **hand-mirrored to TypeScript** at
-  `hub-client/src/utils/atomicCustomNodes.ts` with a sync comment.
-  This matches the codebase's existing pattern for cross-language
-  type pairs (e.g., `hub-client/src/types/intelligence.ts` mirrors
-  `quarto-lsp-core` types this way; `hub-client/src/types/diagnostic.ts`
-  mirrors `DiagnosticMessage`). The codebase does not use codegen for
-  this; doc comments + code review keep the lists aligned. Initial
-  set: `["IncludeExpansion", "CrossrefResolvedRef"]`. Note:
-  `ShortcodeResolution` is NOT in this set — shortcode atomicity is
-  handled via the `Derived` source_info path, not via a wrapper.
+  `pub fn is_atomic_custom_node(type_name: &str) -> bool`. Plan 7
+  ships the **Rust side** (writer in `pampa` consumes it; Plan 8
+  extends the const to add `IncludeExpansion`). The **TypeScript
+  hand-mirror** at `hub-client/src/utils/atomicCustomNodes.ts` ships
+  with **Plan 2A** because Plan 2B is the first consumer (atomic-aware
+  `setLocalAst` gating in the dispatcher); ownership was reassigned
+  during the 2026-05-06 review session. The TS file's header comment
+  documents the sync convention — both sides are kept aligned via
+  doc comments + code review (no codegen). This matches the codebase's
+  existing pattern for cross-language type pairs (e.g.,
+  `hub-client/src/types/intelligence.ts` mirrors `quarto-lsp-core`
+  types this way; `hub-client/src/types/diagnostic.ts` mirrors
+  `DiagnosticMessage`). Initial set:
+  `["IncludeExpansion", "CrossrefResolvedRef"]` (Plan 8 adds
+  `IncludeExpansion` to both sides). Note: `ShortcodeResolution` is
+  NOT in this set — shortcode atomicity is handled via the `Derived`
+  source_info path, not via a wrapper.
 
   **Migration path for extension-contributed atomic types**: the
   hand-mirror is the right shape for built-ins. Extension-contributed
@@ -238,7 +243,7 @@ sites; see §Scope for the verification step.
   in coarsen and emit a warning rather than aborting the entire write.
   The user's other (valid) edits go through; the bad edit is reverted
   to KeepBefore (or KeepBefore-equivalent for inline-level cases).
-  Reasoning: the React side (Plan 2) is the primary safeguard via
+  Reasoning: the React side (Plan 2B) is the primary safeguard via
   read-only enforcement; the writer is the contract guarantor; if both
   are correct the warning channel rarely fires; if React has a hole the
   writer protects without losing the user's session. "Edit cannot apply"
@@ -706,8 +711,8 @@ each bad-edit case substitutes a safe alignment in coarsen and emits a
 warning, but the user's other edits go through. The user-facing contract
 "this edit must be prohibited" is honored (the bad edit doesn't apply);
 the user-facing failure mode "the entire save was rejected" is not.
-React (Plan 2) is the primary safeguard via read-only enforcement; the
-writer is the contract guarantor; if React has a hole the writer
+React (Plan 2B) is the primary safeguard via read-only enforcement;
+the writer is the contract guarantor; if React has a hole the writer
 protects without losing the user's session.
 
 The let-user-win exception for block-level UseAfter on atomic

@@ -16,8 +16,9 @@ existing `AstIframe` plumbing.
 
 This is the foundation milestone. After Plan 1 lands, Lua filters and shortcodes
 are visibly applied in q2-preview's React rendering. CustomNodes (Callout,
-Theorem, etc.) reach React as `__quarto_custom_node` wrapper Divs (Plan 2 adds
-type-specific React components for them).
+Theorem, etc.) reach React as `__quarto_custom_node` wrapper Divs (Plan 2B adds
+type-specific React components for them; Plan 2A lands the iframe foundation
+those components depend on).
 
 Edit-back is **read-only** in v1 — `ReactPreview.tsx`'s `handleSetAst`
 early-returns with a console warning for `q2-preview` format. Plan 7 removes
@@ -130,7 +131,7 @@ this guard once the writer-side round-trip lands.
   ```
   Add `format` to the `useCallback` dependency array. The guard is a
   one-block diff for Plan 7 to delete. The contract this protects is
-  forward-compat for **Plan 2**: Plan 2's CustomNode React components
+  forward-compat for **Plan 2B**: Plan 2B's CustomNode React components
   are the things that will eventually call `setLocalAst` for
   kanban-style edits. Without the guard, those components could
   silently corrupt source through a writer path that hasn't been
@@ -138,7 +139,8 @@ this guard once the writer-side round-trip lands.
 
 ### Out of scope (deferred to other plans)
 
-- React component implementations for CustomNodes (Plan 2).
+- React component implementations for CustomNodes (Plan 2B; Plan 2A
+  lands the iframe foundation).
 - Filter idempotence verification (Plan 3).
 - Provenance type changes (Plans 4/5/6).
 - Edit-back round-trip via `incremental_write_qmd_for_preview` (Plan 7).
@@ -225,13 +227,15 @@ Excluded (with rationale):
 
 - `CalloutResolveTransform` — preserve CustomNode for React.
 - `WebsiteFaviconTransform` — no favicon concept in React preview.
-- `TitleBlockTransform` — React layout reads `meta.title` directly (Plan 2).
+- `TitleBlockTransform` — React layout reads `meta.title` directly (Plan 2B).
 - `FootnotesTransform` — synthesizes a non-source-bearing container; defer to
   future plan with wrapper-CustomNode round-trip story.
 - `TocRenderTransform`, `NavbarRenderTransform`, `SidebarRenderTransform`,
   `PageNavRenderTransform`, `FooterRenderTransform` — produce HTML strings;
-  React components consume structured metadata directly (Plan 2 reimplements
-  Sidebar body-classes and Navbar brand-fallback in JS).
+  q2-preview elides them. The originally-planned Sidebar body-classes
+  and Navbar brand-fallback JS reimplementation was deferred during the
+  2026-05-06 review (Plan 2A §"Out of scope: layout chrome") and now
+  ships with the future "q2-preview layout chrome" plan.
 - `LinkRewriteTransform` — rewrites `.qmd` hrefs to `.html`; wrong target for
   the editor. Editor navigates to `.qmd` directly via `onNavigateToDocument`.
 - `AppendixStructureTransform` — synthesizes a non-source-bearing container;
@@ -351,15 +355,16 @@ rationale for each decision.)
   Page-scoped artifacts (per-key VFS write). Both are required to
   honor the multi-plan contracts below.
 - **Page-scoped artifact handling**: mirror `RenderToHtmlRenderer`'s
-  Page-scoped loop. Resolved by Plan 2 §"Page-scoped artifact
-  handling" — image artifacts from `ResourceCollectorTransform` land
-  in VFS under `/.quarto/project-artifacts/`, served to the iframe as
-  `<img src=...>`. The mirroring is load-bearing because
-  `ResourceCollectorTransform` rewrites image URLs in the AST using
-  the same `ResourceResolverContext::vfs_root`; if q2-preview used a
-  different resolver, the URLs in the AST and the VFS paths would
-  disagree. The loop is artifact-type-agnostic — non-image
-  Page-scoped artifacts ride the same channel even though Plan 2's
+  Page-scoped loop. Plan 2A §"Multi-plan contract: page-scoped image
+  artifacts" reads them — image artifacts from `ResourceCollectorTransform`
+  land in VFS under `/.quarto/project-artifacts/`, and Plan 2A's
+  `iframeAssetRewriter` resolves them to `data:` URIs in the AST iframe
+  (mirroring the HTML-iframe path). The mirroring is load-bearing
+  because `ResourceCollectorTransform` rewrites image URLs in the AST
+  using the same `ResourceResolverContext::vfs_root`; if q2-preview
+  used a different resolver, the URLs in the AST and the VFS paths
+  would disagree. The loop is artifact-type-agnostic — non-image
+  Page-scoped artifacts ride the same channel even though Plan 2B's
   components only consume images today. See §"Multi-plan contract:
   page-scoped artifacts".
 - **Drift-protection test**: a single helper `assert_filtered_subset`
@@ -581,20 +586,20 @@ rationale for each decision.)
     entry under `/.quarto/project-artifacts/`, that the URL embedded
     in the AST and the on-disk VFS path agree
     (resolver-coordinate-system invariant), and that navbar /
-    sidebar metadata is populated. Guards the contract Plan 2
+    sidebar metadata is populated. Guards the contract Plan 2A
     consumes (§"Multi-plan contract: page-scoped image artifacts").
 - **JS routing test** (vitest): mounting `ReactPreview` with
   `format="q2-preview"` content routes through `AstIframe` (matches q2-debug's
   test pattern).
 - **End-to-end browser smoke** (playwright): open a fixture in hub-client,
   switch format to `q2-preview`, assert the iframe renders without error
-  (visual fidelity is Plan 2's responsibility).
+  (visual fidelity is Plan 2B's responsibility; Plan 2A delivers theme
+  CSS + image rendering).
 - **Theme CSS artifact regression test**: after a q2-preview render of a
   fixture that triggers theme compilation, assert
   `/.quarto/project-artifacts/styles.css` exists in VFS and is non-empty.
   Plan 1 doesn't read this artifact, but the test guards the contract
-  Plan 2 will eventually depend on (see §"Multi-plan contract: theme
-  CSS artifact").
+  Plan 2A consumes (see §"Multi-plan contract: theme CSS artifact").
 - **Format-switch behavior — manual verification only**: switching
   a live `ReactPreview` from `format="html"` to `format="q2-preview"`
   (and back) without remounting is exercised interactively by the
@@ -609,7 +614,8 @@ rationale for each decision.)
 ## Dependencies
 
 - Depends on: nothing (this is the first plan to land).
-- Blocks: Plan 2 (which decorates the AST shape this plan produces).
+- Blocks: Plan 2A (iframe foundation), then Plan 2B (decorates the AST
+  shape this plan produces).
 - Independent of: Plans 4/5/6/7/8 (they extend the writer / type system).
 
 ## Multi-plan contracts
@@ -629,7 +635,7 @@ lifts the guard once `incremental_write_qmd_for_preview`'s round-trip
 machinery is in place. The guard is a one-block diff for Plan 7 to
 delete.
 
-The forward-compat contract this protects is **Plan 2**: Plan 2's
+The forward-compat contract this protects is **Plan 2B**: Plan 2B's
 CustomNode React components are the things that will eventually call
 `setLocalAst` for kanban-style edits. Without the guard, those
 components could silently corrupt source through a writer path that
@@ -642,7 +648,7 @@ editable**. User-facing behavior:
   `setLocalAst`, which no-ops with a `console.warn`. The action's
   on-screen affordance may *appear* to succeed (a card visibly drops
   into a new column) but the underlying source is unchanged and the
-  next render reverts the visual state. **This is acceptable post-Plan-2**
+  next render reverts the visual state. **This is acceptable post-Plan-2B**
   — interactive components fail soft until Plan 7 wires the writer
   round-trip, and the user accepts that UX gap explicitly.
 - The user can still navigate, scroll, and observe filter/shortcode
@@ -664,24 +670,27 @@ theme CSS lands in VFS at `/.quarto/project-artifacts/styles.css`
 **This artifact is unread in Plan 1.** The React iframe used by
 q2-preview (`ast-renderer.html`) ships only a system-font reset; it
 does not load any project-emitted CSS. The artifact write is a
-forward-compatibility commitment that Plan 2 consumes.
+forward-compatibility commitment that Plan 2A consumes.
 
-**Expected user-visible state between Plan 1 and Plan 2 landing**:
+**Expected user-visible state between Plan 1 and Plan 2A landing**:
 q2-preview renders **unstyled** — no Bootstrap classes are
 applied, no theme colors, no typography. The iframe shows raw
 semantic markup (Callout, Theorem, Section divs, etc.) over the
 system-font reset. This is intentional and not a bug. Anyone
 testing Plan 1 in isolation should expect this and not chase it
-as a styling regression. The styling story lands with Plan 2's
-stylesheet-injection work (§"Iframe CSS loading from VFS").
+as a styling regression. The styling story lands with Plan 2A's
+stylesheet-injection work (Plan 2A §"In scope: shared VFS asset
+rewriter").
 
-**Resolved by Plan 2** (§"Iframe CSS loading from VFS"): the
-visual-fidelity strategy is **class-compatible-with-bootstrap** —
-components emit the same class names as Rust's HTML output, and the
-iframe loads `/.quarto/project-artifacts/styles.css` from VFS via
-injected `<link rel="stylesheet">`. Plan 1's artifact write feeds
-this contract directly. The earlier "component-local styling"
-alternative was discussed and rejected.
+**Resolved by Plan 2A**: the visual-fidelity strategy is
+**class-compatible-with-bootstrap** — Plan 2B's components emit the
+same class names as Rust's HTML output, and Plan 2A's
+`iframeAssetRewriter` rewrites `<link href="/.quarto/.../styles.css">`
+to a `data:text/css;base64,...` URI by reading from VFS, mirroring
+the existing HTML-iframe pattern in
+`hub-client/src/utils/iframePostProcessor.ts:137-147`. Plan 1's
+artifact write feeds this contract directly. The earlier
+"component-local styling" alternative was discussed and rejected.
 
 A regression test asserts the artifact exists in VFS after a
 q2-preview render (see §Test plan).
@@ -697,11 +706,12 @@ embedded in the AST already point at these paths because the same
 is the shared coordinate system that ties AST URLs to on-disk VFS
 paths.
 
-Plan 2 commits to consuming these via `<img src=…>` in the iframe
-(Plan 2 §"Page-scoped artifact handling"). The contract is symmetric
-to the theme-CSS contract: Plan 1 writes, Plan 2 reads. The loop is
-artifact-type-agnostic — non-image Page-scoped artifacts ride the
-same channel even though Plan 2's components only consume images
+Plan 2A commits to consuming these via `<img src=…>` in the iframe
+(Plan 2A §"In scope: shared VFS asset rewriter"). The contract is
+symmetric to the theme-CSS contract: Plan 1 writes, Plan 2A reads.
+The loop is artifact-type-agnostic — non-image Page-scoped artifacts
+ride the
+same channel even though Plan 2B's components only consume images
 today.
 
 A regression test asserts the rewritten URL in the AST resolves to a
