@@ -22,6 +22,11 @@ pathdiff = "0.2"
 sha2 = "0.11"
 hex = "0.4"
 glob = "0.3"
+# `time` for date formatting (used by L1 ListingItemInfoStage; see
+# claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md §D12).
+# `formatting` enables `OffsetDateTime::format`; `macros` enables the
+# compile-time `format_description!` macro. WASM-compatible.
+time = { version = "0.3", features = ["formatting", "macros"] }
 
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true

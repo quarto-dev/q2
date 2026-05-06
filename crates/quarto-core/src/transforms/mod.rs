@@ -79,6 +79,7 @@ pub use footer_render::FooterRenderTransform;
 pub use footnotes::FootnotesTransform;
 pub use link_rewrite::LinkRewriteTransform;
 pub use metadata_normalize::MetadataNormalizeTransform;
+pub(crate) use metadata_normalize::inlines_to_plain_text;
 pub use navbar_generate::NavbarGenerateTransform;
 pub use navbar_render::NavbarRenderTransform;
 pub use page_nav_generate::PageNavGenerateTransform;

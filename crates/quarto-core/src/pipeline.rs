@@ -59,9 +59,9 @@ use crate::stage::stages::BootstrapJsStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
     EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage, LinkResolutionStage,
-    LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData,
-    PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, StageContext,
-    UnwrapProfileStage, UserFiltersStage,
+    ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage,
+    Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage,
+    ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -157,18 +157,20 @@ pub struct AstOutput {
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 3. `IncludeExpansionStage` - Splice in `{{< include child.qmd >}}` bodies
-/// 4. `DocumentProfileStage` - Extract the static profile at the checkpoint
-/// 5. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
-/// 6. `UnwrapProfileStage` - Hand the AST back to downstream stages
-/// 6. `PreEngineSugaringStage` - Seed crossref registry / desugar shorthand
-/// 7. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
-/// 8. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 9. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
-/// 10. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 11. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 12. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
-/// 13. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 14. `ApplyTemplateStage` - Apply HTML template
+/// 4. `IncludeResolveStage` - Resolve `include-in-header` etc. authored keys
+/// 5. `ListingItemInfoStage` - Auto-fill `meta.listing-item.*` (L1, `bd-izqh`)
+/// 6. `DocumentProfileStage` - Extract the static profile at the checkpoint
+/// 7. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
+/// 8. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 9. `PreEngineSugaringStage` - Seed crossref registry / desugar shorthand
+/// 10. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
+/// 11. `CompileThemeCssStage` - Compile theme CSS from merged metadata
+/// 12. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 13. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 14. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 15. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
+/// 16. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 17. `ApplyTemplateStage` - Apply HTML template
 pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
     build_html_pipeline_stages_with_apply_config(None)
 }
@@ -232,6 +234,13 @@ pub fn build_html_pipeline_stages_with_options(
         // folded later by ApplyTemplateStage's late-drain.
         // Plan: claude-notes/plans/2026-05-04-includes-feature.md.
         Box::new(IncludeResolveStage::new()),
+        // Auto-fill `meta.listing-item.*` (description, image, word
+        // count, reading time, mtime) when the author hasn't supplied
+        // them. Runs pre-checkpoint so the values land in
+        // `DocumentProfile.listing_item` for the listings feature
+        // (epic `bd-61cd`, L1 = `bd-izqh`). Author values always win.
+        // See `claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md`.
+        Box::new(ListingItemInfoStage::new()),
         // Profile checkpoint: post-merge, pre-mutation. See
         // `claude-notes/designs/document-profile-contract.md`.
         Box::new(DocumentProfileStage::new()),
@@ -313,15 +322,17 @@ pub fn build_html_pipeline() -> Pipeline {
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 3. `IncludeExpansionStage` - Splice in `{{< include child.qmd >}}` bodies
-/// 4. `DocumentProfileStage` - Extract the static profile at the checkpoint
-/// 5. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
-/// 6. `UnwrapProfileStage` - Hand the AST back to downstream stages
-/// 6. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 7. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
-/// 8. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
-/// 9. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 10. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 11. `ApplyTemplateStage` - Apply HTML template
+/// 4. `IncludeResolveStage` - Resolve `include-in-header` etc. authored keys
+/// 5. `ListingItemInfoStage` - Auto-fill `meta.listing-item.*` (L1, `bd-izqh`)
+/// 6. `DocumentProfileStage` - Extract the static profile at the checkpoint
+/// 7. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
+/// 8. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 9. `CompileThemeCssStage` - Compile theme CSS from merged metadata
+/// 10. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 11. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
+/// 12. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 13. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 14. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -343,6 +354,13 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         // land in `profile.includes` for cache invalidation
         // (bd-r82e). See `claude-notes/plans/2026-05-04-includes-feature.md`.
         Box::new(IncludeResolveStage::new()),
+        // Auto-fill `meta.listing-item.*` for the listings feature
+        // (L1, `bd-izqh`). Same position and contract as the native
+        // pipeline. mtime via `SystemRuntime::path_metadata`; the
+        // WASM impl currently returns `modified: None`, so
+        // hub-client renders skip `date_modified` until `bd-a3we`
+        // teaches the Automerge VFS to surface change-history time.
+        Box::new(ListingItemInfoStage::new()),
         // Profile checkpoint: post-merge, pre-mutation. Hub-client
         // Phase 9 will intercept this variant to build project-wide
         // nav state.
@@ -1136,7 +1154,7 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 19);
+        assert_eq!(stages.len(), 20);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
@@ -1146,36 +1164,40 @@ mod tests {
         // the profile checkpoint so file-slot include dependencies are
         // recorded into `profile.includes` for cache invalidation.
         assert_eq!(stages[3].name(), "include-resolve");
+        // Listings auto-fill (bd-izqh, L1) sits between include-resolve
+        // and the profile checkpoint so `meta.listing-item.*` enrichment
+        // is visible to `DocumentProfile.listing_item`.
+        assert_eq!(stages[4].name(), "listing-item-info");
         // Profile checkpoint (Phase 0 website epic, bd-f3jc).
-        assert_eq!(stages[4].name(), "document-profile");
+        assert_eq!(stages[5].name(), "document-profile");
         // Cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
-        assert_eq!(stages[5].name(), "link-resolution");
-        assert_eq!(stages[6].name(), "unwrap-profile");
-        assert_eq!(stages[7].name(), "pre-engine-sugaring");
-        assert_eq!(stages[8].name(), "engine-execution");
-        assert_eq!(stages[9].name(), "compile-theme-css");
+        assert_eq!(stages[6].name(), "link-resolution");
+        assert_eq!(stages[7].name(), "unwrap-profile");
+        assert_eq!(stages[8].name(), "pre-engine-sugaring");
+        assert_eq!(stages[9].name(), "engine-execution");
+        assert_eq!(stages[10].name(), "compile-theme-css");
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
-        assert_eq!(stages[10].name(), "bootstrap-js");
-        assert_eq!(stages[11].name(), "user-filters-pre");
-        assert_eq!(stages[12].name(), "ast-transforms");
-        assert_eq!(stages[13].name(), "user-filters-post");
+        assert_eq!(stages[11].name(), "bootstrap-js");
+        assert_eq!(stages[12].name(), "user-filters-pre");
+        assert_eq!(stages[13].name(), "ast-transforms");
+        assert_eq!(stages[14].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[14].name(), "resource-report");
-        assert_eq!(stages[15].name(), "code-highlight");
+        assert_eq!(stages[15].name(), "resource-report");
+        assert_eq!(stages[16].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[16].name(), "math-js");
-        assert_eq!(stages[17].name(), "render-html-body");
-        assert_eq!(stages[18].name(), "apply-template");
+        assert_eq!(stages[17].name(), "math-js");
+        assert_eq!(stages[18].name(), "render-html-body");
+        assert_eq!(stages[19].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 19);
+        assert_eq!(pipeline.len(), 20);
     }
 
     #[test]
@@ -1185,9 +1207,11 @@ mod tests {
         // `engine-execution` and `bootstrap-js`. Includes the
         // `include-resolve` stage (bd-8kp3) so the same
         // `rendered.includes.*` contract holds in the browser.
+        // Includes `listing-item-info` (bd-izqh) so listing-item
+        // metadata is auto-filled symmetrically.
         // Includes `math-js` (bd-w5ov) — math display is safe under
         // hub-client iframe reinit and we want live math in preview.
-        assert_eq!(pipeline.len(), 17);
+        assert_eq!(pipeline.len(), 18);
         let names = pipeline.stage_names();
         // bd-4eyf: hub-client iframe reinit blows away stateful
         // Bootstrap components, so we deliberately omit `bootstrap-js`

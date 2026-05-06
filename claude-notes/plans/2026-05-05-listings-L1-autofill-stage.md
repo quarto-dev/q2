@@ -7,7 +7,34 @@
 `DocumentProfile.listing_item: ListingItemInfo` field and the
 `profile.categories_raw: Option<ConfigValue>` field. L1 *populates*
 that field at the metadata layer; L0 *reads* it at extraction time.
-**Status:** Draft. Awaiting implementation.
+**Status:** In progress (worktree `.worktrees/bd-izqh-listing-item-info-stage/`).
+
+**Implementation-session decisions (2026-05-06).** The user reviewed
+this plan ahead of implementation and made or confirmed five calls.
+Each is recorded inline in §"Decisions log" (D11–D14) and reflected
+in the relevant sections below. Summary:
+
+- **D11 — no truncation in L1.** Store the *full* first paragraph in
+  `meta.listing-item.description`. L3 truncates at render time when
+  the listing's `max-description-length` is known. Removes
+  `MAX_DESCRIPTION_LEN` from L1's surface entirely.
+- **D12 — datetime crate is `time` (not `chrono`).** `time = "0.3"`
+  becomes a `quarto-core` dep. Reused for L9's RFC 822 RSS dates.
+- **D13 — shortcode-bearing image `src` is out of scope.** L1 runs
+  before pre-engine sugaring, so an `Image` whose `src` was
+  originally `{{< meta thumbnail >}}.png` still carries the literal
+  shortcode text in `target.0`. Filed `bd-8h9o` as a discovered-from
+  follow-up to study the problem in isolation; L1 does not filter
+  these today.
+- **D14 — `?Send` async traits.** `#[async_trait(?Send)]` is the
+  project-wide convention; native + WASM compile from one trait
+  definition. Codified in `.claude/rules/wasm.md` for colleagues.
+- **Audit checkpoints cleared.** `ConfigValue::insert_path` /
+  `contains_path` already exist; `StageContext.runtime` is already
+  `pub`; `SystemRuntime::path_metadata` is already implemented on
+  both backends; `metadata_normalize::inlines_to_plain_text` only
+  needs a `pub(crate)` lift. None of the "stop and ask the user"
+  branches in the preparation section apply.
 
 ## Goal of this phase
 
@@ -20,10 +47,13 @@ auto-derived values when the author hasn't supplied them. The stage:
    first-paragraph / first-image), and the source-file path
    (filesystem mtime for `date-modified`).
 2. **Computes** any missing curated fields:
-   - `description` — first plain-text paragraph from `ast.blocks`,
-     truncated.
+   - `description` — first plain-text paragraph from `ast.blocks`
+     (full text, **not truncated**; per D11 the listing host's
+     `max-description-length` is L3's concern).
    - `image` — first `Inline::Image` `target.0` from `ast.blocks`
-     (document order).
+     (document order). Shortcode-bearing `src` (e.g. `{{< meta
+     thumb >}}.png`) is **not** filtered here; tracked separately
+     under `bd-8h9o` (see D13).
    - `word_count` — tokenized scan of `ast.blocks` plain text.
    - `reading_time_minutes` — `word_count / 200` (200 wpm
      constant, ceiling rather than floor for sub-minute texts so
@@ -204,8 +234,8 @@ impl PipelineStage for ListingItemInfoStage {
 fn autofill_listing_item(doc: &mut DocumentAst, ctx: &StageContext) {
     // Compute candidate fill-ins from the AST (no I/O for these).
     let blocks = &doc.ast.blocks;
-    let cand_description = compute_description(blocks, MAX_DESCRIPTION_LEN);
-    let cand_image       = first_image_src(blocks);
+    let cand_description = compute_description(blocks);  // full paragraph, no truncation (D11)
+    let cand_image       = first_image_src(blocks);      // shortcode filtering deferred to bd-8h9o (D13)
     let cand_word_count  = word_count(blocks);
     let cand_reading     = cand_word_count.map(|w| div_ceil(w, WORDS_PER_MINUTE));
 
@@ -238,15 +268,14 @@ implementation work is figuring out the right idiom against
 
 ```rust
 const WORDS_PER_MINUTE: u32 = 200;
-const MAX_DESCRIPTION_LEN: usize = 175;  // matches Q1 default
 ```
 
-`MAX_DESCRIPTION_LEN` is the L7-bracketed Q1 constant; if the
-author sets `listing-item.description` explicitly, no truncation
-applies. If the author sets a custom listing's
-`max-description-length` (L3+ schema work), that override applies
-at *render* time, not here. L1 only emits a sane default the L1
-fallback can use.
+Per D11 (2026-05-06), L1 stores the *full* first-paragraph text.
+Truncation to `max-description-length` is L3's responsibility at
+render time, where the listing host's per-listing config is known.
+Removing `MAX_DESCRIPTION_LEN` from L1 also removes the L1/L3 seam
+where a listing wanting a description longer than 175 chars would
+have been silently capped upstream.
 
 ### `ConfigValue` mutation idioms
 
@@ -343,24 +372,17 @@ keys, with footnote inclusion).
 
 ### Helper specifications
 
-#### `compute_description(blocks: &[Block], max_len: usize) -> Option<String>`
+#### `compute_description(blocks: &[Block]) -> Option<String>`
 
 - Walk `blocks` in document order; find the first
   `Block::Para(p)` (or `Block::Plain(p)`) whose
   `metadata_normalize::inlines_to_plain_text(&p.content)`
   produces a non-empty string after `trim()`.
-- Truncate to `max_len` characters using a word-boundary-safe
-  truncation (Q1 uses `truncateText(s, n, "space")`). If a
-  helper for word-boundary truncation already exists in
-  `quarto-util` or similar, reuse; otherwise write a tiny one
-  and consider it the smaller half of the helper-consolidation
-  follow-up.
+- Return that text **untruncated** (per D11). Truncation to
+  `max-description-length` is L3's job at render time.
 - If no paragraph is found, return `None`. Empty documents,
   documents starting with a heading and no paragraphs, etc.
   produce `None` and the field stays unset.
-- If the truncated text would end mid-word, end at the last
-  whole word and append `…`. (Q1 behavior; non-essential but
-  keeps the comparison easy.)
 
 #### `first_image_src(blocks: &[Block]) -> Option<String>`
 
@@ -414,8 +436,9 @@ reports "1 min" not "0 min."
 fn mtime_iso(runtime: &dyn SystemRuntime, path: &Path) -> Option<String> {
     let metadata = runtime.path_metadata(path).ok()?;
     let modified = metadata.modified?;
-    let datetime: chrono::DateTime<chrono::Utc> = modified.into();
-    Some(datetime.format("%Y-%m-%d").to_string())
+    let dt = time::OffsetDateTime::from(modified);  // SystemTime → OffsetDateTime
+    let fmt = time::macros::format_description!("[year]-[month]-[day]");
+    dt.format(&fmt).ok()
 }
 ```
 
@@ -433,10 +456,16 @@ backend property, not a consumer concern. L1 asks "when was
 this last modified?" and the runtime answers (or returns
 `None` if it doesn't know yet).
 
-`chrono` is already a workspace dependency. Confirm during
-implementation by grepping the worktree's `Cargo.lock`; if
-absent, fall back to manual `SystemTime` → epoch-seconds →
-date arithmetic.
+**Datetime crate (per D12): `time = "0.3"`.** Pre-decision draft
+referenced `chrono`; that was inaccurate (chrono is not a
+workspace dep). The `time` crate is already in use by
+`quarto-hub`; adding it as a `quarto-core` dep consolidates
+onto one datetime crate and unblocks L9's RFC 822 RSS dates
+without re-deciding. `time::OffsetDateTime::from(SystemTime)` is
+infallible; the format-description macro is checked at compile
+time. UTC is implicit because `SystemTime` carries no zone — for
+mtime on a build machine that's the conventional choice and
+matches Q1's behavior on shared CI.
 
 **`StageContext` access to the runtime:** the L1 stage runs
 inside the pipeline, so `ctx.runtime` (or whatever the field
@@ -517,8 +546,9 @@ TDD: write tests first, watch fail, implement, watch pass.
    value; run the stage; assert no field changes.
 2. **`autofill_populates_description_when_unset`** — fixture
    with three paragraphs; first non-empty paragraph text becomes
-   the description; truncated to ≤175 chars (use a paragraph
-   ≥175 chars to exercise truncation).
+   the description, **untruncated** (D11). Use a long paragraph
+   (e.g. 300 chars) and assert the stored value is the full
+   text, byte-for-byte.
 3. **`autofill_skips_description_when_no_paragraph`** —
    document with only a heading; `description` stays `None`.
 4. **`autofill_description_skips_empty_paragraphs`** —
@@ -647,18 +677,17 @@ success":
       `bd-zzke` for any future third consumer. **Do not**
       audit or consolidate the other five sites — that is
       `bd-zzke`'s job, deliberately deferred.
-- [ ] **Audit `ConfigValue` mutation idioms** in
-      `crates/quarto-pandoc-types/src/config_value.rs`. If
-      mutation requires a contract-doc-level decision (e.g.
-      adding `as_map_entries_mut`), stop and ask the user.
-- [ ] **Confirm `StageContext` exposes the `SystemRuntime`.**
-      `path_metadata` already exists on the trait; both native
-      and WASM have an impl (WASM returns
-      `modified: None` today — `bd-a3we` tracks teaching it).
-      L1's only audit task is verifying that `StageContext`
-      makes the runtime reachable from inside the stage. If
-      not, that's a small plumbing task L1 carries; flag in
-      the handoff.
+- [x] **`ConfigValue` mutation idioms — cleared 2026-05-06.**
+      `ConfigValue::insert_path` (auto-creates intermediate
+      maps), `contains_path`, `get_path`, `get_path_mut` are
+      already public. No new public API on `ConfigValue` is
+      required; `fill_if_absent_*` is a thin local helper
+      around `contains_path` + `insert_path`.
+- [x] **`StageContext` runtime access — cleared 2026-05-06.**
+      `pub runtime: Arc<dyn SystemRuntime>` is already a public
+      field on `StageContext`
+      (`crates/quarto-core/src/stage/context.rs:55`). No
+      plumbing task; the stage reads `ctx.runtime` directly.
 
 ### TDD phase — tests first, observe failures
 
@@ -729,13 +758,14 @@ success":
   type lacks an `as_map_entries_mut`-style API, **stop and
   ask the user** before adding one. Adding mutation to a
   shared type is a contract decision.
-- **Risk: WASM build breaks because `chrono` or `std::fs` is
+- **Risk: WASM build breaks because `time` or `std::fs` is
   unavailable.** *Mitigation:* `std::fs` is no longer used —
   L1 routes mtime through `SystemRuntime::path_metadata`,
-  which already has a working WASM impl. `chrono` is a
-  workspace dep already used elsewhere in `quarto-core`. The
-  full `cargo xtask verify` (which includes the WASM
-  hub-client build) catches anything else.
+  which already has a working WASM impl. `time = "0.3"` (per
+  D12) is `no_std`-friendly and already used by `quarto-hub`;
+  no known WASM blockers. The full `cargo xtask verify`
+  (which includes the WASM hub-client build) catches anything
+  else.
 - **Risk: existing snapshots move because of a subtle ordering
   effect of the new stage.** *Mitigation:* L1 doesn't mutate
   AST blocks, only metadata not consumed by render today. If
@@ -782,6 +812,9 @@ success":
 - **No author-preview-image discovery from rendered
   content.** Static-AST first-image is L1's scope; L7 may
   upgrade.
+- **No filtering of shortcode-bearing image `src` (D13).**
+  Tracked separately as `bd-8h9o`; L1 stores whatever
+  `target.0` carries.
 - **No date parsing / re-formatting.** `date_modified` is
   raw mtime as ISO `YYYY-MM-DD`. Render-time formatting
   is the listing template's job.
@@ -800,8 +833,10 @@ success":
 - **D2 (location):**
   `crates/quarto-core/src/stage/stages/listing_item_info.rs`,
   per epic decision 6.
-- **D3 (constants):** `WORDS_PER_MINUTE = 200` (matches Q1),
-  `MAX_DESCRIPTION_LEN = 175` (matches Q1 default).
+- **D3 (constants):** `WORDS_PER_MINUTE = 200` (matches Q1).
+  `MAX_DESCRIPTION_LEN` was previously listed here at 175;
+  superseded by D11 — L1 stores the full first paragraph and
+  L3 owns truncation.
 - **D4 (reading time):** ceiling division. 1-word post →
   "1 min" not "0 min."
 - **D5 (image walk):** static AST only, document order, no
@@ -834,6 +869,38 @@ success":
   consolidating refactor needs an options-driven helper +
   per-site audit + snapshot-diff investigation, which is
   a separate hygiene project.
+- **D11 (no truncation in L1; 2026-05-06):** L1 stores the
+  *full* first-paragraph text in
+  `meta.listing-item.description`. L3 truncates at render
+  time using the listing host's `max-description-length`.
+  Rationale: L1 doesn't know the listing host's per-listing
+  config, and pre-truncating to 175 chars would silently
+  cap a listing that requested a longer preview. Q1
+  truncates at `completeListingItems` time too; this aligns
+  with that ordering.
+- **D12 (datetime crate is `time`, not `chrono`; 2026-05-06):**
+  Add `time = "0.3"` to `quarto-core`. `time` is already in
+  use by `quarto-hub`; adopting it in `quarto-core`
+  consolidates rather than introducing a new crate choice.
+  L9 (RSS feeds) needs RFC 822 dates and reuses the same
+  crate. Earlier-draft references to `chrono` were factually
+  wrong — `chrono` is not a workspace dependency.
+- **D13 (shortcode-bearing image src out of scope; 2026-05-06):**
+  L1 does not filter images whose `src` carries an
+  unresolved shortcode (e.g. `{{< meta thumb >}}.png`). L1
+  runs after `IncludeExpansionStage` but before
+  `PreEngineSugaringStage`, so such images are present in
+  `target.0` as literal text. `bd-8h9o` (discovered-from
+  `bd-izqh`) tracks the dedicated investigation. Until
+  resolved, listings consuming `meta.listing-item.image`
+  (L3+) may surface unresolved shortcode markup; the
+  user-flagged correctness of this is acceptable for v1.
+- **D14 (`?Send` async traits; 2026-05-06):** All async
+  traits in `quarto-core` (and downstream) use
+  `#[async_trait(?Send)]`. The same trait must compile for
+  native and WASM (single-threaded), and several captured
+  types in WASM aren't `Send`. Codified in
+  `.claude/rules/wasm.md` so future work doesn't drift.
 
 ## Open sub-questions (defer; do not block L1)
 
@@ -841,16 +908,12 @@ success":
   `bd-zzke` filed as a P3 chore; L1 reuses
   `metadata_normalize::inlines_to_plain_text` without
   consolidating. See §"Plain-text helper choice".
-- **`ConfigValue` mutation API.** If the existing API is
-  awkward, L1 may need a thin builder helper *inside the
-  L1 module* rather than extending `ConfigValue`'s public
-  surface. Sub-plan-level call; ask the user before
-  extending the public API.
-- **Listings-aware default for `MAX_DESCRIPTION_LEN`.**
-  Q1's default is 175; L1 uses that. If L3's listing
-  config later wants a per-listing override that
-  *re-truncates* a longer L1-saved description, the host
-  page's render can do that. Don't second-guess in L1.
+- ~~**`ConfigValue` mutation API.**~~ Resolved 2026-05-06.
+  `insert_path` and `contains_path` already exist; no public
+  API extension needed. L1's `fill_if_absent_*` is local.
+- ~~**Listings-aware default for `MAX_DESCRIPTION_LEN`.**~~
+  Resolved 2026-05-06 (D11). L1 stores the full paragraph;
+  L3 owns truncation.
 - **`reading_time_minutes` for very long docs.** No upper
   cap. A 100k-word document reports `500`. Fine.
 
