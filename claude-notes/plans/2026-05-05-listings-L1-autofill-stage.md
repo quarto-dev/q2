@@ -88,13 +88,14 @@ Read before writing code:
   - `crates/quarto-core/src/stage/data.rs` — `DocumentAst`
     shape (line 314); the `ast.meta` is mutable through
     `&mut DocumentAst`, which is what L1 needs.
-- Plain-text extraction precedent:
+- Plain-text extraction: **reuse**
   `crates/quarto-core/src/transforms/metadata_normalize.rs`
-  line 110 (`inlines_to_plain_text`). Five other modules
-  re-implement variants; before adding a sixth, evaluate
-  whether to lift a single shared helper into
-  `quarto-pandoc-types` or `quarto-util`. See §"Open
-  sub-question on plain-text helper" below.
+  line 110 (`inlines_to_plain_text`). The other five
+  call sites in tree do **not** share semantics
+  (see §"Plain-text helper choice" below for the
+  comparison); deliberate consolidation is tracked
+  separately as `bd-zzke` (chore, P3) and is **not**
+  L1's job.
 - Pipeline assembly:
   `crates/quarto-core/src/pipeline.rs` — both
   `build_html_pipeline_stages_with_apply_config` (line ~217)
@@ -273,41 +274,75 @@ entries, computing the fill-ins, and replacing the whole sub-map
 on the parent. The parent map is already mutable in
 `MetadataMergeStage`, so the same idiom works here.
 
-### Plain-text and image extraction
+### Plain-text helper choice
 
-For each helper function, decide at implementation time whether
-to:
+There are six `inlines_to_(plain_)text`-flavored functions in
+tree, audited 2026-05-06. They are not duplicates — they are
+six different functions that happen to share names. Coverage
+divergences:
 
-1. **Reuse** an existing helper if its semantics match L1's
-   needs exactly. Candidates: `inlines_to_plain_text` in
-   `crates/quarto-core/src/transforms/metadata_normalize.rs`
-   (line 110), `inlines_to_plain_text` in
-   `crates/quarto-core/src/transforms/title_block.rs` (line
-   144), `inlines_to_text` in
-   `crates/quarto-core/src/template.rs` (line 626),
-   `inlines_to_plain_text` in
-   `crates/quarto-pandoc-types/src/config_value.rs` (line 22).
-2. **Lift** one of them into a single shared helper before L1
-   adds a sixth duplicate. Most likely placement:
-   `quarto_pandoc_types::inline::Inlines::to_plain_text()` or
-   `quarto_util::inlines_to_plain_text(&[Inline]) -> String`.
-3. **Write** an L1-specific helper if the existing ones differ
-   in subtle ways (handling of math, code, raw-inline, link
-   text, image alt) that don't match L1's needs.
+| Site                                        | `Code` | `Math` | `Quoted`            | `Note` (footnote) | `RawInline` | `Custom` slots | `Image` alt | `LineBreak` |
+|---------------------------------------------|--------|--------|---------------------|-------------------|-------------|----------------|-------------|-------------|
+| `quarto-pandoc-types/src/config_value.rs`   | text   | text   | flatten             | skip              | skip        | skip           | recurse alt | space       |
+| `quarto-core/src/transforms/title_block.rs` | text   | —      | —                   | —                 | —           | —              | —           | newline     |
+| `quarto-core/src/transforms/metadata_normalize.rs` | text   | text   | wrap with `'`/`"` (per QuoteType) | recurse blocks    | text        | recurse slots  | recurse alt | newline     |
+| `quarto-core/src/template.rs`               | text   | text   | wrap with `"` only  | recurse blocks    | —           | —              | recurse alt | newline     |
+| `quarto-config/src/format.rs`               | skip   | skip   | skip                | skip              | skip        | skip           | skip        | skip        |
+| `quarto-lsp-core/src/analysis.rs`           | (separate fn) | (separate fn) | recurse | recurse | …           | …              | …           | drop        |
 
-**Recommendation:** spend 30 minutes auditing the four duplicates
-during L1's TDD setup. If they agree on Inline coverage, lift to
-a shared module. If they disagree, document the disagreement,
-file a follow-up bd issue ("consolidate inlines_to_plain_text
-duplicates"), and L1 picks the closest match (probably
-`metadata_normalize`'s).
+A "consolidate to one shared helper" pass requires either
+choosing one shape (and silently changing the others' output —
+a snapshot-churn risk on five render paths) or building an
+options-driven helper with five booleans plus a per-site
+audit. That is a separate hygiene project, deliberately
+deferred — see `bd-zzke`.
+
+**For L1, reuse `metadata_normalize::inlines_to_plain_text`.**
+Reasons:
+
+- It lives in the same crate as L1's stage code, so no new
+  cross-crate visibility surface.
+- It is the most complete: covers `Custom` slots, every
+  formatting variant, math, code, raw-inline, footnote
+  recursion. L1 won't need to walk anything itself for
+  description-text rendering.
+- Its only divergence from L1's ideal is that it recurses into
+  `Note` content (footnote text). For *description preview*
+  this is fine — the description is the first paragraph's
+  rendered text, footnotes-and-all is what authors see. For
+  **word count**, L1's own block-level walk handles the
+  exclusion (see below) — we don't need to fix the helper.
+
+**`metadata_normalize::inlines_to_plain_text` is currently `fn`
+(private to the module).** L1 needs it `pub(crate)` or
+exported through `crate::transforms`. Implementation note:
+add a one-line doc comment noting "Re-used by
+`stages::listing_item_info` (`bd-izqh`); if a third consumer
+arrives, file `bd-zzke` to consolidate." This documents the
+deferral inline with the helper.
+
+For **block-level walking** (used by `compute_description`,
+`first_image_src`, `word_count`), L1 writes its own walker.
+It needs to:
+
+- Walk only block containers L1 cares about (description-
+  candidate paragraphs, image-bearing blocks, word-count
+  blocks).
+- Skip footnote blocks for word-count (Q1 parity — footnote
+  text doesn't count toward reading time).
+
+The block walker is small (~50 lines) and L1-specific. Don't
+try to reuse `metadata_normalize::blocks_to_plain_text`; its
+needs are different (full block-text rendering for metadata
+keys, with footnote inclusion).
 
 ### Helper specifications
 
 #### `compute_description(blocks: &[Block], max_len: usize) -> Option<String>`
 
 - Walk `blocks` in document order; find the first
-  `Block::Para(p)` whose `inlines_to_plain_text(&p.content)`
+  `Block::Para(p)` (or `Block::Plain(p)`) whose
+  `metadata_normalize::inlines_to_plain_text(&p.content)`
   produces a non-empty string after `trim()`.
 - Truncate to `max_len` characters using a word-boundary-safe
   truncation (Q1 uses `truncateText(s, n, "space")`). If a
@@ -343,15 +378,24 @@ duplicates"), and L1 picks the closest match (probably
 
 #### `word_count(blocks: &[Block]) -> Option<u32>`
 
-- Concatenate `inlines_to_plain_text` of every `Block::Para`,
-  `Plain`, `Header`, `BlockQuote`, etc. — same container set as
-  `first_image_src`.
+- L1's own block walker. Visit `Block::Para`, `Plain`,
+  `Header`, `BlockQuote` (recurse), `Div` (recurse),
+  `BulletList`/`OrderedList`/`DefinitionList` (recurse into
+  items), `LineBlock`, `Figure`, table caption / cells. Use
+  `metadata_normalize::inlines_to_plain_text` on each Inline
+  vector visited.
+- **Skip footnote text.** `Inline::Note` content is not
+  counted toward word-count (Q1 parity — footnote prose
+  doesn't affect reading time). Since
+  `metadata_normalize::inlines_to_plain_text` *does* recurse
+  into notes, L1's block walker must either (a) strip
+  `Inline::Note` from each inline list before passing to
+  the helper, or (b) implement its own inline walk that
+  excludes notes. (a) is simpler; choose at implementation
+  time based on which is more idiomatic against the inline
+  type.
 - Tokenize on whitespace runs (`split_whitespace().count()`).
-  This matches Q1's `estimateReadingTimeMinutes` closely
-  enough; Q1 uses a regex that's nearly equivalent.
-- Return `None` if the count is `0` (empty document — let the
-  caller leave the fields unset rather than report 0). Return
-  `Some(n)` for any `n >= 1`.
+- Return `None` if the count is `0`; `Some(n)` for `n >= 1`.
 
 #### `div_ceil(numerator: u32, denominator: u32) -> u32`
 
@@ -569,12 +613,13 @@ success":
       `beads/bd-izqh-listing-item-info-stage`).
 - [ ] `npm install` from worktree root.
 - [ ] `cargo xtask verify --skip-hub-build` baseline.
-- [ ] **Audit the four `inlines_to_plain_text` duplicates**
-      (`metadata_normalize`, `title_block`, `template`,
-      `config_value`). Decide reuse / lift / write. If lift,
-      file the consolidation as a separate bd follow-up
-      issue and **don't block L1 on it** — pick one
-      duplicate to reuse for now.
+- [ ] **Confirm `metadata_normalize::inlines_to_plain_text`
+      visibility.** Make it `pub(crate)` (or export via
+      `crate::transforms`); add the one-line doc-comment
+      noting L1 is the second consumer and pointing at
+      `bd-zzke` for any future third consumer. **Do not**
+      audit or consolidate the other five sites — that is
+      `bd-zzke`'s job, deliberately deferred.
 - [ ] **Audit `ConfigValue` mutation idioms** in
       `crates/quarto-pandoc-types/src/config_value.rs`. If
       mutation requires a contract-doc-level decision (e.g.
@@ -661,11 +706,17 @@ success":
   effect of the new stage.** *Mitigation:* L1 doesn't mutate
   AST blocks, only metadata not consumed by render today. If
   snapshots move, investigate per CLAUDE.md before proceeding.
-- **Risk: `inlines_to_plain_text` reuse picks a variant whose
-  edge-case behavior surprises listings consumers later.**
-  *Mitigation:* audit step documents the disagreement; L3's
-  sub-plan re-checks the choice when listings actually
-  render.
+- **Risk: `metadata_normalize::inlines_to_plain_text`'s
+  decision to recurse into footnotes and to wrap
+  `Inline::Quoted` in quote characters surprises listings
+  consumers later.** *Mitigation:* L1's word-count walker
+  strips notes before passing inlines to the helper (so
+  reading time excludes footnote prose, matching Q1).
+  Quote-character wrapping appears in description-preview
+  output but matches what authors see in their rendered
+  document; if L3 finds it wrong for listings specifically,
+  L3's sub-plan re-opens the choice. The other five
+  variants stay untouched per `bd-zzke`.
 - **Risk: idempotence broken by a "create-if-absent" idiom
   that subtly recreates the value on repeat.** *Mitigation:*
   test 14 enforces idempotence; if it fails, the fix is in
@@ -733,15 +784,21 @@ success":
   `profile.listing_item`; merge is the listings
   consumer's job.
 - **D9 (idempotence):** required, tested at 14.
-- **D10 (helper consolidation):** out of scope for L1
-  unless the audit reveals existing helpers can't be
-  reused safely. File a follow-up bd if so.
+- **D10 (helper consolidation):** out of scope for L1.
+  Tracked as `bd-zzke` (chore, P3). L1 reuses
+  `metadata_normalize::inlines_to_plain_text` directly;
+  the other five sites are not L1's concern. Reasoning:
+  the six in-tree variants don't share semantics, so a
+  consolidating refactor needs an options-driven helper +
+  per-site audit + snapshot-diff investigation, which is
+  a separate hygiene project.
 
 ## Open sub-questions (defer; do not block L1)
 
-- **Plain-text helper consolidation.** Five copies in tree.
-  L1 picks one to reuse and files a follow-up bd for the
-  consolidation. Not L1's job to fix.
+- ~~**Plain-text helper consolidation.**~~ Resolved:
+  `bd-zzke` filed as a P3 chore; L1 reuses
+  `metadata_normalize::inlines_to_plain_text` without
+  consolidating. See §"Plain-text helper choice".
 - **`ConfigValue` mutation API.** If the existing API is
   awkward, L1 may need a thin builder helper *inside the
   L1 module* rather than extending `ConfigValue`'s public
@@ -767,8 +824,9 @@ This sub-plan corresponds to `bd-izqh`. After implementation:
    this sub-plan in a "Follow-ups filed" section before
    closing.
 4. Send a handoff message to the orchestrator covering:
-   - Any new shared helpers added (or follow-ups filed for
-     consolidation).
+   - Whether the `metadata_normalize::inlines_to_plain_text`
+     visibility change introduced any cross-crate ripple
+     (it shouldn't — same crate as L1's stage).
    - Any contract-doc edits beyond the planned `listing_item`
      row note.
    - Whether the WASM mtime gate landed in
@@ -776,4 +834,7 @@ This sub-plan corresponds to `bd-izqh`. After implementation:
      stage. L4's sub-plan will need to know.
    - Profile-cache invalidation observation: did
      `cargo nextest` re-derive any cached profiles? If
-     so, that's the expected v3-cache-rebuild pattern.
+     so, that's the expected v4-cache-rebuild pattern.
+   - Confirmation that no work was done on `bd-zzke`
+     (consolidation chore) — it stays open for a future
+     dedicated session.
