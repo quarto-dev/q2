@@ -36,15 +36,24 @@ This plan also adds a `pipeline_kind: Option<String>` parameter to
 q2-preview pipeline on the baseline AST before reconciling, making the
 reconcile symmetric. Existing callers pass `None` and get today's
 parse-only baseline behavior; q2-preview's call site passes
-`Some("preview")`.
+`Some("preview")`. The string is the wasm-bindgen-friendly form of
+the `Option<&'static str>` selector Plan 1 added to `Format`
+(`crates/quarto-core/src/format.rs::Format::pipeline_kind`); inside
+`incremental_write_qmd` it maps to the same kind string the render
+side already uses ("preview").
 
 When this plan lands, ReactPreview's read-only guard from Plan 1
 lifts (one-block early-return in `handleSetAst`, deletable per Plan
-1's design), and edits in q2-preview round-trip correctly. This plan
-also absorbs the **cleanup of two temporary scaffolding pieces** Plan
-1 deliberately deferred — the string-literal format dispatches in
-`AstTransformsStage::run()` and `ReactPreview.tsx::doRender` — see
-§Scope and Plan 1's §"Multi-plan contract: cleanup owed to Plan 7".
+1's design), and edits in q2-preview round-trip correctly. The
+**render-side dispatches** Plan 1's §"Multi-plan contract: cleanup
+owed to Plan 7" originally targeted (`AstTransformsStage::run()`
+and `ReactPreview.tsx::doRender`) **already use the structured
+selector** as of Plan 1's implementation: `AstTransformsStage`
+reads `ctx.format.pipeline_kind`, and `ReactPreview.doRender`
+dispatches via the `pipelineKindForFormat(format)` helper at
+`hub-client/src/utils/pipelineKind.ts`. Plan 7 therefore adds the
+**write-side parameter** rather than refactoring those render-side
+sites; see §Scope for the verification step.
 
 ## Scope
 
@@ -168,21 +177,27 @@ also absorbs the **cleanup of two temporary scaffolding pieces** Plan
   - Writes via the updated coarsen/assemble logic.
 - Lift the `handleSetAst` read-only guard in `ReactPreview.tsx` introduced
   in Plan 1. Wire `setLocalAst` through with `pipeline_kind: "preview"`.
-- **Cleanup: structured pipeline dispatch (replaces Plan 1's temporary
-  scaffolding).** Plan 1 ships two string-literal format dispatches as
-  deliberate placeholders:
-  1. `AstTransformsStage::run()` matches on
-     `ctx.format.target_format == "q2-preview"` to choose between
-     `build_transform_pipeline` and `build_q2_preview_transform_pipeline`.
-  2. `ReactPreview.tsx::doRender` matches on `format === 'q2-preview'`
-     to choose between `parseQmdToAst` and `renderPageInProject`.
-  Plan 7 introduces `pipeline_kind` ("baseline" / "preview") as part of
-  the round-trip wiring; that field is the structured replacement.
-  Migrate both dispatches to read `pipeline_kind` (or an equivalent
-  typed selector) instead of grepping on format strings. The migration
-  preserves observable behavior; it's a refactor, not a feature
-  change. See Plan 1's §"Multi-plan contract: cleanup owed to Plan 7"
-  for the rationale.
+- **Verify: structured pipeline dispatch is already in place
+  (Plan 1 commits `a7143cc7` + `60658a4e` + `a5e00b20`).** Plan 1's
+  §"Multi-plan contract: cleanup owed to Plan 7" originally framed
+  this as scaffolding Plan 7 would refactor, but Plan 1 implemented
+  the structured form directly:
+  1. `AstTransformsStage::run()` reads `ctx.format.pipeline_kind`
+     (the `Option<&'static str>` field on `Format`) and dispatches
+     to `build_q2_preview_transform_pipeline` when it equals
+     `Some("preview")`.
+  2. `ReactPreview.tsx::doRender` dispatches via
+     `pipelineKindForFormat(format)` from
+     `hub-client/src/utils/pipelineKind.ts`, returning `'preview'`
+     for q2-preview and `undefined` for everything else.
+  Plan 7 therefore has no render-side cleanup work. During Plan 7
+  implementation, **verify the write-side parameter threads through
+  the same selector**: Plan 7's new `pipeline_kind: Option<String>`
+  argument on `incremental_write_qmd` (§Scope item below) should be
+  populated at the JS call site by `pipelineKindForFormat(format)`
+  and threaded through `wasmRenderer.ts::incrementalWriteQmd` to
+  the WASM boundary. Internally, the string maps to the same
+  `pipeline_kind` value the render side already uses.
 
 ### Out of scope
 
@@ -501,16 +516,27 @@ copies the shortcode token from source.
   ranges (line 800).
 - `crates/quarto-source-map/src/source_info.rs:185-237` — accessor patterns
   to extend.
-- `crates/wasm-quarto-hub-client/src/lib.rs:2166` — `incremental_write_qmd`
-  entry point to extend.
-- `hub-client/src/services/wasmRenderer.ts:531` — the JS wrapper.
+- `crates/wasm-quarto-hub-client/src/lib.rs:2510` — `incremental_write_qmd`
+  entry point to extend (line drifted from 2166 after Plan 1's
+  prep refactor + new q2-preview wiring; verify exact line at
+  Plan 7 implementation time).
+- `hub-client/src/services/wasmRenderer.ts:583` — the JS wrapper
+  (line drifted from 531).
 - `hub-client/src/components/render/ReactPreview.tsx` — `handleSetAst`
-  guard to lift, and `doRender` format-string switch to migrate to
-  `pipeline_kind` (Plan 1 cleanup).
-- `crates/quarto-core/src/stage/stages/ast_transforms.rs:134` —
-  `AstTransformsStage::run()` JIT branch, where Plan 1's
-  `target_format == "q2-preview"` string-literal dispatch migrates to
-  `pipeline_kind` (Plan 1 cleanup).
+  guard to lift. Plan 1 implemented the `doRender` format switch via
+  `pipelineKindForFormat(format)` already; Plan 7 wires the same
+  helper into the edit-back path so the guard can be replaced with a
+  call to `incrementalWriteQmd` that passes the `pipeline_kind`.
+- `hub-client/src/utils/pipelineKind.ts` — Plan 1's TS helper
+  (`pipelineKindForFormat`); Plan 7's JS-side call site reads it.
+- `crates/quarto-core/src/stage/stages/ast_transforms.rs` —
+  `AstTransformsStage::run()` JIT branch already dispatches on
+  `ctx.format.pipeline_kind` (Plan 1 commit `60658a4e`); no edit
+  needed for Plan 7 itself, listed for context.
+- `crates/quarto-core/src/format.rs` — `Format::pipeline_kind`
+  (Plan 1 commit `a7143cc7`); Plan 7 reads it in the
+  `incremental_write_qmd` body to drive the baseline-pipeline
+  selection.
 - Plans 4 (Synthetic + By), 5 (wire format), 6 (audit) — provide the
   AST shape this plan walks.
 
@@ -594,11 +620,13 @@ copies the shortcode token from source.
   (audit + Derived provenance on shortcode resolutions).
 - Blocks: nothing structurally; Plan 8 builds on the atomic infrastructure
   but is independent (uses `is_atomic_custom_node` for IncludeExpansion).
-- Lifts the read-only mode that Plan 1 introduced for q2-preview, and
-  absorbs the cleanup of Plan 1's temporary string-literal format
-  dispatches in `AstTransformsStage::run()` and
-  `ReactPreview.tsx::doRender` (see §Scope and Plan 1's §"Multi-plan
-  contract: cleanup owed to Plan 7").
+- Lifts the read-only mode that Plan 1 introduced for q2-preview.
+  Plan 1's render-side `pipeline_kind` dispatches in
+  `AstTransformsStage::run()` and `ReactPreview.tsx::doRender` are
+  already structured (no string-literal scaffolding remains); Plan
+  7 verifies the write-side parameter threads through the same
+  selector. See §Scope's "Verify: structured pipeline dispatch is
+  already in place" item for the verification step.
 
 ## Risk areas
 
@@ -655,9 +683,9 @@ copies the shortcode token from source.
 | Warning channel plumbing through coarsen → incremental_write return | ~50 |
 | `pipeline_kind` parameter + WASM bridge + TS wrapper | ~80 |
 | ReactPreview guard lift + edit-back wiring | ~20 |
-| Cleanup: replace Plan 1's string-literal dispatches with `pipeline_kind` | ~30 |
+| Verify Plan 1's render-side pipeline_kind dispatch is end-to-end correct (no refactor work; Plan 1 already implemented it) | ~5 |
 | Tests (unit + end-to-end round-trip + soft-drop interactions) | ~400 |
-| **Total** | **~1130** |
+| **Total** | **~1105** |
 
 Two focused sessions likely. Flagged as one of the highest-complexity plans;
 extend the budget if the InlineSplice + Transparent composition surfaces
