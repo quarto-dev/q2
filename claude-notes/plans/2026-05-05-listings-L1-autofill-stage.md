@@ -201,7 +201,7 @@ impl PipelineStage for ListingItemInfoStage {
 ### Auto-fill function
 
 ```rust
-fn autofill_listing_item(doc: &mut DocumentAst, _ctx: &StageContext) {
+fn autofill_listing_item(doc: &mut DocumentAst, ctx: &StageContext) {
     // Compute candidate fill-ins from the AST (no I/O for these).
     let blocks = &doc.ast.blocks;
     let cand_description = compute_description(blocks, MAX_DESCRIPTION_LEN);
@@ -209,8 +209,10 @@ fn autofill_listing_item(doc: &mut DocumentAst, _ctx: &StageContext) {
     let cand_word_count  = word_count(blocks);
     let cand_reading     = cand_word_count.map(|w| div_ceil(w, WORDS_PER_MINUTE));
 
-    // mtime is the only I/O; gracefully degrade if it fails.
-    let cand_date_modified = filesystem_mtime_iso(&doc.path);
+    // mtime via the runtime trait; native reads filesystem, WASM
+    // returns None today (see bd-a3we). Either way, L1 is the same
+    // code; the backend semantics live in quarto-system-runtime.
+    let cand_date_modified = mtime_iso(ctx.runtime.as_ref(), &doc.path);
 
     // Find or create `meta.listing-item` as a ConfigValue map.
     let li = doc.ast.meta.ensure_map_entry("listing-item");
@@ -223,6 +225,9 @@ fn autofill_listing_item(doc: &mut DocumentAst, _ctx: &StageContext) {
     li.fill_if_absent_string("date-modified",     cand_date_modified);
 }
 ```
+
+(Exact `ctx.runtime` accessor name is TBD — verify against
+`StageContext`'s actual fields in the worktree.)
 
 The shapes `ensure_map_entry`, `fill_if_absent_string`, etc. are
 **not** implied to exist — they're the API L1 wants. The
@@ -403,37 +408,55 @@ keys, with footnote inclusion).
 `u32::div_ceil` if the MSRV permits. Ceiling so a 1-word post
 reports "1 min" not "0 min."
 
-#### `filesystem_mtime_iso(path: &Path) -> Option<String>`
+#### `mtime_iso(runtime: &dyn SystemRuntime, path: &Path) -> Option<String>`
 
 ```rust
-fn filesystem_mtime_iso(path: &Path) -> Option<String> {
-    let meta = std::fs::metadata(path).ok()?;
-    let modified = meta.modified().ok()?;
+fn mtime_iso(runtime: &dyn SystemRuntime, path: &Path) -> Option<String> {
+    let metadata = runtime.path_metadata(path).ok()?;
+    let modified = metadata.modified?;
     let datetime: chrono::DateTime<chrono::Utc> = modified.into();
     Some(datetime.format("%Y-%m-%d").to_string())
 }
 ```
 
-`chrono` is already a workspace dependency (used elsewhere in
-`quarto-core`); confirm in the worktree before adding any new
-crate. If `chrono` isn't available, fall back to manual
-`SystemTime` → seconds-since-epoch → date arithmetic, but check
-first.
+**Use `SystemRuntime::path_metadata`, not `std::fs::metadata`
+directly.** The runtime trait already abstracts native vs.
+WASM: `crates/quarto-system-runtime/src/native.rs` reads from
+the filesystem; `wasm.rs` reads from the Automerge-backed VFS.
+On native, `metadata.modified` is `Some(SystemTime)`; on WASM,
+it's currently `None` (the VFS doesn't yet track modification
+times — see `bd-a3we`). Either way, L1's code is the same.
 
-WASM consideration: `std::fs::metadata` works under
-`wasm32-wasip1` (the WASI flavor we use); under
-`wasm32-unknown-unknown` it doesn't exist. The hub-client's
-WASM build uses `wasm32-unknown-unknown`. Two options:
+This is the right shape architecturally: the difference between
+"filesystem mtime" and "Automerge change-history time" is a
+backend property, not a consumer concern. L1 asks "when was
+this last modified?" and the runtime answers (or returns
+`None` if it doesn't know yet).
 
-1. **Gate the mtime read with `#[cfg(not(target_arch = "wasm32"))]`**
-   per `.claude/rules/wasm.md`. WASM builds skip mtime, leave
-   `date_modified` unset. Author can supply explicitly if
-   needed in a hub-client preview context. Recommended.
-2. Read mtime via `quarto-system-runtime` (which already
-   handles native/WASM split for fs operations).
+`chrono` is already a workspace dependency. Confirm during
+implementation by grepping the worktree's `Cargo.lock`; if
+absent, fall back to manual `SystemTime` → epoch-seconds →
+date arithmetic.
 
-**Recommendation:** Option 2 if `quarto-system-runtime` exposes
-mtime; Option 1 otherwise. Verify in the worktree.
+**`StageContext` access to the runtime:** the L1 stage runs
+inside the pipeline, so `ctx.runtime` (or whatever the field
+is called on `StageContext`) provides the trait object.
+Confirm the access pattern by reading
+`crates/quarto-core/src/stage/mod.rs` during the worktree
+audit. If the runtime is not currently threaded through
+`StageContext`, this becomes a small additional plumbing
+task — flag in the orchestrator handoff if it requires
+non-trivial wiring.
+
+**Hub-client behavior today:** `bd-a3we` is open as a P2
+follow-up to teach the WASM VFS to surface a meaningful
+`modified` from Automerge change-op timestamps. Until that
+lands, `listing_item.date_modified` stays `None` for
+hub-client renders and listings simply omit the
+"last modified" column for those documents (or fall back to
+`listing_item.date`). When `bd-a3we` lands, L1 needs **no
+code change** — the field will start populating
+automatically.
 
 ## Stage idempotence
 
@@ -521,15 +544,19 @@ TDD: write tests first, watch fail, implement, watch pass.
 11. **`autofill_word_count_zero_returns_none`** — empty
     document → both `word_count` and `reading_time_minutes`
     stay `None`.
-12. **`autofill_date_modified_native`** — write a fixture
-    file with a known mtime (use `filetime::set_file_mtime`),
-    run the stage, assert `date_modified` matches
-    `YYYY-MM-DD` of that mtime. **Native only**;
-    `#[cfg(not(target_arch = "wasm32"))]`.
-13. **`autofill_date_modified_skipped_when_path_missing`** —
-    `doc.path` points at a nonexistent file; `date_modified`
-    stays `None` (no panic, no error). Tests the
-    graceful-degradation contract.
+12. **`autofill_date_modified_via_runtime`** — using a
+    test `SystemRuntime` impl that returns a known
+    `SystemTime` from `path_metadata`, run the stage; assert
+    `date_modified` matches `YYYY-MM-DD` of that time.
+    Backend-agnostic — same test runs on both native and
+    WASM. (Native CI also exercises a real filesystem path
+    indirectly via the integration tests below.)
+13. **`autofill_date_modified_skipped_when_runtime_returns_none`** —
+    using a test runtime that returns `modified: None` (the
+    current WASM behavior), `date_modified` stays `None`.
+    No panic, no error. This is the contract `bd-a3we` will
+    eventually flip from `None` to `Some(...)` in the WASM
+    runtime impl.
 14. **`autofill_idempotent`** — run the stage; capture
     `meta.listing-item`; run it again; assert no change.
 15. **`autofill_preserves_author_extra`** — author set
@@ -624,10 +651,14 @@ success":
       `crates/quarto-pandoc-types/src/config_value.rs`. If
       mutation requires a contract-doc-level decision (e.g.
       adding `as_map_entries_mut`), stop and ask the user.
-- [ ] **Audit WASM-fs availability for mtime.** Check
-      `quarto-system-runtime` for an mtime accessor. If
-      absent, gate the mtime read behind `#[cfg(not(target_arch =
-      "wasm32"))]` per `.claude/rules/wasm.md`.
+- [ ] **Confirm `StageContext` exposes the `SystemRuntime`.**
+      `path_metadata` already exists on the trait; both native
+      and WASM have an impl (WASM returns
+      `modified: None` today — `bd-a3we` tracks teaching it).
+      L1's only audit task is verifying that `StageContext`
+      makes the runtime reachable from inside the stage. If
+      not, that's a small plumbing task L1 carries; flag in
+      the handoff.
 
 ### TDD phase — tests first, observe failures
 
@@ -646,9 +677,8 @@ success":
 ### Implementation
 
 - [ ] Implement `compute_description`, `first_image_src`,
-      `word_count`, `div_ceil`,
-      `filesystem_mtime_iso` (with WASM gate per audit
-      decision).
+      `word_count`, `div_ceil`, `mtime_iso` (using
+      `SystemRuntime::path_metadata`; no `#[cfg]` gate).
 - [ ] Implement `autofill_listing_item` with the
       "fill-if-absent" mutation pattern decided during the
       audit.
@@ -700,8 +730,12 @@ success":
   ask the user** before adding one. Adding mutation to a
   shared type is a contract decision.
 - **Risk: WASM build breaks because `chrono` or `std::fs` is
-  unavailable.** *Mitigation:* the WASM-fs audit step;
-  `cargo xtask verify` (full) catches it.
+  unavailable.** *Mitigation:* `std::fs` is no longer used —
+  L1 routes mtime through `SystemRuntime::path_metadata`,
+  which already has a working WASM impl. `chrono` is a
+  workspace dep already used elsewhere in `quarto-core`. The
+  full `cargo xtask verify` (which includes the WASM
+  hub-client build) catches anything else.
 - **Risk: existing snapshots move because of a subtle ordering
   effect of the new stage.** *Mitigation:* L1 doesn't mutate
   AST blocks, only metadata not consumed by render today. If
@@ -778,6 +812,14 @@ success":
 - **D7 (date-modified format):** `YYYY-MM-DD` ISO date,
   not full datetime. Listings display dates, not times.
   Render-time formatting is the template's job.
+- **D7b (mtime backend abstraction):** L1 reads via
+  `SystemRuntime::path_metadata().modified`. Native impl
+  returns filesystem mtime; WASM impl returns `None` until
+  `bd-a3we` lands. The "different backend, different
+  semantics" question (filesystem mtime vs. Automerge
+  change-history time) is encapsulated *inside the runtime
+  trait*, not in L1's stage. No `#[cfg]` gate on L1; no
+  L1 code change required when `bd-a3we` resolves.
 - **D8 (no `categories` auto-fill):** L1 does not write
   `categories` into `listing-item`. The L0 D7 decision
   preserves `categories_raw` on both `profile` and
@@ -829,9 +871,14 @@ This sub-plan corresponds to `bd-izqh`. After implementation:
      (it shouldn't — same crate as L1's stage).
    - Any contract-doc edits beyond the planned `listing_item`
      row note.
-   - Whether the WASM mtime gate landed in
-     `quarto-system-runtime` or as a `#[cfg]` in the L1
-     stage. L4's sub-plan will need to know.
+   - Whether `StageContext` already exposed the
+     `SystemRuntime` cleanly or required plumbing. If
+     plumbing was needed, name the change so L2/L3
+     plans can rely on it.
+   - Reminder: the `bd-a3we` follow-up (Automerge VFS
+     mtime) stays open. L1 changes nothing about the
+     hub-client experience for `date_modified` — it
+     still reads `None` until `bd-a3we` lands.
    - Profile-cache invalidation observation: did
      `cargo nextest` re-derive any cached profiles? If
      so, that's the expected v4-cache-rebuild pattern.
