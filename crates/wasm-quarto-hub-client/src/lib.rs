@@ -766,8 +766,18 @@ struct RenderResponse {
     success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    /// Rendered HTML for the active page. Populated by the
+    /// HTML-pipeline branch (single-doc and project-active),
+    /// `None` for q2-preview / error responses.
     #[serde(skip_serializing_if = "Option::is_none")]
     html: Option<String>,
+    /// Serialized Pandoc AST JSON for the q2-preview format.
+    /// Populated by the q2-preview pipeline branch (added in a
+    /// later commit), `None` for HTML / error responses. The JS
+    /// layer dispatches on which of `html` / `ast_json` is
+    /// present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ast_json: Option<String>,
     /// Structured diagnostics (errors) with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
     diagnostics: Option<Vec<JsonDiagnostic>>,
@@ -1178,6 +1188,7 @@ async fn render_single_doc_to_response(
                 success: true,
                 error: None,
                 html: Some(output.html),
+                ast_json: None,
                 diagnostics: None,
                 warnings: if warnings.is_empty() {
                     None
@@ -1203,7 +1214,7 @@ async fn render_project_active_page_to_response(
     user_grammars: Option<JsUserGrammars>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
-    use quarto_core::project::pass2_renderer::RenderToHtmlRenderer;
+    use quarto_core::project::pass2_renderer::{Pass2Payload, RenderToHtmlRenderer};
 
     // Detect format from the *active* file's content. (Pass 1 in
     // the orchestrator re-reads each file's bytes — for the active
@@ -1315,10 +1326,20 @@ async fn render_project_active_page_to_response(
     // as a non-zero exit.
     let pass1_failures = pass1_failures_to_json(&summary.pass1_failures);
 
+    // Dispatch on the renderer's payload shape: HTML render fills
+    // `html`, q2-preview render (added in a later commit) fills
+    // `ast_json`. The shared orchestrator code above doesn't care
+    // which.
+    let (html, ast_json) = match active_output.payload {
+        Pass2Payload::Html(s) => (Some(s), None),
+        Pass2Payload::AstJson(s) => (None, Some(s)),
+    };
+
     serde_json::to_string(&RenderResponse {
         success: true,
         error: None,
-        html: Some(active_output.html),
+        html,
+        ast_json,
         diagnostics: None,
         warnings: if warnings.is_empty() {
             None
@@ -1340,6 +1361,7 @@ fn error_response(msg: impl Into<String>) -> String {
         success: false,
         error: Some(msg.into()),
         html: None,
+        ast_json: None,
         diagnostics: None,
         warnings: None,
         pass1_failures: None,
@@ -1361,6 +1383,7 @@ fn render_error_response(e: QuartoError) -> String {
         success: false,
         error: Some(error_msg),
         html: None,
+        ast_json: None,
         diagnostics,
         warnings: None,
         pass1_failures: None,
@@ -1395,6 +1418,7 @@ fn pass_failure_response(
             failure.error
         )),
         html: None,
+        ast_json: None,
         diagnostics,
         warnings: None,
         pass1_failures: None,

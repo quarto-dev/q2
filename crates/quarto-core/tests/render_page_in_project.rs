@@ -131,22 +131,22 @@ fn website_sidebar_includes_sibling_pages() {
     let output = render_active_page(&project_dir, &active);
 
     assert!(
-        output.html.contains("class=\"sidebar"),
+        output.html().contains("class=\"sidebar"),
         "rendered HTML should contain the sidebar block; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     assert!(
-        output.html.contains(">About<") || output.html.contains(">About\n<"),
+        output.html().contains(">About<") || output.html().contains(">About\n<"),
         "sidebar should reference the sibling 'About' entry; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     // The vfs_root resolver makes URLs absolute under the synthetic
     // root; the cross-doc link rewriter still resolves the page
     // identity to `about.html`, just prefixed with the vfs root.
     assert!(
-        output.html.contains("about.html\""),
+        output.html().contains("about.html\""),
         "sidebar entry for about.qmd should rewrite to about.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -175,9 +175,9 @@ fn sibling_title_edit_reflects_in_sidebar() {
     let active = canonical(&project_dir.join("index.qmd"));
     let first = render_active_page(&project_dir, &active);
     assert!(
-        first.html.contains(">About v1<"),
+        first.html().contains(">About v1<"),
         "first render should show 'About v1'; got {}",
-        snippet(&first.html)
+        snippet(&first.html())
     );
 
     // Edit about.qmd's title and re-render the (unchanged) index.
@@ -187,14 +187,14 @@ fn sibling_title_edit_reflects_in_sidebar() {
     );
     let second = render_active_page(&project_dir, &active);
     assert!(
-        second.html.contains(">About v2<"),
+        second.html().contains(">About v2<"),
         "second render should reflect the new sibling title; got {}",
-        snippet(&second.html)
+        snippet(&second.html())
     );
     assert!(
-        !second.html.contains(">About v1<"),
+        !second.html().contains(">About v1<"),
         "second render should *not* still show the old title; got {}",
-        snippet(&second.html)
+        snippet(&second.html())
     );
 }
 
@@ -214,14 +214,14 @@ fn single_file_no_sidebar() {
     let output = render_active_page(&project_dir, &active);
 
     assert!(
-        !output.html.contains("class=\"sidebar"),
+        !output.html().contains("class=\"sidebar"),
         "single-file render should have no sidebar; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     assert!(
-        output.html.contains("Only"),
+        output.html().contains("Only"),
         "rendered HTML should contain the page title; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -255,16 +255,16 @@ fn cross_document_link_rewrites_to_html() {
     // resolver's job. Match on the suffix to stay agnostic to the
     // prefix while still asserting the .qmd → .html rewrite.
     assert!(
-        output.html.contains("about.html\""),
+        output.html().contains("about.html\""),
         "[link](about.qmd) should rewrite to ...about.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     // And there must be NO `about.qmd` reference left in the body —
     // every internal-doc reference must have been rewritten.
     assert!(
-        !output.html.contains("about.qmd\""),
+        !output.html().contains("about.qmd\""),
         "no rewritten about.qmd should remain in body; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -290,9 +290,9 @@ fn title_prefix_applied_in_website_render() {
     // Phase-7 title-prefix transform: the page title is suffixed
     // with the website title separated by an en-dash.
     assert!(
-        output.html.contains("<title>Home – Test Site</title>"),
+        output.html().contains("<title>Home – Test Site</title>"),
         "title prefix should be applied; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -317,14 +317,14 @@ fn hub_smoke_fixture_renders_cleanly() {
     // URLs prefixed by the synthetic root. Match on the suffix to
     // stay agnostic to the prefix.
     assert!(
-        output.html.contains("about.html\""),
+        output.html().contains("about.html\""),
         "sidebar should link to ...about.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     assert!(
-        output.html.contains("posts/first.html\""),
+        output.html().contains("posts/first.html\""),
         "sidebar should link to ...posts/first.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 
     // Cross-doc body link from index.qmd's body rewrites too —
@@ -332,7 +332,7 @@ fn hub_smoke_fixture_renders_cleanly() {
     // sidebar). Both forms now route through `page_url_for` so the
     // emitted URL is identical at both call sites; counting suffix
     // matches stays robust to the resolver flavor.
-    let about_links = output.html.matches("about.html\"").count();
+    let about_links = output.html().matches("about.html\"").count();
     assert!(
         about_links >= 2,
         "expected at least one body href + one sidebar href ending in about.html; got {} matches",
@@ -557,7 +557,7 @@ fn default_project_theme_artifact_lands_in_vfs() {
     let vfs_root_str = vfs_root.to_string_lossy().to_string();
     let needle_prefix = format!("{}/quarto/quarto-theme-", vfs_root_str);
     let theme_link = output
-        .html
+        .html()
         .lines()
         .filter(|line| line.contains(&needle_prefix) && line.contains(".css"))
         .next()
@@ -565,7 +565,7 @@ fn default_project_theme_artifact_lands_in_vfs() {
             panic!(
                 "expected a theme <link> under {}quarto/quarto-theme-…; html: {}",
                 vfs_root_str,
-                snippet(&output.html),
+                snippet(&output.html()),
             )
         });
 
@@ -625,7 +625,8 @@ fn copy_dir_recursive(src: &Path, dst: &Path) {
     }
 }
 
-fn snippet(s: &str) -> String {
+fn snippet(s: impl AsRef<str>) -> String {
+    let s = s.as_ref();
     if s.len() <= 200 {
         s.to_string()
     } else {

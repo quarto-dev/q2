@@ -236,10 +236,49 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
 // WASM impl: keeps HTML + drained artifacts in memory, no disk I/O.
 // ───────────────────────────────────────────────────────────────────
 
+/// The rendered payload produced by a Pass-2 WASM renderer.
+///
+/// `RenderToHtmlRenderer` produces [`Pass2Payload::Html`]; the
+/// q2-preview renderer (added in a later commit) produces
+/// [`Pass2Payload::AstJson`]. Both variants share the rest of
+/// [`WasmPassTwoOutput`]'s fields (source path, diagnostics,
+/// source context, page artifacts) so the orchestrator can drive
+/// either renderer through the same code path and only branch on
+/// the payload at the response-building tail.
+#[derive(Debug)]
+pub enum Pass2Payload {
+    /// Rendered HTML, ready for the iframe post-processor.
+    Html(String),
+    /// Serialized Pandoc AST JSON, ready for the React-side
+    /// q2-preview renderer.
+    AstJson(String),
+}
+
+impl Pass2Payload {
+    /// Returns the HTML string when this is [`Pass2Payload::Html`],
+    /// otherwise `None`. Convenience for callers that statically
+    /// know they invoked the HTML renderer (e.g. native tests).
+    pub fn as_html(&self) -> Option<&str> {
+        match self {
+            Pass2Payload::Html(s) => Some(s.as_str()),
+            Pass2Payload::AstJson(_) => None,
+        }
+    }
+
+    /// Returns the AST JSON string when this is
+    /// [`Pass2Payload::AstJson`], otherwise `None`.
+    pub fn as_ast_json(&self) -> Option<&str> {
+        match self {
+            Pass2Payload::AstJson(s) => Some(s.as_str()),
+            Pass2Payload::Html(_) => None,
+        }
+    }
+}
+
 /// Output of a single Pass-2 render under
-/// [`RenderToHtmlRenderer`]. Carries everything the orchestrator
-/// (and ultimately the WASM caller) needs to surface back to the
-/// hub-client preview.
+/// [`RenderToHtmlRenderer`] (or, in a later commit, the q2-preview
+/// renderer). Carries everything the orchestrator (and ultimately
+/// the WASM caller) needs to surface back to the hub-client preview.
 ///
 /// Cross-platform on purpose: native code rarely wants this shape,
 /// but the type's `RenderToHtmlRenderer` impl block is gated to
@@ -250,8 +289,9 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
 pub struct WasmPassTwoOutput {
     /// Source `.qmd` path (as the orchestrator received it).
     pub source_path: std::path::PathBuf,
-    /// Rendered HTML for the active page.
-    pub html: String,
+    /// The rendered payload — HTML for `RenderToHtmlRenderer`,
+    /// AST JSON for the q2-preview renderer.
+    pub payload: Pass2Payload,
     /// Per-page diagnostics emitted by the head pipeline plus
     /// every Pass-2 stage.
     pub diagnostics: Vec<DiagnosticMessage>,
@@ -263,6 +303,18 @@ pub struct WasmPassTwoOutput {
     /// receives Project-scoped artifacts separately (Phase 5
     /// invariant).
     pub page_artifacts: ArtifactStore,
+}
+
+impl WasmPassTwoOutput {
+    /// Returns the HTML payload, panicking if the payload is not
+    /// [`Pass2Payload::Html`]. Convenience for callers (notably
+    /// native test fixtures) that statically know they invoked
+    /// the HTML renderer.
+    pub fn html(&self) -> &str {
+        self.payload
+            .as_html()
+            .expect("WasmPassTwoOutput::html() called on non-Html payload")
+    }
 }
 
 /// In-memory Pass-2 renderer used by the WASM hub-client live
@@ -383,7 +435,7 @@ impl Pass2Renderer for RenderToHtmlRenderer {
 
         Ok(WasmPassTwoOutput {
             source_path: doc_info.input.clone(),
-            html: render_output.html,
+            payload: Pass2Payload::Html(render_output.html),
             diagnostics: render_output.diagnostics,
             source_context: render_output.source_context,
             page_artifacts: ctx.artifacts,
