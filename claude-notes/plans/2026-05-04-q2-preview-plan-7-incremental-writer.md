@@ -38,8 +38,13 @@ reconcile symmetric. Existing callers pass `None` and get today's
 parse-only baseline behavior; q2-preview's call site passes
 `Some("preview")`.
 
-When this plan lands, ReactPreview's read-only guard from Plan 1 lifts, and
-edits in q2-preview round-trip correctly.
+When this plan lands, ReactPreview's read-only guard from Plan 1
+lifts (one-block early-return in `handleSetAst`, deletable per Plan
+1's design), and edits in q2-preview round-trip correctly. This plan
+also absorbs the **cleanup of two temporary scaffolding pieces** Plan
+1 deliberately deferred — the string-literal format dispatches in
+`AstTransformsStage::run()` and `ReactPreview.tsx::doRender` — see
+§Scope and Plan 1's §"Multi-plan contract: cleanup owed to Plan 7".
 
 ## Scope
 
@@ -163,6 +168,21 @@ edits in q2-preview round-trip correctly.
   - Writes via the updated coarsen/assemble logic.
 - Lift the `handleSetAst` read-only guard in `ReactPreview.tsx` introduced
   in Plan 1. Wire `setLocalAst` through with `pipeline_kind: "preview"`.
+- **Cleanup: structured pipeline dispatch (replaces Plan 1's temporary
+  scaffolding).** Plan 1 ships two string-literal format dispatches as
+  deliberate placeholders:
+  1. `AstTransformsStage::run()` matches on
+     `ctx.format.target_format == "q2-preview"` to choose between
+     `build_transform_pipeline` and `build_q2_preview_transform_pipeline`.
+  2. `ReactPreview.tsx::doRender` matches on `format === 'q2-preview'`
+     to choose between `parseQmdToAst` and `renderPageInProject`.
+  Plan 7 introduces `pipeline_kind` ("baseline" / "preview") as part of
+  the round-trip wiring; that field is the structured replacement.
+  Migrate both dispatches to read `pipeline_kind` (or an equivalent
+  typed selector) instead of grepping on format strings. The migration
+  preserves observable behavior; it's a refactor, not a feature
+  change. See Plan 1's §"Multi-plan contract: cleanup owed to Plan 7"
+  for the rationale.
 
 ### Out of scope
 
@@ -485,7 +505,12 @@ copies the shortcode token from source.
   entry point to extend.
 - `hub-client/src/services/wasmRenderer.ts:531` — the JS wrapper.
 - `hub-client/src/components/render/ReactPreview.tsx` — `handleSetAst`
-  guard to lift.
+  guard to lift, and `doRender` format-string switch to migrate to
+  `pipeline_kind` (Plan 1 cleanup).
+- `crates/quarto-core/src/stage/stages/ast_transforms.rs:134` —
+  `AstTransformsStage::run()` JIT branch, where Plan 1's
+  `target_format == "q2-preview"` string-literal dispatch migrates to
+  `pipeline_kind` (Plan 1 cleanup).
 - Plans 4 (Synthetic + By), 5 (wire format), 6 (audit) — provide the
   AST shape this plan walks.
 
@@ -569,7 +594,11 @@ copies the shortcode token from source.
   (audit + Derived provenance on shortcode resolutions).
 - Blocks: nothing structurally; Plan 8 builds on the atomic infrastructure
   but is independent (uses `is_atomic_custom_node` for IncludeExpansion).
-- Lifts the read-only mode that Plan 1 introduced for q2-preview.
+- Lifts the read-only mode that Plan 1 introduced for q2-preview, and
+  absorbs the cleanup of Plan 1's temporary string-literal format
+  dispatches in `AstTransformsStage::run()` and
+  `ReactPreview.tsx::doRender` (see §Scope and Plan 1's §"Multi-plan
+  contract: cleanup owed to Plan 7").
 
 ## Risk areas
 
@@ -626,8 +655,9 @@ copies the shortcode token from source.
 | Warning channel plumbing through coarsen → incremental_write return | ~50 |
 | `pipeline_kind` parameter + WASM bridge + TS wrapper | ~80 |
 | ReactPreview guard lift + edit-back wiring | ~20 |
+| Cleanup: replace Plan 1's string-literal dispatches with `pipeline_kind` | ~30 |
 | Tests (unit + end-to-end round-trip + soft-drop interactions) | ~400 |
-| **Total** | **~1100** |
+| **Total** | **~1130** |
 
 Two focused sessions likely. Flagged as one of the highest-complexity plans;
 extend the budget if the InlineSplice + Transparent composition surfaces
