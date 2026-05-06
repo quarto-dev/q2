@@ -64,7 +64,7 @@ produced.
 | `body_link_targets` | `Vec<PathBuf>` of project-relative `.qmd` paths this page links to from its body content. Populated by `LinkResolutionStage` (Pass-1) using the same `resolve_doc_relative_target` helper Phase 6's `LinkRewriteTransform` calls in Pass-2 — equivalence test asserts the two produce the same set. The Phase-8 dependency graph turns each target into an edge. See `body-link-resolution-contract.md`. Default empty. |
 | `resources` | `Vec<String>` of document-level `resources:` patterns from the merged frontmatter (`bd-o8pr`). Raw patterns; expansion happens at the post-render collector. The snapshot of what the author declared at frontmatter-freeze time — engines and Lua filters that run later contribute through a separate channel (`DocumentResourceReport`) and cannot retroactively shrink this list. Default empty. |
 | `categories_raw` | `Option<ConfigValue>` carrying the originating tagged value of the top-level `categories:` key (`bd-n8a4`). Mirrors `categories` but preserves `!prefer` / `!concat` merge tags so listings consumers can feed it (alongside `listing_item.categories_raw`) into `quarto_config::MergedConfig` for tag-aware merging. Most consumers should keep reading the flattened `categories`; only listings reach for the raw form. Default `None`. |
-| `listing_item` | `ListingItemInfo` advertising per-document data for listings consumers (`bd-n8a4`). **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; L1's planned `ListingItemInfoStage` (`bd-izqh`) will fill holes (description, image, word count, reading time, date-modified). The nested `extra: BTreeMap<String, ConfigValue>` is the **only** open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
+| `listing_item` | `ListingItemInfo` advertising per-document data for listings consumers (`bd-n8a4`). **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; `ListingItemInfoStage` (`bd-izqh`, L1, landed) auto-fills holes pre-checkpoint for `description` (full first paragraph), `image` (first inline image's URL), `word_count` (Q1-parity tokenization, footnote text excluded), `reading_time_minutes` (`ceil(word_count / 200)`), and `date_modified` (filesystem mtime via `SystemRuntime::path_metadata` formatted as `YYYY-MM-DD` UTC). Author values always win — the stage strictly fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the **only** open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
 
 ## Non-guarantees (explicit)
 
@@ -366,3 +366,18 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   Plan: `claude-notes/plans/2026-05-05-listings-L0-profile-extension.md`.
   Parent epic: `bd-61cd`
   (`claude-notes/plans/2026-05-05-listings-epic.md`).
+- **2026-05-06 — `ListingItemInfoStage` lands (`bd-izqh`, listings
+  epic L1).** No version bump; the field shape is unchanged. New
+  pre-checkpoint stage between `IncludeExpansionStage` and
+  `DocumentProfileStage` auto-fills `meta.listing-item.{description,
+  image, word-count, reading-time-minutes, date-modified}` from the
+  post-include AST (and filesystem mtime via
+  `SystemRuntime::path_metadata`) when the author hasn't supplied
+  them. `DocumentProfileStage` then extracts the enriched
+  `ListingItemInfo` via the same path it used for purely
+  author-supplied values in v4. `categories` is **not** auto-filled
+  by L1 (D8 — listings consumers do their own L0-`categories_raw`-aware
+  merge). The hub-client/WASM pipeline runs the same stage, but
+  `date_modified` stays `None` until `bd-a3we` teaches the Automerge
+  VFS to surface change-history time. Plan:
+  `claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md`.
