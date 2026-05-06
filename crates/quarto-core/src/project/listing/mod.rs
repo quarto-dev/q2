@@ -41,3 +41,14 @@ pub use config::{
     parse_listings,
 };
 pub use item::{ListingItem, hydrate_item};
+
+/// One fully-resolved listing — its config plus the hydrated item
+/// set in final sort order. Produced by `ListingGenerateTransform`
+/// and stored on `RenderContext::resolved_listings`; consumed by
+/// `ListingRenderTransform` (which builds the per-item template
+/// binding and applies the doctemplate).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedListing {
+    pub listing: Listing,
+    pub items: Vec<ListingItem>,
+}

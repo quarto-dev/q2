@@ -1058,14 +1058,22 @@ resolve them inline rather than punt:
 
 - **D1 (two transforms, generate + render):** confirmed by
   user 2026-05-06. Matches navbar / sidebar precedent.
-- **D2 (resolved data lives at `meta.listings.<id>`):**
-  recommend per L2's open question 1. The L3 session may
-  switch to a side-channel if mid-pipeline `meta`
-  mutation becomes a contract problem. **Caveat:** the
-  "Lua filter mutation hook" framing is forward-looking
-  only; today there is no Lua filter slot between
-  generate and render transforms (see D13). Tracked by
-  `bd-0fd0`.
+- **D2 (resolved data flows via a typed RenderContext
+  field, *not* `meta.listings.<id>`):** revised
+  2026-05-06 during impl. The original D2 stored the
+  resolved listings under `meta.listings.<id>` for Lua-
+  mutation forward-compat. Per D13 there is no Lua slot
+  today, and the `Listing`/`ListingItem` ConfigValue
+  round-trip would be ~200 lines of boilerplate that
+  drifts. We follow the `crossref_index` precedent
+  instead: a `pub resolved_listings: Vec<ResolvedListing>`
+  field on `RenderContext`, populated by
+  `ListingGenerateTransform` and read by
+  `ListingRenderTransform`. When `bd-0fd0` (Lua
+  injection slot) lands, the natural integration point
+  is a meta serialize/deserialize bridge at the
+  injection boundary; the typed in-memory shape is
+  unchanged.
 - **D3 (markdown re-parse via `pampa::readers::qmd::read`):**
   user-confirmed 2026-05-06. The fresh `SourceContext`
   is discarded; re-parse diagnostics collapse into one
@@ -1312,8 +1320,32 @@ See §"Filing reminder" for descriptions. During impl:
 
 ### TDD phase 4 — Generate transform
 
-- [ ] Write transform tests (#28–32). Fail.
-- [ ] Implement `ListingGenerateTransform`. Tests pass.
+- [x] Add typed `resolved_listings: Vec<ResolvedListing>`
+      field to `RenderContext` (per revised D2). Define
+      `ResolvedListing { listing, items }` in
+      `project::listing::mod.rs`.
+- [x] Expose `glob_match_path` and
+      `path_to_forward_slashes` from
+      `project::discovery` so the listing module reuses
+      the existing matcher (no new walker).
+- [x] Implement `ListingGenerateTransform` at
+      `crates/quarto-core/src/transforms/listing_generate.rs`:
+      reads `meta.listing`, parses via
+      `parse_listings`, walks `ProjectIndex.profiles()`
+      filtering by host-dir-relative + project-relative
+      glob (D10), excludes the host page, hydrates
+      items, applies include/exclude filters, applies
+      explicit or default sort, truncates to
+      `max-items`. Result lands on
+      `RenderContext::resolved_listings`.
+- [x] Tests: 10 unit tests covering skip-when-absent,
+      skip-when-`listing: false`, write-resolved,
+      include filter, explicit sort, host-dir-relative
+      glob, project-relative glob in subdir,
+      max-items, default-sort-is-date-desc, override
+      semantics.
+- [x] Workspace test count: **8544, +96** from 8448
+      baseline.
 
 ### TDD phase 5 — Render transform
 
