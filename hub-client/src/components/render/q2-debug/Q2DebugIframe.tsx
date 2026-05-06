@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-interface AstIframeProps {
+interface Q2DebugIframeProps {
   astJson: string;
   currentFilePath: string;
   onNavigateToDocument?: (path: string, anchor: string | null) => void;
@@ -9,15 +9,17 @@ interface AstIframeProps {
 }
 
 /**
- * Wrapper component that renders the Ast component in a sandboxed iframe
+ * Wrapper component that renders the q2-debug Ast component in a
+ * sandboxed iframe. Verbatim port of the original AstIframe with the
+ * iframe `src` pointing at the renamed `/q2-debug.html` route.
  */
-export function AstIframe({
+export function Q2DebugIframe({
   astJson,
   currentFilePath,
   onNavigateToDocument,
   setAst,
   customComponentsCode,
-}: AstIframeProps) {
+}: Q2DebugIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
 
@@ -72,8 +74,8 @@ export function AstIframe({
   return (
     <iframe
       ref={iframeRef}
-      src="/ast-renderer.html"
-      title="AST Renderer"
+      src="/q2-debug.html"
+      title="q2-debug Renderer"
       sandbox="allow-scripts allow-same-origin"
       style={{
         width: '100%',

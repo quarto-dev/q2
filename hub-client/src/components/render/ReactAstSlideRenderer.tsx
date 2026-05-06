@@ -3,16 +3,30 @@ import { AspectRatioScaler } from '../render/AspectRatioScaler';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { vfsReadFile, vfsReadBinaryFile } from '../../services/wasmRenderer';
-
-/**
- * Simplified Pandoc AST types for rendering
- * Exported for use in thumbnail generation.
- */
-export interface PandocAST {
-  'pandoc-api-version': [number, number, number];
-  meta: Record<string, unknown>;
-  blocks: Block[];
-}
+import type {
+  PandocAST,
+  BlockNode,
+  InlineNode,
+  ParaBlock,
+  PlainBlock,
+  HeaderBlock,
+  CodeBlock,
+  BulletListBlock,
+  OrderedListBlock,
+  BlockQuoteBlock,
+  DivBlock,
+  RawBlock,
+  FigureBlock,
+  StrInline,
+  EmphInline,
+  StrongInline,
+  CodeInline,
+  LinkInline,
+  ImageInline,
+  SpanInline,
+  MathInline,
+  QuotedInline,
+} from './framework/types';
 
 /**
  * Represents a single slide with its content
@@ -22,64 +36,8 @@ export interface Slide {
   type: 'title' | 'content';
   title?: string;
   author?: string;
-  blocks: Block[];
+  blocks: BlockNode[];
 }
-
-type ParaBlock = { t: 'Para'; c: Inline[] };
-type PlainBlock = { t: 'Plain'; c: Inline[] };
-type HeaderBlock = { t: 'Header'; c: [number, [string, string[], [string, string][]], Inline[]] };
-type CodeBlock = { t: 'CodeBlock'; c: [[string, string[], [string, string][]], string] };
-type BulletListBlock = { t: 'BulletList'; c: Block[][] };
-type OrderedListBlock = { t: 'OrderedList'; c: [[number, { t: string }, { t: string }], Block[][]] };
-type BlockQuoteBlock = { t: 'BlockQuote'; c: Block[] };
-type DivBlock = { t: 'Div'; c: [[string, string[], [string, string][]], Block[]] };
-type HorizontalRuleBlock = { t: 'HorizontalRule' };
-type RawBlock = { t: 'RawBlock'; c: [string, string] };
-type FigureBlock = { t: 'Figure'; c: [[string, string[], [string, string][]], [Inline[] | null, Block[]], Block[]] };
-type UnknownBlock = { t: string; c?: unknown };
-
-export type Block =
-  | ParaBlock
-  | PlainBlock
-  | HeaderBlock
-  | CodeBlock
-  | BulletListBlock
-  | OrderedListBlock
-  | BlockQuoteBlock
-  | DivBlock
-  | HorizontalRuleBlock
-  | RawBlock
-  | FigureBlock
-  | UnknownBlock;
-
-type StrInline = { t: 'Str'; c: string };
-type SpaceInline = { t: 'Space' };
-type SoftBreakInline = { t: 'SoftBreak' };
-type LineBreakInline = { t: 'LineBreak' };
-type EmphInline = { t: 'Emph'; c: Inline[] };
-type StrongInline = { t: 'Strong'; c: Inline[] };
-type CodeInline = { t: 'Code'; c: [[string, string[], [string, string][]], string] };
-type LinkInline = { t: 'Link'; c: [[string, string[], [string, string][]], Inline[], [string, string]] };
-type ImageInline = { t: 'Image'; c: [[string, string[], [string, string][]], Inline[], [string, string]] };
-type SpanInline = { t: 'Span'; c: [[string, string[], [string, string][]], Inline[]] };
-type MathInline = { t: 'Math'; c: [{ t: string }, string] };
-type QuotedInline = { t: 'Quoted'; c: [{ t: string }, Inline[]] };
-type UnknownInline = { t: string; c?: unknown };
-
-export type Inline =
-  | StrInline
-  | SpaceInline
-  | SoftBreakInline
-  | LineBreakInline
-  | EmphInline
-  | StrongInline
-  | CodeInline
-  | LinkInline
-  | ImageInline
-  | SpanInline
-  | MathInline
-  | QuotedInline
-  | UnknownInline;
 
 interface PandocAstSlideRendererProps {
   astJson: string;
@@ -296,8 +254,8 @@ export function parseSlides(ast: PandocAST): Slide[] {
  * Extract sections from blocks. Each section Div becomes a slide.
  * Returns empty array if blocks don't follow section pattern.
  */
-function extractSections(blocks: Block[]): Block[][] {
-  const sections: Block[][] = [];
+function extractSections(blocks: BlockNode[]): BlockNode[][] {
+  const sections: BlockNode[][] = [];
 
   for (const block of blocks) {
     if (block.t === 'Div') {
@@ -323,9 +281,9 @@ function extractSections(blocks: Block[]): Block[][] {
 /**
  * Split blocks into slides based on h1/h2 headers
  */
-function splitByHeaders(blocks: Block[]): Slide[] {
+function splitByHeaders(blocks: BlockNode[]): Slide[] {
   const slides: Slide[] = [];
-  let currentSlideBlocks: Block[] = [];
+  let currentSlideBlocks: BlockNode[] = [];
 
   for (const block of blocks) {
     if (block.t === 'Header') {
@@ -368,8 +326,8 @@ function splitByHeaders(blocks: Block[]): Slide[] {
  * Flatten block structure by extracting blocks from Divs
  * This handles the case where sections are wrapped in Div containers
  */
-function flattenBlocks(blocks: Block[]): Block[] {
-  const result: Block[] = [];
+function flattenBlocks(blocks: BlockNode[]): BlockNode[] {
+  const result: BlockNode[] = [];
 
   for (const block of blocks) {
     if (block.t === 'Div') {
@@ -547,11 +505,11 @@ function parseStyleString(styleString: string): React.CSSProperties {
 }
 
 // ============================================================================
-// Block Rendering
+// BlockNode Rendering
 // ============================================================================
 
 export function renderBlock(
-  block: Block,
+  block: BlockNode,
   key: number,
   currentFilePath: string,
   onNavigateToDocument?: (path: string, anchor: string | null) => void
@@ -720,11 +678,11 @@ export function renderBlock(
 }
 
 // ============================================================================
-// Inline Rendering
+// InlineNode Rendering
 // ============================================================================
 
 export function renderInlines(
-  inlines: Inline[],
+  inlines: InlineNode[],
   currentFilePath: string,
   onNavigateToDocument?: (path: string, anchor: string | null) => void
 ): React.ReactNode[] {
@@ -732,7 +690,7 @@ export function renderInlines(
 }
 
 function renderInline(
-  inline: Inline,
+  inline: InlineNode,
   key: number,
   currentFilePath: string,
   onNavigateToDocument?: (path: string, anchor: string | null) => void

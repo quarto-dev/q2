@@ -75,8 +75,9 @@ comprehensive grep.
 - The writer's atomic-violation diagnostic (Plan 7).
 - The writer's multi-inline shortcode dedupe rule (Plan 7).
 - The `IncludeExpansion` CustomNode wrapper (Plan 8).
-- React component for shortcode-resolved inlines (Plan 2 — components
-  detect Derived provenance and render read-only).
+- React component for shortcode-resolved inlines (Plan 2B — atomic-aware
+  `setLocalAst` gating in the dispatcher detects Derived provenance via
+  Plan 2A's `isAtomicSourceInfo` accessor and renders read-only).
 - The HTML pipeline doesn't need a "ShortcodeResolutionResolveTransform"
   (no wrapper to unwrap). Shortcode-resolved nodes ARE flat inlines/blocks
   with Derived source_info; the HTML writer doesn't care about source_info,
@@ -252,8 +253,16 @@ because their cross-file FileId issue genuinely requires anchoring at the
 parent-file level.
 
 The shortcode-resolution provenance change propagates to: q2-preview
-rendering (Plan 2's `MaybeReadOnlyInline` wrapper detects Derived
-inlines), writer round-trip (Plan 7's atomic logic detects Derived +
-UseAfter as AtomicViolation; Plan 7's dedupe rule handles multi-inline
-shortcode resolutions), and possibly some existing tests that asserted
-on the flat Str's source_info shape.
+rendering (Plan 2B's atomic-aware `setLocalAst` gating in the
+framework's `Inline` dispatcher — `framework/dispatchers.tsx`,
+post-2pre — detects Derived inlines via Plan 2A's
+`isAtomicSourceInfo` accessor. The original "MaybeReadOnlyInline
+wrapper" framing was resolved during the 2026-05-06 / 2026-05-07
+review sessions into the framework's unified `Block` / `Inline`
+dispatchers gaining the atomic gate, rather than a separate
+wrapper component or per-format duplication. Both q2-debug and
+q2-preview pick up the gate "for free"),
+writer round-trip (Plan 7's atomic logic detects Derived + UseAfter
+as AtomicViolation; Plan 7's dedupe rule handles multi-inline
+shortcode resolutions), and possibly some existing tests that
+asserted on the flat Str's source_info shape.

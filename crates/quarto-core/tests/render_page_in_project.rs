@@ -808,3 +808,83 @@ fn website_q2_preview_renders_through_orchestrator() {
         snip()
     );
 }
+
+/// Plan 1 §"Multi-plan contract: theme CSS artifact": the q2-preview
+/// pipeline includes `CompileThemeCssStage`, and
+/// `RenderToPreviewAstRenderer` mirrors the HTML renderer's
+/// Project-scoped artifact flush. After a q2-preview render of a
+/// fixture that triggers theme compilation, the compiled theme CSS
+/// must land in VFS so Plan 2A's iframe entry can read it.
+///
+/// Sibling of [`default_project_theme_artifact_lands_in_vfs`] (the
+/// HTML version), which extracts the path from the rendered HTML's
+/// `<link>` tag. q2-preview returns AST JSON — there's no `<link>` —
+/// so this test walks the on-disk VFS root for the theme file
+/// directly. The path shape is asserted by
+/// `theme_artifact_key_and_path` (multi-doc:
+/// `quarto/quarto-theme-<fingerprint>.css`).
+#[test]
+fn default_project_theme_artifact_lands_in_vfs_under_q2_preview() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: default\n",
+    );
+    // `format: q2-preview` triggers the q2-preview pipeline, but
+    // theme compilation reads `format.html.theme` from metadata.
+    // Both keys must be present.
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: T\nformat:\n  q2-preview: default\n  html:\n    theme: flatly\n---\n\nhi\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let _output = render_active_page_preview(&project_dir, &active);
+
+    // Walk the synthetic vfs_root for the theme artifact. The
+    // multi-doc path shape is `quarto/quarto-theme-<fingerprint>.css`;
+    // see `theme_artifact_key_and_path`.
+    let vfs_root = project_dir.join(".quarto/project-artifacts");
+    let theme_dir = vfs_root.join("quarto");
+    assert!(
+        theme_dir.exists(),
+        "expected the renderer to flush the theme CSS into {}; \
+         directory does not exist",
+        theme_dir.display(),
+    );
+    let entries: Vec<PathBuf> = std::fs::read_dir(&theme_dir)
+        .unwrap_or_else(|e| panic!("read_dir({}) failed: {}", theme_dir.display(), e))
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("quarto-theme-") && n.ends_with(".css"))
+                .unwrap_or(false)
+        })
+        .collect();
+    assert_eq!(
+        entries.len(),
+        1,
+        "expected exactly one quarto-theme-*.css under {}; got {:?}",
+        theme_dir.display(),
+        entries,
+    );
+
+    let css_path = &entries[0];
+    let bytes = std::fs::read(css_path)
+        .unwrap_or_else(|e| panic!("read({}) failed: {}", css_path.display(), e));
+    assert!(
+        !bytes.is_empty(),
+        "theme CSS at {} should be non-empty",
+        css_path.display(),
+    );
+    let css_text = std::str::from_utf8(&bytes).unwrap_or("");
+    assert!(
+        css_text.contains("flatly") || css_text.contains("body") || css_text.contains(":root"),
+        "theme CSS at {} should look like compiled CSS; first 200 bytes: {}",
+        css_path.display(),
+        snippet(css_text),
+    );
+}

@@ -1,18 +1,33 @@
 /**
- * Entry point for the AST renderer iframe.
- * This is loaded by ast-renderer.html and handles postMessage communication.
+ * Entry point for the q2-debug renderer iframe.
+ *
+ * Loaded by `/q2-debug.html` and handles the postMessage protocol with
+ * the parent (Q2DebugIframe). Mounts the framework's <Ast> with
+ * q2-debug's registry as the format-side defaults, layered with any
+ * user-TSX overrides loaded via LOAD_CUSTOM_COMPONENTS.
  */
 
 import { createRoot } from 'react-dom/client';
-import { Ast, componentRegistry } from './components/render/ReactAstDebugRenderer';
-import * as ReactAstDebugRendererModule from './components/render/ReactAstDebugRenderer';
 import React from 'react';
 import { Deck, Slide } from '@revealjs/react';
 import 'reveal.js/reveal.css';
 import 'reveal.js/theme/white.css';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { buildCustomRegistry, type ComponentExports } from './utils/customRegistry';
+
+import { Ast, Node, renderChildren, renderNode } from '../framework';
+import type { FormatRegistry } from '../framework';
+import {
+    Block,
+    Inline,
+    Para, Plain, Header, CodeBlock, BulletList, OrderedList,
+    BlockQuote, Div, HorizontalRule, RawBlock, Figure,
+    Str, Space, SoftBreak, LineBreak,
+    Emph, Strong, Code, Link, Image, Span, Quoted,
+    blockStyle, inlineStyle,
+    q2DebugRegistry,
+} from '.';
+import { buildCustomRegistry, type ComponentExports } from '../../../utils/customRegistry';
 
 let root: ReturnType<typeof createRoot> | null = null;
 let customRegistry: Record<string, React.ComponentType<any>> = {};
@@ -48,12 +63,24 @@ window.addEventListener('message', async (event) => {
 });
 
 /**
- * Load custom components from transpiled JS code using dynamic imports
+ * Load custom components from transpiled JS code using dynamic imports.
  */
 async function loadCustomComponents(componentsCode: Record<string, string>) {
-  // Make React and other dependencies available globally for the imported modules
+  // Make React and the q2-debug renderer surface available as globals
+  // for user TSX modules to destructure. Pinned to an explicit object
+  // rather than `import * as` so internal contracts (RegistryContext,
+  // renderChildrenRegistry) cannot leak onto the global by accident.
+  // See plan-2pre §"`__REACT_AST_DEBUG_RENDERER__` continuity".
   (window as any).React = React;
-  (window as any).__REACT_AST_DEBUG_RENDERER__ = ReactAstDebugRendererModule;
+  (window as any).__REACT_AST_DEBUG_RENDERER__ = {
+    renderChildren, renderNode, Node,
+    Block, Inline,
+    Para, Plain, Header, CodeBlock, BulletList, OrderedList,
+    BlockQuote, Div, HorizontalRule, RawBlock, Figure,
+    Str, Space, SoftBreak, LineBreak,
+    Emph, Strong, Code, Link, Image, Span, Quoted,
+    q2DebugRegistry, blockStyle, inlineStyle,
+  };
   (window as any).RevealReact = { Deck, Slide };
   (window as any).katex = katex;
 
@@ -65,12 +92,12 @@ async function loadCustomComponents(componentsCode: Record<string, string>) {
       try {
         const module = await import(url);
         loadedModules.push(module as ComponentExports);
-        console.log(`[AstIframe] Loaded custom component: ${componentName}`);
+        console.log(`[Q2DebugIframe] Loaded custom component: ${componentName}`);
       } finally {
         URL.revokeObjectURL(url);
       }
     } catch (err) {
-      console.error(`[AstIframe] Failed to load custom component ${componentName}:`, err);
+      console.error(`[Q2DebugIframe] Failed to load custom component ${componentName}:`, err);
     }
   }
 
@@ -83,8 +110,13 @@ function updateAst(payload: UpdateAstPayload) {
     currentFilePath,
   } = payload;
 
-  // Merge custom components with defaults (custom overrides defaults)
-  const mergedRegistry = { ...componentRegistry, ...customRegistry } as Record<string, (props: any) => React.ReactNode>;
+  // Merge q2-debug defaults with any user-TSX overrides. The cast asserts
+  // the merged result satisfies the FormatRegistry contract; the override
+  // side is babel-transpiled user code and runtime-trusted.
+  const mergedRegistry: FormatRegistry = {
+    ...q2DebugRegistry,
+    ...customRegistry,
+  } as FormatRegistry;
 
   const rootElement = document.getElementById('root');
   if (!rootElement) {

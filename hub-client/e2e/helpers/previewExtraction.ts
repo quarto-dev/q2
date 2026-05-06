@@ -13,9 +13,9 @@ import type {} from './testHooks';
  *
  * For html-style previews (the default) the DoubleBufferedIframe component
  * mounts an `iframe.preview-active` whose body is populated when render
- * completes. For `format: q2-debug`, the renderer mounts an AstIframe
- * whose `src` ends in `ast-renderer.html`; we wait for that iframe and
- * for its body to receive content from the postMessage flow.
+ * completes. For `format: q2-debug`, the renderer mounts a Q2DebugIframe
+ * whose `src` ends in `q2-debug.html`; we wait for that iframe and for
+ * its body to receive content from the postMessage flow.
  *
  * If `consoleErrors` is provided, the wait will abort early when a fatal
  * browser error is detected (e.g. WebSocket failure, WASM crash), avoiding
@@ -25,7 +25,7 @@ export type PreviewIframeKind = 'html' | 'q2-debug';
 
 export function previewIframeSelector(kind: PreviewIframeKind): string {
   return kind === 'q2-debug'
-    ? 'iframe[src*="ast-renderer.html"]'
+    ? 'iframe[src*="q2-debug.html"]'
     : 'iframe.preview-active';
 }
 

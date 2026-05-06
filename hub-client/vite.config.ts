@@ -78,14 +78,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         debug: path.resolve(__dirname, 'debug.html'),
-        // ast-renderer.html lives at the project root, not under public/.
-        // When it was in public/ the build emitted both a transformed
-        // copy (at dist/public/ast-renderer.html) and an untransformed
-        // copy of the source file (at dist/ast-renderer.html, with a
-        // dev-only `<script src="/src/ast-renderer-entry.tsx">` reference).
-        // The iframe's `src="/ast-renderer.html"` hit the wrong one in
-        // `vite preview`, breaking the q2-debug E2E test.
-        'ast-renderer': path.resolve(__dirname, 'ast-renderer.html'),
+        'q2-debug': path.resolve(__dirname, 'public/q2-debug.html'),
       },
     },
   },
