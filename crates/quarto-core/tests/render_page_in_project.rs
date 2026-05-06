@@ -34,7 +34,9 @@ use tempfile::TempDir;
 use quarto_core::format::Format;
 use quarto_core::project::ProjectContext;
 use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
-use quarto_core::project::pass2_renderer::{RenderToHtmlRenderer, WasmPassTwoOutput};
+use quarto_core::project::pass2_renderer::{
+    RenderToHtmlRenderer, RenderToPreviewAstRenderer, WasmPassTwoOutput,
+};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn write(path: &Path, contents: &str) {
@@ -632,4 +634,177 @@ fn snippet(s: impl AsRef<str>) -> String {
     } else {
         format!("{}…", &s[..200])
     }
+}
+
+// ─── q2-preview Plan 1 commit 5 ─────────────────────────────────────
+//
+// Native E2E coverage of the orchestrator path through
+// `RenderToPreviewAstRenderer`. Mirrors `render_active_page` (HTML)
+// but constructs a q2-preview renderer; both renderers share
+// `Output = WasmPassTwoOutput` (commit 2's enum-payload payoff), so
+// the orchestrator and summary handling are identical and the only
+// observable divergence is the payload variant.
+
+/// Drive `ProjectPipeline<RenderToPreviewAstRenderer>` with
+/// `RenderMode::ActivePage(active)`. Sibling of [`render_active_page`]
+/// — same project discovery and orchestrator wiring; differs only
+/// in the renderer choice and (consequently) the payload variant
+/// of the resulting `WasmPassTwoOutput`.
+fn render_active_page_preview(project_dir: &Path, active: &Path) -> WasmPassTwoOutput {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(active, runtime.as_ref()).unwrap();
+    if !project.is_single_file {
+        project = ProjectContext::discover(&project.dir, runtime.as_ref()).unwrap();
+    }
+    let _ = project_dir;
+
+    let project_type = project_type_for(&project);
+    let vfs_root = project.dir.join(".quarto/project-artifacts");
+    let renderer = RenderToPreviewAstRenderer::new(&vfs_root);
+
+    // The orchestrator reads `format` to drive Pass-1 + Pass-2.
+    // For q2-preview the format is HTML-based with
+    // `pipeline_kind = Some("preview")`; that's what the renderer
+    // and `AstTransformsStage` dispatch on.
+    let format =
+        Format::from_format_string("q2-preview").expect("q2-preview is a recognized pseudo-format");
+
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        format,
+        "q2-preview",
+        runtime.clone(),
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active.to_path_buf()));
+
+    let summary = pollster::block_on(pipeline.run()).expect("q2-preview pipeline run");
+    assert!(
+        summary.pass1_failures.is_empty(),
+        "unexpected pass-1 failures: {:?}",
+        summary.pass1_failures,
+    );
+    assert!(
+        summary.pass2_failures.is_empty(),
+        "unexpected pass-2 failures: {:?}",
+        summary.pass2_failures,
+    );
+    assert_eq!(
+        summary.outputs.len(),
+        1,
+        "ActivePage mode should produce exactly one output"
+    );
+    summary.outputs.into_iter().next().unwrap()
+}
+
+/// Asserts the q2-preview output's payload is `Pass2Payload::AstJson`.
+/// Convenience companion to [`WasmPassTwoOutput::html`] (the panicking
+/// HTML accessor used by HTML tests above).
+fn ast_json(output: &WasmPassTwoOutput) -> &str {
+    output
+        .payload
+        .as_ast_json()
+        .expect("q2-preview renderer must produce Pass2Payload::AstJson")
+}
+
+/// q2-preview commit 5 E2E: a website fixture with a callout and an
+/// embedded image renders through `RenderToPreviewAstRenderer`,
+/// producing AST JSON with:
+/// - the callout encoded as `__quarto_custom_node` Div with
+///   `data-custom-type=Callout` (preserves the wrapper for React);
+/// - the embedded image's URL rewritten under the synthetic
+///   `vfs_root` (matching the path the renderer flushes the image
+///   bytes to);
+/// - sidebar metadata populated via `SidebarGenerateTransform`
+///   (which is in the q2-preview transform list).
+///
+/// This is the primary regression test for the wiring this commit
+/// adds (single-doc + project-active dispatch on `pipeline_kind`).
+/// It guards Plan 1's "Multi-plan contract: page-scoped image
+/// artifacts" — Plan 2 will rely on the embedded URL and the VFS
+/// path agreeing.
+#[test]
+fn website_q2_preview_renders_through_orchestrator() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n\
+         website:\n  title: Test Site\n  \
+         sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\nAbout this site.\n",
+    );
+
+    // ResourceCollectorTransform reads the file path lazily and
+    // doesn't validate image bytes, so any contents work for the
+    // wiring test. The `write` helper takes &str, so use ASCII.
+    write(
+        &project_dir.join("hero.png"),
+        "fake image bytes for q2-preview test",
+    );
+
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\nformat: q2-preview\n---\n\n\
+         ::: {.callout-note}\n## Heads-up\n\nWelcome.\n:::\n\n\
+         ![Hero](hero.png)\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page_preview(&project_dir, &active);
+
+    let json = ast_json(&output);
+    let snip = || snippet(json);
+
+    // Wrapper survives → React's CustomNode component (Plan 2)
+    // can dispatch on type-name.
+    assert!(
+        json.contains("__quarto_custom_node"),
+        "expected wrapper class in q2-preview AST JSON; got:\n{}",
+        snip()
+    );
+    assert!(
+        json.contains("data-custom-type"),
+        "expected data-custom-type attribute; got:\n{}",
+        snip()
+    );
+    assert!(
+        json.contains("Callout"),
+        "expected Callout type-name in JSON; got:\n{}",
+        snip()
+    );
+
+    // ResourceCollectorTransform rewrites the image URL relative
+    // to the resolver's vfs_root. The renderer flushes the bytes
+    // to a path under `<project_dir>/.quarto/project-artifacts/`
+    // (the native test's stand-in for the WASM VFS).
+    assert!(
+        json.contains("hero"),
+        "expected the image filename to appear in the AST URL; got:\n{}",
+        snip()
+    );
+    // page_artifacts carries the image as an artifact entry.
+    assert!(
+        !output.page_artifacts.is_empty(),
+        "expected ResourceCollectorTransform to emit a page-scoped \
+         artifact for hero.png; got empty page_artifacts"
+    );
+
+    // SidebarGenerateTransform is in the q2-preview transform
+    // list; with a website project + sidebar config, the
+    // structured `navigation.sidebar` should land in `meta`.
+    // Sniff the JSON for the sibling page's title (title resolution
+    // is a sidebar-generate side effect when ProjectIndex is
+    // populated).
+    assert!(
+        json.contains("\"title\"") && json.contains("About"),
+        "expected sidebar metadata to include the sibling 'About' \
+         entry's title; got:\n{}",
+        snip()
+    );
 }

@@ -30,6 +30,7 @@ use std::sync::{Arc, OnceLock};
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
     QuartoError, RenderContext, RenderOptions, ResourceResolverContext, render_qmd_to_html,
+    render_qmd_to_preview_ast,
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
@@ -1164,43 +1165,69 @@ async fn render_single_doc_to_response(
     // read them from VFS at the matching path.
     let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
     ctx.resource_resolver = Some(resolver.clone());
-    let config = HtmlRenderConfig::with_resolver(resolver.clone());
     let source_name = path.to_string_lossy();
 
     let runtime_arc: Arc<dyn SystemRuntime> =
         Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
-    match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
-        Ok(output) => {
-            // Populate VFS with artifacts — Phase 5 routes both
-            // page- and project-scope artifacts under the same
-            // synthetic root in vfs_root mode.
-            let runtime = get_runtime();
-            for (_key, artifact) in ctx.artifacts.iter() {
-                if let Some(artifact_path) = &artifact.path {
-                    let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
-                    runtime.add_file(&vfs_path, artifact.content.clone());
-                }
+    // Dispatch on `format.pipeline_kind`: q2-preview runs the
+    // q2-preview entry point and returns AST JSON; everything else
+    // runs the HTML pipeline. Both branches share the same prelude
+    // (RenderContext + resolver) and tail (VFS artifact flush +
+    // RenderResponse construction with `skip_serializing_if = None`
+    // on the unused payload field).
+    let (html, ast_json, diagnostics, source_context) = match format.pipeline_kind {
+        Some("preview") => {
+            match render_qmd_to_preview_ast(content, &source_name, &mut ctx, runtime_arc).await {
+                Ok(out) => (
+                    None,
+                    Some(out.ast_json),
+                    out.diagnostics,
+                    out.source_context,
+                ),
+                Err(e) => return render_error_response(e),
             }
-
-            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
-            serde_json::to_string(&RenderResponse {
-                success: true,
-                error: None,
-                html: Some(output.html),
-                ast_json: None,
-                diagnostics: None,
-                warnings: if warnings.is_empty() {
-                    None
-                } else {
-                    Some(warnings)
-                },
-                pass1_failures: None,
-            })
-            .unwrap()
         }
-        Err(e) => render_error_response(e),
+        _ => {
+            let config = HtmlRenderConfig::with_resolver(resolver.clone());
+            match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
+                Ok(out) => (Some(out.html), None, out.diagnostics, out.source_context),
+                Err(e) => return render_error_response(e),
+            }
+        }
+    };
+
+    // Populate VFS with artifacts — Phase 5 routes both
+    // page- and project-scope artifacts under the same
+    // synthetic root in vfs_root mode. Format-agnostic: both the
+    // HTML pipeline's `RenderHtmlBodyStage` and the q2-preview
+    // pipeline's `ResourceCollectorTransform` accumulate artifacts
+    // on `ctx.artifacts` using the same resolver, so the iframe
+    // (HTML or AST-iframe) finds the bytes at the matching VFS
+    // path either way.
+    let runtime = get_runtime();
+    for (_key, artifact) in ctx.artifacts.iter() {
+        if let Some(artifact_path) = &artifact.path {
+            let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
+            runtime.add_file(&vfs_path, artifact.content.clone());
+        }
     }
+
+    let warnings = diagnostics_to_json(&diagnostics, &source_context);
+    serde_json::to_string(&RenderResponse {
+        success: true,
+        error: None,
+        html,
+        ast_json,
+        diagnostics: None,
+        warnings: if warnings.is_empty() {
+            None
+        } else {
+            Some(warnings)
+        },
+        pass1_failures: None,
+    })
+    .unwrap()
 }
 
 /// Project-scoped render path — drives the orchestrator with
@@ -1214,7 +1241,9 @@ async fn render_project_active_page_to_response(
     user_grammars: Option<JsUserGrammars>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
-    use quarto_core::project::pass2_renderer::{Pass2Payload, RenderToHtmlRenderer};
+    use quarto_core::project::pass2_renderer::{
+        Pass2Payload, RenderToHtmlRenderer, RenderToPreviewAstRenderer,
+    };
 
     // Detect format from the *active* file's content. (Pass 1 in
     // the orchestrator re-reads each file's bytes — for the active
@@ -1237,7 +1266,6 @@ async fn render_project_active_page_to_response(
     let _ = user_grammars;
 
     let project_type = project_type_for(&project);
-    let renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
 
     // Canonicalize the active path so it matches the form
     // `project.files` was filled with (Pass-2's `RenderMode::ActivePage`
@@ -1246,19 +1274,50 @@ async fn render_project_active_page_to_response(
         .canonicalize(active_path)
         .unwrap_or_else(|_| active_path.to_path_buf());
 
-    let mut pipeline = ProjectPipeline::with_renderer(
-        &mut project,
-        project_type,
-        format,
-        format_str,
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>,
-        renderer,
-    )
-    .with_mode(RenderMode::ActivePage(active_canonical.clone()));
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
-    let summary = match pipeline.run().await {
-        Ok(s) => s,
-        Err(e) => return render_error_response(e),
+    // Dispatch on `format.pipeline_kind`. `pipeline_kind` is
+    // `Option<&'static str>` (Copy), so reading it doesn't move
+    // `format`, leaving it free to consume in the chosen branch.
+    // Both renderers have `type Output = WasmPassTwoOutput;`
+    // (commit 2's enum-payload payoff), so the resulting
+    // `ProjectRenderSummary<WasmPassTwoOutput>` unifies across
+    // arms and the downstream summary-handling code is shared.
+    let kind = format.pipeline_kind;
+    let summary = match kind {
+        Some("preview") => {
+            let renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
+            let mut pipeline = ProjectPipeline::with_renderer(
+                &mut project,
+                project_type,
+                format,
+                format_str,
+                runtime_arc,
+                renderer,
+            )
+            .with_mode(RenderMode::ActivePage(active_canonical.clone()));
+            match pipeline.run().await {
+                Ok(s) => s,
+                Err(e) => return render_error_response(e),
+            }
+        }
+        _ => {
+            let renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
+            let mut pipeline = ProjectPipeline::with_renderer(
+                &mut project,
+                project_type,
+                format,
+                format_str,
+                runtime_arc,
+                renderer,
+            )
+            .with_mode(RenderMode::ActivePage(active_canonical.clone()));
+            match pipeline.run().await {
+                Ok(s) => s,
+                Err(e) => return render_error_response(e),
+            }
+        }
     };
 
     // Locate the active page's output. With `RenderMode::ActivePage`
