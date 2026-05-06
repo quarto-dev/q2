@@ -161,6 +161,37 @@ pub fn remove_final_newline(content: &str) -> &str {
     content.strip_suffix('\n').unwrap_or(content)
 }
 
+/// Resolver chain suitable for project-scoped template lookup.
+///
+/// The chain order is:
+///
+/// 1. [`FileSystemResolver`] — loads partials relative to the
+///    template's `base_path` (typically the host page's directory).
+///    Used by author-supplied custom templates referencing local
+///    partial files.
+/// 2. [`MemoryResolver`] carrying built-in partials (the `builtins`
+///    argument). Used by the listing render transform to embed the
+///    canonical `default` / `grid` / `table` templates.
+///
+/// The two resolvers are chained primary-first, so a custom template
+/// can shadow a built-in name by placing a file with the same name
+/// next to the host page. Built-ins act as the fallback when no
+/// matching file exists.
+///
+/// For lookups that miss both layers, the result is `None`; callers
+/// fall through to whatever the template engine does for unresolved
+/// partials (today: a `Q-10-3` "Partial Not Found" diagnostic).
+///
+/// This helper exists so the listing render transform — the first
+/// known consumer — has a one-call construction site instead of
+/// open-coding the chain. Future consumers (e.g. L8 custom
+/// templates) reuse the same shape.
+pub fn project_listing_resolver(
+    builtins: MemoryResolver,
+) -> ChainedResolver<FileSystemResolver, MemoryResolver> {
+    ChainedResolver::new(FileSystemResolver, builtins)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,5 +312,42 @@ mod tests {
                 .get_partial("missing", Path::new("/t.html"))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn project_listing_resolver_serves_builtins_when_no_filesystem_match() {
+        // For a synthetic base path that doesn't exist on disk, the
+        // FileSystemResolver returns None and falls through to the
+        // MemoryResolver carrying the listing built-ins.
+        let builtins = MemoryResolver::with_partials([("listing-default", "BUILTIN")]);
+        let resolver = project_listing_resolver(builtins);
+        let result = resolver.get_partial(
+            "listing-default",
+            Path::new("/nonexistent-host-page-dir/host.qmd"),
+        );
+        assert_eq!(result, Some("BUILTIN".to_string()));
+    }
+
+    #[test]
+    fn project_listing_resolver_filesystem_shadows_builtin() {
+        use std::io::Write;
+        // A custom template file next to the host page shadows a
+        // built-in with the same name.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // The base_path passed to get_partial is the template's
+        // path; FileSystemResolver looks for partials in
+        // base_path.parent(). We put the partial file in the same
+        // directory as the synthetic host_page path.
+        let host_path = tmp.path().join("host.template");
+        let partial_path = tmp.path().join("listing-default.template");
+        let mut f = std::fs::File::create(&partial_path).expect("create");
+        writeln!(f, "CUSTOM").expect("write");
+        drop(f);
+
+        let builtins = MemoryResolver::with_partials([("listing-default", "BUILTIN")]);
+        let resolver = project_listing_resolver(builtins);
+        let result = resolver.get_partial("listing-default", &host_path);
+        // FileSystemResolver wins → "CUSTOM\n"
+        assert_eq!(result.as_deref(), Some("CUSTOM\n"));
     }
 }

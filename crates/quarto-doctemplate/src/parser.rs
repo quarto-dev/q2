@@ -579,11 +579,17 @@ fn visit_node(
 
         // Pipes
         "pipe" => {
-            // The pipe node contains the actual pipe type as a child
-            for (kind, _) in &children {
-                if kind.starts_with("pipe_") {
-                    let pipe_name = kind.strip_prefix("pipe_").unwrap_or(kind);
-                    return Intermediate::Pipe(Pipe::new(pipe_name, source_info));
+            // The pipe node contains the actual pipe type as a child.
+            // Children are already processed by `to_intermediate` in
+            // post-order, so a child like `pipe_left` will already be
+            // an `Intermediate::Pipe(...)` carrying its args. Forward
+            // that one through unchanged. For the bare pipe variants
+            // (no args) the child arrives as Pipe-with-empty-args
+            // from the catch-all `kind if kind.starts_with("pipe_")`
+            // arm below, so the same forwarding works for them too.
+            for (_kind, child) in children {
+                if let Intermediate::Pipe(pipe) = child {
+                    return Intermediate::Pipe(pipe);
                 }
             }
             Intermediate::Unknown
@@ -814,6 +820,10 @@ fn extract_interpolation_parts(children: Vec<(String, Intermediate)>) -> Interpo
     let mut pipes = Vec::new();
     let mut separator = None;
     let mut partial_name = None;
+    // Collect bare-partial info if we see one, but keep walking the
+    // remaining siblings so any sibling pipes
+    // (e.g. `$greeting()/uppercase$`) make it onto the partial.
+    let mut bare_partial: Option<(String, Vec<Pipe>, SourceInfo)> = None;
 
     for (kind, child) in children {
         match child {
@@ -821,13 +831,9 @@ fn extract_interpolation_parts(children: Vec<(String, Intermediate)>) -> Interpo
             Intermediate::Pipe(pipe) => pipes.push(pipe),
             Intermediate::LiteralSeparator(sep) => separator = Some(sep),
             Intermediate::Partial(name) => partial_name = Some(name),
-            // Bare partial is already fully parsed
             Intermediate::BarePartial(name, bare_pipes, source_info) => {
-                return InterpolationResult::BarePartial {
-                    partial_name: name,
-                    pipes: bare_pipes,
-                    source_info,
-                };
+                // Capture; merge with sibling pipes after the loop.
+                bare_partial = Some((name, bare_pipes, source_info));
             }
             // Also check for _interpolation which passes through
             Intermediate::Node(TemplateNode::Variable(var)) if kind == "_interpolation" => {
@@ -842,14 +848,31 @@ fn extract_interpolation_parts(children: Vec<(String, Intermediate)>) -> Interpo
             }
             // Pass through partial nodes from nested _interpolation
             Intermediate::Node(TemplateNode::Partial(partial)) if kind == "_interpolation" => {
+                let mut all_pipes = partial.pipes;
+                all_pipes.extend(std::mem::take(&mut pipes));
                 return InterpolationResult::BarePartial {
                     partial_name: partial.name,
-                    pipes: partial.pipes,
+                    pipes: all_pipes,
                     source_info: partial.source_info,
                 };
             }
             _ => {}
         }
+    }
+
+    if let Some((name, bare_pipes, source_info)) = bare_partial {
+        // Outer pipes (siblings of bare_partial within the
+        // interpolation node) apply on top of any pipes embedded in
+        // the bare_partial subtree itself. Today the grammar puts all
+        // pipes at the interpolation level, but we preserve both
+        // sources in case the grammar evolves.
+        let mut all_pipes = bare_pipes;
+        all_pipes.extend(pipes);
+        return InterpolationResult::BarePartial {
+            partial_name: name,
+            pipes: all_pipes,
+            source_info,
+        };
     }
 
     if let Some(name) = partial_name {

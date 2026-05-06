@@ -731,5 +731,76 @@
     "message_template": "A diagnostic was emitted by a Lua filter via quarto.warn() or quarto.error().",
     "docs_url": "https://quarto.org/docs/errors/Q-11-1",
     "since_version": "99.9.9"
+  },
+
+  "Q-12-1": {
+    "subsystem": "listing",
+    "title": "Custom Listing Template Not Yet Supported",
+    "message_template": "Custom listing templates land in a follow-up (bd-rqgx). For now, this listing falls back to the `default` built-in. Set `type: default | grid | table` to silence this diagnostic.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-1",
+    "since_version": "99.9.9"
+  },
+  "Q-12-2": {
+    "subsystem": "listing",
+    "title": "Inline Listing Contents Not Yet Supported",
+    "message_template": "An inline metadata record in `contents:` is not yet supported. The entry is skipped; glob entries continue to process.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-2",
+    "since_version": "99.9.9"
+  },
+  "Q-12-3": {
+    "subsystem": "listing",
+    "title": "Unknown Sort Field",
+    "message_template": "The field referenced by `sort:` is not a recognized listing-item field.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-3",
+    "since_version": "99.9.9"
+  },
+  "Q-12-4": {
+    "subsystem": "listing",
+    "title": "Listing Id Collision",
+    "message_template": "Two listings on the same page declare the same `id`. The first one wins; later ones are dropped.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-4",
+    "since_version": "99.9.9"
+  },
+  "Q-12-5": {
+    "subsystem": "listing",
+    "title": "Invalid field-display-names Value",
+    "message_template": "`field-display-names` entries must map field names to display strings. Non-string values are dropped.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-5",
+    "since_version": "99.9.9"
+  },
+  "Q-12-6": {
+    "subsystem": "listing",
+    "title": "listing: false Not Allowed",
+    "message_template": "`listing: false` is not a valid value. Listings are page-local; remove the key entirely or set `listing: true` for a default listing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-6",
+    "since_version": "99.9.9"
+  },
+  "Q-12-7": {
+    "subsystem": "listing",
+    "title": "template Requires type: custom",
+    "message_template": "A `template:` field was set but `type:` is not `custom`. Falling back to the built-in template for the declared type.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-7",
+    "since_version": "99.9.9"
+  },
+  "Q-12-8": {
+    "subsystem": "listing",
+    "title": "Listing Template File Missing",
+    "message_template": "The file referenced by `template:` could not be found relative to the host page.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-8",
+    "since_version": "99.9.9"
+  },
+  "Q-12-9": {
+    "subsystem": "listing",
+    "title": "Deprecated .ejs.md Template Extension",
+    "message_template": "The `.ejs.md` template extension is a Q1 idiom and is not supported by Q2 doctemplate. See the Q1 → Q2 migration guide.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-9",
+    "since_version": "99.9.9"
+  },
+  "Q-12-10": {
+    "subsystem": "listing",
+    "title": "Listing Markdown Re-parse Diagnostics",
+    "message_template": "Re-parsing the doctemplate output of a listing produced one or more diagnostics. The first diagnostic is included; full source-info threading is a follow-up (bd-0jyl).",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-10",
+    "since_version": "99.9.9"
   }
 }
