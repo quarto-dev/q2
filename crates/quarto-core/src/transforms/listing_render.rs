@@ -87,8 +87,26 @@ impl AstTransform for ListingRenderTransform {
         let resolved = std::mem::take(&mut ctx.resolved_listings);
         let mut diags = std::mem::take(&mut ctx.diagnostics);
 
+        // The host page's project-relative directory feeds into the
+        // binding's `path` field so listing item links emit as
+        // host-dir-relative `.qmd` source paths — `LinkRewriteTransform`
+        // (later in this stage) then rewrites them via the resolver.
+        let host_path_str = crate::transforms::navigation_active::page_relative_source(ctx);
+        let host_dir = std::path::Path::new(&host_path_str)
+            .parent()
+            .map(|p| {
+                p.components()
+                    .filter_map(|c| match c {
+                        std::path::Component::Normal(os) => os.to_str().map(str::to_string),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .unwrap_or_default();
+
         for r in &resolved {
-            render_one(ast, r, &mut diags);
+            render_one(ast, r, &host_dir, &mut diags);
         }
 
         // Register the vendored client-side JS artifacts so the
@@ -137,7 +155,12 @@ fn register_listing_js_artifacts(artifacts: &mut crate::artifact::ArtifactStore)
     );
 }
 
-fn render_one(ast: &mut Pandoc, r: &ResolvedListing, diags: &mut Vec<DiagnosticMessage>) {
+fn render_one(
+    ast: &mut Pandoc,
+    r: &ResolvedListing,
+    host_dir: &str,
+    diags: &mut Vec<DiagnosticMessage>,
+) {
     // L8 deferral: custom templates fall back to default with a
     // Q-12-1 diagnostic. The fallback was already done in the
     // generate transform's listing config (we receive a Default
@@ -157,8 +180,9 @@ fn render_one(ast: &mut Pandoc, r: &ResolvedListing, diags: &mut Vec<DiagnosticM
     };
 
     // Build the binding. The host page's meta is used to extract
-    // project.* values (site-url, title) for the templates.
-    let template_ctx = build_listing_context(&r.listing, &r.items, &ast.meta);
+    // project.* values (site-url, title) for the templates;
+    // `host_dir` feeds the per-item path computation.
+    let template_ctx = build_listing_context(&r.listing, &r.items, host_dir, &ast.meta);
 
     // Compile + render the top-level template.
     let template_source = top_level_template_source(kind);

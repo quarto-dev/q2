@@ -187,6 +187,66 @@ fn default_listing_renders_three_posts_in_date_desc_order() {
     assert!(host.contains("2026-01-15"));
 }
 
+/// Listing item links must travel through `LinkRewriteTransform`.
+/// The listing render emits `.qmd` source-path links (body-link
+/// convention); LinkRewriteTransform then rewrites them to
+/// page-relative output URLs via the resolver.
+///
+/// This is what hub-client's iframe interceptor relies on: in
+/// native CLI the page-relative `.html` form lets the browser
+/// load the file directly; in the WASM/VFS path the rewrite
+/// produces an artifact-rooted URL hub-client reverse-maps back
+/// to `.qmd` for in-app navigation. Either way, the listing must
+/// not skip the rewrite by emitting raw `output_href` values.
+#[test]
+fn listing_item_links_are_page_relative_after_link_rewrite() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Blog\nlisting: default\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nformat: html\n---\n\nBody.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second\ndate: 2026-02-15\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+
+    // The host is at posts/index.html and the items are siblings,
+    // so the rewriter should produce bare leaf hrefs (e.g.
+    // `a.html`), NOT project-relative `posts/a.html`. The latter
+    // form is what we get if the listing skipped rewrite by
+    // emitting `output_href` directly.
+    assert!(
+        host.contains(r#"href="a.html""#),
+        "expected page-relative `a.html` href (post-LinkRewrite); got:\n{}",
+        host
+    );
+    assert!(
+        host.contains(r#"href="b.html""#),
+        "expected page-relative `b.html` href (post-LinkRewrite); got:\n{}",
+        host
+    );
+
+    // The unrewritten form must NOT appear — that would indicate
+    // the listing skipped LinkRewriteTransform by emitting raw
+    // `output_href` (`posts/a.html`).
+    assert!(
+        !host.contains(r#"href="posts/a.html""#),
+        "found unrewritten `posts/a.html` — listing items skipped LinkRewriteTransform; got:\n{}",
+        host
+    );
+}
+
 #[test]
 fn grid_type_emits_grid_classes() {
     let (_dir, outputs) = render_project(|p| {

@@ -31,18 +31,27 @@ use super::item::ListingItem;
 /// L2 binding contract — plus a `"project"` map carrying any
 /// project-wide values the templates read.
 ///
-/// `project_meta` is the host page's merged metadata; we read
-/// the `website.site-url` and `website.title` keys from it for
-/// the `project.*` binding.
+/// Arguments:
+///
+/// - `host_dir` is the host page's project-relative directory
+///   (forward-slash, no trailing slash; empty string when the
+///   host is at the project root). Used to compute
+///   host-dir-relative `.qmd` link targets so
+///   [`crate::transforms::LinkRewriteTransform`] can rewrite them
+///   downstream.
+/// - `project_meta` is the host page's merged metadata; we read
+///   `website.site-url` and `website.title` from it for the
+///   `project.*` binding.
 pub fn build_listing_context(
     listing: &Listing,
     items: &[ListingItem],
+    host_dir: &str,
     project_meta: &ConfigValue,
 ) -> TemplateContext {
     let mut ctx = TemplateContext::new();
 
     ctx.insert("listing", build_listing_map(listing));
-    ctx.insert("items", build_items_list(listing, items));
+    ctx.insert("items", build_items_list(listing, items, host_dir));
     ctx.insert("project", build_project_map(project_meta));
 
     ctx
@@ -141,17 +150,22 @@ fn build_listing_map(listing: &Listing) -> TemplateValue {
     TemplateValue::Map(m)
 }
 
-fn build_items_list(listing: &Listing, items: &[ListingItem]) -> TemplateValue {
+fn build_items_list(listing: &Listing, items: &[ListingItem], host_dir: &str) -> TemplateValue {
     TemplateValue::List(
         items
             .iter()
             .enumerate()
-            .map(|(i, item)| build_item_map(listing, item, i))
+            .map(|(i, item)| build_item_map(listing, item, i, host_dir))
             .collect(),
     )
 }
 
-fn build_item_map(listing: &Listing, item: &ListingItem, index: usize) -> TemplateValue {
+fn build_item_map(
+    listing: &Listing,
+    item: &ListingItem,
+    index: usize,
+    host_dir: &str,
+) -> TemplateValue {
     let mut m = HashMap::new();
 
     // Curated fields. Optional fields are only inserted when
@@ -230,11 +244,29 @@ fn build_item_map(listing: &Listing, item: &ListingItem, index: usize) -> Templa
         );
     }
 
-    // Path bookkeeping. Q1 templates use `item.path` and
-    // `item.outputHref` — same value, both kept for parity.
+    // Path bookkeeping.
+    //
+    // `path` is the link target the templates use. We emit the
+    // item's source-path-relative-to-the-host-page (e.g.
+    // `a-second-listing.qmd` from `posts/index.qmd`) — the same
+    // form a body link `[label](other.qmd)` would take.
+    // `LinkRewriteTransform` (which runs after this transform in
+    // the AstTransformsStage Finalization phase) then rewrites the
+    // .qmd to the page-relative output URL via the active
+    // resolver. This is what makes the listing's links navigate
+    // correctly in:
+    //   - native CLI: rewrites to e.g. `a-second-listing.html`
+    //   - hub-client/WASM (vfs_root resolver): rewrites to a
+    //     `/.quarto/project-artifacts/...` URL that
+    //     iframePostProcessor reverse-maps to .qmd for in-app
+    //     navigation (case 3 in iframePostProcessor.ts).
+    //
+    // `outputHref` retains the rendered .html path for templates
+    // (e.g. L7's placeholder href, RSS feed item URLs) that need
+    // the post-render output href specifically.
     m.insert(
         "path".to_string(),
-        TemplateValue::String(item.output_href.clone()),
+        TemplateValue::String(host_relative_qmd(&item.source_path, host_dir)),
     );
     m.insert(
         "outputHref".to_string(),
@@ -282,6 +314,32 @@ fn build_item_map(listing: &Listing, item: &ListingItem, index: usize) -> Templa
     m.insert("show".to_string(), TemplateValue::Map(show));
 
     TemplateValue::Map(m)
+}
+
+/// Compute a host-page-relative forward-slash path string for
+/// the item's source file. Empty `host_dir` means the host is at
+/// the project root; otherwise we strip the host-dir prefix when
+/// the item is inside it. Items outside the host's directory
+/// stay project-relative — the `LinkRewriteTransform` resolver
+/// handles either form, but the host-relative form keeps the
+/// emitted markdown closer to what an author would write by hand.
+fn host_relative_qmd(source_path: &std::path::Path, host_dir: &str) -> String {
+    let project_relative = source_path
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(os) => os.to_str().map(str::to_string),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    if host_dir.is_empty() {
+        return project_relative;
+    }
+    let prefix = format!("{}/", host_dir);
+    project_relative
+        .strip_prefix(&prefix)
+        .map(str::to_string)
+        .unwrap_or(project_relative)
 }
 
 fn build_project_map(meta: &ConfigValue) -> TemplateValue {
@@ -386,8 +444,12 @@ mod tests {
 
     #[test]
     fn binding_includes_listing_id_and_items_array() {
-        let ctx =
-            build_listing_context(&listing(), &[item("A"), item("B")], &ConfigValue::default());
+        let ctx = build_listing_context(
+            &listing(),
+            &[item("A"), item("B")],
+            "posts",
+            &ConfigValue::default(),
+        );
         let listing_map = ctx.get("listing").unwrap();
         assert_eq!(
             listing_map.get_path(&["id"]),
@@ -403,7 +465,12 @@ mod tests {
 
     #[test]
     fn item_binding_has_curated_fields() {
-        let ctx = build_listing_context(&listing(), &[item("Hello")], &ConfigValue::default());
+        let ctx = build_listing_context(
+            &listing(),
+            &[item("Hello")],
+            "posts",
+            &ConfigValue::default(),
+        );
         let items = ctx.get("items").unwrap();
         let TemplateValue::List(arr) = items else {
             panic!("items not a list");
@@ -438,7 +505,7 @@ mod tests {
         let mut i = item("X");
         i.subtitle = None;
         i.image = None;
-        let ctx = build_listing_context(&listing(), &[i], &ConfigValue::default());
+        let ctx = build_listing_context(&listing(), &[i], "posts", &ConfigValue::default());
         let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
             panic!()
         };
@@ -466,7 +533,7 @@ mod tests {
             "status".to_string(),
             ConfigValue::new_string("draft", SourceInfo::default()),
         );
-        let ctx = build_listing_context(&listing(), &[i], &ConfigValue::default());
+        let ctx = build_listing_context(&listing(), &[i], "posts", &ConfigValue::default());
         let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
             panic!()
         };
@@ -511,7 +578,7 @@ mod tests {
             }],
             SourceInfo::default(),
         );
-        let ctx = build_listing_context(&listing(), &[item("A")], &meta);
+        let ctx = build_listing_context(&listing(), &[item("A")], "posts", &meta);
         let TemplateValue::Map(p) = ctx.get("project").unwrap() else {
             panic!()
         };
