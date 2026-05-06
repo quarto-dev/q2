@@ -68,8 +68,9 @@ use crate::transforms::{
     AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, CrossrefIndexTransform,
     CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
     FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesTransform, LinkRewriteTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
-    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
     TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
@@ -778,6 +779,14 @@ pub fn build_transform_pipeline(
     // === NAVIGATION PHASE ===
     // All generates run before any renders so a future user filter or
     // non-HTML pipeline sees a complete navigation.* subtree before rendering.
+    // TODO(bd-0fd0): there is no Lua-filter slot between this Generate
+    // sub-phase and the Render sub-phase below — `UserFiltersStage::pre`
+    // and `::post` bracket the whole `AstTransformsStage`. The L3 plan's
+    // D2 ("resolved data lives at meta.listings.<id>") was revised in
+    // light of this for listings (data flows via a typed RenderContext
+    // field instead). The same forward-compat note applies to the
+    // navbar/sidebar/footer generates here.
+    //
     // TocGenerate must run after SectionizeTransform so section IDs are
     // available; navbar/footer generates only read top-level metadata.
     pipeline.push(Box::new(TocGenerateTransform::new()));
@@ -787,6 +796,13 @@ pub fn build_transform_pipeline(
     // resolved `navigation.sidebar` for the current page.
     pipeline.push(Box::new(PageNavGenerateTransform::new()));
     pipeline.push(Box::new(FooterGenerateTransform::new()));
+    // ListingGenerateTransform runs after the navigation generates
+    // because a future Lua-filter slot (bd-0fd0) should see the full
+    // generated set in one place. ListingRenderTransform runs *before*
+    // the navigation renders so listing markup gets a stable place in
+    // ast.blocks before any rendered-HTML emission for templates.
+    pipeline.push(Box::new(ListingGenerateTransform::new()));
+    pipeline.push(Box::new(ListingRenderTransform::new()));
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));

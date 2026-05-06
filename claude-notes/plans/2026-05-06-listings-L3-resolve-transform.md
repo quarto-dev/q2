@@ -1386,12 +1386,85 @@ See §"Filing reminder" for descriptions. During impl:
 - [x] Workspace test count: **8563, +115** from 8448
       baseline.
 
-### TDD phase 6 — Pipeline wiring
+### TDD phase 6 — Pipeline wiring + e2e
 
-- [ ] Insert both transforms into both pipeline builders.
-- [ ] Run integration test #43 (end-to-end CLI). Iterate
-      until pass.
-- [ ] Run hub-client smoke test #42. Iterate until pass.
+- [x] Insert `ListingGenerateTransform` +
+      `ListingRenderTransform` into
+      `build_transform_pipeline` between the navigation
+      Generate and Render sub-phases. Both native CLI
+      and WASM pipelines route through this builder so
+      one insertion covers both.
+- [x] Add `// TODO(bd-0fd0):` marker at the navigation-
+      phase comment block flagging the missing Lua slot.
+- [x] Fix in-flight: `parse_listings` only handled
+      `Scalar(Yaml::String)`; YAML strings in document
+      frontmatter parse as `PandocInlines`. Now routes
+      through `as_plain_text()` which covers Scalar /
+      Path / Glob / Expr / PandocInlines uniformly.
+- [x] Fix in-flight: `try_replace_explicit_slot` walked
+      only top-level `ast.blocks`, but
+      `SectionizeTransform` (ahead of Navigation phase)
+      wraps top-level headings in `Div .section`
+      containers. Made the walker recurse into Div
+      content. Q1 recurses too.
+- [x] Add 5 integration tests in
+      `crates/quarto-core/tests/listing_pipeline.rs`
+      driving the full `ProjectPipeline`: default-list
+      shape + sort order + L7 placeholder + dates;
+      grid classes; table wrapper; explicit slot fill
+      via recursion; include filter narrows item set.
+      All pass.
+- [x] End-to-end CLI verification recorded below.
+- [x] Workspace test count: **8568, +120** from 8448
+      baseline. `cargo xtask verify` (full incl.
+      hub-client + WASM): clean. `cargo xtask lint`:
+      clean.
+
+### End-to-end CLI verification record
+
+Fixture (`/tmp/listings-fixture/`):
+```
+posts/index.qmd        — listing: default
+posts/a.qmd            — date: 2026-01-15, author: Alice
+posts/b.qmd            — date: 2026-02-20, author: Bob
+posts/c.qmd            — date: 2026-03-05, author: Carol
+_quarto.yml            — type: website
+```
+
+Invocation:
+```
+cd /tmp/listings-fixture
+target/debug/q2 render .
+```
+
+Observed in `_site/posts/index.html` (snippet inspected
+visually):
+```html
+<div id="listing-1" class="quarto-listing" data-listing-rendered="1">
+<div class="list quarto-listing-default">
+<div class="quarto-post image-right">
+<div class="body">
+<h3><a href="posts/c.html" class="no-anchor no-external listing-title">Third post</a></h3>
+<div class="delink listing-description">
+<p>Yet another listing item.</p>
+<p><!-- desc(5A0113B34292)[max=175]:posts/c.html --></p>
+</div>
+</div>
+<div class="metadata">
+<p><span class="listing-date">2026-03-05</span></p>
+<p><span class="listing-author">Carol</span></p>
+</div>
+[... B (2026-02-20) and A (2026-01-15) follow in date-desc order ...]
+</div>
+</div>
+```
+
+Verified: three items rendered in date-desc order
+(C → B → A); each carries title-as-link to the rendered
+sibling's output href, description, date, author, and
+the L7 placeholder comment. The same fixture also
+rendered with `type: grid` and `type: table` (verified
+by integration tests #43-grid and #43-table).
 
 ### TDD phase 7 — Vendored client-side assets
 

@@ -239,16 +239,22 @@ fn render_one(ast: &mut Pandoc, r: &ResolvedListing, diags: &mut Vec<DiagnosticM
     }
 }
 
-/// Walk top-level blocks looking for a Div with the given id.
+/// Walk the host AST looking for a Div with the given id.
 /// Replaces its content + marks it with `data-listing-rendered="1"`.
 /// Returns `true` when a slot was found and updated.
 ///
-/// Does NOT recurse into nested Divs in v1 — the L3 plan flagged
-/// nested-slot recursion as a follow-up open question (Q1
-/// recurses; we match Q1 only at the top level today). Filed under
-/// the conditional follow-ups in the plan.
+/// Recursion is needed because the SectionizeTransform (which runs
+/// in the Normalization phase, ahead of Navigation) wraps top-level
+/// headings in `Div .section` containers, so a user's
+/// `::: {#my-blog}` slot inside a section is no longer a top-level
+/// block by the time the listing renders. Q1 recurses too. Already-
+/// rendered slots short-circuit so the recursion is idempotent.
 fn try_replace_explicit_slot(ast: &mut Pandoc, id: &str, blocks: &[Block]) -> bool {
-    for block in ast.blocks.iter_mut() {
+    fill_in_blocks(&mut ast.blocks, id, blocks)
+}
+
+fn fill_in_blocks(blocks_in: &mut Vec<Block>, id: &str, payload: &[Block]) -> bool {
+    for block in blocks_in.iter_mut() {
         if let Block::Div(div) = block {
             // `Attr` is the tuple `(id, classes, attributes)`.
             if div.attr.0 == id {
@@ -259,10 +265,16 @@ fn try_replace_explicit_slot(ast: &mut Pandoc, id: &str, blocks: &[Block]) -> bo
                 if already_rendered {
                     return true;
                 }
-                div.content = blocks.to_vec();
+                div.content = payload.to_vec();
                 div.attr
                     .2
                     .insert("data-listing-rendered".to_string(), "1".to_string());
+                return true;
+            }
+            // Recurse into the Div's content. Handles nested
+            // sections (from SectionizeTransform) as well as nested
+            // user Divs.
+            if fill_in_blocks(&mut div.content, id, payload) {
                 return true;
             }
         }

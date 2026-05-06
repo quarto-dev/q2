@@ -225,49 +225,56 @@ pub fn parse_listings(
     value: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<Listing> {
-    match &value.value {
-        ConfigValueKind::Scalar(Yaml::Boolean(true)) => {
-            // `listing: true` shorthand
-            vec![default_listing_with_id("listing-1")]
-        }
-        ConfigValueKind::Scalar(Yaml::Boolean(false)) => {
+    // Boolean shorthand has to be checked before falling through to
+    // `as_plain_text`, which would render `true`/`false` as the
+    // strings "true"/"false" and confuse the type-name lookup.
+    if let Some(b) = value.as_bool() {
+        if b {
+            return vec![default_listing_with_id("listing-1")];
+        } else {
             push_diag(
                 diagnostics,
                 "Q-12-6",
                 "`listing: false` is not allowed; remove the key entirely instead.",
                 value,
             );
-            Vec::new()
+            return Vec::new();
         }
-        ConfigValueKind::Scalar(Yaml::String(name)) => {
-            // `listing: default | grid | table | custom`
-            let kind = match parse_type_name(name) {
-                Some(k) => k,
-                None => {
-                    push_diag(
-                        diagnostics,
-                        "Q-12-1",
-                        format!(
-                            "Unknown listing type `{}`; expected one of: default, grid, table, custom.",
-                            name
-                        ),
-                        value,
-                    );
-                    ListingType::Default
-                }
-            };
-            // Build the bare struct with the chosen kind first, then
-            // apply type defaults — `default_listing_with_id` would
-            // bake in the *Default* type's defaults, which we then
-            // can't undo.
-            let mut l = Listing {
-                id: "listing-1".to_string(),
-                kind,
-                ..Listing::default()
-            };
-            apply_type_defaults(&mut l);
-            vec![l]
-        }
+    }
+
+    // Scalar string OR PandocInlines OR Path/Glob/Expr — Quarto
+    // YAML often parses bare frontmatter strings as PandocInlines,
+    // so we route through `as_plain_text` to handle every variant.
+    if let Some(name) = value.as_plain_text() {
+        let kind = match parse_type_name(&name) {
+            Some(k) => k,
+            None => {
+                push_diag(
+                    diagnostics,
+                    "Q-12-1",
+                    format!(
+                        "Unknown listing type `{}`; expected one of: default, grid, table, custom.",
+                        name
+                    ),
+                    value,
+                );
+                ListingType::Default
+            }
+        };
+        // Build the bare struct with the chosen kind first, then
+        // apply type defaults — `default_listing_with_id` would
+        // bake in the *Default* type's defaults, which we then
+        // can't undo.
+        let mut l = Listing {
+            id: "listing-1".to_string(),
+            kind,
+            ..Listing::default()
+        };
+        apply_type_defaults(&mut l);
+        return vec![l];
+    }
+
+    match &value.value {
         ConfigValueKind::Map(_) => {
             let l = parse_one_listing(value, "listing-1", diagnostics);
             vec![l]
