@@ -1471,38 +1471,36 @@ by integration tests #43-grid and #43-table).
 Per D5: ship `list.min.js`, `quarto-listing.js`, and
 `quarto-listing.scss`. Spike-ordered to manage risk.
 
-- [ ] Half-day spike: locate the `ArtifactStore::insert`
-      call sites in existing transforms (precedent: any
-      transform that emits site_libs assets — grep for
-      `ArtifactScope::Project`). Gauge whether listing JS
-      slots in cleanly.
-- [ ] **JS pair (low risk):** copy `list.min.js` and
+- [x] Spike: located the artifact-store API surface
+      (`ArtifactStore::store` + Phase-5's
+      `js:`/`css:`-prefixed key convention). Existing
+      precedent in `WebsiteBootstrapIconsTransform`. JS
+      slot-in is clean.
+- [x] **JS pair (low risk):** copied `list.min.js` and
       `quarto-listing.js` to `resources/listing/`,
-      register both as `Project`-scoped artifacts, emit
-      `<script>` references from built-ins (resolved via
-      `ResourceResolverContext` so depth-N pages get
-      relative paths). Verify both land at
-      `_site/site_libs/listing/<name>.js` and that
-      `quartoListingCategory` is callable in a browser
-      session.
-- [ ] **SCSS (higher risk):** copy
-      `quarto-listing.scss` to `resources/listing/`,
-      register, emit `<link>`. If Q1's
-      Bootstrap-variable `@use` chain forces invasive
-      wiring into the theme-CSS compilation pipeline:
-      file the conditional bd issue from §"Filing
-      reminder" item 5; document the deferral in this
-      sub-plan's "Risks" section; ship L3 without
-      styling. Markup + JS are unchanged; default
-      browser styling renders the listing as a stack of
-      anchors. Listing functionality is preserved.
-- [ ] **All-three deferral (highest risk).** If
-      artifact-store integration itself blocks for an
-      unrelated reason, defer all three to a follow-up
-      and ship markup-only listings. Same conditional
-      bd-issue file; same `<script>` / `<link>`
-      references made conditional on the artifact's
-      presence in the store.
+      registered both as `Project`-scoped artifacts
+      keyed `js:listing:<name>` from
+      `ListingRenderTransform` (only when at least one
+      listing is rendered). `ApplyTemplateStage`'s
+      Phase-5 auto-emission picks up the `js:` prefix
+      and emits `<script>` tags via the resolver, so
+      depth-N pages get relative `../site_libs/...`
+      paths. Verified end-to-end: both files land at
+      `_site/site_libs/listing/<name>.js` and the host
+      page emits `<script src="../site_libs/listing/list.min.js">`
+      etc. Integration test
+      (`vendored_js_artifacts_emit_script_tags_and_land_under_site_libs`)
+      asserts both presence in HTML and presence on disk.
+- [x] **SCSS (deferred via D5 fallback):**
+      `quarto-listing.scss` requires Bootstrap-variable
+      wiring + media-breakpoint mixins from the
+      existing theme-CSS pipeline (CompileThemeCssStage
+      + `quarto_sass::SassLayer`). That's a larger
+      design task than the JS bundling, so per the L3
+      plan's D5 fallback it ships as a follow-up
+      (`bd-57y4`). Today: listings render with default
+      browser styling (markup + JS intact, layout less
+      polished than Q1).
 
 ### Verification and close-out
 
@@ -1574,9 +1572,11 @@ they trigger)
    D10. Files outside the project's render set are
    silently dropped today. File only if a real Q1
    migration shows the gap matters.
-5. **`quarto-listing.scss` Bootstrap-variable wiring**
-   *(conditional).* Filed only if the L3 spike on the
-   SCSS hits the deferral path described under D5.
+5. **`bd-57y4`** — Vendor and integrate
+   `quarto-listing.scss` with the theme-CSS pipeline.
+   Filed 2026-05-06 when the SCSS deferral path under
+   D5 triggered. JS pair shipped in the L3 phase 7
+   commit; SCSS follows as its own design exercise.
 6. **`list.min.js` artifact-store wiring blocked**
-   *(conditional).* Filed only if the all-three-asset
-   deferral path under D5 triggers.
+   *(conditional, did not trigger).* The JS bundling
+   was clean — see phase-7 spike notes above.

@@ -288,6 +288,68 @@ format: html
 }
 
 #[test]
+fn vendored_js_artifacts_emit_script_tags_and_land_under_site_libs() {
+    // Phase 7: list.min.js + quarto-listing.js are registered as
+    // Project-scoped artifacts when at least one listing is
+    // rendered, picked up by `<script>` auto-emission via the
+    // `js:` artifact-key prefix, and flushed to
+    // `_site/site_libs/listing/<file>.js` by `flush_site_libs`.
+    let (project_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Blog\nlisting: default\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: A\ndate: 2026-01-01\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    // Both `<script>` tags appear in the rendered HTML, with
+    // depth-relative paths (the listing host is at posts/index.html
+    // so the path walks up one directory).
+    assert!(
+        host.contains(r#"src="../site_libs/listing/list.min.js""#)
+            || host.contains(r#"src="site_libs/listing/list.min.js""#),
+        "expected list.min.js script tag in host HTML; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains(r#"src="../site_libs/listing/quarto-listing.js""#)
+            || host.contains(r#"src="site_libs/listing/quarto-listing.js""#),
+        "expected quarto-listing.js script tag in host HTML; got:\n{}",
+        host
+    );
+    // The flushed bytes land at the resolver-determined location.
+    let list_js = project_dir.join("_site/site_libs/listing/list.min.js");
+    let quarto_listing_js = project_dir.join("_site/site_libs/listing/quarto-listing.js");
+    assert!(
+        list_js.exists(),
+        "list.min.js missing at {}",
+        list_js.display()
+    );
+    assert!(
+        quarto_listing_js.exists(),
+        "quarto-listing.js missing at {}",
+        quarto_listing_js.display()
+    );
+    // Sanity: the bytes match what we vendored. list.min.js's
+    // first-line marker is the `var List=function...` declaration
+    // (or similar) that the third-party file ships with.
+    let bytes = std::fs::read(&list_js).unwrap();
+    assert!(
+        bytes.len() > 1000,
+        "list.min.js body unexpectedly small: {} bytes",
+        bytes.len()
+    );
+}
+
+#[test]
 fn include_filter_drops_non_matching_items() {
     let (_dir, outputs) = render_project(|p| {
         write(

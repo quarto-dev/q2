@@ -91,12 +91,50 @@ impl AstTransform for ListingRenderTransform {
             render_one(ast, r, &mut diags);
         }
 
+        // Register the vendored client-side JS artifacts so the
+        // sort/filter UI markup our templates emit is functional.
+        // The `js:` key prefix is the convention `ApplyTemplateStage`
+        // recognizes for auto-emitting `<script>` tags into the
+        // rendered HTML; the resolver maps the relative path to
+        // `_site/site_libs/listing/<file>.js` (or the WASM VFS
+        // equivalent). `ArtifactStore::store` overwrites by key, so
+        // re-running across files is fine.
+        register_listing_js_artifacts(&mut ctx.artifacts);
+
         // Restore; downstream stages can still read resolved
         // listings if they want (e.g. L5 categories sidebar).
         ctx.resolved_listings = resolved;
         ctx.diagnostics = diags;
         Ok(())
     }
+}
+
+/// Bytes for the vendored `list.min.js` (third-party MIT) and
+/// `quarto-listing.js` (Q1-owned glue) — copied locally per
+/// CLAUDE.md §"External Sources Policy". The SCSS is *not* shipped
+/// here; per L3 D5 the SCSS needs proper SassLayer integration with
+/// the existing theme-CSS pipeline, which is filed as a follow-up
+/// rather than wired in this commit.
+const LIST_MIN_JS: &[u8] = include_bytes!("../../../../resources/listing/list.min.js");
+const QUARTO_LISTING_JS: &[u8] = include_bytes!("../../../../resources/listing/quarto-listing.js");
+
+const LIST_MIN_REL_PATH: &str = "listing/list.min.js";
+const QUARTO_LISTING_REL_PATH: &str = "listing/quarto-listing.js";
+
+fn register_listing_js_artifacts(artifacts: &mut crate::artifact::ArtifactStore) {
+    use crate::artifact::{Artifact, ArtifactScope};
+    artifacts.store(
+        "js:listing:list.min.js",
+        Artifact::from_bytes(LIST_MIN_JS.to_vec(), "application/javascript")
+            .with_path(LIST_MIN_REL_PATH)
+            .with_scope(ArtifactScope::Project),
+    );
+    artifacts.store(
+        "js:listing:quarto-listing.js",
+        Artifact::from_bytes(QUARTO_LISTING_JS.to_vec(), "application/javascript")
+            .with_path(QUARTO_LISTING_REL_PATH)
+            .with_scope(ArtifactScope::Project),
+    );
 }
 
 fn render_one(ast: &mut Pandoc, r: &ResolvedListing, diags: &mut Vec<DiagnosticMessage>) {
