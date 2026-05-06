@@ -150,6 +150,33 @@ pub struct AstOutput {
     pub source_context: SourceContext,
 }
 
+/// Output of [`render_qmd_to_preview_ast`] — the q2-preview entry-point
+/// sibling of [`render_qmd_to_html`].
+///
+/// Carries the **already-serialized** AST JSON (not the typed
+/// `Pandoc`) so the renderer can plumb it straight into
+/// `Pass2Payload::AstJson` without re-running the JSON writer.
+/// Compared to [`AstOutput`], `PreviewAstOutput` skips the typed
+/// `Pandoc` field — the q2-preview pipeline runs the full transform
+/// pipeline, which mutates the AST extensively, so the typed value
+/// is no longer interesting to callers; only the serialized form is.
+#[derive(Debug)]
+pub struct PreviewAstOutput {
+    /// The transformed Pandoc AST, serialized as JSON via
+    /// `pampa::writers::json::write_with_config` with
+    /// `include_inline_locations: true`. Ready to ship to the
+    /// React iframe.
+    pub ast_json: String,
+    /// Diagnostics emitted by the head pipeline plus every Pass-2
+    /// stage that ran. Pipe to `RenderResponse.warnings` after
+    /// translation via `diagnostics_to_json`.
+    pub diagnostics: Vec<DiagnosticMessage>,
+    /// Source-context handle for translating diagnostic offsets
+    /// into line/column positions on the JS side. Same shape as
+    /// [`RenderOutput::source_context`].
+    pub source_context: SourceContext,
+}
+
 /// Build the standard HTML pipeline stages.
 ///
 /// Returns the stages as a vector, allowing callers to customize before
@@ -730,6 +757,94 @@ pub async fn render_qmd_to_html(
         html: rendered.content,
         diagnostics,
         source_context: rendered.source_context,
+    })
+}
+
+/// Render QMD content to AST JSON for the q2-preview format (Plan 1).
+///
+/// Sibling of [`render_qmd_to_html`]. Drives the q2-preview stage
+/// list (everything through `ResourceReportStage`, no HTML
+/// rendering) and serializes the resulting Pandoc AST to JSON via
+/// `pampa::writers::json::write_with_config` so the React iframe
+/// can render it directly.
+///
+/// # Arguments
+///
+/// * `content` - The QMD source content as bytes
+/// * `source_name` - Name of the source file (for error messages
+///   and the `ASTContext::filenames` slot the JSON writer reads)
+/// * `ctx` - Render context. Should have a `resource_resolver`
+///   set so `ResourceCollectorTransform` rewrites image URLs to
+///   the same path the consumer (e.g. `RenderToPreviewAstRenderer`)
+///   uses when flushing artifacts to VFS.
+/// * `runtime` - System runtime for filesystem operations
+///
+/// # Returns
+///
+/// A [`PreviewAstOutput`] carrying the serialized AST plus
+/// diagnostics and source context.
+///
+/// # Errors
+///
+/// Returns an error if parsing fails, transforms fail, or the JSON
+/// serialization fails (e.g. due to a non-UTF-8 byte sequence in
+/// the writer output, which would indicate a writer bug).
+pub async fn render_qmd_to_preview_ast(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<PreviewAstOutput> {
+    // The q2-preview stage list excludes `CodeHighlightStage` /
+    // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
+    // pipeline returns `DocumentAst`, not `RenderedOutput`.
+    // `EngineExecutionStage` uses the default registry; an
+    // override is not currently exposed (no consumer needs it
+    // for v1).
+    let stages = build_q2_preview_pipeline_stages(None);
+
+    let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    let ast = output.into_document_ast().ok_or_else(|| {
+        crate::error::QuartoError::Other(
+            "q2-preview pipeline did not produce DocumentAst".to_string(),
+        )
+    })?;
+
+    // Source context for translating diagnostic offsets into
+    // line/column on the JS side.
+    let mut source_context = SourceContext::new();
+    let content_str = String::from_utf8_lossy(content).to_string();
+    source_context.add_file(source_name.to_string(), Some(content_str));
+
+    // Build an `ASTContext` from the source context — the JSON
+    // writer needs this to emit `[file_id, start, end]` source-
+    // location triples for inlines (`include_inline_locations:
+    // true`). This shape is lifted verbatim from the q2-debug
+    // entry point (`wasm-quarto-hub-client/src/lib.rs:914-916`)
+    // so q2-preview's JSON envelope matches q2-debug's at the
+    // wire level.
+    let ast_context = pampa::pandoc::ASTContext {
+        filenames: vec![source_name.to_string()],
+        example_list_counter: std::cell::Cell::new(1),
+        source_context: source_context.clone(),
+        parent_source_info: None,
+    };
+    let json_config = pampa::writers::json::JsonConfig {
+        include_inline_locations: true,
+    };
+    let mut buf = Vec::new();
+    pampa::writers::json::write_with_config(&ast.ast, &ast_context, &mut buf, &json_config)
+        .map_err(|e| {
+            crate::error::QuartoError::Other(format!("q2-preview JSON serialization failed: {e:?}"))
+        })?;
+    let ast_json = String::from_utf8(buf).map_err(|e| {
+        crate::error::QuartoError::Other(format!("q2-preview JSON output was not valid UTF-8: {e}"))
+    })?;
+
+    Ok(PreviewAstOutput {
+        ast_json,
+        diagnostics,
+        source_context,
     })
 }
 
@@ -1868,6 +1983,49 @@ mod tests {
             &preview,
             expected_excluded,
             "Plan 1 §\"Transform list for q2-preview\"",
+        );
+    }
+
+    /// `render_qmd_to_preview_ast` runs the q2-preview pipeline
+    /// (CalloutTransform sugar, no CalloutResolveTransform) so a
+    /// callout survives as a `__quarto_custom_node` wrapper Div in
+    /// the serialized JSON. This is the contract Plan 2 (React
+    /// CustomNode components) consumes.
+    #[test]
+    fn render_qmd_to_preview_ast_preserves_callout_custom_node() {
+        let content = b"---\ntitle: Test\nformat: q2-preview\n---\n\n\
+                        ::: {.callout-warning}\n## Watch Out\n\nBe careful!\n:::\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime,
+        ))
+        .expect("q2-preview render");
+
+        let snippet = || &output.ast_json[..output.ast_json.len().min(800)];
+
+        // JSON should contain the wrapper Div class + the
+        // type-name attribute pampa emits for CustomNodes.
+        assert!(
+            output.ast_json.contains("__quarto_custom_node"),
+            "expected wrapper class in q2-preview JSON; got:\n{}",
+            snippet()
+        );
+        assert!(
+            output.ast_json.contains("data-custom-type"),
+            "expected data-custom-type attribute; got:\n{}",
+            snippet()
+        );
+        assert!(
+            output.ast_json.contains("Callout"),
+            "expected Callout type-name in JSON; got:\n{}",
+            snippet()
         );
     }
 
