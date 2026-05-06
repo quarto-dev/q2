@@ -78,7 +78,7 @@ interface ReactRendererProps {
   currentSlideIndex?: number;
   // Callback when slide changes (for manual navigation via arrows/buttons)
   onSlideChange?: (slideIndex: number) => void;
-  // Format type: 'q2-slides' or 'q2-debug'
+  // Format type: 'q2-slides', 'q2-debug', or 'q2-preview'
   format: string;
 }
 
@@ -143,7 +143,14 @@ function ReactRenderer({
     return componentsCode;
   }, [componentPathsKey, currentFilePath]);
 
-  if (format === 'q2-debug') {
+  // Both q2-debug (raw AST view) and q2-preview (post-pipeline AST
+  // for the live preview) render through the same AstIframe — the
+  // iframe's data-shape contract is the only assumption shared, and
+  // the post-pipeline AST from q2-preview is iframe-compatible (more
+  // CustomNode wrappers + transformed metadata; Plan 2 ships the
+  // type-specific React components). q2-preview's data source
+  // diverges upstream in `ReactPreview.tsx::doRender`.
+  if (format === 'q2-debug' || format === 'q2-preview') {
     return (
       <ErrorBoundary>
         <div style={{
