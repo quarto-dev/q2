@@ -288,6 +288,52 @@ pub fn build_html_pipeline_stages_with_options(
     stages
 }
 
+/// Build the q2-preview pipeline stages (Plan 1).
+///
+/// Identical prefix to [`build_html_pipeline_stages_with_options`]
+/// through `ResourceReportStage`, then **stops** — the HTML-specific
+/// tail (`CodeHighlightStage`, `RenderHtmlBodyStage`,
+/// `ApplyTemplateStage`) is intentionally excluded because q2-preview
+/// returns the AST directly to the React iframe rather than rendering
+/// it to HTML. The exact stage list and order is asserted by a
+/// structural test (`build_q2_preview_pipeline_stages_structural`).
+///
+/// `AstTransformsStage` itself is shared with the HTML pipeline; it
+/// dispatches at run-time on `ctx.format.pipeline_kind` to choose
+/// between `build_transform_pipeline` (HTML) and
+/// `build_q2_preview_transform_pipeline` (q2-preview). The dispatch
+/// is added in a later commit; this function is a pure addition with
+/// no consumers yet.
+///
+/// `CompileThemeCssStage` is included so the compiled theme CSS
+/// lands in VFS at `/.quarto/project-artifacts/styles.css` after a
+/// q2-preview render. The artifact is unread by Plan 1 itself but
+/// honored as a forward-compat contract for Plan 2's stylesheet
+/// injection (Plan 1 §"Multi-plan contract: theme CSS artifact").
+pub fn build_q2_preview_pipeline_stages(
+    engine_registry: Option<crate::engine::EngineRegistry>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let engine_stage = match engine_registry {
+        Some(reg) => EngineExecutionStage::with_registry(reg),
+        None => EngineExecutionStage::new(),
+    };
+    vec![
+        Box::new(ParseDocumentStage::new()),
+        Box::new(MetadataMergeStage::new()),
+        Box::new(IncludeExpansionStage::new()),
+        Box::new(DocumentProfileStage::new()),
+        Box::new(LinkResolutionStage::new()),
+        Box::new(UnwrapProfileStage::new()),
+        Box::new(PreEngineSugaringStage::new()),
+        Box::new(engine_stage),
+        Box::new(CompileThemeCssStage::new()),
+        Box::new(UserFiltersStage::pre()),
+        Box::new(AstTransformsStage::new()),
+        Box::new(UserFiltersStage::post()),
+        Box::new(ResourceReportStage::new()),
+    ]
+}
+
 /// Build the standard HTML pipeline.
 ///
 /// This creates a pipeline with the following stages:
@@ -857,6 +903,85 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
+    pipeline.push(Box::new(ResourceCollectorTransform::new()));
+
+    pipeline
+}
+
+/// Build the q2-preview transform pipeline (Plan 1).
+///
+/// This is a fresh, explicit list — *not* a filtered view of
+/// [`build_transform_pipeline`]. Same constructor signature so the
+/// drift-protection helper (`assert_filtered_subset`) can compare
+/// the two pipelines apples-to-apples; same transform constructions
+/// (notably `ShortcodeResolveTransform::with_lua_support`) so
+/// shortcode-and-Lua semantics match the HTML pipeline.
+///
+/// The 19 transforms below are everything from [`build_transform_pipeline`]
+/// minus 12 explicitly excluded ones (see the drift test for the
+/// exclusion list and rationale). Three categories of exclusion:
+///
+/// 1. **Preserve CustomNodes for React** — `CalloutResolveTransform`,
+///    `CrossrefRenderTransform`. The wrappers stay so React's
+///    type-specific components (Plan 2) can render Callout / Theorem
+///    / Proof / FloatRefTarget / Equation / CrossrefResolvedRef.
+/// 2. **Synthesize-with-no-preimage** — `TitleBlockTransform`,
+///    `FootnotesTransform`, `AppendixStructureTransform`. These
+///    construct containers with no source backing; deferred to a
+///    future plan with wrapper-CustomNode round-trip support.
+/// 3. **HTML-pipeline-specific outputs** — `TocRenderTransform`,
+///    `NavbarRenderTransform`, `SidebarRenderTransform`,
+///    `PageNavRenderTransform`, `FooterRenderTransform`,
+///    `LinkRewriteTransform`, `WebsiteFaviconTransform`. These
+///    produce HTML strings or `.qmd → .html` rewrites that React
+///    consumes from structured metadata directly.
+///
+/// `AstTransformsStage::run()` dispatches between this and
+/// `build_transform_pipeline` based on `ctx.format.pipeline_kind`
+/// (added in a later commit). This function is a pure addition with
+/// no consumers yet.
+pub fn build_q2_preview_transform_pipeline(
+    shortcode_paths: Vec<std::path::PathBuf>,
+    extensions: Vec<crate::extension::types::Extension>,
+    runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
+    target_format: String,
+) -> TransformPipeline {
+    let mut pipeline: TransformPipeline = TransformPipeline::new();
+
+    // === NORMALIZATION PHASE ===
+    pipeline.push(Box::new(CalloutTransform::new()));
+    pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
+        shortcode_paths,
+        extensions,
+        runtime,
+        target_format,
+    )));
+    pipeline.push(Box::new(MetadataNormalizeTransform::new()));
+    pipeline.push(Box::new(WebsiteTitlePrefixTransform::new()));
+    pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
+    pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    pipeline.push(Box::new(SectionizeTransform::new()));
+    pipeline.push(Box::new(TheoremSugarTransform::new()));
+    pipeline.push(Box::new(ProofSugarTransform::new()));
+    pipeline.push(Box::new(FloatRefTargetSugarTransform::new()));
+    pipeline.push(Box::new(EquationLabelTransform::new()));
+
+    // === CROSSREF PHASE ===
+    pipeline.push(Box::new(CrossrefIndexTransform::new()));
+    pipeline.push(Box::new(CrossrefResolveTransform::new()));
+
+    // === NAVIGATION PHASE ===
+    // All five Generate transforms run; the corresponding Render
+    // transforms are excluded because React consumes structured
+    // navigation metadata directly. The Generate transforms no-op
+    // when no `ProjectIndex` is present (single-file q2-preview).
+    pipeline.push(Box::new(TocGenerateTransform::new()));
+    pipeline.push(Box::new(NavbarGenerateTransform::new()));
+    pipeline.push(Box::new(SidebarGenerateTransform::new()));
+    pipeline.push(Box::new(PageNavGenerateTransform::new()));
+    pipeline.push(Box::new(FooterGenerateTransform::new()));
+
+    // === FINALIZATION PHASE ===
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
     pipeline
@@ -1652,6 +1777,128 @@ mod tests {
             !output.html.contains("Original body"),
             "rendered HTML must not contain the original body — replay should override; got:\n{}",
             &output.html,
+        );
+    }
+
+    // ─── q2-preview pipeline (Plan 1) ────────────────────────────
+
+    /// Drift-protection helper for subset transform pipelines.
+    ///
+    /// Asserts that `subset` is exactly `full` filtered by
+    /// `expected_excluded`, preserving order. Catches every drift
+    /// mode in one shot: a transform added to `full`, renamed,
+    /// reordered on either side, or removed from `subset`.
+    ///
+    /// `drift_doc_pointer` is included in failure messages to
+    /// direct the reader to the rationale (a plan section, a
+    /// design doc, etc.).
+    ///
+    /// Assumes `subset ⊆ full` — if a transform appears in `subset`
+    /// that's not in `full`, the order assertion fails with a
+    /// useful diff.
+    fn assert_filtered_subset(
+        full: &TransformPipeline,
+        subset: &TransformPipeline,
+        expected_excluded: &[&str],
+        drift_doc_pointer: &str,
+    ) {
+        use std::collections::HashSet;
+
+        let full_names: Vec<&str> = full.iter().map(|t| t.name()).collect();
+        let subset_names: Vec<&str> = subset.iter().map(|t| t.name()).collect();
+        let excluded: HashSet<&str> = expected_excluded.iter().copied().collect();
+
+        // Catch typos / renames in the exclusion list early.
+        let unknown: Vec<_> = expected_excluded
+            .iter()
+            .filter(|n| !full_names.contains(n))
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "expected_excluded names not in full pipeline: {unknown:?}. \
+             See {drift_doc_pointer}."
+        );
+
+        let computed: Vec<&str> = full_names
+            .iter()
+            .copied()
+            .filter(|n| !excluded.contains(n))
+            .collect();
+        assert_eq!(
+            subset_names, computed,
+            "Subset pipeline drift. See {drift_doc_pointer}."
+        );
+    }
+
+    /// Drift-protection: q2-preview's transform list must be
+    /// exactly the HTML transform list minus the 12 excluded
+    /// transforms. New transforms added to `build_transform_pipeline`
+    /// without an explicit decision (include in q2-preview, or add
+    /// to the exclusion list) trip this test.
+    ///
+    /// See `claude-notes/plans/2026-05-04-q2-preview-plan-1-pipeline.md`
+    /// §"Transform list for q2-preview" for the rationale of each
+    /// exclusion.
+    #[test]
+    fn build_q2_preview_transform_pipeline_is_subset_of_html() {
+        // Same constructor args as `build_transform_pipeline` — the
+        // helper iterates pipelines by name, so the actual runtime
+        // / extension list / target_format don't matter here.
+        let runtime = make_test_runtime();
+        let html = build_transform_pipeline(vec![], vec![], runtime.clone(), "html".to_string());
+        let preview =
+            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+
+        let expected_excluded = &[
+            "callout-resolve",
+            "website-favicon",
+            "title-block",
+            "footnotes",
+            "toc-render",
+            "navbar-render",
+            "sidebar-render",
+            "page-nav-render",
+            "footer-render",
+            "link-rewrite",
+            "appendix-structure",
+            "crossref-render",
+        ];
+        assert_filtered_subset(
+            &html,
+            &preview,
+            expected_excluded,
+            "Plan 1 §\"Transform list for q2-preview\"",
+        );
+    }
+
+    /// Structural test for `build_q2_preview_pipeline_stages` —
+    /// asserts the exact stage list and order. The stage list ends
+    /// after `resource-report`; the HTML-specific tail
+    /// (`code-highlight`, `render-html-body`, `apply-template`) is
+    /// excluded.
+    #[test]
+    fn build_q2_preview_pipeline_stages_structural() {
+        let stages = build_q2_preview_pipeline_stages(None);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "parse-document",
+                "metadata-merge",
+                "include-expansion",
+                "document-profile",
+                "link-resolution",
+                "unwrap-profile",
+                "pre-engine-sugaring",
+                "engine-execution",
+                "compile-theme-css",
+                "user-filters-pre",
+                "ast-transforms",
+                "user-filters-post",
+                "resource-report",
+            ],
+            "q2-preview stage list drift; see Plan 1 §Scope and \
+             §\"Resolved decisions\""
         );
     }
 }
