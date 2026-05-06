@@ -1,0 +1,45 @@
+::: {.quarto-post .image-right}
+
+$if(image-html)$
+::: thumbnail
+[$image-html$]($path$){.no-external}
+:::
+$endif$
+
+::: body
+
+$if(title)$
+### [$title$]($path$){.no-anchor .no-external .listing-title}
+$endif$
+
+$if(subtitle)$
+[$subtitle$]($path$){.no-external .listing-subtitle}
+$endif$
+
+$if(description)$
+::: {.delink .listing-description}
+$description$
+
+$description-placeholder$
+:::
+$endif$
+
+:::
+
+::: metadata
+
+$if(date)$
+[$date$]{.listing-date}
+$endif$
+
+$if(author)$
+[$author$]{.listing-author}
+$endif$
+
+$if(reading-time)$
+[$reading-time$]{.listing-reading-time}
+$endif$
+
+:::
+
+:::

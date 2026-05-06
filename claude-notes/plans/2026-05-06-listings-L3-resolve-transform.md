@@ -1349,13 +1349,42 @@ See §"Filing reminder" for descriptions. During impl:
 
 ### TDD phase 5 — Render transform
 
-- [ ] Write transform tests (#33–38) + snapshot tests
-      (#39–41). Fail.
-- [ ] Embed built-in templates (port from Q1 EJS to
-      doctemplate `$var$`).
-- [ ] Implement `ListingRenderTransform` (binding build,
-      doctemplate apply, markdown reparse, AST splice).
-- [ ] Tests pass.
+- [x] Add `binding.rs` building the per-listing
+      `TemplateContext` per L2 §"Per-item template
+      binding" (curated typed fields, pre-rendered
+      helpers, `extra` map via pampa's bridge,
+      `project` map). 4 tests.
+- [x] Add `helpers.rs` with `image_html`,
+      `metadata_attrs`, `description_placeholder`. 5
+      tests.
+- [x] Embed three built-in template pairs
+      (`listing-default`/`grid`/`table` + `item-default`/
+      `grid`/`table`) via `include_str!` in
+      `templates.rs` + sources under `templates/`.
+      v1 simplification noted: dropped Q1's
+      multi-paragraph link wrappers around metadata
+      sections (markdown can't represent them); each
+      field gets its own block. Per-item interactivity
+      (the `metadata-attrs` data-* attrs in the wrapper
+      Div) lands in phase 7 alongside `list.min.js`.
+- [x] Implement `ListingRenderTransform` at
+      `crates/quarto-core/src/transforms/listing_render.rs`:
+      reads `RenderContext::resolved_listings`, builds
+      binding, compiles the embedded template via
+      `project_listing_resolver`, renders to markdown,
+      re-parses via `pampa::readers::qmd::read`,
+      splices into the host AST (explicit slot if a
+      `Div #<listing.id>` exists at top level, else
+      append). Idempotent via `data-listing-rendered`
+      marker. Q-12-1 emitted on `type: custom`
+      (downgrades to default). Re-parse diagnostics
+      collapse into a single Q-12-10 host-page warning
+      (per D3).
+- [x] Tests: 7 unit tests (slot fill, append, idempotent,
+      Q-12-1 for custom, description placeholder,
+      skip-when-disabled, grid class). All pass.
+- [x] Workspace test count: **8563, +115** from 8448
+      baseline.
 
 ### TDD phase 6 — Pipeline wiring
 

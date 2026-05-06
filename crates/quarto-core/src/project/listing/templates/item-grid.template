@@ -1,0 +1,49 @@
+::: {.g-col-1}
+
+::: {.quarto-grid-item .card .h-100}
+
+$if(image-html)$
+::: card-img-top
+[$image-html$]($path$){.no-external}
+:::
+$endif$
+
+::: {.card-body .post-contents}
+
+$if(title)$
+##### [$title$]($path$){.no-anchor .no-external .card-title .listing-title}
+$endif$
+
+$if(subtitle)$
+[$subtitle$]($path$){.no-external .card-subtitle .listing-subtitle}
+$endif$
+
+$if(reading-time)$
+[$reading-time$]{.listing-reading-time .card-text .text-muted}
+$endif$
+
+$if(description)$
+::: {.card-text .listing-description .delink}
+[$description$]($path$){.no-external}
+
+$description-placeholder$
+:::
+$endif$
+
+::: {.card-attribution .card-text-small}
+
+$if(author)$
+[$author$]{.listing-author}
+$endif$
+
+$if(date)$
+[$date$]{.listing-date}
+$endif$
+
+:::
+
+:::
+
+:::
+
+:::
