@@ -29,7 +29,7 @@ companion design rationale is
 | Epic  | `bd-61cd` | epic    | Listings feature epic                                                  | `2026-05-05-listings-epic.md` (this file)            | Filed               |
 | —     | —         | —       | Design discussion (rationale)                                           | `2026-05-05-listings-design-discussion.md`           | Filed               |
 | L0    | `bd-n8a4` | task    | ListingItemInfo profile extension                                      | `2026-05-05-listings-L0-profile-extension.md`        | **Closed** (impl `ab28ea00`, merge `57671f9b`) |
-| L1    | `bd-izqh` | feature | ListingItemInfoStage (auto-fill, pre-checkpoint)                       | `2026-05-05-listings-L1-autofill-stage.md`           | Filed (draft)       |
+| L1    | `bd-izqh` | feature | ListingItemInfoStage (auto-fill, pre-checkpoint)                       | `2026-05-05-listings-L1-autofill-stage.md`           | **Closed** (impl `38749998`, merge `a56e0e91`) |
 | L2    | `bd-j60g` | task    | Listing data model + YAML schema                                       | `YYYY-MM-DD-listings-L2-data-model.md`               | not yet written     |
 | L3    | `bd-ml8z` | feature | ListingResolveTransform (Pass-2, built-ins via doctemplate)            | `YYYY-MM-DD-listings-L3-resolve-transform.md`        | not yet written     |
 | L4    | `bd-b5jm` | task    | quarto-doctemplate enhancements (pipes, ConfigValue bridge, resolver)  | `YYYY-MM-DD-listings-L4-doctemplate-enhancements.md` | not yet written     |
