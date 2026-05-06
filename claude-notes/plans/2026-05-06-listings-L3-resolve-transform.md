@@ -1582,3 +1582,145 @@ they trigger)
 6. **`list.min.js` artifact-store wiring blocked**
    *(conditional, did not trigger).* The JS bundling
    was clean — see phase-7 spike notes above.
+
+## Hand-off summary (for the next session / main agent)
+
+### State of the branch
+
+- Branch: `beads/bd-ml8z-listings-resolve-transform`,
+  branched off `feature/listings`. Implementation
+  complete; never pushed.
+- Verified clean: `cargo xtask verify` (full incl.
+  hub-client + WASM) passes; `cargo xtask lint` clean.
+- Baseline → final test count: **8448 → 8570** (+122).
+- All seven L3 phases are checked off above. The L3
+  listings feature works end-to-end for `default`,
+  `grid`, and `table` types — verified via the integration
+  test suite, the CLI fixture, and a real hub-client
+  browser session.
+
+### Commits on this branch (in order)
+
+1. `3b8dd645` — L4.1+L4.3 + L3 phase 3 (listing types) +
+   Q-12 catalog + parser bug fixes.
+2. `7e614c13` — L3 phase 4 (`ListingGenerateTransform`).
+3. `c5b4ccc2` — L3 phase 5 (`ListingRenderTransform` +
+   built-in templates + binding builder + helpers).
+4. `20f79b2e` — L3 phase 6 (pipeline wiring + 5
+   integration tests + LinkRewrite recursion fix +
+   PandocInlines parser fix).
+5. `c5b4ccc2` (chronologically next) — L3 phase 7
+   (vendored `list.min.js` + `quarto-listing.js`).
+6. `8c63e4e5` — plan close-out notes.
+7. `92749df4` — `scripts/upload-project.mjs` (the sync
+   server upload helper).
+8. `ff23a2a2` — Link-rewrite fix: listing items emit
+   `.qmd` source paths so `LinkRewriteTransform` rewrites
+   them downstream. Without this, hub-client in-app
+   navigation didn't work for listing item links.
+
+### Discovered-from bd issues (filed during this work)
+
+- `bd-0fd0` (p2, task) — Lua filter slot between generate
+  and render transforms. Foundation for proper
+  user-filter mutation of resolved navigation/listing
+  data. Source-code `// TODO(bd-0fd0):` markers landed
+  at three sites (`pipeline.rs` navigation block,
+  `navbar_generate.rs`, `listing_generate.rs`).
+- `bd-0jyl` (p2, task) — Source-info threading through
+  the listing markdown re-parse. Today's collapsed
+  `Q-12-10` warning is a placeholder.
+- `bd-0wyo` (p3, task) — Server-precomputed
+  `other_metadata_html` for the default listing
+  (Q1's `otherFields` loop). v1 ships curated-fields-only.
+- `bd-57y4` (p2, task) — Vendor and integrate
+  `quarto-listing.scss` with the theme-CSS pipeline. The
+  JS pair shipped in phase 7; the SCSS needs proper
+  Bootstrap-variable wiring through `SassLayer` and is
+  its own design exercise.
+- `bd-xs2u` (p2, bug) — Em-dash / en-dash in document
+  titles breaks something in hub-client. User-reported
+  during L3 testing; I (Claude) did not reproduce. Worth
+  treating as orthogonal to listings — the user's
+  workaround (replace em-dashes with single dashes) made
+  hub-client behave correctly. Could be a pampa parser
+  issue, a hub-client display issue, or a sync round-trip
+  issue. Investigation should start by getting the user
+  to describe the exact symptom.
+
+### Things the next session should know
+
+1. **D2 was revised in-flight.** The original L3 plan
+   said resolved listings live at `meta.listings.<id>`.
+   In practice they live in a typed
+   `RenderContext::resolved_listings: Vec<ResolvedListing>`
+   field — the `crossref_index` precedent. The reasoning
+   is captured in D2 above. When `bd-0fd0` (Lua slot)
+   lands, the natural integration point is a meta
+   serialize/deserialize bridge at the injection
+   boundary; the typed in-memory shape is unchanged.
+
+2. **Listing item hrefs are `.qmd` source paths, not
+   `.html` outputs.** The `path` field in the per-item
+   binding (the link target the templates use) is a
+   host-dir-relative `.qmd` source path. This is the
+   body-link convention; `LinkRewriteTransform` walks
+   the listing Div recursively (the
+   recursion-into-Divs fix landed in phase 6) and
+   rewrites it via the active resolver:
+   - native CLI → page-relative `.html`
+   - hub-client / VFS resolver → artifact-rooted URL
+     that `iframePostProcessor.ts`'s case-3 anchor handler
+     reverse-maps to `.qmd` for in-app navigation.
+   `outputHref` is preserved separately for templates
+   that need the post-render URL (L7 description
+   placeholder, L9 RSS feed item URLs).
+
+3. **`scripts/upload-project.mjs` is sticky tooling.** It
+   uploads on-disk Q2 projects to a sync server using the
+   same `@quarto/quarto-sync-client.createNewProject`
+   path the browser uses. Useful for sync-server testing
+   in subsequent sessions. Notes:
+   - Requires the workspace ts-packages to be built; the
+     script auto-runs `npx tsc` per package on demand.
+   - Uses a `fake-indexeddb` polyfill (now a workspace
+     devDep) because `IndexedDBStorageAdapter` is
+     hardcoded inside `createNewProject`.
+   - Has a `--verify` flag that does a fresh-client
+     round-trip read-back as a safety check.
+   - Has known quirks with `wss://sync.automerge.org`'s
+     latency: the internal 1-second peer-wait timeout
+     fires almost always, the script handles the
+     offline-mode-then-reconnect path correctly. The
+     resulting `TimeoutNegativeWarning` from Node is
+     suppressed.
+
+4. **Hub-client uses a UUID-based project route**
+   (`/p/<uuid>/file/<path>`). That UUID is **not** the
+   Automerge IndexDocument id — hub-client maps between
+   them internally. When debugging by ID, work from the
+   automerge id (e.g. `3mphjDWSjh1QSMHa3L4xzE2JYL5n`)
+   that `upload-project.mjs` prints, not the UUID in the
+   browser URL.
+
+5. **Worktree convention used.** All work happened in
+   `.worktrees/bd-ml8z-listings-resolve-transform/` with
+   beads redirected to the main repo's `.beads/`. The
+   beads issue filings (bd-0fd0, bd-0jyl, bd-0wyo,
+   bd-57y4, bd-xs2u) are committed on `feature/listings`
+   in the main repo; the implementation commits are on
+   the worktree's branch.
+
+### What's left before merge / push
+
+- [ ] User approval to push (per CLAUDE.md §"GIT PUSH
+      POLICY").
+- [ ] Hub-client browser smoke against more scenarios
+      (categories, `feed:` config presence, multiple
+      listings on one page) — the integration tests
+      cover the unit behaviors but a free-form hub-client
+      session is a stronger guarantee.
+- [ ] After approval: `br update bd-ml8z --status
+      closed` + `br update bd-b5jm --status closed` and
+      `br sync --flush-only` from the main repo, then
+      commit the bd state.
