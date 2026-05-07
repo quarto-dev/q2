@@ -438,7 +438,8 @@ URIs in the iframe's DOM via the project-relative branch
 (`resolveRelativePath` + `vfsReadBinaryFile`), reading bytes from
 the user's original VFS upload (the renderer does not contribute
 image bytes — see Plan 2A §"Multi-plan contract: page-scoped image
-artifacts" for the full contract and the latent-bug note). 2B's
+artifacts" for the full contract and the latent-bug note,
+bd-3gtn). 2B's
 components emit the `<img>` elements; 2A makes them load. No
 `/.quarto/...` paths appear in q2-preview's body AST.
 

@@ -763,9 +763,8 @@ that would otherwise look like a refactor regression.
   — verifying this in HTML preview is a follow-up). Plan 2A doesn't
   fix the bug, but the iframe rewriter must keep using the user's
   upload as the source of truth and treat the renderer's image flush
-  as not-load-bearing. **TODO**: file a beads issue with the
-  one-line fix (`if !artifact.content.is_empty() { runtime.add_file(...) }`)
-  once we're on the main repo; reference it from the plan when filed.
+  as not-load-bearing. Tracked at **bd-3gtn**; one-line fix is
+  `if !artifact.content.is_empty() { runtime.add_file(...) }`.
 - **Wire-format code 3 back-compat (minor)**. 2A's TS type for
   code 3 covers the post-Plan-5 reader's expected
   `[filter_path, line]` shape (FilterProvenance). Plan 5's reader

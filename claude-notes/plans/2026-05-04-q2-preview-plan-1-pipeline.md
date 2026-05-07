@@ -368,7 +368,7 @@ rationale for each decision.)
   hub-client's `automergeSync`), not from the renderer's flush. See
   §"Multi-plan contract: page-scoped image artifacts" for the full
   contract and the latent-bug note (Plan 2A §"Risk areas →
-  Empty-content artifact overwrite").
+  Empty-content artifact overwrite", tracked at bd-3gtn).
 - **Drift-protection test**: a single helper `assert_filtered_subset`
   asserts that `build_q2_preview_transform_pipeline` is exactly
   `build_transform_pipeline` filtered by an explicit exclusion list,
@@ -596,10 +596,9 @@ rationale for each decision.)
     3. **Manifest entry has empty content** (today's reality —
        `ResourceCollectorTransform` uses `Artifact::from_path`).
        This assertion is fragile-by-design: it documents current
-       behavior and will need flipping when the empty-content
-       overwrite bug fix lands (see Plan 2A §"Risk areas →
-       Empty-content artifact overwrite"). Comment in the test
-       points at the beads issue.
+       behavior and will need flipping when bd-3gtn (the
+       empty-content overwrite bug) is fixed. Comment in the test
+       points at bd-3gtn.
     4. **Navbar / sidebar metadata populated** in `meta` —
        `meta["navigation"]["navbar"]` and `meta["navigation"]["sidebar"]`
        are non-empty.
@@ -739,7 +738,8 @@ and `:1364-1369` (project) writes those empty bytes to the
 resolver's on-disk path. So for image artifacts the flush is at
 best a no-op manifest entry, at worst an overwrite of whatever
 bytes were at the resolved path. (See the latent-bug note in the
-2A plan's §"Risk areas" — `Path::join` with an absolute second arg
+2A plan's §"Risk areas", tracked at bd-3gtn — `Path::join` with an
+absolute second arg
 replaces the first, so the resolved path collapses to the absolute
 artifact path, which collides with the user's upload location. A
 follow-up beads issue tracks the one-line guard fix.)
@@ -770,9 +770,9 @@ the same channel as theme CSS.
 A regression test asserts the AST preserves the user-written URL
 unchanged (no transform mutates `Image::target.0`) and that
 `output.page_artifacts` contains an entry for the image (the
-manifest entry; bytes empty, as expected). Once the latent-bug
-guard lands, an additional assertion can verify the user's upload
-bytes are not clobbered by the flush.
+manifest entry; bytes empty, as expected). Once bd-3gtn (the
+empty-content guard) lands, an additional assertion can verify the
+user's upload bytes are not clobbered by the flush.
 
 ### Multi-plan contract: cleanup owed to Plan 7
 
