@@ -1215,6 +1215,99 @@ fn test_backslash_before_letter() {
     );
 }
 
+/// `\<space>` should produce a non-breaking space (U+00A0), matching Pandoc.
+/// Issue #162 / bd-1aip.
+#[test]
+fn test_backslash_space_becomes_nbsp() {
+    let input = "a \\ b";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // The NBSP attaches to the following character, like Pandoc:
+    //   [ Para [ Str "a" , Space , Str "<NBSP>b" ] ]
+    assert!(
+        result.contains("Str \"\u{00A0}b\""),
+        "Expected Str \"<NBSP>b\" (U+00A0 attached to b) but got: {}",
+        result
+    );
+    assert!(
+        !result.contains("Str \"\\\\ b\""),
+        "Should no longer contain literal backslash-space-b: {}",
+        result
+    );
+}
+
+/// `\<space>` at the start of inline content also produces NBSP.
+#[test]
+fn test_backslash_space_at_paragraph_start() {
+    let input = "\\ x at start";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"\u{00A0}x\""),
+        "Expected Str \"<NBSP>x\" at paragraph start but got: {}",
+        result
+    );
+}
+
+/// An *escaped* backslash followed by a space (`\\ `) is a literal `\`
+/// followed by a real Space. The new NBSP rule must not regress this.
+#[test]
+fn test_escaped_backslash_then_space_remains_literal() {
+    let input = r"a \\ b";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should still split on the space: [Str "a", Space, Str "\", Space, Str "b"]
+    assert!(
+        result.contains("Str \"\\\\\""),
+        "Expected literal backslash Str (`\\\\` in native) but got: {}",
+        result
+    );
+    // Make sure no NBSP snuck in
+    assert!(
+        !result.contains("\u{00A0}"),
+        "Escaped backslash should NOT produce NBSP, got: {:?}",
+        result
+    );
+}
+
+/// Pipe-table cell containing `\<space>` round-trips stably (the
+/// reporter's wild case in quarto-web docs). Verified via the native
+/// writer because the JSON-roundtrip path has unrelated source-info
+/// scrubbing gaps for table internals.
+#[test]
+fn test_backslash_space_in_table_cell_round_trips() {
+    let input = "| col   | other |\n| ----- | ----- |\n| x \\ y | z     |\n";
+    let first = parse_qmd_to_pandoc_ast(input);
+
+    // Re-render to qmd, then parse again, and compare native AST.
+    let mut parser = MarkdownParser::default();
+    let input_bytes = input.as_bytes();
+    let tree = parser.parse(input_bytes, None).expect("parse 1");
+    let ctx = ASTContext::anonymous();
+    let mut errors = DiagnosticCollector::new();
+    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, input_bytes, &ctx, &mut errors)
+        .expect("treesitter_to_pandoc 1");
+
+    let mut qmd_out = Vec::new();
+    writers::qmd::write(&pandoc, &mut qmd_out).expect("qmd write");
+    let regenerated = String::from_utf8(qmd_out).expect("utf-8");
+
+    let second = parse_qmd_to_pandoc_ast(&regenerated);
+
+    assert_eq!(
+        first, second,
+        "Native AST should be stable across qmd round trip; \
+         regenerated qmd was:\n{}",
+        regenerated
+    );
+    // Sanity check: the cell's `\<space>` produced an NBSP somewhere.
+    assert!(
+        first.contains('\u{00A0}'),
+        "Expected an NBSP in the parsed table; got: {}",
+        first
+    );
+}
+
 // ============================================================================
 // Link Tests
 // ============================================================================

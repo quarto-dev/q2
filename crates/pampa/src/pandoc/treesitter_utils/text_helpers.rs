@@ -148,30 +148,40 @@ pub fn apply_smart_quotes(text: String) -> String {
     text.replace('\'', "\u{2019}")
 }
 
-/// Process backslash escapes in text according to Pandoc rules
-/// A backslash before any ASCII punctuation character is treated as an escape
-/// and the backslash is removed, leaving only the escaped character.
+/// Process backslash escapes in text according to Pandoc rules.
 ///
-/// According to Pandoc spec, these characters can be escaped:
-/// !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+/// - A backslash before any ASCII punctuation character is treated as an
+///   escape and the backslash is removed, leaving only the escaped
+///   character. Pandoc-escapable characters: `!"#$%&'()*+,-./:;<=>?@[\]^_\`{|}~`.
+/// - A backslash followed by an ASCII space is Pandoc's non-breaking-space
+///   shorthand: the pair collapses to a single U+00A0 (NO-BREAK SPACE).
+///   See <https://pandoc.org/MANUAL.html#non-breaking-spaces>.
+/// - Any other `\X` is left as the literal two characters.
 pub fn process_backslash_escapes(text: String) -> String {
     let mut result = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
 
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            // Check if next character is ASCII punctuation
+            // Check if next character is ASCII punctuation, an ASCII space,
+            // or anything else.
             if let Some(&next_ch) = chars.peek() {
                 if is_escapable_punctuation(next_ch) {
-                    // This is an escape sequence - skip the backslash and include the character
-                    chars.next(); // consume the next character
+                    // Backslash escape for a punctuation char: drop the
+                    // backslash, emit the punctuation.
+                    chars.next();
                     result.push(next_ch);
+                } else if next_ch == ' ' {
+                    // Pandoc non-breaking-space shorthand: `\<space>` collapses
+                    // to U+00A0. The original space is consumed.
+                    chars.next();
+                    result.push('\u{00A0}');
                 } else {
-                    // Not an escape sequence - keep the backslash
+                    // Not an escape sequence - keep the backslash.
                     result.push(ch);
                 }
             } else {
-                // Backslash at end of string - keep it
+                // Backslash at end of string - keep it.
                 result.push(ch);
             }
         } else {
