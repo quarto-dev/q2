@@ -415,27 +415,38 @@ fn category_html(item: &ListingItem) -> String {
 /// Q2 should keep this scheme or switch to a simpler one (and
 /// adjust both encoder and decoder together).
 fn b64_encode_unicode(s: &str) -> String {
-    use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
-    // JS's encodeURIComponent reserves only:
-    // A-Z a-z 0-9 - _ . ! ~ * ' ( )
-    // — everything else is percent-encoded. Build the complement.
-    const ENCODE_URI_COMPONENT: &AsciiSet = &CONTROLS
-        .add(b' ').add(b'"').add(b'#').add(b'$').add(b'%')
-        .add(b'&').add(b'+').add(b',').add(b'/').add(b':')
-        .add(b';').add(b'<').add(b'=').add(b'>').add(b'?')
-        .add(b'@').add(b'[').add(b'\\').add(b']').add(b'^')
-        .add(b'`').add(b'{').add(b'|').add(b'}');
-    let percent = utf8_percent_encode(s, ENCODE_URI_COMPONENT).to_string();
+    let percent = encode_uri_component(s);
     base64::engine::general_purpose::STANDARD.encode(percent.as_bytes())
+}
+
+/// JavaScript-compatible `encodeURIComponent`. Encodes every UTF-8
+/// byte as `%XX` except the unreserved set:
+/// `A-Z a-z 0-9 - _ . ! ~ * ' ( )`.
+fn encode_uri_component(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for byte in s.as_bytes() {
+        let b = *byte;
+        let unreserved = b.is_ascii_alphanumeric()
+            || matches!(
+                b,
+                b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'
+            );
+        if unreserved {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{:02X}", b));
+        }
+    }
+    out
 }
 ```
 
-(The `percent-encoding` crate is already a workspace
-dep — `Cargo.toml:90` — used by `quarto-util` and the URL
-infrastructure. The `AsciiSet` definition above is the
-inverse of `encodeURIComponent`'s unreserved set
-(`A-Z a-z 0-9 - _ . ! ~ * ' ( )`); validate with the test
-fixtures below before assuming the byte-set is complete.)
+(No new workspace deps — `percent-encoding` is a transitive
+dep but not directly used anywhere in our crates, and the
+follow-up bd may rip out this whole encode/decode pair, so
+the inline version stays self-contained in `helpers.rs`.
+The unreserved set is the JS-`encodeURIComponent` set
+verbatim — validate against the test fixtures below.)
 
 The binding (`binding.rs`) inserts `category-html` next to the
 existing `image-html`, `metadata-attrs`,
@@ -883,19 +894,88 @@ In `crates/quarto-core/src/transforms/categories_sidebar.rs`
 
     **End-to-end CLI verification per CLAUDE.md.**
 
-### End-to-end CLI verification record (fill in after impl)
+### End-to-end CLI verification record
 
-Per CLAUDE.md §"End-to-end verification before declaring
-success", record after impl:
+**Recorded 2026-05-07** per CLAUDE.md §"End-to-end verification
+before declaring success".
 
-- exact invocation used,
-- a snippet of the observed `_site/index.html` containing one
-  rendered listing item showing chips + the sidebar block,
-- an explicit note that the output was inspected,
-- a count of resulting `.html` files, sidebar pills, and
-  per-item chips for the fixture used.
+**Fixture:** `/tmp/q2-l5-e2e/` — a website project with one host
+(`posts/index.qmd`) declaring `listing: { type: default,
+categories: true }` and three sibling posts:
 
-### Hub-client smoke
+- `posts/a.qmd` — categories `[rust, design]`
+- `posts/b.qmd` — categories `[rust]`
+- `posts/c.qmd` — categories `[elm]`
+
+**Exact invocation:**
+
+```
+cargo run --bin q2 -- render /tmp/q2-l5-e2e
+```
+
+**Output files produced:**
+`_site/posts/{index,a,b,c}.html` (4 files), plus
+`_site/site_libs/listing/{list.min.js,quarto-listing.js}`.
+
+**Observed counts** (via `grep -o`) on
+`_site/posts/index.html`:
+
+- 4 per-item `<div class="listing-category"` chips
+  (a=2, b=1, c=1).
+- 4 sidebar `<div class="category"` pills (1 "All" + 3 unique
+  categories: design, elm, rust).
+- 1 `<div id="quarto-margin-sidebar"` wrapper.
+- 1 `quarto-listing.js` script reference.
+
+**Snippet of observed output** (per-item chip block on post `a`):
+
+```html
+<div class="listing-categories">
+<div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div>
+<div class="listing-category" onclick="window.quartoListingCategory('ZGVzaWdu'); return false;">design</div>
+</div>
+```
+
+**Snippet of observed sidebar block:**
+
+```html
+<h5 class="quarto-listing-category-title">Categories</h5>
+<div class="quarto-listing-category category-default">
+<div class="category" data-category="">All <span class="quarto-category-count">(3)</span></div>
+<div class="category" data-category="ZGVzaWdu">design <span class="quarto-category-count">(1)</span></div>
+<div class="category" data-category="ZWxt">elm <span class="quarto-category-count">(1)</span></div>
+<div class="category" data-category="cnVzdA==">rust <span class="quarto-category-count">(2)</span></div>
+</div>
+```
+
+**Sidebar wrapper context** (TOC + categories share the same
+`#quarto-margin-sidebar`, TOC first as the plan specifies):
+
+```html
+<div id="quarto-content" class="quarto-container ...">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<nav id="TOC" role="doc-toc" class="toc-active">
+...TOC nav...
+</nav>
+<h5 class="quarto-listing-category-title">Categories</h5>
+...categories pills...
+</div>
+```
+
+**Output was inspected directly** (not just inferred from passing
+tests).
+
+### Hub-client smoke (deferred)
+
+**Deferred 2026-05-07 to `bd-ra5j`.** Same call as L3: a real
+browser session against a running hub. The functional surface
+to confirm: chips render, sidebar renders, clicks fire
+`window.quartoListingCategory(...)`, `list.js` filters items.
+Until `bd-57y4` (SCSS bundle) lands, the visuals will look
+bare; the smoke is about markup + JS gluing together, not
+visual parity.
+
+Original session intent (kept here for the bd-ra5j worker):
 
 After Rust changes are in, before declaring done:
 
@@ -994,141 +1074,212 @@ watch pass.
 
 ### Preparation
 
-- [ ] Re-read
+- [x] Re-read
       `claude-notes/instructions/testing.md` and
       `claude-notes/instructions/coding.md`.
-- [ ] Re-read `.claude/rules/wasm.md` (`?Send`,
+- [x] Re-read `.claude/rules/wasm.md` (`?Send`,
       WASM-cfg gating).
-- [ ] Re-read L3 hand-off summary
+- [x] Re-read L3 hand-off summary
       (`claude-notes/plans/2026-05-06-listings-L3-resolve-transform.md`
       §"Hand-off summary") for the state-of-the-branch
       L5 builds on.
-- [ ] Confirm L3 has merged onto `feature/listings`. If
-      not, **stop and ask the user**.
-- [ ] Create the worktree at
+- [x] Confirm L3 has merged onto `feature/listings`. If
+      not, **stop and ask the user**. (Confirmed
+      2026-05-07: merge commit `b4f2238c`.)
+- [x] Create the worktree at
       `.worktrees/bd-5vsr-listings-categories-sidebar/` per
       §"Branch / worktree". Branch
       `beads/bd-5vsr-listings-categories-sidebar`, branched
       off `feature/listings`.
-- [ ] `npm install` in the worktree.
-- [ ] Add `.beads/redirect` per worktree rules so `br`
+- [x] `npm install` in the worktree.
+- [x] Add `.beads/redirect` per worktree rules so `br`
       uses the main repo's `.beads/`.
-- [ ] Baseline: `cargo xtask verify --skip-hub-build
+- [x] Baseline: `cargo xtask verify --skip-hub-build
       --skip-hub-tests` and record the test count here.
-      (L3 closed at 8569 passing; L5's baseline depends on
-      whether L3 has merged into `feature/listings`.)
+      **Baseline 2026-05-07: 8570 passing / 195 skipped** at
+      `feature/listings` HEAD `43256c1a` (the L5-plan
+      commit). `cargo xtask verify --skip-hub-build
+      --skip-hub-tests` clean.
 
 ### Follow-up bd issues — file at start
 
 Two issues to file before impl begins, with
 `--deps discovered-from:bd-5vsr`:
 
-- [ ] **Localization for category labels.** Title:
+- [x] **Localization for category labels.** Title:
       *"Localize listing category sidebar labels (Categories,
       All)"*. Type: task, p3. Description: today's L5 hardcodes
       English; we need a localization plumbing pattern (likely
       similar to whatever crossref settles on — see the comment
       in `crossref_render.rs`). Link this plan.
+      **Filed 2026-05-07 as `bd-99ru`.**
 
-- [ ] **bd-57y4 cross-reference.** No new issue — just confirm
+- [x] **Encoding-review follow-up.** Title: *"Review category
+      click-handler encoding scheme (b64+percent-encoding)"*.
+      Type: task, p3. Open questions on whether to drop the
+      encode/decode pair entirely or replace with a simpler
+      Q2-native idiom (re-encoding the JS side correspondingly).
+      **Filed 2026-05-07 as `bd-754f`.**
+
+- [x] **bd-57y4 cross-reference.** No new issue — just confirm
       the existing `bd-57y4` (vendor-and-integrate
       `quarto-listing.scss`) is current and add a comment to
       its description: "L5 (bd-5vsr) lands the markup that
       consumes this SCSS; merging bd-57y4 restores Q1 visual
       parity for category sidebars and per-item category
       chips." This step is `br update`, not `br create`.
+      **Done 2026-05-07.**
 
 ### TDD phase 1 — `helpers::category_html`
 
-- [ ] Write tests #1–4 in `helpers.rs`. Fail.
-- [ ] Implement `category_html`. Tests pass.
-- [ ] Workspace-level `cargo nextest run --workspace`
-      passes.
+- [x] Write tests #1–4 in `helpers.rs`. Fail.
+- [x] Implement `category_html`. Tests pass.
+- [x] Workspace-level `cargo nextest run --workspace`
+      passes. (8570 → 8578; +8 from helpers.)
 
 ### TDD phase 2 — Per-item binding
 
-- [ ] Write a binding test verifying `category-html` lands
+- [x] Write a binding test verifying `category-html` lands
       on the per-item map (extend the existing
       `binding.rs` test module).
-- [ ] Add the `category-html` insertion to
+- [x] Add the `category-html` insertion to
       `build_item_map`.
-- [ ] Tests pass.
+- [x] Tests pass. (8578 → 8580; +2 binding tests.)
 
 ### TDD phase 3 — Item templates
 
-- [ ] Write template-render tests #26–29.
-- [ ] Update `item-default.template` and
+- [x] Write template-render tests #26–29.
+- [x] Update `item-default.template` and
       `item-grid.template` to splice in the category block
       conditional on `show.categories`.
-- [ ] Tests pass.
+- [x] Tests pass. (8580 → 8584; +4 template tests.)
 
 ### TDD phase 4 — Sidebar aggregation + HTML emission
 
-- [ ] Write aggregation tests #5–11 and HTML-emission tests
+- [x] Write aggregation tests #5–11 and HTML-emission tests
       #12–19 in `categories_sidebar.rs` (or a sub-module).
       Fail.
-- [ ] Implement `aggregate_categories` and
+- [x] Implement `aggregate_categories` and
       `render_sidebar_html`. Tests pass.
+      (8584 → 8600; +16 sidebar tests. Also added
+      `Listing.categories_source: SourceInfo` ahead of phase 8
+      so the aggregation can carry the right span when phase 8
+      wires `Q-12-12`.)
 
 ### TDD phase 5 — `CategoriesSidebarTransform`
 
-- [ ] Write transform tests #20–25. Fail.
-- [ ] Implement the transform. Tests pass.
+- [x] Write transform tests #20–25. Fail.
+- [x] Implement the transform. Tests pass.
+      (Plus #23b empty-but-enabled silent-skip placeholder; the
+      `Q-12-12` diagnostic itself wires up in phase 8.)
 
 ### TDD phase 6 — Pipeline wiring
 
-- [ ] Insert `CategoriesSidebarTransform` into
+- [x] Insert `CategoriesSidebarTransform` into
       `build_transform_pipeline` between `ListingRender`
-      and `TocRender`.
-- [ ] Add `// TODO(bd-0fd0):` marker noting the future
-      Lua-injection slot.
+      and `TocRender`. (`pipeline.rs` line ~810; the WASM
+      path reuses the same builder via
+      `AstTransformsStage::run`, so both native and WASM
+      pick it up.)
+- [x] Add `// TODO(bd-0fd0):` marker noting the future
+      Lua-injection slot. (8600 → 8607.)
 
 ### TDD phase 7 — Template change
 
-- [ ] Write template-level tests #34–37. Fail.
-- [ ] Update `FULL_HTML_TEMPLATE` per §"Template change
+- [x] Write template-level tests #34–37. Fail.
+- [x] Update `FULL_HTML_TEMPLATE` per §"Template change
       in `template.rs`". Tests pass.
+      (8607 → 8611. Note: tests use a new `render_full`
+      helper because `render_with_template` selects the
+      MINIMAL template by default — `FULL_HTML_TEMPLATE`
+      is the right place for the new sidebar logic but
+      the convenience entry point doesn't reach it.)
 
 ### TDD phase 8 — Diagnostic catalog + SourceInfo plumbing
 
-- [ ] Add a `categories_source: SourceInfo` field to
+- [x] Add a `categories_source: SourceInfo` field to
       `Listing` (defaults to `SourceInfo::default()`); update
       `parse_categories_mode` (config.rs:714) to capture the
-      `categories:` entry's source-info while parsing. Existing
-      Listing-construction sites (Default impl, tests) get the
-      default zero span — not user-facing.
-- [ ] Add `Q-12-11` and `Q-12-12` entries to
+      `categories:` entry's source-info while parsing.
+      (Done in phase 4 prep; the parser captures
+      `entry.key_source` so the diagnostic underlines the
+      `categories:` key.)
+- [x] Add `Q-12-11` and `Q-12-12` entries to
       `crates/quarto-error-reporting/error_catalog.json`.
-- [ ] Wire the `Q-12-11` mixed-mode diagnostic in
-      `aggregate_categories`.
-- [ ] Wire the `Q-12-12` enabled-but-empty diagnostic in the
-      transform's outcome handler (per the
-      `AggregateOutcome::EnabledButEmpty` variant in §"What
-      `CategoriesSidebarTransform` does"). Use the listing's
-      `categories_source` for the diagnostic span.
-- [ ] Verify both diagnostics surface in the existing
-      diagnostic-catalog tests.
+- [x] Wire the `Q-12-11` mixed-mode diagnostic. (Detected in
+      `aggregate_categories`; emitted from the transform when
+      `agg.mixed_modes` is true.)
+- [x] Wire the `Q-12-12` enabled-but-empty diagnostic in the
+      transform's outcome handler. Span on the
+      `categories:` key from the first such listing.
+- [x] Verify both diagnostics surface in the existing
+      diagnostic-catalog tests. (8611 → 8614; 4 new
+      diagnostic tests, 1 of which renamed an existing test.)
 
 ### TDD phase 9 — Snapshot + integration
 
-- [ ] Write snapshot tests #30–33.
-- [ ] Write integration test #38.
-- [ ] Run all together; iterate until green.
+- [x] Write snapshot tests #30–33. Added `insta.workspace = true`
+      to `quarto-core`'s dev-deps (matches the convention used in
+      `pampa`, `quarto-highlight`, etc.) and wrote four
+      end-to-end snapshot tests in `tests/listing_pipeline.rs`,
+      each driving the full `ProjectPipeline` and snapshotting
+      a focused L5-owned slice of the rendered HTML (chip blocks
+      + sidebar block, or sidebar block alone for the
+      two-listing case). Snapshots live under
+      `tests/snapshots/`. The focused-slice approach (rather
+      than full HTML) keeps the snapshots small, readable, and
+      resilient to unrelated changes.
+- [x] Write integration test #38. (`listing_pipeline.rs` —
+      `listing_with_categories_renders_chips_and_sidebar_e2e`.
+      Drives the full `ProjectPipeline` through a real
+      4-file fixture: 1 host with `listing: { categories: true }`
+      + 3 posts; asserts chips × 4, sidebar pills × 4 (incl.
+      "All"), counts, the `#quarto-margin-sidebar` wrapper, and
+      that `quarto-listing.js` is still emitted.)
+- [x] Run all together; iterate until green.
+
+**Bug surfaced and fixed during phase 9:** snapshot test #33
+(two listings on one page with subdir-relative `contents:`
+globs) initially produced empty listings. Root cause: Quarto's
+YAML parser tags strings like `posts/*.qmd` as `PandocInlines`
+(a `Span` carrying class `yaml-markdown-syntax-error`), but
+`parse_contents` (`crates/quarto-core/src/project/listing/config.rs:572`)
+matched only `Scalar(Yaml::String)` / `Glob` / `Array`,
+silently dropping the explicit contents and letting
+`apply_type_defaults` overwrite with the sibling-only `*.qmd`
+default. The fix routes `parse_contents` through
+`as_plain_text` first (matching `parse_listings`'s
+shorthand-string handling), with two new unit tests covering
+the `PandocInlines` paths. The broader audit of sibling parser
+branches that may share the same vulnerability is filed as
+**`bd-nwyp`**.
+
+Test count: 8614 → 8621 (+7 from this phase: 4 snapshot tests +
+2 new parser tests + 1 e2e integration test).
 
 ### Verification and close-out
 
-- [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace` — all pass; record
+- [x] `cargo build --workspace` clean. (Implicit in
+      `cargo xtask verify`.)
+- [x] `cargo nextest run --workspace` — all pass; record
       test-count delta against the baseline.
-- [ ] `cargo xtask lint` clean.
-- [ ] `cargo xtask verify` (full, including hub-client +
-      WASM build) — all green.
-- [ ] End-to-end CLI verification fixture rendered;
+      **Baseline 8570 → final 8621 (+51 over the L5 work
+      across phases 1, 2, 3, 4, 5, 7, 8, 9, plus the
+      bd-nwyp parser-fix unit tests.)**
+- [x] `cargo xtask lint` clean. (`693 files checked`.)
+- [x] `cargo xtask verify` (full, including hub-client +
+      WASM build) — all green. (After moving `base64`
+      out of the native-only block in
+      `crates/quarto-core/Cargo.toml` — see commit
+      message for context.)
+- [x] End-to-end CLI verification fixture rendered;
       output inspected; recorded inline above the
       §"End-to-end CLI verification record" stub.
-- [ ] Hub-client browser smoke recorded (or explicitly
-      deferred with a follow-up bd; see L3's hand-off
-      summary for precedent).
+- [x] Hub-client browser smoke deferred to **bd-ra5j**
+      (per the L5 plan's "if deferred, file a follow-up"
+      clause and the L3 precedent). Note: until bd-57y4
+      lands, the visual smoke is partial anyway — the
+      functional smoke is the load-bearing part.
 - [ ] Stop and request user permission before any push
       (per CLAUDE.md §"GIT PUSH POLICY").
 - [ ] After user approval: `br update bd-5vsr --status

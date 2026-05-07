@@ -31,6 +31,7 @@
 mod appendix;
 mod callout;
 mod callout_resolve;
+mod categories_sidebar;
 mod config;
 mod crossref_index;
 mod crossref_render;
@@ -70,6 +71,7 @@ mod website_title_prefix;
 pub use appendix::AppendixStructureTransform;
 pub use callout::CalloutTransform;
 pub use callout_resolve::CalloutResolveTransform;
+pub use categories_sidebar::CategoriesSidebarTransform;
 pub use config::{AppendixStyle, ReferenceLocation, is_feature_disabled, resolve_website_bool};
 pub use crossref_index::CrossrefIndexTransform;
 pub use crossref_render::CrossrefRenderTransform;

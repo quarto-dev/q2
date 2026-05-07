@@ -13,8 +13,10 @@
 //! the L11 close-out report.
 //!
 //! Note: this v1 binding intentionally does **not** include:
-//! - `category-html` — defer to L5 categories sidebar.
 //! - `other-metadata-html` — defer to bd-0wyo.
+//!
+//! `category-html` was added by L5 (bd-5vsr); see
+//! [`helpers::category_html`].
 
 use std::collections::HashMap;
 
@@ -294,6 +296,10 @@ fn build_item_map(
         "description-placeholder".to_string(),
         TemplateValue::String(helpers::description_placeholder(item, listing)),
     );
+    m.insert(
+        "category-html".to_string(),
+        TemplateValue::String(helpers::category_html(item)),
+    );
 
     // Free-form author fields.
     if !item.extra.is_empty() {
@@ -547,6 +553,52 @@ mod tests {
         assert_eq!(
             extra_map.get("status"),
             Some(&TemplateValue::String("draft".to_string()))
+        );
+    }
+
+    // L5 phase 2: per-item binding picks up `category-html`.
+    #[test]
+    fn item_binding_category_html_present_with_categories() {
+        let mut i = item("X");
+        i.categories = vec!["rust".to_string(), "design".to_string()];
+        let ctx = build_listing_context(&listing(), &[i], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!()
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!()
+        };
+        let TemplateValue::String(html) = m
+            .get("category-html")
+            .expect("category-html present on per-item map")
+        else {
+            panic!("category-html not a string");
+        };
+        // Two chips, b64 onclick args, plain category text.
+        assert_eq!(
+            html.matches(r#"<div class="listing-category""#).count(),
+            2,
+            "expected two chips, got: {html}"
+        );
+        assert!(html.contains(">rust<"));
+        assert!(html.contains(">design<"));
+    }
+
+    #[test]
+    fn item_binding_category_html_empty_when_no_categories() {
+        // Default `item()` fixture has empty categories.
+        let ctx = build_listing_context(&listing(), &[item("X")], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!()
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!()
+        };
+        // Always present (so $if(category-html)$ never sees "undefined"),
+        // but empty so the template skips the surrounding markup.
+        assert_eq!(
+            m.get("category-html"),
+            Some(&TemplateValue::String(String::new()))
         );
     }
 

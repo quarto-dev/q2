@@ -16,6 +16,14 @@ $if(subtitle)$
 [$subtitle$]($path$){.no-external .listing-subtitle}
 $endif$
 
+$if(show.categories)$
+$if(category-html)$
+```{=html}
+$category-html$
+```
+$endif$
+$endif$
+
 $if(description)$
 ::: {.delink .listing-description}
 $description$

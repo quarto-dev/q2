@@ -3811,6 +3811,7 @@ dependencies = [
  "hashlink",
  "hex",
  "include_dir",
+ "insta",
  "jupyter-protocol",
  "pampa",
  "pathdiff",

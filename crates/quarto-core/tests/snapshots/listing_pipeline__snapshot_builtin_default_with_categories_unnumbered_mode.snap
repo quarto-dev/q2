@@ -1,0 +1,19 @@
+---
+source: crates/quarto-core/tests/listing_pipeline.rs
+assertion_line: 812
+expression: l5_owned_slice(host)
+---
+=== chip blocks ===
+<div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('ZWxt'); return false;">elm</div></div>
+
+<div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div></div>
+
+<div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div><div class="listing-category" onclick="window.quartoListingCategory('ZGVzaWdu'); return false;">design</div></div>
+
+=== sidebar ===
+<h5 class="quarto-listing-category-title">Categories</h5>
+<div class="quarto-listing-category category-unnumbered">
+<div class="category" data-category="ZGVzaWdu">design</div>
+<div class="category" data-category="ZWxt">elm</div>
+<div class="category" data-category="cnVzdA==">rust</div>
+</div>

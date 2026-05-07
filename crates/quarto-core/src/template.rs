@@ -194,7 +194,16 @@ $if(navigation.toc.title)$
 $endif$
 $rendered.navigation.toc$
 </nav>
+$if(rendered.navigation.margin_categories)$
+$rendered.navigation.margin_categories$
+$endif$
 </div>
+$else$
+$if(rendered.navigation.margin_categories)$
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+$rendered.navigation.margin_categories$
+</div>
+$endif$
 $endif$
 
 <main class="content" id="quarto-document-content">
@@ -2117,6 +2126,143 @@ mod tests {
             undef.is_some(),
             "expected Q-10-2 warning for undefined variable, got: {:?}",
             diagnostics
+        );
+    }
+
+    // ─────────── L5 phase 7: margin sidebar with categories ───────────
+
+    /// Render through the full HTML template (not the minimal one
+    /// that `render_with_template` uses by default). The L5 phase 7
+    /// tests need to exercise the `#quarto-margin-sidebar` region,
+    /// which only lives in `FULL_HTML_TEMPLATE`.
+    fn render_full(body: &str, meta: &ConfigValue) -> String {
+        let template = full_html_template().expect("full template compiles");
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String(body.to_string()));
+        add_metadata_to_context(meta, &mut ctx);
+        let (html, _diags) = template.render_with_diagnostics(&ctx);
+        html.expect("template renders")
+    }
+
+    /// Build a meta with the requested combination of nested
+    /// `rendered.navigation.toc` and `rendered.navigation.margin_categories`
+    /// strings.
+    fn meta_with_navigation(toc: Option<&str>, margin_categories: Option<&str>) -> ConfigValue {
+        let mut nav_entries: Vec<ConfigMapEntry> = Vec::new();
+        if let Some(toc_html) = toc {
+            nav_entries.push(ConfigMapEntry {
+                key: "toc".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_string(toc_html, dummy_source_info()),
+            });
+        }
+        if let Some(cats_html) = margin_categories {
+            nav_entries.push(ConfigMapEntry {
+                key: "margin_categories".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_string(cats_html, dummy_source_info()),
+            });
+        }
+        let nav = ConfigValue::new_map(nav_entries, dummy_source_info());
+        let rendered = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "navigation".to_string(),
+                key_source: dummy_source_info(),
+                value: nav,
+            }],
+            dummy_source_info(),
+        );
+        ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "pagetitle".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("Test", dummy_source_info()),
+                },
+                ConfigMapEntry {
+                    key: "rendered".to_string(),
+                    key_source: dummy_source_info(),
+                    value: rendered,
+                },
+            ],
+            dummy_source_info(),
+        )
+    }
+
+    // L5 plan §"Tests" #34
+    #[test]
+    fn full_template_emits_margin_sidebar_with_only_toc() {
+        let meta = meta_with_navigation(Some("<ul><li>toc-entry</li></ul>"), None);
+        let html = render_full("<p>body</p>", &meta);
+        assert!(
+            html.contains(r#"<div id="quarto-margin-sidebar""#),
+            "expected sidebar wrapper; got: {html}"
+        );
+        assert!(html.contains("<nav id=\"TOC\""));
+        assert!(html.contains("toc-entry"));
+        // No category container.
+        assert!(!html.contains("quarto-listing-category"));
+    }
+
+    // L5 plan §"Tests" #35
+    #[test]
+    fn full_template_emits_margin_sidebar_with_only_categories() {
+        let cat_html = r#"<h5 class="quarto-listing-category-title">Categories</h5>
+<div class="quarto-listing-category category-default">
+<div class="category" data-category="">All</div>
+</div>"#;
+        let meta = meta_with_navigation(None, Some(cat_html));
+        let html = render_full("<p>body</p>", &meta);
+        assert!(
+            html.contains(r#"<div id="quarto-margin-sidebar""#),
+            "sidebar wrapper expected; got: {html}"
+        );
+        // No TOC nav.
+        assert!(!html.contains("<nav id=\"TOC\""));
+        assert!(html.contains(r#"class="quarto-listing-category-title""#));
+    }
+
+    // L5 plan §"Tests" #36
+    #[test]
+    fn full_template_emits_margin_sidebar_with_both() {
+        let cat_html = r#"<h5 class="quarto-listing-category-title">Categories</h5>"#;
+        let meta = meta_with_navigation(Some("<ul><li>toc-entry</li></ul>"), Some(cat_html));
+        let html = render_full("<p>body</p>", &meta);
+        assert!(html.contains(r#"<div id="quarto-margin-sidebar""#));
+        // Both inside the same sidebar container.
+        let sidebar_open = html.find(r#"<div id="quarto-margin-sidebar""#).unwrap();
+        let sidebar_close = html[sidebar_open..]
+            .find("</div>\n\n<main")
+            .map(|i| sidebar_open + i)
+            .or_else(|| {
+                html[sidebar_open..]
+                    .find("</main>")
+                    .map(|i| sidebar_open + i)
+            })
+            .unwrap_or(html.len());
+        let sidebar_html = &html[sidebar_open..sidebar_close];
+        assert!(
+            sidebar_html.contains("<nav id=\"TOC\"") && sidebar_html.contains("Categories"),
+            "expected both TOC and categories inside the same sidebar; got: {sidebar_html}"
+        );
+        // TOC must come before categories (TOC first per the
+        // L5 sub-plan's template change).
+        let toc_pos = sidebar_html.find("<nav id=\"TOC\"").unwrap();
+        let cats_pos = sidebar_html.find("Categories").unwrap();
+        assert!(
+            toc_pos < cats_pos,
+            "TOC must precede categories; got order: {sidebar_html}"
+        );
+    }
+
+    // L5 plan §"Tests" #37
+    #[test]
+    fn full_template_omits_margin_sidebar_when_neither_set() {
+        let meta = meta_with_navigation(None, None);
+        let html = render_full("<p>body</p>", &meta);
+        assert!(
+            !html.contains(r#"<div id="quarto-margin-sidebar""#),
+            "sidebar must be absent when neither toc nor categories are set; got: {html}"
         );
     }
 }

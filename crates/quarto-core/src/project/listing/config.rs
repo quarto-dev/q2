@@ -22,6 +22,7 @@ use std::path::PathBuf;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
+use quarto_source_map::SourceInfo;
 use yaml_rust2::Yaml;
 
 // ─────────────────────────────────────────────────────────────────
@@ -63,6 +64,12 @@ pub struct Listing {
     pub include: Vec<ListingFilter>,
     pub exclude: Vec<ListingFilter>,
     pub categories: ListingCategoriesMode,
+    /// Span on the `categories:` YAML key, captured by the parser
+    /// for L5's `Q-12-12` "categories enabled but no item has any"
+    /// diagnostic. `SourceInfo::default()` (a zero span) when the
+    /// listing was constructed without parsing — e.g. by the
+    /// `Default` impl or in tests.
+    pub categories_source: SourceInfo,
     pub feed: Option<ListingFeedOptions>,
 }
 
@@ -103,6 +110,7 @@ impl Default for Listing {
             include: Vec::new(),
             exclude: Vec::new(),
             categories: ListingCategoriesMode::Disabled,
+            categories_source: SourceInfo::default(),
             feed: None,
         }
     }
@@ -505,6 +513,9 @@ fn parse_one_listing(
             "exclude" => l.exclude = parse_filter_list(&entry.value),
             "categories" => {
                 l.categories = parse_categories_mode(&entry.value);
+                // Capture the YAML span on the `categories:` key for L5's
+                // Q-12-12 diagnostic.
+                l.categories_source = entry.key_source.clone();
             }
             "feed" => {
                 l.feed = parse_feed(&entry.value);
@@ -562,6 +573,18 @@ fn parse_contents(
     value: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<ListingContents> {
+    // Quarto YAML routinely parses bare frontmatter strings as
+    // `PandocInlines` (e.g. when a glob like `posts/*.qmd` confuses
+    // the markdown sublexer and lands as a `Span` carrying the
+    // `yaml-markdown-syntax-error` class). Route through
+    // `as_plain_text` first so any string-shaped variant becomes a
+    // glob, mirroring `parse_listings`'s top-level shorthand
+    // handling. The bug that surfaced when L5's snapshot fixture
+    // used `contents: "posts/*.qmd"` and the broader audit of
+    // sibling parser branches is tracked under bd-nwyp.
+    if let Some(s) = value.as_plain_text() {
+        return vec![ListingContents::Glob(s)];
+    }
     match &value.value {
         ConfigValueKind::Scalar(Yaml::String(s)) => {
             vec![ListingContents::Glob(s.clone())]
@@ -571,23 +594,30 @@ fn parse_contents(
         }
         ConfigValueKind::Array(items) => items
             .iter()
-            .filter_map(|item| match &item.value {
-                ConfigValueKind::Scalar(Yaml::String(s)) => Some(ListingContents::Glob(s.clone())),
-                ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob(pattern.clone())),
-                ConfigValueKind::Map(entries) => {
-                    push_diag(
-                        diagnostics,
-                        "Q-12-2",
-                        "Inline `contents:` records are not yet supported; entry skipped.",
-                        item,
-                    );
-                    let map = entries
-                        .iter()
-                        .map(|e| (e.key.clone(), e.value.clone()))
-                        .collect::<BTreeMap<_, _>>();
-                    Some(ListingContents::Inline(map))
+            .filter_map(|item| {
+                if let Some(s) = item.as_plain_text() {
+                    return Some(ListingContents::Glob(s));
                 }
-                _ => None,
+                match &item.value {
+                    ConfigValueKind::Scalar(Yaml::String(s)) => {
+                        Some(ListingContents::Glob(s.clone()))
+                    }
+                    ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob(pattern.clone())),
+                    ConfigValueKind::Map(entries) => {
+                        push_diag(
+                            diagnostics,
+                            "Q-12-2",
+                            "Inline `contents:` records are not yet supported; entry skipped.",
+                            item,
+                        );
+                        let map = entries
+                            .iter()
+                            .map(|e| (e.key.clone(), e.value.clone()))
+                            .collect::<BTreeMap<_, _>>();
+                        Some(ListingContents::Inline(map))
+                    }
+                    _ => None,
+                }
             })
             .collect(),
         _ => Vec::new(),
@@ -994,6 +1024,62 @@ mod tests {
         assert_eq!(
             listings[0].contents,
             vec![ListingContents::Glob("posts/**/*.qmd".to_string())]
+        );
+    }
+
+    // 6b. Quarto YAML often parses globs like `posts/*.qmd` as
+    // `PandocInlines` (a Span with class `yaml-markdown-syntax-error`
+    // because `*` triggers the markdown sublexer). `parse_contents`
+    // must route through `as_plain_text` so the glob string is still
+    // captured. Discovered when L5's snapshot tests #33 surfaced
+    // empty listings — see bd-nwyp.
+    #[test]
+    fn contents_pandoc_inlines_string_parses_as_glob() {
+        use quarto_pandoc_types::inline::{Inline, Str};
+        // Build a PandocInlines value carrying the literal string
+        // `posts/*.qmd`. `as_plain_text` flattens this back to the
+        // raw string regardless of any wrapping spans/classes.
+        let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
+            text: "posts/*.qmd".to_string(),
+            source_info: SourceInfo::default(),
+        })];
+        let contents_val = ConfigValue::new_inlines(inlines, SourceInfo::default());
+        let (listings, diags) = parse(map(vec![
+            ("type", s("default")),
+            ("contents", contents_val),
+        ]));
+        assert_eq!(
+            listings[0].contents,
+            vec![ListingContents::Glob("posts/*.qmd".to_string())],
+            "expected `posts/*.qmd` glob; diags: {:?}",
+            diags
+        );
+    }
+
+    // 6c. Same fix in the array-of-strings shape: each item may
+    // also arrive as `PandocInlines`. Locks behavior for
+    // `contents: [posts/*.qmd, notes/*.qmd]`.
+    #[test]
+    fn contents_array_with_pandoc_inlines_items_parses() {
+        use quarto_pandoc_types::inline::{Inline, Str};
+        let make_inlines = |t: &str| -> ConfigValue {
+            let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
+                text: t.to_string(),
+                source_info: SourceInfo::default(),
+            })];
+            ConfigValue::new_inlines(inlines, SourceInfo::default())
+        };
+        let arr_val = ConfigValue::new_array(
+            vec![make_inlines("posts/*.qmd"), make_inlines("notes/*.qmd")],
+            SourceInfo::default(),
+        );
+        let (listings, _) = parse(map(vec![("type", s("default")), ("contents", arr_val)]));
+        assert_eq!(
+            listings[0].contents,
+            vec![
+                ListingContents::Glob("posts/*.qmd".to_string()),
+                ListingContents::Glob("notes/*.qmd".to_string()),
+            ]
         );
     }
 
