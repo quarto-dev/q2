@@ -11,7 +11,7 @@ Fill q2-preview's empty registry (created by Plan 2A) with real-HTML leaf compon
 
 - **q2-preview's built-in registry** — every Pandoc base type rendered as real HTML (Para → `<p>`, Header → `<h1>`-`<h6>`, BulletList → `<ul>`, **Image → `<img>`**, **Figure → `<figure>` + `<figcaption>`**, etc.). Includes Pandoc gap fills (LineBlock, DefinitionList, Table family, Underline, Strikeout, Superscript, Subscript, SmallCaps, Cite, RawInline, Note).
 - **Type-specific CustomNode components** — Callout, Theorem, Proof, FloatRefTarget, Equation, CrossrefResolvedRef, IncludeExpansion. Class-compatible with Rust's HTML output so Quarto's compiled theme CSS produces matching visuals.
-- **Framework: atomic-aware dispatcher gate** — `framework/dispatchers.tsx` `Block` / `Inline` components gain a gate that no-ops `setLocalAst` for atomic content (Derived source_info, atomic Synthetic kinds, atomic CustomNode types). Benefits both q2-debug and q2-preview when either grows interactive editing.
+- **Framework: atomic-aware gate** — framework's `Node` component (in `framework/dispatch.tsx`) gains a gate that no-ops `setLocalAst` for atomic content (Derived source_info, atomic Synthetic kinds, atomic CustomNode types). Located at the single recursion chokepoint, before each format's `Block`/`Inline` dispatcher receives `args`. Benefits both q2-debug and q2-preview automatically — neither format's dispatcher needs modification.
 - **Framework: unwrap / rewrap walks** — `framework/customNode.ts` translates between wire-format wrapper Divs/Spans and JS-native `CustomBlockNode` / `CustomInlineNode` shapes. Both formats can consume.
 - **Class-name constants module** — pinned class taxonomy mirroring Rust's HTML output, so loading Quarto's CSS produces matching visuals.
 
@@ -40,6 +40,8 @@ export function rewrapCustomNodes(ast: PandocAST): PandocAST;
 3. Walk reads `type_name` from `data-custom-type` (canonical discovery mechanism per Plan 2A §"Provided: atomicCustomNodes hand-mirror"), reads slot metadata from `data-custom-slots`, reads `plain_data` from `data-custom-data`. Strips wrapper class and `data-custom-*` kvs from `attr`; strips the `Plain` wrapper from Inline / Inlines slots; recurses into slot contents (for nested CustomNodes — Plan 8 case).
 4. After unwrap, the AST contains zero `__quarto_custom_node` references. The registry's `Div` / `Span` entries only see real Divs / Spans.
 5. The framework's `Node` dispatcher gets one new entry in its `blockTypes` array: `'CustomBlock'`.
+
+**q2-debug input assumption.** The unwrap walk runs unconditionally inside framework's `Ast` — both formats see it. q2-debug today renders the **raw, pre-pipeline AST**, which never contains `__quarto_custom_node` wrappers (CustomNodes are produced by transforms in q2-preview's pipeline, not q2-debug's). Under that assumption, unwrap is a no-op for q2-debug and the unconditional placement is safe. **If that assumption ever changes** — e.g. q2-debug is ever pointed at post-pipeline AST — q2-debug's bordered-Div rendering would become bordered "Not registered: CustomBlock" instead, since q2-debug doesn't register CustomBlock/CustomInline. The fix at that point is to gate the unwrap call on format (move it from framework's `Ast` into each format's `'Ast'` registry component, where the format opts in). Documented here so the assumption is recoverable from the plan rather than buried in code.
 
 **Reverse path** (setLocalAst → setAst → postMessage):
 1. Components freely propagate JS-native shapes through `setLocalAst`.
@@ -86,27 +88,37 @@ export type CustomNode = CustomBlockNode | CustomInlineNode;
 
 The `'CustomBlock'` / `'CustomInline'` discriminator (not a single `'Custom'` + `variant` field) is chosen because (a) the framework's `Node` dispatcher uses a hardcoded `blockTypes` array, and adding two distinct `t` values fits with a one-line addition; (b) block-vs-inline becomes a static type property; (c) round-trip is unambiguous.
 
-##### `framework/dispatchers.tsx` — atomic-aware gate
+##### `framework/dispatch.tsx` — atomic-aware gate inside `Node`
 
-The framework's `Block` and `Inline` dispatchers gain an atomic-aware gate that wraps the existing `registry[node.t]` lookup:
+Plan 2pre's refined architecture moves `Block`/`Inline` dispatchers out of framework into format-owned files (`q2-debug/dispatchers.tsx`, `q2-preview/dispatchers.tsx`). Putting the atomic gate in either format's dispatcher would either duplicate the code or only protect one format. The cleaner home is framework's `Node` component (in `framework/dispatch.tsx`) — the single recursion chokepoint that runs *before* either format's dispatcher receives `args`.
 
-```ts
-const Inline = (args: NodeArgs<InlineNode>) => {
+`Node`'s body gains the gate:
+
+```tsx
+const NOOP = () => {};
+
+const Node = ({ node, setLocalAst, onNavigateToDocument }: NodeProps) => {
   const ctx = useContext(RegistryContext);
-  const registry = ctx?.registry ?? {};
-  const pool = ctx?.sourceInfoPool;
+  const pool = ctx.sourceInfoPool;
 
-  const isAtomic = isAtomicSourceInfo(args.node, pool, ATOMIC_SYNTHETIC_KINDS)
-                || (args.node.t === 'CustomInline' && isAtomicCustomNode(args.node.type_name));
+  const isAtomic = isAtomicSourceInfo(node, pool, ATOMIC_SYNTHETIC_KINDS)
+                || ((node.t === 'CustomBlock' || node.t === 'CustomInline')
+                    && isAtomicCustomNode(node.type_name));
 
-  const effectiveArgs = isAtomic ? { ...args, setLocalAst: NOOP } : args;
+  const effectiveSetLocalAst = isAtomic ? NOOP : setLocalAst;
 
-  const Component = registry[args.node.t];
-  return Component ? <Component {...effectiveArgs} /> : <span>Not registered: {args.node.t}</span>;
+  const isBlock = blockTypes.includes(node.t);
+  const Dispatcher = ctx.registry[isBlock ? 'Block' : 'Inline'];
+  if (!Dispatcher) {
+    // Programmer error: format shipped a registry without 'Block'/'Inline'.
+    // Both shipped formats register them; this branch never fires in normal flow.
+    return <>{`Dispatcher not registered: ${isBlock ? 'Block' : 'Inline'}`}</>;
+  }
+  return <Dispatcher node={node} setLocalAst={effectiveSetLocalAst} onNavigateToDocument={onNavigateToDocument} />;
 };
 ```
 
-Same modification for `Block` (handles atomic blocks like `IncludeExpansion`).
+The format's `Block` / `Inline` dispatcher receives already-gated `args` and continues with its own `registry[node.t]` lookup unchanged — q2-debug's bordered-box leaves and q2-preview's real-HTML leaves both see a no-op `setLocalAst` for atomic content without any per-format awareness.
 
 Three atomic detection paths converge into one gate:
 
@@ -114,11 +126,13 @@ Three atomic detection paths converge into one gate:
 2. **Atomic Synthetic source_info** (Plan 4's `By::is_atomic_synthesizer()`) — via `ATOMIC_SYNTHETIC_KINDS`.
 3. **Atomic CustomNode types** (`CrossrefResolvedRef` today; `IncludeExpansion` post-Plan-8) — via `isAtomicCustomNode`.
 
-The gate is correctness-level: atomic content's source AST and rendered output diverge (e.g. `@fig-1` source vs. "Figure 1" rendered), so editing into rendered atomic content would corrupt the source. Both formats benefit from the gate; q2-debug picks it up "for free" if it ever grows editing affordances.
+The gate is correctness-level: atomic content's source AST and rendered output diverge (e.g. `@fig-1` source vs. "Figure 1" rendered), so editing into rendered atomic content would corrupt the source. Both formats benefit automatically; q2-debug picks it up "for free" if it ever grows editing affordances, without modifying its dispatcher.
 
-##### `framework/renderChildren.tsx` — CustomBlock / CustomInline traversal
+##### `framework/dispatch.tsx` — CustomBlock / CustomInline traversal
 
-Add entries to `renderChildrenRegistry` for `CustomBlock` and `CustomInline` so child traversal works for slot contents. The gate above ensures atomic children don't get a usable `setLocalAst`.
+Add entries to `renderChildrenRegistry` (which lives in `framework/dispatch.tsx` after Plan 2pre's collapse) for `CustomBlock` and `CustomInline` so child traversal works for slot contents. The gate above ensures atomic children don't get a usable `setLocalAst`.
+
+Also extend `blockTypes` to include `'CustomBlock'`. `Node`'s isBlock test already routes via this array, so the addition is a one-line change.
 
 #### q2-preview leaf components
 
@@ -244,15 +258,19 @@ Crossref-numbered captions (`Figure 1: …`) are already baked into the caption 
 import * as Blocks from './blocks';
 import * as Inlines from './inlines';
 import * as Custom from './custom';
-import { Block, Inline } from '../framework/dispatchers';
+import { Block, Inline } from './dispatchers';  // q2-preview's own; created in Plan 2A
+import { PreviewDocument } from './PreviewDocument';
 
 export const previewRegistry: Record<string, ComponentType<any>> = {
   ...Blocks,
   ...Inlines,
   Block,
   Inline,
-  Ast: Document,  // q2-preview's root wrapper, registered under the 'Ast' key (no debug styling)
-  // CustomBlock and CustomInline dispatch to customNodeRegistry by type_name
+  Ast: PreviewDocument,  // q2-preview's root wrapper, registered under the 'Ast' key (no debug styling)
+  // CustomBlock and CustomInline dispatch to customNodeRegistry by type_name.
+  // These entries are q2-preview-specific — q2-debug has no customNodeRegistry
+  // and would render an unhandled CustomBlock/CustomInline as the q2-debug
+  // dispatcher's bordered "Not registered" fallback if it ever encountered one.
   CustomBlock: ({ node, ...args }) => {
     const Comp = customNodeRegistry[node.type_name] ?? customNodeRegistry['__fallback__'];
     return <Comp node={node} {...args} />;
@@ -268,6 +286,8 @@ export const customNodeRegistry: Record<string, ComponentType<any>> = {
   __fallback__: GenericFallback,
 };
 ```
+
+Plan 2A's `q2-preview/dispatchers.tsx` ships `Block` and `Inline` with the muted-gray "(not yet implemented)" miss path. 2B's leaves under `Blocks` / `Inlines` populate the registry so the miss path stops firing for Pandoc base types; CustomNodes that the user-extended registry hasn't covered fall through to the `__fallback__` component instead of the muted-gray placeholder (since `CustomBlock`/`CustomInline` keys *are* registered, just generically).
 
 #### `q2-preview/utils.ts` — shared component utilities
 
@@ -338,7 +358,7 @@ This fork lands as part of Plan 2B's PR (or a closely-following PR) because it d
 
 - **Real-HTML leaves as q2-preview's built-in registry** — not "drafts pasted into demos." Pasted-demo overrides via `render-components: [...]` (Plan 2A item 13) still work; they layer on top of the built-ins instead of replacing missing defaults.
 - **q2-preview/blocks/, q2-preview/inlines/, q2-preview/custom/ as a directory tree of one component per file**. Easier to navigate, override, and test than a single `html.tsx`. Barrel files (`q2-preview/blocks/index.ts` etc.) provide name-keyed re-exports for the registry.
-- **Atomic-aware dispatcher gate in framework, not q2-preview**. Correctness-level concern; benefits both formats. q2-debug picks up the gate "for free."
+- **Atomic-aware gate in framework's `Node`, not in either format's `Block`/`Inline`.** Plan 2pre moves the dispatchers out of framework into format-owned files; `Node` is the only remaining cross-format chokepoint where the gate can sit once. Correctness-level concern; benefits both formats. q2-debug picks up the gate "for free."
 - **Two registries**: `componentRegistry` keyed by `node.t`, `customNodeRegistry` keyed by `type_name`. User overrides target one or the other explicitly.
 - **CustomBlock / CustomInline dispatch**: registry's `CustomBlock` / `CustomInline` entries look up `customNodeRegistry[node.type_name]` and render with `CustomNodeArgs`. The framework's `Node` dispatcher gets `'CustomBlock'` added to `blockTypes`.
 - **`html.tsx` and `custom.tsx` paste-in pattern still works** for users who want to override q2-preview's defaults. The 2B build-out makes the registry no longer require pasting to be useful.
@@ -369,7 +389,7 @@ Round-trip property: `unwrap(rewrap(x)) === x` and `wrap(unwrap(wireDiv)) === wi
 
 - `framework/types.ts` — `BlockNode`, `InlineNode`, `PandocAST`, `Attr`, `Slot`, `CustomBlockNode` placeholder (filled in 2B).
 - `framework/RegistryContext.tsx` — exported context with `sourceInfoPool` (added by 2A).
-- `framework/Ast.tsx`, `framework/dispatchers.tsx`, `framework/renderChildren.tsx`, `framework/renderNode.ts` — used unchanged; the dispatcher gate modification happens here in 2B.
+- `framework/Ast.tsx`, `framework/dispatch.tsx` (the consolidated recursion-and-render module from 2pre — houses `Node`, `renderChildren`, `renderNode`, `blockTypes`) — used unchanged from 2A; 2B modifies `Node` (atomic gate) and adds `CustomBlock`/`CustomInline` entries to `renderChildrenRegistry`, plus extends `blockTypes` with `'CustomBlock'`. All inside `dispatch.tsx`.
 - `q2-preview/PreviewIframe.tsx`, `q2-preview/PreviewContext.tsx`, `q2-preview/registry.ts` skeleton, `q2-preview/entry.tsx` — extended by 2B with leaves and CustomNode components.
 - `hub-client/public/q2-preview.html` — unchanged.
 - `hub-client/src/types/sourceInfo.ts`, `hub-client/src/utils/sourceInfo.ts`, `hub-client/src/utils/atomicCustomNodes.ts` — read by the framework dispatcher gate.
@@ -405,8 +425,7 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
 ### hub-client side (modified by 2B)
 
 - `hub-client/src/components/render/framework/types.ts` — fill in `CustomBlockNode` / `CustomInlineNode` shapes.
-- `hub-client/src/components/render/framework/dispatchers.tsx` — atomic-aware gate.
-- `hub-client/src/components/render/framework/renderChildren.tsx` — add CustomBlock / CustomInline traversal entries.
+- `hub-client/src/components/render/framework/dispatch.tsx` — atomic-aware gate inside `Node`; add CustomBlock / CustomInline traversal entries to `renderChildrenRegistry`; extend `blockTypes` with `'CustomBlock'`.
 - `hub-client/src/components/render/framework/customNode.ts` (NEW) — unwrap / rewrap walks.
 - `hub-client/src/components/render/q2-preview/blocks/*.tsx` (NEW) — every Pandoc Block.
 - `hub-client/src/components/render/q2-preview/inlines/*.tsx` (NEW) — every Pandoc Inline (incl. Image).
@@ -455,7 +474,7 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
 
 ### Hard dependencies
 
-- **Plan 2pre** — directory restructure. 2B's framework changes (atomic-aware gate, customNode.ts, types.ts CustomNode shapes, renderChildren.tsx CustomBlock entries) reference paths and structures Plan 2pre establishes.
+- **Plan 2pre** — directory restructure. 2B's framework changes (atomic-aware gate inside `Node`, customNode.ts, types.ts CustomNode shapes, CustomBlock entries in `renderChildrenRegistry`, all in `framework/dispatch.tsx`) reference paths and structures Plan 2pre establishes.
 - **Plan 2A** — q2-preview surface scaffolding. 2B fills the registry skeleton 2A creates; consumes PreviewContext, registry barrel, entry.tsx.
 - **Plan 1** — pipeline + format detection (already shipped).
 
@@ -483,8 +502,8 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2B; they
 |---|---|
 | Framework: `customNode.ts` (unwrap + rewrap) | ~160 |
 | Framework: `types.ts` CustomNode shapes | ~60 |
-| Framework: dispatcher atomic gate + tests | ~50 |
-| Framework: `renderChildren.tsx` CustomBlock entries | ~30 |
+| Framework: atomic gate inside `Node` (`framework/dispatch.tsx`) + tests | ~50 |
+| Framework: CustomBlock/CustomInline entries in `renderChildrenRegistry` (in `dispatch.tsx`) + `blockTypes` extension | ~30 |
 | q2-preview/blocks/*.tsx (14 files; 11 existing-pattern + 3 gap fills) | ~250 |
 | q2-preview/inlines/*.tsx (20 files; 12 existing-pattern + 8 gap fills) | ~220 |
 | q2-preview/custom/*.tsx (7 files + fallback) | ~360 |
@@ -505,6 +524,6 @@ Risk: Table family is the highest-effort single component (~80 LOC). Budget extr
 ## Notes
 
 - This plan replaces the original Plan 2B, which framed `html.tsx` and `custom.tsx` as "drafts pasted into demos." The 2026-05-07 review established that q2-preview is a sibling format with its own built-in registry; the paste-in pattern still works for user overrides but is no longer the default delivery mechanism.
-- The atomic-aware dispatcher gate moved from "modify q2-debug's dispatcher" to "framework dispatcher" — benefits both formats.
+- The atomic-aware gate moved from "modify q2-debug's dispatcher" to framework's `Node` (the single recursion chokepoint, in `framework/dispatch.tsx`) — benefits both formats automatically without modifying either format's dispatcher.
 - Image and Figure moved into 2B as the natural place for "Pandoc base type leaves with full semantics."
 - Following the user's lead: q2-preview is intended to evolve toward a system component (likely a Quarto extension), but the bundling / distribution mechanics are out of scope for 2B.

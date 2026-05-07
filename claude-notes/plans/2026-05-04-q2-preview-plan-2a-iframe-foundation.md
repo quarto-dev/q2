@@ -13,7 +13,9 @@ Stand up q2-preview as a sibling of q2-debug under the directory layout Plan 2pr
   - `entry.tsx` — iframe entry, mirrors q2-debug's pattern.
   - `PreviewIframe.tsx` — iframe wrapper, parallel to `q2-debug/DebugIframe.tsx`.
   - `PreviewContext.tsx` — q2-preview-specific React context (carries `currentFilePath`).
-  - `registry.ts` — q2-preview registry skeleton with a minimal `'Ast'` entry (the document-root wrapper) and a generic "Not registered" fallback for unknown node types. **No leaf components ship in 2A.** Plan 2B fills them.
+  - `dispatchers.tsx` — q2-preview's `Block` / `Inline` dispatchers (parallel to `q2-debug/dispatchers.tsx`, established in Plan 2pre). Each does the standard `registry[node.t]` lookup; on miss renders a muted-gray "X (not yet implemented)" placeholder — `<span style={{ color: '#888', fontStyle: 'italic' }}>{t} (not yet implemented)</span>` for inlines, the block equivalent for blocks. Required because Plan 2pre's refined architecture moves `Block`/`Inline` out of framework into format-owned files; framework's `Node` cannot dispatch without them. ~30 LOC.
+  - `PreviewDocument.tsx` — q2-preview's document-root wrapper, registered into `registry.ts` under the `'Ast'` key. Calls `renderChildren({ node: ast, setLocalAst: setAst, ... })` with no debug styling. ~15 LOC.
+  - `registry.ts` — q2-preview registry skeleton with `'Ast'` (`PreviewDocument`), `'Block'`/`'Inline'` (from `dispatchers.tsx` above), and nothing else. **No leaf components ship in 2A.** Plan 2B fills them; until then, every node renders as the muted-gray "not yet implemented" placeholder.
 - `hub-client/public/q2-preview.html` — iframe HTML page parallel to `ast-renderer.html`.
 - `ReactRenderer.tsx` routes `format: q2-preview` through `PreviewIframe`; q2-debug stays on `DebugIframe`.
 - The framework's `RegistryContext` carries `sourceInfoPool` (added here, used by Plan 2B's atomic-aware dispatcher gate).
@@ -23,7 +25,7 @@ Stand up q2-preview as a sibling of q2-debug under the directory layout Plan 2pr
 - `__Q2_PREVIEW_RENDERER__` global is set on q2-preview's iframe window for user TSX overrides.
 - TypeScript types for the source-info pool and `atomicCustomNodes` ship as shared utilities (used by 2B).
 
-q2-preview at the end of 2A renders every node as a "Not registered: T" placeholder. Theme CSS is loaded; links navigate. **No content is visibly readable yet.** That is intentional — 2A's job is the iframe surface; 2B's job is the leaves.
+q2-preview at the end of 2A renders every node as a muted-gray "T (not yet implemented)" placeholder. Theme CSS is loaded; links navigate. **No content is visibly readable yet.** That is intentional — 2A's job is the iframe surface; 2B's job is the leaves.
 
 ## Scope
 
@@ -105,7 +107,7 @@ to:
 
 (Plan 2pre dropped the `| null` from the value type as part of its dispatcher-fallback removal — see 2pre §"Dispatcher fallback removal." The default value is `{ registry: {} }`; 2A's extension is purely additive — `sourceInfoPool` is optional, so existing call sites that pass only `{ registry }` continue to type-check.)
 
-Both q2-debug and q2-preview pass `sourceInfoPool` when available. q2-debug doesn't read it today; Plan 2B's atomic-aware dispatcher gate (in `framework/dispatchers.tsx`) reads it and benefits both formats.
+Both q2-debug and q2-preview pass `sourceInfoPool` when available. q2-debug doesn't read it today; Plan 2B's atomic-aware gate (in framework's `Node` component inside `framework/dispatch.tsx` — the single recursion chokepoint that runs before each format's `Block`/`Inline` dispatcher) reads it and benefits both formats automatically.
 
 #### 5. q2-preview iframe HTML page
 
@@ -135,21 +137,71 @@ export const PreviewContext = createContext<PreviewContextValue | null>(null);
 
 Plan 2B's `Image` and other leaf components read `currentFilePath` via `useContext(PreviewContext)`.
 
-#### 8. q2-preview registry skeleton
+#### 8. q2-preview registry skeleton + dispatchers
 
-`hub-client/src/components/render/q2-preview/registry.ts`, new file. Empty registry plus:
+Two new files.
 
-- An `Ast` registry entry that simply calls `renderChildren({ node: ast, setLocalAst: setAst, ... })` with no debug wrapper. This is what `framework/Ast.tsx` looks up via `registry['Ast']`. (The registry key stays `'Ast'` for both formats — see 2pre §"What stays exactly the same." q2-preview's component implementing this entry can be named whatever — e.g. `PreviewDocument` — only the registry key needs to be `'Ast'`.)
-- A fallback that returns `<div>Not registered: {nodeType}</div>` for any unknown `node.t`. Implemented by the framework's `Block` / `Inline` dispatchers when `registry[node.t]` is undefined — no per-format work needed; just don't register any leaves yet.
+**`hub-client/src/components/render/q2-preview/dispatchers.tsx`** — q2-preview's `Block` and `Inline` dispatchers, parallel to `q2-debug/dispatchers.tsx` (Plan 2pre). Under Plan 2pre's refined architecture, framework reserves the `'Block'`/`'Inline'` registry keys but provides no implementations; each format must register its own. Both dispatchers do the standard `registry[node.t]` lookup; on miss they render a muted-gray "(not yet implemented)" placeholder:
 
-q2-preview at this point boots and renders every node as a "Not registered" placeholder. Plan 2B fills the registry.
+```tsx
+const placeholderStyle: React.CSSProperties = { color: '#888', fontStyle: 'italic' };
+
+export const Block = (args: NodeArgs<BlockNode>) => {
+  const ctx = useContext(RegistryContext);
+  const Component = ctx.registry[args.node.t];
+  return Component
+    ? <Component {...args} />
+    : <div style={placeholderStyle}>{args.node.t} (not yet implemented)</div>;
+};
+
+export const Inline = (args: NodeArgs<InlineNode>) => {
+  const ctx = useContext(RegistryContext);
+  const Component = ctx.registry[args.node.t];
+  return Component
+    ? <Component {...args} />
+    : <span style={placeholderStyle}>{args.node.t} (not yet implemented)</span>;
+};
+```
+
+The placeholder aesthetic is deliberately quiet — q2-preview's eventual goal is Quarto-Bootstrap parity, and the "not yet implemented" state should read as "quietly not here yet" rather than "alert" or "debug noise."
+
+**`hub-client/src/components/render/q2-preview/registry.ts`** — registry assembly:
+
+```ts
+import { Block, Inline } from './dispatchers';
+import { PreviewDocument } from './PreviewDocument';  // the 'Ast' entry component
+
+export const previewRegistry: Record<string, ComponentType<any>> = {
+  Block,
+  Inline,
+  Ast: PreviewDocument,
+};
+```
+
+`PreviewDocument` is q2-preview's document-root wrapper (registered under `'Ast'`). It calls `renderChildren({ node: ast, setLocalAst: setAst, ... })` with no debug wrapper. The registry key stays `'Ast'` for both formats — see 2pre §"What stays exactly the same"; only the registered component differs per format.
+
+q2-preview at this point boots and renders every node as the muted-gray "(not yet implemented)" placeholder. Plan 2B fills the registry with real-HTML leaves.
 
 #### 9. q2-preview entry
 
 `hub-client/src/components/render/q2-preview/entry.tsx`, new file. Parallel to `q2-debug/entry.tsx`. Differences:
 
 - Imports `framework` + `q2-preview/registry`.
-- Sets `window.__Q2_PREVIEW_RENDERER__ = { ...framework, ...preview }` (parallel to q2-debug's `__REACT_AST_DEBUG_RENDERER__`).
+- Sets `window.__Q2_PREVIEW_RENDERER__` to an explicit object (parallel to q2-debug's `__REACT_AST_DEBUG_RENDERER__` pattern from 2pre — *not* a wholesale `{ ...framework, ...preview }` spread). The minimal 2A surface:
+
+  ```ts
+  import { renderChildren, renderNode, Node } from '../framework';
+  import { Block, Inline } from './dispatchers';
+  import { previewRegistry } from './registry';
+
+  (window as any).__Q2_PREVIEW_RENDERER__ = {
+    renderChildren, renderNode, Node,
+    Block, Inline,
+    previewRegistry,
+  };
+  ```
+
+  Plan 2B extends this object with q2-preview's leaf components as they ship. The explicit-object form locks the public surface and prevents framework internals (`renderChildrenRegistry`, `RegistryContext`) from leaking onto the global by accident — same rationale as 2pre's q2-debug global.
 - Mirrors q2-debug's `loadCustomComponents` pattern: when `LOAD_CUSTOM_COMPONENTS` arrives, sets `window.React = React`, `window.katex = katex` (Plan 2B's Math component will use it), and any other globals user TSX expects, then dynamically imports each transpiled blob and merges exports into the active registry. **Pre-existing bug to be aware of**: today's q2-debug `loadCustomComponents` accumulates wrong (each iteration overwrites `customRegistry` with `{ ...componentRegistry, ...module }` instead of `{ ...customRegistry, ...module }`, so only the last loaded file's exports survive). Mirror the pattern in q2-preview but **fix the bug** — q2-preview should accumulate correctly. Tracked at **bd-3day** (back-port the fix to q2-debug).
 - Wraps the `<Ast>` mount in a small wrapper component that:
   - Provides `<PreviewContext.Provider value={{ currentFilePath }}>`.
@@ -280,11 +332,14 @@ Moved to **Plan 2B**:
 Moved to **Plan 2pre** (already shipped before 2A):
 
 - Directory restructure (`framework/` + `q2-debug/`).
-- Deletion of dead `ReactAstRenderer.tsx`.
+- Framework-vs-format split: `Block`/`Inline` dispatchers move to `q2-debug/dispatchers.tsx`; framework reserves the registry keys but provides no implementations. (Drives 2A's new q2-preview `dispatchers.tsx` requirement.)
+- Single `framework/dispatch.tsx` housing `Node`, `renderChildren`, `renderNode` (collapsed from the earlier three-file split to avoid cross-file circularity).
+- Deletion of dead `ReactAstRenderer.tsx` and the parent `ReactAstDebugRenderer.tsx` (after carve-up).
 - Deletion of dead `transpileAndImportTSX` from `tsxTranspiler.ts`.
 - PandocAST consolidation into `framework/types.ts`.
 - Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename.
 - Dispatcher `?? componentRegistry` fallback removal; `RegistryContext` default → `{ registry: {} }`; `<Ast>`'s `registry` prop made required.
+- `__REACT_AST_DEBUG_RENDERER__` global converted from wholesale spread to explicit-object form (sets the pattern 2A's `__Q2_PREVIEW_RENDERER__` follows).
 
 Deferred to a future "q2-preview layout chrome" plan:
 
@@ -299,7 +354,7 @@ Deferred to a future "q2-preview layout chrome" plan:
 - **`'Ast'` registry key is preserved across both formats.** q2-debug registers `'Ast': AstRenderer` (the bordered debug wrapper); q2-preview registers `'Ast': PreviewDocument` (or whatever name the component takes — registry key is what matters). Each format owns its own document-root component; the shared key just means `framework/Ast.tsx` does a single `registry['Ast']` lookup that resolves per-format. Preserving the key also keeps user TSX overrides like `~/docs/demo-playground/elliot/slide.tsx`'s `export const Ast` working unchanged. (See 2pre §"Dispatcher fallback removal" for the registry-injection invariant — `<Ast>`'s `registry` prop is now required.)
 - **Keep `__REACT_AST_DEBUG_RENDERER__` global** for q2-debug's existing demos. Add `__Q2_PREVIEW_RENDERER__` for q2-preview. q2-debug demos keep working unchanged.
 - **`PreviewContext` for `currentFilePath`**, not on the framework's `RegistryContext`. q2-debug doesn't need `currentFilePath`; only q2-preview's leaves do (e.g. `Image` resolution).
-- **`sourceInfoPool` ON the framework's `RegistryContext`**. The atomic-aware dispatcher gate (Plan 2B) is correctness-level, lives in `framework/dispatchers.tsx`, and benefits both formats. Framework needs the pool.
+- **`sourceInfoPool` ON the framework's `RegistryContext`**. The atomic-aware gate (Plan 2B) is correctness-level and lives in framework's `Node` component (the single recursion chokepoint, in `framework/dispatch.tsx`) — under 2pre's refined architecture, `Node` runs before each format's `Block`/`Inline` dispatcher and can no-op `setLocalAst` for atomic content centrally. Both formats benefit automatically. Framework needs the pool.
 - **Iframe lifecycle, researched.** q2-preview's AST iframe **remounts on every document switch**, matching q2-debug's existing behavior. The chain (verified in `ReactPreview.tsx:258-261`, `ReactRenderer.tsx:148`, `PreviewRouter.tsx:41-46, 100-109`):
   1. User switches file → `currentFile.path` changes.
   2. `ReactPreview` resets `previewState` to `'START'` (`ReactPreview.tsx:258-261`).
@@ -326,7 +381,7 @@ Deferred to a future "q2-preview layout chrome" plan:
 - **Plan 6** populates Derived source_info on shortcode resolutions.
 - **Plan 7** ships the Rust `ATOMIC_CUSTOM_NODES` const + `is_atomic_custom_node()` function.
 - **Plan 8** amends `atomicCustomNodes.ts` to add `"IncludeExpansion"`.
-- **Plan 2B** ships the atomic-aware dispatcher gate in `framework/dispatchers.tsx`. Until 2B lands, 2A's `sourceInfoPool` plumbing on `RegistryContext` is unread.
+- **Plan 2B** ships the atomic-aware gate inside framework's `Node` (in `framework/dispatch.tsx`). Until 2B lands, 2A's `sourceInfoPool` plumbing on `RegistryContext` is unread.
 
 ## Multi-plan contracts
 
@@ -390,7 +445,8 @@ CLI render path is unaffected — it doesn't use `RenderResponse` (which is a JS
 ### hub-client side (post-2pre paths)
 
 - `hub-client/src/components/render/framework/RegistryContext.tsx` — extended by item 4 with `sourceInfoPool`.
-- `hub-client/src/components/render/q2-preview/` — new directory.
+- `hub-client/src/components/render/framework/dispatch.tsx` — Plan 2B's atomic gate lands inside `Node` here; 2A doesn't modify it but item 4 distributes the pool that 2B reads.
+- `hub-client/src/components/render/q2-preview/` — new directory (`dispatchers.tsx`, `registry.ts`, `PreviewContext.tsx`, `PreviewIframe.tsx`, `entry.tsx`, `PreviewDocument.tsx`).
 - `hub-client/public/q2-preview.html` — new.
 - `hub-client/src/components/render/ReactRenderer.tsx:101-111` — `render-components` gate (q2-preview added by item 13).
 - `hub-client/src/components/render/ReactRenderer.tsx:148` — format dispatch (q2-preview routed to PreviewIframe by item 12).
@@ -408,7 +464,7 @@ The TDD discipline applies per work-item, not per-plan. Item 10 (link handlers e
 - **Source-info accessor unit tests**: build representative `astJson` strings containing each wire code (0–5), parse them, assert `entryFor` / `isDerived` / `isAtomicSourceInfo` return correct values. Codes 4–5 use hand-constructed JSON until Plan 5 ships writer support.
 - **`render-components` gate regression test** (vitest): mount `ReactRenderer` with `format: q2-preview` and a `render-components: [foo.tsx]` AST; assert `customComponentsCode` is populated. Sibling regression test for q2-debug confirms behavior unchanged.
 - **`PreviewIframe` boot smoke test**: mount with a minimal `astJson` and `currentFilePath`, assert the iframe loads `/q2-preview.html` and reaches `IFRAME_READY`.
-- **q2-preview registry fallback**: mount the iframe with an AST containing a `Para`, assert it renders as `<div>Not registered: Para</div>` (or whatever the fallback shape is). This confirms 2A's "empty registry" state is what we said it is.
+- **q2-preview dispatcher placeholder**: mount the iframe with an AST containing a `Para` (block) and a `Str` (inline), assert each renders as the muted-gray "(not yet implemented)" placeholder produced by `q2-preview/dispatchers.tsx`. Confirms `Block`/`Inline` are wired and that the registry containing only `'Block'`/`'Inline'`/`'Ast'` produces the expected 2A output. Sibling test asserts the placeholder DOM uses `color: #888` and `font-style: italic` so the aesthetic stays muted.
 - **Link handler unit tests** (vitest): build a representative `Document`, attach `installLinkHandlers(doc, { currentFilePath: '/foo.qmd', onQmdLinkClick })`, dispatch synthetic clicks on:
   - `<a href="https://example.com">` — assert `window.open` called with `_blank`.
   - `<a href="other.qmd#sec">` — assert `onQmdLinkClick({ path: '/other.qmd', anchor: 'sec' })`.
@@ -453,13 +509,14 @@ The TDD discipline applies per work-item, not per-plan. Item 10 (link handlers e
 | 5 | `q2-preview.html` | ~30 |
 | 6 | `PreviewIframe.tsx` | ~80 |
 | 7 | `PreviewContext.tsx` | ~15 |
-| 8 | `q2-preview/registry.ts` skeleton (`'Ast'` entry only) | ~25 |
+| 8a | `q2-preview/dispatchers.tsx` (`Block`/`Inline` with muted-gray miss path) | ~30 |
+| 8b | `q2-preview/registry.ts` skeleton (`'Ast'`, `'Block'`, `'Inline'` entries) + `PreviewDocument.tsx` | ~40 |
 | 9 | `q2-preview/entry.tsx` (PreviewRoot, theme CSS, link handlers wiring) | ~120 |
 | 10 | `utils/iframeLinkHandlers.ts` extraction | ~120 |
 | 11 | Rust-side `themeFingerprint` surfacing — 5 constructor sites + new field + test | ~40 |
 | 12 | `ReactRenderer.tsx` format dispatch update | ~10 |
 | 13 | `render-components` gate extension + regression test | ~20 |
-| | **Total** | **~680** |
+| | **Total** | **~720** |
 
 One focused session is realistic; possibly two. Natural split:
 - **Session A**: items 1–4 (shared utilities) + items 5–8 (q2-preview surface scaffolding). Verifies the iframe boots empty.
