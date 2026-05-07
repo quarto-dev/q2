@@ -35,7 +35,7 @@ companion design rationale is
 | L4    | `bd-b5jm` | task    | quarto-doctemplate enhancements (pipes, ConfigValue bridge, resolver)  | `2026-05-06-listings-L3-resolve-transform.md` (bundled w/ L3) | **Closed** (impl `3b8dd645`, merge `b4f2238c`) |
 | L5    | `bd-5vsr` | feature | Categories sidebar                                                     | `2026-05-06-listings-L5-categories-sidebar.md`       | **Closed** (impl `2750546b`+`67a985f4`, merge `9e8afa0d`) |
 | L6    | `bd-xbnf` | task    | Dependency-graph integration (`listing_content_globs`)                 | `2026-05-07-listings-L6-dep-graph.md`                | **Closed** (impl `ffa4d227`, merge `8b5efb91`) |
-| L7    | `bd-qf7r` | feature | Post-render placeholder upgrade (engine-rendered previews; BRACKETED)  | `YYYY-MM-DD-listings-L7-postrender-upgrade.md`       | not yet written     |
+| L7    | `bd-qf7r` | feature | Post-render placeholder upgrade (engine-rendered previews; BRACKETED)  | `2026-05-07-listings-L7-postrender-upgrade.md`       | **Closed** (impl `d4877142`, merge `dc3a0f7b`) |
 | L8    | `bd-rqgx` | feature | Custom listing templates                                               | `YYYY-MM-DD-listings-L8-custom-templates.md`         | not yet written     |
 | L9    | `bd-o90m` | feature | RSS feeds                                                              | `YYYY-MM-DD-listings-L9-rss-feeds.md`                | not yet written     |
 | L10   | `bd-hzsi` | task    | Q1 → Q2 listing template migration docs + LLM skill                    | `YYYY-MM-DD-listings-L10-migration-docs.md`          | not yet written     |
