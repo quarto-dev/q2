@@ -18,6 +18,14 @@ $if(subtitle)$
 [$subtitle$]($path$){.no-external .card-subtitle .listing-subtitle}
 $endif$
 
+$if(show.categories)$
+$if(category-html)$
+```{=html}
+$category-html$
+```
+$endif$
+$endif$
+
 $if(reading-time)$
 [$reading-time$]{.listing-reading-time .card-text .text-muted}
 $endif$

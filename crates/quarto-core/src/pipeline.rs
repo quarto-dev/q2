@@ -65,16 +65,17 @@ use crate::stage::{
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, CrossrefIndexTransform,
-    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
-    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
-    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
-    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    AppendixStructureTransform, CalloutResolveTransform, CalloutTransform,
+    CategoriesSidebarTransform, CrossrefIndexTransform, CrossrefRenderTransform,
+    CrossrefResolveTransform, EquationLabelTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
+    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
+    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
+    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
+    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
+    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
+    WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -803,6 +804,17 @@ pub fn build_transform_pipeline(
     // ast.blocks before any rendered-HTML emission for templates.
     pipeline.push(Box::new(ListingGenerateTransform::new()));
     pipeline.push(Box::new(ListingRenderTransform::new()));
+    // CategoriesSidebarTransform runs after ListingRenderTransform
+    // so it reads `RenderContext::resolved_listings` (which the
+    // render transform restores after consumption) and aggregates
+    // categories across all listings on the host page. It must run
+    // before TocRenderTransform so both `rendered.navigation.*`
+    // keys land before ApplyTemplate reads them.
+    //
+    // TODO(bd-0fd0): same Lua-filter slot caveat as the listing
+    // generate/render transforms above — when the slot lands the
+    // resolved-listing data path becomes user-mutable.
+    pipeline.push(Box::new(CategoriesSidebarTransform::new()));
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));

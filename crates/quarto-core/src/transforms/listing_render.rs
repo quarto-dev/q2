@@ -642,4 +642,129 @@ mod tests {
             "expected grid class in rendered AST"
         );
     }
+
+    /// Walk the AST and concatenate every `RawBlock` / `RawInline`
+    /// HTML payload into a single string. Convenient for substring
+    /// asserting "did the template emit the chip markup".
+    fn collect_raw_html(ast: &Pandoc) -> String {
+        use quarto_pandoc_types::block::Block as B;
+        use quarto_pandoc_types::inline::Inline as I;
+        fn walk_blocks(blocks: &[B], out: &mut String) {
+            for b in blocks {
+                match b {
+                    B::RawBlock(rb) if rb.format.eq_ignore_ascii_case("html") => {
+                        out.push_str(&rb.text);
+                        out.push('\n');
+                    }
+                    B::Div(d) => walk_blocks(&d.content, out),
+                    B::BlockQuote(bq) => walk_blocks(&bq.content, out),
+                    B::OrderedList(ol) => {
+                        for item in &ol.content {
+                            walk_blocks(item, out);
+                        }
+                    }
+                    B::BulletList(bl) => {
+                        for item in &bl.content {
+                            walk_blocks(item, out);
+                        }
+                    }
+                    B::Paragraph(p) => walk_inlines(&p.content, out),
+                    B::Plain(p) => walk_inlines(&p.content, out),
+                    B::Header(h) => walk_inlines(&h.content, out),
+                    _ => {}
+                }
+            }
+        }
+        fn walk_inlines(inlines: &[I], out: &mut String) {
+            for i in inlines {
+                if let I::RawInline(ri) = i {
+                    if ri.format.eq_ignore_ascii_case("html") {
+                        out.push_str(&ri.text);
+                        out.push('\n');
+                    }
+                }
+            }
+        }
+        let mut out = String::new();
+        walk_blocks(&ast.blocks, &mut out);
+        out
+    }
+
+    fn item_with_categories(title: &str, cats: &[&str]) -> ListingItem {
+        let mut i = make_item(title, Some("2026-01-01"));
+        i.categories = cats.iter().map(|s| s.to_string()).collect();
+        i
+    }
+
+    // L5 plan §"Tests" #26
+    #[tokio::test]
+    async fn item_default_renders_category_chips_when_categories_field_enabled() {
+        let listing = make_listing(ListingType::Default);
+        // `categories` is in the default `Default`-type fields list,
+        // so `show.categories` is truthy by default.
+        assert!(listing.fields.iter().any(|f| f == "categories"));
+        let items = vec![item_with_categories("a", &["rust", "design"])];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+        assert!(diags.is_empty(), "diags: {:?}", diags);
+        let html = collect_raw_html(&ast);
+        assert_eq!(
+            html.matches(r#"<div class="listing-category""#).count(),
+            2,
+            "expected two chips, got HTML: {html}"
+        );
+        assert!(html.contains(">rust<"));
+        assert!(html.contains(">design<"));
+    }
+
+    // L5 plan §"Tests" #27
+    #[tokio::test]
+    async fn item_default_omits_category_chips_when_field_disabled() {
+        let mut listing = make_listing(ListingType::Default);
+        listing.fields.retain(|f| f != "categories");
+        assert!(!listing.fields.iter().any(|f| f == "categories"));
+        let items = vec![item_with_categories("a", &["rust", "design"])];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, _) = run_transform(empty_pandoc(), resolved).await;
+        let html = collect_raw_html(&ast);
+        assert_eq!(
+            html.matches(r#"<div class="listing-category""#).count(),
+            0,
+            "expected no chips when categories field disabled, got: {html}"
+        );
+    }
+
+    // L5 plan §"Tests" #28
+    #[tokio::test]
+    async fn item_grid_renders_category_chips() {
+        let listing = make_listing(ListingType::Grid);
+        assert!(listing.fields.iter().any(|f| f == "categories"));
+        let items = vec![item_with_categories("a", &["rust", "design"])];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, _) = run_transform(empty_pandoc(), resolved).await;
+        let html = collect_raw_html(&ast);
+        assert_eq!(
+            html.matches(r#"<div class="listing-category""#).count(),
+            2,
+            "expected two chips on grid template, got: {html}"
+        );
+    }
+
+    // L5 plan §"Tests" #29
+    #[tokio::test]
+    async fn item_table_unchanged_no_chips() {
+        // The table template is hardcoded title/date/author and v1
+        // does not honor `listing.fields` for the table cells. L5
+        // explicitly does not add per-item chips to the table.
+        let listing = make_listing(ListingType::Table);
+        let items = vec![item_with_categories("a", &["rust", "design"])];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, _) = run_transform(empty_pandoc(), resolved).await;
+        let html = collect_raw_html(&ast);
+        assert_eq!(
+            html.matches(r#"<div class="listing-category""#).count(),
+            0,
+            "table listing must not emit per-item chips"
+        );
+    }
 }

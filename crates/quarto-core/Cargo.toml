@@ -49,6 +49,13 @@ pampa = { workspace = true, features = ["lua-filter", "json-filter"] }
 # wasm32-unknown-unknown target.
 quarto-highlight.workspace = true
 
+# Used by the listings module's `b64_encode_unicode` helper (mirroring
+# Q1's `b64EncodeUnicode` for the categories click handler). Available
+# on both native and wasm32; `wasm-quarto-hub-client` already lists
+# `base64 = "0.22"` directly. The encoding is small enough that the
+# follow-up bd-754f review may replace it with a Q2-native scheme.
+base64.workspace = true
+
 # Native-only dependencies (for execution engines and resource extraction)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"
@@ -61,7 +68,6 @@ runtimelib = { version = "2.0", features = ["tokio-runtime"] }
 jupyter-protocol = "2.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
-base64.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true

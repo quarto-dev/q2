@@ -22,6 +22,7 @@ use std::path::PathBuf;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
+use quarto_source_map::SourceInfo;
 use yaml_rust2::Yaml;
 
 // ─────────────────────────────────────────────────────────────────
@@ -63,6 +64,12 @@ pub struct Listing {
     pub include: Vec<ListingFilter>,
     pub exclude: Vec<ListingFilter>,
     pub categories: ListingCategoriesMode,
+    /// Span on the `categories:` YAML key, captured by the parser
+    /// for L5's `Q-12-12` "categories enabled but no item has any"
+    /// diagnostic. `SourceInfo::default()` (a zero span) when the
+    /// listing was constructed without parsing — e.g. by the
+    /// `Default` impl or in tests.
+    pub categories_source: SourceInfo,
     pub feed: Option<ListingFeedOptions>,
 }
 
@@ -103,6 +110,7 @@ impl Default for Listing {
             include: Vec::new(),
             exclude: Vec::new(),
             categories: ListingCategoriesMode::Disabled,
+            categories_source: SourceInfo::default(),
             feed: None,
         }
     }
@@ -505,6 +513,9 @@ fn parse_one_listing(
             "exclude" => l.exclude = parse_filter_list(&entry.value),
             "categories" => {
                 l.categories = parse_categories_mode(&entry.value);
+                // Capture the YAML span on the `categories:` key for L5's
+                // Q-12-12 diagnostic.
+                l.categories_source = entry.key_source.clone();
             }
             "feed" => {
                 l.feed = parse_feed(&entry.value);
