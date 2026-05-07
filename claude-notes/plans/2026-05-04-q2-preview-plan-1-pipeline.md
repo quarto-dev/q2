@@ -355,18 +355,20 @@ rationale for each decision.)
   Page-scoped artifacts (per-key VFS write). Both are required to
   honor the multi-plan contracts below.
 - **Page-scoped artifact handling**: mirror `RenderToHtmlRenderer`'s
-  Page-scoped loop. Plan 2A §"Multi-plan contract: page-scoped image
-  artifacts" reads them — image artifacts from `ResourceCollectorTransform`
-  land in VFS under `/.quarto/project-artifacts/`, and Plan 2A's
-  `iframeAssetRewriter` resolves them to `data:` URIs in the AST iframe
-  (mirroring the HTML-iframe path). The mirroring is load-bearing
-  because `ResourceCollectorTransform` rewrites image URLs in the AST
-  using the same `ResourceResolverContext::vfs_root`; if q2-preview
-  used a different resolver, the URLs in the AST and the VFS paths
-  would disagree. The loop is artifact-type-agnostic — non-image
-  Page-scoped artifacts ride the same channel even though Plan 2B's
-  components only consume images today. See §"Multi-plan contract:
-  page-scoped artifacts".
+  Page-scoped loop. The loop runs the same artifact-flush as the
+  HTML pipeline; for theme CSS / icon CSS / fonts (artifacts with
+  real bytes via `Artifact::from_bytes`) this puts loadable bytes
+  in VFS at `vfs_root.join(artifact_path)`. **For image artifacts
+  this is a no-op-or-clobber**: `ResourceCollectorTransform` uses
+  `Artifact::from_path`, which leaves `content` empty; the flush
+  writes those empty bytes to the resolved path. `<img src>` in the
+  AST stays as the user wrote it (no transform mutates
+  `Image::target.0`), and the image bytes the iframe ultimately
+  reads come from the user's original VFS upload (written by the
+  hub-client's `automergeSync`), not from the renderer's flush. See
+  §"Multi-plan contract: page-scoped image artifacts" for the full
+  contract and the latent-bug note (Plan 2A §"Risk areas →
+  Empty-content artifact overwrite").
 - **Drift-protection test**: a single helper `assert_filtered_subset`
   asserts that `build_q2_preview_transform_pipeline` is exactly
   `build_transform_pipeline` filtered by an explicit exclusion list,
@@ -581,13 +583,37 @@ rationale for each decision.)
     `_quarto.yml`, navbar, sidebar. Includes a callout, a theorem,
     and an embedded image. Routes through the project branch
     (`render_project_active_page_to_preview_response`). Subsumes the
-    "Page-scoped image artifact regression test" — assert the
-    rewritten image URL in the AST resolves to a non-empty VFS
-    entry under `/.quarto/project-artifacts/`, that the URL embedded
-    in the AST and the on-disk VFS path agree
-    (resolver-coordinate-system invariant), and that navbar /
-    sidebar metadata is populated. Guards the contract Plan 2A
-    consumes (§"Multi-plan contract: page-scoped image artifacts").
+    "Page-scoped image artifact regression test". Assert all of:
+    1. **AST preserves the user-written URL**: parse the AST JSON
+       and locate the `Image` node; assert `target.0 == "hero.png"`
+       (no transform mutates `Image::target.0`).
+    2. **Manifest entry exists with the expected resolved path**:
+       `output.page_artifacts` contains an entry whose `path` field
+       equals `project_dir.join("hero.png")` — verifies the
+       `ResourceCollectorTransform` visitor's `base_dir.join(url)`
+       resolution matches what `automergeSync` would have used to
+       upload the image.
+    3. **Manifest entry has empty content** (today's reality —
+       `ResourceCollectorTransform` uses `Artifact::from_path`).
+       This assertion is fragile-by-design: it documents current
+       behavior and will need flipping when the empty-content
+       overwrite bug fix lands (see Plan 2A §"Risk areas →
+       Empty-content artifact overwrite"). Comment in the test
+       points at the beads issue.
+    4. **Navbar / sidebar metadata populated** in `meta` —
+       `meta["navigation"]["navbar"]` and `meta["navigation"]["sidebar"]`
+       are non-empty.
+
+    Once the empty-content bug is fixed, add:
+    5. (Post-bug-fix) **User upload bytes survive the render**:
+       in a WASM-runtime test, pre-populate VFS with non-empty bytes
+       at `project_dir.join("hero.png")`, run the render, assert the
+       bytes are unchanged. This is the assertion that fully closes
+       the iframe-finds-bytes contract; it requires the bug fix
+       because today the flush would clobber the upload.
+
+    Guards the contract Plan 2A consumes (§"Multi-plan contract:
+    page-scoped image artifacts").
 - **JS routing test** (vitest): mounting `ReactPreview` with
   `format="q2-preview"` content routes through `AstIframe` (matches q2-debug's
   test pattern).
@@ -679,44 +705,74 @@ semantic markup (Callout, Theorem, Section divs, etc.) over the
 system-font reset. This is intentional and not a bug. Anyone
 testing Plan 1 in isolation should expect this and not chase it
 as a styling regression. The styling story lands with Plan 2A's
-stylesheet-injection work (Plan 2A §"In scope: shared VFS asset
-rewriter").
+theme-CSS injection (Plan 2A §"In scope" item 10, "AstWithAssets
+wrapper component").
 
 **Resolved by Plan 2A**: the visual-fidelity strategy is
 **class-compatible-with-bootstrap** — Plan 2B's components emit the
-same class names as Rust's HTML output, and Plan 2A's
-`iframeAssetRewriter` rewrites `<link href="/.quarto/.../styles.css">`
-to a `data:text/css;base64,...` URI by reading from VFS, mirroring
-the existing HTML-iframe pattern in
-`hub-client/src/utils/iframePostProcessor.ts:137-147`. Plan 1's
-artifact write feeds this contract directly. The earlier
-"component-local styling" alternative was discussed and rejected.
+same class names as Rust's HTML output, and Plan 2A's iframe entry
+reads the VFS artifact at first AST receive and injects the bytes
+as an inline `<style>` element in `document.head`. (The HTML
+iframe's `<link>` rewrite at `iframePostProcessor.ts:137-147`
+doesn't carry over: the AST iframe never has a `<link>` element to
+rewrite — Pandoc nodes don't produce stylesheet links — so one-shot
+inline injection replaces the rewrite for CSS. When service-worker
+resource resolution lands, both paths converge.) Plan 1's artifact
+write feeds this contract directly. The earlier "component-local
+styling" alternative was discussed and rejected.
 
 A regression test asserts the artifact exists in VFS after a
 q2-preview render (see §Test plan).
 
 ### Multi-plan contract: page-scoped image artifacts
 
-Plan 1's `RenderToPreviewAstRenderer` writes Page-scoped artifacts
-(images via `ResourceCollectorTransform`) to VFS under
-`/.quarto/project-artifacts/{stem}_files/`, mirroring the loop in
-`render_single_doc_to_response` (`lib.rs:1386-1391`). The image URLs
-embedded in the AST already point at these paths because the same
-`ResourceResolverContext::vfs_root` is used by both — the resolver
-is the shared coordinate system that ties AST URLs to on-disk VFS
-paths.
+The contract here is subtler than "renderer writes, iframe reads"
+and was clarified after a code-trace during the 2A plan review.
 
-Plan 2A commits to consuming these via `<img src=…>` in the iframe
-(Plan 2A §"In scope: shared VFS asset rewriter"). The contract is
-symmetric to the theme-CSS contract: Plan 1 writes, Plan 2A reads.
-The loop is artifact-type-agnostic — non-image Page-scoped artifacts
-ride the
-same channel even though Plan 2B's components only consume images
-today.
+**The renderer does not contribute image bytes.**
+`ResourceCollectorTransform` walks the AST immutably (it takes
+`&Block` / `&Inline` references) and stores artifact entries via
+`Artifact::from_path`, which sets `content: Vec::new()` (see
+`crates/quarto-core/src/artifact.rs:108-116`). The WASM flush loop
+at `crates/wasm-quarto-hub-client/src/lib.rs:1208-1214` (single-doc)
+and `:1364-1369` (project) writes those empty bytes to the
+resolver's on-disk path. So for image artifacts the flush is at
+best a no-op manifest entry, at worst an overwrite of whatever
+bytes were at the resolved path. (See the latent-bug note in the
+2A plan's §"Risk areas" — `Path::join` with an absolute second arg
+replaces the first, so the resolved path collapses to the absolute
+artifact path, which collides with the user's upload location. A
+follow-up beads issue tracks the one-line guard fix.)
 
-A regression test asserts the rewritten URL in the AST resolves to a
-non-empty VFS entry, and that the URL and the on-disk VFS path agree
-(see §Test plan).
+The image bytes the iframe actually reads come from the **user's
+original VFS upload**, written by the hub-client's `automergeSync`
+via `vfsAddFile` / `vfsAddBinaryFile` whenever a project file
+syncs. The iframe rewriter uses
+`resolveRelativePath(currentFilePath, src) + vfsReadBinaryFile`
+to read those bytes back. The "agreement" the rewriter relies on
+is that *the user uploaded the image at the same project-relative
+path the qmd references it by* — not that the renderer flushed
+bytes anywhere.
+
+The AST preserves the user's URL unchanged. `LinkRewriteTransform`
+explicitly leaves `Image::target.0` alone (per its line 29 doc
+comment, and it's excluded from the q2-preview pipeline anyway);
+no other transform mutates image URLs.
+
+Plan 2A's iframe rewriter consumes the user's upload directly
+(Plan 2A §"In scope: image rewriter helper"). The contract is
+**asymmetric** with the theme-CSS contract: theme CSS is genuinely
+"Plan 1 writes, Plan 2A reads"; image bytes are "user uploads,
+Plan 2A reads." Non-image Page-scoped artifacts that follow the
+theme-CSS shape (with real bytes via `Artifact::from_bytes`) ride
+the same channel as theme CSS.
+
+A regression test asserts the AST preserves the user-written URL
+unchanged (no transform mutates `Image::target.0`) and that
+`output.page_artifacts` contains an entry for the image (the
+manifest entry; bytes empty, as expected). Once the latent-bug
+guard lands, an additional assertion can verify the user's upload
+bytes are not clobbered by the flush.
 
 ### Multi-plan contract: cleanup owed to Plan 7
 

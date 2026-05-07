@@ -257,7 +257,8 @@ rendering (Plan 2B's atomic-aware `setLocalAst` gating in the
 `Inline` dispatcher detects Derived inlines via Plan 2A's
 `isAtomicSourceInfo` accessor — the original "MaybeReadOnlyInline
 wrapper" framing was resolved during the 2026-05-06 review session
-into a dispatcher modification rather than a separate component),
+into a unified `Block` / `Inline` dispatcher that 2B introduces,
+rather than a separate wrapper component),
 writer round-trip (Plan 7's atomic logic detects Derived + UseAfter
 as AtomicViolation; Plan 7's dedupe rule handles multi-inline
 shortcode resolutions), and possibly some existing tests that

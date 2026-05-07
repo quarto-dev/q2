@@ -252,8 +252,11 @@ through `RegistryContext` already.
 #### Atomic-aware `setLocalAst` gating in dispatchers
 
 The original Plan 2's `MaybeReadOnlyInline` wrapper is **not** a
-new component. The check folds into the existing `Block` / `Inline`
-dispatchers in `ReactAstDebugRenderer.tsx`:
+new component. 2B introduces unified `Block` / `Inline` dispatcher
+components in `ReactAstDebugRenderer.tsx` that wrap the existing
+`registry[node.t]` lookup with the atomic-aware gate. (Plan 2A
+left the registry pattern in place untouched; 2B is what
+introduces the dispatcher seam where the gate lives.)
 
 ```ts
 const Inline = (args: NodeArgs<InlineNode>) => {
@@ -417,16 +420,27 @@ vs. Plan 5 wire-format codes 4/5.
 - `hub-client/src/utils/atomicCustomNodes.ts`
   (`isAtomicCustomNode`).
 - `RegistryContext` extension carrying `sourceInfoPool`.
-- `iframeAssetRewriter.ts` (theme CSS + image data-URI rewrites).
+- `iframeImageRewriter.ts` (image-only `data:` URI rewrites; the
+  CSS half of the old "asset rewriter" idea was replaced by inline
+  `<style>` injection in 2A).
+- `iframeLinkHandlers.ts` (external new-tab, `.qmd` clicks, anchor
+  clicks, `Ctrl+S` save — installed once via event delegation).
+- Theme CSS one-shot `<style>` injection in `AstWithAssets`.
 - `:where()`-wrapped `ast-renderer.html` styling.
 - `render-components` gate covering q2-preview.
 
 ### Consumed: Plan 1's page-scoped image artifacts
 
-q2-preview emits `<img src>` referencing `/.quarto/project-artifacts/<stem>_files/...`
-paths. Plan 2A's asset rewriter resolves these to `data:` URIs
-in the iframe's DOM. 2B's components emit the `<img>` elements;
-2A makes them load.
+q2-preview's AST keeps `<img src>` as the user wrote it (e.g.
+`hero.png`); `ResourceCollectorTransform` does not rewrite the
+target. Plan 2A's `rewriteImages` helper resolves these to `data:`
+URIs in the iframe's DOM via the project-relative branch
+(`resolveRelativePath` + `vfsReadBinaryFile`), reading bytes from
+the user's original VFS upload (the renderer does not contribute
+image bytes — see Plan 2A §"Multi-plan contract: page-scoped image
+artifacts" for the full contract and the latent-bug note). 2B's
+components emit the `<img>` elements; 2A makes them load. No
+`/.quarto/...` paths appear in q2-preview's body AST.
 
 ### Provided: visual parity for q2-preview
 
@@ -487,8 +501,10 @@ incrementally without 2B needing amendment.
 - `hub-client/src/utils/atomicCustomNodes.ts` (from 2A) — call
   `isAtomicCustomNode` from dispatcher.
 - `hub-client/src/components/render/ReactAstDebugRenderer.tsx` —
-  Block / Inline dispatcher modifications; add `'CustomBlock'`
-  to `blockTypes`; add `Custom*` registry entries.
+  introduce unified `Block` / `Inline` dispatcher components
+  wrapping the existing `registry[node.t]` lookup with the
+  atomic-aware gate; add `'CustomBlock'` to `blockTypes`; add
+  `Custom*` registry entries.
 - `hub-client/src/ast-renderer-entry.tsx` — call
   `unwrapCustomNodes` post-parse, `rewrapCustomNodes` pre-postMessage.
 - `hub-client/src/utils/customNode.ts` (NEW) — unwrap / rewrap.
@@ -560,9 +576,10 @@ incrementally without 2B needing amendment.
 ### Hard dependencies
 
 - **Plan 2A** — iframe foundation. 2B consumes every artifact 2A
-  ships (PandocAST consolidation, source-info accessor,
-  atomicCustomNodes.ts, asset rewriter, render-components gate).
-  2B cannot land before 2A.
+  ships (PandocAST consolidation with `BlockNode`/`InlineNode`
+  naming, source-info accessor, atomicCustomNodes.ts, image
+  rewriter, link handlers, theme CSS injection, render-components
+  gate). 2B cannot land before 2A.
 - **Plan 1** — pipeline + format detection (already shipped). 2B
   renders the AST shape Plan 1's pipeline produces.
 
@@ -616,7 +633,7 @@ with 2B; they decorate the AST that 2B's components render.
 | `custom.tsx` components (7 type-specific) | ~360 |
 | `types/customNode.ts` (CustomBlockNode / CustomInlineNode + Slot) | ~60 |
 | `utils/customNode.ts` (unwrap + rewrap walks) | ~160 |
-| Atomic-aware dispatcher modifications + tests | ~50 |
+| Block / Inline dispatcher components (introduction + atomic-aware gate) + tests | ~50 |
 | Shared utilities (formatRefLabel, composeAttr, renderSlot) | ~80 |
 | `utils/quartoClasses.ts` (class-name constants) | ~80 |
 | Tests (round-trip, component snapshots, atomic, Derived) | ~250 |

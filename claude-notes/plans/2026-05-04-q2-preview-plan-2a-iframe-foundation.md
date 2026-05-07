@@ -11,9 +11,19 @@ Land the iframe-side plumbing that makes q2-preview ready to host the
 type-specific React components shipped in Plan 2B. After 2A:
 
 - Theme CSS produced by `CompileThemeCssStage` reaches the AST iframe
-  via the same `data:` URI rewrite pattern the HTML iframe uses today.
+  by inlining the VFS bytes into a `<style>` in `document.head` at
+  iframe init. The HTML iframe's `<link>`-rewrite pattern doesn't
+  carry over: the AST iframe has no `<link>` to rewrite (Pandoc nodes
+  don't produce stylesheet links), so one-shot inline injection is
+  the natural alternative until service-worker resource resolution
+  lands.
 - Page-scoped image artifacts produced by `ResourceCollectorTransform`
-  reach the iframe the same way.
+  reach the iframe via a DOM walk that swaps `<img src>` for `data:`
+  URIs sourced from the VFS — same pattern as the HTML iframe, but
+  using the project-relative branch of the existing rewriter (image
+  paths in q2-preview's AST are user-written paths like `hero.png`,
+  not `/.quarto/...`; see §"Multi-plan contract: page-scoped image
+  artifacts" for why).
 - Documents with `format: q2-preview` can use a `render-components: [...]`
   YAML key to load custom `.tsx` files (the gate in `ReactRenderer.tsx`
   is currently q2-debug-only).
@@ -39,108 +49,272 @@ those wrapper Divs render as Callouts, Theorems, etc.**
 
 ### In scope
 
-- **`render-components` YAML key gate extension** in
-  `hub-client/src/components/render/ReactRenderer.tsx:103`. Today the
-  gate is `if (format !== 'q2-debug') { return ''; }`; q2-preview
-  gets added so that demos using `format: q2-preview` can specify
-  custom `.tsx` files in the same way. ~5 LOC + a regression test.
-- **Shared VFS asset rewriter**
-  (`hub-client/src/utils/iframeAssetRewriter.ts`, new file). Factor
-  the `<link rel="stylesheet">` and `<img src>` data-URI rewrite logic
-  out of `iframePostProcessor.ts:130-216` into a function that takes
-  a `Document` and walks it. The HTML iframe's existing
-  post-processor calls it; the AST iframe gains a new
-  `useEffect` in `ast-renderer-entry.tsx` (after `root.render()`)
-  that calls the same function against `iframe.contentDocument`.
-  Both call sites stay duplicated-by-design until the service-worker
-  resource-resolution work lands (per `iframePostProcessor.ts:24`)
-  — at which point both call sites delete together.
-- **Source-info pool TS type mirror**
-  (`hub-client/src/types/sourceInfo.ts`, new file). Mirrors the wire
-  format defined in `crates/pampa/src/writers/json.rs:54-91`:
-  ```ts
-  export interface By { kind: string; data?: unknown }
-  export type SourceInfoEntry =
-    | { t: 0; r: [number, number]; d: number }
-    | { t: 1; r: [number, number]; d: number }
-    | { t: 2; r: [number, number]; d: Array<[number, number, number]> }
-    | { t: 3; r: [number, number]; d: [string, number] }
-    | { t: 4; r: [0, 0];           d: By }
-    | { t: 5; r: [0, 0];           d: { from: number; by: By } };
-  export type SourceInfoPool = readonly SourceInfoEntry[];
-  export interface AstContext {
-    files: Array<{ name: string; lineBreaks?: number[]; totalLength?: number }>;
-    metaTopLevelKeySources?: unknown;
-    sourceInfoPool?: SourceInfoPool;
+The list below is in **implementation order**. Items 1–5 are the
+type / data foundation (most consumed by 2B and by later items in
+this plan); items 6–7 are independent one-liners; items 8–9 are
+behavior-preserving HTML-iframe refactors; item 10 is the AST-iframe
+wrapper that consumes 8 and 9.
+
+#### 1. Source-info pool TS type mirror
+
+`hub-client/src/types/sourceInfo.ts`, new file. Mirrors the wire
+format defined in `crates/pampa/src/writers/json.rs:54-91`:
+
+```ts
+export interface By { kind: string; data?: unknown }
+export type SourceInfoEntry =
+  | { t: 0; r: [number, number]; d: number }
+  | { t: 1; r: [number, number]; d: number }
+  | { t: 2; r: [number, number]; d: Array<[number, number, number]> }
+  | { t: 3; r: [number, number]; d: [string, number] }
+  | { t: 4; r: [0, 0];           d: By }
+  | { t: 5; r: [0, 0];           d: { from: number; by: By } };
+export type SourceInfoPool = readonly SourceInfoEntry[];
+export interface AstContext {
+  files: Array<{ name: string; lineBreaks?: number[]; totalLength?: number }>;
+  metaTopLevelKeySources?: unknown;
+  sourceInfoPool?: SourceInfoPool;
+}
+```
+
+Codes 4 and 5 are dormant on the wire today — Plan 5 wires them up
+when it lands. The TS type already accepts them so 2A doesn't need
+amendment when Plan 5 ships. Defining `AstContext` here (not in
+`pandoc.ts`) makes the dependency direction `pandoc.ts → sourceInfo.ts`,
+which matches consumption order downstream.
+
+**`By` is intentionally coarse in 2A** — `{ kind: string; data?: unknown }`
+mirrors Plan 4's open Rust struct (`{ kind: String, data: serde_json::Value }`)
+and accepts every kind 4 / 5 / 6 / 7 / 8 will produce. Plan 4
+introduces specific builder methods per kind (`By::filter`,
+`By::sectionize`, `By::shortcode`, `By::include`, etc.) with
+distinct `data` shapes. Once those land and consumers branch on
+`kind`, this TS type becomes a candidate for narrowing to a
+discriminated union (`type By = { kind: 'filter'; data: { filter_path: string; line: number } } | { kind: 'sectionize' } | ...`).
+Not in 2A's scope; flagged here so the future refinement isn't
+forgotten. Until then, kind-specific consumers (e.g. preimage
+navigation) cast `data` to the expected shape locally.
+
+#### 2. PandocAST type consolidation
+
+Pull the four duplicate `PandocAST` / Block / Inline definitions
+from `ReactRenderer.tsx`, `ReactAstRenderer.tsx` (dead),
+`ReactAstSlideRenderer.tsx`, and `ReactAstDebugRenderer.tsx` into a
+single `hub-client/src/types/pandoc.ts`. **Naming**: adopt
+`BlockNode` / `InlineNode` as the canonical names (the richest
+existing definition is `ReactAstDebugRenderer.tsx`'s, which uses
+these names; `Block`/`Inline` are too generic for grep). The
+slide-side files currently export `Block` / `Inline` and have three
+external importers (`RevealjsReactAstSlideRenderer.tsx`,
+`hooks/useCursorToSlide.ts`, `hooks/useSlideThumbnails.tsx`) — all
+three migrate to `BlockNode` / `InlineNode` from `types/pandoc.ts`
+in the same pass; no compat re-export retained.
+
+Add `astContext?: AstContext` to the consolidated `PandocAST`
+(import from item 1). The type also includes **placeholder
+discriminants for CustomBlockNode (`t: 'CustomBlock'`) and
+CustomInlineNode (`t: 'CustomInline'`)** in the `BlockNode` /
+`InlineNode` unions — Plan 2B's `unwrapCustomNodes` walk produces
+these at render time but the shapes are pre-declared so 2B doesn't
+have to re-edit foundational types.
+
+**Six consumers update** to import from the new file:
+`ReactRenderer.tsx`, `ReactAstSlideRenderer.tsx`,
+`ReactAstDebugRenderer.tsx`, `RevealjsReactAstSlideRenderer.tsx`,
+`hooks/useCursorToSlide.ts`, `hooks/useSlideThumbnails.tsx`. The
+dead `ReactAstRenderer.tsx` is **deleted** (zero importers).
+This item touches the broadest file set in 2A; landing it second
+(after the foundational types) keeps later items rebasing cleanly.
+
+#### 3. Source-info accessor module
+
+`hub-client/src/utils/sourceInfo.ts`, new file. Pure functions, no
+React:
+
+- `entryFor(node, pool): SourceInfoEntry | undefined` — looks up
+  a node's pool entry by its `s` field.
+- `isDerived(node, pool): boolean` — returns true iff the entry
+  is type code 5. Plan 6's shortcode resolutions populate Derived.
+  Until Plan 6 lands, this never fires.
+- `isAtomicSourceInfo(node, pool, atomicKinds): boolean` — true
+  iff `isDerived` OR `(entry.t === 4 && atomicKinds.has(entry.d.kind))`.
+  The `atomicKinds` set is empty in 2A; Plan 4 introduces atomic
+  `By` kinds and Plan 6 emits them.
+- `ATOMIC_SYNTHETIC_KINDS: ReadonlySet<string>` — exported empty
+  set today, with a comment pointing at Plan 4's
+  `By::is_atomic_synthesizer()` for the synchronization contract.
+  Plan 4 / 6 fill it.
+
+#### 4. `atomicCustomNodes.ts`
+
+`hub-client/src/utils/atomicCustomNodes.ts`, new file. Hand-mirror
+of Plan 7's `crates/quarto-core/src/.../ATOMIC_CUSTOM_NODES` Rust
+const, owned by 2A because 2A is the first consumer (Plan 2B's
+atomic-aware dispatcher reads it; Plan 7 ships the Rust counterpart
+later). Initial built-in set: `["CrossrefResolvedRef"]`. Plan 8
+amends this file to add `"IncludeExpansion"`. Header comment names
+the Rust source of truth and the sync convention (matches
+`types/diagnostic.ts` ↔ `DiagnosticMessage` and
+`types/intelligence.ts` ↔ `quarto-lsp-core`).
+
+#### 5. Extend `RegistryContext`
+
+In `hub-client/src/components/render/ReactAstDebugRenderer.tsx`,
+extend `RegistryContext` to carry `sourceInfoPool?: SourceInfoPool`
+(from item 1) alongside `registry`. The `<Ast>` component reads
+`astContext?.sourceInfoPool` (from item 2's consolidated type) and
+provides it. 2A consumers don't read it yet — the existing
+`registry[node.t]` lookups inside `<Ast>` stay unchanged. 2B's
+atomic-aware `setLocalAst` gating folds into those registry lookups
+(or into a new dispatcher component introduced by 2B; the exact
+shape is 2B's call). 2A only ships the data source.
+
+#### 6. `ast-renderer.html` style fix
+
+Wrap the existing inline `<style>` body rule in `:where()` to drop
+its specificity to 0,0,0,0:
+
+```html
+<style>
+  :where(body) {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, ...;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  ```
-  Codes 4 and 5 are dormant on the wire today — Plan 5 wires them up
-  when it lands. The TS type already accepts them so 2A doesn't need
-  amendment when Plan 5 ships.
-- **Source-info accessor module**
-  (`hub-client/src/utils/sourceInfo.ts`, new file). Pure functions,
-  no React:
-  - `entryFor(node, pool): SourceInfoEntry | undefined` — looks up
-    a node's pool entry by its `s` field.
-  - `isDerived(node, pool): boolean` — returns true iff the entry
-    is type code 5. Plan 6's shortcode resolutions populate Derived.
-    Until Plan 6 lands, this never fires.
-  - `isAtomicSourceInfo(node, pool, atomicKinds): boolean` — true
-    iff `isDerived` OR `(entry.t === 4 && atomicKinds.has(entry.d.kind))`.
-    The `atomicKinds` set is empty in 2A; Plan 4 introduces atomic
-    `By` kinds and Plan 6 emits them.
-  - `ATOMIC_SYNTHETIC_KINDS: ReadonlySet<string>` — exported empty
-    set today, with a comment pointing at Plan 4's `By::is_atomic_synthesizer()`
-    for the synchronization contract. Plan 4 / 6 fill it.
-- **Extend `RegistryContext`** in `hub-client/src/components/render/ReactAstDebugRenderer.tsx`
-  to carry `sourceInfoPool?: SourceInfoPool` alongside `registry`.
-  The `<Ast>` component reads `astContext?.sourceInfoPool` from the
-  parsed AST and provides it. 2A consumers don't read it yet
-  (`Block` / `Inline` dispatchers stay unchanged); 2B's atomic-aware
-  gating consumes it.
-- **`hub-client/src/utils/atomicCustomNodes.ts`** (new file).
-  Hand-mirror of Plan 7's `crates/quarto-core/src/.../ATOMIC_CUSTOM_NODES`
-  Rust const, owned by 2A because 2A is the first consumer
-  (Plan 2B's atomic-aware dispatcher reads it; Plan 7 ships the
-  Rust counterpart later). Initial built-in set:
-  `["CrossrefResolvedRef"]`. Plan 8 amends this file to add
-  `"IncludeExpansion"`. Header comment names the Rust source of
-  truth and the sync convention (matches `types/diagnostic.ts` ↔
-  `DiagnosticMessage` and `types/intelligence.ts` ↔ `quarto-lsp-core`).
-- **PandocAST type consolidation**: pull the four duplicate
-  `PandocAST` / `BlockNode` / `InlineNode` definitions from
-  `ReactAstRenderer.tsx` (dead — see "Out of scope" rationale
-  inverted), `ReactRenderer.tsx`, `ReactAstSlideRenderer.tsx`,
-  `ReactAstDebugRenderer.tsx` into a single `hub-client/src/types/pandoc.ts`.
-  Add the `astContext?: AstContext` field. The consolidated type
-  also includes **placeholder discriminants for CustomBlockNode
-  (`t: 'CustomBlock'`) and CustomInlineNode (`t: 'CustomInline'`)**
-  in the `BlockNode` / `InlineNode` unions — Plan 2B's
-  `unwrapCustomNodes` walk produces these at render time but the
-  shapes are pre-declared so 2B doesn't have to re-edit foundational
-  types. Three live consumers (`ReactRenderer.tsx`,
-  `ReactAstSlideRenderer.tsx`, `ReactAstDebugRenderer.tsx`) update
-  to import from the new file. The dead `ReactAstRenderer.tsx`
-  is **deleted** (zero importers).
-- **`ast-renderer.html` style fix**: wrap the existing inline `<style>`
-  body rule in `:where()` to drop its specificity to 0,0,0:
-  ```html
-  <style>
-    :where(body) {
-      margin: 0; padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, ...;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
+  #root { width: 100%; height: 100vh; overflow: auto; }
+</style>
+```
+
+Properties: q2-debug / q2-slides (no theme CSS loaded) keep their
+system-font reset because the `:where(body)` rule is the only one
+targeting `body`. q2-preview's loaded Bootstrap reboot (`body
+{ font-family: var(--bs-body-font-family); ... }` at
+`resources/scss/bootstrap/dist/scss/_reboot.scss:49-60`, plus
+Quarto's own `body { margin: 0 }` at `_bootstrap-rules.scss:27`,
+both at spec 0,0,0,1) cleanly defeats the `:where()` rule
+(spec 0,0,0,0). `#root` stays unwrapped because it's iframe-private
+and theme CSS doesn't touch it.
+
+#### 7. `render-components` YAML key gate extension
+
+In `hub-client/src/components/render/ReactRenderer.tsx:103`. Today
+the gate is `if (format !== 'q2-debug') { return ''; }`; q2-preview
+gets added so that demos using `format: q2-preview` can specify
+custom `.tsx` files in the same way. ~5 LOC + a regression test.
+
+#### 8. Image rewriter helper
+
+`hub-client/src/utils/iframeImageRewriter.ts`, new file. Extract
+only the `<img>` rewrite block from `iframePostProcessor.ts:177-210`
+into `rewriteImages(doc: Document, opts: { currentFilePath: string })`.
+Preserves both branches that exist today: `/.quarto/...` paths via
+`vfsReadFile`, and project-relative paths via `resolveRelativePath`
++ `vfsReadBinaryFile`. The project-relative branch is the one
+q2-preview actually exercises (see §"Multi-plan contract:
+page-scoped image artifacts"); the `/.quarto/...` branch stays
+because the HTML iframe still uses it.
+
+The HTML iframe's `postProcessIframe` calls this helper for the
+image rewrite, retaining its `<link>` rewrite (lines 137-147),
+external-link `target="_blank"` (lines 213-215), and qmd-link
+click handler (line 218+) inline — none of those ride along to the
+AST iframe. Behavior-preserving for the HTML iframe; existing
+`iframePostProcessor.test.ts` and `.integration.test.ts` suites
+guard the refactor.
+
+#### 9. AST-iframe link handlers
+
+`hub-client/src/utils/iframeLinkHandlers.ts`, new file. Extract
+external-new-tab, `.qmd` click, same-doc-anchor click, and
+`Ctrl+S`/`Cmd+S` save logic from `iframePostProcessor.ts:212-281`
+into `installLinkHandlers(doc: Document, opts)`. The AST iframe
+uses event delegation — a single `click` listener on
+`document.body` plus the `keydown` listener, attached once at
+mount:
+
+```ts
+doc.body.addEventListener('click', (e) => {
+  const a = (e.target as HTMLElement).closest('a');
+  if (!a) return;
+  const href = a.getAttribute('href');
+  if (!href) return;
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    e.preventDefault();
+    window.open(href, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (href.startsWith('#')) { /* → onQmdLinkClick({ anchor }) */ }
+  /* .qmd → resolveRelativePath + onQmdLinkClick({ path, anchor }) */
+});
+```
+
+External new-tab is handled via `window.open` + `preventDefault`
+rather than the HTML iframe's per-element `target="_blank"`
+attribute write — delegation can't set attributes on every `<a>`
+without a re-walk per render.
+
+The HTML iframe's per-element listener pattern (lines 222-237,
+240-251) stays as-is; only the AST iframe uses delegation. The
+artifact-rooted `.html` reverse-mapping (bd-lnd3, lines 253-272) is
+**not extracted** — it only matters when `LinkRewriteTransform`
+ran, which q2-preview's pipeline excludes. q2-preview's AST keeps
+`.qmd` paths verbatim; the `.qmd` branch handles them natively.
+
+Also export `injectPreviewStyles` from `iframePostProcessor.ts`
+(lines 294-326) so the AST iframe can call it. The HTML iframe
+still calls it inline; the export is mechanical.
+
+#### 10. `AstWithAssets` wrapper component
+
+In `hub-client/src/ast-renderer-entry.tsx`, wrap the existing
+`<Ast>` mount in a small container component that holds three
+`useEffect`s — one per concern from the items above. Glue layer
+that brings 8 (image rewrite), 9 (link handlers), and the theme
+CSS injection together at the iframe boundary:
+
+```tsx
+function AstWithAssets(props: AstProps) {
+  // [astJson, currentFilePath]: image rewrite re-runs after each
+  // commit because React replaces <img src="data:..."> with raw
+  // paths each render.
+  useEffect(() => {
+    rewriteImages(document, { currentFilePath: props.currentFilePath });
+  }, [props.astJson, props.currentFilePath]);
+
+  // []: link handlers attach once at mount via event delegation.
+  useEffect(() => {
+    installLinkHandlers(document, {
+      currentFilePath: props.currentFilePath,
+      onQmdLinkClick: props.onNavigateToDocument,
+    });
+  }, []);
+
+  // []: theme CSS + responsive overrides inject once at mount.
+  useEffect(() => {
+    const css = vfsReadFile(DEFAULT_CSS_ARTIFACT_PATH);
+    if (css.success && css.content) {
+      const style = document.createElement('style');
+      style.textContent = css.content;
+      document.head.appendChild(style);
     }
-    #root { width: 100%; height: 100vh; overflow: auto; }
-  </style>
-  ```
-  Properties: q2-debug / q2-slides (no theme CSS loaded) keep their
-  system-font reset because the `:where(body)` rule is the only one
-  targeting `body`. q2-preview's loaded Bootstrap (`body { font-family: ... }`,
-  spec 0,0,1) cleanly defeats the `:where()` rule (spec 0,0,0)
-  regardless of source order. `#root` stays unwrapped because it's
-  iframe-private and theme CSS doesn't touch it.
+    injectPreviewStyles(document);
+  }, []);
+
+  return <Ast {...props} />;
+}
+```
+
+Why the wrapper rather than effects inside `<Ast>`: keeps `Ast`
+focused on rendering the AST tree; isolates the iframe-only
+concerns (postMessage, blob-URL component loading, asset glue)
+where the rest of the iframe-only glue already lives.
+
+When service-worker resource resolution lands, items 8, 9, and the
+theme CSS injection all delete together (per
+`iframePostProcessor.ts:24`). The wrapper itself becomes a thin
+`<Ast {...props} />` shell at that point — or the `<Ast>` mount
+re-flattens.
 
 ### Out of scope (deferred to Plan 2B)
 
@@ -193,9 +367,14 @@ pre-Plan-2B":
 1. **Theme CSS is applied.** Documents with `theme: flatly` (or any
    theme) render with the compiled Bootstrap + theme CSS. Typography,
    colors, spacing match the HTML format for the document body.
-2. **Images render.** `<img>` elements pointing at
-   `/.quarto/project-artifacts/<stem>_files/...` resolve to the
-   in-VFS image and display correctly.
+2. **Images render.** `<img>` elements (with the user's original
+   `src` from the qmd, e.g. `hero.png` or `images/foo.png`) resolve
+   to the in-VFS upload via the project-relative branch of
+   `rewriteImages` (`resolveRelativePath(currentFilePath, src)` +
+   `vfsReadBinaryFile`) and display correctly. The bytes come from
+   the user's automergeSync upload — no `/.quarto/...` paths appear
+   in q2-preview's body AST (see §"Multi-plan contract: page-scoped
+   image artifacts" for the full mechanism).
 3. **Custom `.tsx` files load** for `format: q2-preview` documents
    when listed under the `render-components: [...]` YAML key. Pasting
    Elliot's existing `html.tsx` into a q2-preview demo produces a
@@ -222,15 +401,41 @@ new affordances — and is a natural pause point for manual QA before
   for q2-preview) or JS-side conditional `<style>` injection.
   Rejected: both add structural moving parts to achieve what
   specificity demotion does in one line. `:where(body)` cleanly
-  loses against any user theme rule at spec ≥ 0,0,1 regardless of
-  source order, while still applying when no theme CSS is loaded.
-- **Asset rewrite via post-render DOM walk, not AST-walk**. The
-  shared helper takes a `Document` and rewrites `<link>` / `<img>`
-  in place. Mirrors the existing HTML iframe pattern exactly,
-  enabling code share and identical removal when service-worker
-  resource resolution lands. AST-walk alternative was discussed
-  and rejected (would require re-rewriting on every change and
-  diverges from the proven HTML-iframe path).
+  loses against any user theme rule at spec ≥ 0,0,0,1 (Bootstrap's
+  reboot is 0,0,0,1; comfortably wins) while still applying when no
+  theme CSS is loaded.
+- **Image rewrite via post-render DOM walk, not AST-walk**. The
+  helper takes a `Document` and rewrites `<img>` in place. Mirrors
+  the HTML iframe pattern for images and enables code share with
+  identical removal when service-worker resource resolution lands.
+  AST-walk alternative was discussed and rejected (would require
+  re-rewriting on every change and diverges from the proven
+  HTML-iframe path).
+- **Inline `<style>` for theme CSS, not `<link>` rewrite**. The HTML
+  iframe's `<link>` rewrite works because the renderer emits
+  `<link rel="stylesheet" href="/.quarto/...">` as part of the HTML
+  body; the AST iframe never has a `<link>` to rewrite (Pandoc nodes
+  don't produce them). Three alternatives considered: (a) a static
+  `<link>` in `ast-renderer.html` rewritten on iframe-init — risks
+  flash-of-unstyled-content while the browser tries to load the VFS
+  path before the rewriter intercepts; (b) React-19 hoisted `<link>`
+  — more machinery for the same effect; (c) inline `<style>` from
+  VFS bytes — chosen. When service-worker resource resolution
+  lands, alternative (a) becomes flash-free and we can revisit.
+- **Event delegation for AST-iframe link handlers**. The HTML iframe
+  attaches per-element click listeners after each `srcdoc` load,
+  which works because the iframe document is fresh on each load. The
+  AST iframe mutates a React-managed tree incrementally; per-element
+  re-attachment per render would require idempotency tracking and is
+  fragile. A single delegated `click` listener on `document.body`
+  keys off href shape and dispatches; set once at iframe init, no
+  re-walk needed.
+- **`BlockNode` / `InlineNode` as canonical names** (over
+  `Block` / `Inline`). The richest existing definition
+  (`ReactAstDebugRenderer.tsx`) uses these names; `Block`/`Inline`
+  are too generic for grep. The migration affects three slide-side
+  importers plus the slide renderer itself; all change in this pass
+  with no compat re-export.
 - **`atomicCustomNodes.ts` ownership moves from Plan 7 to 2A**.
   Plan 7's original §"is_atomic_custom_node registry" decision
   named the file but assumed Plan 7 ships it. Plan 2B is the first
@@ -265,8 +470,8 @@ land:
   them up, no entry has those codes.
 - **Plan 5** adds wire format codes 4 and 5 to the JSON writer.
   After Plan 5, the codes start appearing in the pool. 2A's
-  accessor handles them. Plan 2B consumes via the dispatcher
-  modification.
+  accessor handles them. Plan 2B consumes via the unified
+  Block / Inline dispatcher it introduces.
 - **Plan 6** populates Derived source_info on shortcode
   resolutions. After Plan 6, individual inlines start having
   `t: 5` source-info entries. 2A's `isDerived` accessor returns
@@ -289,19 +494,42 @@ land:
 Plan 1's `RenderToPreviewAstRenderer` writes the compiled theme
 CSS to `/.quarto/project-artifacts/styles.css` (per
 `pipeline.rs::DEFAULT_CSS_ARTIFACT_PATH`) on every q2-preview
-render. 2A's iframe asset rewriter resolves this VFS path to a
-`data:text/css;base64,...` URI in the iframe's DOM, mirroring
-`iframePostProcessor.ts:137-147`. The Rust→VFS contract from
-Plan 1 is unchanged; 2A is the first reader.
+render. 2A's iframe entry reads the bytes once on first AST receive
+and injects them as an inline `<style>` element in `document.head`
+(the AST iframe has no `<link>` to rewrite). The Rust→VFS contract
+from Plan 1 is unchanged; 2A is the first reader.
 
 ### Consumed: page-scoped image artifacts (from Plan 1)
 
-Plan 1's renderer also writes page-scoped artifacts (images via
-`ResourceCollectorTransform`) to `/.quarto/project-artifacts/<stem>_files/`.
-2A's iframe asset rewriter resolves `<img src>` referencing those
-paths to `data:` URIs, mirroring `iframePostProcessor.ts:177-210`.
-The contract is symmetric to the theme-CSS contract — Plan 1
-writes; 2A reads.
+The contract here is subtler than "renderer writes, iframe reads."
+The renderer does **not** contribute image bytes. `ResourceCollectorTransform`
+walks the AST immutably and stores artifact entries with empty
+content (`Artifact::from_path` at `artifact.rs:108-116` sets
+`content: Vec::new()`). The WASM flush loop at
+`wasm-quarto-hub-client/src/lib.rs:1208-1214` (single-doc) and
+`:1364-1369` (project) writes those empty bytes to the resolver's
+on-disk path. Net effect for images: at best a no-op manifest entry,
+at worst a clobber of the user's upload (see §"Risk areas →
+Empty-content artifact overwrite" below).
+
+The image bytes the iframe actually reads come from the **user's
+original VFS upload**, written by the hub-client's `automergeSync`
+via `vfsAddFile` / `vfsAddBinaryFile` whenever a file appears in
+the synced project. So the agreement that lets the rewriter find
+the bytes is: *the user uploaded the image at the same
+project-relative path the qmd references it by*. The iframe
+computes that path via `resolveRelativePath(currentFilePath, src)`
+and reads via `vfsReadBinaryFile`. The renderer is not in the loop
+for image bytes.
+
+`<img src>` in q2-preview's AST keeps the user's original path
+(`hero.png`, `images/foo.png`, etc.) — `LinkRewriteTransform`
+explicitly leaves `Image::target.0` alone, and no other transform
+mutates it. External URLs (`http`, `https`, `data:`, `//`) and
+absolute paths (`/foo.png`) follow today's HTML-iframe behavior.
+**No `/.quarto/...` paths appear in q2-preview's body AST** — the
+`/.quarto/...` branch of `rewriteImages` is dormant for q2-preview
+but kept for the HTML iframe's use of the same helper.
 
 ### Provided: source-info pool accessor (for Plan 2B and beyond)
 
@@ -347,15 +575,25 @@ file header comment.
   format dispatch for AstIframe (q2-debug + q2-preview both route
   through here today; unchanged by 2A).
 - `hub-client/src/components/render/ReactAstDebugRenderer.tsx` —
-  `RegistryContext` definition; consolidate `PandocAST` here too.
+  `RegistryContext` definition (extended in 2A) and one of the
+  four sites whose `PandocAST` definition moves to
+  `types/pandoc.ts`.
 - `hub-client/src/components/render/AstIframe.tsx` — postMessage
   protocol (unchanged by 2A).
 - `hub-client/src/ast-renderer-entry.tsx` — iframe entry; 2A adds
-  the asset-rewriter useEffect after `root.render()`.
+  the `AstWithAssets` wrapper component (image rewriter useEffect,
+  link handler useEffect, theme CSS injection useEffect) here.
 - `hub-client/public/ast-renderer.html:7-22` — inline `<style>`
   to wrap with `:where()`.
-- `hub-client/src/utils/iframePostProcessor.ts:130-216` — source
-  for the asset-rewrite logic to extract.
+- `hub-client/src/utils/iframePostProcessor.ts:177-210` — source
+  for the image-rewrite logic to extract into
+  `iframeImageRewriter.ts`.
+- `hub-client/src/utils/iframePostProcessor.ts:212-281` — source
+  for the link-handler logic (external new-tab, `.qmd` clicks,
+  same-doc anchor, `Ctrl+S`/`Cmd+S` save) to extract into
+  `iframeLinkHandlers.ts`. The artifact-rooted `.html`
+  reverse-mapping at lines 253-272 stays in
+  `iframePostProcessor.ts` (HTML-only; not extracted).
 - `hub-client/src/components/render/ReactAstRenderer.tsx` —
   dead file to delete.
 - `hub-client/src/types/diagnostic.ts`,
@@ -364,6 +602,30 @@ file header comment.
   patterns to follow.
 
 ## Test plan
+
+### TDD discipline per work-item
+
+The TDD discipline in `CLAUDE.md` ("write test → verify failure →
+implement → verify pass") applies **per work-item**, not per-plan.
+Items 1–7 are greenfield additions or single-purpose changes — true
+failing-test-first applies (write the test, verify it fails for the
+expected reason, implement, verify it passes). Items 2 (PandocAST
+consolidation), 8 (image rewriter extraction), and 9 (link handlers
+extraction) are **behavior-preserving refactors** — the canonical
+"failing test" doesn't exist because there's no behavior change to
+test for. The test gate for these items is **"existing tests pass
+before AND after the refactor"** (specifically the
+`iframePostProcessor.test.ts` and `.integration.test.ts` suites for
+items 8 / 9; the workspace `tsc -b` for item 2). Structure each
+refactor commit so it is independently verifiable: run the relevant
+test suite at the start of the commit (should pass), make the
+mechanical move, run the suite again (should still pass).
+
+The temptation on a refactor is to skip the "before" run and trust
+the diff. Don't — running before catches a pre-existing failure
+that would otherwise look like a refactor regression.
+
+### Tests
 
 - **Source-info accessor unit tests**: build representative
   `astJson` strings containing each wire code (0–5), parse them,
@@ -378,25 +640,48 @@ file header comment.
   `render-components: [foo.tsx]` AST; assert `customComponentsCode`
   is populated (today's behavior is empty for non-debug formats).
   Sibling regression test for q2-debug confirms behavior unchanged.
-- **Asset rewriter unit tests**: build a representative `Document`
-  with `<link>` and `<img>` elements pointing at `/.quarto/...`
-  paths, mock VFS reads, run the helper, assert the resulting DOM
-  has `data:` URIs in place of the original paths.
-- **Asset rewriter integration test (HTML iframe)**: existing
-  iframe post-processor tests (`iframePostProcessor.test.ts`,
-  `iframePostProcessor.integration.test.ts`) should continue to
-  pass after the helper extraction. Treats the refactor as
+- **Image rewriter unit tests**: build a representative `Document`
+  with `<img>` elements pointing at (a) project-relative paths
+  (`hero.png`), (b) `/.quarto/...` paths (legacy/HTML branch),
+  (c) external URLs (skipped), and (d) `data:` URIs (skipped).
+  Mock VFS reads, run `rewriteImages(doc, { currentFilePath })`,
+  assert the resulting DOM has `data:` URIs in place of the
+  rewritable paths and no change to the others.
+- **Image rewriter integration test (HTML iframe)**: existing
+  `iframePostProcessor.test.ts` and `.integration.test.ts` suites
+  pass before and after the extraction. The refactor is
   behavior-preserving.
-- **Asset rewriter integration test (AST iframe)**: render an
-  AST containing an `<img src="/.quarto/project-artifacts/foo.png">`,
-  populate the VFS with a fake image, mount the iframe, assert the
-  rendered `<img>` has a `data:` URI src.
-- **`:where()` style regression test**: render q2-debug content
-  in the iframe, assert the body computed style still applies the
-  system-font reset. Render q2-preview content with theme CSS
-  loaded, assert Bootstrap's font-family wins. Either two snapshot
-  tests or one DOM-inspection test — pick whichever fits the
-  existing iframe-test patterns.
+- **Image rewriter integration test (AST iframe)**: render an AST
+  with an `<img src="hero.png">`, populate the VFS at the
+  resolved project-relative path with a fake image, mount the
+  iframe, assert the rendered `<img>` has a `data:` URI src.
+  Re-render with a different image src, assert the new image is
+  also rewritten (verifies the `[astJson]` dependency on the
+  useEffect).
+- **Link handler unit tests** (vitest): build a representative
+  `Document`, attach `installLinkHandlers(doc, { onQmdLinkClick,
+  currentFilePath: '/foo.qmd' })`, dispatch synthetic clicks on:
+  `<a href="https://example.com">` (assert `window.open` called
+  with `_blank`), `<a href="other.qmd#sec">` (assert
+  `onQmdLinkClick({ path: '/other.qmd', anchor: 'sec' })`),
+  `<a href="#sec">` (assert `onQmdLinkClick({ anchor: 'sec' })`),
+  and a non-`.qmd` non-anchor href (assert no handler call,
+  default click behavior preserved). Dispatch a synthetic
+  `Cmd+S` keydown, assert the parent postMessage fires.
+- **Theme CSS injection unit test**: render an AST through
+  `AstWithAssets`, populate the VFS with a fake `styles.css`,
+  assert a `<style>` element with the CSS bytes appears in
+  `document.head`. Re-render — assert the `<style>` is not
+  duplicated (one-shot guarantee).
+- **`:where()` style regression test** (DOM-inspection, not
+  snapshot): mount the iframe with no theme CSS loaded
+  (q2-debug); assert `getComputedStyle(document.body).fontFamily`
+  contains the system-font reset prefix. Mount with theme CSS
+  injected; assert the computed font-family contains
+  `var(--bs-body-font-family)`'s resolved stack (or, more
+  robustly, assert it differs from the q2-debug value).
+  DOM-inspection over snapshots because computed-style snapshots
+  drift across browser/UA-default updates.
 - **PandocAST consolidation build-pass**: `npm run build:all`
   succeeds after the consolidation. `npm run test:ci` passes for
   hub-client. `cargo xtask verify --skip-rust-tests` succeeds end-to-end.
@@ -417,27 +702,31 @@ file header comment.
 ### Blocks
 
 - **Plan 2B** — type-specific component renderers. 2B consumes
-  every artifact 2A ships (PandocAST consolidation, source-info
-  accessor, atomicCustomNodes.ts, asset rewriter). 2B cannot land
-  before 2A.
+  every artifact 2A ships (PandocAST consolidation with
+  `BlockNode`/`InlineNode` naming, source-info accessor,
+  atomicCustomNodes.ts, image rewriter, link handlers, theme CSS
+  injection). 2B cannot land before 2A.
 - Independent of Plans 4 / 5 / 6 / 7 / 8 — they extend the writer
   / type system / wire format. 2A's source-info wiring is forward-
   compatible with all of them.
 
 ## Risk areas
 
-- **`iframePostProcessor.ts` refactor regression**. The helper
-  extraction must be behavior-preserving for the HTML iframe.
-  Mitigation: the existing `iframePostProcessor.test.ts` and
-  `iframePostProcessor.integration.test.ts` suites pass before
-  and after. Don't change extraction shape mid-refactor.
+- **`iframePostProcessor.ts` refactor regression**. The image
+  rewriter and link-handler extractions must be behavior-preserving
+  for the HTML iframe. Mitigation: the existing
+  `iframePostProcessor.test.ts` and `iframePostProcessor.integration.test.ts`
+  suites pass before and after. Don't change extraction shape
+  mid-refactor.
 - **`PandocAST` consolidation type drift**. The four duplicate
-  definitions have drifted slightly (the `ReactRenderer.tsx`
-  variant is the most spartan; `ReactAstDebugRenderer.tsx` has
-  the richest type tree). Use the richest one as the canonical
-  shape, plus the new `astContext?` field, plus the
-  `CustomBlockNode` / `CustomInlineNode` placeholders. Run
-  `tsc -b` after each consumer's import update.
+  definitions have drifted on naming (`Block`/`Inline` vs
+  `BlockNode`/`InlineNode`) and inline-variant coverage. The
+  consolidation picks `BlockNode`/`InlineNode` (richest existing
+  shape) plus the `astContext?` field and `CustomBlockNode` /
+  `CustomInlineNode` placeholders. The three slide-side importers
+  (`RevealjsReactAstSlideRenderer.tsx`, `useCursorToSlide.ts`,
+  `useSlideThumbnails.tsx`) get rename + import updates in the same
+  pass. Run `tsc -b` after each consumer's import update.
 - **`render-components` gate change visibility**. The current
   one-line gate is buried in a `useMemo`; easy to miss when
   reading the diff. Add a comment explaining the gate's
@@ -448,25 +737,68 @@ file header comment.
   the alternative is splitting `ast-renderer.html` (rejected
   above) or removing the body rule entirely (acceptable but
   causes UA-default 8px body margin in q2-debug).
+- **AST-iframe `useEffect` re-run on every commit**. The image
+  rewriter useEffect keys on `[astJson, currentFilePath]`. If
+  another React state change triggers a re-render without changing
+  `astJson`, the effect skips correctly. If a future change makes
+  the AST mutate without `astJson` changing reference (e.g. an
+  in-place edit), the rewriter would miss the update. Mitigation:
+  always replace `astJson` with a new string on AST mutation
+  (today's `setAst` flow already does this via postMessage
+  serialization).
+- **Empty-content artifact overwrite (latent bug discovered during
+  plan review)**. The WASM flush loop at
+  `wasm-quarto-hub-client/src/lib.rs:1208-1214` and `:1364-1369`
+  writes `artifact.content.clone()` to VFS without checking for
+  empty content. `ResourceCollectorTransform` produces empty-content
+  artifacts whose `path` field is the absolute resolved
+  `base_dir.join(url)`. `Path::join` with an absolute second arg
+  replaces the first, so the resolver's `vfs_root.join(absolute_path)`
+  collapses to the absolute path itself — which is also where the
+  hub-client's `automergeSync` uploaded the user's image. The flush
+  therefore overwrites the user's bytes with `Vec::new()` on every
+  render. In current production this hasn't bitten anyone yet (HTML
+  preview has been the test surface and the iframe rewrite still
+  happens to work after the overwrite because… it doesn't, actually
+  — verifying this in HTML preview is a follow-up). Plan 2A doesn't
+  fix the bug, but the iframe rewriter must keep using the user's
+  upload as the source of truth and treat the renderer's image flush
+  as not-load-bearing. **TODO**: file a beads issue with the
+  one-line fix (`if !artifact.content.is_empty() { runtime.add_file(...) }`)
+  once we're on the main repo; reference it from the plan when filed.
+- **Wire-format code 3 back-compat (minor)**. 2A's TS type for
+  code 3 covers the post-Plan-5 reader's expected
+  `[filter_path, line]` shape (FilterProvenance). Plan 5's reader
+  also accepts the legacy Transformed shape `[parent_id, ...]`,
+  but no fresh writer emits that anymore. If old AST JSON predating
+  Plan 5 ever reaches the iframe, the type would not cover it; in
+  production the iframe only sees fresh writer output, so this is
+  not a real risk.
 
 ## Estimated scope
 
-| Component | Lines (rough) |
-|---|---|
-| `render-components` gate extension + regression test | ~20 |
-| `iframeAssetRewriter.ts` extraction + caller updates | ~120 |
-| AST-iframe asset-rewriter useEffect + integration test | ~50 |
-| `types/sourceInfo.ts` (mirror types) | ~50 |
-| `utils/sourceInfo.ts` (accessors + tests) | ~120 |
-| `RegistryContext` extension + AST entry threading | ~30 |
-| `utils/atomicCustomNodes.ts` (TS hand-mirror) | ~30 |
-| `types/pandoc.ts` consolidation + 3-consumer migration + delete dead file | ~150 (net negative after deletion) |
-| `ast-renderer.html` `:where()` wrap + regression test | ~30 |
-| **Total** | **~600** |
+Items in implementation order (matching §"In scope" above).
 
-Likely fits in one focused implementation session. The
-asset-rewriter extraction is the highest-effort item; the rest is
-mechanical.
+| # | Component | Lines (rough) |
+|---|---|---|
+| 1 | `types/sourceInfo.ts` (mirror types) | ~50 |
+| 2 | `types/pandoc.ts` consolidation + 6-consumer migration + delete dead file | ~180 (net negative after deletion) |
+| 3 | `utils/sourceInfo.ts` (accessors + tests) | ~120 |
+| 4 | `utils/atomicCustomNodes.ts` (TS hand-mirror) | ~30 |
+| 5 | `RegistryContext` extension + AST entry threading | ~30 |
+| 6 | `ast-renderer.html` `:where()` wrap + regression test | ~30 |
+| 7 | `render-components` gate extension + regression test | ~20 |
+| 8 | `iframeImageRewriter.ts` extraction + HTML caller update | ~80 |
+| 9 | `iframeLinkHandlers.ts` extraction + HTML caller unchanged (HTML keeps inline pattern) | ~120 |
+| 10 | `AstWithAssets` wrapper (3 useEffects: image, link, theme CSS + injectPreviewStyles) + integration tests | ~120 |
+| | **Total** | **~780** |
+
+Two focused sessions are realistic. A natural split is **items
+1–5** (type/data foundation; inert wiring for 2B) and **items
+6–10** (iframe glue; lights up theme CSS, images, and link
+navigation visibly). Either session can land independently of the
+other — items 1–5 don't visibly change anything, and items 6–10
+don't depend on the source-info types existing.
 
 ## Notes
 
@@ -474,16 +806,18 @@ mechanical.
   (`2026-05-04-q2-preview-plan-2-builtin-components.md`), which
   was split into 2A (foundation) + 2B (components) during the
   2026-05-06 review session. The split was driven by scope
-  realism: research raised the original ~970 LOC estimate to
-  ~1415 LOC and added items (source-info plumbing, asset-rewriter
-  share, render-components gate, `:where()` fix) that are
-  logically separable from the type-specific component work.
+  realism: research raised the original ~970 LOC estimate, and
+  added items (source-info plumbing, image rewriter / link
+  handlers extraction, theme CSS injection, render-components
+  gate, `:where()` fix) that are logically separable from the
+  type-specific component work.
 - The "rename `MaybeReadOnlyInline`" from the original Plan 2 is
   resolved in 2B: there's no such wrapper component; the atomic-
-  aware `setLocalAst` gating folds into the existing `Block` /
-  `Inline` dispatchers. 2A ships the prerequisites
-  (`isAtomicSourceInfo`, `atomicCustomNodes.ts`); 2B ships the
-  consumers.
+  aware `setLocalAst` gating folds into the existing
+  `registry[node.t]` lookups inside `<Ast>` (or into a new
+  dispatcher component introduced by 2B; final shape is 2B's
+  call). 2A ships the prerequisites (`isAtomicSourceInfo`,
+  `atomicCustomNodes.ts`); 2B ships the consumers.
 - Forward-compat dormancy is the explicit pattern for 2A's
   source-info wiring vs. Plan 5 wire-format codes 4/5. The plan-7
   cleanup pattern (Plan 1's `pipeline_kind` field landed dormant
