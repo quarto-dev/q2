@@ -2,7 +2,11 @@
 
 $if(image-html)$
 ::: thumbnail
-[$image-html$]($path$){.no-external}
+[`$image-html$`{=html}]($path$){.no-external}
+:::
+$else$
+::: thumbnail
+[`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}]($path$){.no-external}
 :::
 $endif$
 
@@ -26,9 +30,15 @@ $endif$
 
 $if(description)$
 ::: {.delink .listing-description}
+```{=html}
+$description-placeholder-begin$
+```
+
 $description$
 
-$description-placeholder$
+```{=html}
+$description-placeholder-end$
+```
 :::
 $endif$
 

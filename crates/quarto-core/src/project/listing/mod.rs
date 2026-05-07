@@ -38,6 +38,13 @@ pub mod placeholders;
 pub mod sort;
 pub mod templates;
 
+// Native-only L7 post-render upgrade. Excluded from the WASM build
+// because it depends on `scraper` (HTML reader for sibling rendered
+// outputs) and on file-IO patterns that have no analogue in the
+// hub-client preview environment. See plan §"scraper dep gating".
+#[cfg(not(target_arch = "wasm32"))]
+pub mod post_render_upgrade;
+
 pub use config::{
     ColumnType, FeedType, GridItemAlign, ImageAlign, Listing, ListingCategoriesMode,
     ListingContents, ListingFeedOptions, ListingFilter, ListingSort, ListingType, SortDirection,
