@@ -48,6 +48,7 @@ pub mod error;
 pub mod eval_context;
 pub mod evaluator;
 pub mod parser;
+pub mod pipes;
 pub mod resolver;
 
 // Re-export main types at crate root
@@ -62,5 +63,5 @@ pub use eval_context::{DiagnosticCollector, EvalContext};
 pub use parser::Template;
 pub use resolver::{
     ChainedResolver, FileSystemResolver, MemoryResolver, NullResolver, PartialResolver,
-    resolve_partial_path,
+    project_listing_resolver, resolve_partial_path,
 };

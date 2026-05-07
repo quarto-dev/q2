@@ -169,6 +169,22 @@ pub struct RenderContext<'a> {
     /// the caller (`render_document_to_file`) can stuff them into
     /// the per-doc render result for the orchestrator to drain.
     pub resource_report: crate::project_resources::DocumentResourceReport,
+
+    /// Resolved listings produced by `ListingGenerateTransform` and
+    /// consumed by `ListingRenderTransform`. Populated only when the
+    /// host page declares a `listing:` key. Both transforms run
+    /// inside `AstTransformsStage` and share this context directly,
+    /// so no `StageContext` bridge is needed.
+    ///
+    /// This is the impl-time revision of the L3 sub-plan's D2: the
+    /// original design called for round-tripping through
+    /// `meta.listings.<id>` for Lua-mutation forward-compat, but
+    /// per D13 there is no Lua filter slot between generate and
+    /// render today. When `bd-0fd0` (Lua injection slot) lands, the
+    /// natural integration point is a meta serialize/deserialize
+    /// bridge at the injection boundary; this typed in-memory shape
+    /// stays unchanged.
+    pub resolved_listings: Vec<crate::project::listing::ResolvedListing>,
 }
 
 /// Options for rendering
@@ -211,6 +227,7 @@ impl<'a> RenderContext<'a> {
             observer: Arc::new(NoopObserver),
             user_grammar_provider: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),
+            resolved_listings: Vec::new(),
         }
     }
 

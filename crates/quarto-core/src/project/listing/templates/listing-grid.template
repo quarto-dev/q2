@@ -1,0 +1,5 @@
+::: {.list .grid .quarto-listing-grid .quarto-listing-cols-$listing.grid-columns$}
+
+$items:item-grid()$
+
+:::

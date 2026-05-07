@@ -188,6 +188,27 @@ fn to_forward_slashes(path: &Path) -> String {
         .join("/")
 }
 
+/// Match a `path`-shaped string against a glob `pattern`. Both are
+/// expected to be forward-slash separated and project-relative (or
+/// host-relative — the matcher itself is purely string-based).
+///
+/// The pattern grammar is the project's narrow glob vocabulary:
+/// literal segments, `?` (single char), `*` (any chars in one
+/// segment), `**` (zero or more whole segments). This is the same
+/// matcher used internally by `expand_patterns` for `_quarto.yml`'s
+/// `project.render`. Phase-8 (incremental rebuilds) and L3
+/// (listings item discovery) reuse it without duplication.
+pub fn glob_match_path(pattern: &str, path: &str) -> bool {
+    glob_match(&normalize_pattern(pattern), &normalize_pattern(path))
+}
+
+/// Convert a `Path` to a forward-slash project-relative string.
+/// Public so callers (e.g. listings item discovery in L3) can match
+/// the same convention `expand_patterns` uses internally.
+pub fn path_to_forward_slashes(path: &Path) -> String {
+    to_forward_slashes(path)
+}
+
 /// Minimal glob matcher: supports literals, `*`, `?`, and `**`.
 ///
 /// This is narrow by design — we accept the glob vocabulary we want to
