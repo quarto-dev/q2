@@ -115,7 +115,7 @@ list), 2B fills the following gaps:
 #### JS-native CustomNode TS interface (`hub-client/src/types/customNode.ts`)
 
 ```ts
-import type { Attr, Block, Inline } from './pandoc';
+import type { Attr, BlockNode, InlineNode } from './pandoc';
 
 /**
  * Slot contents in a JS-native CustomNode. Mirrors quarto-pandoc-types::Slot.
@@ -124,10 +124,10 @@ import type { Attr, Block, Inline } from './pandoc';
  * shape Rust uses.
  */
 export type Slot =
-  | { kind: 'block';   value: Block }
-  | { kind: 'inline';  value: Inline }
-  | { kind: 'blocks';  value: Block[] }
-  | { kind: 'inlines'; value: Inline[] };
+  | { kind: 'block';   value: BlockNode }
+  | { kind: 'inline';  value: InlineNode }
+  | { kind: 'blocks';  value: BlockNode[] }
+  | { kind: 'inlines'; value: InlineNode[] };
 
 interface CustomNodeBase {
   type_name: string;
@@ -179,11 +179,16 @@ export function rewrapCustomNodes(ast: PandocAST): PandocAST;
 **Forward path** (wire → render):
 1. `<Ast>` parses `astJson` (today).
 2. `<Ast>` calls `unwrapCustomNodes(parsed)` — single tree walk
-   that replaces wrapper Div / Span (with `__quarto_custom_node`
-   class) by `CustomBlockNode` / `CustomInlineNode` shapes;
-   strips the wrapper class and `data-custom-*` kvs from `attr`;
-   strips the `Plain` wrapper from Inline / Inlines slots; recurses
-   into slot contents (for nested CustomNodes — Plan 8 case).
+   that replaces wrapper Div / Span (identified by the
+   `__quarto_custom_node` class) by `CustomBlockNode` /
+   `CustomInlineNode` shapes. The walk reads `type_name` from the
+   `data-custom-type` attribute (the canonical discovery mechanism
+   per Plan 2A §"Provided: atomicCustomNodes hand-mirror"), reads
+   slot metadata from `data-custom-slots`, and reads `plain_data`
+   from `data-custom-data`. It strips the wrapper class and
+   `data-custom-*` kvs from `attr`; strips the `Plain` wrapper from
+   Inline / Inlines slots; recurses into slot contents (for nested
+   CustomNodes — Plan 8 case).
 3. After unwrap, the AST contains zero `__quarto_custom_node`
    references. `componentRegistry['Div']` / `['Span']` only see
    real Divs / Spans.
@@ -224,20 +229,20 @@ function renderSlot(
 ): ReactNode {
   switch (slot.kind) {
     case 'block':
-      return <Node node={slot.value} setLocalAst={(n) => setSlot({ kind: 'block', value: n as Block })} {...ctx}/>;
+      return <Node node={slot.value} setLocalAst={(n) => setSlot({ kind: 'block', value: n as BlockNode })} {...ctx}/>;
     case 'inline':
-      return <Node node={slot.value} setLocalAst={(n) => setSlot({ kind: 'inline', value: n as Inline })} {...ctx}/>;
+      return <Node node={slot.value} setLocalAst={(n) => setSlot({ kind: 'inline', value: n as InlineNode })} {...ctx}/>;
     case 'blocks':
       return slot.value.map((b, i) => (
         <Node key={i} node={b} setLocalAst={(n) => {
-          const next = [...slot.value]; next[i] = n as Block;
+          const next = [...slot.value]; next[i] = n as BlockNode;
           setSlot({ kind: 'blocks', value: next });
         }} {...ctx}/>
       ));
     case 'inlines':
       return slot.value.map((inl, i) => (
         <Node key={i} node={inl} setLocalAst={(n) => {
-          const next = [...slot.value]; next[i] = n as Inline;
+          const next = [...slot.value]; next[i] = n as InlineNode;
           setSlot({ kind: 'inlines', value: next });
         }} {...ctx}/>
       ));
@@ -418,14 +423,26 @@ vs. Plan 5 wire-format codes 4/5.
 - `hub-client/src/utils/sourceInfo.ts` (`entryFor`, `isDerived`,
   `isAtomicSourceInfo`, `ATOMIC_SYNTHETIC_KINDS`).
 - `hub-client/src/utils/atomicCustomNodes.ts`
-  (`isAtomicCustomNode`).
-- `RegistryContext` extension carrying `sourceInfoPool`.
-- `iframeImageRewriter.ts` (image-only `data:` URI rewrites; the
-  CSS half of the old "asset rewriter" idea was replaced by inline
-  `<style>` injection in 2A).
+  (`isAtomicCustomNode`); `type_name` matching against the
+  `data-custom-type` attribute the JSON writer emits — see Plan 2A
+  §"Provided: atomicCustomNodes hand-mirror" for the discovery
+  mechanism.
+- `RegistryContext` extension carrying `sourceInfoPool` and
+  `currentFilePath`.
+- Render-time `<img src>` resolution in the existing `Image`
+  registry component (reads `currentFilePath` from
+  `RegistryContext`, emits `<img src="data:...">` directly). 2B's
+  `html.tsx` does not override `Image`; if a future override exists,
+  it must preserve or replicate this behavior to keep images
+  loading.
 - `iframeLinkHandlers.ts` (external new-tab, `.qmd` clicks, anchor
-  clicks, `Ctrl+S` save — installed once via event delegation).
-- Theme CSS one-shot `<style>` injection in `AstWithAssets`.
+  clicks, `Ctrl+S` save — installed once via event delegation;
+  reads current props via a ref so handlers stay correct across
+  document navigation).
+- Theme CSS injection in `AstWithAssets`, fingerprint-keyed
+  (`themeFingerprint` from `RenderResponse` triggers re-injection
+  on theme swap; the `<style data-q2-theme>` marker doubles as a
+  StrictMode idempotency guard).
 - `:where()`-wrapped `ast-renderer.html` styling.
 - `render-components` gate covering q2-preview.
 
@@ -433,15 +450,17 @@ vs. Plan 5 wire-format codes 4/5.
 
 q2-preview's AST keeps `<img src>` as the user wrote it (e.g.
 `hero.png`); `ResourceCollectorTransform` does not rewrite the
-target. Plan 2A's `rewriteImages` helper resolves these to `data:`
-URIs in the iframe's DOM via the project-relative branch
-(`resolveRelativePath` + `vfsReadBinaryFile`), reading bytes from
-the user's original VFS upload (the renderer does not contribute
-image bytes — see Plan 2A §"Multi-plan contract: page-scoped image
-artifacts" for the full contract and the latent-bug note,
-bd-3gtn). 2B's
-components emit the `<img>` elements; 2A makes them load. No
-`/.quarto/...` paths appear in q2-preview's body AST.
+target. Plan 2A's `Image` component renderer resolves these at
+render time via `resolveRelativePath(currentFilePath, src)` +
+`vfsReadBinaryFile`, reading bytes from the user's original VFS
+upload (the renderer does not contribute image bytes — see Plan
+2A §"Multi-plan contract: page-scoped image artifacts" for the
+full contract and the latent-bug note, bd-3gtn). 2B's
+type-specific components don't emit `<img>` directly — when an
+`Image` node appears in a slot, slot rendering routes through the
+`Image` registry component, which 2A wired for render-time
+resolution. No `/.quarto/...` paths appear in q2-preview's body
+AST.
 
 ### Provided: visual parity for q2-preview
 
@@ -578,9 +597,11 @@ incrementally without 2B needing amendment.
 
 - **Plan 2A** — iframe foundation. 2B consumes every artifact 2A
   ships (PandocAST consolidation with `BlockNode`/`InlineNode`
-  naming, source-info accessor, atomicCustomNodes.ts, image
-  rewriter, link handlers, theme CSS injection, render-components
-  gate). 2B cannot land before 2A.
+  naming, source-info accessor, atomicCustomNodes.ts including
+  the `data-custom-type` discovery mechanism, render-time `Image`
+  renderer with `currentFilePath` in `RegistryContext`, link
+  handlers via ref-based context, fingerprint-keyed theme CSS
+  injection, render-components gate). 2B cannot land before 2A.
 - **Plan 1** — pipeline + format detection (already shipped). 2B
   renders the AST shape Plan 1's pipeline produces.
 
