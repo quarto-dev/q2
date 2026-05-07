@@ -1,0 +1,3 @@
+::: {data-baz="a\\b"}
+hello
+:::
