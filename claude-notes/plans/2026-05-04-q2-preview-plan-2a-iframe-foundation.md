@@ -10,20 +10,27 @@
 Land the iframe-side plumbing that makes q2-preview ready to host the
 type-specific React components shipped in Plan 2B. After 2A:
 
-- Theme CSS produced by `CompileThemeCssStage` reaches the AST iframe
-  by inlining the VFS bytes into a `<style>` in `document.head` at
-  iframe init. The HTML iframe's `<link>`-rewrite pattern doesn't
-  carry over: the AST iframe has no `<link>` to rewrite (Pandoc nodes
-  don't produce stylesheet links), so one-shot inline injection is
-  the natural alternative until service-worker resource resolution
-  lands.
+- Theme CSS produced by `CompileThemeCssStage` reaches the AST
+  iframe by inlining the VFS bytes into a single
+  `<style data-q2-theme>` element in `document.head`,
+  fingerprint-keyed for live reload (item 11 surfaces
+  `theme_fingerprint(css)` from Rust so theme swaps trigger
+  re-injection without remounting the iframe). The HTML iframe's
+  `<link>`-rewrite pattern doesn't carry over: the AST iframe has
+  no `<link>` to rewrite (Pandoc nodes don't produce stylesheet
+  links), so inline injection is the natural alternative until
+  service-worker resource resolution lands.
 - Page-scoped image artifacts produced by `ResourceCollectorTransform`
-  reach the iframe via a DOM walk that swaps `<img src>` for `data:`
-  URIs sourced from the VFS — same pattern as the HTML iframe, but
-  using the project-relative branch of the existing rewriter (image
-  paths in q2-preview's AST are user-written paths like `hero.png`,
-  not `/.quarto/...`; see §"Multi-plan contract: page-scoped image
-  artifacts" for why).
+  reach the iframe via **render-time resolution** in the `Image`
+  component renderer: it reads `currentFilePath` from `RegistryContext`,
+  resolves user-written `<img src>` paths like `hero.png` against the
+  current document's directory, and reads bytes synchronously from the
+  VFS into a `data:` URI on the React-emitted `<img>`. No post-render
+  DOM walk, no useEffect, no flicker. The HTML iframe keeps its
+  existing inline rewriter (post-`srcdoc` DOM walk) since it doesn't
+  own a React render path. See §"Multi-plan contract: page-scoped image
+  artifacts" for why q2-preview's body AST never carries `/.quarto/...`
+  paths.
 - Documents with `format: q2-preview` can use a `render-components: [...]`
   YAML key to load custom `.tsx` files (the gate in `ReactRenderer.tsx`
   is currently q2-debug-only).
@@ -50,10 +57,14 @@ those wrapper Divs render as Callouts, Theorems, etc.**
 ### In scope
 
 The list below is in **implementation order**. Items 1–5 are the
-type / data foundation (most consumed by 2B and by later items in
-this plan); items 6–7 are independent one-liners; items 8–9 are
-behavior-preserving HTML-iframe refactors; item 10 is the AST-iframe
-wrapper that consumes 8 and 9.
+type / data foundation (most consumed by Plan 2B and by later items
+in this plan); items 6–7 are independent one-liners; item 8 is the
+`Image` renderer change that consumes `currentFilePath` from the
+context plumbed in item 5; item 9 is the link-handlers extraction;
+item 10 is the AST-iframe wrapper that consumes 9 plus theme CSS
+injection. Item 11 is a small Rust-side change that surfaces
+`themeFingerprint` for live theme reload — items 1–10 can ship
+without it.
 
 #### 1. Source-info pool TS type mirror
 
@@ -97,18 +108,26 @@ navigation) cast `data` to the expected shape locally.
 
 #### 2. PandocAST type consolidation
 
-Pull the four duplicate `PandocAST` / Block / Inline definitions
-from `ReactRenderer.tsx`, `ReactAstRenderer.tsx` (dead),
-`ReactAstSlideRenderer.tsx`, and `ReactAstDebugRenderer.tsx` into a
-single `hub-client/src/types/pandoc.ts`. **Naming**: adopt
-`BlockNode` / `InlineNode` as the canonical names (the richest
-existing definition is `ReactAstDebugRenderer.tsx`'s, which uses
-these names; `Block`/`Inline` are too generic for grep). The
-slide-side files currently export `Block` / `Inline` and have three
-external importers (`RevealjsReactAstSlideRenderer.tsx`,
-`hooks/useCursorToSlide.ts`, `hooks/useSlideThumbnails.tsx`) — all
-three migrate to `BlockNode` / `InlineNode` from `types/pandoc.ts`
-in the same pass; no compat re-export retained.
+Pull the duplicate `PandocAST` definitions from `ReactRenderer.tsx`,
+`ReactAstSlideRenderer.tsx`, and `ReactAstDebugRenderer.tsx` (plus
+the dead `ReactAstRenderer.tsx`) into a single
+`hub-client/src/types/pandoc.ts`. Pull the `Block` / `Inline`
+definitions from `ReactRenderer.tsx` and `ReactAstDebugRenderer.tsx`
+under the names `BlockNode` / `InlineNode` (the richest existing
+definition is `ReactAstDebugRenderer.tsx`'s, which already uses
+these names; `Block`/`Inline` are too generic for grep).
+
+**Slide-side scope is intentionally minimal.** q2-slides stays on
+the q2-debug render path (no q2-preview upgrade in this plan), so
+`ReactAstSlideRenderer.tsx` keeps its locally-exported `Block` /
+`Inline` types — no rename, no consolidation of those types. The
+slide hooks (`hooks/useCursorToSlide.ts`,
+`hooks/useSlideThumbnails.tsx`) and `RevealjsReactAstSlideRenderer.tsx`
+do not import `Block` or `Inline` directly today; they import
+`PandocAST` (and `parseSlides` / `renderBlock` / `renderSlide`),
+and their only change is to update the `PandocAST` import path to
+`types/pandoc.ts`. Light-touch refactor for the slide side; deeper
+consolidation for the q2-debug / q2-preview side.
 
 Add `astContext?: AstContext` to the consolidated `PandocAST`
 (import from item 1). The type also includes **placeholder
@@ -118,13 +137,21 @@ CustomInlineNode (`t: 'CustomInline'`)** in the `BlockNode` /
 these at render time but the shapes are pre-declared so 2B doesn't
 have to re-edit foundational types.
 
-**Six consumers update** to import from the new file:
-`ReactRenderer.tsx`, `ReactAstSlideRenderer.tsx`,
-`ReactAstDebugRenderer.tsx`, `RevealjsReactAstSlideRenderer.tsx`,
-`hooks/useCursorToSlide.ts`, `hooks/useSlideThumbnails.tsx`. The
-dead `ReactAstRenderer.tsx` is **deleted** (zero importers).
-This item touches the broadest file set in 2A; landing it second
-(after the foundational types) keeps later items rebasing cleanly.
+**Consumers updated** to import from the new file:
+
+- `ReactRenderer.tsx` — `PandocAST` and the (renamed)
+  `BlockNode` / `InlineNode`.
+- `ReactAstDebugRenderer.tsx` — `PandocAST`, `BlockNode`,
+  `InlineNode`.
+- `ReactAstSlideRenderer.tsx` — `PandocAST` only (keeps local
+  `Block` / `Inline`).
+- `RevealjsReactAstSlideRenderer.tsx`, `hooks/useCursorToSlide.ts`,
+  `hooks/useSlideThumbnails.tsx` — `PandocAST` import path update
+  only.
+
+The dead `ReactAstRenderer.tsx` is **deleted** (zero importers).
+Landing this item second (after the foundational types) keeps
+later items rebasing cleanly.
 
 #### 3. Source-info accessor module
 
@@ -157,13 +184,39 @@ the Rust source of truth and the sync convention (matches
 `types/diagnostic.ts` ↔ `DiagnosticMessage` and
 `types/intelligence.ts` ↔ `quarto-lsp-core`).
 
+**Discovery mechanism.** The dispatcher recovers the wrapped
+CustomNode's kind from the `data-custom-type` attribute that the
+JSON writer attaches to every wrapper Div (block) / Span (inline)
+— see `crates/pampa/src/writers/json.rs:1297-1325` (block) and
+`:1381+` (inline). The hand-mirror's strings match the writer's
+emitted `type_name` byte-for-byte; `"CrossrefResolvedRef"`
+corresponds to the literal `type_name` Rust emits. 2B's dispatcher
+reads `wrapper.attr.kvs["data-custom-type"]` and looks the value
+up in this set.
+
 #### 5. Extend `RegistryContext`
 
 In `hub-client/src/components/render/ReactAstDebugRenderer.tsx`,
 extend `RegistryContext` to carry `sourceInfoPool?: SourceInfoPool`
-(from item 1) alongside `registry`. The `<Ast>` component reads
-`astContext?.sourceInfoPool` (from item 2's consolidated type) and
-provides it. 2A consumers don't read it yet — the existing
+(from item 1) and `currentFilePath: string` alongside `registry`.
+`<Ast>` wraps its rendered children in the Provider:
+
+```tsx
+<RegistryContext.Provider value={{
+  registry,
+  sourceInfoPool: astContext?.sourceInfoPool,
+  currentFilePath,
+}}>
+  {/* rendered tree */}
+</RegistryContext.Provider>
+```
+
+`currentFilePath` reaches `<Ast>` as a prop from
+`ast-renderer-entry.tsx` (set on each `setAst` postMessage). Item 8
+consumes it for render-time `<img src>` resolution in the `Image`
+renderer.
+
+`sourceInfoPool` consumers don't read it yet — the existing
 `registry[node.t]` lookups inside `<Ast>` stay unchanged. 2B's
 atomic-aware `setLocalAst` gating folds into those registry lookups
 (or into a new dispatcher component introduced by 2B; the exact
@@ -203,37 +256,52 @@ the gate is `if (format !== 'q2-debug') { return ''; }`; q2-preview
 gets added so that demos using `format: q2-preview` can specify
 custom `.tsx` files in the same way. ~5 LOC + a regression test.
 
-#### 8. Image rewriter helper
+#### 8. Image renderer render-time resolution
 
-`hub-client/src/utils/iframeImageRewriter.ts`, new file. Extract
-only the `<img>` rewrite block from `iframePostProcessor.ts:177-210`
-into `rewriteImages(doc: Document, opts: { currentFilePath: string })`.
-Preserves both branches that exist today: `/.quarto/...` paths via
-`vfsReadFile`, and project-relative paths via `resolveRelativePath`
-+ `vfsReadBinaryFile`. The project-relative branch is the one
-q2-preview actually exercises (see §"Multi-plan contract:
-page-scoped image artifacts"); the `/.quarto/...` branch stays
-because the HTML iframe still uses it.
+In `hub-client/src/components/render/ReactAstDebugRenderer.tsx`'s
+registry, the `Image` renderer is updated to resolve `<img src>`
+synchronously at render time, consuming `currentFilePath` from
+`RegistryContext` (item 5). The component reads VFS bytes via
+`vfsReadBinaryFile(resolveRelativePath(currentFilePath, src))`,
+encodes them as a `data:` URI, and emits `<img src={dataUri}>`
+directly. No `useEffect`, no post-render DOM walk, no flicker.
 
-The HTML iframe's `postProcessIframe` calls this helper for the
-image rewrite, retaining its `<link>` rewrite (lines 137-147),
-external-link `target="_blank"` (lines 213-215), and qmd-link
-click handler (line 218+) inline — none of those ride along to the
-AST iframe. Behavior-preserving for the HTML iframe; existing
-`iframePostProcessor.test.ts` and `.integration.test.ts` suites
-guard the refactor.
+External URLs (`http`, `https`, `data:`, `//`) and paths that fail
+VFS resolution pass through unchanged — GIGO; mirrors the HTML
+iframe's existing fallthrough behavior. The legacy `/.quarto/...`
+branch from `iframePostProcessor.ts:177-210` is **not** ported
+here: q2-preview's body AST never carries `/.quarto/...` image
+paths (see §"Multi-plan contract: page-scoped image artifacts").
+
+The HTML iframe is **unchanged** by this item. Its inline rewriter
+in `iframePostProcessor.ts:177-210` stays where it is, with both
+branches intact; existing `iframePostProcessor.test.ts` and
+`.integration.test.ts` suites continue to guard it. The
+"shared rewriter helper" approach from earlier drafts of this plan
+is dropped — there is no second consumer to share with, and the
+HTML iframe is on its own deletion timeline (the rewriter goes
+away when service-worker resource resolution lands; same fate,
+parallel implementations).
+
+**Knock-on for q2-debug.** q2-debug uses the same registry, so it
+also picks up render-time image resolution. Today q2-debug has no
+image-rewrite path at all; under this plan, q2-debug images render
+correctly as a side effect. Not a regression.
 
 #### 9. AST-iframe link handlers
 
 `hub-client/src/utils/iframeLinkHandlers.ts`, new file. Extract
 external-new-tab, `.qmd` click, same-doc-anchor click, and
 `Ctrl+S`/`Cmd+S` save logic from `iframePostProcessor.ts:212-281`
-into `installLinkHandlers(doc: Document, opts)`. The AST iframe
-uses event delegation — a single `click` listener on
-`document.body` plus the `keydown` listener, attached once at
-mount:
+into `installLinkHandlers(doc: Document, ctxRef: { current: Ctx })`,
+where `Ctx = { currentFilePath: string; onQmdLinkClick: (...) => void }`.
+The AST iframe uses event delegation with a **ref-based context**
+to avoid stale closures across document navigation (the iframe is
+mounted once per session and persists across docs; see "Design
+decisions → Iframe lifetime model"):
 
 ```ts
+// click on document.body (delegation)
 doc.body.addEventListener('click', (e) => {
   const a = (e.target as HTMLElement).closest('a');
   if (!a) return;
@@ -244,10 +312,27 @@ doc.body.addEventListener('click', (e) => {
     window.open(href, '_blank', 'noopener,noreferrer');
     return;
   }
+  const { currentFilePath, onQmdLinkClick } = ctxRef.current;
   if (href.startsWith('#')) { /* → onQmdLinkClick({ anchor }) */ }
-  /* .qmd → resolveRelativePath + onQmdLinkClick({ path, anchor }) */
+  /* .qmd → resolveRelativePath(currentFilePath, href)
+            + onQmdLinkClick({ path, anchor }) */
+});
+
+// keydown on window (document.body doesn't reliably receive
+// keyboard focus; HTML iframe attaches its keydown to window too)
+window.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    e.preventDefault();
+    parent.postMessage({ kind: 'save' }, '*');
+  }
 });
 ```
+
+Reading `currentFilePath` and `onQmdLinkClick` from `ctxRef.current`
+inside the listener (rather than capturing them at attach time)
+keeps the handlers correct after the user navigates to a different
+document — `ctxRef.current` is updated by the wrapper on each
+render; no listener re-attachment needed.
 
 External new-tab is handled via `window.open` + `preventDefault`
 rather than the HTML iframe's per-element `target="_blank"`
@@ -262,44 +347,62 @@ ran, which q2-preview's pipeline excludes. q2-preview's AST keeps
 `.qmd` paths verbatim; the `.qmd` branch handles them natively.
 
 Also export `injectPreviewStyles` from `iframePostProcessor.ts`
-(lines 294-326) so the AST iframe can call it. The HTML iframe
-still calls it inline; the export is mechanical.
+(lines 294-326) so the AST iframe can call it, **and add an
+idempotency guard inside the function**: early-return if
+`doc.head.querySelector('style[data-hub-client]')` is non-null
+(~3 LOC). Without the guard, React 18 StrictMode's
+mount→unmount→mount cycle in dev would inject the styles twice.
+The HTML iframe's existing call is unaffected (it calls
+`injectPreviewStyles` exactly once per `srcdoc` load).
 
 #### 10. `AstWithAssets` wrapper component
 
 In `hub-client/src/ast-renderer-entry.tsx`, wrap the existing
-`<Ast>` mount in a small container component that holds three
-`useEffect`s — one per concern from the items above. Glue layer
-that brings 8 (image rewrite), 9 (link handlers), and the theme
-CSS injection together at the iframe boundary:
+`<Ast>` mount in a small container component that holds two
+`useEffect`s plus a context ref. Glue layer that brings item 9
+(link handlers) and theme CSS injection together at the iframe
+boundary. Image resolution is **not** here — it lives in the
+`Image` renderer (item 8), so the wrapper has no image effect to
+manage:
 
 ```tsx
 function AstWithAssets(props: AstProps) {
-  // [astJson, currentFilePath]: image rewrite re-runs after each
-  // commit because React replaces <img src="data:..."> with raw
-  // paths each render.
-  useEffect(() => {
-    rewriteImages(document, { currentFilePath: props.currentFilePath });
-  }, [props.astJson, props.currentFilePath]);
+  // Ref-based context for link handlers — keeps the closure inside
+  // installLinkHandlers reading current props instead of stale
+  // mount-time values. See item 9 for the why.
+  const linkCtxRef = useRef({
+    currentFilePath: props.currentFilePath,
+    onQmdLinkClick: props.onNavigateToDocument,
+  });
+  linkCtxRef.current = {
+    currentFilePath: props.currentFilePath,
+    onQmdLinkClick: props.onNavigateToDocument,
+  };
 
   // []: link handlers attach once at mount via event delegation.
   useEffect(() => {
-    installLinkHandlers(document, {
-      currentFilePath: props.currentFilePath,
-      onQmdLinkClick: props.onNavigateToDocument,
-    });
+    installLinkHandlers(document, linkCtxRef);
   }, []);
 
-  // []: theme CSS + responsive overrides inject once at mount.
+  // [props.themeFingerprint]: re-inject when the compiled CSS bytes
+  // change. The fingerprint is surfaced from Rust (item 11) on each
+  // RenderResponse; the styles.css path itself is constant
+  // (DEFAULT_CSS_ARTIFACT_PATH), so the bytes are the change signal.
+  // The data-q2-theme marker doubles as a StrictMode idempotency
+  // guard (mount→unmount→mount in dev would otherwise duplicate the
+  // <style>).
   useEffect(() => {
     const css = vfsReadFile(DEFAULT_CSS_ARTIFACT_PATH);
-    if (css.success && css.content) {
-      const style = document.createElement('style');
-      style.textContent = css.content;
+    if (!css.success || !css.content) return;
+    let style = document.head.querySelector<HTMLStyleElement>('style[data-q2-theme]');
+    if (!style) {
+      style = document.createElement('style');
+      style.setAttribute('data-q2-theme', '1');
       document.head.appendChild(style);
     }
-    injectPreviewStyles(document);
-  }, []);
+    style.textContent = css.content;
+    injectPreviewStyles(document);  // idempotent per item 9
+  }, [props.themeFingerprint]);
 
   return <Ast {...props} />;
 }
@@ -310,11 +413,51 @@ focused on rendering the AST tree; isolates the iframe-only
 concerns (postMessage, blob-URL component loading, asset glue)
 where the rest of the iframe-only glue already lives.
 
-When service-worker resource resolution lands, items 8, 9, and the
-theme CSS injection all delete together (per
-`iframePostProcessor.ts:24`). The wrapper itself becomes a thin
+Until item 11 lands, `props.themeFingerprint` is `undefined` and
+the theme effect runs once on mount (no live reload, but theme
+CSS still injected — strictly better than today's "no theme CSS
+at all" state).
+
+When service-worker resource resolution lands, both effects delete
+together (per `iframePostProcessor.ts:24`). The `Image` renderer
+in item 8 also drops its VFS read at that point, emitting raw
+paths the SW intercepts. The wrapper becomes a thin
 `<Ast {...props} />` shell at that point — or the `<Ast>` mount
 re-flattens.
+
+#### 11. Rust-side `themeFingerprint` surfacing
+
+Plumb `theme_fingerprint(css)` (already computed at
+`crates/quarto-core/src/stage/stages/compile_theme_css.rs:447`,
+already used as the artifact key `css:theme:<fingerprint>`) onto
+`RenderResponse`, through the WASM bridge, into the postMessage
+payload that `ast-renderer-entry.tsx` consumes as
+`props.themeFingerprint`. Path:
+
+1. **`quarto-core`** (or wherever Plan 1 places the render-output
+   type): add `theme_fingerprint: Option<String>` to
+   `RenderResponse`. Populate from the active theme artifact's key
+   at the point where the response is constructed. ~5 LOC.
+2. **`wasm-quarto-hub-client/src/lib.rs`**: surface the field on
+   the JS-facing return shape. Mechanical. ~3 LOC.
+3. **hub-client TS types** (e.g. `types/render.ts` or wherever
+   `RenderResponse` is mirrored): add the field. ~2 LOC.
+4. **`AstIframe.tsx`** postMessage payload: pass
+   `themeFingerprint` through to the iframe alongside `astJson`
+   and `currentFilePath`. ~2 LOC.
+5. **`ast-renderer-entry.tsx`**: receive and forward to
+   `<AstWithAssets>` as a prop.
+
+Items 1–10 can ship without item 11; item 10's wrapper handles
+`themeFingerprint === undefined` as a no-op (no re-injection on
+theme change). Item 11 lights up live theme reload as the final
+piece.
+
+Because this item touches `quarto-core`, full
+`cargo xtask verify` (not `--skip-hub-build`) is required before
+merging — the `wasm-quarto-hub-client` crate depends on
+`quarto-core` types and the WASM build is the only check that
+catches drift.
 
 ### Out of scope (deferred to Plan 2B)
 
@@ -369,12 +512,14 @@ pre-Plan-2B":
    colors, spacing match the HTML format for the document body.
 2. **Images render.** `<img>` elements (with the user's original
    `src` from the qmd, e.g. `hero.png` or `images/foo.png`) resolve
-   to the in-VFS upload via the project-relative branch of
-   `rewriteImages` (`resolveRelativePath(currentFilePath, src)` +
-   `vfsReadBinaryFile`) and display correctly. The bytes come from
-   the user's automergeSync upload — no `/.quarto/...` paths appear
-   in q2-preview's body AST (see §"Multi-plan contract: page-scoped
-   image artifacts" for the full mechanism).
+   at render time inside the `Image` component renderer
+   (`resolveRelativePath(currentFilePath, src)` + `vfsReadBinaryFile`,
+   reading `currentFilePath` from `RegistryContext`). The bytes
+   come from the user's automergeSync upload — no `/.quarto/...`
+   paths appear in q2-preview's body AST (see §"Multi-plan contract:
+   page-scoped image artifacts" for the full mechanism). q2-debug
+   picks up image rendering as a side effect (the same registry
+   serves both surfaces).
 3. **Custom `.tsx` files load** for `format: q2-preview` documents
    when listed under the `render-components: [...]` YAML key. Pasting
    Elliot's existing `html.tsx` into a q2-preview demo produces a
@@ -404,32 +549,58 @@ new affordances — and is a natural pause point for manual QA before
   loses against any user theme rule at spec ≥ 0,0,0,1 (Bootstrap's
   reboot is 0,0,0,1; comfortably wins) while still applying when no
   theme CSS is loaded.
-- **Image rewrite via post-render DOM walk, not AST-walk**. The
-  helper takes a `Document` and rewrites `<img>` in place. Mirrors
-  the HTML iframe pattern for images and enables code share with
-  identical removal when service-worker resource resolution lands.
-  AST-walk alternative was discussed and rejected (would require
-  re-rewriting on every change and diverges from the proven
-  HTML-iframe path).
-- **Inline `<style>` for theme CSS, not `<link>` rewrite**. The HTML
-  iframe's `<link>` rewrite works because the renderer emits
-  `<link rel="stylesheet" href="/.quarto/...">` as part of the HTML
-  body; the AST iframe never has a `<link>` to rewrite (Pandoc nodes
-  don't produce them). Three alternatives considered: (a) a static
-  `<link>` in `ast-renderer.html` rewritten on iframe-init — risks
-  flash-of-unstyled-content while the browser tries to load the VFS
-  path before the rewriter intercepts; (b) React-19 hoisted `<link>`
-  — more machinery for the same effect; (c) inline `<style>` from
-  VFS bytes — chosen. When service-worker resource resolution
-  lands, alternative (a) becomes flash-free and we can revisit.
-- **Event delegation for AST-iframe link handlers**. The HTML iframe
-  attaches per-element click listeners after each `srcdoc` load,
-  which works because the iframe document is fresh on each load. The
-  AST iframe mutates a React-managed tree incrementally; per-element
-  re-attachment per render would require idempotency tracking and is
-  fragile. A single delegated `click` listener on `document.body`
-  keys off href shape and dispatches; set once at iframe init, no
-  re-walk needed.
+- **Render-time `<img src>` resolution in the `Image` component,
+  not a post-render DOM walk**. Earlier drafts proposed mirroring
+  the HTML iframe's DOM-walk pattern. That works for the HTML iframe
+  because it doesn't own a React render path (`srcdoc` is opaque).
+  The AST iframe DOES own its render path, so the idiomatic React
+  fix is "render the right output" rather than "fix what render
+  produced." Render-time resolution eliminates flicker, eliminates
+  the `[astJson]`-dep concern that haunted earlier drafts, and
+  produces fewer effects in the wrapper. Trade-off: the AST iframe
+  and HTML iframe no longer share a rewriter helper; they're on
+  parallel deletion timelines anyway (both remove their image
+  logic when service-worker resource resolution lands).
+- **Inline `<style>` for theme CSS, fingerprint-keyed for live
+  reload**. The HTML iframe's `<link>` rewrite works because the
+  renderer emits `<link rel="stylesheet" href="/.quarto/...">` as
+  part of the HTML body; the AST iframe never has a `<link>` to
+  rewrite (Pandoc nodes don't produce them). Three alternatives
+  considered: (a) a static `<link>` in `ast-renderer.html` rewritten
+  on iframe-init — risks flash-of-unstyled-content; (b) React-19
+  hoisted `<link>` — more machinery for the same effect; (c) inline
+  `<style>` from VFS bytes — chosen. The bytes change when the user
+  swaps themes, but the artifact path is constant
+  (`DEFAULT_CSS_ARTIFACT_PATH`), so the wrapper's effect keys on
+  `props.themeFingerprint` (item 11) to re-inject when the
+  underlying CSS changes. Single `<style data-q2-theme="1">` element
+  is reused across reloads; idempotent under React StrictMode. When
+  service-worker resource resolution lands, alternative (a) becomes
+  flash-free and we can revisit.
+- **Iframe lifetime model.** The AST iframe is mounted exactly once
+  per session and persists across document navigation — the user
+  switching between files updates `astJson` and `currentFilePath`
+  via postMessage, but the iframe DOM (and its internal React tree)
+  does not unmount and remount. This is the architectural fact that
+  motivates the ref-based context for link handlers (props would go
+  stale otherwise) and the fingerprint-keyed theme reload (a
+  one-shot mount-time effect would never re-fire on theme change).
+  Stated explicitly because several decisions in this plan hinge
+  on it.
+
+- **Event delegation with ref-based context for AST-iframe link
+  handlers**. The HTML iframe attaches per-element click listeners
+  after each `srcdoc` load, which works because the iframe document
+  is fresh on each load. The AST iframe mutates a React-managed
+  tree incrementally; per-element re-attachment per render would
+  require idempotency tracking and is fragile. A single delegated
+  `click` listener on `document.body` (plus a `keydown` listener on
+  `window`) keys off href shape and dispatches; set once at iframe
+  init, no re-walk needed. Because the iframe persists across
+  document navigation (per "Iframe lifetime model" above), the
+  listener reads `currentFilePath` and `onQmdLinkClick` via a ref
+  that the wrapper updates on each render — closure capture of
+  those props at mount time would go stale on doc switch.
 - **`BlockNode` / `InlineNode` as canonical names** (over
   `Block` / `Inline`). The richest existing definition
   (`ReactAstDebugRenderer.tsx`) uses these names; `Block`/`Inline`
@@ -489,15 +660,23 @@ land:
 
 ## Multi-plan contracts
 
-### Consumed: theme CSS artifact (from Plan 1)
+### Consumed: theme CSS artifact + fingerprint signal (from Plan 1 + item 11)
 
 Plan 1's `RenderToPreviewAstRenderer` writes the compiled theme
 CSS to `/.quarto/project-artifacts/styles.css` (per
 `pipeline.rs::DEFAULT_CSS_ARTIFACT_PATH`) on every q2-preview
-render. 2A's iframe entry reads the bytes once on first AST receive
-and injects them as an inline `<style>` element in `document.head`
-(the AST iframe has no `<link>` to rewrite). The Rust→VFS contract
-from Plan 1 is unchanged; 2A is the first reader.
+render. The path is constant across theme swaps; only the bytes
+change. 2A's wrapper's theme effect reads the bytes when it fires
+and injects them into a single `<style data-q2-theme="1">` element
+in `document.head` (the AST iframe has no `<link>` to rewrite).
+
+Item 11 surfaces `theme_fingerprint(css)` (computed at
+`compile_theme_css.rs:447`, already used as the artifact key
+`css:theme:<fingerprint>`) onto `RenderResponse` as
+`themeFingerprint`. The wrapper's theme effect keys on this value
+so live theme swaps trigger re-injection. The Rust→VFS contract
+from Plan 1 is unchanged; 2A is the first reader and adds the
+fingerprint surfacing as a small Rust-side change.
 
 ### Consumed: page-scoped image artifacts (from Plan 1)
 
@@ -515,21 +694,23 @@ Empty-content artifact overwrite" below).
 The image bytes the iframe actually reads come from the **user's
 original VFS upload**, written by the hub-client's `automergeSync`
 via `vfsAddFile` / `vfsAddBinaryFile` whenever a file appears in
-the synced project. So the agreement that lets the rewriter find
+the synced project. So the agreement that lets the renderer find
 the bytes is: *the user uploaded the image at the same
-project-relative path the qmd references it by*. The iframe
-computes that path via `resolveRelativePath(currentFilePath, src)`
-and reads via `vfsReadBinaryFile`. The renderer is not in the loop
+project-relative path the qmd references it by*. The `Image`
+component renderer (item 8) computes that path via
+`resolveRelativePath(currentFilePath, src)` and reads via
+`vfsReadBinaryFile` synchronously during render, emitting an
+`<img src="data:...">` directly. The renderer is not in the loop
 for image bytes.
 
 `<img src>` in q2-preview's AST keeps the user's original path
 (`hero.png`, `images/foo.png`, etc.) — `LinkRewriteTransform`
 explicitly leaves `Image::target.0` alone, and no other transform
 mutates it. External URLs (`http`, `https`, `data:`, `//`) and
-absolute paths (`/foo.png`) follow today's HTML-iframe behavior.
-**No `/.quarto/...` paths appear in q2-preview's body AST** — the
-`/.quarto/...` branch of `rewriteImages` is dormant for q2-preview
-but kept for the HTML iframe's use of the same helper.
+paths that fail VFS resolution fall through unchanged (GIGO; same
+as the HTML iframe today). **No `/.quarto/...` paths appear in
+q2-preview's body AST** — the `/.quarto/...` branch in the HTML
+iframe's inline rewriter has no analog in the AST iframe.
 
 ### Provided: source-info pool accessor (for Plan 2B and beyond)
 
@@ -545,27 +726,47 @@ can also build on the same accessors.
 ### Provided: atomicCustomNodes hand-mirror (for Plan 2B and Plan 7)
 
 2A ships `hub-client/src/utils/atomicCustomNodes.ts` with the
-initial built-in set. Plan 2B's atomic-aware dispatcher imports
-`isAtomicCustomNode(typeName)` from this file. Plan 7 ships the
-Rust counterpart and the sync convention is documented in 2A's
-file header comment.
+initial built-in set (`["CrossrefResolvedRef"]`). Plan 2B's
+atomic-aware dispatcher imports `isAtomicCustomNode(typeName)` from
+this file. Plan 7 ships the Rust counterpart and the sync
+convention is documented in 2A's file header comment.
+
+**Discovery mechanism for the dispatcher.** The JSON writer
+serializes CustomNodes as wrapper Divs (block) or Spans (inline)
+with a `data-custom-type` attribute carrying the literal
+`type_name` — see `crates/pampa/src/writers/json.rs:1297-1325`
+(block) and `:1381+` (inline). The dispatcher recovers the kind
+by reading `wrapper.attr.kvs["data-custom-type"]` and looking it
+up in the atomic set. The hand-mirror's strings match the writer's
+emitted `type_name` byte-for-byte; `"CrossrefResolvedRef"` is the
+exact string Rust emits.
 
 ## References
 
-### Rust side (read-only — 2A doesn't modify Rust)
+### Rust side
+
+2A modifies Rust in one place — item 11's `themeFingerprint` field
+on `RenderResponse`, plumbed through `wasm-quarto-hub-client`. The
+references below are otherwise read-only (2A consumes their wire
+format / pipeline behavior but does not change them).
 
 - `crates/pampa/src/writers/json.rs:54-91` — wire format types
-  (AstContextJson, SourceInfoJson, NodeJson, etc.).
+  (AstContextJson, SourceInfoJson, NodeJson, etc.). Allocation
+  policy lives at
+  `claude-notes/designs/wire-format-source-info-codes.md`.
 - `crates/pampa/src/writers/json.rs:300-330` — `add_source_info`
   on each node.
 - `crates/pampa/src/writers/json.rs:1297` — `write_custom_block`
-  (block CustomNodes wrapped as Div).
+  (block CustomNodes wrapped as Div with `data-custom-type`).
 - `crates/pampa/src/writers/json.rs:1380` — `write_custom_inline`
-  (inline CustomNodes wrapped as Span).
+  (inline CustomNodes wrapped as Span with `data-custom-type`).
 - `crates/quarto-source-map/src/source_info.rs:22-55` — SourceInfo
   enum (extended by Plan 4).
 - `crates/quarto-core/src/pipeline.rs::DEFAULT_CSS_ARTIFACT_PATH`
   — VFS path for the theme CSS artifact.
+- `crates/quarto-core/src/stage/stages/compile_theme_css.rs:447`
+  — `theme_fingerprint(css)` (item 11 surfaces the value onto
+  `RenderResponse`).
 
 ### hub-client side
 
@@ -575,25 +776,31 @@ file header comment.
   format dispatch for AstIframe (q2-debug + q2-preview both route
   through here today; unchanged by 2A).
 - `hub-client/src/components/render/ReactAstDebugRenderer.tsx` —
-  `RegistryContext` definition (extended in 2A) and one of the
-  four sites whose `PandocAST` definition moves to
-  `types/pandoc.ts`.
+  `RegistryContext` definition (extended in item 5 to carry
+  `sourceInfoPool` and `currentFilePath`); `Image` renderer
+  updated by item 8 for render-time `<img src>` resolution; one
+  of the sites whose `PandocAST` / `BlockNode` / `InlineNode`
+  definitions move to `types/pandoc.ts`.
 - `hub-client/src/components/render/AstIframe.tsx` — postMessage
-  protocol (unchanged by 2A).
-- `hub-client/src/ast-renderer-entry.tsx` — iframe entry; 2A adds
-  the `AstWithAssets` wrapper component (image rewriter useEffect,
-  link handler useEffect, theme CSS injection useEffect) here.
+  protocol; item 11 adds `themeFingerprint` to the payload.
+- `hub-client/src/ast-renderer-entry.tsx` — iframe entry; item 10
+  adds the `AstWithAssets` wrapper (link-handler effect via ref,
+  fingerprint-keyed theme CSS effect) and forwards
+  `themeFingerprint` from the postMessage payload.
 - `hub-client/public/ast-renderer.html:7-22` — inline `<style>`
   to wrap with `:where()`.
-- `hub-client/src/utils/iframePostProcessor.ts:177-210` — source
-  for the image-rewrite logic to extract into
-  `iframeImageRewriter.ts`.
 - `hub-client/src/utils/iframePostProcessor.ts:212-281` — source
   for the link-handler logic (external new-tab, `.qmd` clicks,
   same-doc anchor, `Ctrl+S`/`Cmd+S` save) to extract into
   `iframeLinkHandlers.ts`. The artifact-rooted `.html`
   reverse-mapping at lines 253-272 stays in
-  `iframePostProcessor.ts` (HTML-only; not extracted).
+  `iframePostProcessor.ts` (HTML-only; not extracted). Item 9
+  also adds an idempotency guard to `injectPreviewStyles`
+  (lines 294-326) and exports it.
+- `hub-client/src/utils/iframePostProcessor.ts:177-210` — image
+  rewriter for the HTML iframe. **Unchanged** by 2A; item 8 ships
+  a separate render-time approach for the AST iframe rather than
+  extracting a shared helper.
 - `hub-client/src/components/render/ReactAstRenderer.tsx` —
   dead file to delete.
 - `hub-client/src/types/diagnostic.ts`,
@@ -607,19 +814,19 @@ file header comment.
 
 The TDD discipline in `CLAUDE.md` ("write test → verify failure →
 implement → verify pass") applies **per work-item**, not per-plan.
-Items 1–7 are greenfield additions or single-purpose changes — true
-failing-test-first applies (write the test, verify it fails for the
-expected reason, implement, verify it passes). Items 2 (PandocAST
-consolidation), 8 (image rewriter extraction), and 9 (link handlers
-extraction) are **behavior-preserving refactors** — the canonical
-"failing test" doesn't exist because there's no behavior change to
-test for. The test gate for these items is **"existing tests pass
-before AND after the refactor"** (specifically the
+Most items (1, 3, 4, 5, 6, 7, 8, 10, 11) are greenfield additions
+or single-purpose changes — true failing-test-first applies (write
+the test, verify it fails for the expected reason, implement,
+verify it passes). Items 2 (PandocAST consolidation) and 9 (link
+handlers extraction) are **behavior-preserving refactors** — the
+canonical "failing test" doesn't exist because there's no behavior
+change to test for. The test gate for these items is **"existing
+tests pass before AND after the refactor"** (specifically the
 `iframePostProcessor.test.ts` and `.integration.test.ts` suites for
-items 8 / 9; the workspace `tsc -b` for item 2). Structure each
-refactor commit so it is independently verifiable: run the relevant
-test suite at the start of the commit (should pass), make the
-mechanical move, run the suite again (should still pass).
+item 9; the workspace `tsc -b` for item 2). Structure each refactor
+commit so it is independently verifiable: run the relevant test
+suite at the start of the commit (should pass), make the mechanical
+move, run the suite again (should still pass).
 
 The temptation on a refactor is to skip the "before" run and trust
 the diff. Don't — running before catches a pre-existing failure
@@ -640,39 +847,63 @@ that would otherwise look like a refactor regression.
   `render-components: [foo.tsx]` AST; assert `customComponentsCode`
   is populated (today's behavior is empty for non-debug formats).
   Sibling regression test for q2-debug confirms behavior unchanged.
-- **Image rewriter unit tests**: build a representative `Document`
-  with `<img>` elements pointing at (a) project-relative paths
-  (`hero.png`), (b) `/.quarto/...` paths (legacy/HTML branch),
-  (c) external URLs (skipped), and (d) `data:` URIs (skipped).
-  Mock VFS reads, run `rewriteImages(doc, { currentFilePath })`,
-  assert the resulting DOM has `data:` URIs in place of the
-  rewritable paths and no change to the others.
-- **Image rewriter integration test (HTML iframe)**: existing
+- **Image renderer component tests** (vitest): mount `<Ast>` with a
+  fixture containing `Image` nodes pointing at (a) project-relative
+  paths (`hero.png`), (b) `/.quarto/...` paths (shouldn't appear
+  in q2-preview but the renderer should pass them through), (c)
+  external URLs, and (d) `data:` URIs. Mock VFS via the registry
+  context's `currentFilePath`. Assert the rendered `<img>` for case
+  (a) has a `data:` URI src; cases (b), (c), (d) keep their
+  original src.
+- **Image rendering integration test (AST iframe)**: render an AST
+  with `<img src="hero.png">`, populate the VFS at the resolved
+  project-relative path with a fake image, mount the iframe, assert
+  the rendered `<img>` has a `data:` URI src on first paint. No
+  flicker assertion needed — the rewrite happens during render, not
+  after. Re-render with a different image src and assert the new
+  image is also resolved.
+- **HTML iframe image rewriter regression**: existing
   `iframePostProcessor.test.ts` and `.integration.test.ts` suites
-  pass before and after the extraction. The refactor is
-  behavior-preserving.
-- **Image rewriter integration test (AST iframe)**: render an AST
-  with an `<img src="hero.png">`, populate the VFS at the
-  resolved project-relative path with a fake image, mount the
-  iframe, assert the rendered `<img>` has a `data:` URI src.
-  Re-render with a different image src, assert the new image is
-  also rewritten (verifies the `[astJson]` dependency on the
-  useEffect).
+  pass without modification. The HTML iframe rewriter is
+  **unchanged** by this plan; this gate confirms no accidental
+  collateral damage.
 - **Link handler unit tests** (vitest): build a representative
-  `Document`, attach `installLinkHandlers(doc, { onQmdLinkClick,
-  currentFilePath: '/foo.qmd' })`, dispatch synthetic clicks on:
+  `Document`, build `ctxRef = { current: { onQmdLinkClick,
+  currentFilePath: '/foo.qmd' } }`, attach `installLinkHandlers(doc,
+  ctxRef)`, dispatch synthetic clicks on:
   `<a href="https://example.com">` (assert `window.open` called
   with `_blank`), `<a href="other.qmd#sec">` (assert
   `onQmdLinkClick({ path: '/other.qmd', anchor: 'sec' })`),
   `<a href="#sec">` (assert `onQmdLinkClick({ anchor: 'sec' })`),
   and a non-`.qmd` non-anchor href (assert no handler call,
   default click behavior preserved). Dispatch a synthetic
-  `Cmd+S` keydown, assert the parent postMessage fires.
-- **Theme CSS injection unit test**: render an AST through
-  `AstWithAssets`, populate the VFS with a fake `styles.css`,
-  assert a `<style>` element with the CSS bytes appears in
-  `document.head`. Re-render — assert the `<style>` is not
-  duplicated (one-shot guarantee).
+  `Cmd+S` keydown on `window`, assert the parent postMessage
+  fires. **Stale-closure regression**: mutate
+  `ctxRef.current.currentFilePath` to `'/bar.qmd'`, re-dispatch a
+  click on `<a href="other.qmd">`, assert `onQmdLinkClick`
+  resolves relative to the *new* base.
+- **Theme CSS fingerprint-keyed re-injection test** (vitest):
+  mount `<AstWithAssets>` with `themeFingerprint='abc'` and a fake
+  `styles.css` containing bytes A; assert one
+  `<style data-q2-theme>` element with bytes A in `document.head`.
+  Re-render with the same `themeFingerprint='abc'` — assert the
+  same single `<style>` element (no duplication; effect short-
+  circuits on unchanged dep). Re-render with
+  `themeFingerprint='def'` and bytes B in VFS — assert the same
+  single `<style>` element but with bytes B (textContent updated,
+  not appended). Mount/unmount/mount under StrictMode dev — assert
+  exactly one `<style data-q2-theme>` element exists (the marker
+  doubles as a StrictMode idempotency guard).
+- **`injectPreviewStyles` idempotency unit test** (vitest):
+  call `injectPreviewStyles(doc)` twice on the same document;
+  assert exactly one `<style data-hub-client>` element exists in
+  `doc.head`.
+- **Rust-side `themeFingerprint` surfacing test** (cargo nextest):
+  construct a `RenderResponse` for a single render with a known
+  theme; assert `response.theme_fingerprint == Some(theme_fingerprint(css))`
+  for the response's theme CSS. Render the same fixture twice with
+  the same theme; assert fingerprints are byte-identical. Render
+  with a different theme; assert fingerprints differ.
 - **`:where()` style regression test** (DOM-inspection, not
   snapshot): mount the iframe with no theme CSS loaded
   (q2-debug); assert `getComputedStyle(document.body).fontFamily`
@@ -712,21 +943,25 @@ that would otherwise look like a refactor regression.
 
 ## Risk areas
 
-- **`iframePostProcessor.ts` refactor regression**. The image
-  rewriter and link-handler extractions must be behavior-preserving
-  for the HTML iframe. Mitigation: the existing
-  `iframePostProcessor.test.ts` and `iframePostProcessor.integration.test.ts`
-  suites pass before and after. Don't change extraction shape
-  mid-refactor.
-- **`PandocAST` consolidation type drift**. The four duplicate
+- **`iframePostProcessor.ts` refactor regression**. Only the
+  link-handler extraction (item 9) and the `injectPreviewStyles`
+  export + idempotency guard (item 9) touch this file. The image
+  rewriter is **not** extracted — item 8 ships a different
+  approach (render-time resolution in the `Image` component), so
+  `iframePostProcessor.ts:177-210` is left alone. The HTML iframe
+  must remain behavior-identical: existing
+  `iframePostProcessor.test.ts` and
+  `iframePostProcessor.integration.test.ts` suites pass before and
+  after.
+- **`PandocAST` consolidation type drift**. The duplicate
   definitions have drifted on naming (`Block`/`Inline` vs
   `BlockNode`/`InlineNode`) and inline-variant coverage. The
   consolidation picks `BlockNode`/`InlineNode` (richest existing
   shape) plus the `astContext?` field and `CustomBlockNode` /
-  `CustomInlineNode` placeholders. The three slide-side importers
-  (`RevealjsReactAstSlideRenderer.tsx`, `useCursorToSlide.ts`,
-  `useSlideThumbnails.tsx`) get rename + import updates in the same
-  pass. Run `tsc -b` after each consumer's import update.
+  `CustomInlineNode` placeholders. Slide-side files keep their
+  local `Block`/`Inline` exports (q2-slides stays on q2-debug
+  path); they only update their `PandocAST` import path. Run
+  `tsc -b` after each consumer's import update.
 - **`render-components` gate change visibility**. The current
   one-line gate is buried in a `useMemo`; easy to miss when
   reading the diff. Add a comment explaining the gate's
@@ -737,42 +972,25 @@ that would otherwise look like a refactor regression.
   the alternative is splitting `ast-renderer.html` (rejected
   above) or removing the body rule entirely (acceptable but
   causes UA-default 8px body margin in q2-debug).
-- **AST-iframe `useEffect` re-run on every commit**. The image
-  rewriter useEffect keys on `[astJson, currentFilePath]`. If
-  another React state change triggers a re-render without changing
-  `astJson`, the effect skips correctly. If a future change makes
-  the AST mutate without `astJson` changing reference (e.g. an
-  in-place edit), the rewriter would miss the update. Mitigation:
-  always replace `astJson` with a new string on AST mutation
-  (today's `setAst` flow already does this via postMessage
-  serialization).
-- **Empty-content artifact overwrite (latent bug discovered during
-  plan review)**. The WASM flush loop at
+- **Empty-content artifact overwrite (out of scope; tracked at
+  bd-3gtn)**. The WASM flush loop at
   `wasm-quarto-hub-client/src/lib.rs:1208-1214` and `:1364-1369`
   writes `artifact.content.clone()` to VFS without checking for
   empty content. `ResourceCollectorTransform` produces empty-content
-  artifacts whose `path` field is the absolute resolved
-  `base_dir.join(url)`. `Path::join` with an absolute second arg
-  replaces the first, so the resolver's `vfs_root.join(absolute_path)`
-  collapses to the absolute path itself — which is also where the
-  hub-client's `automergeSync` uploaded the user's image. The flush
-  therefore overwrites the user's bytes with `Vec::new()` on every
-  render. In current production this hasn't bitten anyone yet (HTML
-  preview has been the test surface and the iframe rewrite still
-  happens to work after the overwrite because… it doesn't, actually
-  — verifying this in HTML preview is a follow-up). Plan 2A doesn't
-  fix the bug, but the iframe rewriter must keep using the user's
-  upload as the source of truth and treat the renderer's image flush
-  as not-load-bearing. Tracked at **bd-3gtn**; one-line fix is
-  `if !artifact.content.is_empty() { runtime.add_file(...) }`.
-- **Wire-format code 3 back-compat (minor)**. 2A's TS type for
-  code 3 covers the post-Plan-5 reader's expected
-  `[filter_path, line]` shape (FilterProvenance). Plan 5's reader
-  also accepts the legacy Transformed shape `[parent_id, ...]`,
-  but no fresh writer emits that anymore. If old AST JSON predating
-  Plan 5 ever reaches the iframe, the type would not cover it; in
-  production the iframe only sees fresh writer output, so this is
-  not a real risk.
+  artifacts whose `path` resolves (via `Path::join` semantics on
+  absolute paths) to the same VFS location where `automergeSync`
+  writes user uploads — overwriting them with `Vec::new()` on each
+  render. The `Image` renderer (item 8) reads user uploads as the
+  source of truth, so the bug is parallel to 2A's image story
+  rather than blocking it. Fix is one line in each flush loop
+  (`if !artifact.content.is_empty() { ... }`); lives in **bd-3gtn**,
+  not 2A scope.
+- **Wire-format codes**. See
+  `claude-notes/designs/wire-format-source-info-codes.md` for the
+  allocation policy. Codes 0–3 are stable in production; codes 4–5
+  are forward-declared in 2A's TS types and inert until Plan 5
+  writes them. Adding new codes later requires synchronized writer
+  + reader updates.
 
 ## Estimated scope
 
@@ -781,23 +999,26 @@ Items in implementation order (matching §"In scope" above).
 | # | Component | Lines (rough) |
 |---|---|---|
 | 1 | `types/sourceInfo.ts` (mirror types) | ~50 |
-| 2 | `types/pandoc.ts` consolidation + 6-consumer migration + delete dead file | ~180 (net negative after deletion) |
+| 2 | `types/pandoc.ts` consolidation + 5-consumer migration + delete dead file | ~150 (net negative after deletion) |
 | 3 | `utils/sourceInfo.ts` (accessors + tests) | ~120 |
 | 4 | `utils/atomicCustomNodes.ts` (TS hand-mirror) | ~30 |
-| 5 | `RegistryContext` extension + AST entry threading | ~30 |
+| 5 | `RegistryContext` extension (`sourceInfoPool` + `currentFilePath`) + AST entry threading + Provider plumbing | ~50 |
 | 6 | `ast-renderer.html` `:where()` wrap + regression test | ~30 |
 | 7 | `render-components` gate extension + regression test | ~20 |
-| 8 | `iframeImageRewriter.ts` extraction + HTML caller update | ~80 |
-| 9 | `iframeLinkHandlers.ts` extraction + HTML caller unchanged (HTML keeps inline pattern) | ~120 |
-| 10 | `AstWithAssets` wrapper (3 useEffects: image, link, theme CSS + injectPreviewStyles) + integration tests | ~120 |
-| | **Total** | **~780** |
+| 8 | `Image` renderer render-time resolution + component tests | ~50 |
+| 9 | `iframeLinkHandlers.ts` extraction (ref-based context) + `injectPreviewStyles` idempotency guard | ~130 |
+| 10 | `AstWithAssets` wrapper (2 useEffects: link, fingerprint-keyed theme CSS) + integration tests | ~80 |
+| 11 | Rust-side `themeFingerprint` surfacing (`quarto-core` + WASM bridge + TS types + postMessage payload) + Rust test | ~30 |
+| | **Total** | **~740** |
 
 Two focused sessions are realistic. A natural split is **items
-1–5** (type/data foundation; inert wiring for 2B) and **items
-6–10** (iframe glue; lights up theme CSS, images, and link
-navigation visibly). Either session can land independently of the
-other — items 1–5 don't visibly change anything, and items 6–10
-don't depend on the source-info types existing.
+1–5** (type/data foundation including the `RegistryContext` plumbing
+2B and item 8 consume; inert wiring for 2B) and **items 6–11**
+(iframe glue plus the small Rust-side fingerprint surfacing; lights
+up theme CSS, images, and link navigation visibly). Either session
+can land independently of the other — items 1–5 don't visibly change
+anything beyond the Provider's new value shape, and items 6–11 don't
+depend on the source-info types existing.
 
 ## Notes
 
