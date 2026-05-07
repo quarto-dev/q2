@@ -665,8 +665,8 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
     if rawblock.format == "markdown" {
         write!(buf, "{}", rawblock.text)?;
     } else {
-        // For other formats, use fenced raw block notation
-        writeln!(buf, "```{{{}}}", rawblock.format)?;
+        // For other formats, use fenced raw block notation with `=` prefix
+        writeln!(buf, "```{{={}}}", rawblock.format)?;
         write!(buf, "{}", rawblock.text)?;
         if !rawblock.text.ends_with('\n') {
             writeln!(buf)?;
