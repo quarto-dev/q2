@@ -55,13 +55,15 @@ round-tripping; edits inside surfacing as diagnostics).
     arm includes `unreachable!("coarsen should have substituted KeepBefore
     for atomic CustomNode in RecurseIntoContainer; this branch indicates
     a coarsen bug")` as a debug assertion.
-- Add a React component for `IncludeExpansion` in custom.tsx (Plan 2B's
-  registry; Plan 2B already lands an `IncludeExpansion` placeholder
-  component as dormant wiring — Plan 8 makes the underlying CustomNode
-  appear in the AST):
+- Add a React component for `IncludeExpansion` at
+  `hub-client/src/components/render/q2-preview/custom/IncludeExpansion.tsx`
+  (q2-preview's built-in custom-node registry, post-2pre / 2B; Plan 2B
+  already lands an `IncludeExpansion` placeholder component as dormant
+  wiring — Plan 8 makes the underlying CustomNode appear in the AST):
   - Transparent passthrough: render the content slot's blocks normally.
   - Read-only: do not pass `setLocalAst` to slot children (enforced via
-    Plan 2B's atomic-aware dispatcher reading
+    the framework's atomic-aware dispatcher in `framework/dispatchers.tsx`
+    reading
     `hub-client/src/utils/atomicCustomNodes.ts`).
   - Visual indicator (optional): subtle background tint or hover badge
     "from foo.qmd".
