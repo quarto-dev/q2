@@ -34,7 +34,7 @@ companion design rationale is
 | L3    | `bd-ml8z` | feature | ListingResolveTransform (Pass-2, built-ins via doctemplate)            | `2026-05-06-listings-L3-resolve-transform.md`        | **Closed** (impl `3b8dd645`…`ff23a2a2`, merge `b4f2238c`) |
 | L4    | `bd-b5jm` | task    | quarto-doctemplate enhancements (pipes, ConfigValue bridge, resolver)  | `2026-05-06-listings-L3-resolve-transform.md` (bundled w/ L3) | **Closed** (impl `3b8dd645`, merge `b4f2238c`) |
 | L5    | `bd-5vsr` | feature | Categories sidebar                                                     | `2026-05-06-listings-L5-categories-sidebar.md`       | **Closed** (impl `2750546b`+`67a985f4`, merge `9e8afa0d`) |
-| L6    | `bd-xbnf` | task    | Dependency-graph integration (`listing_content_targets`)               | `YYYY-MM-DD-listings-L6-dep-graph.md`                | not yet written     |
+| L6    | `bd-xbnf` | task    | Dependency-graph integration (`listing_content_globs`)                 | `2026-05-07-listings-L6-dep-graph.md`                | **Closed** (impl `ffa4d227`, merge `8b5efb91`) |
 | L7    | `bd-qf7r` | feature | Post-render placeholder upgrade (engine-rendered previews; BRACKETED)  | `YYYY-MM-DD-listings-L7-postrender-upgrade.md`       | not yet written     |
 | L8    | `bd-rqgx` | feature | Custom listing templates                                               | `YYYY-MM-DD-listings-L8-custom-templates.md`         | not yet written     |
 | L9    | `bd-o90m` | feature | RSS feeds                                                              | `YYYY-MM-DD-listings-L9-rss-feeds.md`                | not yet written     |
@@ -180,7 +180,7 @@ Dependency graph (Phase 8):
   - body_link_targets (existing)
   - nav_dependencies (existing)
   - sidebar co-membership (existing)
-  - listing_content_targets ← new edge source
+  - listing_content_globs ← new edge source (`bd-xbnf`, L6)
 ```
 
 The `ListingItemInfoStage` lives between `IncludeExpansionStage` and
@@ -410,21 +410,32 @@ Scope:
 
 **bd type:** task. Depends on L0, L2.
 
-Scope:
-- Add `listing_content_targets: Vec<PathBuf>` to
-  `DocumentProfile` (additive; no version bump if defaulted).
-  Populated during the dependency-graph build phase by expanding
-  the host's `listing.contents` globs against the project's
-  source paths.
+Scope (as implemented; original epic-plan design renamed
+`listing_content_targets` → `listing_content_globs` per the L6
+sub-plan, since we store unresolved glob strings rather than
+resolved paths — resolution can't safely cache on a per-doc
+profile that doesn't see the full project source set):
+- Add `listing_content_globs: Vec<String>` to `DocumentProfile`.
+  **Profile version bumped 4 → 5** (`bd-xbnf`) so stale Phase-8
+  caches invalidate cleanly. Populated by `DocumentProfile::extract`
+  via the new `crate::project::listing::config::extract_content_globs`
+  helper.
 - New automatic edge source in
   `crates/quarto-core/src/project/dependency_graph.rs`: for each
-  host page with non-empty `listing_content_targets`, add a
-  forward edge from the host to each match.
+  host page with non-empty `listing_content_globs`, expand each
+  glob against `ProjectIndex.profiles()` (host-relative first,
+  project-relative fallback — same rule L3 uses) and add a forward
+  edge from the host to each match. Each listing host with a
+  non-empty glob list is added to `force_render`.
 - Mode B picks up listing hosts when any of their content files
-  are touched. Verify against the existing Mode B tests.
+  is targeted. The existing
+  `augment_targets_with_always_render` primitive does the work
+  unchanged — L6 only feeds `force_render`.
 - Tests: edge-add correctness, Mode B selection includes listing
   hosts, sentinel for "listing host with no matches" (no edges,
-  no errors).
+  no errors). Unit + integration coverage in `quarto-core` (+26
+  tests over baseline). End-to-end CLI Mode-B verification
+  recorded in the L6 sub-plan.
 
 ### L7 — Post-render placeholder upgrade (engine-rendered previews)
 
@@ -635,7 +646,9 @@ Scope:
 - Confirm `cargo xtask verify` runs clean on a fresh checkout.
 - Update `claude-notes/designs/document-profile-contract.md`
   change log if any v3-additive fields were added beyond
-  `listing_item` (e.g. `listing_content_targets` in L6).
+  `listing_item` (L6 added `listing_content_globs` and bumped
+  the profile version 4 → 5 — already documented in the
+  contract doc).
 - Confirm hub-client renders listings end-to-end via WASM
   (real browser session, per CLAUDE.md §"End-to-end
   verification"). The key claim being verified: hub-client
