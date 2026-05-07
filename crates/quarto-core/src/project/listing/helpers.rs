@@ -70,21 +70,61 @@ pub fn metadata_attrs(item: &ListingItem, item_index: usize) -> String {
     parts.join(" ")
 }
 
-/// Build the description placeholder comment for an item. The L7
-/// post-render upgrade scans the rendered HTML for these comments
-/// and substitutes the engine-rendered first-paragraph when
-/// available.
+/// Build the description envelope's begin marker for an item.
 ///
-/// Even when L7 doesn't run (hub-client / future `quarto preview`),
-/// the L1 fallback `description` already lives next to the
-/// placeholder in the rendered markup, so the listing renders
-/// correctly without substitution.
-pub fn description_placeholder(item: &ListingItem, listing: &Listing) -> String {
-    placeholders::description_placeholder(
+/// L3 emits this just before the L1 fallback `$description$` block
+/// in the listing item template; L7's post-render upgrade scans
+/// for the begin/end pair and substitutes the engine-rendered first
+/// paragraph between them when available, or strips just the
+/// markers (keeping the L1 fallback) when not. Both states render
+/// correctly — see the L1 safeguard contract.
+pub fn description_placeholder_begin(item: &ListingItem, listing: &Listing) -> String {
+    placeholders::description_placeholder_begin(
         &listing.id,
         listing.max_description_length,
         &item.output_href,
     )
+}
+
+/// Build the description envelope's end marker. Token-only; paired
+/// with the begin marker via the L7 regex.
+pub fn description_placeholder_end() -> String {
+    placeholders::description_placeholder_end()
+}
+
+/// Build the image envelope's begin marker for an item.
+///
+/// `idx` is the item's index in the listing (used by Q1's interactive
+/// JS for stable per-item ids; carried verbatim through the marker).
+///
+/// The marker carries the listing's configured `image-placeholder:`
+/// URL base64-encoded with [`base64::engine::general_purpose::URL_SAFE_NO_PAD`].
+/// Empty when the listing has no `image-placeholder:` set; the L7
+/// substitution then falls through to the empty-div placeholder.
+/// Embedding it here means L7 doesn't have to walk source profiles
+/// to find listing config at substitution time — see plan
+/// §"Architecture: image-placeholder cascade in detail".
+///
+/// `attrs` is fixed at `progressive=false, height=, lazy=true` in
+/// v1 (matching Q1's emission shape). Wiring `listing.image_height`
+/// / `listing.image_lazy_loading` into the substituted `<img>` is a
+/// follow-up; v1 emits the static defaults verbatim.
+pub fn image_placeholder_begin(item: &ListingItem, listing: &Listing, idx: usize) -> String {
+    use base64::Engine;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let attrs = "progressive=false, height=, lazy=true";
+    let b64_default = listing
+        .image_placeholder
+        .as_deref()
+        .map(|url| URL_SAFE_NO_PAD.encode(url.as_bytes()))
+        .unwrap_or_default();
+    placeholders::image_placeholder_begin(&listing.id, idx, &item.output_href, attrs, &b64_default)
+}
+
+/// Build the image envelope's end marker. Token-only; paired with
+/// the begin marker via the L7 regex.
+pub fn image_placeholder_end() -> String {
+    placeholders::image_placeholder_end()
 }
 
 /// Build the per-item categories chip block. Empty when the item has
@@ -243,12 +283,59 @@ mod tests {
     }
 
     #[test]
-    fn description_placeholder_uses_listing_id_and_max_len() {
+    fn description_placeholder_begin_carries_max_len_and_href() {
         let item = make_item_with_image(None);
-        let comment = description_placeholder(&item, &make_listing());
-        assert!(comment.contains("desc(5A0113B34292)"));
-        assert!(comment.contains("[max=175]"));
-        assert!(comment.contains("posts/foo.html"));
+        let comment = description_placeholder_begin(&item, &make_listing());
+        assert_eq!(
+            comment,
+            "<!-- desc-begin(5A0113B34292)[max=175]:posts/foo.html -->"
+        );
+    }
+
+    #[test]
+    fn description_placeholder_end_is_token_only() {
+        // No item / listing args: end marker is token-only.
+        let comment = description_placeholder_end();
+        assert_eq!(comment, "<!-- desc-end(5A0113B34292) -->");
+    }
+
+    #[test]
+    fn image_placeholder_begin_emits_static_attrs_when_no_default() {
+        let item = make_item_with_image(None);
+        let listing = make_listing(); // image_placeholder: None
+        let comment = image_placeholder_begin(&item, &listing, 4);
+        // Verify the attrs string + listing-id + idx + href and that
+        // the b64-default segment is empty.
+        assert_eq!(
+            comment,
+            "<!-- img-begin(9CEB782EFEE6)[progressive=false, height=, lazy=true]:listing-1:4:posts/foo.html: -->"
+        );
+    }
+
+    #[test]
+    fn image_placeholder_begin_b64_encodes_listing_default_url() {
+        use base64::Engine;
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let item = make_item_with_image(None);
+        let mut listing = make_listing();
+        listing.image_placeholder = Some("assets/site/default.png".to_string());
+        let comment = image_placeholder_begin(&item, &listing, 0);
+        let expected_b64 = URL_SAFE_NO_PAD.encode("assets/site/default.png".as_bytes());
+        // The b64 of the URL must appear verbatim at the trailing
+        // `:b64 -->` slot.
+        let expected_suffix = format!(":{} -->", expected_b64);
+        assert!(
+            comment.ends_with(&expected_suffix),
+            "expected marker to end with `{}`, got: {}",
+            expected_suffix,
+            comment
+        );
+    }
+
+    #[test]
+    fn image_placeholder_end_is_token_only() {
+        let comment = image_placeholder_end();
+        assert_eq!(comment, "<!-- img-end(9CEB782EFEE6) -->");
     }
 
     fn make_item_with_categories(categories: Vec<&str>) -> ListingItem {

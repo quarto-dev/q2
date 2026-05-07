@@ -474,3 +474,194 @@ fn pipeline_default_project_no_phase_7_outputs() {
     );
     assert!(summary.project_diagnostics.is_empty());
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// L7 (`bd-qf7r`) — `substitute_listing_placeholders` is wired into
+// `WebsiteProjectType::post_render` and runs against the project's
+// rendered outputs.
+// ═══════════════════════════════════════════════════════════════════
+
+// L7 plan §"Tests" Phase 7 #38
+#[test]
+fn pipeline_website_post_render_substitutes_listing_placeholders() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\nlisting:\n  contents: \"posts/*.qmd\"\n  type: default\nformat: html\n---\n\nHome page.\n",
+        );
+        // Explicit `description:` populates the L1 fallback so the
+        // listing template's `$if(description)$` block renders. The
+        // body content is what L7 will pull as the engine first
+        // paragraph from the rendered sibling.
+        write(
+            &project_dir.join("posts/foo.qmd"),
+            "---\ntitle: Foo\ndate: 2026-01-15\ndescription: Foo L1 fallback.\nformat: html\n---\n\nEngine first paragraph from foo.\n",
+        );
+        write(
+            &project_dir.join("posts/bar.qmd"),
+            "---\ntitle: Bar\ndate: 2026-01-10\ndescription: Bar L1 fallback.\nformat: html\n---\n\nEngine first paragraph from bar.\n",
+        );
+    });
+
+    let host = read(&project_dir.join("_site/index.html"));
+    assert!(
+        host.contains("Engine first paragraph from foo."),
+        "expected foo's engine first paragraph in host; got: {host}"
+    );
+    assert!(
+        host.contains("Engine first paragraph from bar."),
+        "expected bar's engine first paragraph in host; got: {host}"
+    );
+    // L7-substituted preview replaces the L1 fallback; the static
+    // text should NOT survive.
+    assert!(
+        !host.contains("Foo L1 fallback."),
+        "L1 fallback should be replaced by engine first paragraph; got: {host}"
+    );
+    assert!(
+        !host.contains("Bar L1 fallback."),
+        "L1 fallback should be replaced by engine first paragraph"
+    );
+    // Both halves of the description envelope must be gone.
+    assert!(
+        !host.contains("desc-begin(5A0113B34292)"),
+        "begin marker must be stripped from rendered host; got first 800 chars:\n{}",
+        &host.chars().take(800).collect::<String>()
+    );
+    assert!(
+        !host.contains("desc-end(5A0113B34292)"),
+        "end marker must be stripped from rendered host"
+    );
+    // No Q-12-13 — both posts produced rendered output.
+    assert!(
+        summary
+            .project_diagnostics
+            .iter()
+            .all(|d| d.code.as_deref() != Some("Q-12-13")),
+        "expected no Q-12-13; got: {:?}",
+        summary.project_diagnostics
+    );
+}
+
+// L7 plan §"Tests" Phase 7 #42 — image substitution end-to-end.
+//
+// The post's body emits the `<img>` via a raw-HTML block so L1's
+// `first_image_src` (which looks for Pandoc Image AST nodes) does
+// NOT see it and leaves `listing_item.image: None`. The listing
+// host emits the image-placeholder envelope; after Pass-2 the
+// sibling output's HTML contains a `<img src="preview-image.png">`
+// in `main.content`. L7's preview-image extractor picks it up via
+// the named-pattern selector (src contains "preview" + ".png")
+// and substitutes the envelope.
+//
+// This avoids needing a real engine: the raw-HTML pathway lets
+// us inject the rendered image without depending on jupyter / R
+// being installed. The substitution path it exercises is the
+// same one engine-rendered images would hit.
+#[test]
+fn pipeline_website_post_render_substitutes_image_from_sibling_preview() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\nlisting:\n  contents: \"posts/*.qmd\"\n  type: default\nformat: html\n---\n\nHome page.\n",
+        );
+        // The raw-HTML `{=html}` block emits `<img>` directly.
+        // L1's `first_image_src` walks Block::Image AST nodes and
+        // sees nothing here (raw blocks don't contain Image
+        // inlines), so the listing item's `image:` field stays
+        // unset and the host's image-placeholder envelope fires.
+        // Body para is needed so the description envelope can
+        // substitute too (otherwise the L1 fallback "shows" but
+        // L7 sees no <p> to extract).
+        write(
+            &project_dir.join("posts/with-engine-image.qmd"),
+            "---\ntitle: Engine Post\ndate: 2026-01-20\ndescription: Static fallback.\nformat: html\n---\n\nBody paragraph.\n\n```{=html}\n<img src=\"preview-image.png\" alt=\"engine output\">\n```\n",
+        );
+    });
+
+    let host = read(&project_dir.join("_site/index.html"));
+    // The image envelope was substituted with a `<img>` referring
+    // to the sibling's preview image, host-relativized.
+    assert!(
+        host.contains(r#"src="posts/preview-image.png""#),
+        "expected substituted img src; got: {host}"
+    );
+    assert!(
+        host.contains(r#"class="thumbnail-image""#),
+        "expected thumbnail-image class on substituted img"
+    );
+    // No image envelope markers survive in the rendered host.
+    assert!(
+        !host.contains("img-begin(9CEB782EFEE6)"),
+        "image begin marker should be stripped; got: {host}"
+    );
+    assert!(
+        !host.contains("img-end(9CEB782EFEE6)"),
+        "image end marker should be stripped"
+    );
+    // No empty placeholder div either (substitution replaced it).
+    assert!(
+        !host.contains("listing-item-img-placeholder"),
+        "empty placeholder should be replaced by substituted img"
+    );
+    // The description path also substitutes from the body
+    // paragraph, not the static fallback.
+    assert!(
+        host.contains("Body paragraph."),
+        "expected engine first paragraph"
+    );
+    assert!(
+        !host.contains("Static fallback."),
+        "L1 fallback should be replaced"
+    );
+    assert!(
+        summary
+            .project_diagnostics
+            .iter()
+            .all(|d| d.code.as_deref() != Some("Q-12-13")),
+        "no Q-12-13 expected; got: {:?}",
+        summary.project_diagnostics
+    );
+}
+
+// L7 plan §"Tests" Phase 7 #39
+#[test]
+fn pipeline_default_project_does_not_substitute_listing_placeholders() {
+    // L7 should not run on default projects. A default project that
+    // happened to emit placeholder-shaped comments in its output
+    // would pass through unchanged.
+    let (project_dir, _summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: default\n  output-dir: _out\n",
+        );
+        // A bare html comment that resembles a desc-begin marker
+        // (the static content in this fixture has no real listing
+        // — the comment should never be touched because L7 is
+        // never invoked on default projects).
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\n```{=html}\n<!-- desc-begin(5A0113B34292)[max=100]:nope.html -->\n<p>Static fallback.</p>\n<!-- desc-end(5A0113B34292) -->\n```\n",
+        );
+    });
+
+    let html = read(&project_dir.join("_out/index.html"));
+    // Comment must survive verbatim.
+    assert!(
+        html.contains("desc-begin(5A0113B34292)"),
+        "default project must not invoke L7 substitution; markers should survive. Got first 800 chars:\n{}",
+        &html.chars().take(800).collect::<String>()
+    );
+    assert!(
+        html.contains("desc-end(5A0113B34292)"),
+        "default project must preserve end marker too"
+    );
+}

@@ -176,9 +176,26 @@ fn default_listing_renders_three_posts_in_date_desc_order() {
         p_first
     );
 
-    // L7-bound description placeholders are emitted alongside the
-    // L1 fallback descriptions.
-    assert!(host.contains("desc(5A0113B34292)"));
+    // L7 ran during `WebsiteProjectType::post_render`: the
+    // description envelope markers are stripped from the rendered
+    // host and the description region is replaced with each post's
+    // engine-rendered first paragraph (`"First body."` etc., from
+    // the post bodies above).
+    assert!(
+        !host.contains("desc-begin(5A0113B34292)"),
+        "L7 should have stripped description begin markers; got: {host}"
+    );
+    assert!(
+        !host.contains("desc-end(5A0113B34292)"),
+        "L7 should have stripped description end markers"
+    );
+    // Engine-rendered first paragraph from each post's body.
+    assert!(
+        host.contains("First body.")
+            && host.contains("Second body.")
+            && host.contains("Third body."),
+        "L7 should substitute the engine first paragraphs; got: {host}"
+    );
 
     // Authors and dates flow through.
     assert!(host.contains("Alice"));

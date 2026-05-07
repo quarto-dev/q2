@@ -4,7 +4,11 @@
 
 $if(image-html)$
 ::: card-img-top
-[$image-html$]($path$){.no-external}
+[`$image-html$`{=html}]($path$){.no-external}
+:::
+$else$
+::: card-img-top
+[`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}]($path$){.no-external}
 :::
 $endif$
 
@@ -32,9 +36,15 @@ $endif$
 
 $if(description)$
 ::: {.card-text .listing-description .delink}
+```{=html}
+$description-placeholder-begin$
+```
+
 [$description$]($path$){.no-external}
 
-$description-placeholder$
+```{=html}
+$description-placeholder-end$
+```
 :::
 $endif$
 

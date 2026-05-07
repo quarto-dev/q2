@@ -258,6 +258,17 @@ impl ProjectType for WebsiteProjectType {
             copy_favicon(project, runtime, diagnostics)?;
             write_sitemap(project, index, output_paths, runtime)?;
             write_robots_txt(project, runtime)?;
+            // L7 (`bd-qf7r`): replace listing description / image
+            // placeholder envelopes with engine-rendered preview
+            // content read from sibling outputs. Bracketed feature
+            // — see `super::listing::post_render_upgrade` header
+            // comment for the discipline this enforces.
+            super::listing::post_render_upgrade::substitute_listing_placeholders(
+                project,
+                output_paths,
+                runtime,
+                diagnostics,
+            )?;
         }
         // Suppress unused-warnings on WASM where the cfg block above
         // is empty. The signature is fixed by the trait, and these

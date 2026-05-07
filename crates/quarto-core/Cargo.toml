@@ -62,6 +62,13 @@ tempfile = "3"
 include_dir = "0.7"
 which = "8"
 regex = "1.12"
+# `scraper` (CSS-selector HTML reader) for the L7 post-render upgrade
+# (`bd-qf7r`). Native-only by construction: post_render runs only
+# under `quarto render`, never in the WASM hub-client preview. The
+# crate's transitive deps include `html5ever` + a couple of crates
+# that don't build for `wasm32-unknown-unknown`; gating here keeps
+# them out of the WASM tree. See plan §"scraper dep gating".
+scraper = { workspace = true }
 
 # Jupyter engine dependencies (native only)
 runtimelib = { version = "2.0", features = ["tokio-runtime"] }

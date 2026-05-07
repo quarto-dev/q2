@@ -292,9 +292,33 @@ fn build_item_map(
         "metadata-attrs".to_string(),
         TemplateValue::String(helpers::metadata_attrs(item, index)),
     );
+    // Description envelope (L7 plan §"How the begin / end markers
+    // reach the templates"). Both keys are always populated;
+    // `$description-placeholder-begin$` and `-end$` flank the L1
+    // fallback `$description$` block in the templates so the L7
+    // post-render step has a region to substitute.
     m.insert(
-        "description-placeholder".to_string(),
-        TemplateValue::String(helpers::description_placeholder(item, listing)),
+        "description-placeholder-begin".to_string(),
+        TemplateValue::String(helpers::description_placeholder_begin(item, listing)),
+    );
+    m.insert(
+        "description-placeholder-end".to_string(),
+        TemplateValue::String(helpers::description_placeholder_end()),
+    );
+    // Image envelope. Always populated regardless of whether
+    // `item.image` is set: the templates only reference these keys
+    // inside the `$if(image-html)$ ... $else$ ... $endif$` block, so
+    // markers for image-present items never reach the rendered
+    // output. Keeping the binding unconditional keeps the template
+    // logic simple — the decision lives in `$if(image-html)$`, not
+    // in the binding.
+    m.insert(
+        "image-placeholder-begin".to_string(),
+        TemplateValue::String(helpers::image_placeholder_begin(item, listing, index)),
+    );
+    m.insert(
+        "image-placeholder-end".to_string(),
+        TemplateValue::String(helpers::image_placeholder_end()),
     );
     m.insert(
         "category-html".to_string(),
@@ -498,11 +522,135 @@ mod tests {
         );
         assert!(m.contains_key("path"));
         assert!(m.contains_key("outputHref"));
-        assert!(m.contains_key("description-placeholder"));
+        // Description envelope keys (L7 plan Phase 2 #7).
+        assert!(m.contains_key("description-placeholder-begin"));
+        assert!(m.contains_key("description-placeholder-end"));
+        // Image envelope keys (always populated; L7 plan Phase 2 #8/#9).
+        assert!(m.contains_key("image-placeholder-begin"));
+        assert!(m.contains_key("image-placeholder-end"));
         // image-html is empty when no image
         assert_eq!(
             m.get("image-html"),
             Some(&TemplateValue::String(String::new()))
+        );
+    }
+
+    // L7 plan §"Tests" Phase 2 #7
+    #[test]
+    fn binding_emits_description_begin_end_pair() {
+        let ctx = build_listing_context(
+            &listing(),
+            &[item("Hello")],
+            "posts",
+            &ConfigValue::default(),
+        );
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!()
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!()
+        };
+        let TemplateValue::String(begin) = m
+            .get("description-placeholder-begin")
+            .expect("description-placeholder-begin present")
+        else {
+            panic!("description-placeholder-begin not a string");
+        };
+        let TemplateValue::String(end) = m
+            .get("description-placeholder-end")
+            .expect("description-placeholder-end present")
+        else {
+            panic!("description-placeholder-end not a string");
+        };
+        assert!(
+            begin.starts_with("<!-- desc-begin(5A0113B34292)["),
+            "begin marker shape: {begin}"
+        );
+        assert_eq!(end, "<!-- desc-end(5A0113B34292) -->");
+    }
+
+    // L7 plan §"Tests" Phase 2 #8
+    #[test]
+    fn binding_emits_image_placeholder_begin_end_when_no_image() {
+        let mut i = item("X");
+        i.image = None;
+        let ctx = build_listing_context(&listing(), &[i], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!()
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!()
+        };
+        let TemplateValue::String(begin) = m
+            .get("image-placeholder-begin")
+            .expect("image-placeholder-begin present")
+        else {
+            panic!("image-placeholder-begin not a string");
+        };
+        let TemplateValue::String(end) = m
+            .get("image-placeholder-end")
+            .expect("image-placeholder-end present")
+        else {
+            panic!("image-placeholder-end not a string");
+        };
+        assert!(
+            begin.starts_with("<!-- img-begin(9CEB782EFEE6)["),
+            "begin marker shape: {begin}"
+        );
+        assert!(
+            !begin.is_empty(),
+            "begin marker must be non-empty when no image"
+        );
+        assert_eq!(end, "<!-- img-end(9CEB782EFEE6) -->");
+    }
+
+    // L7 plan §"Tests" Phase 2 #9 — clarified per the implementation
+    // notes: we always populate the envelope markers, regardless of
+    // `item.image`. The template's `$if(image-html)$ ... $else$ ...`
+    // controls visibility, not the binding.
+    #[test]
+    fn binding_image_placeholder_present_even_when_image_set() {
+        let mut i = item("X");
+        i.image = Some("static.png".to_string());
+        let ctx = build_listing_context(&listing(), &[i], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!()
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!()
+        };
+        // Both keys exist and are non-empty even when image is set —
+        // they're inert because the template's $else$ branch never
+        // fires for image-present items.
+        assert!(m.contains_key("image-placeholder-begin"));
+        assert!(m.contains_key("image-placeholder-end"));
+    }
+
+    // L7 plan §"Tests" Phase 2 #13
+    #[test]
+    fn binding_image_placeholder_default_url_b64_encoded_into_marker() {
+        use base64::Engine;
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let mut l = listing();
+        l.image_placeholder = Some("assets/default.png".to_string());
+        let mut i = item("X");
+        i.image = None;
+        let ctx = build_listing_context(&l, &[i], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!()
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!()
+        };
+        let TemplateValue::String(begin) = m.get("image-placeholder-begin").unwrap() else {
+            panic!()
+        };
+        let expected_b64 = URL_SAFE_NO_PAD.encode("assets/default.png".as_bytes());
+        assert!(
+            begin.contains(&format!(":{} -->", expected_b64)),
+            "marker should carry b64-encoded default URL `{}`; got: {}",
+            expected_b64,
+            begin
         );
     }
 

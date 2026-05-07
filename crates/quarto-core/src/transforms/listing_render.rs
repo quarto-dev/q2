@@ -590,20 +590,100 @@ mod tests {
         );
     }
 
-    // 37. render_emits_description_placeholder
+    // L7 plan §"Tests" Phase 2 #10. The description envelope's
+    // begin AND end markers should land in the rendered AST, with
+    // the L1 fallback `description` between them.
     #[tokio::test]
-    async fn rendered_output_contains_description_placeholder() {
-        // The description-placeholder string should land in the
-        // rendered AST (as a literal `<!-- desc(...) -->` text
-        // node inside the description Div).
+    async fn render_emits_description_begin_end_envelope_around_l1_fallback() {
         let listing = make_listing(ListingType::Default);
         let items = vec![make_item("foo", Some("2026-01-01"))];
         let resolved = vec![ResolvedListing { listing, items }];
         let (ast, _) = run_transform(empty_pandoc(), resolved).await;
         let serialized = format!("{:?}", ast);
         assert!(
-            serialized.contains("desc(5A0113B34292)"),
-            "expected description placeholder in rendered AST"
+            serialized.contains("desc-begin(5A0113B34292)"),
+            "expected description begin marker in rendered AST"
+        );
+        assert!(
+            serialized.contains("desc-end(5A0113B34292)"),
+            "expected description end marker in rendered AST"
+        );
+    }
+
+    // L7 plan §"Tests" Phase 2 #11. With no static image, the image
+    // envelope must wrap the empty placeholder div.
+    #[tokio::test]
+    async fn render_emits_image_placeholder_begin_end_when_l1_image_unset() {
+        let listing = make_listing(ListingType::Default);
+        // make_item leaves image=None.
+        let items = vec![make_item("foo", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, _) = run_transform(empty_pandoc(), resolved).await;
+        let serialized = format!("{:?}", ast);
+        assert!(
+            serialized.contains("img-begin(9CEB782EFEE6)"),
+            "expected image begin marker when no static image; AST: {serialized}"
+        );
+        assert!(
+            serialized.contains("img-end(9CEB782EFEE6)"),
+            "expected image end marker when no static image"
+        );
+        assert!(
+            serialized.contains("listing-item-img-placeholder"),
+            "expected empty placeholder div between markers"
+        );
+    }
+
+    // L7 plan §"Tests" Phase 2 #12. With a static image, the image
+    // envelope must NOT appear in the rendered output (the template's
+    // $if(image-html)$ branch fires, not $else$).
+    #[tokio::test]
+    async fn render_omits_image_placeholder_when_l1_image_set() {
+        let listing = make_listing(ListingType::Default);
+        let mut item = make_item("foo", Some("2026-01-01"));
+        item.image = Some("/img/foo.png".to_string());
+        let items = vec![item];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+        let serialized = format!("{:?}", ast);
+        assert!(
+            !serialized.contains("img-begin(9CEB782EFEE6)"),
+            "image envelope must NOT appear when static image is set; AST: {serialized}"
+        );
+        assert!(
+            serialized.contains("/img/foo.png"),
+            "expected static image src in rendered AST"
+        );
+        // Regression: the static-image branch must not trigger
+        // the Q-2-9 ("HTML element converted to raw HTML") /
+        // Q-12-10 re-parse warning. The template wraps
+        // `$image-html$` in explicit `` `…`{=html} `` syntax for
+        // exactly this reason — a bare `<img>` inside link
+        // brackets would auto-convert and warn.
+        assert!(
+            diags.iter().all(|d| d.code.as_deref() != Some("Q-12-10")),
+            "expected no Q-12-10 from static-image branch; got: {diags:?}"
+        );
+    }
+
+    // L7 plan §"Tests" Phase 2 #13. The image marker carries the
+    // listing's image-placeholder URL (URL_SAFE_NO_PAD base64) for
+    // L7 to consume at substitution time.
+    #[tokio::test]
+    async fn render_carries_image_placeholder_default_url_into_marker() {
+        use base64::Engine;
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let mut listing = make_listing(ListingType::Default);
+        listing.image_placeholder = Some("assets/default.png".to_string());
+        let items = vec![make_item("foo", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, _) = run_transform(empty_pandoc(), resolved).await;
+        let serialized = format!("{:?}", ast);
+        let expected = URL_SAFE_NO_PAD.encode("assets/default.png".as_bytes());
+        assert!(
+            serialized.contains(&format!(":{} -->", expected)),
+            "expected b64 default URL `{}` in image begin marker; AST: {serialized}",
+            expected
         );
     }
 

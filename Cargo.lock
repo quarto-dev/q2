@@ -3832,6 +3832,7 @@ dependencies = [
  "quarto-yaml",
  "regex",
  "runtimelib",
+ "scraper",
  "serde",
  "serde_json",
  "sha2 0.11.0",
