@@ -43,7 +43,14 @@ use thiserror::Error;
 ///   templates) and `categories_raw: Option<ConfigValue>` so listing
 ///   consumers can apply tag-aware merging via `MergedConfig` when
 ///   combining top-level and listing-item categories.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 4;
+/// - `5`: `bd-xbnf` (listings epic, L6). Adds `listing_content_globs:
+///   Vec<String>` — the unresolved glob strings declared on the host
+///   page's `listing.*.contents:`. The dependency-graph builder
+///   expands these at graph-build time to add forward edges from each
+///   listing host to its content files, so Mode B (`quarto render
+///   posts/foo.qmd`) automatically pulls in listing hosts when any of
+///   their content files are targeted.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 5;
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -416,6 +423,33 @@ pub struct DocumentProfile {
     /// Added v3 → v4 (`bd-n8a4`).
     #[serde(default, skip_serializing_if = "ListingItemInfo::is_empty")]
     pub listing_item: ListingItemInfo,
+
+    /// Glob patterns from the host's `listing.*.contents:` config,
+    /// flattened across all listings declared on the page. Each
+    /// entry is a raw glob string (e.g. `"*.qmd"`,
+    /// `"posts/**/*.qmd"`) — *not* a resolved path.
+    ///
+    /// Resolution is **not** cached on the profile because it
+    /// depends on the full project source set, which a per-doc
+    /// profile cannot represent safely (a new sibling `.qmd` added
+    /// to the project would not invalidate the host's profile
+    /// cache, leaving the resolution stale). Instead, the
+    /// dependency-graph builder
+    /// ([`crate::project::dependency_graph::ProjectDependencyGraph::build`])
+    /// expands these globs at graph-build time against
+    /// [`crate::project::index::ProjectIndex::profiles`]
+    /// (host-relative first, project-relative fallback — same rule
+    /// the L3 generate transform uses at render time) and produces
+    /// forward edges from each host to each match. Listing hosts
+    /// with non-empty entries are also added to
+    /// [`crate::project::dependency_graph::ProjectDependencyGraph::force_render`]
+    /// so Mode B pulls them in when any of their content files is
+    /// in the user-named target set.
+    ///
+    /// Default empty; serializer omits empty lists.
+    /// Added v4 → v5 (`bd-xbnf`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub listing_content_globs: Vec<String>,
 }
 
 /// Helper for `#[serde(skip_serializing_if = ...)]` on plain bool
@@ -468,6 +502,7 @@ impl Default for DocumentProfile {
             resources: Vec::new(),
             categories_raw: None,
             listing_item: ListingItemInfo::default(),
+            listing_content_globs: Vec::new(),
         }
     }
 }
@@ -528,6 +563,11 @@ impl DocumentProfile {
             // the wiring, not the field declarations.
             categories_raw: extract_categories_raw(meta),
             listing_item: extract_listing_item(meta),
+            // L6 (`bd-xbnf`): pull glob strings out of meta.listing
+            // so the dep-graph builder can expand them later. The
+            // resolution itself happens at graph-build time, not
+            // here — see the field doc for the reason.
+            listing_content_globs: crate::project::listing::config::extract_content_globs(meta),
         }
     }
 
@@ -1404,8 +1444,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_4() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 4);
+    fn document_profile_version_is_5() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 5);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by
@@ -1502,5 +1542,105 @@ Body.
         let arr = raw.as_array().expect("raw is an array");
         let names: Vec<String> = arr.iter().filter_map(|v| v.as_plain_text()).collect();
         assert_eq!(names, vec!["x".to_string(), "y".to_string()]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // L6 (`bd-xbnf`): `listing_content_globs` field + v4 → v5 bump
+    //
+    // The dep-graph builder reads this field at graph-build time to
+    // pull in listing hosts whenever any of their content files is
+    // in the user-named target set (Mode B). Versioning bumps so
+    // stale Phase-8 caches invalidate cleanly.
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Test #9 — default profile has empty `listing_content_globs`.
+    /// Default-empty + `skip_serializing_if` keeps the on-disk
+    /// profile shape unchanged for documents with no listings.
+    #[test]
+    fn profile_v5_default_has_empty_listing_content_globs() {
+        let p = DocumentProfile::default();
+        assert!(p.listing_content_globs.is_empty());
+    }
+
+    /// Test #10 — frontmatter with a listing populates the field.
+    /// Mirrors what `extract_content_globs` returns when called on
+    /// the document's `meta`.
+    #[test]
+    fn profile_extract_populates_listing_content_globs_from_meta() {
+        let qmd = "\
+---
+title: Host
+listing:
+  contents: posts/*.qmd
+---
+
+Body.
+";
+        let ast = parse_qmd(qmd);
+        let p = DocumentProfile::extract(&ast, Path::new("idx.qmd"), "idx.html", "html");
+        assert_eq!(
+            p.listing_content_globs,
+            vec!["posts/*.qmd".to_string()],
+            "extract should pull glob strings from meta.listing.contents"
+        );
+    }
+
+    /// Test #11 — a v4 profile (the pre-L6 shape) must be rejected
+    /// by `from_json` with a clean error so the cache layer
+    /// regenerates rather than silently reading a stale profile.
+    #[test]
+    fn profile_v4_json_rejected_with_clean_error() {
+        let payload = r#"{
+            "profile_version": 4,
+            "source_path": "x.qmd",
+            "output_href": "x.html",
+            "format_id": "html",
+            "title": null,
+            "subtitle": null,
+            "description": null,
+            "authors": [],
+            "date": null,
+            "categories": [],
+            "keywords": [],
+            "image": null,
+            "draft": false,
+            "outline": []
+        }"#;
+        match DocumentProfile::from_json(payload) {
+            Err(DocumentProfileError::VersionMismatch { expected, found }) => {
+                assert_eq!(expected, DOCUMENT_PROFILE_VERSION);
+                assert_eq!(found, 4);
+            }
+            other => panic!("expected VersionMismatch from v4 payload, got {:?}", other),
+        }
+    }
+
+    /// Test #12 — round-trip serialization preserves a non-empty
+    /// `listing_content_globs`.
+    #[test]
+    fn profile_v5_listing_content_globs_round_trip() {
+        let mut p = DocumentProfile::default();
+        p.source_path = PathBuf::from("idx.qmd");
+        p.listing_content_globs = vec!["a/*.qmd".to_string(), "b/*.qmd".to_string()];
+
+        let json = p.to_json().expect("serialize");
+        let restored = DocumentProfile::from_json(&json).expect("deserialize");
+        assert_eq!(
+            restored.listing_content_globs,
+            vec!["a/*.qmd".to_string(), "b/*.qmd".to_string()]
+        );
+    }
+
+    /// Test #13 — `to_json` of a default profile omits the empty
+    /// `listing_content_globs` field. Keeps the v4 / v5 on-disk
+    /// shape identical for documents without listings.
+    #[test]
+    fn profile_v5_round_trip_empty_omits_field() {
+        let p = DocumentProfile::default();
+        let json = p.to_json().expect("serialize");
+        assert!(
+            !json.contains("listing_content_globs"),
+            "empty listing_content_globs should be omitted from JSON; got: {json}"
+        );
     }
 }

@@ -64,6 +64,7 @@ produced.
 | `body_link_targets` | `Vec<PathBuf>` of project-relative `.qmd` paths this page links to from its body content. Populated by `LinkResolutionStage` (Pass-1) using the same `resolve_doc_relative_target` helper Phase 6's `LinkRewriteTransform` calls in Pass-2 — equivalence test asserts the two produce the same set. The Phase-8 dependency graph turns each target into an edge. See `body-link-resolution-contract.md`. Default empty. |
 | `resources` | `Vec<String>` of document-level `resources:` patterns from the merged frontmatter (`bd-o8pr`). Raw patterns; expansion happens at the post-render collector. The snapshot of what the author declared at frontmatter-freeze time — engines and Lua filters that run later contribute through a separate channel (`DocumentResourceReport`) and cannot retroactively shrink this list. Default empty. |
 | `categories_raw` | `Option<ConfigValue>` carrying the originating tagged value of the top-level `categories:` key (`bd-n8a4`). Mirrors `categories` but preserves `!prefer` / `!concat` merge tags so listings consumers can feed it (alongside `listing_item.categories_raw`) into `quarto_config::MergedConfig` for tag-aware merging. Most consumers should keep reading the flattened `categories`; only listings reach for the raw form. Default `None`. |
+| `listing_content_globs` | `Vec<String>` of unresolved glob strings from the host page's `listing.*.contents:` declarations (`bd-xbnf`, listings L6). Flattened across all listings on the page. The dependency-graph builder expands these against `ProjectIndex` at graph-build time (host-relative first, project-relative fallback — matches L3's render-time rule) to add forward edges from each listing host to its content files; hosts with non-empty entries are also added to the graph's `force_render` set so Mode B (`quarto render posts/foo.qmd`) pulls in listing hosts when any of their content files is targeted. Resolution is **not** cached on the profile (the per-doc cache cannot represent dependency on the full project source set safely). Default empty. |
 | `listing_item` | `ListingItemInfo` advertising per-document data for listings consumers (`bd-n8a4`). **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; `ListingItemInfoStage` (`bd-izqh`, L1, landed) auto-fills holes pre-checkpoint for `description` (full first paragraph), `image` (first inline image's URL), `word_count` (Q1-parity tokenization, footnote text excluded), `reading_time_minutes` (`ceil(word_count / 200)`), and `date_modified` (filesystem mtime via `SystemRuntime::path_metadata` formatted as `YYYY-MM-DD` UTC). Author values always win — the stage strictly fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the **only** open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
 
 ## Non-guarantees (explicit)
@@ -381,3 +382,30 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   `date_modified` stays `None` until `bd-a3we` teaches the Automerge
   VFS to surface change-history time. Plan:
   `claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md`.
+- **2026-05-07 — v5 (`bd-xbnf`, listings epic L6).**
+  `DOCUMENT_PROFILE_VERSION` bumped 4 → 5. One new field, additive
+  at the on-disk layer (`skip_serializing_if` keeps default
+  profiles compact):
+  - `listing_content_globs: Vec<String>` — flattened glob strings
+    from the host page's `listing.*.contents:` declarations.
+    *Unresolved* globs only; resolution happens at graph-build
+    time inside
+    `crate::project::dependency_graph::ProjectDependencyGraph::build`,
+    which expands each glob against the full project source set
+    (host-relative first, project-relative fallback — same rule
+    `ListingGenerateTransform` uses at render time) to add forward
+    edges from each listing host to its content files. Hosts with
+    non-empty entries are also added to the graph's
+    `force_render` set so Mode B (`quarto render posts/foo.qmd`)
+    automatically pulls in listing hosts when any of their
+    content files is in the user-named target set. Resolution is
+    **not** cached on the profile because it depends on the full
+    project source set, which a per-doc profile can't represent
+    safely (a new sibling `.qmd` would not invalidate the host's
+    profile cache, leaving the resolution stale). Default empty.
+  v4 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently
+  regenerated, identical to every prior bump.
+  Plan: `claude-notes/plans/2026-05-07-listings-L6-dep-graph.md`.
+  Parent epic: `bd-61cd`
+  (`claude-notes/plans/2026-05-05-listings-epic.md`).

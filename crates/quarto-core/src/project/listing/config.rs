@@ -879,6 +879,43 @@ pub fn apply_type_defaults(l: &mut Listing) {
     }
 }
 
+/// Extract just the content-glob strings from a host page's
+/// `meta.listing:` value, ignoring all other listing config.
+///
+/// Used by [`crate::project::dependency_graph::ProjectDependencyGraph::build`]
+/// (Phase-8 / L6, `bd-xbnf`) to discover which sibling files this
+/// page's listings reference, so Mode B can re-render the host
+/// when any of those siblings is in the user-named target set.
+///
+/// Globs are flattened across all listings declared on the page —
+/// the dep graph cares about edges, not which listing produced
+/// them. Inline-record `contents:` entries (`Q-12-2` at render
+/// time) contribute nothing to the dep graph.
+///
+/// **Implementation note (`bd-bqf2`):** today this routes through
+/// [`parse_listings`] and discards the resulting diagnostics, so
+/// shape-handling stays in lockstep with the L3 generate transform
+/// without any duplicated walker logic. If profiling ever shows
+/// the redundant work as a hotspot, `bd-bqf2` tracks the refactor
+/// to a shared shape walker. For now: one source of truth, no
+/// drift risk.
+pub fn extract_content_globs(meta: &ConfigValue) -> Vec<String> {
+    let Some(listing_value) = meta.get("listing") else {
+        return Vec::new();
+    };
+    let mut throwaway_diagnostics: Vec<DiagnosticMessage> = Vec::new();
+    let listings = parse_listings(listing_value, &mut throwaway_diagnostics);
+    let mut out: Vec<String> = Vec::new();
+    for listing in listings {
+        for content in listing.contents {
+            if let ListingContents::Glob(g) = content {
+                out.push(g);
+            }
+        }
+    }
+    out
+}
+
 fn push_diag(
     diagnostics: &mut Vec<DiagnosticMessage>,
     code: &str,
@@ -1214,5 +1251,95 @@ mod tests {
         assert_eq!(listings.len(), 1);
         assert_eq!(listings[0].kind, ListingType::Default);
         assert!(diags.iter().any(|d| d.code.as_deref() == Some("Q-12-4")));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // L6 (bd-xbnf): extract_content_globs
+    //
+    // The dep-graph builder calls this to read just the glob strings
+    // out of `meta.listing`, ignoring all the other listing config.
+    // It must agree with `parse_listings` on every accepted shape so
+    // graph edges line up with what the L3 generate transform
+    // resolves at render time.
+    // ─────────────────────────────────────────────────────────────
+
+    fn meta_with_listing(value: ConfigValue) -> ConfigValue {
+        map(vec![("listing", value)])
+    }
+
+    /// `listing: true` shorthand → default contents `*.qmd`.
+    #[test]
+    fn extract_globs_from_single_listing_default_shorthand() {
+        let meta = meta_with_listing(b(true));
+        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+    }
+
+    /// Explicit `contents:` glob list.
+    #[test]
+    fn extract_globs_from_single_listing_with_explicit_contents() {
+        let meta = meta_with_listing(map(vec![("contents", arr(vec![s("posts/*.qmd")]))]));
+        assert_eq!(
+            extract_content_globs(&meta),
+            vec!["posts/*.qmd".to_string()]
+        );
+    }
+
+    /// Map listing without `contents:` (e.g. `{ type: grid }`) →
+    /// default contents `*.qmd` (matches `apply_type_defaults`).
+    #[test]
+    fn extract_globs_from_single_listing_no_contents_shorthand() {
+        let meta = meta_with_listing(map(vec![("type", s("grid"))]));
+        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+    }
+
+    /// Array of listings; globs flatten across listings.
+    #[test]
+    fn extract_globs_from_array_of_listings() {
+        let meta = meta_with_listing(arr(vec![
+            map(vec![("contents", arr(vec![s("a/*.qmd")]))]),
+            map(vec![("contents", arr(vec![s("b/*.qmd"), s("c/*.qmd")]))]),
+        ]));
+        assert_eq!(
+            extract_content_globs(&meta),
+            vec![
+                "a/*.qmd".to_string(),
+                "b/*.qmd".to_string(),
+                "c/*.qmd".to_string(),
+            ]
+        );
+    }
+
+    /// Inline-record entries are dropped (L3 already surfaces Q-12-2
+    /// at render time; the dep graph has no glob to add).
+    #[test]
+    fn extract_globs_drops_inline_records() {
+        let meta = meta_with_listing(map(vec![(
+            "contents",
+            arr(vec![map(vec![("title", s("foo"))]), s("*.qmd")]),
+        )]));
+        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+    }
+
+    /// `listing: false` → no globs (parse_listings emits Q-12-6
+    /// here; we discard that diagnostic at extract time).
+    #[test]
+    fn extract_globs_listing_false_is_empty() {
+        let meta = meta_with_listing(b(false));
+        assert!(extract_content_globs(&meta).is_empty());
+    }
+
+    /// Meta with no `listing:` key → empty globs.
+    #[test]
+    fn extract_globs_no_listing_key_is_empty() {
+        let meta = map(vec![("title", s("Hello"))]);
+        assert!(extract_content_globs(&meta).is_empty());
+    }
+
+    /// `contents:` as a single string (not an array) — `parse_contents`
+    /// accepts this shape; `extract_content_globs` must agree.
+    #[test]
+    fn extract_globs_handles_string_shorthand_contents() {
+        let meta = meta_with_listing(map(vec![("contents", s("*.qmd"))]));
+        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
     }
 }

@@ -51,6 +51,7 @@ use std::path::{Path, PathBuf};
 
 use quarto_pandoc_types::ConfigValue;
 
+use crate::project::discovery::{glob_match_path, path_to_forward_slashes, relative_to_dir};
 use crate::project::index::ProjectIndex;
 use crate::project::sidebar_membership::resolve_sidebar_membership;
 
@@ -162,6 +163,54 @@ impl ProjectDependencyGraph {
             for target in &profile.nav_dependencies {
                 if index.lookup_by_source(target).is_some() {
                     add_edge(from, target);
+                }
+            }
+
+            // === Listing-content edges (L6, `bd-xbnf`) ===
+            //
+            // Each listing host advertises its `listing.*.contents:`
+            // globs on `profile.listing_content_globs`. We expand
+            // them against the project's source set and add a
+            // forward edge `host → content` for each match.
+            //
+            // Match rule mirrors `ListingGenerateTransform` at
+            // render time (host-relative first, project-relative
+            // fallback) so graph edges line up with what the
+            // listing actually resolves. Self-edges are dropped by
+            // `add_edge`.
+            //
+            // Hosts with non-empty globs are added to
+            // `force_render` so Mode B's
+            // `augment_targets_with_always_render` pulls them in
+            // when any of their content files is in the user-named
+            // target set. Hosts whose globs match nothing have no
+            // outgoing edges, so the augmentation never has reason
+            // to pull them in (harmless inclusion in `force_render`).
+            if !profile.listing_content_globs.is_empty() {
+                force_render.insert(from.clone());
+
+                let host_path_str = path_to_forward_slashes(from);
+                let host_dir_str = Path::new(&host_path_str)
+                    .parent()
+                    .map(path_to_forward_slashes)
+                    .unwrap_or_default();
+
+                for glob in &profile.listing_content_globs {
+                    for candidate in index.profiles() {
+                        if candidate.source_path == *from {
+                            continue;
+                        }
+                        let cand_str = path_to_forward_slashes(&candidate.source_path);
+                        let cand_host_relative = relative_to_dir(&cand_str, &host_dir_str);
+                        let host_match = cand_host_relative
+                            .as_deref()
+                            .map(|hr| glob_match_path(glob, hr))
+                            .unwrap_or(false);
+                        let project_match = glob_match_path(glob, &cand_str);
+                        if host_match || project_match {
+                            add_edge(from, &candidate.source_path);
+                        }
+                    }
                 }
             }
         }
@@ -719,5 +768,303 @@ mod tests {
 
         let closure = g.forward_closure([Path::new("a.qmd")]);
         assert_eq!(closure.len(), 1);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // L6 (`bd-xbnf`): listing_content_globs become edges + force_render.
+    //
+    // The dep-graph builder reads each profile's
+    // `listing_content_globs` and expands them against the project's
+    // source set (host-relative first, project-relative fallback).
+    // Each match becomes a forward edge `host → content`. Hosts with
+    // non-empty entries are also added to `force_render` so Mode B's
+    // `augment_targets_with_always_render` pulls them in when any
+    // matched content file is targeted.
+    // ─────────────────────────────────────────────────────────────────
+
+    /// A profile builder for L6 tests, with `listing_content_globs`
+    /// as its distinguishing input.
+    fn listing_host(path: &str, globs: &[&str]) -> DocumentProfile {
+        DocumentProfile {
+            source_path: PathBuf::from(path),
+            output_href: path.replace(".qmd", ".html"),
+            format_id: "html".to_string(),
+            title: Some(path.to_string()),
+            listing_content_globs: globs.iter().map(|g| g.to_string()).collect(),
+            ..DocumentProfile::default()
+        }
+    }
+
+    fn plain_doc(path: &str) -> DocumentProfile {
+        DocumentProfile {
+            source_path: PathBuf::from(path),
+            output_href: path.replace(".qmd", ".html"),
+            format_id: "html".to_string(),
+            title: Some(path.to_string()),
+            ..DocumentProfile::default()
+        }
+    }
+
+    /// Test #14 — host at project root with glob `"*.qmd"` matches
+    /// every project-root sibling but not itself.
+    #[test]
+    fn listing_globs_become_edges_host_relative_default() {
+        let profiles = vec![
+            listing_host("index.qmd", &["*.qmd"]),
+            plain_doc("a.qmd"),
+            plain_doc("b.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let deps = g
+            .edges
+            .get(Path::new("index.qmd"))
+            .expect("index has listing edges");
+        assert!(deps.contains(Path::new("a.qmd")));
+        assert!(deps.contains(Path::new("b.qmd")));
+        assert!(
+            !deps.contains(Path::new("index.qmd")),
+            "self-edge must be suppressed"
+        );
+        assert_eq!(deps.len(), 2);
+    }
+
+    /// Test #15 — explicit `posts/**/*.qmd` glob matches via the
+    /// project-relative fallback. Sibling `outside.qmd` does not match.
+    #[test]
+    fn listing_globs_become_edges_project_relative() {
+        let profiles = vec![
+            listing_host("index.qmd", &["posts/**/*.qmd"]),
+            plain_doc("posts/foo.qmd"),
+            plain_doc("posts/bar.qmd"),
+            plain_doc("outside.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let deps = g.edges.get(Path::new("index.qmd")).unwrap();
+        assert!(deps.contains(Path::new("posts/foo.qmd")));
+        assert!(deps.contains(Path::new("posts/bar.qmd")));
+        assert!(!deps.contains(Path::new("outside.qmd")));
+        assert_eq!(deps.len(), 2);
+    }
+
+    /// Test #16 — host whose globs match nothing produces no edges,
+    /// but is still in `force_render` (harmless: with no edges, the
+    /// augmentation never has reason to pull it in).
+    #[test]
+    fn listing_globs_no_match_no_edges_but_in_force_render() {
+        let profiles = vec![
+            listing_host("index.qmd", &["nope/*.qmd"]),
+            plain_doc("a.qmd"),
+            plain_doc("b.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        assert!(
+            !g.edges.contains_key(Path::new("index.qmd")),
+            "no globs matched, so no outgoing edges"
+        );
+        assert!(
+            g.force_render.contains(Path::new("index.qmd")),
+            "host with non-empty listing_content_globs must be in force_render"
+        );
+    }
+
+    /// Test #17 — any non-empty `listing_content_globs` puts the host
+    /// in `force_render`, regardless of edge count.
+    #[test]
+    fn listing_host_added_to_force_render() {
+        let profiles = vec![listing_host("index.qmd", &["*.qmd"]), plain_doc("a.qmd")];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        assert!(g.force_render.contains(Path::new("index.qmd")));
+    }
+
+    /// Test #18 — empty `listing_content_globs` means the host is
+    /// not a listing host; do *not* add it to `force_render`.
+    #[test]
+    fn listing_host_with_empty_globs_not_in_force_render() {
+        let profiles = vec![plain_doc("index.qmd"), plain_doc("a.qmd")];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        assert!(g.force_render.is_empty());
+    }
+
+    /// Test #19 — host inside a sub-directory uses host-relative
+    /// glob matching for default `"*.qmd"` and excludes itself.
+    #[test]
+    fn listing_globs_dont_self_edge_in_subdir() {
+        let profiles = vec![
+            listing_host("posts/index.qmd", &["*.qmd"]),
+            plain_doc("posts/foo.qmd"),
+            plain_doc("posts/bar.qmd"),
+            plain_doc("other/baz.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let deps = g.edges.get(Path::new("posts/index.qmd")).unwrap();
+        assert!(deps.contains(Path::new("posts/foo.qmd")));
+        assert!(deps.contains(Path::new("posts/bar.qmd")));
+        assert!(
+            !deps.contains(Path::new("posts/index.qmd")),
+            "host must not self-edge"
+        );
+        assert!(
+            !deps.contains(Path::new("other/baz.qmd")),
+            "host-relative *.qmd must not reach into a sibling directory"
+        );
+        assert_eq!(deps.len(), 2);
+    }
+
+    /// Test #20 — host has both `body_link_targets` and listing edges
+    /// pointing at the same content; the resulting edge set
+    /// dedupes via `BTreeSet`.
+    #[test]
+    fn listing_globs_combine_with_body_link_edges() {
+        let mut host = listing_host("index.qmd", &["*.qmd"]);
+        host.body_link_targets = vec![PathBuf::from("a.qmd")];
+        let profiles = vec![host, plain_doc("a.qmd"), plain_doc("b.qmd")];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let deps = g.edges.get(Path::new("index.qmd")).unwrap();
+        // Both `a.qmd` (from body link AND listing glob) and `b.qmd`
+        // (from listing glob only). One edge per target — the
+        // BTreeSet dedupes.
+        assert_eq!(deps.len(), 2, "edges dedupe via BTreeSet");
+        assert!(deps.contains(Path::new("a.qmd")));
+        assert!(deps.contains(Path::new("b.qmd")));
+    }
+
+    /// Test #21 — host has both `always_render: true` and a listing.
+    /// `force_render` is a `BTreeSet`, so the host appears once.
+    #[test]
+    fn listing_host_with_always_render_double_force_render_no_dup() {
+        let mut host = listing_host("index.qmd", &["*.qmd"]);
+        host.always_render = true;
+        let profiles = vec![host, plain_doc("a.qmd")];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        assert_eq!(g.force_render.len(), 1);
+        assert!(g.force_render.contains(Path::new("index.qmd")));
+    }
+
+    /// Test #22 — one host with two globs matching disjoint sibling
+    /// sets produces edges for both.
+    #[test]
+    fn listing_globs_multi_glob_host() {
+        let profiles = vec![
+            listing_host("index.qmd", &["a/*.qmd", "b/*.qmd"]),
+            plain_doc("a/one.qmd"),
+            plain_doc("b/two.qmd"),
+            plain_doc("c/three.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let deps = g.edges.get(Path::new("index.qmd")).unwrap();
+        assert!(deps.contains(Path::new("a/one.qmd")));
+        assert!(deps.contains(Path::new("b/two.qmd")));
+        assert!(!deps.contains(Path::new("c/three.qmd")));
+        assert_eq!(deps.len(), 2);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // L6: augmentation interaction (Mode B selection)
+    //
+    // These tests exercise the existing
+    // `augment_targets_with_always_render` primitive against the new
+    // `force_render` / edge set produced by the listing-edges block.
+    // No augmentation code changes; these are guards against future
+    // regression.
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Test #23 — Mode B target = a content file → augmentation
+    /// pulls in the listing host.
+    #[test]
+    fn augment_pulls_in_listing_host_when_content_targeted() {
+        let profiles = vec![
+            listing_host("index.qmd", &["posts/*.qmd"]),
+            plain_doc("posts/foo.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let augmented = g.augment_targets_with_always_render([Path::new("posts/foo.qmd")]);
+        assert_eq!(augmented.len(), 2);
+        assert!(augmented.contains(Path::new("posts/foo.qmd")));
+        assert!(augmented.contains(Path::new("index.qmd")));
+    }
+
+    /// Test #24 — Mode B target unrelated to the listing host →
+    /// augmentation does NOT pull in the host.
+    #[test]
+    fn augment_does_not_pull_in_listing_host_when_unrelated_target() {
+        let profiles = vec![
+            listing_host("index.qmd", &["posts/*.qmd"]),
+            plain_doc("posts/foo.qmd"),
+            plain_doc("unrelated.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let augmented = g.augment_targets_with_always_render([Path::new("unrelated.qmd")]);
+        assert_eq!(augmented.len(), 1);
+        assert!(augmented.contains(Path::new("unrelated.qmd")));
+        assert!(!augmented.contains(Path::new("index.qmd")));
+    }
+
+    /// Test #25 — sanity: a non-listing-host page with a body-link
+    /// to a target page is *not* in `force_render`, so the
+    /// augmentation does not pull it in. Confirms the `force_render`
+    /// gate still discriminates listing hosts from arbitrary linkers.
+    #[test]
+    fn augment_pulls_in_listing_host_only_via_force_render_not_body_links() {
+        // linker (non-listing) -> target. Without force_render
+        // membership, augmentation has no reason to pull `linker` in.
+        let mut linker = plain_doc("linker.qmd");
+        linker.body_link_targets = vec![PathBuf::from("target.qmd")];
+        let profiles = vec![linker, plain_doc("target.qmd")];
+        let index = ProjectIndex::new(profiles);
+
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+
+        let augmented = g.augment_targets_with_always_render([Path::new("target.qmd")]);
+        assert_eq!(augmented.len(), 1);
+        assert!(augmented.contains(Path::new("target.qmd")));
+        assert!(
+            !augmented.contains(Path::new("linker.qmd")),
+            "body-link without force_render must not get pulled in"
+        );
     }
 }
