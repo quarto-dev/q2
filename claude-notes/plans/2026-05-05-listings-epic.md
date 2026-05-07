@@ -33,7 +33,7 @@ companion design rationale is
 | L2    | `bd-j60g` | task    | Listing data model + YAML schema                                       | `2026-05-06-listings-L2-data-model.md`               | **Closed** (reference doc; types impl in L3, merge `b4f2238c`) |
 | L3    | `bd-ml8z` | feature | ListingResolveTransform (Pass-2, built-ins via doctemplate)            | `2026-05-06-listings-L3-resolve-transform.md`        | **Closed** (impl `3b8dd645`…`ff23a2a2`, merge `b4f2238c`) |
 | L4    | `bd-b5jm` | task    | quarto-doctemplate enhancements (pipes, ConfigValue bridge, resolver)  | `2026-05-06-listings-L3-resolve-transform.md` (bundled w/ L3) | **Closed** (impl `3b8dd645`, merge `b4f2238c`) |
-| L5    | `bd-5vsr` | feature | Categories sidebar                                                     | `2026-05-06-listings-L5-categories-sidebar.md`       | Drafted             |
+| L5    | `bd-5vsr` | feature | Categories sidebar                                                     | `2026-05-06-listings-L5-categories-sidebar.md`       | **Closed** (impl `2750546b`+`67a985f4`, merge `9e8afa0d`) |
 | L6    | `bd-xbnf` | task    | Dependency-graph integration (`listing_content_targets`)               | `YYYY-MM-DD-listings-L6-dep-graph.md`                | not yet written     |
 | L7    | `bd-qf7r` | feature | Post-render placeholder upgrade (engine-rendered previews; BRACKETED)  | `YYYY-MM-DD-listings-L7-postrender-upgrade.md`       | not yet written     |
 | L8    | `bd-rqgx` | feature | Custom listing templates                                               | `YYYY-MM-DD-listings-L8-custom-templates.md`         | not yet written     |
