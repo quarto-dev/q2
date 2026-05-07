@@ -1218,16 +1218,17 @@ Two issues to file before impl begins, with
 
 ### TDD phase 9 — Snapshot + integration
 
-- [~] Write snapshot tests #30–33. **Skipped intentionally:**
-      `crates/quarto-core` does not currently use `insta` and the
-      L5 unit tests already pin emit shape comprehensively
-      (per-item chip count, css classes, `b64` round-trip, sort
-      order, escape behavior, mode-specific markup). Adding 4
-      new HTML snapshots would be byte-pinning rather than
-      catching regressions the unit tests miss; the integration
-      test #38 below covers the cross-cutting render path. If
-      future work needs full HTML snapshots, pulling in `insta`
-      should be a separate prep step.
+- [x] Write snapshot tests #30–33. Added `insta.workspace = true`
+      to `quarto-core`'s dev-deps (matches the convention used in
+      `pampa`, `quarto-highlight`, etc.) and wrote four
+      end-to-end snapshot tests in `tests/listing_pipeline.rs`,
+      each driving the full `ProjectPipeline` and snapshotting
+      a focused L5-owned slice of the rendered HTML (chip blocks
+      + sidebar block, or sidebar block alone for the
+      two-listing case). Snapshots live under
+      `tests/snapshots/`. The focused-slice approach (rather
+      than full HTML) keeps the snapshots small, readable, and
+      resilient to unrelated changes.
 - [x] Write integration test #38. (`listing_pipeline.rs` —
       `listing_with_categories_renders_chips_and_sidebar_e2e`.
       Drives the full `ProjectPipeline` through a real
@@ -1235,8 +1236,26 @@ Two issues to file before impl begins, with
       + 3 posts; asserts chips × 4, sidebar pills × 4 (incl.
       "All"), counts, the `#quarto-margin-sidebar` wrapper, and
       that `quarto-listing.js` is still emitted.)
-- [x] Run all together; iterate until green. (8614 → 8615;
-      net +1 from the e2e integration.)
+- [x] Run all together; iterate until green.
+
+**Bug surfaced and fixed during phase 9:** snapshot test #33
+(two listings on one page with subdir-relative `contents:`
+globs) initially produced empty listings. Root cause: Quarto's
+YAML parser tags strings like `posts/*.qmd` as `PandocInlines`
+(a `Span` carrying class `yaml-markdown-syntax-error`), but
+`parse_contents` (`crates/quarto-core/src/project/listing/config.rs:572`)
+matched only `Scalar(Yaml::String)` / `Glob` / `Array`,
+silently dropping the explicit contents and letting
+`apply_type_defaults` overwrite with the sibling-only `*.qmd`
+default. The fix routes `parse_contents` through
+`as_plain_text` first (matching `parse_listings`'s
+shorthand-string handling), with two new unit tests covering
+the `PandocInlines` paths. The broader audit of sibling parser
+branches that may share the same vulnerability is filed as
+**`bd-nwyp`**.
+
+Test count: 8614 → 8621 (+7 from this phase: 4 snapshot tests +
+2 new parser tests + 1 e2e integration test).
 
 ### Verification and close-out
 
@@ -1244,8 +1263,9 @@ Two issues to file before impl begins, with
       `cargo xtask verify`.)
 - [x] `cargo nextest run --workspace` — all pass; record
       test-count delta against the baseline.
-      **Baseline 8570 → final 8615 (+45 over the L5 work
-      across phases 1, 2, 3, 4, 5, 7, 8, 9.)**
+      **Baseline 8570 → final 8621 (+51 over the L5 work
+      across phases 1, 2, 3, 4, 5, 7, 8, 9, plus the
+      bd-nwyp parser-fix unit tests.)**
 - [x] `cargo xtask lint` clean. (`693 files checked`.)
 - [x] `cargo xtask verify` (full, including hub-client +
       WASM build) — all green. (After moving `base64`

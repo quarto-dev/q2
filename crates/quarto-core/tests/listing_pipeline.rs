@@ -586,3 +586,284 @@ Third body.
         "L5 must not perturb L3's quarto-listing.js artifact wiring; got:\n{host}"
     );
 }
+
+// ─────────── L5 snapshot tests #30–33 ──────────────────────────────
+//
+// Snapshot only the L5-owned subsets of the rendered HTML — the
+// per-item chip blocks and the right-margin categories sidebar
+// block — not the whole 30+ KB rendered page. Locks the canonical
+// emit byte-for-byte while staying robust against unrelated changes
+// (theme tweaks, navbar updates, code-highlight CSS, etc.).
+//
+// Snapshots live at `crates/quarto-core/tests/snapshots/` per
+// insta's default convention.
+
+/// Extract every `<div class="listing-categories">…</div>` block
+/// from the rendered HTML in document order, joined by blank lines.
+/// Returns "(no chip blocks)" if none are present.
+fn extract_chip_blocks(html: &str) -> String {
+    let mut out: Vec<&str> = Vec::new();
+    let needle_open = r#"<div class="listing-categories">"#;
+    let mut cursor = 0usize;
+    while let Some(rel) = html[cursor..].find(needle_open) {
+        let start = cursor + rel;
+        // Locate the matching `</div>` closer for the chip block.
+        // The block's *internal* `<div class="listing-category">` chips
+        // each have their own `</div>`; the wrapper closer is the LAST
+        // `</div>` before the next `<div` at the same indentation. Q1's
+        // chip block is one line per chip + outer `</div>`, but the
+        // doctemplate output reflows whitespace. We match the wrapper
+        // by counting `<div` opens and `</div>` closes from the start
+        // of the wrapper.
+        let mut depth = 0i32;
+        let mut pos = start;
+        let block_end = loop {
+            let next_open = html[pos..].find("<div").map(|i| pos + i);
+            let next_close = html[pos..].find("</div>").map(|i| pos + i);
+            match (next_open, next_close) {
+                (Some(o), Some(c)) if o < c => {
+                    depth += 1;
+                    pos = o + 4;
+                }
+                (_, Some(c)) => {
+                    depth -= 1;
+                    pos = c + 6;
+                    if depth == 0 {
+                        break c + 6;
+                    }
+                }
+                _ => break html.len(),
+            }
+        };
+        out.push(html[start..block_end].trim_end());
+        cursor = block_end;
+    }
+    if out.is_empty() {
+        return "(no chip blocks)".to_string();
+    }
+    out.join("\n\n")
+}
+
+/// Extract the right-margin categories sidebar block — the heading
+/// plus the container div. Returns "(no sidebar)" if absent.
+///
+/// We slice by locating the heading and walking forward through
+/// the container's matching closer. Robust to whitespace because
+/// we depth-count `<div` / `</div>` tokens.
+fn extract_sidebar_block(html: &str) -> String {
+    let heading_marker = r#"<h5 class="quarto-listing-category-title">"#;
+    let Some(h_start) = html.find(heading_marker) else {
+        return "(no sidebar)".to_string();
+    };
+    // Find the container open right after the heading closer.
+    let after_heading = h_start + heading_marker.len();
+    let h_close = html[after_heading..]
+        .find("</h5>")
+        .map(|i| after_heading + i + "</h5>".len())
+        .unwrap_or(html.len());
+    let container_marker = r#"<div class="quarto-listing-category"#;
+    let Some(rel) = html[h_close..].find(container_marker) else {
+        return html[h_start..h_close].to_string();
+    };
+    let container_start = h_close + rel;
+    // Depth-walk to find the matching `</div>`.
+    let mut depth = 0i32;
+    let mut pos = container_start;
+    let container_end = loop {
+        let next_open = html[pos..].find("<div").map(|i| pos + i);
+        let next_close = html[pos..].find("</div>").map(|i| pos + i);
+        match (next_open, next_close) {
+            (Some(o), Some(c)) if o < c => {
+                depth += 1;
+                pos = o + 4;
+            }
+            (_, Some(c)) => {
+                depth -= 1;
+                pos = c + 6;
+                if depth == 0 {
+                    break c + 6;
+                }
+            }
+            _ => break html.len(),
+        }
+    };
+    html[h_start..container_end].to_string()
+}
+
+/// Compose the L5-owned slice of the rendered output: chip blocks,
+/// then a separator, then the sidebar. Used as the snapshot input
+/// for tests #30–32.
+fn l5_owned_slice(html: &str) -> String {
+    format!(
+        "=== chip blocks ===\n{}\n\n=== sidebar ===\n{}\n",
+        extract_chip_blocks(html),
+        extract_sidebar_block(html),
+    )
+}
+
+// L5 plan §"Tests" #30 — default mode, three posts, snapshot the
+// chip blocks + sidebar.
+#[test]
+fn snapshot_builtin_default_with_categories_default_mode() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            r#"---
+title: Blog
+listing:
+  type: default
+  categories: true
+format: html
+---
+"#,
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\ncategories: [rust, design]\nformat: html\n---\nFirst body.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second\ndate: 2026-02-20\ncategories: [rust]\nformat: html\n---\nSecond body.\n",
+        );
+        write(
+            &p.join("posts/c.qmd"),
+            "---\ntitle: Third\ndate: 2026-03-05\ncategories: [elm]\nformat: html\n---\nThird body.\n",
+        );
+    });
+    let host = html_for(&outputs, "index");
+    insta::assert_snapshot!(l5_owned_slice(host));
+}
+
+// L5 plan §"Tests" #31 — cloud mode.
+#[test]
+fn snapshot_builtin_default_with_categories_cloud_mode() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            r#"---
+title: Blog
+listing:
+  type: default
+  categories: cloud
+format: html
+---
+"#,
+        );
+        // Counts skewed so the cloud sizing is visibly different
+        // across categories: rust=3 (largest), design=1, elm=1.
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\ncategories: [rust, design]\nformat: html\n---\nFirst body.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second\ndate: 2026-02-20\ncategories: [rust]\nformat: html\n---\nSecond body.\n",
+        );
+        write(
+            &p.join("posts/c.qmd"),
+            "---\ntitle: Third\ndate: 2026-03-05\ncategories: [elm, rust]\nformat: html\n---\nThird body.\n",
+        );
+    });
+    let host = html_for(&outputs, "index");
+    insta::assert_snapshot!(l5_owned_slice(host));
+}
+
+// L5 plan §"Tests" #32 — unnumbered mode.
+#[test]
+fn snapshot_builtin_default_with_categories_unnumbered_mode() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            r#"---
+title: Blog
+listing:
+  type: default
+  categories: unnumbered
+format: html
+---
+"#,
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\ncategories: [rust, design]\nformat: html\n---\nFirst body.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second\ndate: 2026-02-20\ncategories: [rust]\nformat: html\n---\nSecond body.\n",
+        );
+        write(
+            &p.join("posts/c.qmd"),
+            "---\ntitle: Third\ndate: 2026-03-05\ncategories: [elm]\nformat: html\n---\nThird body.\n",
+        );
+    });
+    let host = html_for(&outputs, "index");
+    insta::assert_snapshot!(l5_owned_slice(host));
+}
+
+// L5 plan §"Tests" #33 — two listings on one page, both with
+// `categories: default`, aggregate sidebar should union both
+// listings' categories. Snapshots the sidebar only since chips
+// are scattered across two listing blocks (each chip block
+// itself is covered by tests #30–32 + #38).
+#[test]
+fn snapshot_page_with_two_listings_aggregates_sidebar() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        // Single host page with two listings. Each listing's
+        // `contents:` glob points at a different sub-dir so we
+        // get a clean partition.
+        write(
+            &p.join("hub.qmd"),
+            r#"---
+title: Hub
+listing:
+  - id: posts
+    type: default
+    contents: "posts/*.qmd"
+    categories: true
+  - id: notes
+    type: default
+    contents: "notes/*.qmd"
+    categories: true
+format: html
+---
+"#,
+        );
+        // Posts: rust + design.
+        write(
+            &p.join("posts/p1.qmd"),
+            "---\ntitle: P1\ndate: 2026-01-01\ncategories: [rust, design]\nformat: html\n---\nBody.\n",
+        );
+        write(
+            &p.join("posts/p2.qmd"),
+            "---\ntitle: P2\ndate: 2026-01-02\ncategories: [rust]\nformat: html\n---\nBody.\n",
+        );
+        // Notes: design + elm. design overlaps with posts; elm is
+        // unique to notes; the sidebar should union all three.
+        write(
+            &p.join("notes/n1.qmd"),
+            "---\ntitle: N1\ndate: 2026-02-01\ncategories: [design, elm]\nformat: html\n---\nBody.\n",
+        );
+        write(
+            &p.join("notes/n2.qmd"),
+            "---\ntitle: N2\ndate: 2026-02-02\ncategories: [elm]\nformat: html\n---\nBody.\n",
+        );
+    });
+    let host = html_for(&outputs, "hub");
+    insta::assert_snapshot!(extract_sidebar_block(host));
+}

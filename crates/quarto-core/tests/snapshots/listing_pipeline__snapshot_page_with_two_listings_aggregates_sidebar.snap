@@ -1,0 +1,12 @@
+---
+source: crates/quarto-core/tests/listing_pipeline.rs
+assertion_line: 868
+expression: extract_sidebar_block(host)
+---
+<h5 class="quarto-listing-category-title">Categories</h5>
+<div class="quarto-listing-category category-default">
+<div class="category" data-category="">All <span class="quarto-category-count">(4)</span></div>
+<div class="category" data-category="ZGVzaWdu">design <span class="quarto-category-count">(2)</span></div>
+<div class="category" data-category="ZWxt">elm <span class="quarto-category-count">(2)</span></div>
+<div class="category" data-category="cnVzdA==">rust <span class="quarto-category-count">(2)</span></div>
+</div>

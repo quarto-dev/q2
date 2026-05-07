@@ -71,6 +71,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+insta.workspace = true
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros"] }
 
