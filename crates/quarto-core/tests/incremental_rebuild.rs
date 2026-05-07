@@ -826,3 +826,95 @@ fn corrupt_profile_cache_falls_through() {
     assert!(summary.pass1_failures.is_empty());
     assert!(summary.pass2_failures.is_empty());
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// L6 (`bd-xbnf`): Mode B re-renders a listing host when any of its
+// content files is targeted.
+//
+// Listing hosts now advertise their `listing.*.contents:` glob
+// strings on `DocumentProfile.listing_content_globs`. The
+// dep-graph builder expands them at graph-build time and adds the
+// host to `force_render`, so `quarto render posts/foo.qmd` pulls
+// the host back into the render set automatically — no manual
+// `--targets index.qmd` required.
+// ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn mode_b_re_renders_listing_host_when_content_targeted() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    // Listing host: declares a `posts/*.qmd` listing.
+    write(
+        &project_dir.join("index.qmd"),
+        "\
+---
+title: Home
+listing:
+  contents: posts/*.qmd
+---
+
+::: {#listing-1}
+:::
+",
+    );
+    write(
+        &project_dir.join("posts/foo.qmd"),
+        "---\ntitle: Foo\ndate: 2026-05-01\n---\n\nFoo body.\n",
+    );
+    write(
+        &project_dir.join("posts/bar.qmd"),
+        "---\ntitle: Bar\ndate: 2026-05-02\n---\n\nBar body.\n",
+    );
+
+    // Cold full render to populate _site/ and the cache.
+    let runtime = runtime_with_cache(&project_dir);
+    let _ = render_project(&project_dir, runtime.clone());
+
+    let index_path = project_dir.join("_site/index.html");
+    let foo_path = project_dir.join("_site/posts/foo.html");
+    let bar_path = project_dir.join("_site/posts/bar.html");
+    let index_mtime_before = output_mtime(&index_path).expect("index.html exists");
+    let foo_mtime_before = output_mtime(&foo_path).expect("posts/foo.html exists");
+    let bar_mtime_before = output_mtime(&bar_path).expect("posts/bar.html exists");
+
+    // Sleep enough that mtimes can differ if files are re-written.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    // Mode B: target only posts/foo.qmd. Pre-L6, the listing host
+    // would NOT be rebuilt and its index.html would show stale
+    // listing data. Post-L6, the dep-graph augmentation pulls
+    // the host in via the listing-content edge + force_render.
+    let target = project_dir.join("posts/foo.qmd");
+    let summary = render_mode_b(&project_dir, runtime, &[target]);
+
+    // foo + index should render; bar must stay untouched.
+    assert_eq!(
+        summary.outputs.len(),
+        2,
+        "Mode B with listing-content target should render foo + listing host; got {} outputs",
+        summary.outputs.len()
+    );
+
+    let index_mtime_after = output_mtime(&index_path).expect("index.html exists");
+    let foo_mtime_after = output_mtime(&foo_path).expect("posts/foo.html exists");
+    let bar_mtime_after = output_mtime(&bar_path).expect("posts/bar.html exists");
+
+    assert!(
+        foo_mtime_after >= foo_mtime_before,
+        "posts/foo.html mtime should advance (it was the explicit target)"
+    );
+    assert!(
+        index_mtime_after > index_mtime_before,
+        "index.html mtime should advance (listing host pulled in by L6 \
+         augmentation): before={index_mtime_before:?}, after={index_mtime_after:?}"
+    );
+    assert_eq!(
+        bar_mtime_before, bar_mtime_after,
+        "posts/bar.html should NOT be touched (not in target set; not a listing host)"
+    );
+}

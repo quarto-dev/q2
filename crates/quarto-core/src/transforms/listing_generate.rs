@@ -31,7 +31,7 @@
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
-use crate::project::discovery::{glob_match_path, path_to_forward_slashes};
+use crate::project::discovery::{glob_match_path, path_to_forward_slashes, relative_to_dir};
 use crate::project::listing::filter::apply_filters;
 use crate::project::listing::sort::apply_sort;
 use crate::project::listing::{ListingContents, ResolvedListing, hydrate_item, parse_listings};
@@ -105,7 +105,8 @@ impl AstTransform for ListingGenerateTransform {
                     if candidate_path_str == host_path_str {
                         continue;
                     }
-                    let host_relative_candidate = relative_to(&candidate_path_str, &host_dir_str);
+                    let host_relative_candidate =
+                        relative_to_dir(&candidate_path_str, &host_dir_str);
                     if matches_any_glob(
                         &listing.contents,
                         &candidate_path_str,
@@ -167,19 +168,6 @@ fn matches_any_glob(
         }
         ListingContents::Inline(_) => false,
     })
-}
-
-/// Compute `path` relative to `base_dir`, both expressed as
-/// forward-slash project-relative strings. Returns `None` when
-/// `path` is not under `base_dir`. Empty `base_dir` means the
-/// project root, in which case the project-relative form is the
-/// host-relative form.
-fn relative_to(path: &str, base_dir: &str) -> Option<String> {
-    if base_dir.is_empty() {
-        return Some(path.to_string());
-    }
-    let prefix = format!("{}/", base_dir);
-    path.strip_prefix(&prefix).map(|s| s.to_string())
 }
 
 #[cfg(test)]
