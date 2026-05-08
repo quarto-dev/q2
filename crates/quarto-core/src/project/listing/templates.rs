@@ -45,18 +45,24 @@ pub fn builtins_resolver() -> MemoryResolver {
     ])
 }
 
-/// Source of the top-level template for a listing type. The render
-/// transform compiles this string with the built-ins resolver
-/// chain; the partial inside (`item-default()`, etc.) is loaded
-/// from the resolver.
+/// Source of the top-level template for a built-in listing type.
+///
+/// The render transform compiles this string with the built-ins
+/// resolver chain; the partial inside (`item-default()`, etc.) is
+/// loaded from the resolver.
+///
+/// **Custom listings take a separate code path in the render
+/// transform** (see `transforms/listing_render.rs::render_one` →
+/// `load_custom_template`); this function should only be called
+/// for the three built-in types. The `Custom` arm exists as a
+/// defensive fallback for any unforeseen caller — it returns the
+/// default built-in source rather than panicking.
 pub fn top_level_template_source(kind: ListingType) -> &'static str {
     match kind {
         ListingType::Default => LISTING_DEFAULT,
         ListingType::Grid => LISTING_GRID,
         ListingType::Table => LISTING_TABLE,
-        // L8 custom templates land via a separate code path; if we
-        // get here with `Custom`, the render transform has already
-        // emitted Q-12-1 and downgraded to `Default`.
+        // Defensive fallback; not reached on the L8 render path.
         ListingType::Custom => LISTING_DEFAULT,
     }
 }
