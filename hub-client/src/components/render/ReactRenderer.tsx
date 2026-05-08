@@ -118,10 +118,14 @@ function ReactRenderer({
 
     const componentPaths = JSON.parse(componentPathsKey) as string[];
 
-    // Transpile each component using the latest fileContents from the ref
     const componentsCode: Record<string, string> = {};
     for (const path of componentPaths) {
-      const tsxCode = fileContents.get(path);
+      // AST meta resolves render-components paths against the project root
+      // and produces a leading-slash form (e.g. "/elliot/simple.tsx"), but
+      // FileEntry.path / fileContents keys are project-root-relative without
+      // the leading slash. Normalize before lookup.
+      const lookupPath = path.startsWith('/') ? path.slice(1) : path;
+      const tsxCode = fileContents.get(lookupPath);
       if (!tsxCode) {
         console.warn(`[ReactRenderer] Component file not found: ${path}`);
         continue;
