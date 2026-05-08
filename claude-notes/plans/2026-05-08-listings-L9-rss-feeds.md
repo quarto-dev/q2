@@ -1603,13 +1603,37 @@ RFC 822 `pubDate` formatting L9 needs is server-side in
 
 ### TDD phase 3 — feed binding
 
-- [ ] Write tests #7–15.
-- [ ] Implement `feed/binding.rs::build_channel_context`
-      and `build_item_context`. Server-side XML escaping
-      via `quote::escape` or a small inline helper.
-- [ ] Implement `build_item_image` with `imagesize`
-      lookup + scaling.
-- [ ] Tests pass.
+- [x] Write tests #7–15. Implementation landed alongside
+      tests in `feed/binding.rs`: 32 unit tests cover XML
+      escaping (text + attr forms), URL joining, RFC 2822
+      / RFC 3339 / date-only parsing, image dimension
+      scaling, MIME mapping, channel-builder cascade
+      (feed.* → website.* → empty), per-item description-
+      element shape (CDATA for metadata feeds; placeholder
+      envelope for partial/full), local-PNG imagesize
+      integration with synthetic 100x100 and 4000x3000
+      fixture headers, absolute-URL / data-URI / unreadable-
+      file fallback to empty `attrs`, and `xml-stylesheet`
+      plumbing.
+- [x] Implement `feed/binding.rs` as `build_feed_channel`
+      (channel-level) and `build_feed_item` (per-item)
+      returning typed `FeedChannel` / `FeedItem` structs
+      (ergonomic for the upcoming stage transform — the
+      template-context conversion will be a thin wrapper
+      built in phase 4 alongside the templates). Server-
+      side XML escaping via small inline `xml_escape_text`
+      / `xml_escape_attr` helpers (no new dep).
+- [x] Implement `build_item_image` with `imagesize` lookup
+      + scaling. The scaling helper `scale_to_feed_dimensions`
+      mirrors Q1's `feedImageSize` exactly (max 400h × 144w,
+      bottleneck on the smaller axis ratio).
+- [x] Tests pass: `cargo nextest run -p quarto-core
+      'project::listing::feed::binding::tests'` →
+      32 passed, 0 failed.
+- [x] Added `parsing` feature to the `time` crate in
+      `quarto-core`'s `Cargo.toml` (already had
+      `formatting` + `macros`); needed for
+      `OffsetDateTime::parse` / `Date::parse`.
 
 ### TDD phase 4 — staged-file write transform
 

@@ -1,0 +1,10 @@
+<item>
+<title>$item.title$</title>
+$for(item.authors)$<dc:creator>$it$</dc:creator>
+$endfor$<link>$item.link$</link>
+$item.description-element$
+$for(item.categories)$<category>$it$</category>
+$endfor$<guid>$item.guid$</guid>
+$if(item.pub-date)$<pubDate>$item.pub-date$</pubDate>
+$endif$$if(item.image)$<media:content url="$item.image.url$" medium="image"$item.image.attrs$/>
+$endif$</item>

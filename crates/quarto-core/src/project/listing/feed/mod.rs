@@ -1,0 +1,41 @@
+/*
+ * project/listing/feed/mod.rs
+ * Copyright (c) 2026 Posit, PBC
+ */
+
+//! L9 RSS feed generation (`bd-o90m`).
+//!
+//! See `claude-notes/plans/2026-05-08-listings-L9-rss-feeds.md` for
+//! the design. This submodule owns:
+//!
+//! - **`binding`** — typed `FeedChannel` / `FeedItem` shapes plus
+//!   server-side XML escaping and per-item image metadata via the
+//!   `imagesize` crate. Native-only (`imagesize` is target-gated in
+//!   `quarto-core`'s `Cargo.toml`).
+//! - *(forthcoming)* `stage` — the `ListingFeedStageTransform` that
+//!   emits one `*.feed-{full|partial|metadata}-staged` per
+//!   feed-configured listing. Native-only.
+//! - *(forthcoming)* `complete` — the `complete_staged_feeds`
+//!   post-render step that substitutes placeholders and finalizes
+//!   each staged feed into a real `.xml`. Native-only.
+//! - *(forthcoming)* `reader_ext` — the listings-RSS subset of Q1's
+//!   `readRenderedContents`: HTML-preserving first-paragraph
+//!   extraction (for `partial` feeds) and full-content extraction
+//!   with urls-to-absolute + anchor-strip (for `full` feeds). Native
+//!   only — depends on `scraper`.
+//! - *(forthcoming)* `link_inject` — the `ListingFeedLinkTransform`
+//!   that injects `<link rel="alternate" type="application/rss+xml">`
+//!   into the host page's head metadata. **Runs on both native and
+//!   WASM** so the rendered HTML is byte-for-byte identical between
+//!   the CLI and the hub-client preview, even though the linked file
+//!   is only written by `quarto render`.
+//!
+//! Module-gate granularity: most files here sit under
+//! `#[cfg(not(target_arch = "wasm32"))]` because they pull
+//! native-only deps (`imagesize`, `scraper`) or perform file I/O.
+//! `link_inject` is the exception: it does no I/O and is registered
+//! in both `build_html_pipeline_stages_with_apply_config` and
+//! `build_wasm_html_pipeline`.
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod binding;
