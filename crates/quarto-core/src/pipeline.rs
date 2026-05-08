@@ -829,6 +829,17 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(
         crate::project::listing::feed::ListingFeedStageTransform::new(),
     ));
+    // L9 (bd-o90m): inject `<link rel="alternate" type="application/rss+xml">`
+    // into `rendered.includes.header` for every feed-configured
+    // listing. Runs on both native AND WASM (registered in both
+    // pipeline builders) so the rendered HTML matches between the
+    // CLI render and the hub-client preview. The link points at
+    // a feed file the hub-client doesn't write — clicking it 404s
+    // in preview, which is acceptable v1 behavior (documented in
+    // the L11 listings reference page).
+    pipeline.push(Box::new(
+        crate::project::listing::feed::ListingFeedLinkTransform::new(),
+    ));
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));

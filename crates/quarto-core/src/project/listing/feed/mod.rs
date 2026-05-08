@@ -45,5 +45,12 @@ pub mod binding;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod stage;
 
+// Outside the cfg gate: link-inject does no I/O, has no native-
+// only deps, and runs on both native and WASM pipelines. See the
+// header comment above and `feed/link_inject.rs`'s file-level
+// docs.
+pub mod link_inject;
+
+pub use link_inject::ListingFeedLinkTransform;
 #[cfg(not(target_arch = "wasm32"))]
 pub use stage::ListingFeedStageTransform;

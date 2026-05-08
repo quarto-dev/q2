@@ -1666,15 +1666,26 @@ RFC 822 `pubDate` formatting L9 needs is server-side in
 
 ### TDD phase 5 — link injection transform
 
-- [ ] Write tests #25–29.
-- [ ] Implement `feed/link_inject.rs::ListingFeedLinkTransform`.
-      Adds to `header-includes` (or equivalent head-meta
-      slot — verify in
-      `WebsiteFaviconTransform`/`WebsiteCanonicalUrlTransform`
-      precedent).
-- [ ] Register in the Pass-2 transform list (both native
-      + WASM).
-- [ ] Tests pass.
+- [x] Write tests #25–29 plus an extra
+      `link_inject_multi_listing_emits_qualified_hrefs` for D7.
+- [x] Implement `feed/link_inject.rs::ListingFeedLinkTransform`.
+      Appends to `rendered.includes.header` (the slot
+      `WebsiteFaviconTransform::apply_favicon` writes to
+      via `append_to_rendered_header` —
+      `crates/quarto-core/src/transforms/website_favicon.rs:74`).
+      The helper is duplicated locally for now; a follow-up
+      bd at close-out hoists it to a shared util once a
+      third caller appears.
+- [x] Register in the Pass-2 transform list. Sits unconditionally
+      in `build_transform_pipeline` after the stage-transform
+      registration; both native and WASM pipelines reach it
+      through `AstTransformsStage::new()` (which JIT-builds
+      via `build_transform_pipeline`). Verified
+      `npm run build:wasm` clean.
+- [x] Tests pass: `cargo nextest run -p quarto-core
+      'project::listing::feed::link_inject'` → 6 passed.
+      Wider `cargo nextest run -p quarto-core` → 1869 passed
+      (was 1863 before phase 4; +6 new).
 
 ### TDD phase 6 — reader extension
 
