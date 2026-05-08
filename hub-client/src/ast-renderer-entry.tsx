@@ -68,8 +68,10 @@ async function loadCustomComponents(componentsCode: Record<string, string>) {
         // Dynamically import the module
         const module = await import(url);
 
-        // Extract all exported components
-        customRegistry = { ...componentRegistry, ...module }
+        // Accumulate exports across all loaded modules. Defaults are merged
+        // separately at render time (see updateAst), so the loop only needs
+        // to layer module exports on top of the prior iteration's registry.
+        customRegistry = { ...customRegistry, ...module }
 
         console.log(`[AstIframe] Loaded custom component: ${componentName}`);
       } finally {
