@@ -5,6 +5,7 @@ import { AstIframe } from './AstIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
+import { resolveComponentPath } from '../../utils/componentPath';
 
 // Simple error boundary to catch errors in custom components
 class ErrorBoundary extends Component<
@@ -120,11 +121,11 @@ function ReactRenderer({
 
     const componentsCode: Record<string, string> = {};
     for (const path of componentPaths) {
-      // AST meta resolves render-components paths against the project root
-      // and produces a leading-slash form (e.g. "/elliot/simple.tsx"), but
-      // FileEntry.path / fileContents keys are project-root-relative without
-      // the leading slash. Normalize before lookup.
-      const lookupPath = path.startsWith('/') ? path.slice(1) : path;
+      // render-components entries can be either project-root-absolute
+      // (leading slash) or relative to the current document's directory.
+      // fileContents is keyed by project-root-relative paths without the
+      // leading slash, so resolve before lookup.
+      const lookupPath = resolveComponentPath(path, currentFilePath);
       const tsxCode = fileContents.get(lookupPath);
       if (!tsxCode) {
         console.warn(`[ReactRenderer] Component file not found: ${path}`);
@@ -140,7 +141,7 @@ function ReactRenderer({
     }
 
     return componentsCode;
-  }, [componentPathsKey]);
+  }, [componentPathsKey, currentFilePath]);
 
   if (format === 'q2-debug') {
     return (
