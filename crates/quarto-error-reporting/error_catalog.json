@@ -823,5 +823,12 @@
     "message_template": "Listing item from {href} produced no preview content; using static fallback description. The sibling output file is missing or has no usable first paragraph; the listing remains correct but uses the description from the post's frontmatter / first source paragraph rather than the engine-rendered output.",
     "docs_url": "https://quarto.org/docs/errors/Q-12-13",
     "since_version": "99.9.9"
+  },
+  "Q-12-14": {
+    "subsystem": "listing",
+    "title": "Listing Type custom Without template Path",
+    "message_template": "A `type: custom` listing requires a `template:` field pointing at a doctemplate file. Falling back to the built-in `default` template.",
+    "docs_url": "https://quarto.org/docs/errors/Q-12-14",
+    "since_version": "99.9.9"
   }
 }

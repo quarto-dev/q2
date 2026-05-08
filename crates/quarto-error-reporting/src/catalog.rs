@@ -135,4 +135,22 @@ mod tests {
         assert!(get_error_info("Q-999-999").is_none()); // quarto-error-code-audit-ignore
         assert!(get_docs_url("Q-999-999").is_none()); // quarto-error-code-audit-ignore
     }
+
+    // L8 / bd-rqgx test #1: Q-12-14 catalog presence.
+    #[test]
+    fn error_catalog_has_q_12_14() {
+        let info = get_error_info("Q-12-14").expect("Q-12-14 must be in the catalog");
+        assert_eq!(info.subsystem, "listing");
+        assert_eq!(info.title, "Listing Type custom Without template Path");
+        assert!(
+            info.message_template.contains("type: custom"),
+            "Q-12-14 message must mention `type: custom`; got: {}",
+            info.message_template
+        );
+        assert!(
+            info.message_template.contains("default"),
+            "Q-12-14 message must mention the default fallback; got: {}",
+            info.message_template
+        );
+    }
 }
