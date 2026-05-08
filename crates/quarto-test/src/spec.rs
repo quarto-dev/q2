@@ -28,6 +28,12 @@ pub struct RunConfig {
     pub os: Option<Vec<String>>,
     /// Do not run on these operating systems.
     pub not_os: Option<Vec<String>>,
+    /// True when the fixture's format requires a JS runtime to render
+    /// (e.g. q2-debug renders via React inside an iframe). Runners that
+    /// can't execute JS (the CLI smoke-all runner) skip such fixtures;
+    /// runners that can (Playwright) run them. The TS WASM unit test's
+    /// `format !== 'html'` filter handles q2-debug skipping orthogonally.
+    pub requires_js: bool,
 }
 
 impl RunConfig {
@@ -55,6 +61,10 @@ impl RunConfig {
 
             if let Some(not_os) = map.get("not_os") {
                 config.not_os = parse_string_or_array(not_os);
+            }
+
+            if let Some(req) = map.get("requires_js") {
+                config.requires_js = req.as_bool().unwrap_or(false);
             }
         }
 

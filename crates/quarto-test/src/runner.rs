@@ -81,6 +81,14 @@ pub fn run_test_file(path: &Path) -> Result<TestResult> {
         if let Some(reason) = config.should_skip() {
             return Ok(TestResult::Skipped(reason));
         }
+        // CLI runner has no JS; skip fixtures that need a JS-capable
+        // renderer (q2-debug, q2-slides, etc.). These are exercised via
+        // Playwright e2e under hub-client/.
+        if config.requires_js {
+            return Ok(TestResult::Skipped(
+                "tests.run.requires_js: true (no JS in CLI runner)".to_string(),
+            ));
+        }
     }
 
     // If no test specs, nothing to do
@@ -90,16 +98,10 @@ pub fn run_test_file(path: &Path) -> Result<TestResult> {
         ));
     }
 
-    // Run tests for each format. Hub-client-only formats (q2-debug,
-    // q2-slides) are exercised via Playwright e2e in hub-client/, not
-    // through the CLI render path — skip them here so a fixture that
-    // declares them does not fail the CLI smoke-all runner.
+    // Run tests for each format
     let mut failures: Vec<FailureDetail> = Vec::new();
 
     for spec in specs {
-        if is_hub_client_only_format(&spec.format) {
-            continue;
-        }
         let format_failures = run_format_tests(&path, &spec)?;
         failures.extend(format_failures);
     }
@@ -152,13 +154,6 @@ struct RenderOutput {
     error: Option<String>,
     /// Log messages captured during rendering.
     messages: Vec<LogMessage>,
-}
-
-/// Returns true if `format` is rendered only by the hub-client and has no
-/// CLI render path. Such formats are tested via Playwright e2e under
-/// `hub-client/e2e/`, not through this CLI runner.
-fn is_hub_client_only_format(format: &str) -> bool {
-    matches!(format, "q2-debug" | "q2-slides")
 }
 
 /// Run tests for a single format specification.

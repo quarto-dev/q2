@@ -29,6 +29,14 @@ export interface RunConfig {
   ci?: boolean;
   os?: string[];
   not_os?: string[];
+  /**
+   * True when the fixture's format requires a JS runtime to render
+   * (e.g. q2-debug renders via React inside an iframe). Honored by
+   * runners that can't execute JS — the CLI smoke-all runner skips
+   * these. The Playwright runner always has JS, so this is a no-op
+   * here; we parse the field for consistency with the Rust side.
+   */
+  requires_js?: boolean;
 }
 
 export interface FormatTestSpec {
