@@ -1637,14 +1637,32 @@ RFC 822 `pubDate` formatting L9 needs is server-side in
 
 ### TDD phase 4 — staged-file write transform
 
-- [ ] Write tests #16–24.
-- [ ] Embed the three `.template` files via
-      `include_str!` in `feed/mod.rs` (same pattern as
-      `templates.rs`).
-- [ ] Implement `feed/stage.rs::ListingFeedStageTransform`.
-- [ ] Register the transform in the Pass-2 transform
-      list (after `ListingGenerateTransform`).
-- [ ] Tests pass.
+- [x] Write tests #16–24 plus an extra
+      `stage_qualifies_filename_for_multi_feed_hosts` for D7.
+- [x] Embed the three `.template` files via `include_str!`
+      (in `feed/stage.rs`, not `feed/mod.rs` — keeps the
+      template constants alongside the transform that
+      consumes them; same outcome). Templates files live
+      under `feed/templates/{preamble,item,postamble}.template`.
+- [x] Implement `feed/stage.rs::ListingFeedStageTransform`.
+      Includes typed `FeedChannel`/`FeedItem` →
+      `TemplateContext` lifters, item-truncation logic
+      (default 20; `feed.items: 0` treated as missing),
+      a `most_recent_item_date` helper for `lastBuildDate`,
+      and Q-12-15 emission when `website.site-url` is
+      missing (once per transform invocation).
+- [x] Register the transform in the Pass-2 transform list,
+      after `CategoriesSidebarTransform` in
+      `pipeline.rs:build_html_pipeline_stages_with_apply_config`.
+      Native-only registration (gated with
+      `#[cfg(not(target_arch = "wasm32"))]` at the push
+      site, mirroring the cfg gate in `feed/mod.rs`).
+- [x] Tests pass: `cargo nextest run -p quarto-core
+      'project::listing::feed'` → 42 passed
+      (32 binding + 10 stage). Full workspace
+      `cargo nextest run --workspace` → 8755 passed.
+      `cargo xtask lint` clean. `npm run build:wasm`
+      (hub-client) clean.
 
 ### TDD phase 5 — link injection transform
 

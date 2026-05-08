@@ -12,9 +12,11 @@
 //!   server-side XML escaping and per-item image metadata via the
 //!   `imagesize` crate. Native-only (`imagesize` is target-gated in
 //!   `quarto-core`'s `Cargo.toml`).
-//! - *(forthcoming)* `stage` — the `ListingFeedStageTransform` that
-//!   emits one `*.feed-{full|partial|metadata}-staged` per
-//!   feed-configured listing. Native-only.
+//! - **`stage`** — the `ListingFeedStageTransform` that emits one
+//!   `*.feed-{full|partial|metadata}-staged` file per
+//!   feed-configured listing during Pass-2. Per-category sub-feeds
+//!   produce additional `*-<category>.feed-…-staged` files. Native-
+//!   only.
 //! - *(forthcoming)* `complete` — the `complete_staged_feeds`
 //!   post-render step that substitutes placeholders and finalizes
 //!   each staged feed into a real `.xml`. Native-only.
@@ -39,3 +41,9 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod binding;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod stage;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use stage::ListingFeedStageTransform;
