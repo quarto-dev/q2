@@ -1721,15 +1721,30 @@ RFC 822 `pubDate` formatting L9 needs is server-side in
 
 ### TDD phase 7 — post-render completion
 
-- [ ] Write tests #37–43.
-- [ ] Implement `feed/complete.rs::complete_staged_feeds`.
-      Per-call HashMap cache. Walk output dir
-      (`std::fs::read_dir` + filter on staged
-      extension).
-- [ ] Wire the call into
-      `WebsiteProjectType::post_render` after the L7
-      step.
-- [ ] Tests pass.
+- [x] Write tests #37–43 plus an extra
+      `complete_walks_nested_directories` (recursive walk
+      catches `_site/posts/index.feed-...`) and a
+      `staged_type_from_filename` unit test.
+- [x] Implement `feed/complete.rs::complete_staged_feeds`.
+      Per-call HashMap cache (`HashMap<PathBuf, Option<String>>`)
+      avoids re-reading siblings shared across multiple
+      feeds (e.g. the main feed and per-category sub-feeds
+      on the same host). Recursive `std::fs::read_dir` walk
+      filters strictly on the three staged extensions.
+      Errors during one feed are reported as warnings and
+      don't abort the whole step.
+- [x] Wire the call into `WebsiteProjectType::post_render`
+      after L7's `substitute_listing_placeholders`. The
+      L9 reader extractors then see fully-finalized
+      sibling HTML.
+- [x] Tests pass: `cargo nextest run -p quarto-core
+      'project::listing::feed::complete'` → 9 passed.
+      Wider `cargo nextest run -p quarto-core` → 1896
+      passed (was 1887 before phase 6).
+- [x] WASM build still clean (`npm run build:wasm`) —
+      orchestrator.rs's `complete_staged_feeds` call sits
+      inside the existing `cfg(not(target_arch = "wasm32"))`
+      block in `WebsiteProjectType::post_render`.
 
 ### TDD phase 8 — End-to-end CLI
 

@@ -48,6 +48,12 @@ pub mod stage;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod reader_ext;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod complete;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use complete::complete_staged_feeds;
+
 // Outside the cfg gate: link-inject does no I/O, has no native-
 // only deps, and runs on both native and WASM pipelines. See the
 // header comment above and `feed/link_inject.rs`'s file-level
