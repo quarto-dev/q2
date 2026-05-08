@@ -37,7 +37,7 @@ companion design rationale is
 | L6    | `bd-xbnf` | task    | Dependency-graph integration (`listing_content_globs`)                 | `2026-05-07-listings-L6-dep-graph.md`                | **Closed** (impl `ffa4d227`, merge `8b5efb91`) |
 | L7    | `bd-qf7r` | feature | Post-render placeholder upgrade (engine-rendered previews; BRACKETED)  | `2026-05-07-listings-L7-postrender-upgrade.md`       | **Closed** (impl `d4877142`, merge `dc3a0f7b`) |
 | L8    | `bd-rqgx` | feature | Custom listing templates                                               | `2026-05-07-listings-L8-custom-templates.md`         | **Closed** (impl `92ca4c52`, merge `cd2410fa`) |
-| L9    | `bd-o90m` | feature | RSS feeds                                                              | `YYYY-MM-DD-listings-L9-rss-feeds.md`                | not yet written     |
+| L9    | `bd-o90m` | feature | RSS feeds                                                              | `2026-05-08-listings-L9-rss-feeds.md`                | **Closed** (impl `8b7a9286`…`0bdd219e` (7 phases), merge `f5475bb2`) |
 | L10   | `bd-hzsi` | task    | Q1 → Q2 listing template migration docs + LLM skill                    | `YYYY-MM-DD-listings-L10-migration-docs.md`          | not yet written     |
 | L11   | `bd-qb4o` | task    | Listings epic close-out                                                | `YYYY-MM-DD-listings-L11-close-out.md`               | not yet written     |
 **Parent design discussion:**
