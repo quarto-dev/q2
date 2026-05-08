@@ -12,6 +12,7 @@ import 'reveal.js/reveal.css';
 import 'reveal.js/theme/white.css';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { buildCustomRegistry, type ComponentExports } from './utils/customRegistry';
 
 let root: ReturnType<typeof createRoot> | null = null;
 let customRegistry: Record<string, React.ComponentType<any>> = {};
@@ -50,38 +51,30 @@ window.addEventListener('message', async (event) => {
  * Load custom components from transpiled JS code using dynamic imports
  */
 async function loadCustomComponents(componentsCode: Record<string, string>) {
-  customRegistry = {};
-
   // Make React and other dependencies available globally for the imported modules
   (window as any).React = React;
   (window as any).__REACT_AST_DEBUG_RENDERER__ = ReactAstDebugRendererModule;
   (window as any).RevealReact = { Deck, Slide };
   (window as any).katex = katex;
 
+  const loadedModules: ComponentExports[] = [];
   for (const [componentName, code] of Object.entries(componentsCode)) {
     try {
-      // Create a blob URL for the transpiled code
       const blob = new Blob([code], { type: 'application/javascript' });
       const url = URL.createObjectURL(blob);
-
       try {
-        // Dynamically import the module
         const module = await import(url);
-
-        // Accumulate exports across all loaded modules. Defaults are merged
-        // separately at render time (see updateAst), so the loop only needs
-        // to layer module exports on top of the prior iteration's registry.
-        customRegistry = { ...customRegistry, ...module }
-
+        loadedModules.push(module as ComponentExports);
         console.log(`[AstIframe] Loaded custom component: ${componentName}`);
       } finally {
-        // Clean up the blob URL
         URL.revokeObjectURL(url);
       }
     } catch (err) {
       console.error(`[AstIframe] Failed to load custom component ${componentName}:`, err);
     }
   }
+
+  customRegistry = buildCustomRegistry(loadedModules);
 }
 
 function updateAst(payload: UpdateAstPayload) {
