@@ -3,16 +3,7 @@ import { AspectRatioScaler } from '../render/AspectRatioScaler';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { vfsReadFile, vfsReadBinaryFile } from '../../services/wasmRenderer';
-
-/**
- * Simplified Pandoc AST types for rendering
- * Exported for use in thumbnail generation.
- */
-export interface PandocAST {
-  'pandoc-api-version': [number, number, number];
-  meta: Record<string, unknown>;
-  blocks: Block[];
-}
+import type { PandocAST } from './framework/types';
 
 /**
  * Represents a single slide with its content

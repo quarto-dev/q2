@@ -9,7 +9,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import html2canvas from 'html2canvas';
 import type { Symbol } from '../types/intelligence';
-import { parseSlides, renderSlide, type PandocAST } from '../components/render/ReactAstSlideRenderer';
+import { parseSlides, renderSlide } from '../components/render/ReactAstSlideRenderer';
+import type { PandocAST } from '../components/render/framework/types';
 
 /**
  * Map from symbol line number to thumbnail data URL.

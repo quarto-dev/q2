@@ -6,6 +6,7 @@ import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
 import { resolveComponentPath } from '../../utils/componentPath';
+import type { PandocAST } from './framework/types';
 
 // Simple error boundary to catch errors in custom components
 class ErrorBoundary extends Component<
@@ -52,13 +53,6 @@ class ErrorBoundary extends Component<
 
     return this.props.children;
   }
-}
-
-// Simplified Pandoc AST type for setAst callback
-interface PandocAST {
-  'pandoc-api-version': [number, number, number];
-  meta: Record<string, unknown>;
-  blocks: unknown[];
 }
 
 interface ReactRendererProps {
