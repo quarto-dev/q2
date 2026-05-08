@@ -14,7 +14,7 @@ import {
 } from '@quarto/quarto-sync-client';
 import { SERVER_INFO_PATH } from './globalSetup';
 import type { ServerInfo } from './globalSetup';
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export interface ProjectFile {
   path: string;
@@ -104,9 +104,48 @@ async function waitForServerDocuments(
 }
 
 /**
+ * Drive the first-time-setup UI to create a synced project set on the running
+ * hub server and store its pointer in the browser's IDB. Must be called once
+ * per fresh Playwright browser context before {@link seedProjectInBrowser},
+ * otherwise the legacy project entry triggers the "Upgrade: Synced Project
+ * List" migration screen and blocks all navigation.
+ *
+ * Modeled after the share-link spec's `bootstrapReceiverProjectSet` — driving
+ * the UI lets the app's own `useProjectSet` race-free state machine put us in
+ * `connected` status rather than racing a hand-rolled createProjectSet call
+ * against the migration check.
+ */
+export async function bootstrapProjectSet(
+  page: Page,
+  syncServer: string,
+): Promise<void> {
+  await page.goto('/');
+  await expect(page.locator('body')).toBeVisible();
+
+  await expect(
+    page.getByRole('heading', { name: 'Quarto Hub' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Get started by creating a new project set/i),
+  ).toBeVisible();
+
+  await page.locator('#setup-sync-server').fill(syncServer);
+  await page
+    .getByRole('button', { name: /Create New Project Set/i })
+    .click();
+
+  await expect(
+    page.getByRole('heading', { name: 'Your Projects' }),
+  ).toBeVisible({ timeout: 20000 });
+}
+
+/**
  * Seed a project entry in the browser's IndexedDB so the app can load it.
  *
- * Must be called after page.goto('/') so Vite modules are available.
+ * Call {@link bootstrapProjectSet} once per browser context first so the
+ * synced project set is initialized; otherwise the App lands on the
+ * needs-migration screen.
+ *
  * Returns the local project ID (UUID) used in URL navigation.
  */
 export async function seedProjectInBrowser(
