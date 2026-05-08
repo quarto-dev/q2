@@ -106,9 +106,15 @@ test.describe('smoke-all E2E tests', () => {
           `/#/p/${localId}/file/${encodeURIComponent(fixture.renderPath)}`,
         );
 
-        // Format-driven dispatch: q2-debug uses the AstIframe, everything
+        // Format-driven dispatch: q2-debug uses the AstIframe,
+        // q2-preview uses the Q2PreviewIframe (Plan 2A), everything
         // else uses the html preview iframe.
-        const kind = spec.format === 'q2-debug' ? 'q2-debug' : 'html';
+        const kind =
+          spec.format === 'q2-debug'
+            ? 'q2-debug'
+            : spec.format === 'q2-preview'
+              ? 'q2-preview'
+              : 'html';
 
         // Wait for render (or error)
         if (!spec.expectsError) {

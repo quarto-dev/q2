@@ -29,6 +29,23 @@ import {
 } from '.';
 import { buildCustomRegistry, type ComponentExports } from '../../../utils/customRegistry';
 
+// Set the renderer-surface global at module top so importing this
+// module is sufficient to populate `window.__REACT_AST_DEBUG_RENDERER__`
+// — the framework-primitive parity test (Plan 2A item 14) relies on
+// being able to read both globals via plain module imports without
+// firing `LOAD_CUSTOM_COMPONENTS` setup messages. `React`, `katex`,
+// and `RevealReact` stay lazy in `loadCustomComponents` since they're
+// tied to dynamic user-TSX imports (the right time to set them).
+(window as any).__REACT_AST_DEBUG_RENDERER__ = {
+    renderChildren, renderNode, Node,
+    Block, Inline,
+    Para, Plain, Header, CodeBlock, BulletList, OrderedList,
+    BlockQuote, Div, HorizontalRule, RawBlock, Figure,
+    Str, Space, SoftBreak, LineBreak,
+    Emph, Strong, Code, Link, Image, Span, Quoted,
+    q2DebugRegistry, blockStyle, inlineStyle,
+};
+
 let root: ReturnType<typeof createRoot> | null = null;
 let customRegistry: Record<string, React.ComponentType<any>> = {};
 let componentsLoading = false;
@@ -66,21 +83,12 @@ window.addEventListener('message', async (event) => {
  * Load custom components from transpiled JS code using dynamic imports.
  */
 async function loadCustomComponents(componentsCode: Record<string, string>) {
-  // Make React and the q2-debug renderer surface available as globals
-  // for user TSX modules to destructure. Pinned to an explicit object
-  // rather than `import * as` so internal contracts (RegistryContext,
-  // renderChildrenRegistry) cannot leak onto the global by accident.
-  // See plan-2pre §"`__REACT_AST_DEBUG_RENDERER__` continuity".
+  // Make React, RevealReact, and katex available as globals for user
+  // TSX modules. The renderer-surface global is set at module top
+  // (see above); these three remain lazy because they're tied to
+  // dynamic user-TSX imports — `loadCustomComponents` is the right
+  // moment to materialize them.
   (window as any).React = React;
-  (window as any).__REACT_AST_DEBUG_RENDERER__ = {
-    renderChildren, renderNode, Node,
-    Block, Inline,
-    Para, Plain, Header, CodeBlock, BulletList, OrderedList,
-    BlockQuote, Div, HorizontalRule, RawBlock, Figure,
-    Str, Space, SoftBreak, LineBreak,
-    Emph, Strong, Code, Link, Image, Span, Quoted,
-    q2DebugRegistry, blockStyle, inlineStyle,
-  };
   (window as any).RevealReact = { Deck, Slide };
   (window as any).katex = katex;
 

@@ -78,7 +78,17 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         debug: path.resolve(__dirname, 'debug.html'),
-        'q2-debug': path.resolve(__dirname, 'public/q2-debug.html'),
+        // q2-debug.html and q2-preview.html live at the hub-client root,
+        // not under public/. When they were in public/, the build emitted
+        // both a transformed copy (at dist/public/q2-{debug,preview}.html)
+        // and an untransformed copy of the source file (at
+        // dist/q2-{debug,preview}.html, referencing the dev-only
+        // `<script src="/src/...">` path). The iframes' `src="/q2-*.html"`
+        // hit the wrong one under `vite preview`, leaving the iframe blank
+        // and breaking the q2-debug + q2-preview E2E suite. Same fix as
+        // PR #172 applied to ast-renderer.html on main.
+        'q2-debug': path.resolve(__dirname, 'q2-debug.html'),
+        'q2-preview': path.resolve(__dirname, 'q2-preview.html'),
       },
     },
   },

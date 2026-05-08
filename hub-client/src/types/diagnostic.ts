@@ -71,4 +71,12 @@ export interface RenderResponse {
   warnings?: Diagnostic[];
   /** Sibling-page Pass-1 failures (bd-rqba). */
   pass1_failures?: Pass1Failure[];
+  /**
+   * Compiled theme CSS fingerprint (Plan 2A item 11). Recovered
+   * from the `css:theme:<fingerprint>` artifact key. The hub-client
+   * iframe wrapper dedupes blob-URL re-mints when this hasn't
+   * changed. `undefined` when no theme artifact was produced
+   * (errors, q2-debug, themeless single-doc).
+   */
+  theme_fingerprint?: string;
 }

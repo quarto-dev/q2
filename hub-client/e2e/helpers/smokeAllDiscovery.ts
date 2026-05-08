@@ -405,10 +405,13 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
       skipPrintsMessage: SKIP_PRINTS_MESSAGE.has(relPath),
     });
 
-    // Only formats the e2e runner knows how to drive: html (preview iframe)
-    // and q2-debug (AstIframe).
+    // Only formats the e2e runner knows how to drive: html (preview iframe),
+    // q2-debug (AstIframe), and q2-preview (Q2PreviewIframe — Plan 2A).
     const supportedSpecs = formatSpecs.filter(
-      (s) => s.format === 'html' || s.format === 'q2-debug',
+      (s) =>
+        s.format === 'html' ||
+        s.format === 'q2-debug' ||
+        s.format === 'q2-preview',
     );
     if (supportedSpecs.length === 0) continue;
 

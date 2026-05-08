@@ -154,12 +154,21 @@ What this plan does NOT solve:
 
 ### Integration test (vitest)
 
-- Mount `<ReactRenderer>` with a fixture containing a render-component path, allow first transpile, simulate `fileContents` update with edited content, advance timers past the debounce, assert `<AstIframe>` receives a `customComponentsCode` prop with the new transpiled code.
+- Mount `<ReactRenderer>` with a fixture containing a render-component path, allow first transpile, simulate `fileContents` update with edited content, advance timers past the debounce, assert `<Q2DebugIframe>` receives a `customComponentsCode` prop with the new transpiled code. (Note: post-Plan-2pre the iframe component is `Q2DebugIframe`, not `AstIframe`.)
 
-### Manual smoke
+### E2E (single Playwright spec)
 
-- Open Elliot's `~/docs/demo-playground/elliot/index.qmd` in hub-client. Edit `~/docs/demo-playground/elliot/html.tsx` (e.g., change `Para`'s output style). Within ~500ms of typing, observe the iframe re-rendering with the change. No YAML edit, no page reload.
-- Type a syntax error mid-edit (`function foo() {`). Observe the iframe stays on the last-good output rather than blanking. Console shows the transpile error. Complete the syntax (`function foo() { return null; }`); iframe re-renders with the new output.
+`hub-client/e2e/q2-debug-render-components-live-reload.spec.ts` — sister to the existing `q2-debug-render-components.spec.ts` from commit `dc828c53` on main. Mirrors that spec's `bootstrapProjectSet` + `createProjectOnServer` + `seedProjectInBrowser` setup. One spec file, two test cases.
+
+**Setup.** Create a project containing one qmd with `format: q2-debug` + `render-components: [reactji.tsx]`, plus the `reactji.tsx` from the existing smoke-all q2-debug fixture (or a tiny purpose-built TSX — anything that produces a visible difference between pre/post-edit).
+
+**Test 1: live reload.** Mount the page; assert the iframe renders the pre-edit DOM (e.g., `❤️ 1` from the reactji counter). Programmatically mutate the TSX content via `page.evaluate(({path, content}) => updateFileContent(path, content), { path: 'reactji.tsx', content: editedTsx })` — calling into the hub's automerge layer in-page (the `dev-only `window.quartoDebug` API from commit `0f103490`, or whatever the established mutation handle is at the time). Wait the debounce window plus a small jitter (~700ms total). Assert the iframe DOM updates to reflect the edited TSX (e.g., counter button now shows a different label or different rendered shape).
+
+**Test 2: syntax-error preserves last-good.** Same setup. Assert pre-edit DOM. Mutate to invalid TSX (`function foo() {`). Wait through the debounce. Assert the iframe DOM is **unchanged** from pre-edit (last-good output preserved). Then mutate to valid TSX with a different output. Wait. Assert the iframe DOM updates to the new output.
+
+This spec covers the end-to-end debounce → load-custom-components → iframe re-render flow. The vitest unit/integration tests above cover the *logic* (cache-hit, content-change, syntax-error, debounce timing); the e2e spec is the safety net for the message-passing path that vitest can't reach.
+
+Cost: ~80 LOC for the spec file. Runs slowly (Playwright spinup) so it's gated behind `npm run test:e2e`, not `test:ci`. Worth the budget because live-reload is the kind of UX that silently degrades in subtle ways (debounce off-by-one, postMessage timing race) without anyone noticing until users complain.
 
 ## Risk areas
 
@@ -177,7 +186,8 @@ What this plan does NOT solve:
 | Debounce useState + useEffect | ~20 |
 | Iframe entry re-render trigger (if needed) | ~5 |
 | Tests (cache-hit, content-change, multi-file, syntax-error, debounce, integration) | ~120 |
-| **Total** | **~170** |
+| E2E spec (`q2-debug-render-components-live-reload.spec.ts`) | ~80 |
+| **Total** | **~250** |
 
 One focused session. Tests are the biggest line-count item; the implementation itself is tight.
 

@@ -305,6 +305,14 @@ pub struct WasmPassTwoOutput {
     /// receives Project-scoped artifacts separately (Phase 5
     /// invariant).
     pub page_artifacts: ArtifactStore,
+    /// Compiled theme CSS fingerprint, recovered from the
+    /// `css:theme:<fingerprint>` Project-scoped artifact key
+    /// produced by `CompileThemeCssStage` (Plan 2A item 11).
+    /// Captured at the renderer level **before** the
+    /// `drain_project_scoped` call so the value survives both the
+    /// website-merge and default-project-flush paths. `None` if
+    /// no theme artifact was produced.
+    pub theme_fingerprint: Option<String>,
 }
 
 impl WasmPassTwoOutput {
@@ -447,6 +455,19 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         //
         // Page-scoped artifacts on `ctx.artifacts` travel back to JS
         // alongside the HTML regardless of which branch fires.
+        //
+        // Plan 2A item 11: capture the theme fingerprint **before**
+        // the drain. After drain + flush_site_libs (default-project
+        // path), the artifact is gone — neither `ctx.artifacts` nor
+        // `project_artifacts` retain it. Stashing on the output
+        // makes the value visible to both project types.
+        let theme_fingerprint = ctx
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .and_then(|(key, _)| key.strip_prefix("css:theme:"))
+            .map(|s| s.to_string());
+
         let drained = ctx.artifacts.drain_project_scoped();
         let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
         if lib_dir.is_empty() {
@@ -467,6 +488,7 @@ impl Pass2Renderer for RenderToHtmlRenderer {
             diagnostics: render_output.diagnostics,
             source_context: render_output.source_context,
             page_artifacts: ctx.artifacts,
+            theme_fingerprint,
         })
     }
 
@@ -577,6 +599,49 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         // `post_render`), no-lib-dir flushes in-place. The choice
         // is artifact-flow, not payload-flow, so HTML and q2-preview
         // share it verbatim.
+        //
+        // Plan 2A item 11: capture the theme fingerprint **before**
+        // the drain (see `RenderToHtmlRenderer::render` for the
+        // rationale). q2-preview also stamps the theme bytes at
+        // the stable `styles.css` path so the hub-client iframe can
+        // read them regardless of single-doc / project layout —
+        // `compile_theme_css` puts the artifact at
+        // `quarto/quarto-theme-<fp>.css` for multi-doc projects, but
+        // q2-preview previews one document at a time so the
+        // fingerprint-suffixed path adds nothing for this consumer.
+        // Honors Plan 1's stated contract that "RenderToPreviewAstRenderer
+        // writes the compiled theme CSS to
+        // /.quarto/project-artifacts/styles.css on every q2-preview render."
+        let theme_artifact_entry = ctx
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, a)| (k.to_string(), a.content.clone()));
+
+        let theme_fingerprint = theme_artifact_entry
+            .as_ref()
+            .and_then(|(k, _)| k.strip_prefix("css:theme:"))
+            .map(|s| s.to_string());
+
+        if let Some((_, content)) = &theme_artifact_entry {
+            // Compute the iframe-readable path directly from the VFS
+            // root rather than via `resolver.on_disk_path_for` —
+            // websites would route Project-scoped paths through
+            // `site_libs/`, but the iframe wrapper expects the
+            // unsuffixed location at `{vfs_root}/styles.css`.
+            let iframe_path = self.vfs_root.join("styles.css");
+            if let Some(parent) = iframe_path.parent() {
+                let _ = runtime.dir_create(parent, true);
+            }
+            runtime.file_write(&iframe_path, content).map_err(|e| {
+                crate::error::QuartoError::other(format!(
+                    "Failed to write q2-preview theme CSS to iframe path {}: {}",
+                    iframe_path.display(),
+                    e
+                ))
+            })?;
+        }
+
         let drained = ctx.artifacts.drain_project_scoped();
         let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
         if lib_dir.is_empty() {
@@ -597,6 +662,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             diagnostics: preview_output.diagnostics,
             source_context: preview_output.source_context,
             page_artifacts: ctx.artifacts,
+            theme_fingerprint,
         })
     }
 

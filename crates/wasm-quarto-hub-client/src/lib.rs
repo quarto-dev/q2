@@ -796,6 +796,15 @@ struct RenderResponse {
     /// chooses strict vs lenient.
     #[serde(skip_serializing_if = "Option::is_none")]
     pass1_failures: Option<Vec<JsonPass1Failure>>,
+    /// Compiled theme CSS fingerprint (Plan 2A item 11). Pulled from
+    /// the `css:theme:<fingerprint>` artifact key produced by
+    /// `CompileThemeCssStage`. The hub-client iframe wrapper uses
+    /// this to dedupe theme CSS posts: if the fingerprint hasn't
+    /// changed, the parent skips the blob-URL re-mint cycle.
+    /// `None` for renders that produced no theme artifact (q2-debug,
+    /// errors, single-doc renders without a `theme:` YAML key).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    theme_fingerprint: Option<String>,
 }
 
 /// Create a minimal project context for WASM rendering.
@@ -1216,6 +1225,7 @@ async fn render_single_doc_to_response(
     }
 
     let warnings = diagnostics_to_json(&diagnostics, &source_context);
+    let theme_fingerprint = extract_theme_fingerprint(&ctx.artifacts);
     serde_json::to_string(&RenderResponse {
         success: true,
         error: None,
@@ -1228,8 +1238,22 @@ async fn render_single_doc_to_response(
             Some(warnings)
         },
         pass1_failures: None,
+        theme_fingerprint,
     })
     .unwrap()
+}
+
+/// Pull the compiled theme fingerprint out of the artifact store. The
+/// `CompileThemeCssStage` keys its artifact `css:theme:<fingerprint>`;
+/// we recover the fingerprint from the suffix without re-hashing CSS
+/// bytes. Returns `None` if no theme artifact was produced (q2-debug,
+/// errors, single-doc renders without a `theme:` YAML key).
+fn extract_theme_fingerprint(store: &quarto_core::ArtifactStore) -> Option<String> {
+    store
+        .get_by_prefix("css:theme:")
+        .first()
+        .and_then(|(key, _)| key.strip_prefix("css:theme:"))
+        .map(|s| s.to_string())
 }
 
 /// Project-scoped render path — drives the orchestrator with
@@ -1382,6 +1406,12 @@ async fn render_project_active_page_to_response(
     all_diags.extend(summary.project_diagnostics);
     let warnings = diagnostics_to_json(&all_diags, &active_output.source_context);
 
+    // Plan 2A item 11: theme fingerprint is captured at the
+    // pass-2 renderer level (before drain_project_scoped) and
+    // stashed on `WasmPassTwoOutput`. Surviving both website-merge
+    // and default-project-flush paths.
+    let theme_fingerprint_from_output = active_output.theme_fingerprint.clone();
+
     // Pass-1 failures for non-active-page files (bd-rqba). The
     // active page's own Pass-1 failure shortcuts above via
     // `pass_failure_response`, so anything reaching this branch
@@ -1417,6 +1447,7 @@ async fn render_project_active_page_to_response(
         } else {
             Some(pass1_failures)
         },
+        theme_fingerprint: theme_fingerprint_from_output,
     })
     .unwrap()
 }
@@ -1431,6 +1462,7 @@ fn error_response(msg: impl Into<String>) -> String {
         diagnostics: None,
         warnings: None,
         pass1_failures: None,
+        theme_fingerprint: None,
     })
     .unwrap()
 }
@@ -1453,6 +1485,7 @@ fn render_error_response(e: QuartoError) -> String {
         diagnostics,
         warnings: None,
         pass1_failures: None,
+        theme_fingerprint: None,
     })
     .unwrap()
 }
@@ -1488,6 +1521,7 @@ fn pass_failure_response(
         diagnostics,
         warnings: None,
         pass1_failures: None,
+        theme_fingerprint: None,
     })
     .unwrap()
 }

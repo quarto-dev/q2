@@ -167,6 +167,18 @@ impl TransformPipeline {
     pub fn transform_names(&self) -> Vec<&str> {
         self.transforms.iter().map(|t| t.name()).collect()
     }
+
+    /// Drop every transform whose `name()` appears in `exclude`,
+    /// preserving the relative order of the remaining transforms.
+    ///
+    /// This is the primitive that lets a downstream pipeline
+    /// (e.g. q2-preview) be defined as `full minus these names`,
+    /// rather than as an independently-maintained explicit list
+    /// that drifts from the full pipeline whenever a transform is
+    /// added.
+    pub fn retain_excluding(&mut self, exclude: &[&str]) {
+        self.transforms.retain(|t| !exclude.contains(&t.name()));
+    }
 }
 
 impl Default for TransformPipeline {

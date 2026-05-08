@@ -315,50 +315,45 @@ pub fn build_html_pipeline_stages_with_options(
     stages
 }
 
-/// Build the q2-preview pipeline stages (Plan 1).
+/// Names of stages in [`build_html_pipeline_stages_with_options`]
+/// that the q2-preview pipeline drops. All three turn the AST into
+/// an HTML string (or wrap one); q2-preview returns the AST itself
+/// to the React iframe.
 ///
-/// Identical prefix to [`build_html_pipeline_stages_with_options`]
-/// through `ResourceReportStage`, then **stops** — the HTML-specific
-/// tail (`CodeHighlightStage`, `RenderHtmlBodyStage`,
-/// `ApplyTemplateStage`) is intentionally excluded because q2-preview
-/// returns the AST directly to the React iframe rather than rendering
-/// it to HTML. The exact stage list and order is asserted by a
-/// structural test (`build_q2_preview_pipeline_stages_structural`).
-///
-/// `AstTransformsStage` itself is shared with the HTML pipeline; it
-/// dispatches at run-time on `ctx.format.pipeline_kind` to choose
-/// between `build_transform_pipeline` (HTML) and
-/// `build_q2_preview_transform_pipeline` (q2-preview). The dispatch
-/// is added in a later commit; this function is a pure addition with
-/// no consumers yet.
-///
+/// New stages added to the HTML pipeline are **included by default**
+/// — q2-preview opts a stage out only when its output is HTML-only.
 /// `CompileThemeCssStage` is included so the compiled theme CSS
 /// lands in VFS at `/.quarto/project-artifacts/styles.css` after a
-/// q2-preview render. The artifact is unread by Plan 1 itself but
-/// honored as a forward-compat contract for Plan 2's stylesheet
-/// injection (Plan 1 §"Multi-plan contract: theme CSS artifact").
+/// q2-preview render (Plan 1 §"Multi-plan contract: theme CSS
+/// artifact"); Plan 2A's iframe entry reads it.
+///
+/// The unknown-name validator
+/// (`q2_preview_stage_excluded_names_exist_in_html_pipeline`)
+/// fails the test suite if any name here is not an actual stage in
+/// the full HTML pipeline (typo / rename guard).
+const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &[
+    "code-highlight",
+    "math-js",
+    "render-html-body",
+    "apply-template",
+];
+
+/// Build the q2-preview pipeline stages (Plan 1).
+///
+/// Constructed as [`build_html_pipeline_stages_with_options`] with
+/// the names in [`Q2_PREVIEW_STAGE_EXCLUDED`] removed. Order is
+/// preserved.
+///
+/// `AstTransformsStage` runs in both pipelines; it dispatches at
+/// run-time on `ctx.format.pipeline_kind` between
+/// `build_transform_pipeline` (HTML) and
+/// `build_q2_preview_transform_pipeline` (q2-preview).
 pub fn build_q2_preview_pipeline_stages(
     engine_registry: Option<crate::engine::EngineRegistry>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    let engine_stage = match engine_registry {
-        Some(reg) => EngineExecutionStage::with_registry(reg),
-        None => EngineExecutionStage::new(),
-    };
-    vec![
-        Box::new(ParseDocumentStage::new()),
-        Box::new(MetadataMergeStage::new()),
-        Box::new(IncludeExpansionStage::new()),
-        Box::new(DocumentProfileStage::new()),
-        Box::new(LinkResolutionStage::new()),
-        Box::new(UnwrapProfileStage::new()),
-        Box::new(PreEngineSugaringStage::new()),
-        Box::new(engine_stage),
-        Box::new(CompileThemeCssStage::new()),
-        Box::new(UserFiltersStage::pre()),
-        Box::new(AstTransformsStage::new()),
-        Box::new(UserFiltersStage::post()),
-        Box::new(ResourceReportStage::new()),
-    ]
+    let mut stages = build_html_pipeline_stages_with_options(None, engine_registry);
+    stages.retain(|s| !Q2_PREVIEW_STAGE_EXCLUDED.contains(&s.name()));
+    stages
 }
 
 /// Build the standard HTML pipeline.
@@ -1027,82 +1022,68 @@ pub fn build_transform_pipeline(
     pipeline
 }
 
-/// Build the q2-preview transform pipeline (Plan 1).
+/// Names of transforms in [`build_transform_pipeline`] that the
+/// q2-preview pipeline drops. Three categories:
 ///
-/// This is a fresh, explicit list — *not* a filtered view of
-/// [`build_transform_pipeline`]. Same constructor signature so the
-/// drift-protection helper (`assert_filtered_subset`) can compare
-/// the two pipelines apples-to-apples; same transform constructions
-/// (notably `ShortcodeResolveTransform::with_lua_support`) so
-/// shortcode-and-Lua semantics match the HTML pipeline.
-///
-/// The 19 transforms below are everything from [`build_transform_pipeline`]
-/// minus 12 explicitly excluded ones (see the drift test for the
-/// exclusion list and rationale). Three categories of exclusion:
-///
-/// 1. **Preserve CustomNodes for React** — `CalloutResolveTransform`,
-///    `CrossrefRenderTransform`. The wrappers stay so React's
-///    type-specific components (Plan 2) can render Callout / Theorem
-///    / Proof / FloatRefTarget / Equation / CrossrefResolvedRef.
-/// 2. **Synthesize-with-no-preimage** — `TitleBlockTransform`,
-///    `FootnotesTransform`, `AppendixStructureTransform`. These
-///    construct containers with no source backing; deferred to a
-///    future plan with wrapper-CustomNode round-trip support.
-/// 3. **HTML-pipeline-specific outputs** — `TocRenderTransform`,
-///    `NavbarRenderTransform`, `SidebarRenderTransform`,
-///    `PageNavRenderTransform`, `FooterRenderTransform`,
-///    `LinkRewriteTransform`, `WebsiteFaviconTransform`. These
+/// 1. **Preserve CustomNodes for React** — `callout-resolve`,
+///    `crossref-render`. Wrappers stay so React's type-specific
+///    components (Plan 2) can render Callout / Theorem / Proof /
+///    FloatRefTarget / Equation / CrossrefResolvedRef.
+/// 2. **Synthesize-with-no-preimage** — `title-block`, `footnotes`,
+///    `appendix-structure`. These construct containers with no
+///    source backing; deferred to a future plan with
+///    wrapper-CustomNode round-trip support.
+/// 3. **HTML-pipeline-specific outputs** — `toc-render`,
+///    `navbar-render`, `sidebar-render`, `page-nav-render`,
+///    `footer-render`, `link-rewrite`, `website-favicon`. These
 ///    produce HTML strings or `.qmd → .html` rewrites that React
 ///    consumes from structured metadata directly.
 ///
+/// New transforms added to [`build_transform_pipeline`] are
+/// **included by default** — q2-preview opts a transform out
+/// only when there's a concrete reason (one of the three
+/// categories above). This is the deliberate inversion of the
+/// original Plan 1 explicit-list framing: see commit message of
+/// the deny-list flip for the empirical motivation.
+///
+/// The unknown-name validator
+/// (`q2_preview_transform_excluded_names_exist_in_html_pipeline`)
+/// fails the test suite if any name here is not an actual transform
+/// in the full HTML pipeline (typo / rename guard).
+const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
+    "callout-resolve",
+    "website-favicon",
+    "title-block",
+    "footnotes",
+    "toc-render",
+    "navbar-render",
+    "sidebar-render",
+    "page-nav-render",
+    "footer-render",
+    "link-rewrite",
+    "appendix-structure",
+    "crossref-render",
+];
+
+/// Build the q2-preview transform pipeline (Plan 1).
+///
+/// Constructed as [`build_transform_pipeline`] with the names in
+/// [`Q2_PREVIEW_TRANSFORM_EXCLUDED`] removed. Order is preserved.
+/// Constructor args (notably `shortcode_paths`, `extensions`,
+/// `runtime`, `target_format`) are forwarded verbatim so
+/// shortcode-and-Lua semantics match the HTML pipeline.
+///
 /// `AstTransformsStage::run()` dispatches between this and
-/// `build_transform_pipeline` based on `ctx.format.pipeline_kind`
-/// (added in a later commit). This function is a pure addition with
-/// no consumers yet.
+/// `build_transform_pipeline` based on `ctx.format.pipeline_kind`.
 pub fn build_q2_preview_transform_pipeline(
     shortcode_paths: Vec<std::path::PathBuf>,
     extensions: Vec<crate::extension::types::Extension>,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
 ) -> TransformPipeline {
-    let mut pipeline: TransformPipeline = TransformPipeline::new();
-
-    // === NORMALIZATION PHASE ===
-    pipeline.push(Box::new(CalloutTransform::new()));
-    pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
-        shortcode_paths,
-        extensions,
-        runtime,
-        target_format,
-    )));
-    pipeline.push(Box::new(MetadataNormalizeTransform::new()));
-    pipeline.push(Box::new(WebsiteTitlePrefixTransform::new()));
-    pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
-    pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
-    pipeline.push(Box::new(SectionizeTransform::new()));
-    pipeline.push(Box::new(TheoremSugarTransform::new()));
-    pipeline.push(Box::new(ProofSugarTransform::new()));
-    pipeline.push(Box::new(FloatRefTargetSugarTransform::new()));
-    pipeline.push(Box::new(EquationLabelTransform::new()));
-
-    // === CROSSREF PHASE ===
-    pipeline.push(Box::new(CrossrefIndexTransform::new()));
-    pipeline.push(Box::new(CrossrefResolveTransform::new()));
-
-    // === NAVIGATION PHASE ===
-    // All five Generate transforms run; the corresponding Render
-    // transforms are excluded because React consumes structured
-    // navigation metadata directly. The Generate transforms no-op
-    // when no `ProjectIndex` is present (single-file q2-preview).
-    pipeline.push(Box::new(TocGenerateTransform::new()));
-    pipeline.push(Box::new(NavbarGenerateTransform::new()));
-    pipeline.push(Box::new(SidebarGenerateTransform::new()));
-    pipeline.push(Box::new(PageNavGenerateTransform::new()));
-    pipeline.push(Box::new(FooterGenerateTransform::new()));
-
-    // === FINALIZATION PHASE ===
-    pipeline.push(Box::new(ResourceCollectorTransform::new()));
-
+    let mut pipeline =
+        build_transform_pipeline(shortcode_paths, extensions, runtime, target_format);
+    pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
     pipeline
 }
 
@@ -1761,6 +1742,94 @@ mod tests {
         );
     }
 
+    /// Plan 2A item 11: the artifact key produced by
+    /// `CompileThemeCssStage` is `css:theme:<fingerprint>`, where
+    /// `<fingerprint>` matches `theme_fingerprint(css)` byte-for-byte.
+    /// The WASM bridge recovers `RenderResponse.theme_fingerprint` from
+    /// this suffix without re-hashing CSS bytes; the contract this test
+    /// locks is that the suffix and the CSS-derived fingerprint stay in
+    /// sync.
+    #[test]
+    fn test_theme_fingerprint_recoverable_from_artifact_key() {
+        use crate::stage::stages::theme_fingerprint;
+
+        // Render twice with the same theme — fingerprints must match.
+        let content_a = b"---\ntitle: Test\ntheme: flatly\n---\n\nA.";
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        let mut ctx_a1 = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx_a2 = RenderContext::new(&project, &doc, &format, &binaries);
+        let config = HtmlRenderConfig::default();
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_a,
+            "test.qmd",
+            &mut ctx_a1,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_a,
+            "test.qmd",
+            &mut ctx_a2,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+
+        let key_a1 = ctx_a1
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        let key_a2 = ctx_a2
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        assert_eq!(
+            key_a1, key_a2,
+            "same theme renders must produce byte-identical fingerprint keys"
+        );
+
+        let suffix_a = key_a1
+            .strip_prefix("css:theme:")
+            .expect("key should start with css:theme:");
+        let css_a = get_css_artifact(&ctx_a1);
+        assert_eq!(
+            suffix_a,
+            theme_fingerprint(&css_a),
+            "key suffix must match theme_fingerprint(css) byte-for-byte"
+        );
+
+        // Render with a different theme — fingerprint must differ.
+        let content_b = b"---\ntitle: Test\ntheme: cosmo\n---\n\nB.";
+        let mut ctx_b = RenderContext::new(&project, &doc, &format, &binaries);
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_b,
+            "test.qmd",
+            &mut ctx_b,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+        let key_b = ctx_b
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        assert_ne!(
+            key_a1, key_b,
+            "different themes must produce different fingerprint keys"
+        );
+    }
+
     /// bd-45yw Phase 4a: `HtmlRenderConfig.engine_registry` overrides
     /// the engine registry that `EngineExecutionStage` uses, so a
     /// caller (orchestrator/CLI replay path) can substitute a
@@ -1907,86 +1976,32 @@ mod tests {
     /// `expected_excluded`, preserving order. Catches every drift
     /// mode in one shot: a transform added to `full`, renamed,
     /// reordered on either side, or removed from `subset`.
+    /// Verify every name in [`Q2_PREVIEW_TRANSFORM_EXCLUDED`] is an
+    /// actual transform in the full HTML pipeline. Catches the one
+    /// drift mode the deny-list construction *can't* catch on its
+    /// own: a transform gets renamed and the exclusion list silently
+    /// no-ops on the old name (so the renamed transform leaks into
+    /// q2-preview).
     ///
-    /// `drift_doc_pointer` is included in failure messages to
-    /// direct the reader to the rationale (a plan section, a
-    /// design doc, etc.).
-    ///
-    /// Assumes `subset ⊆ full` — if a transform appears in `subset`
-    /// that's not in `full`, the order assertion fails with a
-    /// useful diff.
-    fn assert_filtered_subset(
-        full: &TransformPipeline,
-        subset: &TransformPipeline,
-        expected_excluded: &[&str],
-        drift_doc_pointer: &str,
-    ) {
-        use std::collections::HashSet;
+    /// New transforms added to `build_transform_pipeline` are
+    /// included in q2-preview by default — that's the whole point
+    /// of the deny-list flip — so this test does NOT fail on
+    /// HTML-pipeline additions.
+    #[test]
+    fn q2_preview_transform_excluded_names_exist_in_html_pipeline() {
+        let runtime = make_test_runtime();
+        let html = build_transform_pipeline(vec![], vec![], runtime, "html".to_string());
+        let html_names: Vec<&str> = html.iter().map(|t| t.name()).collect();
 
-        let full_names: Vec<&str> = full.iter().map(|t| t.name()).collect();
-        let subset_names: Vec<&str> = subset.iter().map(|t| t.name()).collect();
-        let excluded: HashSet<&str> = expected_excluded.iter().copied().collect();
-
-        // Catch typos / renames in the exclusion list early.
-        let unknown: Vec<_> = expected_excluded
+        let unknown: Vec<&&str> = Q2_PREVIEW_TRANSFORM_EXCLUDED
             .iter()
-            .filter(|n| !full_names.contains(n))
+            .filter(|n| !html_names.contains(n))
             .collect();
         assert!(
             unknown.is_empty(),
-            "expected_excluded names not in full pipeline: {unknown:?}. \
-             See {drift_doc_pointer}."
-        );
-
-        let computed: Vec<&str> = full_names
-            .iter()
-            .copied()
-            .filter(|n| !excluded.contains(n))
-            .collect();
-        assert_eq!(
-            subset_names, computed,
-            "Subset pipeline drift. See {drift_doc_pointer}."
-        );
-    }
-
-    /// Drift-protection: q2-preview's transform list must be
-    /// exactly the HTML transform list minus the 12 excluded
-    /// transforms. New transforms added to `build_transform_pipeline`
-    /// without an explicit decision (include in q2-preview, or add
-    /// to the exclusion list) trip this test.
-    ///
-    /// See `claude-notes/plans/2026-05-04-q2-preview-plan-1-pipeline.md`
-    /// §"Transform list for q2-preview" for the rationale of each
-    /// exclusion.
-    #[test]
-    fn build_q2_preview_transform_pipeline_is_subset_of_html() {
-        // Same constructor args as `build_transform_pipeline` — the
-        // helper iterates pipelines by name, so the actual runtime
-        // / extension list / target_format don't matter here.
-        let runtime = make_test_runtime();
-        let html = build_transform_pipeline(vec![], vec![], runtime.clone(), "html".to_string());
-        let preview =
-            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
-
-        let expected_excluded = &[
-            "callout-resolve",
-            "website-favicon",
-            "title-block",
-            "footnotes",
-            "toc-render",
-            "navbar-render",
-            "sidebar-render",
-            "page-nav-render",
-            "footer-render",
-            "link-rewrite",
-            "appendix-structure",
-            "crossref-render",
-        ];
-        assert_filtered_subset(
-            &html,
-            &preview,
-            expected_excluded,
-            "Plan 1 §\"Transform list for q2-preview\"",
+            "Q2_PREVIEW_TRANSFORM_EXCLUDED contains names not in build_transform_pipeline: \
+             {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
+             Full HTML transform list: {html_names:?}",
         );
     }
 
@@ -2033,34 +2048,25 @@ mod tests {
         );
     }
 
-    /// Structural test for `build_q2_preview_pipeline_stages` —
-    /// asserts the exact stage list and order. The stage list ends
-    /// after `resource-report`; the HTML-specific tail
-    /// (`code-highlight`, `render-html-body`, `apply-template`) is
-    /// excluded.
+    /// Verify every name in [`Q2_PREVIEW_STAGE_EXCLUDED`] is an
+    /// actual stage in the full HTML pipeline. Same drift-mode
+    /// guard as
+    /// `q2_preview_transform_excluded_names_exist_in_html_pipeline`,
+    /// but at the stage level.
     #[test]
-    fn build_q2_preview_pipeline_stages_structural() {
-        let stages = build_q2_preview_pipeline_stages(None);
-        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
-        assert_eq!(
-            names,
-            vec![
-                "parse-document",
-                "metadata-merge",
-                "include-expansion",
-                "document-profile",
-                "link-resolution",
-                "unwrap-profile",
-                "pre-engine-sugaring",
-                "engine-execution",
-                "compile-theme-css",
-                "user-filters-pre",
-                "ast-transforms",
-                "user-filters-post",
-                "resource-report",
-            ],
-            "q2-preview stage list drift; see Plan 1 §Scope and \
-             §\"Resolved decisions\""
+    fn q2_preview_stage_excluded_names_exist_in_html_pipeline() {
+        let html_stages = build_html_pipeline_stages_with_options(None, None);
+        let html_names: Vec<&str> = html_stages.iter().map(|s| s.name()).collect();
+
+        let unknown: Vec<&&str> = Q2_PREVIEW_STAGE_EXCLUDED
+            .iter()
+            .filter(|n| !html_names.contains(n))
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "Q2_PREVIEW_STAGE_EXCLUDED contains names not in build_html_pipeline_stages: \
+             {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
+             Full HTML stage list: {html_names:?}",
         );
     }
 }

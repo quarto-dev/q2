@@ -2,23 +2,26 @@
  * Integration tests for `ReactRenderer`.
  *
  * Two concerns share this file because both depend on the same set of
- * module mocks (Q2DebugIframe + tsxTranspiler + slide renderers):
+ * module mocks (Q2DebugIframe / Q2PreviewIframe + tsxTranspiler + slide
+ * renderers):
  *
  *  1. Render-components lookup (the chain that broke during the
  *     bugfix-react-components-not-loading investigation): AST meta
  *     extraction → resolveComponentPath → fileContents lookup →
- *     transpileTSX → customComponentsCode prop captured on Q2DebugIframe.
+ *     transpileTSX → customComponentsCode prop captured on the iframe
+ *     wrapper. Plan 2A item 13 extended this gate to cover q2-preview
+ *     alongside q2-debug.
  *
- *  2. Format routing (Plan 1 §"Test plan" item 5): mounting with
- *     `format="q2-preview"` routes through `Q2DebugIframe` alongside
- *     `q2-debug`, while `q2-slides` does not. The dispatch lives at
- *     `ReactRenderer.tsx`'s `format === 'q2-debug' || format === 'q2-preview'`
- *     branch; these tests guard against a regression that would silently
- *     route q2-preview through `SlideAst` (which expects slide-shaped
- *     AST and would crash).
+ *  2. Format routing (Plan 2A item 12): the format dispatch is split.
+ *     `q2-debug` routes through `Q2DebugIframe`; `q2-preview` routes
+ *     through `Q2PreviewIframe`; `q2-slides` routes through neither.
+ *     These tests guard against a regression that would silently route
+ *     q2-preview through `SlideAst` (which expects slide-shaped AST
+ *     and would crash) or through `Q2DebugIframe` (which lacks the
+ *     theme-CSS effect).
  *
- * `Q2DebugIframe` is mocked so we can capture the prop without spinning
- * up a real iframe; the routing tests check whether the mock was
+ * Both iframe wrappers are mocked so we can capture the prop without
+ * spinning up real iframes; the routing tests check which mock was
  * invoked to decide which branch was taken.
  *
  * `transpileTSX` is mocked because it would otherwise pull the full
@@ -34,10 +37,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
 
 const capturedAstIframeProps: any[] = [];
+const capturedPreviewIframeProps: any[] = [];
 
 vi.mock('./q2-debug/Q2DebugIframe', () => ({
   Q2DebugIframe: (props: any) => {
     capturedAstIframeProps.push(props);
+    return null;
+  },
+}));
+
+vi.mock('./q2-preview/Q2PreviewIframe', () => ({
+  Q2PreviewIframe: (props: any) => {
+    capturedPreviewIframeProps.push(props);
     return null;
   },
 }));
@@ -75,6 +86,10 @@ function astWithRenderComponents(paths: string[]): string {
 
 function lastCapturedCode(): Record<string, string> | undefined {
   return capturedAstIframeProps.at(-1)?.customComponentsCode;
+}
+
+function lastCapturedPreviewCode(): Record<string, string> | undefined {
+  return capturedPreviewIframeProps.at(-1)?.customComponentsCode;
 }
 
 const EMPTY_AST = JSON.stringify({
@@ -174,22 +189,79 @@ describe('ReactRenderer (q2-debug render-components lookup)', () => {
 describe('ReactRenderer format routing', () => {
   beforeEach(() => {
     capturedAstIframeProps.length = 0;
+    capturedPreviewIframeProps.length = 0;
   });
 
-  it('routes q2-preview through Q2DebugIframe', () => {
+  it('routes q2-preview through Q2PreviewIframe (Plan 2A item 12)', () => {
     mountForRouting('q2-preview');
-    expect(capturedAstIframeProps.length).toBeGreaterThan(0);
+    expect(capturedPreviewIframeProps.length).toBeGreaterThan(0);
+    // q2-preview must NOT also hit the q2-debug iframe.
+    expect(capturedAstIframeProps.length).toBe(0);
   });
 
   it('routes q2-debug through Q2DebugIframe (regression baseline)', () => {
     mountForRouting('q2-debug');
     expect(capturedAstIframeProps.length).toBeGreaterThan(0);
+    expect(capturedPreviewIframeProps.length).toBe(0);
   });
 
-  it('does not route q2-slides through Q2DebugIframe', () => {
+  it('does not route q2-slides through any AST iframe', () => {
     const { queryByTestId } = mountForRouting('q2-slides');
     expect(capturedAstIframeProps.length).toBe(0);
+    expect(capturedPreviewIframeProps.length).toBe(0);
     // Positive sentinel: the slide path was actually taken.
     expect(queryByTestId('slide-sentinel')).not.toBeNull();
+  });
+});
+
+describe('ReactRenderer render-components gate (Plan 2A item 13)', () => {
+  beforeEach(() => {
+    capturedAstIframeProps.length = 0;
+    capturedPreviewIframeProps.length = 0;
+  });
+
+  it('extracts customComponentsCode for q2-preview format', () => {
+    const fileContents = new Map([
+      ['elliot/simple.tsx', 'export const Para = () => null;'],
+    ]);
+
+    render(
+      <ReactRenderer
+        astJson={astWithRenderComponents(['/elliot/simple.tsx'])}
+        currentFilePath="elliot/index.qmd"
+        files={[]}
+        fileContents={fileContents}
+        onNavigateToDocument={() => {}}
+        setAst={() => {}}
+        format="q2-preview"
+      />,
+    );
+
+    // Same transpilation behavior as q2-debug — gate covers both.
+    expect(lastCapturedPreviewCode()).toEqual({
+      '/elliot/simple.tsx': 'JS:export const Para = () => null;',
+    });
+  });
+
+  it('q2-debug behavior unchanged (regression baseline)', () => {
+    const fileContents = new Map([
+      ['elliot/simple.tsx', 'export const Para = () => null;'],
+    ]);
+
+    render(
+      <ReactRenderer
+        astJson={astWithRenderComponents(['/elliot/simple.tsx'])}
+        currentFilePath="elliot/index.qmd"
+        files={[]}
+        fileContents={fileContents}
+        onNavigateToDocument={() => {}}
+        setAst={() => {}}
+        format="q2-debug"
+      />,
+    );
+
+    expect(lastCapturedCode()).toEqual({
+      '/elliot/simple.tsx': 'JS:export const Para = () => null;',
+    });
   });
 });

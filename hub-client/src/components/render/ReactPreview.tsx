@@ -45,6 +45,20 @@ type RenderResult = {
   success: true;
   astJson: string;
   diagnostics: Diagnostic[];
+  /**
+   * Three-way theme fingerprint (Plan 2A item 11).
+   *  - `string`: render succeeded with a theme; the parent posts
+   *    `UPDATE_THEME` with this fingerprint.
+   *  - `null`: render succeeded with no theme (e.g. user removed
+   *    `theme:` YAML key); the parent posts an explicit clear.
+   *  - field-omitted (`undefined` after destructuring): the upstream
+   *    pipeline did not surface a theme — same effect as `null`.
+   *
+   * The render-failure case omits this field entirely; the
+   * ReactPreview state then preserves last-good fingerprint across
+   * transient errors (see `setThemeFingerprint` call site).
+   */
+  themeFingerprint?: string | null;
 } | {
   success: false;
   error: string;
@@ -101,10 +115,18 @@ async function doRender(
           diagnostics: allDiagnostics,
         };
       }
+      // Three-way themeFingerprint mapping:
+      //   - present string ⇒ theme present, pass through
+      //   - field absent on RenderResponse ⇒ render succeeded with no
+      //     theme intended ⇒ explicit clear (`null`)
+      // The render-failure branch below omits the field entirely so
+      // last-good fingerprint state is preserved.
+      const themeFingerprint = result.theme_fingerprint ?? null;
       return {
         success: true,
         astJson,
         diagnostics: allDiagnostics,
+        themeFingerprint,
       };
     } else {
       const errorMsg =
@@ -175,6 +197,19 @@ export default function ReactPreview({
   // Rendered AST JSON to display
   const [ast, setAst] = useState<string>('');
 
+  // Three-way theme fingerprint (Plan 2A item 11):
+  //   `undefined` → pre-first-render or render failed; iframe keeps
+  //                 last-good styling.
+  //   `null`      → render succeeded with no theme intended; iframe
+  //                 clears its `<link data-q2-theme>`.
+  //   string      → render succeeded with a theme of this fingerprint.
+  // Render failures intentionally do not call `setThemeFingerprint`,
+  // preserving the last-good value across transient errors so that
+  // editing in the YAML doesn't strip Bootstrap mid-edit.
+  const [themeFingerprint, setThemeFingerprint] = useState<
+    string | null | undefined
+  >(undefined);
+
   // Debounce rendering
   const renderTimeoutRef = useRef<number | null>(null);
   const lastContentRef = useRef<string>('');
@@ -222,6 +257,13 @@ export default function ReactPreview({
       setPreviewState('GOOD');
       // Update rendered AST
       setAst(result.astJson);
+      // Apply theme fingerprint if the render produced one. Only the
+      // success branch calls this — render failures preserve the
+      // last-good fingerprint across transient errors (Plan 2A item
+      // 11 three-way semantics).
+      if (result.themeFingerprint !== undefined) {
+        setThemeFingerprint(result.themeFingerprint);
+      }
       // Notify parent of AST change
       onAstChange?.(result.astJson);
     } else {
@@ -298,6 +340,7 @@ export default function ReactPreview({
             currentSlideIndex={currentSlideIndex}
             onSlideChange={onSlideChange}
             format={format}
+            themeFingerprint={themeFingerprint}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

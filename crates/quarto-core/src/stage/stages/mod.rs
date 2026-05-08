@@ -54,7 +54,7 @@ pub use ast_transforms::AstTransformsStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use bootstrap_js::BootstrapJsStage;
 pub use code_highlight::CodeHighlightStage;
-pub use compile_theme_css::CompileThemeCssStage;
+pub use compile_theme_css::{CompileThemeCssStage, theme_fingerprint};
 pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
 pub use include_expansion::IncludeExpansionStage;
