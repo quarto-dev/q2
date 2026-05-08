@@ -313,9 +313,12 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
       skipPrintsMessage: SKIP_PRINTS_MESSAGE.has(relPath),
     });
 
-    // Only include HTML format specs
-    const htmlSpecs = formatSpecs.filter((s) => s.format === 'html');
-    if (htmlSpecs.length === 0) continue;
+    // Only formats the e2e runner knows how to drive: html (preview iframe)
+    // and q2-debug (AstIframe).
+    const supportedSpecs = formatSpecs.filter(
+      (s) => s.format === 'html' || s.format === 'q2-debug',
+    );
+    if (supportedSpecs.length === 0) continue;
 
     const qmdDir = dirname(qmdPath);
     const projectRoot = findProjectRoot(qmdDir);
@@ -332,7 +335,7 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
       projectFiles,
       renderPath: relative(projectRoot, qmdPath),
       runConfig,
-      formatSpecs: htmlSpecs,
+      formatSpecs: supportedSpecs,
     });
   }
 

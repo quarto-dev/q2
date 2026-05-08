@@ -1,0 +1,15 @@
+---
+title: q2-debug reactji heart
+format: q2-debug
+render-components:
+  - reactji.tsx
+_quarto:
+  tests:
+    q2-debug:
+      ensureHtmlElements:
+        - selectors:
+            - '[data-testid="reaction-❤️"]'
+            - 'button:has-text("❤️ 1")'
+---
+
+A paragraph with a single heart reaction. [❤️]{.quarto-edit-comment}

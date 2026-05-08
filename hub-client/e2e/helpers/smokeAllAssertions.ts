@@ -11,6 +11,8 @@ import {
   getPreviewHtml,
   getPreviewCss,
   getRenderDiagnostics,
+  previewIframeSelector,
+  type PreviewIframeKind,
   type RenderDiagnostic,
 } from './previewExtraction';
 
@@ -83,9 +85,17 @@ export async function runAssertions(
   documentPath: string,
   assertions: AssertionSpec[],
   expectsError: boolean,
+  opts: { kind?: PreviewIframeKind } = {},
 ): Promise<void> {
-  // Get diagnostics once for all assertion types that need them
-  const diag = await getRenderDiagnostics(page, documentPath);
+  const kind: PreviewIframeKind = opts.kind ?? 'html';
+  const iframeSel = previewIframeSelector(kind);
+
+  // q2-debug doesn't go through the WASM html render path, so skip the
+  // diagnostic fetch (it would re-render as html and report unrelated noise).
+  const diag =
+    kind === 'q2-debug'
+      ? { success: true, error: undefined, diagnostics: [], warnings: [] }
+      : await getRenderDiagnostics(page, documentPath);
   const allMsgs = collectMessages(diag.diagnostics, diag.warnings);
 
   for (const spec of assertions) {
@@ -111,7 +121,7 @@ export async function runAssertions(
 
       case 'ensureHtmlElements': {
         expect(diag.success, `Render failed: ${diag.error}`).toBe(true);
-        const previewFrame = page.frameLocator('iframe.preview-active');
+        const previewFrame = page.frameLocator(iframeSel);
         for (const selector of spec.selectors) {
           await expect(
             previewFrame.locator(selector).first(),

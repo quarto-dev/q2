@@ -16,6 +16,7 @@ import {
   type DiscoveredTest,
 } from './helpers/smokeAllDiscovery';
 import {
+  bootstrapProjectSet,
   createProjectOnServer,
   seedProjectInBrowser,
   getServerUrl,
@@ -84,9 +85,11 @@ test.describe('smoke-all E2E tests', () => {
           })),
         );
 
-        // Load in browser
-        await page.goto('/');
-        await expect(page.locator('body')).toBeVisible();
+        // Load in browser. bootstrapProjectSet drives the first-time-setup UI
+        // so the App lands in `connected` status before we add the legacy IDB
+        // project entry; otherwise the entry would trigger the
+        // "Upgrade: Synced Project List" screen and block navigation.
+        await bootstrapProjectSet(page, serverUrl);
         const localId = await seedProjectInBrowser(
           page,
           indexDocId,
@@ -98,11 +101,16 @@ test.describe('smoke-all E2E tests', () => {
           `/#/p/${localId}/file/${encodeURIComponent(fixture.renderPath)}`,
         );
 
+        // Format-driven dispatch: q2-debug uses the AstIframe, everything
+        // else uses the html preview iframe.
+        const kind = spec.format === 'q2-debug' ? 'q2-debug' : 'html';
+
         // Wait for render (or error)
         if (!spec.expectsError) {
           await waitForPreviewRender(page, {
             timeout: 45000,
             consoleErrors,
+            kind,
           });
         } else {
           // For expected errors, wait a bit for the render attempt to complete
@@ -115,6 +123,7 @@ test.describe('smoke-all E2E tests', () => {
           fixture.renderPath,
           spec.assertions,
           spec.expectsError,
+          { kind },
         );
       });
     }

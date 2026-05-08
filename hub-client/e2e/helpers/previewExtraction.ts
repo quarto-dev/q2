@@ -10,21 +10,35 @@ import type { Page } from '@playwright/test';
 /**
  * Wait for the preview iframe to render content.
  *
- * The DoubleBufferedIframe component injects a `<!-- render-<timestamp> -->`
- * comment on each render. We wait for:
- * 1. An iframe with class `preview-active` to exist
- * 2. Its body to have non-empty innerHTML (content rendered)
+ * For html-style previews (the default) the DoubleBufferedIframe component
+ * mounts an `iframe.preview-active` whose body is populated when render
+ * completes. For `format: q2-debug`, the renderer mounts an AstIframe
+ * whose `src` ends in `ast-renderer.html`; we wait for that iframe and
+ * for its body to receive content from the postMessage flow.
  *
  * If `consoleErrors` is provided, the wait will abort early when a fatal
  * browser error is detected (e.g. WebSocket failure, WASM crash), avoiding
  * a long timeout with no diagnostic info.
  */
+export type PreviewIframeKind = 'html' | 'q2-debug';
+
+export function previewIframeSelector(kind: PreviewIframeKind): string {
+  return kind === 'q2-debug'
+    ? 'iframe[src*="ast-renderer.html"]'
+    : 'iframe.preview-active';
+}
+
 export async function waitForPreviewRender(
   page: Page,
-  opts: { timeout?: number; consoleErrors?: string[] } = {},
+  opts: {
+    timeout?: number;
+    consoleErrors?: string[];
+    kind?: PreviewIframeKind;
+  } = {},
 ): Promise<void> {
   const timeout = opts.timeout ?? 30000;
   const consoleErrors = opts.consoleErrors;
+  const iframeSelector = previewIframeSelector(opts.kind ?? 'html');
 
   // Poll for render completion, but also check for fatal console errors
   // so we can fail fast with a useful message instead of timing out.
@@ -54,11 +68,11 @@ export async function waitForPreviewRender(
     }
 
     // Check if the preview iframe has rendered content
-    const rendered = await page.evaluate(() => {
-      const iframe = document.querySelector('iframe.preview-active') as HTMLIFrameElement | null;
+    const rendered = await page.evaluate((selector) => {
+      const iframe = document.querySelector(selector) as HTMLIFrameElement | null;
       if (!iframe?.contentDocument?.body) return false;
       return iframe.contentDocument.body.innerHTML.length > 0;
-    });
+    }, iframeSelector);
 
     if (rendered) return;
 
