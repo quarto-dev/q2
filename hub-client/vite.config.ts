@@ -49,6 +49,7 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
         debug: path.resolve(__dirname, 'debug.html'),
         'ast-renderer': path.resolve(__dirname, 'public/ast-renderer.html'),
+        'q2-debug': path.resolve(__dirname, 'public/q2-debug.html'),
       },
     },
   },
