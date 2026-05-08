@@ -314,6 +314,14 @@ if (format === 'q2-preview') {
 
 `ErrorBoundary` catches render errors from user-supplied TSX (Plan 2A item 13's `render-components`). Both formats need it.
 
+**Bundle the smoke-all `PreviewIframeKind` extension into this commit.** The smoke-all infrastructure on main today supports `'html' | 'q2-debug'`. Add `'q2-preview'` as the third kind in lockstep with the format-dispatch update so smoke-all/Playwright can target the q2-preview iframe immediately when Plan 2B's fixtures land:
+
+- `hub-client/e2e/helpers/previewExtraction.ts` — `PreviewIframeKind` union grows `'q2-preview'`; `previewIframeSelector` returns `'iframe[src*="q2-preview.html"]'` for the new kind.
+- `hub-client/e2e/helpers/smokeAllDiscovery.ts` — fixture format allow-list grows `'q2-preview'`.
+- `hub-client/e2e/smoke-all.spec.ts` — dispatch on the q2-preview kind (skip diagnostic-fetching, target the q2-preview iframe).
+
+Mirrors the q2-debug extension that landed in commit `059dfeab`; ~10 LOC across three files. Plan 2B's smoke-all fixtures consume this extension.
+
 #### 13. `render-components` YAML key gate extension
 
 In `ReactRenderer.tsx:103`, extend the gate from `format !== 'q2-debug'` to `format !== 'q2-debug' && format !== 'q2-preview'` so q2-preview demos can specify custom `.tsx` files. Add a comment explaining the dual coverage. ~5 LOC + a regression test.
@@ -517,9 +525,9 @@ The TDD discipline applies per work-item, not per-plan. Item 10 (link handlers e
 | 9 | `q2-preview/entry.tsx` (PreviewRoot, theme CSS, link handlers wiring) | ~120 |
 | 10 | `utils/iframeLinkHandlers.ts` extraction | ~120 |
 | 11 | Rust-side `themeFingerprint` surfacing — 5 constructor sites + new field + test | ~40 |
-| 12 | `ReactRenderer.tsx` format dispatch update | ~10 |
+| 12 | `ReactRenderer.tsx` format dispatch update + smoke-all `PreviewIframeKind` extension (3 files in `e2e/helpers/` + `e2e/smoke-all.spec.ts`) | ~20 |
 | 13 | `render-components` gate extension + regression test | ~20 |
-| | **Total** | **~720** |
+| | **Total** | **~730** |
 
 One focused session is realistic; possibly two. Natural split:
 - **Session A**: items 1–4 (shared utilities) + items 5–8 (q2-preview surface scaffolding). Verifies the iframe boots empty.

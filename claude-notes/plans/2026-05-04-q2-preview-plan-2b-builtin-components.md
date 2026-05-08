@@ -445,10 +445,21 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
 
 ## Test plan
 
-### Unit / vitest
+### Test-tier conventions
 
-- **Unwrap / rewrap round-trip property**: for each known CustomNode type, `unwrap(rewrap(node)) === node` and `rewrap(unwrap(wireDiv)) === wireDiv`. Catches drift.
-- **Rust → JS → Rust round-trip**: build a CustomNode in Rust, wrap to JSON, ship to JS, unwrap, rewrap, ship back, decode in Rust, assert structural equality.
+Mirroring the pattern Plan 2pre established for q2-debug:
+
+- **vitest unit** (`*.test.ts(x)`, `node` env, no DOM) — pure logic / data tests.
+- **vitest integration** (`*.integration.test.tsx`, jsdom env) — React mounting against real `<Ast registry={q2PreviewRegistry}>`. The bulk of "component renders correctly" lives here. ~100 tests/file at sub-second runtime.
+- **smoke-all WASM** (`crates/quarto/tests/smoke-all/q2-preview/*.qmd` + `.tsx`) — declarative fixtures with `_quarto.tests.q2-preview.ensureHtmlElements`. Run by both the CLI runner (HTML output only) and the Playwright runner (iframe DOM). q2-preview fixtures use `requires_js: true` so the CLI runner skips them; the Playwright runner picks them up. Adds the third `PreviewIframeKind` (see §"Smoke-all q2-preview infrastructure" below).
+- **Playwright e2e** (`hub-client/e2e/*.spec.ts`) — imperative interaction tests for things smoke-all's declarative DSL can't fit cleanly. Used sparingly per project policy.
+
+The component-mount tests in the next subsection live under `hub-client/src/components/render/q2-preview/q2-preview.integration.test.tsx`, mirroring `q2-debug.integration.test.tsx`.
+
+### Vitest integration tests (jsdom, mounting `<Ast registry={q2PreviewRegistry}>`)
+
+- **Unwrap / rewrap round-trip property**: for each known CustomNode type, `unwrap(rewrap(node)) === node` and `rewrap(unwrap(wireDiv)) === wireDiv`. Catches drift. (Pure logic; lives in `framework/customNode.test.ts` rather than the integration file — node env is fine.)
+- **Rust → JS → Rust round-trip**: build a CustomNode in Rust, wrap to JSON, ship to JS, unwrap, rewrap, ship back, decode in Rust, assert structural equality. (Cross-language; cargo nextest test on the Rust side.)
 - **Image renderer component tests**: mount `<Image>` with fixtures pointing at:
   - Project-relative path (`hero.png`) — assert `<img>` has `data:` URI src.
   - External URL (`https://...`) — assert pass-through.
@@ -457,6 +468,8 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
   - Image with `width` / `height` kvs — assert attrs on `<img>`.
   - Image with id, classes, title — assert all attributes on `<img>`.
   - Image with non-`Str` alt inlines (`Emph`, `Code`) — assert alt text contains the expanded plain text.
+
+  The `data:` URI cases need a mocked `vfsReadBinaryFile` (or equivalent VFS read primitive). The smoke-all e2e tier covers the real-VFS path.
 - **Figure renderer**: mount `<Figure>` with fixture containing body Image and caption blocks; assert `<figure>` + `<figcaption>` structure with body recursion.
 - **Component snapshot tests**: render each base-type component and each CustomNode component with a fixed input; snapshot the rendered DOM.
 - **Generic fallback test**: render a wrapper Div with `type_name: "Unknown"` via the renderer plumbing; assert the fallback component renders with the type name visible.
@@ -464,15 +477,31 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
 - **Atomic CustomNode read-only test**: render a `CrossrefResolvedRef` wrapper; assert children don't receive a usable `setLocalAst`.
 - **Derived inline read-only test**: render a Para containing inlines with `Derived` source_info (a shortcode-resolved title); confirm setLocalAst is no-op (shortcode populating a Derived entry — until Plan 6, this test uses hand-constructed pool entries).
 
-### Pandoc base-type gap-fill tests
+### Pandoc base-type gap-fill tests (vitest integration)
 
 - One per new component (LineBlock, DefinitionList, Table family, Underline, Strikeout, Superscript, Subscript, SmallCaps, RawInline, Cite, Note). Render representative AST node, snapshot DOM.
 - **Table family integration**: render a real markdown pipe table through q2-preview pipeline, assert `<table>` / `<thead>` / `<tbody>` structure with correct cell alignment classes.
 
-### Browser smoke (playwright, marked as e2e)
+### Smoke-all q2-preview infrastructure (one-time extension)
 
-- Open a fixture in hub-client containing a callout, a theorem, a cross-reference, an equation, and an embedded image; switch format to `q2-preview`; assert each visual element renders with the expected class set and text content.
-- Open a fixture containing `![alt](hero.png){width=400}` with a real image uploaded; assert `<img>` rendered with width=400 and alt text.
+The smoke-all infrastructure on main today supports `'html' | 'q2-debug'` preview iframe kinds (commits `059dfeab` + `7102c10e` + `3ab7e1c4`). Extend it to a third kind, `'q2-preview'`:
+
+- `hub-client/e2e/helpers/previewExtraction.ts` — `PreviewIframeKind` union grows `'q2-preview'`; `previewIframeSelector` returns `'iframe[src*="q2-preview.html"]'` for the new kind. Mirror of the q2-debug extension.
+- `hub-client/e2e/helpers/smokeAllDiscovery.ts` — fixture format allow-list grows `'q2-preview'`.
+- `hub-client/e2e/smoke-all.spec.ts` — dispatch on the q2-preview kind (skip diagnostic-fetching, target the q2-preview iframe).
+
+Bundle this with Plan 2A item 12 (the format-dispatch update) so the third kind lands the same time q2-preview routes through `Q2PreviewIframe`. ~10 LOC across three files.
+
+### Smoke-all q2-preview fixtures (replaces the original "browser smoke" tests)
+
+Under `crates/quarto/tests/smoke-all/q2-preview/`:
+
+- **`multi-element-doc.qmd`** + supporting assets. One callout, one theorem, one cross-reference, one equation, one embedded image. Frontmatter assertion via `_quarto.tests.q2-preview.ensureHtmlElements` checks each component's expected class set is present in the rendered iframe DOM. Successor to the original Plan 2B test 1.
+- **`image-with-attrs.qmd`** + a real PNG asset. Single Image with `![alt](hero.png){width=400}`. Asserts `<img>` rendered with `src^="data:image/"` (substring match for the data-URI prefix), `width="400"`, and the alt-text content. Successor to the original Plan 2B test 2.
+
+Both fixtures use `requires_js: true` (commit `3ab7e1c4`'s feature) so the CLI smoke-all runner skips them and the Playwright runner picks them up. No imperative Playwright spec files needed; the existing `smoke-all.spec.ts` runner discovers them automatically.
+
+These fixtures cover the iframe boot path, `data:` URI generation through the real VFS, and the end-to-end browser path. The component-level class/text/attr assertions mostly land in vitest integration above; smoke-all's job is the integration safety net, not the per-component checks.
 
 ## Dependencies
 
@@ -494,7 +523,7 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2B; they
 
 - **Round-trip correctness in unwrap / rewrap.** The two functions must be exact mirrors of each other and of Rust's `write_custom_block` / `read_custom_block_from_div`. Property tests catch drift.
 - **`CrossrefResolvedRef` Span vs Div wrapper handling**. Inline CustomNode, wire-format wraps in Span. Unwrap / rewrap walks must handle both wrappers uniformly.
-- **Math (KaTeX) inside Equation CustomNode**. Tagged equations need to round-trip cleanly through KaTeX. Browser smoke test is the safety net.
+- **Math (KaTeX) inside Equation CustomNode**. Tagged equations need to round-trip cleanly through KaTeX. The smoke-all q2-preview multi-element fixture is the safety net.
 - **Drift between Rust's HTML output and our React rendering**. Class-compatible commitment, not DOM-equivalent. Where DOM differs, CSS may need adjustment.
 - **`__quarto_custom_node` class polluting rendered DOM after user override**. Resolved by design: unwrap is the single forward-path conversion, runs before any registry dispatch. The `Div` registry slot only sees real Divs.
 - **Class-taxonomy enumeration completeness**. First implementation commit enumerates classes from the named Rust source files. Mitigation: cross-check against actual q2-preview demo renders.
@@ -516,7 +545,9 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2B; they
 | q2-preview/registry.ts assembly | ~50 |
 | q2-preview/entry.tsx unwrap/rewrap wiring | ~10 |
 | Tests (round-trip, component snapshots, atomic, Derived, Image edge cases) | ~300 |
-| **Total** | **~1690** |
+| Smoke-all q2-preview infrastructure (PreviewIframeKind extension, discovery, dispatch) | ~10 |
+| Smoke-all q2-preview fixtures (multi-element-doc.qmd, image-with-attrs.qmd + assets) | ~50 |
+| **Total** | **~1750** |
 
 Larger than the original Plan 2B's ~1190 LOC because Image / Figure (originally in Plan 2A item 8) plus the explicit Pandoc base-type leaves are now in 2B's scope. Reasonable for two focused sessions:
 
