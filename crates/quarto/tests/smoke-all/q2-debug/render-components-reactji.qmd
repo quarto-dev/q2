@@ -7,9 +7,10 @@ _quarto:
   tests:
     q2-debug:
       ensureHtmlElements:
-        - selectors:
-            - '[data-testid="reaction-❤️"]'
-            - 'button:has-text("❤️ 1")'
+        # data-testid alone proves the Block override loaded and rendered.
+        # Text-content + click are verified in
+        # hub-client/e2e/q2-debug-render-components.spec.ts.
+        - ['[data-testid="reaction-❤️"]']
 ---
 
 A paragraph with a single heart reaction. [❤️]{.quarto-edit-comment}
