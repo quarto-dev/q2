@@ -317,11 +317,11 @@ The four fallback sites are character-for-character identical (`const registries
 
 After deletion, `tsxTranspiler.ts` keeps only `transpileTSX` and the imports it actually uses (`{ transform } from '@babel/standalone'`).
 
-### `customRegistry` accumulator fix (bd-3day, in passing)
+### `customRegistry` accumulator (bd-3day) — already fixed
 
-`hub-client/src/ast-renderer-entry.tsx:72` has a long-standing bug tracked as **bd-3day**: `customRegistry = { ...componentRegistry, ...module }` overwrites `customRegistry` with each iteration, so multi-file render-components configurations only keep the last file's exports. The fix is a single-character change: `componentRegistry` → `customRegistry` at the spread line, so subsequent iterations accumulate. Since the entry file is being rewritten as part of 2pre, the fix is rolled into the same commit; the commit message references bd-3day so the issue can be closed.
+**Status (2026-05-08):** bd-3day was fixed independently on `bugfix/react-components-not-loading` via commits `409cd404` (the accumulator change in-line) and `ce2081f6` (extraction of `buildCustomRegistry` into `hub-client/src/utils/customRegistry.ts`, with four unit tests in `customRegistry.test.ts` including an explicit accumulation regression check). After the 2026-05-08 rebase onto that branch, Phase 2.7's "fix bd-3day in passing" is **obsolete** — the entry rewrite to `q2-debug/entry.tsx` now just keeps using `buildCustomRegistry(loadedModules)` and the accumulator behavior is locked in by the helper's tests.
 
-The accumulator fix is independent of the carve-up and could ship separately, but doing it during the entry rewrite avoids a second touch on the same lines.
+What 2pre still needs to do in Phase 2.7: move the file from `hub-client/src/ast-renderer-entry.tsx` to `hub-client/src/components/render/q2-debug/entry.tsx`, update its imports for the new framework + q2-debug locations, and switch the wholesale `import * as` window-global write to the explicit-object literal (see §"`__REACT_AST_DEBUG_RENDERER__` continuity"). No accumulator-related changes; `buildCustomRegistry` continues to do that work unchanged.
 
 ### Update consumers
 
@@ -401,8 +401,43 @@ Plan 2A introduces `__Q2_PREVIEW_RENDERER__` for q2-preview with the same explic
 - Any change to leaf component output (q2-debug stays byte-identical; q2-preview leaves come in 2B).
 - Splitting iframe HTML pages by format (Plan 2A creates `/q2-preview.html`).
 - Format dispatch for q2-preview routing through a separate iframe (Plan 2A).
-- New tests (the existing suite is the contract).
 - Migrating the `~/docs/demo-playground/gordon/tldraw-shortcode/` demo. It uses `__REACT_AST_DEBUG_RENDERER__` exclusively, so the rename does not affect it. Out of 2pre's scope.
+
+## Test gates (replaces the original "manual smoke test" plan)
+
+The pre-2026-05-08 plan relied on manual browser smoke tests at every phase boundary. After the 2026-05-08 rebase onto `bugfix/react-components-not-loading`, the same gates are covered by the test suite that landed there plus `q2-debug.integration.test.tsx` (added in this branch). Manual visual inspection drops from a per-step requirement to an end-of-phase courtesy.
+
+**Vitest (fast, run on every commit via `npm run test:integration`):**
+
+| Gate | Test |
+|---|---|
+| Bordered debug aesthetic intact for Para / Header / BulletList | `q2-debug.integration.test.tsx` "q2-debug bordered aesthetic" describe block |
+| Figure body collapse + bordered "Caption: ShortCaption" port (Bug A + C) | `q2-debug.integration.test.tsx` "q2-debug Figure (Bug A + caption-branch port)" |
+| `// TODO:` text removed from Figure DOM (Bug A) | same describe block, "does NOT render the literal `// TODO:` text" |
+| Dispatcher fallback removal preserves "Not registered" miss path | `q2-debug.integration.test.tsx` "q2-debug 'Not registered' miss path" |
+| User-TSX override resolves through `<Block>` to user component | `q2-debug.integration.test.tsx` "q2-debug override path" |
+| Format routing — q2-debug / q2-preview to AstIframe; q2-slides to SlideAst | `ReactRenderer.integration.test.tsx` "ReactRenderer format routing" (3 cases) |
+| Render-components lookup: absolute path, doc-relative bare filename, missing file | `ReactRenderer.integration.test.tsx` "ReactRenderer (q2-debug render-components lookup)" (3 cases) |
+| Registry accumulator — multi-module merge (bd-3day regression) | `customRegistry.test.ts` (4 cases) |
+
+**Playwright E2E (slower, opt-in via `npm run test:e2e` — use sparingly per project policy):**
+
+| Gate | Test |
+|---|---|
+| Render-components dynamic import + load + Block override + JSX inside user code | smoke-all fixture `crates/quarto/tests/smoke-all/q2-debug/render-components-reactji.qmd` (declarative `_quarto.tests.q2-debug.ensureHtmlElements`) |
+| Click-and-state-change inside dynamically-loaded user TSX | `hub-client/e2e/q2-debug-render-components.spec.ts` |
+
+**What changes during Phase 2:** when Phase 2.5 renames `AstIframe` → `Q2DebugIframe` and the iframe path `/ast-renderer.html` → `/q2-debug.html`, the following test selectors update in lockstep with the code change (in the same commit):
+
+- `hub-client/e2e/helpers/previewExtraction.ts` — `previewIframeSelector` for `'q2-debug'` kind: `iframe[src*="ast-renderer.html"]` → `iframe[src*="q2-debug.html"]`.
+- `hub-client/e2e/q2-debug-render-components.spec.ts` — `page.frameLocator('iframe[src*="ast-renderer.html"]')` → `iframe[src*="q2-debug.html"]`.
+
+The continued-passing of these tests *after* the rename is the regression gate for Phase 2.5. If they fail, the rename rewired the wrong path.
+
+**What's specifically NOT covered yet** (acceptable risk; documented for honesty):
+
+- A direct DOM-shape A/B between pre-2pre and post-2pre q2-debug output. The `q2-debug.integration.test.tsx` checks specific DOM features (border styling, "Para:" prefix, "Caption:" wrapper) but does not assert byte-identical-DOM. A hostile regression that subtly altered q2-debug's bordered output without breaking any of those assertions would still slip past — though the structural reasoning ("the leaf functions are byte-identical relocations of the same code") makes this unlikely.
+- The window-global keys assertion (`Object.keys(window.__REACT_AST_DEBUG_RENDERER__).sort()`) is not yet test-locked. The user verified manually on 2026-05-07. A small E2E addition (5 lines in the existing reactji spec) would lock this if it becomes worth the e2e cost.
 
 ## Phase 0: Pre-flight (throwaway branch)
 
@@ -449,43 +484,46 @@ Goal at the end of Phase 1: `framework/` and `q2-debug/` exist with all final co
 - [x] **1.8** Create `q2-debug/components.tsx`. Move all bordered-box leaves (`Para`, `Plain`, …, `Quoted`) and `AstRenderer`. **Update `Figure`** to render body via `renderChildren(args)` *plus* the bordered "Caption: ShortCaption" branch port-for-port from the current registry entry, minus the `// TODO:` text (§"Figure entry").
 - [x] **1.9** Create `q2-debug/registry.ts`. Define `q2DebugRegistry: FormatRegistry` (renamed from `componentRegistry`) assembled from `BlockComponents`, `InlineComponents`, `Block`, `Inline`, `Ast: AstRenderer`. Re-export `BlockComponents`, `InlineComponents`, `Block`, `Inline`.
 - [x] **1.10** Convert `ReactAstDebugRenderer.tsx` into a re-export barrel. Re-export from `framework` and `q2-debug` under **old names** so existing importers keep compiling: `export { Ast, renderChildren, renderNode } from './framework';` `export type { PandocAST, BlockNode, InlineNode, NodeArgs, FigureBlock, … } from './framework';` `export { Block, blockStyle, inlineStyle } from './q2-debug';` `export { q2DebugRegistry as componentRegistry } from './q2-debug';`. The shim is the only Phase-1-throwaway file.
-- [~] **1.11** **Verification.** `npm run build:all` PASSES. `npm run test:ci` PASSES (74/74). DevTools check on `~/docs/demo-playground/elliot/index.qmd` confirms `Object.keys(window.__REACT_AST_DEBUG_RENDERER__)` is exactly `['Ast', 'Block', 'Inline', 'Node', 'blockStyle', 'componentRegistry', 'inlineStyle', 'renderChildren', 'renderNode']` — all expected names present. **Full visual smoke test BLOCKED** by a separate preexisting bug, not introduced by 2pre: `ReactRenderer.tsx:114-139`'s `customComponentsCode` `useMemo` has `[componentPathsKey]` deps only (omits `fileContents`), so when `astJson` arrives before VFS-loaded `fileContents` populates `/elliot/*.tsx`, the memo runs once with an empty map, fires `[ReactRenderer] Component file not found` warnings for each render-component path, and never re-runs — the iframe never receives `LOAD_CUSTOM_COMPONENTS`. Confirmed reproducible on the pre-2pre branch HEAD (`f58ed2b6`). Tracked as a separate beads issue (handoff prompt at `claude-notes/plans/2026-05-07-debug-render-components-not-loading.md`). The Phase-1 ⇄ Phase-2 boundary is therefore a strictly-checked structural carve-up; the override-rendering smoke test resumes once the file-lookup race is fixed.
+- [x] **1.11** **Verification.** After the 2026-05-08 rebase onto `bugfix/react-components-not-loading`, Phase 1 verification is complete and automated:
+    - `npm run build:all` PASSES.
+    - `npm run test` (vitest unit) PASSES.
+    - `npm run test:integration` (jsdom) PASSES — 63 tests in 7 files, including the new `q2-debug.integration.test.tsx` (8 cases locking the bordered aesthetic, the Figure caption-branch port, the Bug A `// TODO:` removal, the Not-registered miss path, and the override-resolution path) and the new lookup tests in `ReactRenderer.integration.test.tsx`.
+    - `npm run test:wasm` PASSES — 74 tests in 12 files, including the smoke-all reactji fixture (run separately under `npm run test:e2e` because q2-debug requires the browser iframe path; smoke-all WASM run is HTML-only).
+    - `__REACT_AST_DEBUG_RENDERER__` global keys spot-checked manually 2026-05-07 in DevTools (`['Ast', 'Block', 'Inline', 'Node', 'blockStyle', 'componentRegistry', 'inlineStyle', 'renderChildren', 'renderNode']`).
+    - The four file-lookup bugs that were blocking visual smoke-testing on 2026-05-07 are fixed on the rebase target: `7a59df6d`, `46dcf365`, `479b514d`, `409cd404`. The pre-rebase blocker doc at `claude-notes/plans/2026-05-07-debug-render-components-not-loading.md` is preserved as historical context but no longer applies.
 
 ### Phase 2 — Migrate consumers, rename for cohabitation, delete the shim
 
-Each step is one commit, each gated by `npm run build:all` plus (where indicated) a browser smoke test. The shim from step 1.10 keeps every consumer compileable until step 2.14 deletes it.
+Each step is one commit, each gated by `npm run build:all` plus the test suites called out below. The shim from step 1.10 keeps every consumer compileable until step 2.14 deletes it. **All previously-manual smoke tests are now covered by the test suites listed in §"Test gates"**; references below point to those gates rather than to elliot-demo browser sessions.
 
-- [ ] **2.1** PandocAST import-path consolidation. In `ReactRenderer.tsx`, `useCursorToSlide.ts`, `useSlideThumbnails.tsx`, `RevealjsReactAstSlideRenderer.tsx`, `ReactAstSlideRenderer.tsx`: drop any local `PandocAST` declaration; import `PandocAST` from `./framework/types` (or relative equivalent). One commit. Build.
-- [ ] **2.2** Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename in `ReactAstSlideRenderer.tsx`. ~25 mechanical refs. Drop slide-side local block/inline type declarations; import the unions from `./framework/types`. Slide-side now inherits framework's `MathInline` extension. Build. (Pre-flight in 0.1 should have de-risked this.)
-- [ ] **2.3** Create `public/q2-debug.html` mirroring `public/ast-renderer.html` but with `<script type="module" src="/src/ast-renderer-entry.tsx">` (still pointing at the OLD entry path; entry hasn't moved yet). Add `'q2-debug': path.resolve(__dirname, 'public/q2-debug.html')` to `vite.config.ts` rollup inputs *alongside* the existing `'ast-renderer'` entry. Now both routes are served and load the same entry. Build. Smoke test that `/q2-debug.html` loads identically to `/ast-renderer.html`.
-- [ ] **2.4** Create `q2-debug/Q2DebugIframe.tsx` (verbatim port of `AstIframe.tsx`, renamed component, `src` updated to `/q2-debug.html`). Build.
-- [ ] **2.5** Update `ReactRenderer.tsx` to import `Q2DebugIframe` from `./q2-debug/Q2DebugIframe` and use it in place of `AstIframe`. q2-debug now runs through `/q2-debug.html`. Build. **Smoke test** all elliot demos.
-- [ ] **2.6** Delete `hub-client/src/components/render/AstIframe.tsx`. Verify no remaining importers via grep. Build.
-- [ ] **2.7** Create `q2-debug/entry.tsx` as the new entry. Use the explicit `__REACT_AST_DEBUG_RENDERER__` object literal from §"`__REACT_AST_DEBUG_RENDERER__` continuity." Annotate `mergedRegistry: FormatRegistry` (with cast at the spread, since `customRegistry` is babel-transpiled user code). **Fix bd-3day in the same commit**: change `customRegistry = { ...componentRegistry, ...module }` to `customRegistry = { ...customRegistry, ...module }` so subsequent iterations accumulate. Commit message references bd-3day. Build. (No runtime change yet — `q2-debug.html` still points at the old entry.)
-- [ ] **2.8** Update `public/q2-debug.html` to point its `<script type="module" src=…>` at `/src/components/render/q2-debug/entry.tsx`. Remove the `'ast-renderer'` rollup input from `vite.config.ts`; only `'q2-debug'` remains. Build. **Smoke test** all elliot demos including a multi-component override (`render-components: [simple.tsx, html.tsx, comment.tsx]` if available, otherwise add a temporary fixture) to confirm bd-3day's accumulator fix landed.
-- [ ] **2.9** Delete `hub-client/src/ast-renderer-entry.tsx` (replaced by `q2-debug/entry.tsx`; nothing references it after 2.8). Build.
-- [ ] **2.10** Delete `hub-client/public/ast-renderer.html` (no consumers). Build.
-- [ ] **2.11** Delete `transpileAndImportTSX` and supporting top-level imports in `hub-client/src/services/tsxTranspiler.ts` (see §"Deletion" for the full list). After deletion the file imports only `{ transform } from '@babel/standalone'`. Verify `transpileTSX`'s single caller (`ReactRenderer.tsx:131`) still resolves. Build.
-- [ ] **2.12** Delete `hub-client/src/components/render/ReactAstRenderer.tsx` (already dead; verified by grep). Build.
+- [ ] **2.1** PandocAST import-path consolidation. In `ReactRenderer.tsx`, `useCursorToSlide.ts`, `useSlideThumbnails.tsx`, `RevealjsReactAstSlideRenderer.tsx`, `ReactAstSlideRenderer.tsx`: drop any local `PandocAST` declaration; import `PandocAST` from `./framework/types` (or relative equivalent). One commit. Build + `test:ci`.
+- [ ] **2.2** Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename in `ReactAstSlideRenderer.tsx`. ~25 mechanical refs. Drop slide-side local block/inline type declarations; import the unions from `./framework/types`. Slide-side now inherits framework's `MathInline` extension. Build + `test:ci`. (Pre-flight in 0.1 already de-risked this.)
+- [ ] **2.3** Create `public/q2-debug.html` mirroring `public/ast-renderer.html` but with `<script type="module" src="/src/ast-renderer-entry.tsx">` (still pointing at the OLD entry path; entry hasn't moved yet). Add `'q2-debug': path.resolve(__dirname, 'public/q2-debug.html')` to `vite.config.ts` rollup inputs *alongside* the existing `'ast-renderer'` entry. Now both routes are served and load the same entry. Build + `test:ci`. (Both routes serving the same entry is a transitional state; the smoke-all + E2E specs continue to use `/ast-renderer.html` until step 2.5 renames their selectors.)
+- [ ] **2.4** Create `q2-debug/Q2DebugIframe.tsx` (verbatim port of `AstIframe.tsx`, renamed component, `src` updated to `/q2-debug.html`). Build + `test:ci`.
+- [ ] **2.5** **The iframe-rename gate.** Update `ReactRenderer.tsx` to import `Q2DebugIframe` from `./q2-debug/Q2DebugIframe` and use it in place of `AstIframe`. q2-debug now runs through `/q2-debug.html`. **Update test selectors in lockstep**: `ReactRenderer.integration.test.tsx`'s `vi.mock('./AstIframe')` becomes `vi.mock('./q2-debug/Q2DebugIframe')`; `hub-client/e2e/helpers/previewExtraction.ts`'s `previewIframeSelector` for q2-debug from `iframe[src*="ast-renderer.html"]` to `iframe[src*="q2-debug.html"]`; `hub-client/e2e/q2-debug-render-components.spec.ts`'s `frameLocator` selector likewise. Build + `test:ci` + `test:e2e` (the e2e run is the regression gate confirming the iframe-rename rewired the right path).
+- [ ] **2.6** Delete `hub-client/src/components/render/AstIframe.tsx`. Verify no remaining importers via grep. Build + `test:ci`.
+- [ ] **2.7** Create `q2-debug/entry.tsx` as the new entry. Use the explicit `__REACT_AST_DEBUG_RENDERER__` object literal from §"`__REACT_AST_DEBUG_RENDERER__` continuity." Annotate `mergedRegistry: FormatRegistry` (with cast at the spread, since `customRegistry` is babel-transpiled user code). The accumulator continues to use `buildCustomRegistry(loadedModules)` from `hub-client/src/utils/customRegistry.ts` — no behavior change there (bd-3day was fixed independently in `409cd404`). Build + `test:ci`. (No runtime change yet — `q2-debug.html` still points at the old entry.)
+- [ ] **2.8** Update `public/q2-debug.html` to point its `<script type="module" src=…>` at `/src/components/render/q2-debug/entry.tsx`. Remove the `'ast-renderer'` rollup input from `vite.config.ts`; only `'q2-debug'` remains. Build + `test:ci` + `test:e2e` (smoke-all reactji fixture verifies the explicit-object `__REACT_AST_DEBUG_RENDERER__` setup; `customRegistry.test.ts` continues to lock the multi-module accumulator behavior).
+- [ ] **2.9** Delete `hub-client/src/ast-renderer-entry.tsx` (replaced by `q2-debug/entry.tsx`; nothing references it after 2.8). Build + `test:ci`.
+- [ ] **2.10** Delete `hub-client/public/ast-renderer.html` (no consumers). Build + `test:ci`.
+- [ ] **2.11** Delete `transpileAndImportTSX` and supporting top-level imports in `hub-client/src/services/tsxTranspiler.ts` (see §"Deletion" for the full list). After deletion the file imports only `{ transform } from '@babel/standalone'`. Verify `transpileTSX`'s single caller (`ReactRenderer.tsx`) still resolves. Build + `test:ci`.
+- [ ] **2.12** Delete `hub-client/src/components/render/ReactAstRenderer.tsx` (already dead; verified by grep). Build + `test:ci`.
 - [ ] **2.13** Documentation sweep: update `~/docs/demo-playground/elliot/render_components.qmd` paths and the `componentRegistry` → `q2DebugRegistry` symbol mention; grep `claude-notes/research/` and `claude-notes/designs/` for the old file/symbol names and update; update `claude-notes/plans/2026-05-04-q2-preview-plan-1*.md` if any path references slipped in. Build (no code changes; doc commit only).
-- [ ] **2.14** Delete the Phase-1 shim `hub-client/src/components/render/ReactAstDebugRenderer.tsx`. Verify no remaining importers via grep. Build. **Smoke test** all elliot demos one last time.
-- [ ] **2.15** Final full verification: `cargo xtask verify --skip-rust-tests` end-to-end. Browser smoke test against `~/docs/demo-playground/elliot/index.qmd` and `slides.qmd`: q2-debug bordered aesthetic intact, all elliot demo overrides apply, `__REACT_AST_DEBUG_RENDERER__` exposes the expected names in DevTools. Update `hub-client/changelog.md` per the project's hub-client commit instructions (one entry per landed commit hash, but a final summary entry can also be added for the carve-up).
+- [ ] **2.14** Delete the Phase-1 shim `hub-client/src/components/render/ReactAstDebugRenderer.tsx`. Verify no remaining importers via grep. Build + `test:ci`.
+- [ ] **2.15** Final full verification: `cargo xtask verify --skip-rust-tests` end-to-end (Rust workspace + hub-client build + `test:ci` + e2e with reactji fixture). Update `hub-client/changelog.md` per the project's hub-client commit instructions.
 
 After 2.15, `framework/` + `q2-debug/` are the only renderer code paths; `ReactAstDebugRenderer.tsx`, `ReactAstRenderer.tsx`, `AstIframe.tsx`, `ast-renderer-entry.tsx`, `public/ast-renderer.html`, and `transpileAndImportTSX` are gone; q2-debug is byte-equivalent (with the Bug-A `// TODO:` text deletion); the codebase is ready for Plan 2A to scaffold q2-preview as a sibling.
 
 ## Test plan
 
-Behavior preservation is the entire contract. Verify at every checklist step:
+Behavior preservation is the entire contract. After the 2026-05-08 rebase, the gates are listed in §"Test gates (replaces the original 'manual smoke test' plan)" above. Each Phase 2 step calls out which suites must pass for that step.
 
-1. **`npm run build:all` passes** from `hub-client/`. The hub-client TypeScript build is the strictest gate.
-2. **`npm run test:ci` passes** unchanged.
-3. **Browser smoke test (manual)** at the steps marked **Smoke test** in the checklist: open `~/docs/demo-playground/elliot/index.qmd` in hub-client. q2-debug renders identically to pre-2pre (modulo Bug A's `// TODO:` text disappearance) — confirmed by:
-   - The bordered-box debug aesthetic for un-overridden leaves.
-   - `html.tsx` / `simple.tsx` / `comment.tsx` / `kanban.tsx` overrides still load and apply.
-   - DevTools console: `window.__REACT_AST_DEBUG_RENDERER__` exposes `renderChildren`, `renderNode`, `Node`, `Block`, `Inline`, `q2DebugRegistry`, individual leaf components, and `blockStyle`/`inlineStyle`.
-   - Multi-component override (after 2.8) accumulates contributions from all listed files (bd-3day regression).
+Summary of when each suite runs:
+1. **`npm run build:all`** at every commit (TypeScript strict mode is the first gate).
+2. **`npm run test:ci`** at every commit (vitest unit + integration + WASM, ~14 seconds).
+3. **`npm run test:e2e`** at the iframe-rename commit (2.5), the entry-rewire commit (2.8), and the final-verification commit (2.15). Skipped at the routine intermediate commits because Playwright is slow and the integration suite already covers the wiring; the e2e run earns its keep at the points where the iframe URL or its consumer actually moves.
 
-No new tests. Adding tests for the moved code is Plan 2A's / 2B's concern (when the new q2-preview surface is added).
+The `q2-debug.integration.test.tsx` file added in this branch is the load-bearing behavior-preservation test for q2-debug's render path; if Phase 2 breaks q2-debug's bordered output, the Figure caption-branch port, the Bug-A `// TODO:` removal, the Not-registered miss path, or the override-resolution path, that file fails. The reactji E2E fixture covers the dynamic-import + Block-override + JSX path through a real browser iframe.
 
 ## Risk areas
 
@@ -538,7 +576,7 @@ None. Plan 1 has shipped; nothing else is required.
 
 ### Out-of-scope tracked work consumed in passing
 
-- **bd-3day** — `customRegistry` accumulator bug. Fixed in step 2.7's single-character change. Commit message references bd-3day so the issue can be closed.
+- **bd-3day** — `customRegistry` accumulator bug. **Already fixed** independently of 2pre on `bugfix/react-components-not-loading` (`409cd404` + `ce2081f6`); 2pre Phase 2.7 no longer carries this fix.
 
 ## Notes
 
