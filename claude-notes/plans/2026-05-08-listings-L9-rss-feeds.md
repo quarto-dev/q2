@@ -1689,13 +1689,35 @@ RFC 822 `pubDate` formatting L9 needs is server-side in
 
 ### TDD phase 6 — reader extension
 
-- [ ] Write tests #30–36.
-- [ ] Implement `feed/reader_ext.rs::extract_first_para_html`.
-      HTML-preserving extraction; word-boundary
-      truncation that respects HTML tags.
-- [ ] Implement `feed/reader_ext.rs::extract_full_contents`
-      with urls-to-absolute + anchor-strip transforms.
-- [ ] Tests pass.
+- [x] Write tests #30–36 plus a handful of helper unit tests
+      (`collapse_relative_strips_dotdot`,
+      `parent_href_string_handles_root_and_nested`,
+      `visible_text_drops_tags_and_decodes_entities`,
+      `extract_first_para_html_strips_anchors_with_inline_children`,
+      `extract_first_para_html_returns_none_when_no_main`,
+      `extract_first_para_html_skips_empty_p`,
+      `extract_first_para_html_no_truncate_when_max_zero`,
+      `extract_full_contents_rewrites_image_src`,
+      `extract_full_contents_passes_external_url_through`,
+      `extract_full_contents_resolves_site_rooted_path`,
+      `extract_full_contents_keeps_external_anchors_intact`).
+- [x] Implement `feed/reader_ext.rs::extract_first_para_html`.
+      HTML-preserving when the para fits under `max_length`;
+      degrades to plain-text + word-boundary truncation
+      otherwise (see file-level "Limitations" note —
+      truncation under `max_length` is a v1 follow-up). Anchor
+      tags are unwrapped (Q1 partial-mode behavior).
+- [x] Implement `feed/reader_ext.rs::extract_full_contents`
+      with `urls-to-absolute` (a/link href + img/source/video/audio
+      src), `<header id="title-block-header">` removal, and
+      `a[href^="#"]` unwrap. External / data / mailto /
+      javascript / scheme-relative URLs pass through unchanged.
+      Site-rooted paths (`/about.html`) resolve against the
+      site URL.
+- [x] Tests pass: `cargo nextest run -p quarto-core
+      'project::listing::feed::reader_ext'` → 18 passed.
+      Wider `cargo nextest run -p quarto-core` → 1887 passed
+      (was 1869 before phase 5; +18 new).
 
 ### TDD phase 7 — post-render completion
 
