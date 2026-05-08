@@ -392,14 +392,33 @@ fn normalize_api_version(pandoc_json: &mut serde_json::Value, our_json: &serde_j
     }
 }
 
+/// Strip every field that is part of the source-location side of the JSON
+/// shape. After scrubbing, the remaining structure is the pure-content view
+/// of the AST and can be compared by equality across two parses of the
+/// same document, even if the two parses produced differently-sized
+/// `astContext.sourceInfoPool`s.
+///
+/// The S-suffix convention (`attrS`, `captionS`, `bodiesS`, ...) is used
+/// throughout `crates/pampa/src/writers/json.rs` for foreign keys into
+/// `astContext.sourceInfoPool` (or for source-info envelopes containing
+/// such keys). Every S-suffix key emitted by the JSON writer is listed
+/// here; if a new one is added, this list must be extended too.
 fn remove_location_fields(json: &mut serde_json::Value) {
     if let Some(obj) = json.as_object_mut() {
-        obj.remove("l"); // Remove the "l" field (old SourceInfo)
-        obj.remove("s"); // Remove the "s" field (new quarto_source_map::SourceInfo)
-        obj.remove("astContext"); // Remove the astContext field (includes metaTopLevelKeySources)
-        obj.remove("attrS"); // Remove the "attrS" field (AttrSourceInfo)
-        obj.remove("targetS"); // Remove the "targetS" field (TargetSourceInfo)
-        obj.remove("citationIdS"); // Remove the "citationIdS" field (Citation id source)
+        obj.remove("l"); // old SourceInfo
+        obj.remove("s"); // quarto_source_map::SourceInfo foreign key
+        obj.remove("astContext"); // pool itself + metaTopLevelKeySources
+        // S-suffix source-info foreign keys / envelopes:
+        obj.remove("attrS");
+        obj.remove("bodiesS");
+        obj.remove("bodyS");
+        obj.remove("captionS");
+        obj.remove("cellsS");
+        obj.remove("citationIdS");
+        obj.remove("footS");
+        obj.remove("headS");
+        obj.remove("rowsS");
+        obj.remove("targetS");
         for value in obj.values_mut() {
             remove_location_fields(value);
         }
