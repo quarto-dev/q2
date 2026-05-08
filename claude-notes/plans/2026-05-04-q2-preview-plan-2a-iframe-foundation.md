@@ -168,15 +168,18 @@ The placeholder aesthetic is deliberately quiet — q2-preview's eventual goal i
 **`hub-client/src/components/render/q2-preview/registry.ts`** — registry assembly:
 
 ```ts
+import type { FormatRegistry } from '../framework';
 import { Block, Inline } from './dispatchers';
 import { PreviewDocument } from './PreviewDocument';  // the 'Ast' entry component
 
-export const previewRegistry: Record<string, ComponentType<any>> = {
+export const previewRegistry: FormatRegistry = {
   Block,
   Inline,
   Ast: PreviewDocument,
 };
 ```
+
+The `FormatRegistry` annotation is the typed-format-registry contract introduced by Plan 2pre (§"Typed format-registry contract"). `Block` and `Inline` must satisfy `DispatcherComponent`; `PreviewDocument` must satisfy `AstComponent`. TypeScript catches register-time mistakes at this site.
 
 `PreviewDocument` is q2-preview's document-root wrapper (registered under `'Ast'`). It calls `renderChildren({ node: ast, setLocalAst: setAst, ... })` with no debug wrapper. The registry key stays `'Ast'` for both formats — see 2pre §"What stays exactly the same"; only the registered component differs per format.
 

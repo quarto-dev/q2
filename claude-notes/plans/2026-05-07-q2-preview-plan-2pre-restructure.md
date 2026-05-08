@@ -34,11 +34,11 @@ Extract from `ReactAstDebugRenderer.tsx` into new files under `hub-client/src/co
 
 | File | Contents |
 |---|---|
-| `framework/types.ts` | `PandocAST`, `BlockNode` + all Block variants, `InlineNode` + all Inline variants (**including `MathInline`** — see §"Slide-side type compatibility"), `NodeArgs<T>` |
+| `framework/types.ts` | `PandocAST`, `BlockNode` + all Block variants, `InlineNode` + all Inline variants (**including `MathInline`** — see §"Slide-side type compatibility"), `NodeArgs<T>`, plus the typed format-registry contracts `AstProps` / `AstComponent` / `DispatcherComponent` / `FormatRegistry` (see §"Typed format-registry contract") |
 | `framework/RegistryContext.tsx` | `RegistryContext` — promoted from file-private const to exported context. Default value changes from `null` to `{ registry: {} }` so dispatchers can read `useContext(RegistryContext).registry` directly without a fallback (see §"Dispatcher fallback removal"). (Plan 2A adds `sourceInfoPool?` to the value shape.) |
 | `framework/Ast.tsx` | `Ast` component (parses `astJson`, sets up Provider, looks up `registry['Ast']`). `registry` prop is **required** (no default — see §"Dispatcher fallback removal"). |
-| `framework/dispatch.tsx` | `Node` component; `renderChildrenRegistry`, `renderChildren`; `renderNode`; `blockTypes` array (was inlined in three places). Recursive-descent code is co-located here because `renderChildrenRegistry`'s entries reference `<Node>` — splitting them across files would introduce cross-file coupling for no separation gain. `renderNode` calls `useContext(RegistryContext)` and is therefore a hook-equivalent: it must be invoked inside an `<Ast>`-set Provider (user TSX always does, via the registered `'Ast'` component). `renderNode`'s defensive fallback (when neither `registry['Block']`/`['Inline']` nor `registry[node.t]` resolve) becomes plain unstyled text — the styled "Not registered" UI lives in the format's `Block`/`Inline` dispatchers, which always run in normal flow. **`Block` and `Inline` are not framework components** — see §"q2-debug extraction" and §"Framework reserves the registry keys" below. |
-| `framework/index.ts` | Re-exports for siblings (everything in `types.ts`, `RegistryContext`, `Ast`, `Node`, `renderChildren`, `renderNode`, `blockTypes`). `renderChildrenRegistry` is **not** re-exported — it's an internal contract of `dispatch.tsx`. |
+| `framework/dispatch.tsx` | `Node` component; `renderChildrenRegistry`, `renderChildren`; `renderNode`; `blockTypes` array (was inlined in two places — `renderNode` at `ReactAstDebugRenderer.tsx:328` and `Node` at `:582`). Recursive-descent code is co-located here because `renderChildrenRegistry`'s entries reference `<Node>` — splitting them across files would introduce cross-file coupling for no separation gain. `renderNode` calls `useContext(RegistryContext)` and is therefore a hook-equivalent: it must be invoked inside an `<Ast>`-set Provider (user TSX always does, via the registered `'Ast'` component). `renderNode`'s defensive fallback (when neither `registry['Block']`/`['Inline']` nor `registry[node.t]` resolve) becomes plain unstyled text — the styled "Not registered" UI lives in the format's `Block`/`Inline` dispatchers, which always run in normal flow. **`Block` and `Inline` are not framework components** — see §"q2-debug extraction" and §"Framework reserves the registry keys" below. |
+| `framework/index.ts` | Re-exports for siblings (everything in `types.ts`, `RegistryContext`, `Ast`, `Node`, `renderChildren`, `renderNode`, `blockTypes`). `renderChildrenRegistry` is **not** re-exported — see §"`renderChildrenRegistry` is framework-internal" below for why this is a deliberate contract, not a casual omission. |
 
 ### q2-debug extraction
 
@@ -57,6 +57,45 @@ Move and rename:
 |---|---|---|
 | `hub-client/src/ast-renderer-entry.tsx` (top-level under `src/`) | `hub-client/src/components/render/q2-debug/entry.tsx` (two levels deeper) | Two-level move; all relative imports inside the entry update accordingly. Updated imports for new framework + q2-debug locations. `window.__REACT_AST_DEBUG_RENDERER__` continues to expose all the names user TSX expects. The `<script type="module" src=…>` in `public/ast-renderer.html` updates to the new path (see §"Update consumers"). |
 | `hub-client/src/components/render/AstIframe.tsx` | `hub-client/src/components/render/q2-debug/DebugIframe.tsx` | Functionality unchanged. Component renamed `AstIframe` → `DebugIframe`. Iframe URL (the value of `src=`) stays `/ast-renderer.html` — only the served HTML's internal `<script>` source path changes. |
+
+### Typed format-registry contract
+
+Today the registry is `Record<string, (props: any) => React.ReactNode>`. With three reserved keys (`'Block'`, `'Inline'`, `'Ast'`) whose prop shapes are concrete and asymmetric, that's loose enough to let format-side mistakes (typo'd prop names, wrong shape on the `Ast` component) reach runtime. 2pre adds three small types to `framework/types.ts` plus a `FormatRegistry` alias:
+
+```ts
+export type AstProps = {
+    ast: PandocAST;
+    onNavigateToDocument?: (path: string, anchor: string | null) => void;
+    setAst: (newAst: PandocAST) => void;
+};
+export type AstComponent = (props: AstProps) => React.ReactNode;
+export type DispatcherComponent = (args: NodeArgs<BlockNode | InlineNode>) => React.ReactNode;
+
+export type FormatRegistry = Record<string, (props: any) => React.ReactNode> & {
+    Ast: AstComponent;
+    Block: DispatcherComponent;
+    Inline: DispatcherComponent;
+};
+```
+
+**Where the typing actually catches mistakes.** The narrow types are applied at the *format-side construction site*:
+
+```ts
+// q2-debug/registry.ts
+export const componentRegistry: FormatRegistry = {
+    ...BlockComponents,
+    ...InlineComponents,
+    Block,                    // checked: must satisfy DispatcherComponent
+    Inline,                   // checked: must satisfy DispatcherComponent
+    Ast: AstRenderer,         // checked: must satisfy AstComponent
+};
+```
+
+Plan 2A's `q2-preview/registry.ts` does the same with `previewRegistry: FormatRegistry`. The framework's `<Ast>` keeps its loose `registry: Record<string, ...>` prop type — user TSX overrides loaded via `import(blob)` are babel-stripped of types and can't be checked anyway, so tightening the prop type would force a cast at the entry-side merge for no real gain. The split is honest: format-side defaults are TS-checked, user-supplied overrides are runtime-trusted.
+
+**Cost.** Three exported types, one cast-free annotation per format registry. No change at the entry merge point. No new dependencies on the user-TSX side.
+
+**Benefit.** Format authors get TS errors at registration time if they register a non-conforming component, the framework's `<AstComponent>` invocation can drop the `(props: any)` typing, and the Ast/Block/Inline contract is documented in code rather than living implicitly in entry glue.
 
 ### Framework reserves the registry keys; formats provide the components
 
@@ -87,6 +126,57 @@ Slide-side's local `PandocAST.blocks: Block[]` (slide-local `Block`) is structur
 Resolution: add `MathInline = { t: 'Math'; c: [{ t: 'DisplayMath' | 'InlineMath' }, string] }` to framework's `InlineNode` union as part of the framework extraction. This is the single Pandoc inline the debug renderer never had. Adding it to the framework type doesn't change q2-debug's behavior — q2-debug's registry doesn't register a `Math` component, so Math nodes still render as "Not registered: Math" exactly as they do today. Plan 2B's q2-preview registry registers a real `Math` component (KaTeX-rendered).
 
 This single type addition resolves the consolidation cleanly. Without it, slide-side code that walks `pandoc.blocks` and pattern-matches on `Inline` variants would lose narrowing for Math.
+
+### `renderChildrenRegistry` is framework-internal
+
+Plan 2B writes to `renderChildrenRegistry` — it adds entries for `'CustomBlock'` and `'CustomInline'` (see Plan 2B §"`framework/dispatch.tsx` — CustomBlock / CustomInline traversal" and the multi-plan-contracts list there). Those mutations happen *inside* `framework/dispatch.tsx` itself; they are framework-evolves-itself changes, not consumer extensions. The structure is never exposed via `framework/index.ts` or the format-side globals (`__REACT_AST_DEBUG_RENDERER__`, `__Q2_PREVIEW_RENDERER__`).
+
+**Two registries with different growth shapes.** Custom-node growth lives in a *different* registry — `customNodeRegistry`, keyed by `type_name`, owned by the format (Plan 2B §"Two registries"). The split is:
+
+| Registry | Keyed by | Lives in | Mutated by | Grows with |
+|---|---|---|---|---|
+| `renderChildrenRegistry` | Pandoc tag (`Para`, `Header`, …) + the abstract `'CustomBlock'` / `'CustomInline'` categories | `framework/dispatch.tsx` (private) | Framework only | New Pandoc base types (rare); category-level entries (one-time, in 2B) |
+| `customNodeRegistry` | `type_name` (`Callout`, `Theorem`, …, user-defined) | `q2-preview/registry.ts` (per-format) | Format + user overrides | Per-custom-node-type growth (open-ended) |
+
+So per-type custom-node extensibility is real, but it's not via `renderChildrenRegistry`. The 2B `'CustomBlock'` / `'CustomInline'` entries are *generic* — they iterate slot contents without per-type knowledge. The type-aware logic lives in the registered component (`Callout`, `Theorem`, …), which reads its named slots and calls `renderSlot(...)` — a per-format utility, not a framework registry. A new custom-node type adds *one* entry in `customNodeRegistry` and *zero* entries in `renderChildrenRegistry`.
+
+This is why 2pre keeps the structure private: there is no future user-facing extension scenario that requires it to be public.
+
+### Figure `renderChildrenRegistry` fix (deliberate non-byte-identical change)
+
+The current `renderChildrenRegistry.Figure` entry (`ReactAstDebugRenderer.tsx:274-296`) has three pre-existing bugs that the framework extraction is the right moment to fix:
+
+**Bug A — `// TODO:` rendered as DOM text.** Line 285 has `// TODO: doesn't totally make sense to have this here:` placed *between* two `{...}` JSX expressions inside a `<>...</>` fragment. In JSX text position, `//` is literal characters, not a comment, so every figure rendered today shows that string in the DOM.
+
+**Bug B — Wrong half of the Caption.** Pandoc's Figure shape is `c = [Attr, Caption, [Block]]` with `Caption = (ShortCaption, [Block])` = `[InlineNode[] | null, BlockNode[]]`. The registry entry renders `c[1][0]` (the ShortCaption — alt-text used for things like list-of-figures) and ignores `c[1][1]` (the visible caption blocks). Elliot's `html.tsx:113` does the opposite — destructures `[, captionBlocks] = c[1]` and renders `c[1][1]` (correct convention). Documents with both fields populated will get *two* captions when html.tsx is loaded — one from the debug entry's "Caption: ..." line, one from html.tsx's `<figcaption>`.
+
+**Bug C — Mixed concerns.** Every other entry in `renderChildrenRegistry` (Para, Plain, Header, Emph, BlockQuote, Div, lists, …) renders only the children list. Figure additionally embeds caption presentation. Any registered Figure component that calls `renderChildren(args)` (the natural pattern, used by `html.tsx:130`) inherits the unwanted "Caption:" wrapper.
+
+**Impact today.** Hits q2-debug on every Figure render. Hits q2-preview *transitively* because q2-preview currently routes through the same `AstIframe` + `componentRegistry` (`ReactRenderer.tsx:148`). After 2A, q2-preview gets its own registry, and after 2B registers a real Figure component (which will call `renderChildren(args)` for body blocks — see Plan 2B §"`q2-preview/blocks/Figure.tsx`"), it inherits Bugs A and C unless the framework entry is fixed.
+
+**Fix.** In `framework/dispatch.tsx`, collapse the Figure entry to the standard pattern:
+
+```ts
+Figure: ({ node, setLocalAst, onNavigateToDocument }) =>
+    (node as FigureBlock).c[2].map((child, i) => (
+        <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            setLocalAst={(newChild) => {
+                const newChildren = [...(node as FigureBlock).c[2]];
+                newChildren[i] = newChild as BlockNode;
+                setLocalAst({ t: 'Figure', c: [(node as FigureBlock).c[0], (node as FigureBlock).c[1], newChildren] });
+            }}
+        />
+    )),
+```
+
+The caption is the registered Figure component's responsibility from now on. q2-debug's `Figure` in `q2-debug/components.tsx` becomes a one-line bordered wrapper that just calls `renderChildren(args)` — no caption. q2-preview's eventual Figure (Plan 2B) reads `c[1][1]` and renders `<figcaption>` as already specified there.
+
+**Behavior change.** q2-debug's bordered Figure will *not* be byte-identical to today's:
+
+- The literal `// TODO: doesn't totally make sense to have this here:` text disappears.
+- The "Caption: ..." line for short-captioned figures disappears.
+
+This is a deliberate exception to 2pre's "byte-identical for q2-debug" claim. It is recorded explicitly in §"What stays exactly the same" so the deviation is not a surprise during review.
 
 ### Block/Inline naming consolidation
 
@@ -161,7 +251,7 @@ After deletion, `tsxTranspiler.ts` keeps only `transpileTSX` and the imports it 
 
 ### Update consumers
 
-- `hub-client/src/components/render/ReactRenderer.tsx`: import `DebugIframe` from `./q2-debug/DebugIframe`; import `PandocAST` from `./framework/types`. Format-dispatch logic unchanged in 2pre — `q2-debug || q2-preview → DebugIframe` (Plan 2A reroutes q2-preview through a new `PreviewIframe`).
+- `hub-client/src/components/render/ReactRenderer.tsx`: import `DebugIframe` from `./q2-debug/DebugIframe`; import `PandocAST` from `./framework/types`. Format-dispatch logic unchanged in 2pre — `q2-debug || q2-preview → DebugIframe` (Plan 2A reroutes q2-preview through a new `PreviewIframe`). The existing comment at `ReactRenderer.tsx:141-147` describing q2-preview-via-AstIframe is **left as-is** in 2pre — it becomes inaccurate in wording (`AstIframe` is renamed `DebugIframe`) but the *behavior* it describes is still current. Plan 2A rewrites it when format dispatch actually changes.
 - `hub-client/src/services/tsxTranspiler.ts`: delete `transpileAndImportTSX` and its supporting top-level imports (see §"Deletion" for the full list and rationale). After deletion, the file imports only `{ transform } from '@babel/standalone'` and exports only `transpileTSX`. No new import path from the post-restructure framework or q2-debug barrels is needed.
 - `hub-client/public/ast-renderer.html`: update `<script type="module" src="/src/ast-renderer-entry.tsx">` to `<script type="module" src="/src/components/render/q2-debug/entry.tsx">`. The HTML file path and the iframe URL (`/ast-renderer.html`) are unchanged; only the inner `<script>` source path changes to track the entry move.
 - `hub-client/vite.config.ts`: the `'ast-renderer': path.resolve(__dirname, 'public/ast-renderer.html')` rollup input stays as-is — the HTML location and URL haven't changed.
@@ -189,7 +279,7 @@ Several documents currently reference paths that 2pre changes. Update as part of
 - The render pipeline.
 - `hub-client/public/ast-renderer.html` — file path and iframe URL (`/ast-renderer.html`) are unchanged. The `<script type="module" src=…>` *inside* the HTML updates to track the entry move (see §"Update consumers").
 - The postMessage protocol (`IFRAME_READY` / `UPDATE_AST` / `SET_AST` / `LOAD_CUSTOM_COMPONENTS` / `NAVIGATE_TO_DOCUMENT`).
-- The bytes / DOM produced by q2-debug's render path.
+- The bytes / DOM produced by q2-debug's render path, **with one deliberate exception**: the buggy `renderChildrenRegistry.Figure` entry is fixed. The literal `// TODO:` text and the "Caption:" line for short-captioned figures both disappear from q2-debug's output. See §"Figure `renderChildrenRegistry` fix" for the rationale and the fix.
 - `window.__REACT_AST_DEBUG_RENDERER__` global name and the names it exposes.
 - The `'Ast'` registry key — no rename. User TSX that exports a component named `Ast` (e.g. `~/docs/demo-playground/elliot/slide.tsx`) continues to override the document root.
 - Elliot's demos in `~/docs/demo-playground/elliot/` — including `slide.tsx`'s `export const Ast = …`, which keeps working because the registry key is preserved.
@@ -222,7 +312,7 @@ import {
 };
 ```
 
-**Surface researched.** A grep across `~/docs/demo-playground/elliot/` confirms the names actually destructured at runtime today are `renderChildren` (`html.tsx`, `kanban.tsx`, `drag.tsx`), `renderNode` (`slide.tsx`, `html.tsx`), and `Block` (`comment.tsx`). Type names (`BlockNode`, `InlineNode`, `NodeArgs`, `SpanInline`, `ParaBlock`, …) appear in `comment.tsx` but `babel-preset-typescript` erases them at transpile, so they don't need runtime values. The leaf components (`Para`, `Str`, …) are exposed for users who want to compose with them, matching today's accidental-but-relied-on availability via the wholesale spread.
+**Surface researched.** A grep across `~/docs/demo-playground/elliot/` confirms the names actually destructured at runtime today are `renderChildren` (`html.tsx`, `kanban.tsx`, `drag.tsx`), `renderNode` (`slide.tsx`, `html.tsx`), `Block` (`comment.tsx`), and `blockStyle` (`drag.tsx`). All four are in the explicit object literal above (`blockStyle` via the `blockStyle, inlineStyle` line). Type names (`BlockNode`, `InlineNode`, `NodeArgs`, `SpanInline`, `ParaBlock`, …) appear in `comment.tsx` but `babel-preset-typescript` erases them at transpile, so they don't need runtime values. The leaf components (`Para`, `Str`, …) are exposed for users who want to compose with them, matching today's accidental-but-relied-on availability via the wholesale spread.
 
 `renderChildrenRegistry` and `RegistryContext` are deliberately excluded — they are framework internals; if a future demo needs them, that's a deliberate API extension, not a side effect of `import *`.
 
@@ -252,6 +342,7 @@ Before starting the framework split proper, run a single ~30-minute check on a t
 - If `npm run build:all` passes, the rename is safe and the framework extraction step in 2pre proper proceeds with confidence.
 - If it fails because slide-side's `Inline` union loses the `Math` discriminant (slide-side's local `MathInline` doesn't exist on the imported `InlineNode`), that confirms the §"Slide-side type compatibility" addition is on target — add `MathInline` to the framework union as planned and re-check.
 - If it fails because slide-side's `Quoted` discriminant narrows from `{ t: string }` (slide-side line 66) to `{ t: 'SingleQuote' | 'DoubleQuote' }` (framework form) and that surfaces somewhere — the runtime check in `renderInline` is fine (compares to `'SingleQuote'` literally), but if a function-boundary type-check rejects the narrowing, capture the site and either widen at the boundary or accept the narrower type. Same family of safe-narrowing fix as `MathInline`.
+- If it fails because slide-side's `Math` discriminant narrows from `{ t: string }` (slide-side line 65) to `{ t: 'DisplayMath' | 'InlineMath' }` (framework form) and that surfaces somewhere — the runtime check in `renderInline` at `ReactAstSlideRenderer.tsx:892` is fine (`mathType.t === 'DisplayMath'` is a literal compare), parallel to the `Quoted` case above. If a function-boundary type-check rejects the narrowing, same fix.
 - If it fails for any *other* reason — e.g. structural mismatch at `splitByHeaders` / `extractSections` / `flattenBlocks` boundaries because the unions don't unify cleanly — the failure pinpoints where a cast or union widening is needed. Capture the diagnosis in the plan; resolve as part of 2pre's framework extraction.
 
 The goal of pre-flight is to eliminate the TypeScript-narrowing risks that survive review — everything else in 2pre is mechanical splitting and string-substitution work that `npm run build:all` will catch in real time during implementation.
@@ -293,10 +384,12 @@ No new tests. Adding tests for the moved code is Plan 2A's / 2B's concern (when 
 | Update `ReactRenderer.tsx` imports | ~3 |
 | Update `public/ast-renderer.html` `<script src>` | ~1 |
 | Drop dispatcher `?? componentRegistry` fallbacks (4 dispatcher sites + `Ast` prop default + `RegistryContext` default change) | ~6 |
+| Add typed format-registry contracts (`AstProps`, `AstComponent`, `DispatcherComponent`, `FormatRegistry` in `framework/types.ts`; one annotation each on `componentRegistry`) | ~12 |
+| Fix `renderChildrenRegistry.Figure` (Bugs A/B/C); update q2-debug's `Figure` to a one-line wrapper | ~15 |
 | Replace wholesale `__REACT_AST_DEBUG_RENDERER__` spread with explicit object | ~30 |
 | Delete `transpileAndImportTSX` and supporting top-level imports in `tsxTranspiler.ts` | -50 |
 | Documentation sweep (`render_components.qmd` path updates incl. line-51 fix, claude-notes grep) | ~30 (path-only edits across multiple docs) |
-| Delete `ReactAstRenderer.tsx` | -270 |
+| Delete `ReactAstRenderer.tsx` | -344 |
 | Delete `ReactAstDebugRenderer.tsx` (after carve-up; should be empty) | -600 (offsets the moves above; net is structural relocation) |
 | **Net behavior change** | **0** |
 

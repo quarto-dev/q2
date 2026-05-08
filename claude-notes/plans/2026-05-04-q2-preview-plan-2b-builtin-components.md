@@ -130,7 +130,9 @@ The gate is correctness-level: atomic content's source AST and rendered output d
 
 ##### `framework/dispatch.tsx` — CustomBlock / CustomInline traversal
 
-Add entries to `renderChildrenRegistry` (which lives in `framework/dispatch.tsx` after Plan 2pre's collapse) for `CustomBlock` and `CustomInline` so child traversal works for slot contents. The gate above ensures atomic children don't get a usable `setLocalAst`.
+Add entries to `renderChildrenRegistry` (which lives in `framework/dispatch.tsx` after Plan 2pre's collapse, framework-internal) for `CustomBlock` and `CustomInline` so child traversal works for slot contents. The gate above ensures atomic children don't get a usable `setLocalAst`.
+
+These two new entries are *generic* — they iterate slots without per-type knowledge. The type-aware logic lives in the registered component (`Callout`, `Theorem`, …), which reads its named slots and calls `renderSlot(...)` from `q2-preview/utils.ts`. **`renderChildrenRegistry` does not grow per custom-node type.** A new custom-node type adds *one* entry in `customNodeRegistry` (per-format, keyed by `type_name`) and *zero* entries in `renderChildrenRegistry`. The framework table has Pandoc-base-type entries plus exactly two abstract-category entries (`'CustomBlock'`, `'CustomInline'`) — no further entries are anticipated. See 2pre §"`renderChildrenRegistry` is framework-internal" for the contract this preserves.
 
 Also extend `blockTypes` to include `'CustomBlock'`. `Node`'s isBlock test already routes via this array, so the addition is a one-line change.
 
@@ -240,6 +242,8 @@ export function Figure({ node }: { node: FigureBlock }) {
 ```
 
 Crossref-numbered captions (`Figure 1: …`) are already baked into the caption blocks by `CrossrefResolveTransform` (in q2-preview's pipeline at `pipeline.rs:881, :977`); q2-preview gets that for free.
+
+This component renders body blocks via `<Block />` and reads `c[1][1]` directly for the caption — it does **not** call `renderChildren(args)` for the figure as a whole. That avoids any interaction with `renderChildrenRegistry.Figure`, which was rewritten in 2pre to render only `c[2]` (the main body) and to drop the buggy short-caption / `// TODO:` interleaving. Either pattern is correct after 2pre; this component happens to slot blocks individually for the caption hairsplit.
 
 ##### `q2-preview/custom/` — type-specific CustomNode components
 
@@ -389,7 +393,7 @@ Round-trip property: `unwrap(rewrap(x)) === x` and `wrap(unwrap(wireDiv)) === wi
 
 - `framework/types.ts` — `BlockNode`, `InlineNode`, `PandocAST`, `Attr`, `Slot`, `CustomBlockNode` placeholder (filled in 2B).
 - `framework/RegistryContext.tsx` — exported context with `sourceInfoPool` (added by 2A).
-- `framework/Ast.tsx`, `framework/dispatch.tsx` (the consolidated recursion-and-render module from 2pre — houses `Node`, `renderChildren`, `renderNode`, `blockTypes`) — used unchanged from 2A; 2B modifies `Node` (atomic gate) and adds `CustomBlock`/`CustomInline` entries to `renderChildrenRegistry`, plus extends `blockTypes` with `'CustomBlock'`. All inside `dispatch.tsx`.
+- `framework/Ast.tsx`, `framework/dispatch.tsx` (the consolidated recursion-and-render module from 2pre — houses `Node`, `renderChildren`, `renderNode`, `blockTypes`, and the framework-internal `renderChildrenRegistry`) — used unchanged from 2A; 2B modifies `Node` (atomic gate) and adds `CustomBlock`/`CustomInline` entries to `renderChildrenRegistry`, plus extends `blockTypes` with `'CustomBlock'`. All inside `dispatch.tsx`. The mutations to `renderChildrenRegistry` are framework-evolves-itself changes — the structure is not exposed via `framework/index.ts` or any format global. See 2pre §"`renderChildrenRegistry` is framework-internal" for the contract.
 - `q2-preview/PreviewIframe.tsx`, `q2-preview/PreviewContext.tsx`, `q2-preview/registry.ts` skeleton, `q2-preview/entry.tsx` — extended by 2B with leaves and CustomNode components.
 - `hub-client/public/q2-preview.html` — unchanged.
 - `hub-client/src/types/sourceInfo.ts`, `hub-client/src/utils/sourceInfo.ts`, `hub-client/src/utils/atomicCustomNodes.ts` — read by the framework dispatcher gate.
