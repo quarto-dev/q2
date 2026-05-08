@@ -8,3 +8,4 @@ export {
     BlockComponents, InlineComponents, AstRenderer,
 } from './components';
 export { q2DebugRegistry } from './registry';
+export { Q2DebugIframe } from './Q2DebugIframe';
