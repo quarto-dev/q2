@@ -45,6 +45,18 @@ pub mod templates;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod post_render_upgrade;
 
+// L9 RSS feed generation (`bd-o90m`). The submodule itself is
+// declared unconditionally so the (forthcoming) link-inject
+// transform — which has no native-only dependencies and runs on
+// both native and WASM — is reachable from both pipeline builders.
+// The internals of `feed/` apply their own cfg gates: most files
+// (binding, stage, complete, reader_ext, templates) live under
+// `#[cfg(not(target_arch = "wasm32"))]` because they depend on
+// `imagesize` / `scraper` / file I/O. See
+// `claude-notes/plans/2026-05-08-listings-L9-rss-feeds.md`
+// §"Module gate granularity".
+pub mod feed;
+
 pub use config::{
     ColumnType, FeedType, GridItemAlign, ImageAlign, Listing, ListingCategoriesMode,
     ListingContents, ListingFeedOptions, ListingFilter, ListingSort, ListingType, SortDirection,

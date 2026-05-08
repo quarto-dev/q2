@@ -24,9 +24,12 @@ hex = "0.4"
 glob = "0.3"
 # `time` for date formatting (used by L1 ListingItemInfoStage; see
 # claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md §D12).
-# `formatting` enables `OffsetDateTime::format`; `macros` enables the
+# `formatting` enables `OffsetDateTime::format`; `parsing` enables
+# `OffsetDateTime::parse` and `Date::parse` (added in L9 for the
+# RSS feed binding's `pub_date_rfc822` field, which accepts
+# RFC 3339 / RFC 2822 / ISO date-only inputs); `macros` enables the
 # compile-time `format_description!` macro. WASM-compatible.
-time = { version = "0.3", features = ["formatting", "macros"] }
+time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
 
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
@@ -69,6 +72,15 @@ regex = "1.12"
 # that don't build for `wasm32-unknown-unknown`; gating here keeps
 # them out of the WASM tree. See plan §"scraper dep gating".
 scraper = { workspace = true }
+# `imagesize` (header-only image dimensions/MIME detection) for the L9
+# RSS feed `<media:content>` emission (`bd-o90m`). Native-only —
+# feeds are written by `quarto render`'s post_render step; the WASM
+# hub-client preview doesn't generate feeds. The crate parses image
+# headers only (no full decode) and has no wasm-incompatible deps,
+# but stays target-gated to keep the WASM bundle smaller. See
+# `claude-notes/plans/2026-05-08-listings-L9-rss-feeds.md`
+# §"Image metadata via `imagesize`".
+imagesize = "0.13"
 
 # Jupyter engine dependencies (native only)
 runtimelib = { version = "2.0", features = ["tokio-runtime"] }

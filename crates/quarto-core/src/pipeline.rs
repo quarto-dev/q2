@@ -815,6 +815,31 @@ pub fn build_transform_pipeline(
     // generate/render transforms above — when the slot lands the
     // resolved-listing data path becomes user-mutable.
     pipeline.push(Box::new(CategoriesSidebarTransform::new()));
+    // L9 (bd-o90m): emit one staged feed file per feed-configured
+    // listing on the host page. Reads `ctx.resolved_listings` and
+    // writes `<output_dir>/<dir>/<stem>.feed-{type}-staged` to disk
+    // synchronously. Native-only — the entire feed staging module
+    // is gated to `cfg(not(target_arch = "wasm32"))` (it depends on
+    // `imagesize` and synchronous `std::fs::write`, neither of
+    // which makes sense in the in-browser VFS). The
+    // `ListingFeedLinkTransform` registered just below DOES run on
+    // both targets so the rendered HTML's head metadata stays
+    // byte-for-byte identical between the CLI and hub-client preview.
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(
+        crate::project::listing::feed::ListingFeedStageTransform::new(),
+    ));
+    // L9 (bd-o90m): inject `<link rel="alternate" type="application/rss+xml">`
+    // into `rendered.includes.header` for every feed-configured
+    // listing. Runs on both native AND WASM (registered in both
+    // pipeline builders) so the rendered HTML matches between the
+    // CLI render and the hub-client preview. The link points at
+    // a feed file the hub-client doesn't write — clicking it 404s
+    // in preview, which is acceptable v1 behavior (documented in
+    // the L11 listings reference page).
+    pipeline.push(Box::new(
+        crate::project::listing::feed::ListingFeedLinkTransform::new(),
+    ));
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
