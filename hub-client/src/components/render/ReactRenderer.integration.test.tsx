@@ -2,31 +2,31 @@
  * Integration tests for `ReactRenderer`.
  *
  * Two concerns share this file because both depend on the same set of
- * module mocks (AstIframe + tsxTranspiler + slide renderers):
+ * module mocks (Q2DebugIframe + tsxTranspiler + slide renderers):
  *
  *  1. Render-components lookup (the chain that broke during the
  *     bugfix-react-components-not-loading investigation): AST meta
  *     extraction → resolveComponentPath → fileContents lookup →
- *     transpileTSX → customComponentsCode prop captured on AstIframe.
+ *     transpileTSX → customComponentsCode prop captured on Q2DebugIframe.
  *
  *  2. Format routing (Plan 1 §"Test plan" item 5): mounting with
- *     `format="q2-preview"` routes through `AstIframe` alongside
+ *     `format="q2-preview"` routes through `Q2DebugIframe` alongside
  *     `q2-debug`, while `q2-slides` does not. The dispatch lives at
  *     `ReactRenderer.tsx`'s `format === 'q2-debug' || format === 'q2-preview'`
  *     branch; these tests guard against a regression that would silently
  *     route q2-preview through `SlideAst` (which expects slide-shaped
  *     AST and would crash).
  *
- * `AstIframe` is mocked so we can capture the prop without spinning up
- * a real iframe; the routing tests check whether the mock was invoked
- * to decide which branch was taken.
+ * `Q2DebugIframe` is mocked so we can capture the prop without spinning
+ * up a real iframe; the routing tests check whether the mock was
+ * invoked to decide which branch was taken.
  *
  * `transpileTSX` is mocked because it would otherwise pull the full
  * TypeScript transpiler graph at module-init time.
  *
  * The slide renderers are mocked so the q2-slides arm is exercised
  * without pulling in `AspectRatioScaler`'s `ResizeObserver` dependency,
- * and so the negative assertion ("not AstIframe") has a positive
+ * and so the negative assertion ("not Q2DebugIframe") has a positive
  * sentinel to prove the path was actually taken.
  */
 
@@ -35,8 +35,8 @@ import { render } from '@testing-library/react';
 
 const capturedAstIframeProps: any[] = [];
 
-vi.mock('./AstIframe', () => ({
-  AstIframe: (props: any) => {
+vi.mock('./q2-debug/Q2DebugIframe', () => ({
+  Q2DebugIframe: (props: any) => {
     capturedAstIframeProps.push(props);
     return null;
   },
@@ -176,17 +176,17 @@ describe('ReactRenderer format routing', () => {
     capturedAstIframeProps.length = 0;
   });
 
-  it('routes q2-preview through AstIframe', () => {
+  it('routes q2-preview through Q2DebugIframe', () => {
     mountForRouting('q2-preview');
     expect(capturedAstIframeProps.length).toBeGreaterThan(0);
   });
 
-  it('routes q2-debug through AstIframe (regression baseline)', () => {
+  it('routes q2-debug through Q2DebugIframe (regression baseline)', () => {
     mountForRouting('q2-debug');
     expect(capturedAstIframeProps.length).toBeGreaterThan(0);
   });
 
-  it('does not route q2-slides through AstIframe', () => {
+  it('does not route q2-slides through Q2DebugIframe', () => {
     const { queryByTestId } = mountForRouting('q2-slides');
     expect(capturedAstIframeProps.length).toBe(0);
     // Positive sentinel: the slide path was actually taken.

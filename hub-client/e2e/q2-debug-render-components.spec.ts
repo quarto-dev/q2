@@ -65,7 +65,7 @@ test.describe('q2-debug render-components', () => {
       `/#/p/${localId}/file/${encodeURIComponent('render-components-reactji.qmd')}`,
     );
 
-    const iframe = page.frameLocator('iframe[src*="ast-renderer.html"]');
+    const iframe = page.frameLocator('iframe[src*="q2-debug.html"]');
     const counter = iframe.locator('[data-testid="reaction-❤️"]');
 
     await expect(counter).toBeVisible({ timeout: 30000 });

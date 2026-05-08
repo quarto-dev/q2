@@ -1,7 +1,7 @@
 import { useMemo, Component } from 'react';
 import type { ReactNode } from 'react';
 import type { FileEntry } from '../../types/project';
-import { AstIframe } from './AstIframe';
+import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
@@ -138,7 +138,7 @@ function ReactRenderer({
   }, [componentPathsKey, currentFilePath]);
 
   // Both q2-debug (raw AST view) and q2-preview (post-pipeline AST
-  // for the live preview) render through the same AstIframe — the
+  // for the live preview) render through the same Q2DebugIframe — the
   // iframe's data-shape contract is the only assumption shared, and
   // the post-pipeline AST from q2-preview is iframe-compatible (more
   // CustomNode wrappers + transformed metadata; Plan 2 ships the
@@ -156,7 +156,7 @@ function ReactRenderer({
           right: 0,
           bottom: 0,
         }}>
-          <AstIframe
+          <Q2DebugIframe
             astJson={astJson}
             currentFilePath={currentFilePath}
             onNavigateToDocument={onNavigateToDocument}
