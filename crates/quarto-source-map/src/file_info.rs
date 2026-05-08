@@ -108,9 +108,16 @@ impl FileInformation {
             self.line_breaks[row - 1] + 1 // +1 to skip past the '\n'
         };
 
-        // Count characters (not bytes) from line_start to offset
-        // This ensures the column is a character count, not a byte count
-        let column = content[line_start..offset].chars().count();
+        // Count characters (not bytes) from line_start to offset.
+        // Tree-sitter and Pandoc-source byte ranges occasionally produce
+        // offsets that land inside a multi-byte UTF-8 sequence; floor such
+        // offsets to the start of the enclosing char so the slice stays on
+        // a valid char boundary instead of panicking.
+        let mut safe_offset = offset;
+        while safe_offset > line_start && !content.is_char_boundary(safe_offset) {
+            safe_offset -= 1;
+        }
+        let column = content[line_start..safe_offset].chars().count();
 
         Some(Location {
             offset,
@@ -313,5 +320,27 @@ mod tests {
             loc.column, 12,
             "Column should be character count (12), not byte offset (14)"
         );
+    }
+
+    #[test]
+    fn test_offset_inside_multibyte_char_does_not_panic() {
+        // Regression: a byte offset that lands inside a multi-byte UTF-8
+        // sequence used to panic with "byte index N is not a char boundary".
+        // Tree-sitter and Pandoc-source byte ranges can both produce such
+        // offsets in the wild, so the function must return a valid Location
+        // (rounded down to the previous char boundary) rather than panic.
+        let content = "x ❤️ y"; // ❤ = 3 bytes (E2 9D A4), ️ = 3 bytes (EF B8 8F)
+        let info = FileInformation::new(content);
+
+        // Byte 3 is the second byte of "❤" (which spans bytes 2..5).
+        // Floor to the start of "❤" at byte 2 → 2 chars before it ("x ").
+        let loc = info.offset_to_location(3, content).unwrap();
+        assert_eq!(loc.row, 0);
+        assert_eq!(loc.column, 2);
+
+        // Byte 4 is the third byte of "❤" — also inside the same char.
+        let loc = info.offset_to_location(4, content).unwrap();
+        assert_eq!(loc.row, 0);
+        assert_eq!(loc.column, 2);
     }
 }
