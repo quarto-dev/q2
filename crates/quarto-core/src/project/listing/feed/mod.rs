@@ -17,20 +17,23 @@
 //!   feed-configured listing during Pass-2. Per-category sub-feeds
 //!   produce additional `*-<category>.feed-…-staged` files. Native-
 //!   only.
-//! - *(forthcoming)* `complete` — the `complete_staged_feeds`
-//!   post-render step that substitutes placeholders and finalizes
-//!   each staged feed into a real `.xml`. Native-only.
-//! - *(forthcoming)* `reader_ext` — the listings-RSS subset of Q1's
-//!   `readRenderedContents`: HTML-preserving first-paragraph
-//!   extraction (for `partial` feeds) and full-content extraction
-//!   with urls-to-absolute + anchor-strip (for `full` feeds). Native
-//!   only — depends on `scraper`.
-//! - *(forthcoming)* `link_inject` — the `ListingFeedLinkTransform`
-//!   that injects `<link rel="alternate" type="application/rss+xml">`
-//!   into the host page's head metadata. **Runs on both native and
-//!   WASM** so the rendered HTML is byte-for-byte identical between
-//!   the CLI and the hub-client preview, even though the linked file
-//!   is only written by `quarto render`.
+//! - **`complete`** — the `complete_staged_feeds` post-render step
+//!   (called from `WebsiteProjectType::post_render` after L7's
+//!   substitution) that substitutes the description-element
+//!   placeholders against engine-rendered sibling HTML and
+//!   finalizes each staged feed into a real `.xml`. Native-only.
+//! - **`reader_ext`** — the listings-RSS subset of Q1's
+//!   `readRenderedContents`: `extract_first_para_html` (for
+//!   `partial` feeds, with HTML preservation and anchor unwrap)
+//!   and `extract_full_contents` (for `full` feeds, with
+//!   urls-to-absolute, title-block-header removal, and local-
+//!   anchor strip). Native-only — depends on `scraper`.
+//! - **`link_inject`** — the `ListingFeedLinkTransform` that
+//!   injects `<link rel="alternate" type="application/rss+xml">`
+//!   into the host page's head metadata. **Runs on both native
+//!   and WASM** so the rendered HTML is byte-for-byte identical
+//!   between the CLI and the hub-client preview, even though the
+//!   linked file is only written by `quarto render`.
 //!
 //! Module-gate granularity: most files here sit under
 //! `#[cfg(not(target_arch = "wasm32"))]` because they pull
