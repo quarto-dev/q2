@@ -1304,9 +1304,14 @@ cargo xtask verify --skip-hub-build  # baseline before changes
 Before starting, the L9 session must record:
 
 - Current `feature/listings` HEAD hash (`cd2410fa` at
-  plan time; verify and re-record).
-- Baseline test count (post-L8 close-out: 8712 Rust
-  tests; verify and record).
+  plan time; verified at impl-start as `b8c9b8b5`
+  after committing the L9 plan doc onto the branch
+  — the worktree is branched from `b8c9b8b5`).
+- Baseline test count: **8907 workspace tests** as of
+  impl-start 2026-05-08 (via
+  `cargo nextest list --workspace --message-format=json`).
+  L9 close-out should report a delta of ≥ +35 new
+  tests.
 
 ## Pipeline-builder wiring
 
@@ -1489,14 +1494,22 @@ scopes. The transforms read from `RenderContext` and
   user-confirmed 2026-05-08, with explicit awareness of
   WASM dep gating. v1 verifies the gating with `cargo
   xtask verify` before committing.
-- **D7 (single feed-staged filename per host, qualified
-  with listing id only when multiple listings):**
-  user-confirmed 2026-05-08. The common case (one
-  listing) produces `posts.feed-full-staged`; the rare
-  case of multiple listings on one page produces
-  `posts-<listing-id>.feed-full-staged`. Avoids
-  collisions without a warning code. No `Q-12-17`
-  needed.
+- **D7 (per-listing feed; qualified filename only for
+  multi-listing pages):** user-confirmed 2026-05-08.
+  **Q1 divergence (verified at impl-start in
+  `external-sources/quarto-cli/src/project/types/website/listing/website-listing-feed.ts`):**
+  Q1 stores `feed:` on `ListingSharedOptions` (host-page
+  level) and merges items from every listing on the page
+  into a single feed. Q2's data model (L2) instead stores
+  `feed:` on each `Listing` — so we get one feed per
+  feed-configured listing. The common case (one listing
+  per host) produces the same `posts.xml` Q1 emits.
+  Multi-listing pages are a Q2-only capability and emit
+  `posts-<listing-id>.xml` per feed-configured listing.
+  No collisions; no `Q-12-17` warning needed. If a future
+  user reports they wanted Q1's merge semantics, the
+  conservative response is to add an opt-in
+  `feed-merge: true` page-level config; not in v1.
 - **D8 (no new pipes in L9):** user-confirmed 2026-05-08.
   Originally specified `date_format <fmt>`; revised at
   impl-start to "no new pipes" once it became clear the
@@ -1533,41 +1546,52 @@ watch pass.
 
 ### Preparation
 
-- [ ] Re-read `claude-notes/instructions/testing.md` and
+- [x] Re-read `claude-notes/instructions/testing.md` and
       `claude-notes/instructions/coding.md`.
-- [ ] Re-read `.claude/rules/wasm.md` (cfg gating; `?Send`
+- [x] Re-read `.claude/rules/wasm.md` (cfg gating; `?Send`
       on async traits).
-- [ ] Re-read the L7 sub-plan §"scraper dep gating" and
+- [x] Re-read the L7 sub-plan §"scraper dep gating" and
       L8 sub-plan §"WASM behavior" — L9 follows both
       precedents.
-- [ ] Confirm `feature/listings` head is the post-L8
-      merge (`cd2410fa` at plan time; verify).
-- [ ] Create the worktree at
+- [x] Confirm `feature/listings` head is the post-L8
+      merge. Verified at impl-start: branch tip is
+      `b8c9b8b5` (this plan-doc commit on top of the
+      `cd2410fa` L8 merge).
+- [x] Create the worktree at
       `.worktrees/bd-o90m-listings-rss-feeds/` per
       §"Branch / worktree". Branch
       `beads/bd-o90m-listings-rss-feeds`.
-- [ ] `npm install` in the worktree.
-- [ ] Add `.beads/redirect` per worktree rules.
-- [ ] Baseline: `cargo xtask verify --skip-hub-build
-      --skip-hub-tests`; record Rust test count.
+- [x] `npm install` in the worktree.
+- [x] Add `.beads/redirect` per worktree rules.
+- [x] Baseline: `cargo xtask verify --skip-hub-build
+      --skip-hub-tests` clean; recorded **8907 workspace
+      tests** as the baseline (via
+      `cargo nextest list --workspace --message-format=json`).
 
-### TDD phase 1 — diagnostics + dep edit + module skeleton
+### TDD phase 1 — diagnostics + dep edit (module skeleton deferred)
 
-- [ ] Write tests #1, #2 (catalog entries + WASM build
-      stays clean).
-- [ ] Add `Q-12-15` and `Q-12-16` to `error_catalog.json`.
-- [ ] Add `imagesize = "0.13"` to
+- [x] Write test #1 (`error_catalog_has_q_12_15_and_q_12_16`
+      in `crates/quarto-error-reporting/src/catalog.rs`).
+- [x] Test #2 is a build-system check, not a Rust test:
+      verified manually via
+      `cargo tree --target wasm32-unknown-unknown -p wasm-quarto-hub-client | grep imagesize`
+      (empty output) and a successful
+      `cargo build --target wasm32-unknown-unknown -p wasm-quarto-hub-client`.
+      Recorded in `claude-notes/plans/...`.
+- [x] Add `Q-12-15` and `Q-12-16` to `error_catalog.json`.
+- [x] Add `imagesize = "0.13"` to
       `crates/quarto-core/Cargo.toml` under
       `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`.
-- [ ] Create `crates/quarto-core/src/project/listing/feed/`
-      with `mod.rs` (cfg-gated `pub mod` declarations),
-      empty `binding.rs`, `stage.rs`, `complete.rs`,
-      `reader_ext.rs`, `link_inject.rs`. Empty
-      `templates/` dir with three empty `.template` files.
-- [ ] Run `cargo xtask verify` — confirm WASM build
-      succeeds and `cargo tree` shows `imagesize` is
-      NOT pulled into the WASM build.
-- [ ] Tests pass.
+- [ ] ~~Create `feed/` skeleton with empty files~~ —
+      deferred. Phase 1's goal is "the dep + diagnostic
+      edits land cleanly without breaking WASM"; the
+      empty-stub scaffold would create half-finished
+      files. Each subsequent phase creates its own
+      `feed/<file>.rs` when the test for it is written.
+- [x] Confirm WASM build succeeds and `cargo tree` shows
+      `imagesize` is NOT pulled into the WASM build.
+- [x] Tests pass: `cargo nextest run -p quarto-error-reporting`
+      → 45 passed, 0 failed.
 
 ### TDD phase 2 — *(deferred)* `date_format` pipe
 
