@@ -1399,9 +1399,11 @@ async fn render_project_active_page_to_response(
     all_diags.extend(summary.project_diagnostics);
     let warnings = diagnostics_to_json(&all_diags, &active_output.source_context);
 
-    // Pull the theme fingerprint from the summary before consuming
-    // pass1 failures below (Plan 2A item 11).
-    let theme_fingerprint_from_summary = summary.theme_fingerprint;
+    // Plan 2A item 11: theme fingerprint is captured at the
+    // pass-2 renderer level (before drain_project_scoped) and
+    // stashed on `WasmPassTwoOutput`. Surviving both website-merge
+    // and default-project-flush paths.
+    let theme_fingerprint_from_output = active_output.theme_fingerprint.clone();
 
     // Pass-1 failures for non-active-page files (bd-rqba). The
     // active page's own Pass-1 failure shortcuts above via
@@ -1438,7 +1440,7 @@ async fn render_project_active_page_to_response(
         } else {
             Some(pass1_failures)
         },
-        theme_fingerprint: theme_fingerprint_from_summary,
+        theme_fingerprint: theme_fingerprint_from_output,
     })
     .unwrap()
 }

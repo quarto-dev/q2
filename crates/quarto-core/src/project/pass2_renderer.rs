@@ -303,6 +303,14 @@ pub struct WasmPassTwoOutput {
     /// receives Project-scoped artifacts separately (Phase 5
     /// invariant).
     pub page_artifacts: ArtifactStore,
+    /// Compiled theme CSS fingerprint, recovered from the
+    /// `css:theme:<fingerprint>` Project-scoped artifact key
+    /// produced by `CompileThemeCssStage` (Plan 2A item 11).
+    /// Captured at the renderer level **before** the
+    /// `drain_project_scoped` call so the value survives both the
+    /// website-merge and default-project-flush paths. `None` if
+    /// no theme artifact was produced.
+    pub theme_fingerprint: Option<String>,
 }
 
 impl WasmPassTwoOutput {
@@ -419,6 +427,19 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         //
         // Page-scoped artifacts on `ctx.artifacts` travel back to JS
         // alongside the HTML regardless of which branch fires.
+        //
+        // Plan 2A item 11: capture the theme fingerprint **before**
+        // the drain. After drain + flush_site_libs (default-project
+        // path), the artifact is gone — neither `ctx.artifacts` nor
+        // `project_artifacts` retain it. Stashing on the output
+        // makes the value visible to both project types.
+        let theme_fingerprint = ctx
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .and_then(|(key, _)| key.strip_prefix("css:theme:"))
+            .map(|s| s.to_string());
+
         let drained = ctx.artifacts.drain_project_scoped();
         let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
         if lib_dir.is_empty() {
@@ -439,6 +460,7 @@ impl Pass2Renderer for RenderToHtmlRenderer {
             diagnostics: render_output.diagnostics,
             source_context: render_output.source_context,
             page_artifacts: ctx.artifacts,
+            theme_fingerprint,
         })
     }
 
@@ -549,6 +571,17 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         // `post_render`), no-lib-dir flushes in-place. The choice
         // is artifact-flow, not payload-flow, so HTML and q2-preview
         // share it verbatim.
+        //
+        // Plan 2A item 11: capture the theme fingerprint **before**
+        // the drain (see `RenderToHtmlRenderer::render` for the
+        // rationale).
+        let theme_fingerprint = ctx
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .and_then(|(key, _)| key.strip_prefix("css:theme:"))
+            .map(|s| s.to_string());
+
         let drained = ctx.artifacts.drain_project_scoped();
         let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
         if lib_dir.is_empty() {
@@ -569,6 +602,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             diagnostics: preview_output.diagnostics,
             source_context: preview_output.source_context,
             page_artifacts: ctx.artifacts,
+            theme_fingerprint,
         })
     }
 

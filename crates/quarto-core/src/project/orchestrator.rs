@@ -370,16 +370,6 @@ pub struct ProjectRenderSummary<O = RenderToFileResult> {
     /// non-fatal warnings (e.g. missing favicon source) — failures
     /// surface as a returned `Err` instead.
     pub project_diagnostics: Vec<DiagnosticMessage>,
-    /// Compiled theme CSS fingerprint, recovered from the
-    /// `css:theme:<fingerprint>` project-scoped artifact key
-    /// produced by `CompileThemeCssStage` (Plan 2A item 11).
-    /// `None` if no theme artifact was produced (e.g. q2-debug
-    /// renders, projects with no `theme:` YAML key).
-    ///
-    /// Surfaced here so the WASM hub-client bridge can post it on
-    /// `RenderResponse.theme_fingerprint` without needing access
-    /// to the orchestrator's private artifact store.
-    pub theme_fingerprint: Option<String>,
 }
 
 impl<O> ProjectRenderSummary<O> {
@@ -681,23 +671,11 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             )?;
         }
 
-        // Recover the theme fingerprint from the `css:theme:<fp>`
-        // artifact key. The compile-theme-css stage stores its output
-        // with this key, fingerprint-suffixed; the bytes also live
-        // under a path the post_render flushes to disk / VFS.
-        let theme_fingerprint = self
-            .project_artifacts
-            .get_by_prefix("css:theme:")
-            .first()
-            .and_then(|(key, _)| key.strip_prefix("css:theme:"))
-            .map(|s| s.to_string());
-
         Ok(ProjectRenderSummary {
             outputs,
             pass1_failures,
             pass2_failures,
             project_diagnostics,
-            theme_fingerprint,
         })
     }
 
