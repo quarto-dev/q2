@@ -7,17 +7,54 @@
 
 ## Goal
 
-Fill q2-preview's empty registry (created by Plan 2A) with real-HTML leaf components, plus the framework-level plumbing they depend on:
+Fill q2-preview's empty registry (created by Plan 2A) with real-HTML leaf components, plus the framework-level plumbing they depend on. Visual + structural parity is the target: q2-preview should render the same Bootstrap-styled HTML (same elements, same classes, same nesting where possible) as the HTML pipeline, so the compiled theme CSS produces visually-identical output. See §Design decisions "Visual + structural parity target" below for the contract.
 
 - **q2-preview's built-in registry** — every Pandoc base type rendered as real HTML (Para → `<p>`, Header → `<h1>`-`<h6>`, BulletList → `<ul>`, **Image → `<img>`**, **Figure → `<figure>` + `<figcaption>`**, etc.). Includes Pandoc gap fills (LineBlock, DefinitionList, Table family, Underline, Strikeout, Superscript, Subscript, SmallCaps, Cite, RawInline, Note).
-- **Type-specific CustomNode components** — Callout, Theorem, Proof, FloatRefTarget, Equation, CrossrefResolvedRef, IncludeExpansion. Class-compatible with Rust's HTML output so Quarto's compiled theme CSS produces matching visuals.
+- **Type-specific CustomNode components** — Callout, Theorem, Proof, FloatRefTarget, Equation, CrossrefResolvedRef, IncludeExpansion. Class-compatible AND structure-compatible with Rust's HTML output so Quarto's compiled Bootstrap-flavored theme CSS produces matching visuals without per-format CSS forks.
 - **Framework: atomic-aware gate** — framework's `Node` component (in `framework/dispatch.tsx`) gains a gate that no-ops `setLocalAst` for atomic content (Derived source_info, atomic Synthetic kinds, atomic CustomNode types). Located at the single recursion chokepoint, before each format's `Block`/`Inline` dispatcher receives `args`. Benefits both q2-debug and q2-preview automatically — neither format's dispatcher needs modification.
 - **Framework: unwrap / rewrap walks** — `framework/customNode.ts` translates between wire-format wrapper Divs/Spans and JS-native `CustomBlockNode` / `CustomInlineNode` shapes. Both formats can consume.
-- **Class-name constants module** — pinned class taxonomy mirroring Rust's HTML output, so loading Quarto's CSS produces matching visuals.
+- **Class-name constants module** — pinned Bootstrap-flavored class taxonomy mirroring Rust's HTML output, so loading Quarto's CSS produces matching visuals.
 
 q2-preview's leaf components ship as part of the **built-in registry**, not as drafts pasted into demos. The render-components override mechanism (Plan 2A item 13) still works for users who want to override q2-preview leaves; the built-ins are simply the default registry.
 
 Elliot's existing `~/docs/demo-playground/elliot/html.tsx` is the seed for q2-preview's built-in real-HTML leaves. 2B's work is to fill its base-type gaps, port it from `__REACT_AST_DEBUG_RENDERER__` to `__Q2_PREVIEW_RENDERER__`, ship it as `q2-preview/blocks/` and `q2-preview/inlines/` rather than as a single user file, and add the CustomNode components alongside.
+
+## Checklist
+
+Phases mirror the §"Estimated scope" Session A / Session B partitioning. Each item is a coherent commit-or-small-cluster of work; expand into sub-items if scope grows during implementation (per CLAUDE.md "Add new items if you discover additional work"). Cross-references point at the design-detail sections under §Scope below.
+
+### Phase 1 — Framework changes (`framework/`)
+
+- [ ] **1.1** `framework/customNode.ts` (NEW) + `framework/Ast.tsx` co-edits — implement `unwrapCustomNodes` / `rewrapCustomNodes` walks per §"`framework/customNode.ts` — unwrap / rewrap walks" (structural JSON traversal; full block/inline wire-format asymmetry; mirrors `crates/pampa/src/{writers,readers}/json.rs::{write,read}_custom_{block,inline}`). Single commit also adds 2 lines to `framework/Ast.tsx`: call `unwrapCustomNodes(ast)` after `JSON.parse` and extract `astContext.sourceInfoPool` onto the `RegistryContext.Provider` value (Plan 2A item 4 typed the field but didn't fill it). Includes round-trip property tests in `framework/customNode.test.ts` (node env): six concrete `type_name`s (`Callout`, `Theorem`, `Proof`, `FloatRefTarget`, `Equation`, `CrossrefResolvedRef`) plus `IncludeExpansion` placeholder; both `unwrap(rewrap(x)) ≡ x` and `rewrap(unwrap(wireDiv)) ≡ wireDiv` directions; explicit inline-CustomNode case to exercise the no-Plain-wrapper-on-inline-side asymmetry.
+- [ ] **1.2** `framework/types.ts` — add concrete `CustomBlockNode` / `CustomInlineNode` / `Slot` / `CustomNodeBase` shapes per §"`framework/types.ts` — concrete CustomNode shapes" (Plan 2pre added `MathInline` but did not stage placeholders for these — they are new).
+- [ ] **1.3** `framework/dispatch.tsx` — atomic-aware gate inside `Node` + `CustomBlock` / `CustomInline` entries in `renderChildrenRegistry` (consumed by `Fallback`, not by per-type components — see §"CustomBlock / CustomInline traversal") + extend `blockTypes` from 11 to **19 entries** (additions: `LineBlock`, `DefinitionList`, `Table`, `CustomBlock`, `BlockMetadata`, `NoteDefinitionPara`, `NoteDefinitionFencedBlock`, `CaptionBlock`). Per §"atomic-aware gate inside `Node`" and §"CustomBlock / CustomInline traversal" → "`blockTypes` extension". Includes atomic-detection tests covering all three convergence paths (Derived source_info, atomic Synthetic kinds, atomic CustomNode types).
+
+### Phase 2 — Asset manifest plumbing
+
+*Plan 2A is fully landed (commits `fe40973b` + theme follow-ups). Items 2.2 and 2.3 extend the existing `Q2PreviewIframe.tsx` and `entry.tsx`; no cross-plan ordering risk.*
+
+- [ ] **2.1** `hub-client/src/utils/vfsPaths.ts` (NEW) — extract `resolveRelativePath`, `normalizePath`, `guessMimeType` from three existing private copies (`iframePostProcessor.ts`, `iframeLinkHandlers.ts`, `ReactAstSlideRenderer.tsx`); migrate the call sites to import from the new module. Then implement `q2-preview/assetWalker.ts::buildAssetManifest` per §"Parent-side asset walker" (collect Image paths, resolve via `vfsPaths.ts`, VFS read, base64-string-keyed cache, mint/reuse blob URLs, return revocations). Two commits: helper extraction first (pure refactor), walker second. Includes `assetWalker.test.ts` covering cache hit, content-change eviction with revocation, image removal, external-URL skipping, VFS-read failure, and an N=100 stress case.
+- [ ] **2.2** `q2-preview/AssetManifestContext.tsx` (new) + `Q2PreviewIframe.tsx` walker integration — cache ref, `useMemo` keyed on `astJson + currentFilePath`, extend `UPDATE_AST` payload to `{ astJson, currentFilePath, assetManifest }`, unmount cleanup. Includes `Q2PreviewIframe` integration test asserting payload contents and unmount revocation. Per §"Manifest distribution: rides on `UPDATE_AST`" and §"`q2-preview/AssetManifestContext.tsx`".
+- [ ] **2.3** `q2-preview/entry.tsx` — destructure `assetManifest` from `UPDATE_AST` payload and forward as a `PreviewRootProps` field; `PreviewRoot` wraps `<Ast>` with `<AssetManifestContext.Provider>` alongside the existing `<PreviewContext.Provider>`. Call `rewrapCustomNodes(newAst)` inside the `setAst` callback before `postMessage({ type: 'SET_AST' })`. (Forward unwrap lives in `framework/Ast.tsx` per item 1.1, not here.) Per §"Update q2-preview entry to call rewrap before `SET_AST`".
+
+### Phase 3 — q2-preview leaf components
+
+- [ ] **3.1** `q2-preview/utils.ts` — `lookupAssetUrl`, `inlinesToPlainText`, `formatRefLabel`, `composeAttr`, `renderSlot` per §"`q2-preview/utils.ts` — shared component utilities". Required by Image (lookupAssetUrl), Theorem/Proof/etc. (formatRefLabel), and CustomNode components (renderSlot) in later phases.
+- [ ] **3.2** `q2-preview/blocks/*.tsx` — 14 Pandoc Block components (11 existing-pattern from Elliot's `html.tsx` + 3 gap fills: LineBlock, DefinitionList, Table family). Includes `Figure.tsx` per §"`q2-preview/blocks/Figure.tsx` — `<figure>` + `<figcaption>`" (renders body via `<Block />`, reads `c[1][1]` directly for caption). Plus `q2-preview/blocks/index.ts` barrel.
+- [ ] **3.3** `q2-preview/inlines/*.tsx` — 20 Pandoc Inline components (12 existing-pattern + 8 gap fills: Underline, Strikeout, Superscript, Subscript, SmallCaps, RawInline, Cite, Note). Includes `Image.tsx` per §"`q2-preview/inlines/Image.tsx` — full Pandoc semantics" (manifest consumer via `useContext(AssetManifestContext)`, no `vfsReadBinaryFile` in iframe) and `Math.tsx` per §"`q2-preview/inlines/Math.tsx` — KaTeX leaf" (near-verbatim port of Elliot's `html.tsx:259–279` with two divergences). Plus `q2-preview/inlines/index.ts` barrel.
+
+### Phase 4 — CustomNode components + registry assembly
+
+- [ ] **4.1** `q2-preview/quartoClasses.ts` — class-name constants enumerated from `crates/quarto-core/src/transforms/callout_resolve.rs`, `crates/quarto-core/src/transforms/crossref_render.rs`, `crates/pampa/src/transforms/sectionize.rs`. **First commit of Phase 4**, per §"`q2-preview/quartoClasses.ts` — class-name constants" ("The first commit of the implementation phase is the enumeration commit").
+- [ ] **4.2** `q2-preview/custom/*.tsx` — 7 type-specific CustomNode components (`Callout`, `Theorem`, `Proof`, `FloatRefTarget`, `Equation`, `CrossrefResolvedRef`, `IncludeExpansion`) keyed by the canonical `type_name` strings from `crates/quarto-core/src/crossref/mod.rs:60–92`. Plus `Fallback.tsx` registered under key `'__fallback__'` (delegates to `renderChildren` for generic slot walk). **`Equation.tsx` is a JS-side port of `crossref_render.rs::render_equation:601`** — appends `\tag{N}` from `plain_data.order.order` because q2-preview excludes `CrossrefRenderTransform`. Per §"`q2-preview/custom/`" Equation entry. Class-compatible with Rust's HTML output via `quartoClasses.ts`. Plus `q2-preview/custom/index.ts` barrel.
+- [ ] **4.3** `q2-preview/registry.ts` + `q2-preview/CustomNodeRegistryContext.tsx` (NEW) + `entry.tsx` PreviewRoot extension — assemble `previewRegistry: FormatRegistry` (Blocks + Inlines + Block/Inline dispatchers + `Ast: PreviewDocument` + `CustomBlock` / `CustomInline` dispatchers as `useContext`-reading wrapper components) and `customNodeRegistry: Record<string, ...>` (Custom + `Fallback` under `'__fallback__'`). `CustomBlockDispatcher` / `CustomInlineDispatcher` read the merged registry from `CustomNodeRegistryContext`. PreviewRoot computes `mergedCustomNodeRegistry = { ...customNodeRegistry, ...customRegistry }` (same `customRegistry` that feeds `mergedPreviewRegistry`) and provides via context. After this lands, 2A's "(not yet implemented)" muted-gray miss path stops firing for Pandoc base types, and user TSX can override either Pandoc tags or CustomNode `type_name`s. Includes vitest integration test for both override directions (Pandoc tag override + CustomNode override).
+
+### Phase 5 — Verification + demos
+
+- [ ] **5.1** Pandoc base-type gap-fill integration tests — vitest under `q2-preview.integration.test.tsx` (jsdom). One test per new gap-fill component; plus Figure body recursion, Image edge cases (manifest hit / external pass-through / `data:` pass-through / manifest miss / width-height kvs / id-classes-title / alt-text via Stringify), atomic CustomNode read-only, Derived inline read-only, generic-fallback, class-compatibility. Per §"Vitest integration tests" and §"Pandoc base-type gap-fill tests".
+- [ ] **5.2** Smoke-all q2-preview fixtures — under `crates/quarto/tests/smoke-all/q2-preview/`: `multi-element-doc.qmd` (single-doc; callout + theorem + cross-reference + equation + image), `image-with-attrs.qmd` (single-doc; real PNG asset), `multi-element-project/` (default-project with `_quarto.yml` + sibling doc; same multi-element content), and `with-render-components/` (project + small `comment.tsx` override; locks the user-override merge). All `requires_js: true` so the Playwright runner picks them up. Assertions via `_quarto.tests.q2-preview.ensureHtmlElements`. (The `PreviewIframeKind = 'q2-preview'` smoke-all infrastructure landed in Plan 2A item 12 — `previewExtraction.ts:23`.) **Project-mode fixtures are mandatory, not optional** — see §"Test-tier conventions → Project-context coverage rule".
+- [ ] **5.3** WASM integration tests (project-mode safety net) — `assetManifestProject.wasm.test.ts` and `customNodeWireFormatProject.wasm.test.ts` per §"WASM integration tests" in the test plan. Mirrors `themeFingerprint.wasm.test.ts` (Plan 2A) at the WASM-bridge layer; isolates "is the Rust→WASM JSON correct" from "are the iframe-side mocks set up right." `themeFingerprint.wasm.test.ts` itself must be preserved when `pass2_renderer.rs` is touched.
+- [ ] **5.4** Fork Elliot's demos to `~/docs/demo-playground/gordon/render-components/` per §"Fork Elliot's demos to `gordon/render-components`" — copy, rebase qmd `format` to `q2-preview` and TSX global to `__Q2_PREVIEW_RENDERER__`, prune now-built-in components, update docs (`index.qmd`, `render_components.qmd`). The override path is locked by 5.2's `with-render-components/` smoke fixture, so this item is documentation / demo polish only.
 
 ## Scope
 
@@ -34,22 +71,104 @@ export function unwrapCustomNodes(ast: PandocAST): PandocAST;
 export function rewrapCustomNodes(ast: PandocAST): PandocAST;
 ```
 
-**Forward path** (wire → render):
-1. `framework/Ast.tsx` parses `astJson`.
-2. Calls `unwrapCustomNodes(parsed)` — single tree walk that replaces wrapper Divs / Spans (identified by the `__quarto_custom_node` class) with `CustomBlockNode` / `CustomInlineNode` shapes.
-3. Walk reads `type_name` from `data-custom-type` (canonical discovery mechanism per Plan 2A §"Provided: atomicCustomNodes hand-mirror"), reads slot metadata from `data-custom-slots`, reads `plain_data` from `data-custom-data`. Strips wrapper class and `data-custom-*` kvs from `attr`; strips the `Plain` wrapper from Inline / Inlines slots; recurses into slot contents (for nested CustomNodes — Plan 8 case).
-4. After unwrap, the AST contains zero `__quarto_custom_node` references. The registry's `Div` / `Span` entries only see real Divs / Spans.
-5. The framework's `Node` dispatcher gets one new entry in its `blockTypes` array: `'CustomBlock'`.
+**Walk strategy: structural JSON-level traversal.** Both walks recursively visit every JSON object/array in the AST. The wrapper-detection criterion is purely structural (`t === 'Div' | 'Span'` AND classes contains `'__quarto_custom_node'`), so the walks do not need an AST-shape dispatch table — `Para.c`, `Header.c[2]`, `BulletList.c[i][j]`, slot contents, etc. are all reached by descending into every `c` field encountered. This avoids duplicating the per-tag knowledge already in `framework/dispatch.tsx`'s `renderChildrenRegistry`.
 
-**q2-debug input assumption.** The unwrap walk runs unconditionally inside framework's `Ast` — both formats see it. q2-debug today renders the **raw, pre-pipeline AST**, which never contains `__quarto_custom_node` wrappers (CustomNodes are produced by transforms in q2-preview's pipeline, not q2-debug's). Under that assumption, unwrap is a no-op for q2-debug and the unconditional placement is safe. **If that assumption ever changes** — e.g. q2-debug is ever pointed at post-pipeline AST — q2-debug's bordered-Div rendering would become bordered "Not registered: CustomBlock" instead, since q2-debug doesn't register CustomBlock/CustomInline. The fix at that point is to gate the unwrap call on format (move it from framework's `Ast` into each format's `'Ast'` registry component, where the format opts in). Documented here so the assumption is recoverable from the plan rather than buried in code.
+###### Forward path (wire → JS-native)
 
-**Reverse path** (setLocalAst → setAst → postMessage):
-1. Components freely propagate JS-native shapes through `setLocalAst`.
-2. Reassembly walks back up to the root `setAst` (already wired in entry.tsx).
-3. Before postMessage, `rewrapCustomNodes(ast)` walks once and rewrites JS-native CustomNodes back to wire-format Div / Span; re-adds `__quarto_custom_node` class and `data-custom-{type,slots,data}` kvs; re-wraps Inline / Inlines slots in `Plain`.
-4. Wire-format AST goes to parent.
+`unwrapCustomNodes` is called inside `framework/Ast.tsx` immediately after `JSON.parse(astJson)` and before the registry dispatches (see §"`framework/Ast.tsx` — co-edits" below). It walks the AST once and replaces every wrapper Div / Span with a `CustomBlockNode` / `CustomInlineNode` shape. After the walk, the AST contains zero `__quarto_custom_node` references — the registry's `Div` / `Span` entries only ever see real Divs / Spans.
 
-The handler change in q2-preview's entry (and q2-debug's, if/when it grows interactive editing):
+**Algorithm** (mirror of `crates/pampa/src/readers/json.rs::read_custom_block_from_div:2220` and `read_custom_inline_from_span:2358`):
+
+1. **Detection**: a node is a custom-node wrapper iff `node.t === 'Div' || node.t === 'Span'` AND `node.c[0][1]` (the classes array) contains `'__quarto_custom_node'`.
+2. **Metadata extraction** from `node.c[0][2]` (the kvs map):
+   - `type_name`: `kvs['data-custom-type']`, default `'Unknown'`.
+   - `slot_meta`: `JSON.parse(kvs['data-custom-slots'] ?? '{}')`. Maps slot name → kind string (`"Block" | "Inline" | "Blocks" | "Inlines"`).
+   - `plain_data`: `JSON.parse(kvs['data-custom-data'] ?? 'null')`.
+3. **Attr stripping**: build `attr` from the wrapper's `c[0]` minus the custom-node leakage:
+   - `id` stays.
+   - Filter `'__quarto_custom_node'` out of classes (preserves order of remaining classes).
+   - Strip `data-custom-type`, `data-custom-slots`, `data-custom-data` from kvs (preserves order of remaining entries).
+4. **Slot iteration** — walk `node.c[1]` (the wrapper's children). Each is a `Div` (block-wrapper) or `Span` (inline-wrapper) carrying `data-slot-name` in its kvs. Defensively `continue` on (mirroring reader at `:2278–2292` and `:2415–2430`):
+   - Wrong tag (non-`Div` in a block wrapper, non-`Span` in an inline wrapper).
+   - Missing `data-slot-name`.
+   - Malformed `c` shape.
+5. **Per-slot decoding** by kind. Look up the kind in `slot_meta`; default to `'Blocks'` for block wrappers and `'Inlines'` for inline wrappers (mirrors `:2298` and `:2436`):
+   - **Block wrapper, `Block` slot**: `slotContent[0]` (single block).
+   - **Block wrapper, `Inline` slot**: `slotContent[0]` is a `Plain` block; take `slotContent[0].c[0]`. The `Plain` wrapper exists because `writers/json.rs:1340` emits `[{t:'Plain', c:[inline]}]` to keep slot content typed as blocks on the wire.
+   - **Block wrapper, `Blocks` slot**: `slotContent` (the array as-is).
+   - **Block wrapper, `Inlines` slot**: `slotContent[0]` is a `Plain`; take `slotContent[0].c`.
+   - **Inline wrapper, `Inline` slot**: `slotContent[0]` (single inline). **No Plain wrapper to strip** — `writers/json.rs:1422` writes the inline directly into the slot `Span`'s content.
+   - **Inline wrapper, `Inlines` slot**: `slotContent` (the array as-is). Again, no Plain wrapper.
+   - **Inline wrapper, `Block` / `Blocks` slot**: degenerate case (Q-3-39 — block slot in inline custom node). Rust writer at `:1428` emits a placeholder `Str{c:'[block content]'}` and a diagnostic; round-trip is intentionally lossy. v1 unwrap mirrors the reader at `:2453` and treats the slot as `Inlines`.
+6. **Recursion**: after decoding a slot's contents, recurse into them so nested CustomNodes (Plan 8 case) are unwrapped too. The structural JSON walk handles this automatically — the slot-decoded value is just another subtree the walker keeps descending.
+7. **Output shape**:
+   ```ts
+   {
+     t: 'CustomBlock' | 'CustomInline',
+     type_name, slots, plain_data, attr,
+     s: <wrapper's source-info index, preserved>,
+   }
+   ```
+   The wrapper's `s` field (if present) carries the CustomNode's source_info — set at `writers/json.rs:1373`. Inner slot wrapper Divs / Spans don't have `s`; they're synthetic and disappear at unwrap.
+
+###### Reverse path (JS-native → wire)
+
+`rewrapCustomNodes` is called in `q2-preview/entry.tsx`'s `setAst` callback (and in q2-debug's, if it ever grows interactive editing) just before `postMessage({ type: 'SET_AST' })`. It walks the JS-native AST and rewrites every `CustomBlockNode` / `CustomInlineNode` back to a wire-format Div / Span.
+
+**Algorithm** (mirror of `writers/json.rs::write_custom_block:1297` and `write_custom_inline:1381`):
+
+1. **Detection**: `node.t === 'CustomBlock' || node.t === 'CustomInline'`.
+2. **Slot metadata**: build `slot_meta` by mapping each slot's `kind` to its capitalised name (`'block' → 'Block'`, etc.).
+3. **Wrapper attr**: clone `node.attr`, then:
+   - Insert `'__quarto_custom_node'` at index 0 of classes (matches `:1329` and `:1413`).
+   - Append to kvs (preserving insertion order — user kvs first, custom data-* last):
+     - `'data-custom-type': type_name`
+     - `'data-custom-slots': JSON.stringify(slot_meta)`
+     - `'data-custom-data': JSON.stringify(plain_data)` — **only emitted when** `plain_data !== null && plain_data !== undefined`, mirroring Rust's `!is_null()` guard at `:1320`.
+4. **Slot encoding** — for each `(name, slot)` in `node.slots`, emit a slot wrapper. The slot wrapper's attr is `('', [], { 'data-slot-name': name })` — empty id, empty classes, single kv:
+   - **CustomBlock**, slot wrapper is a `Div`:
+     - `Block` slot: `c: [wrapperAttr, [slot.value]]`.
+     - `Inline` slot: `c: [wrapperAttr, [{ t:'Plain', c:[slot.value] }]]`.
+     - `Blocks` slot: `c: [wrapperAttr, slot.value]`.
+     - `Inlines` slot: `c: [wrapperAttr, [{ t:'Plain', c:slot.value }]]`.
+   - **CustomInline**, slot wrapper is a `Span`:
+     - `Inline` slot: `c: [wrapperAttr, [slot.value]]`.
+     - `Inlines` slot: `c: [wrapperAttr, slot.value]`.
+     - `Block` / `Blocks` slot: not round-trippable; v1 emits a placeholder `Str{c:'[block content]'}` (mirrors `:1438`).
+5. **Outer wrapper**: emit `{ t: 'Div' | 'Span', c: [wrapper_attr, slot_wrappers], s: node.s }`.
+6. **Recursion**: recurse into slot contents before encoding so nested JS-native CustomNodes are rewrapped first.
+
+###### Order preservation
+
+- **Classes**: `'__quarto_custom_node'` is always at index 0 of the wire wrapper's classes; user classes follow in their original order.
+- **Kvs**: user kvs first (in their original order), then `data-custom-type`, `data-custom-slots`, `data-custom-data` appended last in that order. Plain JS objects with string keys preserve insertion order in modern engines (V8, JSC, SpiderMonkey), so `Record<string, string>` is sufficient — no `Map` needed.
+- **Slots**: slot iteration order is preserved across unwrap → rewrap so `slot_meta` JSON and the slot wrapper sequence match the original wire format.
+
+###### Round-trip property
+
+For every CustomNode shape that appears in q2-preview's pipeline output:
+
+- `unwrap(rewrap(jsNative)) ≡ jsNative` — JS-native fixed point.
+- `rewrap(unwrap(wireDiv)) ≡ wireDiv` — wire-format fixed point (structural equality, not byte-identical: `JSON.stringify` may differ in whitespace from Rust's serializer, but the parsed shape is identical).
+
+Rust-side anchors at `crates/pampa/src/writers/json.rs:3893` (block — Callout with Inlines+Blocks slots, plain_data object), `:3960` (inline — Tooltip with Inlines slot), `:4023` (preserves user attr — id, classes, kvs). JS-side property tests cover the same three plus the cases the Rust tests don't exercise: single-`Block` slot, single-`Inline` slot in a CustomBlock, empty slots, nested custom-in-custom (Plan 8 case).
+
+###### `framework/Ast.tsx` — co-edits
+
+Two minimal changes inside `Ast.tsx` are folded into the customNode.ts commit:
+
+1. After `JSON.parse(astJson)`, call `ast = unwrapCustomNodes(ast)`.
+2. Extract `(ast as any).astContext?.sourceInfoPool` and put it on the `RegistryContext.Provider` value (the field was typed by Plan 2A item 4 but is not yet filled). The atomic gate in `Node` reads this via `useContext(RegistryContext).sourceInfoPool` — see §"atomic-aware gate inside `Node`" below.
+
+Both edits are ~2 lines each and live in the same commit so the unwrap call and pool wiring don't appear in inconsistent intermediate states.
+
+###### q2-debug input assumption
+
+The unwrap walk runs unconditionally inside framework's `Ast` — both formats see it. q2-debug today renders the **raw, pre-pipeline AST**, which never contains `__quarto_custom_node` wrappers (CustomNodes are produced by transforms in q2-preview's pipeline, not q2-debug's). Under that assumption, unwrap is a no-op for q2-debug and the unconditional placement is safe. **If that assumption ever changes** — e.g. q2-debug is ever pointed at post-pipeline AST — q2-debug's bordered-Div rendering would become bordered "Not registered: CustomBlock" instead, since q2-debug doesn't register CustomBlock/CustomInline. The fix at that point is to gate the unwrap call on format (move it from framework's `Ast` into each format's `'Ast'` registry component, where the format opts in). Documented here so the assumption is recoverable from the plan rather than buried in code.
+
+###### setLocalAst → setAst handler
+
+In q2-preview's entry (and q2-debug's, if/when it grows interactive editing):
 
 ```ts
 setAst={(newAst) => {
@@ -62,7 +181,7 @@ setAst={(newAst) => {
 
 ##### `framework/types.ts` — concrete CustomNode shapes
 
-The placeholder `CustomBlockNode` / `CustomInlineNode` discriminants in `framework/types.ts` (added by Plan 2pre) get filled in:
+Add concrete `CustomBlockNode` / `CustomInlineNode` / `Slot` / `CustomNodeBase` shapes to `framework/types.ts` (Plan 2pre added `MathInline` to the inline union but did not stage placeholders for these — they are new):
 
 ```ts
 import type { Attr, BlockNode, InlineNode } from './types';
@@ -132,9 +251,25 @@ The gate is correctness-level: atomic content's source AST and rendered output d
 
 Add entries to `renderChildrenRegistry` (which lives in `framework/dispatch.tsx` after Plan 2pre's collapse, framework-internal) for `CustomBlock` and `CustomInline` so child traversal works for slot contents. The gate above ensures atomic children don't get a usable `setLocalAst`.
 
-These two new entries are *generic* — they iterate slots without per-type knowledge. The type-aware logic lives in the registered component (`Callout`, `Theorem`, …), which reads its named slots and calls `renderSlot(...)` from `q2-preview/utils.ts`. **`renderChildrenRegistry` does not grow per custom-node type.** A new custom-node type adds *one* entry in `customNodeRegistry` (per-format, keyed by `type_name`) and *zero* entries in `renderChildrenRegistry`. The framework table has Pandoc-base-type entries plus exactly two abstract-category entries (`'CustomBlock'`, `'CustomInline'`) — no further entries are anticipated. See 2pre §"`renderChildrenRegistry` is framework-internal" for the contract this preserves.
+These two new entries are *generic* — they iterate slots without per-type knowledge. **The standard render path does not call them**: per-type components (`Callout`, `Theorem`, …) drive their own slot rendering via `renderSlot` from `q2-preview/utils.ts`, which builds `<Node>` instances directly. **The actual consumer is `Fallback`** (the `'__fallback__'` entry in `customNodeRegistry`) — it has no per-type slot knowledge and delegates to `renderChildren({ node: customNode })` for generic walk-and-render, which routes through these registry entries. Any future generic walker (debug introspection, AST-shape diagnostics) that calls `renderChildren` on a CustomNode will hit the same path.
 
-Also extend `blockTypes` to include `'CustomBlock'`. `Node`'s isBlock test already routes via this array, so the addition is a one-line change.
+**`renderChildrenRegistry` does not grow per custom-node type.** A new custom-node type adds *one* entry in `customNodeRegistry` (per-format, keyed by `type_name`) and *zero* entries in `renderChildrenRegistry`. The framework table has Pandoc-base-type entries plus exactly two abstract-category entries (`'CustomBlock'`, `'CustomInline'`) — no further entries are anticipated. See 2pre §"`renderChildrenRegistry` is framework-internal" for the contract this preserves.
+
+###### `blockTypes` extension
+
+Extend `blockTypes` from its current 11 entries to **19 entries** total. Today's array (`framework/dispatch.tsx:29`) is:
+
+```ts
+['Para', 'Plain', 'Header', 'CodeBlock', 'BulletList', 'OrderedList', 'BlockQuote', 'Div', 'HorizontalRule', 'RawBlock', 'Figure']
+```
+
+Add 8 entries:
+
+- **In-scope new leaves** (rendered by 2B's `q2-preview/blocks/`): `'LineBlock'`, `'DefinitionList'`, `'Table'`.
+- **Post-unwrap discriminator**: `'CustomBlock'`. After `unwrapCustomNodes`, custom-block wrapper Divs become `t: 'CustomBlock'`; without this entry `Node` would misroute them to the `Inline` dispatcher.
+- **Out-of-scope but defensively-routed-as-block**: `'BlockMetadata'`, `'NoteDefinitionPara'`, `'NoteDefinitionFencedBlock'`, `'CaptionBlock'`. These tags can appear in the AST (per `crates/pampa/src/writers/json.rs:1242, :1251, :1257, :1263`); without `blockTypes` membership they'd be misclassified as inlines and the format's `Inline` dispatcher would render the "(not yet implemented)" placeholder. With `blockTypes` membership the format's `Block` dispatcher renders the placeholder correctly. The §Defensive variants list below stays unchanged — these tags continue to fall through to the muted-gray placeholder in v1.
+
+`Node`'s `isBlock` test already routes via this array, so the addition is a single 8-element extension.
 
 #### Asset manifest plumbing (parent walker + iframe distribution)
 
@@ -146,10 +281,11 @@ Per Plan 2A §"Provided: blob-URL asset contract," image bytes flow as blob URLs
 
 ```ts
 // hub-client/src/components/render/q2-preview/assetWalker.ts
+import { resolveRelativePath, guessMimeType } from '../../../utils/vfsPaths';
 
 export interface ManifestCacheEntry {
   url: string;
-  contentHash: string;
+  contentB64: string;  // the base64 string used as the cache identity (see "Cache key" below)
 }
 
 export interface AssetManifestResult {
@@ -162,7 +298,7 @@ export interface AssetManifestResult {
  * mints (or reuses cached) blob URLs, and returns a manifest plus
  * the list of URLs that should be revoked.
  *
- * The cache (caller-owned) memoizes by `(resolvedPath, contentHash)`
+ * The cache (caller-owned) memoizes by `(resolvedPath, contentB64)`
  * so unchanged image content keeps the same blob URL across re-renders
  * — browsers cache fetched blob URLs internally, so reuse is free.
  */
@@ -177,17 +313,22 @@ export function buildAssetManifest(
   const seenKeys = new Set<string>();
 
   for (const origPath of imagePaths) {
-    const resolved = resolvePath(currentFilePath, origPath);
+    const resolved = stripLeadingSlash(resolveRelativePath(currentFilePath, origPath));
     const result = vfsReadBinaryFile(resolved);
     if (!result.success || !result.content) continue;
-    const contentHash = hashBytes(result.content);
-    const cacheKey = `${resolved}\0${contentHash}`;
+
+    // Cache key: base64 content is itself the identity. vfsReadBinaryFile
+    // returns base64-encoded bytes (per iframePostProcessor.ts:206), and
+    // identical bytes always produce identical base64 — so the base64
+    // string is a collision-free, synchronous content fingerprint.
+    // Cost: ~133KB per 100KB image held in cache; ~6.6MB for a 50-image doc.
+    const cacheKey = `${resolved}\0${result.content}`;
     seenKeys.add(cacheKey);
 
     let entry = cache.get(cacheKey);
     if (!entry) {
-      const blob = base64ToBlob(result.content, mimeFromPath(resolved));
-      entry = { url: URL.createObjectURL(blob), contentHash };
+      const blob = base64ToBlob(result.content, guessMimeType(resolved));
+      entry = { url: URL.createObjectURL(blob), contentB64: result.content };
       cache.set(cacheKey, entry);
     }
     manifest[origPath] = entry.url;
@@ -205,11 +346,48 @@ export function buildAssetManifest(
 
   return { manifest, revoked };
 }
+
+// ~5-line helper, local to assetWalker.ts:
+function base64ToBlob(b64: string, mime: string): Blob {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  return new Blob([bytes], { type: mime });
+}
 ```
 
 `Q2PreviewIframe` owns the cache as a ref, calls `buildAssetManifest` once per `UPDATE_AST` cycle (via `useMemo` keyed on `astJson + currentFilePath`), and revokes everything on iframe unmount.
 
+**Cache key rationale.** The base64 string returned by `vfsReadBinaryFile` is a deterministic 1-to-1 encoding of the underlying bytes — there's no need for a separate hash. SHA-256 via `crypto.subtle.digest` would force the walker async (breaking the `useMemo` pattern Plan 2A item 6 specifies); FNV-1a or Murmur3 in pure JS would collide marginally and cost ~10 LOC for no benefit when the base64 is already in hand. If memory pressure ever becomes a problem (say the user uploads a 50MB image), revisit then.
+
 External URLs (`http://`, `https://`, `data:`, `//`) are skipped during the walk — `collectImagePaths` filters them out so the manifest only contains project-relative paths.
+
+**`stripLeadingSlash` helper**: `resolveRelativePath` returns paths starting with `/` (absolute-from-project-root convention), but the VFS stores paths without the leading slash (per `iframePostProcessor.ts:201`). One-line strip kept local to `assetWalker.ts` rather than baked into `vfsPaths.ts` because other consumers of the helper want the leading slash.
+
+##### `hub-client/src/utils/vfsPaths.ts` — extract shared helpers
+
+`resolveRelativePath`, `guessMimeType`, and `normalizePath` are duplicated three times today as private functions in `iframePostProcessor.ts:329, 343, 356` and partially in `iframeLinkHandlers.ts:116, 123` (`resolveRelativePath` + `normalizePath`; no `guessMimeType` since link handlers don't deal with MIME types) and `ReactAstSlideRenderer.tsx:886, 900, 913`. Plan 2B's asset walker would be the fourth consumer; instead, extract to a new module and migrate the three existing call sites.
+
+**Surface**: three pure functions:
+
+```ts
+// hub-client/src/utils/vfsPaths.ts
+
+/** Resolve a relative path against the current file's directory. */
+export function resolveRelativePath(currentFile: string, relativePath: string): string;
+
+/** Normalize a path: collapse `.`, `..`, leading slash. */
+export function normalizePath(path: string): string;
+
+/** Guess a MIME type from file extension. Returns 'application/octet-stream' for unknown. */
+export function guessMimeType(path: string): string;
+```
+
+**Migration**: this is the **first commit of Plan 2B's asset-manifest cluster** (Phase 2 in the checklist). Land it before introducing `assetWalker.ts` so the new consumer reads from the canonical source. Three existing files lose their private copies and import from the new module:
+
+- `hub-client/src/utils/iframePostProcessor.ts` (lines 329, 343, 356).
+- `hub-client/src/utils/iframeLinkHandlers.ts` (lines 116 and 123 — `resolveRelativePath` and `normalizePath`).
+- `hub-client/src/components/render/ReactAstSlideRenderer.tsx` (lines 886, 913).
+
+No behavioral change; pure refactor. ~50 LOC in the new file, ~40 LOC removed across the three existing files. Net ~+10 LOC.
 
 ##### Manifest distribution: rides on `UPDATE_AST`
 
@@ -237,7 +415,42 @@ import { createContext } from 'react';
 export const AssetManifestContext = createContext<Record<string, string>>({});
 ```
 
-`PreviewRoot` (Plan 2A item 9, `q2-preview/entry.tsx`) extracts `assetManifest` from `UPDATE_AST` payload state and provides via `<AssetManifestContext.Provider value={manifest}>`. Image components consume via `useContext(AssetManifestContext)`.
+2B extends Plan 2A's top-level `updateAst(payload)` callback in `q2-preview/entry.tsx` to destructure `assetManifest` from each `UPDATE_AST` payload and forward it as a prop to `<PreviewRoot>`. `PreviewRoot`'s props (the `PreviewRootProps` interface defined in 2A item 9) grow by one field: `assetManifest: Record<string, string>`. PreviewRoot wraps the `<Ast>` mount with `<AssetManifestContext.Provider value={props.assetManifest}>` (alongside its existing `<PreviewContext.Provider>`). Image components consume via `useContext(AssetManifestContext)`.
+
+##### `q2-preview/CustomNodeRegistryContext.tsx`
+
+New file (sibling of `AssetManifestContext`). Distributes the **merged** customNodeRegistry — built-ins layered with any user-TSX overrides — to the `CustomBlock` / `CustomInline` dispatchers in `registry.ts`. See §Design decisions "User overrides win" for the design rationale.
+
+```tsx
+import { createContext } from 'react';
+import { customNodeRegistry } from './registry';
+
+export const CustomNodeRegistryContext = createContext<
+  Record<string, (props: any) => React.ReactNode>
+>(customNodeRegistry);
+```
+
+The default value is the built-in registry so the context is usable in tests that mount `<Ast>` without a wrapping `PreviewRoot`. In production, `PreviewRoot` always provides a merged value:
+
+```ts
+// inside PreviewRoot, alongside the existing AssetManifestContext.Provider:
+const mergedCustomNodeRegistry = {
+  ...customNodeRegistry,
+  ...customRegistry,  // same export bag that feeds mergedPreviewRegistry
+};
+
+return (
+  <PreviewContext.Provider value={{ currentFilePath: props.currentFilePath }}>
+    <AssetManifestContext.Provider value={props.assetManifest}>
+      <CustomNodeRegistryContext.Provider value={mergedCustomNodeRegistry}>
+        <Ast {...props} registry={mergedPreviewRegistry} />
+      </CustomNodeRegistryContext.Provider>
+    </AssetManifestContext.Provider>
+  </PreviewContext.Provider>
+);
+```
+
+The same `customRegistry` value flows into both merged maps. Disjoint namespaces (Pandoc tags vs CustomNode `type_name`s) make this unambiguous: a user export named `Image` lands meaningfully only in the Pandoc-tag map; an export named `Callout` lands meaningfully only in the CustomNode map. Exports that don't collide with either built-in are dead code (warn-or-not is up to the harness — out of scope for v1).
 
 ##### Manifest miss handling
 
@@ -291,7 +504,7 @@ Real-HTML implementations of every Pandoc Inline variant:
 | `q2-preview/inlines/SmallCaps.tsx` | `SmallCaps` (gap) | `<span style="font-variant: small-caps">` |
 | `q2-preview/inlines/RawInline.tsx` | `RawInline` (gap) | If `format === 'html'`, `dangerouslySetInnerHTML`; else `<code>` |
 | `q2-preview/inlines/Cite.tsx` | `Cite` (gap) | Visible inlines (second-position content); citations array provides metadata |
-| `q2-preview/inlines/Note.tsx` | `Note` (gap) | `<sup>[fn]</sup>` marker with hover tooltip; full footnote pane is layout chrome |
+| `q2-preview/inlines/Note.tsx` | `Note` (gap, defensive) | Defensive fallback only — see §"FootnotesTransform inclusion" below. Renders `<sup>[?]</sup>` for the `reference-location: block`/`section` cases where the Rust transform no-ops; default `document` location replaces all `Note` inlines with `Span(Sup(Link))` upstream of q2-preview's renderer. |
 
 ##### `q2-preview/inlines/Image.tsx` — full Pandoc semantics
 
@@ -329,6 +542,109 @@ export function Image({ node }: { node: ImageInline }) {
 
 The legacy `/.quarto/...` branch from `iframePostProcessor.ts:177-210` is **not** ported — q2-preview's body AST never carries `/.quarto/...` image paths (per Plan 2A §"Provided: blob-URL asset contract").
 
+##### `q2-preview/inlines/Math.tsx` — KaTeX leaf
+
+Near-verbatim port of Elliot's Math from `~/docs/demo-playground/elliot/html.tsx:259–279`. The entry already imports `katex` statically (per `q2-preview/entry.tsx:30`) and bundles `katex/dist/katex.min.css`, so the built-in component imports `katex` directly via ESM rather than reading `window.katex`:
+
+```tsx
+import { memo } from 'react';
+import katex from 'katex';
+import type { MathInline } from '../../framework/types';
+
+export const Math = memo(({ node }: { node: MathInline }) => {
+  const [{ t: mathType }, latex] = node.c;
+  const isDisplayMath = mathType === 'DisplayMath';
+  try {
+    const html = katex.renderToString(latex, {
+      displayMode: isDisplayMath,
+      throwOnError: false,
+      output: 'html',
+    });
+    return <span dangerouslySetInnerHTML={{ __html: html }} />;
+  } catch {
+    // Surface the raw LaTeX so failed parses don't vanish silently.
+    return <span>{latex}</span>;
+  }
+});
+```
+
+Three divergences from Elliot's pattern:
+
+- **Direct ESM import of `katex`** instead of reading `window.katex`. `window.katex` is set inside the entry's `loadCustomComponents` (line 126) only when `LOAD_CUSTOM_COMPONENTS` arrives; if a document has no user-TSX overrides, `window.katex` is `undefined` and Elliot's pattern would crash. The static import works in every render path. (`window.katex` is still set for user-TSX components that expect it, including users who paste Elliot's `html.tsx` to override built-ins.)
+
+  **Sandbox safety.** The iframe is sandboxed with `sandbox="allow-scripts allow-same-origin"` (per `Q2PreviewIframe.tsx:168`); the `allow-same-origin` token combined with same-origin Vite bundling means the iframe can run module scripts that import from the same origin's bundle. The static `import katex from 'katex'` resolves at iframe load time against the bundled chunk that Vite emits alongside `q2-preview.html`; no cross-origin fetch, no eval, no `data:` URI for the import. KaTeX itself runs entirely client-side without network access. Same-origin import is what makes "use the bundle, not `window.katex`" safe — without `allow-same-origin` the import would fail and we'd be forced back to the global-via-postMessage pattern.
+- Drop `console.log('katex', katex)` and `console.error` calls — let errors surface in dev tools naturally rather than as console spam.
+- Explicit `<span>{latex}</span>` fallback on the catch path. Elliot's version returns `undefined` from the `catch`, which renders as nothing — a KaTeX failure makes the equation vanish silently. Showing the raw LaTeX makes the failure visible.
+
+Used both as a registry leaf (for plain `Math` inlines outside any Equation wrapper) and as the slot-render target for `Equation.tsx` (which appends `\tag{N}` to the LaTeX before slot-dispatching — see §"`q2-preview/custom/`" below).
+
+##### Pipeline change: include `FootnotesTransform` in q2-preview
+
+Per the 2026-05-09 audit, **`"footnotes"` is removed from `Q2_PREVIEW_TRANSFORM_EXCLUDED`** at `crates/quarto-core/src/pipeline.rs:1049-1062`. This is a pipeline.rs change, not a hub-client change — listed here because q2-preview's Note.tsx behavior depends on it.
+
+**Rationale.** `FootnotesTransform` (`crates/quarto-core/src/transforms/footnotes.rs:67`) does two things:
+
+1. **Numbers footnotes** in document order and replaces each `Inline::Note` with `Span(id="fnrefN")(Sup(Link(href="#fnN", class="footnote-ref")(Str(N))))` per `:440-460`.
+2. **Builds a `Div(class="footnotes")` at the end of the document** containing an OrderedList of footnote bodies, each with a backlink to the inline reference.
+
+Both outputs use Pandoc primitives (Span, Sup, Link, Div, OrderedList) that q2-preview's blocks/inlines components already render. The transform is HTML-output-shaped only in its class names (`footnote-ref`, `footnote-back`, `footnotes`); the structural shape is generic.
+
+**Why it was originally excluded** (per `pipeline.rs:1024` comment): "synthesize-with-no-preimage." The footnotes section, the backlink arrows, and the wrapper `Span(id="fnrefN")` are constructed without source positions — future edit affordances would need atomicity to prevent corrupting source.
+
+**Why it's safe for v1 q2-preview**: q2-preview is structural rendering only ("Edit affordances ... v1 is structural-only rendering" — §Out of scope). The actual *Note content* (the user-typed footnote body) keeps its source_info; only the chrome (section wrapper, backlink) is synthesized. When edit UI ships in a later plan, the proper fix is atomicity markers on the synthesized chrome (Plan 4/6/7's territory), not excluding the transform.
+
+**Effects**:
+
+- **Note marker numbering is automatic.** No JS pre-walk needed; the transform's counter does the work upstream.
+- **`NoteDefinitionPara` and `NoteDefinitionFencedBlock` are transformed away.** §Out of scope's defensive-rendering for these tags becomes inert — they no longer reach the iframe's AST in the default (`reference-location: document`) configuration.
+- **Three new classes added to the taxonomy** (in `q2-preview/quartoClasses.ts`):
+  ```ts
+  export const FOOTNOTES = 'footnotes';
+  export const FOOTNOTE_REF = 'footnote-ref';
+  export const FOOTNOTE_BACK = 'footnote-back';
+  ```
+- **`Note.tsx` becomes a defensive fallback.** With `reference-location: document` (default) or `margin`, raw `Note` inlines never reach the iframe — they're transformed upstream. Only `reference-location: block` or `section` (where Pandoc handles footnotes natively in the writer) leaves raw Notes in place. q2-preview's `Note.tsx` renders these as `<sup>[?]</sup>` since they shouldn't normally surface; if they do, they're a configuration-level signal, not a render-quality issue.
+
+##### Pipeline change: include `AppendixStructureTransform` in q2-preview
+
+Per the 2026-05-09 audit, **`"appendix-structure"` is removed from `Q2_PREVIEW_TRANSFORM_EXCLUDED`** at `crates/quarto-core/src/pipeline.rs:1049-1062`. Same reasoning as `FootnotesTransform`: it produces output that q2-preview's components already render, and the "synthesize-with-no-preimage" exclusion rationale doesn't bite for v1 structural rendering.
+
+**What it does** (`crates/quarto-core/src/transforms/appendix.rs:9-35`): consolidates appendix-related content into a single `Div(id="quarto-appendix", class="default")` at the end of the document. Pulls in:
+
+- User-defined appendix sections (`:::{.appendix} ...`).
+- Footnotes section (from `FootnotesTransform`, now also included).
+- Bibliography section (from `CiteprocTransform` — currently not in the pipeline; this branch is inert for v1).
+- License / copyright / citation sections from `license:`, `copyright:`, `citation:` YAML metadata (each becomes a small `Div(class="section")` with an h2 header).
+
+**Why it's safe**: every output is pure Pandoc primitives (`Block::Div`, `Block::Header`, `Block::Paragraph`, `Inline::Str`, `Inline::Link`) — no `RawBlock` HTML strings. q2-preview's `Div`/`Header`/`Paragraph` components render the appendix container exactly as the HTML pipeline would, with the same `quarto-appendix` / `quarto-bibliography` / `quarto-reuse` / `quarto-copyright` / `quarto-citation` class names so theme CSS targeting matches.
+
+**Effects**:
+
+- The footnotes section moves from "loose at document end" to "nested inside `<div id="quarto-appendix">`." Visually identical to the HTML pipeline.
+- License/copyright/citation YAML metadata renders automatically without 2B touching `PreviewDocument.tsx` or the metadata pipeline.
+- New classes added to `quartoClasses.ts`:
+  ```ts
+  export const QUARTO_APPENDIX = 'quarto-appendix';      // outer container
+  export const QUARTO_BIBLIOGRAPHY = 'quarto-bibliography';
+  export const QUARTO_REUSE = 'quarto-reuse';            // license section
+  export const QUARTO_COPYRIGHT = 'quarto-copyright';
+  export const QUARTO_CITATION = 'quarto-citation';
+  ```
+
+**Bibliography note**: `AppendixStructureTransform` looks for a `<div id="refs">` (citeproc output) to fold into the appendix. `CiteprocTransform` is not in the q2-preview pipeline today (and not in the HTML pipeline either, per the audit — defer-to-Pandoc), so the bibliography branch finds nothing and skips. If/when Citeproc lands, the appendix transform automatically picks up the `<div id="refs">` it produces; no further q2-preview change needed.
+
+##### Pipeline change: `TitleBlockTransform` is **not** included (deferred)
+
+Reviewed in the 2026-05-09 audit. `TitleBlockTransform` (`crates/quarto-core/src/transforms/title_block.rs:67-74`) gates on `ctx.format.is_html()`: in HTML mode it does nothing (the HTML template generates `<header id="title-block-header">` from metadata variables); in non-HTML modes it prepends an h1 from the title metadata.
+
+q2-preview's format maps to HTML (`crates/quarto-core/src/format.rs:119`: `"q2-preview" => Some(("html", Some("preview")))`), so `should_add_h1` returns false unless the user opts into minimal-template mode. **But q2-preview bypasses the HTML template entirely** (`ApplyTemplateStage` is excluded — see `pipeline.rs` exclusion comment), so neither branch of the gate produces a title block for q2-preview: the template-generated header isn't there because there's no template, and the AST h1-injection path isn't taken because q2-preview reports `is_html()`.
+
+**Consequence**: a user document with `title: My Document` in YAML and no body `# heading` renders with no visible title in q2-preview today. (Plan 2A item 11 surfaces the title for the browser tab via metadata extraction; the body is empty.) That's a pre-existing 2A gap, not a 2B regression.
+
+**Why not just include the transform**: making `should_add_h1` return true for q2-preview requires either (a) a Rust change to gate on something other than `is_html()` — e.g. a new `template_will_run` accessor on `ctx.format` — or (b) treating q2-preview as forced-`minimal: true`, which has surface-area implications elsewhere. Either is a real Rust change with downstream effects, not a one-line deny-list edit.
+
+**Decision**: defer to a follow-up plan. Plan 2B's scope is the renderer; the title-rendering decision is upstream and worth its own plan to consider rendering options (Rust transform vs. JS-side title block in `PreviewDocument.tsx`) holistically.
+
 ##### `q2-preview/blocks/Figure.tsx` — `<figure>` + `<figcaption>`
 
 ```tsx
@@ -356,49 +672,86 @@ This component renders body blocks via `<Block />` and reads `c[1][1]` directly 
 
 ##### `q2-preview/custom/` — type-specific CustomNode components
 
+The seven concrete `type_name` strings (canonical source: `crates/quarto-core/src/crossref/mod.rs:60–92` plus `crates/quarto-core/src/transforms/callout.rs:32`):
+
+| Component | `type_name` | Producer transform |
+|---|---|---|
+| `Callout.tsx` | `"Callout"` | `CalloutTransform` |
+| `Theorem.tsx` | `"Theorem"` | `TheoremSugarTransform` |
+| `Proof.tsx` | `"Proof"` | `ProofSugarTransform` |
+| `FloatRefTarget.tsx` | `"FloatRefTarget"` | `FloatRefTargetSugarTransform` |
+| `Equation.tsx` | `"Equation"` | `EquationLabelTransform` |
+| `CrossrefResolvedRef.tsx` | `"CrossrefResolvedRef"` | `CrossrefResolveTransform` |
+| `IncludeExpansion.tsx` | `"IncludeExpansion"` | (Plan 8, dormant) |
+
+Per-component notes:
+
 - **`Callout.tsx`** — header (icon + title), body. Class-compatible with Rust's callout HTML (`callout`, `callout-{type}`, `callout-header`, `callout-title-container`, `callout-body`).
 - **`Theorem.tsx`** — labeled block with title from `formatRefLabel(kind, number, title?)`. Class-compatible with `theorem`, `theorem-title`.
-- **`Proof.tsx`** — labeled block. Class-compatible with `proof`, `proof-title`.
+- **`Proof.tsx`** — outer Div with class `proof`. **No `proof-title` class** — the label is an inline italic `<em>Proof.</em>` (or the user's title) prepended to the body's first paragraph, mirroring `render_proof` at `crates/quarto-core/src/transforms/crossref_render.rs:566–575`. Component renders `<em>Proof.</em> ` (or user title) inline at the start of the body's first paragraph.
 - **`FloatRefTarget.tsx`** — figure-like wrapper for `#fig-foo` / `#tbl-foo` content with caption.
-- **`Equation.tsx`** — Math content with optional `\tag{N}` (appended by `CrossrefIndex`); slot-renders the inner Math through `q2-preview/inlines/Math.tsx`.
+- **`Equation.tsx`** — **JS-side port of `crates/quarto-core/src/transforms/crossref_render.rs::render_equation:601`.** q2-preview's pipeline excludes `crossref-render` (listed in `Q2_PREVIEW_TRANSFORM_EXCLUDED` at `crates/quarto-core/src/pipeline.rs:1049`, entry at `:1061`), so the Equation CustomNode arrives in the iframe with the *un-tagged* DisplayMath inline still in `slots["content"]` and the equation number sitting in `plain_data.order.order`. The component:
+  1. Reads `id = node.attr[0]` (e.g. `"eq-einstein"`) and `order = node.plain_data?.order?.order` (number, optional).
+  2. Pulls the math inline out of `slots["content"]` (a single-element `Inlines`; the inline is a `MathInline` with `c: [{t:'DisplayMath'}, latex]`).
+  3. If `order` is a number, replace `latex` with `` `${latex}\\tag{${order}}` `` and rebuild the math inline with the modified text. KaTeX renders `\tag{}` natively.
+  4. Slot-render the (possibly modified) math through `q2-preview/inlines/Math.tsx`, wrapped in `<span id={id}>` for `@eq-xxx` anchor linking.
+
+  The `\tag{N}` append is JS-side because the q2-preview pipeline keeps the CustomNode wrapper for editing affordances; the HTML pipeline does the same append in Rust at `crossref_render.rs:631` and discards the wrapper.
+
 - **`CrossrefResolvedRef.tsx`** — inline CustomNode (Span wrapper). Renders the resolved reference text. Atomic — slot children do not receive `setLocalAst` (the framework gate handles this; the component itself just renders).
 - **`IncludeExpansion.tsx`** — dormant placeholder until Plan 8 produces these. Atomic per `atomicCustomNodes.ts`. v1 renders as a transparent passthrough (renders the slot blocks); registration in place from the start so when Plan 8's wrapper starts appearing in the AST, it renders correctly.
-- **Generic fallback** — `customNodeRegistry['__fallback__']` for unknown `type_name` values. Styled box with `data-custom-type` displayed and slot contents nested. Useful for extension-defined CustomNodes.
+- **`Fallback.tsx`** — registered under `customNodeRegistry['__fallback__']` for unknown `type_name` values. Styled box that displays `node.type_name` and recursively walks all slots via `renderChildren({ node })` (which routes through `renderChildrenRegistry`'s `'CustomBlock'` / `'CustomInline'` entries — see §"CustomBlock / CustomInline traversal" above). Useful for extension-defined CustomNodes that haven't shipped a per-type component yet.
 
 #### `q2-preview/registry.ts` assembly
 
 ```ts
+import { useContext } from 'react';
+import type { FormatRegistry } from '../framework/types';
 import * as Blocks from './blocks';
 import * as Inlines from './inlines';
 import * as Custom from './custom';
 import { Block, Inline } from './dispatchers';  // q2-preview's own; created in Plan 2A
 import { PreviewDocument } from './PreviewDocument';
+import { Fallback } from './custom/Fallback';
+import { CustomNodeRegistryContext } from './CustomNodeRegistryContext';
 
-export const previewRegistry: Record<string, ComponentType<any>> = {
+// CustomBlock / CustomInline dispatchers read the *merged* customNodeRegistry
+// from context (built-ins layered with any user-TSX overrides — see §Design
+// decisions "User overrides win"). Module-level lookup against the un-merged
+// `customNodeRegistry` would skip user overrides; the context indirection is
+// what makes user overrides of CustomNodes work.
+const CustomBlockDispatcher = ({ node, ...args }: any) => {
+  const merged = useContext(CustomNodeRegistryContext);
+  const Comp = merged[node.type_name] ?? merged['__fallback__'];
+  return <Comp node={node} {...args} />;
+};
+
+const CustomInlineDispatcher = ({ node, ...args }: any) => {
+  const merged = useContext(CustomNodeRegistryContext);
+  const Comp = merged[node.type_name] ?? merged['__fallback__'];
+  return <Comp node={node} {...args} />;
+};
+
+export const previewRegistry: FormatRegistry = {
   ...Blocks,
   ...Inlines,
   Block,
   Inline,
   Ast: PreviewDocument,  // q2-preview's root wrapper, registered under the 'Ast' key (no debug styling)
-  // CustomBlock and CustomInline dispatch to customNodeRegistry by type_name.
-  // These entries are q2-preview-specific — q2-debug has no customNodeRegistry
-  // and would render an unhandled CustomBlock/CustomInline as the q2-debug
-  // dispatcher's bordered "Not registered" fallback if it ever encountered one.
-  CustomBlock: ({ node, ...args }) => {
-    const Comp = customNodeRegistry[node.type_name] ?? customNodeRegistry['__fallback__'];
-    return <Comp node={node} {...args} />;
-  },
-  CustomInline: ({ node, ...args }) => {
-    const Comp = customNodeRegistry[node.type_name] ?? customNodeRegistry['__fallback__'];
-    return <Comp node={node} {...args} />;
-  },
+  CustomBlock: CustomBlockDispatcher,
+  CustomInline: CustomInlineDispatcher,
 };
 
-export const customNodeRegistry: Record<string, ComponentType<any>> = {
+// Built-in CustomNode registry. The user-merged version is computed in
+// PreviewRoot (entry.tsx) and rides through CustomNodeRegistryContext;
+// see §Design decisions "User overrides win".
+export const customNodeRegistry: Record<string, (props: any) => React.ReactNode> = {
   ...Custom,
-  __fallback__: GenericFallback,
+  __fallback__: Fallback,
 };
 ```
+
+`previewRegistry` keeps `FormatRegistry` (the typed shape from `framework/types.ts:89` that enforces `Ast`/`Block`/`Inline` keys); `customNodeRegistry` is a looser `Record<string, ...>` since its keys are dynamic `type_name` strings. The CustomBlock/CustomInline dispatchers are tiny wrapper components, not closure literals, because they need to call `useContext` (which can only run inside a React render).
 
 Plan 2A's `q2-preview/dispatchers.tsx` ships `Block` and `Inline` with the muted-gray "(not yet implemented)" miss path. 2B's leaves under `Blocks` / `Inlines` populate the registry so the miss path stops firing for Pandoc base types; CustomNodes that the user-extended registry hasn't covered fall through to the `__fallback__` component instead of the muted-gray placeholder (since `CustomBlock`/`CustomInline` keys *are* registered, just generically).
 
@@ -423,17 +776,75 @@ function renderSlot(slot, setSlot, ctx) {
 
 #### `q2-preview/quartoClasses.ts` — class-name constants
 
-Pinned class taxonomy mirroring Rust's HTML output. Long-term candidate for code-generation; v1 hand-written. Categories:
+Pinned class taxonomy mirroring Rust's HTML output. Long-term candidate for code-generation; v1 hand-written. Enumeration completed during the 2026-05-09 audit (lines below cite Rust line numbers as of that date — verify before locking the constants):
 
-- **Callout**: from `crates/quarto-core/src/transforms/callout_resolve.rs`.
-- **Theorem / Proof / FloatRefTarget / Equation / CrossrefResolvedRef**: from `crates/quarto-core/src/transforms/crossref_render.rs`.
-- **Section / Header levels**: from `crates/pampa/src/transforms/sectionize.rs`.
+```ts
+// Callout — emitted by CalloutResolveTransform (excluded from q2-preview;
+// q2-preview keeps the Callout CustomNode wrapper, but the class names
+// must match for theme CSS compatibility).
+// Source: crates/quarto-core/src/transforms/callout_resolve.rs:170,172,175,199,215,226,234
+export const CALLOUT = 'callout';
+export const CALLOUT_TYPE_PREFIX = 'callout-';            // callout-note, callout-warning, callout-tip, callout-important, callout-caution
+export const CALLOUT_APPEARANCE_PREFIX = 'callout-appearance-'; // -default, -simple, -minimal
+export const CALLOUT_COLLAPSE = 'callout-collapse';
+export const CALLOUT_HEADER = 'callout-header';
+export const CALLOUT_TITLE_CONTAINER = 'callout-title-container';
+export const CALLOUT_ICON_CONTAINER = 'callout-icon-container';
+export const CALLOUT_ICON = 'callout-icon';
+export const CALLOUT_BODY_CONTAINER = 'callout-body-container';
+export const CALLOUT_BODY = 'callout-body';
 
-The exact list is enumerated during 2B implementation by reading the referenced Rust functions. The first commit of the implementation phase is the enumeration commit.
+// Theorem / Proof — crates/quarto-core/src/transforms/crossref_render.rs:346,482,537
+export const THEOREM = 'theorem';
+export const THEOREM_TITLE = 'theorem-title';
+export const PROOF = 'proof';
+// NOTE: there is no `proof-title` class. The proof label is an inline
+// `<em>Proof.</em>` (italic), not a wrapped Span — see render_proof at
+// crossref_render.rs:534-585.
 
-#### Update q2-preview entry to use unwrap / rewrap
+// Equation — crates/quarto-core/src/transforms/crossref_render.rs:601-650
+// No specific class; preserves user attr (typically just `id="eq-..."`).
+// q2-preview's Equation.tsx wraps the Math in `<span id={id}>` with no
+// added classes, matching the Rust output.
 
-`q2-preview/entry.tsx` (created by Plan 2A) is updated to call `unwrapCustomNodes` after parsing `astJson` and `rewrapCustomNodes` before posting `SET_AST`.
+// FloatRefTarget — crates/quarto-core/src/transforms/float_ref_target.rs:240,315
+// No classes added; preserves user attr verbatim. In Rust HTML output the
+// figure subtype maps to a native `<figure>` (no class), other subtypes
+// to `<div>` (no class). Identifier carries on the `id` attribute.
+
+// CrossrefResolvedRef — crates/quarto-core/src/transforms/crossref_render.rs:707
+export const QUARTO_XREF = 'quarto-xref';
+
+// Section / level — crates/pampa/src/transforms/sectionize.rs:114
+// (Rendered by q2-preview's Div.tsx; not a CustomNode, but worth pinning
+// for class-compatibility tests.)
+export const SECTION = 'section';
+export const SECTION_LEVEL_PREFIX = 'level';  // level1, level2, ..., level6
+
+// Footnotes — emitted by FootnotesTransform (now included in q2-preview's
+// pipeline; see §"Pipeline change: include FootnotesTransform").
+// Source: crates/quarto-core/src/transforms/footnotes.rs:26-35,440-460
+export const FOOTNOTES = 'footnotes';            // outer Div(class="footnotes")
+export const FOOTNOTE_REF = 'footnote-ref';      // <a> inside the inline <sup>
+export const FOOTNOTE_BACK = 'footnote-back';    // backlink <a> inside each <li>
+
+// Appendix container — emitted by AppendixStructureTransform (now included
+// in q2-preview's pipeline; see §"Pipeline change: include AppendixStructureTransform").
+// Source: crates/quarto-core/src/transforms/appendix.rs:244-365
+export const QUARTO_APPENDIX = 'quarto-appendix';        // outer container Div
+export const QUARTO_BIBLIOGRAPHY = 'quarto-bibliography'; // bib section (inert until Citeproc)
+export const QUARTO_REUSE = 'quarto-reuse';              // license section
+export const QUARTO_COPYRIGHT = 'quarto-copyright';      // copyright section
+export const QUARTO_CITATION = 'quarto-citation';        // how-to-cite section
+```
+
+**Callout subtype values** (`callout_type` from `CalloutTransform`): `note | warning | tip | important | caution`. **Appearance values**: `default | simple | minimal`. **Theorem environment classes** for non-`thm` ref types: e.g. `lemma`, `corollary`, `proposition`, `definition` — added alongside `theorem` per `crossref_render.rs:350`. The exact set comes from the user's `crossref:` config; `quartoClasses.ts` should not hard-code the environment list.
+
+The first commit of Phase 4 ports the constants above into the file and adds compile-time tests cross-referencing Rust source line numbers in comments. This is the enumeration commit; subsequent component commits (4.2) consume these constants.
+
+#### Update q2-preview entry to call rewrap before `SET_AST`
+
+`q2-preview/entry.tsx` (created by Plan 2A) is updated to call `rewrapCustomNodes(newAst)` inside the `setAst` callback before `postMessage({ type: 'SET_AST', ast: ... })`. The forward (unwrap) direction lives in `framework/Ast.tsx` (see §"`framework/customNode.ts`" → "`framework/Ast.tsx` co-edits"); only the rewrap lives in entry.tsx.
 
 #### Fork Elliot's demos to `gordon/render-components`
 
@@ -446,7 +857,7 @@ Action items, all under `~/docs/demo-playground/gordon/render-components/` (new 
 - **Prune the now-built-in**: remove TSX files / individual exports that q2-preview ships natively after 2B. Most of `html.tsx`'s contents (Para, Header, Str, Space, Emph, Strong, Code, Link, Image, Figure, Span, Quoted, Math, Div, RawBlock, etc.) become redundant. Keep only the components that demonstrate genuine *override* behavior beyond the built-ins.
 - **Keep live demos**: `comment.tsx` (Slack-like commenting UI), `kanban.tsx` (drag-and-drop kanban), `drag.tsx` (generic drag helper), and any `slide.tsx` if applicable — these are real extensions, not gap-fillers.
 - **Update docs**: rewrite `index.qmd` and `render_components.qmd` to reference the new path, the new format, the new global, and the post-2B "what's built-in vs. what you can override" model. The originals at `~/docs/demo-playground/elliot/` stay unchanged — q2-debug demos keep working there.
-- **Confirm the override path actually works for q2-preview** end-to-end: pasting `comment.tsx` (or another genuine override) into a `format: q2-preview` doc with `render-components: [...]` should override the built-in registry's matching component name and render the user's version.
+- **Override path is locked by the `with-render-components/` smoke-all fixture** (see §"Smoke-all q2-preview fixtures") — that fixture is the automated end-to-end verification for the override merge. Manual confirmation by pasting `comment.tsx` into a doc and watching it render in the browser is no longer the gate; the smoke-all fixture is.
 
 This fork lands as part of Plan 2B's PR (or a closely-following PR) because it depends on:
 - Plan 2A's `format: q2-preview` routing and `__Q2_PREVIEW_RENDERER__` global.
@@ -460,7 +871,7 @@ This fork lands as part of Plan 2B's PR (or a closely-following PR) because it d
 - Body-classes derivation, navbar brand-fallback. Deferred per Plan 2A.
 - Quarto-specific Image extensions: `fig-align`, `fig-link`, `fig-alt`, `lightbox`, subfigures, `fig-cap-location`. Tier 3 — defer to a follow-up plan parallel to "q2-preview layout chrome."
 - `BlockMetadata` (Quarto extension, structured config blocks — not user-visible content), rendered as fallback in v1.
-- `NoteDefinitionPara`, `NoteDefinitionFencedBlock` (Quarto reference-style note definitions), rendered as fallback in v1.
+- `NoteDefinitionPara`, `NoteDefinitionFencedBlock` (Quarto reference-style note definitions): with `FootnotesTransform` now included in q2-preview's pipeline, these are transformed away upstream and don't reach the iframe in the default `reference-location: document` configuration. Only the rare `reference-location: block`/`section` cases (where Pandoc's writer handles footnotes natively) would leave them in the AST; covered by `Note.tsx`'s defensive fallback.
 
 ### Defensive variants
 
@@ -473,11 +884,37 @@ This fork lands as part of Plan 2B's PR (or a closely-following PR) because it d
 - **q2-preview/blocks/, q2-preview/inlines/, q2-preview/custom/ as a directory tree of one component per file**. Easier to navigate, override, and test than a single `html.tsx`. Barrel files (`q2-preview/blocks/index.ts` etc.) provide name-keyed re-exports for the registry.
 - **Atomic-aware gate in framework's `Node`, not in either format's `Block`/`Inline`.** Plan 2pre moves the dispatchers out of framework into format-owned files; `Node` is the only remaining cross-format chokepoint where the gate can sit once. Correctness-level concern; benefits both formats. q2-debug picks up the gate "for free."
 - **Two registries**: `componentRegistry` keyed by `node.t`, `customNodeRegistry` keyed by `type_name`. User overrides target one or the other explicitly.
+- **User overrides win — for both Pandoc tags and CustomNode types.** When a user supplies a TSX file via `render-components: [...]` that exports a name colliding with a built-in (e.g. their own `Image` shadowing the Pandoc inline, or their own `Callout` shadowing the Callout CustomNode component), the user's component shadows the built-in. The framework-as-defaults model: built-ins are a starting point users can rewire piecewise without forking the renderer.
+
+  The merge happens in two places because q2-preview has two registries with disjoint namespaces. **Pandoc tags** (`Para`, `Header`, `Image`, …) live in `previewRegistry`; **CustomNode `type_name`s** (`Callout`, `Theorem`, `Equation`, …) live in `customNodeRegistry`. The two namespaces never collide today (Pandoc tags are framework-fixed; CustomNode type_names come from Quarto transforms), so a single user-TSX export bag can feed both maps unambiguously. **Plan 2B's mechanism**: `PreviewRoot` (in `entry.tsx`) computes both merged registries from the same `customRegistry`:
+
+  ```ts
+  const mergedPreviewRegistry: FormatRegistry = {
+      ...previewRegistry,
+      ...customRegistry,        // user TSX exports
+  } as FormatRegistry;
+
+  const mergedCustomNodeRegistry: Record<string, ...> = {
+      ...customNodeRegistry,
+      ...customRegistry,        // same exports — disjoint namespaces, no conflict
+  };
+  ```
+
+  The merged customNodeRegistry rides through a new `q2-preview/CustomNodeRegistryContext.tsx` (sibling of `AssetManifestContext`), which `PreviewRoot` provides alongside the existing context providers. The `CustomBlock` / `CustomInline` registry entries (in `q2-preview/registry.ts`) become tiny wrapper components that read the merged registry via `useContext(CustomNodeRegistryContext)` rather than referencing a module-level `customNodeRegistry`.
+
+  This design preserves the existing user API — `render-components: [...]` with named exports — and adds zero ceremony for users who want to override CustomNodes. The reverse merge order (built-ins after user) would make `render-components` useless for replacing either kind of component.
 - **CustomBlock / CustomInline dispatch**: registry's `CustomBlock` / `CustomInline` entries look up `customNodeRegistry[node.type_name]` and render with `CustomNodeArgs`. The framework's `Node` dispatcher gets `'CustomBlock'` added to `blockTypes`.
 - **`html.tsx` and `custom.tsx` paste-in pattern still works** for users who want to override q2-preview's defaults. The 2B build-out makes the registry no longer require pasting to be useful.
 - **The `'Ast'` registry entry in q2-preview is minimal**: just calls `renderChildren({ node: ast, setLocalAst: setAst, ... })` with no debug wrapper. The format-specific outer wrapper (PreviewContext provider, etc.) is in `q2-preview/entry.tsx` (`PreviewRoot`), not in the registry. (The registry key `'Ast'` is shared with q2-debug — see 2pre §"What stays exactly the same"; only the registered component differs per format.)
 - **Image alt-text via Stringify**, not just `Str` filtering. Elliot's `html.tsx` had a `Str`-only filter; a real Pandoc Stringify pass handles `Emph` / `Code` / `SoftBreak` / etc. inside alt text correctly.
-- **Visual fidelity tier**: class-compatible. Same CSS class names as Rust's HTML output where the AST shape diverges. DOM structure may differ where it doesn't affect CSS.
+- **Visual + structural parity target.** q2-preview targets **Bootstrap-flavored HTML output structurally identical to the HTML pipeline's writer output** — same elements, same classes, same nesting — so Quarto's compiled theme CSS (which is Bootstrap-derived; see Plan 2A item 11's `theme.css` plumbing) produces visually-matching output without per-format CSS forks. Concretely:
+
+  - **Element parity**: `Para → <p>`, `Header → <h1>..<h6>`, `BulletList → <ul>`, `OrderedList → <ol>`, `BlockQuote → <blockquote>`, `Figure → <figure>` + `<figcaption>`, `Image → <img>`, `Code → <code>`, `CodeBlock → <pre><code>`, `Emph → <em>`, `Strong → <strong>`, `Link → <a>`, etc. — match Pandoc's HTML writer choices, not invent new ones.
+  - **Class parity**: see §"`q2-preview/quartoClasses.ts`" for the pinned Bootstrap-flavored class taxonomy (`callout`, `callout-note`, `theorem`, `theorem-title`, `quarto-xref`, `footnote-ref`, `section`, `level1`–`level6`, …). Cross-referenced to Rust source line numbers so drift is caught.
+  - **Where divergence is allowed**: when Pandoc's writer choice conflicts with React's children-as-array model (e.g. some writers use string concatenation for inline content where React composes nodes), or when Pandoc's writer relies on document-final post-processing q2-preview can't reproduce (e.g. table column-width fixup applied after HTML serialization). In those cases, prefer the smallest deviation that preserves CSS selector targets.
+  - **Where divergence is forbidden**: anywhere theme CSS targets a specific element-or-class combination. If a Bootstrap rule says `.callout > .callout-header { ... }`, the Callout component must emit a child element with class `callout-header` directly under `.callout` — not a Span nested inside another Div. Class-without-structure parity wouldn't render correctly.
+
+  **Rationale.** The previous "class-compatible; DOM may diverge" framing was permissive enough to allow divergence the theme CSS couldn't tolerate (e.g. a `<section class="callout">` instead of `<div class="callout">`, where Bootstrap's `.callout { ... }` rule still matches but child-selector rules might not). Tightening to element-and-structure parity removes that risk.
 
 ## Encode / decode / unwrap / rewrap (terminology)
 
@@ -500,13 +937,19 @@ Round-trip property: `unwrap(rewrap(x)) === x` and `wrap(unwrap(wireDiv)) === wi
 
 ### Consumed: Plans 2pre and 2A foundation
 
-- `framework/types.ts` — `BlockNode`, `InlineNode`, `PandocAST`, `Attr`, `Slot`, `CustomBlockNode` placeholder (filled in 2B).
-- `framework/RegistryContext.tsx` — exported context with `sourceInfoPool` (added by 2A).
-- `framework/Ast.tsx`, `framework/dispatch.tsx` (the consolidated recursion-and-render module from 2pre — houses `Node`, `renderChildren`, `renderNode`, `blockTypes`, and the framework-internal `renderChildrenRegistry`) — used unchanged from 2A; 2B modifies `Node` (atomic gate) and adds `CustomBlock`/`CustomInline` entries to `renderChildrenRegistry`, plus extends `blockTypes` with `'CustomBlock'`. All inside `dispatch.tsx`. The mutations to `renderChildrenRegistry` are framework-evolves-itself changes — the structure is not exposed via `framework/index.ts` or any format global. See 2pre §"`renderChildrenRegistry` is framework-internal" for the contract.
-- `q2-preview/Q2PreviewIframe.tsx`, `q2-preview/PreviewContext.tsx`, `q2-preview/registry.ts` skeleton, `q2-preview/entry.tsx` — extended by 2B with leaves, CustomNode components, asset-walker integration, and `AssetManifestContext` provider.
+Plan 2A is **fully landed** as of commits `fe40973b` (the foundation) plus follow-ups `81e48f10` and `e6381abd` (theme-fingerprint and theme-CSS-path fixes for default-project mode) and `0887a3fa` (refactored q2-preview pipeline construction to deny-list form — `Q2_PREVIEW_TRANSFORM_EXCLUDED` and `Q2_PREVIEW_STAGE_EXCLUDED`). The set of excluded transforms is unchanged from the original allow-list (still excludes `crossref-render`, `callout-resolve`, etc.); the refactor is structural only.
+
+- `framework/types.ts` — `BlockNode`, `InlineNode`, `PandocAST`, `Attr`, `MathInline` (added by 2pre); 2B adds `Slot`, `CustomNodeBase`, `CustomBlockNode`, `CustomInlineNode` (new — Plan 2pre did not stage placeholders).
+- `framework/RegistryContext.tsx` — exported context with `sourceInfoPool?` typed by 2A item 4 but **not yet filled**; 2B's Ast.tsx co-edit wires it up.
+- `framework/Ast.tsx` — extended by 2B with two minimal additions: call `unwrapCustomNodes(ast)` after `JSON.parse(astJson)`, and extract `astContext.sourceInfoPool` onto the `RegistryContext.Provider` value. Both edits live in the customNode.ts commit.
+- `framework/dispatch.tsx` (the consolidated recursion-and-render module from 2pre — houses `Node`, `renderChildren`, `renderNode`, `blockTypes`, and the framework-internal `renderChildrenRegistry`) — 2B modifies `Node` (atomic gate), adds `CustomBlock`/`CustomInline` entries to `renderChildrenRegistry`, and extends `blockTypes` from 11 to 19 entries (8 additions — see §"`blockTypes` extension" above). The mutations to `renderChildrenRegistry` are framework-evolves-itself changes — the structure is not exposed via `framework/index.ts` or any format global. See 2pre §"`renderChildrenRegistry` is framework-internal" for the contract.
+- `q2-preview/PreviewContext.tsx`, `q2-preview/dispatchers.tsx`, `q2-preview/PreviewDocument.tsx`, `q2-preview/registry.ts` skeleton — landed by Plan 2A items 7 & 8; 2B fills in the leaf and CustomNode components and rewires the registry assembly.
+- `q2-preview/Q2PreviewIframe.tsx` — landed by Plan 2A item 6. 2B's item 2.2 extends it by adding the asset-walker call (cache ref, `useMemo`, payload extension to `{ astJson, currentFilePath, assetManifest }`, unmount cleanup).  Today's `Q2PreviewIframe.tsx:115-125` posts `UPDATE_AST` with payload `{ astJson, currentFilePath }` (no manifest yet).
+- `q2-preview/entry.tsx` — landed by Plan 2A item 9. Sets `__Q2_PREVIEW_RENDERER__` at module top, registers a module-top message handler covering `LOAD_CUSTOM_COMPONENTS` / `UPDATE_AST` / `UPDATE_THEME`, and dispatches via a `PreviewRoot` component with `PreviewRootProps = { astJson, currentFilePath, onNavigateToDocument?, setAst }`. Imports `katex` statically, bundles `katex/dist/katex.min.css`, and sets `window.katex` inside `loadCustomComponents` for user TSX. **Critically**, the `setAst` callback at `entry.tsx:221-226` posts the AST to the parent verbatim — 2B's item 2.3 inserts the `rewrapCustomNodes(newAst)` call there. 2B also extends `UpdateAstPayload` (line 63-66) to include `assetManifest` and forwards it via `<AssetManifestContext.Provider>` inside `PreviewRoot`. The `mergedRegistry` spread at `entry.tsx:179-182` (`{ ...previewRegistry, ...customRegistry }`) is the encoded "user overrides win" rule — see §Design decisions.
 - `hub-client/public/q2-preview.html` — unchanged.
 - `hub-client/src/types/sourceInfo.ts`, `hub-client/src/utils/sourceInfo.ts`, `hub-client/src/utils/atomicCustomNodes.ts` — read by the framework dispatcher gate.
 - `hub-client/src/utils/iframeLinkHandlers.ts` — installed by 2A; unchanged.
+- `hub-client/src/utils/vfsPaths.ts` — **new** in 2B (extracted from three existing private copies of `resolveRelativePath` / `guessMimeType` / `normalizePath`). See §"vfsPaths.ts — extract shared helpers" above.
 
 ### Consumed: Plan 1's page-scoped image artifacts (via Plan 2A's blob-URL asset contract)
 
@@ -520,11 +963,15 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
 
 ## Open questions for implementation
 
-- **Inline-level Note rendering**: v1 renders `Note` as `<sup>[fn]</sup>` with hover tooltip. Confirm whether the marker numbering should match the Rust pipeline's numbering or just count inline order.
-- **Cite rendering**: v1 renders the visible inline content (second position). Full citation rendering with bibliography is layout chrome — out of scope.
-- **Equation tagging**: KaTeX handles `\tag` natively; confirm during implementation that the appended `\tag` survives intact through slot dispatch.
-- **Quarto Image extensions** (`fig-align`, `fig-link`, etc.): Tier 3, deferred. Document the gap explicitly so users know what's missing.
-- **`Math` component placement**: lives in `q2-preview/inlines/Math.tsx` (Pandoc base inline). Equation CustomNode wraps Math with crossref tagging; both render via the same KaTeX path.
+(All open questions from prior revisions have been resolved during 2026-05-09 audits — see "Resolved" subsection below. New open questions should be added here as they arise.)
+
+### Resolved during 2026-05-09 audits
+
+- **Equation `\tag{N}` source — resolved.** q2-preview's pipeline excludes `crossref-render` (listed in `Q2_PREVIEW_TRANSFORM_EXCLUDED` at `crates/quarto-core/src/pipeline.rs:1049`, entry at `:1061`), so the Equation CustomNode arrives in the iframe with the **un-tagged** DisplayMath inline in `slots["content"]`. The JS `Equation.tsx` component appends `\tag{N}` itself by reading `plain_data.order.order` — a JS-side port of `crates/quarto-core/src/transforms/crossref_render.rs::render_equation:601`. KaTeX renders `\tag{}` natively. See §"`q2-preview/custom/`" Equation entry.
+- **`Math` component placement — resolved.** Lives in `q2-preview/inlines/Math.tsx` (Pandoc base inline; near-verbatim port of Elliot's pattern). Used both as a registry leaf for plain `Math` inlines and as the slot-render target for `Equation.tsx`.
+- **Note marker numbering — resolved by including `FootnotesTransform`.** The transform is included in q2-preview's pipeline (removed from `Q2_PREVIEW_TRANSFORM_EXCLUDED`); it numbers footnotes in document order and replaces each `Note` with `Span(Sup(Link))`. No JS pre-walk needed. See §"Pipeline change: include `FootnotesTransform`".
+- **Cite rendering — resolved.** Render `c[1]` (the visible inlines that Pandoc fills in for the link text) via `renderChildren`; ignore `c[0]` (the citations array — metadata that future bibliography rendering can consume). One-line component. Bibliography itself is layout chrome, deferred.
+- **Quarto Image extensions (`fig-align`, `fig-link`, `fig-alt`, `lightbox`, subfigures, `fig-cap-location`) — resolved.** Silently ignore unknown Image kvs in v1 (current `Image.tsx` already passes only `width`/`height`). Document in user-facing docs that these extensions are not yet implemented in q2-preview. The `<img>` still renders correctly without them; missing fig-align is a degradation, not a failure. Future plan parallel to "q2-preview layout chrome" picks them up.
 
 ## References
 
@@ -536,26 +983,37 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
 - `crates/quarto-core/src/transforms/callout_resolve.rs` — Callout HTML structure source.
 - `crates/quarto-core/src/transforms/crossref_render.rs` — Theorem/Proof/FloatRefTarget/Equation/CrossrefResolvedRef HTML rendering.
 - `crates/pampa/src/transforms/sectionize.rs` — Section / levelN classes.
+- `crates/quarto-core/src/transforms/footnotes.rs` — Note → `Span(Sup(Link))` + `Div.footnotes` section. Now included in q2-preview's pipeline.
+- `crates/quarto-core/src/transforms/appendix.rs` — `<div id="quarto-appendix">` consolidation, license/copyright/citation sections. Now included in q2-preview's pipeline.
+- `crates/quarto-core/src/transforms/title_block.rs` — title-block injection (HTML-template-aware). **Not** included in q2-preview's pipeline; see §"Pipeline change: `TitleBlockTransform` is not included".
 
 ### hub-client side (modified by 2B)
 
-- `hub-client/src/components/render/framework/types.ts` — fill in `CustomBlockNode` / `CustomInlineNode` shapes.
-- `hub-client/src/components/render/framework/dispatch.tsx` — atomic-aware gate inside `Node`; add CustomBlock / CustomInline traversal entries to `renderChildrenRegistry`; extend `blockTypes` with `'CustomBlock'`.
+- `hub-client/src/components/render/framework/types.ts` — add concrete `CustomBlockNode` / `CustomInlineNode` / `Slot` / `CustomNodeBase` shapes.
+- `hub-client/src/components/render/framework/Ast.tsx` — call `unwrapCustomNodes` after parsing `astJson`; extract `astContext.sourceInfoPool` onto the `RegistryContext.Provider` value.
+- `hub-client/src/components/render/framework/dispatch.tsx` — atomic-aware gate inside `Node`; add CustomBlock / CustomInline traversal entries to `renderChildrenRegistry`; extend `blockTypes` from 11 to 19 entries.
 - `hub-client/src/components/render/framework/customNode.ts` (NEW) — unwrap / rewrap walks.
+- `hub-client/src/utils/vfsPaths.ts` (NEW) — extract `resolveRelativePath`, `normalizePath`, `guessMimeType` from three existing private copies.
+- `hub-client/src/utils/iframePostProcessor.ts` — drop private copies of helpers; import from `vfsPaths.ts`.
+- `hub-client/src/utils/iframeLinkHandlers.ts` — drop private copies of `resolveRelativePath` and `normalizePath`; import from `vfsPaths.ts`.
+- `hub-client/src/components/render/ReactAstSlideRenderer.tsx` — drop private copies of helpers; import from `vfsPaths.ts`.
 - `hub-client/src/components/render/q2-preview/blocks/*.tsx` (NEW) — every Pandoc Block.
-- `hub-client/src/components/render/q2-preview/inlines/*.tsx` (NEW) — every Pandoc Inline (incl. Image).
-- `hub-client/src/components/render/q2-preview/custom/*.tsx` (NEW) — type-specific CustomNode components.
+- `hub-client/src/components/render/q2-preview/inlines/*.tsx` (NEW) — every Pandoc Inline (incl. Image, Math).
+- `hub-client/src/components/render/q2-preview/custom/*.tsx` (NEW) — type-specific CustomNode components + Fallback.
 - `hub-client/src/components/render/q2-preview/registry.ts` — populate.
 - `hub-client/src/components/render/q2-preview/utils.ts` (NEW) — `lookupAssetUrl`, `inlinesToPlainText`, `formatRefLabel`, `composeAttr`, `renderSlot`.
 - `hub-client/src/components/render/q2-preview/quartoClasses.ts` (NEW) — class-name constants.
 - `hub-client/src/components/render/q2-preview/assetWalker.ts` (NEW) — `buildAssetManifest` parent-side walker.
 - `hub-client/src/components/render/q2-preview/AssetManifestContext.tsx` (NEW) — iframe-side context for manifest distribution.
-- `hub-client/src/components/render/q2-preview/Q2PreviewIframe.tsx` — call asset walker, manage URL cache and revocations, post manifest in `UPDATE_AST` payload.
-- `hub-client/src/components/render/q2-preview/entry.tsx` — call unwrap/rewrap; extract `assetManifest` from `UPDATE_AST` payload; provide via `AssetManifestContext`.
+- `hub-client/src/components/render/q2-preview/CustomNodeRegistryContext.tsx` (NEW) — iframe-side context for the merged customNodeRegistry (built-ins + user-TSX overrides). Enables user override of CustomNode components — see §Design decisions "User overrides win".
+- `hub-client/src/components/render/q2-preview/Q2PreviewIframe.tsx` — extends Plan 2A item 6 with asset walker, URL cache management, manifest in `UPDATE_AST` payload.
+- `hub-client/src/components/render/q2-preview/entry.tsx` — extends Plan 2A item 9 with rewrap before `SET_AST`, manifest extraction from `UPDATE_AST` payload, both context providers (`AssetManifestContext` + `CustomNodeRegistryContext`), and merged-registry computation (`{...customNodeRegistry, ...customRegistry}`).
+- `crates/quarto-core/src/pipeline.rs` — remove `"footnotes"` and `"appendix-structure"` from `Q2_PREVIEW_TRANSFORM_EXCLUDED:1049-1062`. Two-line change. See §"Pipeline change: include `FootnotesTransform`" and §"Pipeline change: include `AppendixStructureTransform`". `TitleBlockTransform` (`"title-block"`) stays excluded — see §"Pipeline change: `TitleBlockTransform` is not included".
 
 ### Demo files
 
 - Elliot's existing `~/docs/demo-playground/elliot/html.tsx` is the seed for the q2-preview blocks/inlines registry. Files in `q2-preview/blocks/` and `q2-preview/inlines/` adopt his approach with the gap fills enumerated above and the alt-text-via-Stringify improvement.
+- `q2-preview/inlines/Math.tsx` is a near-verbatim port of Elliot's Math at `html.tsx:259–279`. See §"`q2-preview/inlines/Math.tsx`" for the two divergences (drop console statements; explicit raw-LaTeX fallback on KaTeX error).
 
 ## Test plan
 
@@ -568,12 +1026,26 @@ Mirroring the pattern Plan 2pre established for q2-debug:
 - **smoke-all WASM** (`crates/quarto/tests/smoke-all/q2-preview/*.qmd` + `.tsx`) — declarative fixtures with `_quarto.tests.q2-preview.ensureHtmlElements`. Run by both the CLI runner (HTML output only) and the Playwright runner (iframe DOM). q2-preview fixtures use `requires_js: true` so the CLI runner skips them; the Playwright runner picks them up. Adds the third `PreviewIframeKind` (see §"Smoke-all q2-preview infrastructure" below).
 - **Playwright e2e** (`hub-client/e2e/*.spec.ts`) — imperative interaction tests for things smoke-all's declarative DSL can't fit cleanly. Used sparingly per project policy.
 
+#### Project-context coverage rule
+
+**Every WASM-path-significant feature must have at least one test covering single-doc, default-project (with `_quarto.yml`), and — where applicable — website-project (`type: website`).** This is a hard rule, not a "nice to have."
+
+The single-doc-only blind spot bit Plan 2A twice in real-browser testing despite extensive unit + integration + WASM coverage:
+
+- `81e48f10` — `theme_fingerprint` was missing from the `RenderResponse` JSON in default-project mode. The orchestrator drained Project-scoped artifacts via `flush_site_libs` for non-website projects, never merging into `project_artifacts`; my single-doc-only WASM regression test didn't exercise the orchestrator path at all.
+- `e6381abd` — q2-preview theme CSS lands at `/.quarto/project-artifacts/styles.css` for single-doc but at `quarto/quarto-theme-<fp>.css` for project mode; the iframe wrapper read the single-doc path unconditionally. Single-doc tests passed; project-mode renders silently lost the theme `<link>`.
+
+The lesson: q2-preview has **two** WASM render entry points (`render_qmd_to_response` single-doc, `render_project_active_page_to_response` project) and the project entry has an **internal default-vs-website branch** (driven by `lib_dir`/`site_libs` and the project type). The two Plan 2A bugs both crossed the single-doc-vs-project boundary, not the default-vs-website one — so for 2B "single-doc + project (one of either)" is usually sufficient coverage. Add a website-project case only when a feature plausibly behaves differently under the website pipeline (e.g. `LinkRewriteTransform` interaction). 2B's asset manifest, CustomNode unwrapping, atomic-gate detection, and render-components override path all branch on project context the same way; explicit per-branch coverage prevents the same class of bug here.
+
+When adding tests, ask: "if this feature broke only in default-project mode, would my tests catch it?" If the answer requires manual browser verification, add a fixture.
+
 The component-mount tests in the next subsection live under `hub-client/src/components/render/q2-preview/q2-preview.integration.test.tsx`, mirroring `q2-debug.integration.test.tsx`.
 
 ### Vitest integration tests (jsdom, mounting `<Ast registry={q2PreviewRegistry}>`)
 
-- **Unwrap / rewrap round-trip property**: for each known CustomNode type, `unwrap(rewrap(node)) === node` and `rewrap(unwrap(wireDiv)) === wireDiv`. Catches drift. (Pure logic; lives in `framework/customNode.test.ts` rather than the integration file — node env is fine.)
-- **Rust → JS → Rust round-trip**: build a CustomNode in Rust, wrap to JSON, ship to JS, unwrap, rewrap, ship back, decode in Rust, assert structural equality. (Cross-language; cargo nextest test on the Rust side.)
+- **Unwrap / rewrap round-trip property**: lives in `framework/customNode.test.ts` (pure logic; node env). Cover the six in-tree CustomNode `type_name`s explicitly — `"Callout"`, `"Theorem"`, `"Proof"`, `"FloatRefTarget"`, `"Equation"`, `"CrossrefResolvedRef"` — plus a v1 placeholder shape for `"IncludeExpansion"` (Plan 8). For each, assert `unwrap(rewrap(jsNative)) ≡ jsNative` and `rewrap(unwrap(wireDiv)) ≡ wireDiv`. Also include cases the Rust round-trip tests don't exercise: single-`Block` slot, single-`Inline` slot in a CustomBlock, empty slots, CustomNode-in-slot-of-CustomNode (Plan 8 shape).
+- **Inline-CustomNode-specific round-trip case**: explicitly fixture an inline CustomNode (`CrossrefResolvedRef` is the obvious choice) so the no-Plain-wrapper-on-inline-side asymmetry is exercised. The block-CustomNode round-trip won't catch it.
+- **Rust → JS → Rust round-trip**: build a CustomNode in Rust, wrap to JSON, ship to JS, unwrap, rewrap, ship back, decode in Rust, assert structural equality. (Cross-language; cargo nextest test on the Rust side. Anchors the JS algorithm against `crates/pampa/src/writers/json.rs:3893`, `:3960`, `:4023`.)
 - **Image renderer component tests**: mount `<Image>` wrapped in `<AssetManifestContext.Provider value={manifest}>` with fixtures pointing at:
   - Project-relative path (`hero.png`) with `manifest = { 'hero.png': 'blob:abc' }` — assert `<img src="blob:abc">`.
   - External URL (`https://...`) — assert pass-through; manifest is not consulted.
@@ -601,39 +1073,43 @@ The component-mount tests in the next subsection live under `hub-client/src/comp
 - **Atomic CustomNode read-only test**: render a `CrossrefResolvedRef` wrapper; assert children don't receive a usable `setLocalAst`.
 - **Derived inline read-only test**: render a Para containing inlines with `Derived` source_info (a shortcode-resolved title); confirm setLocalAst is no-op (shortcode populating a Derived entry — until Plan 6, this test uses hand-constructed pool entries).
 
+### WASM integration tests (project-mode safety net)
+
+These tests live in `hub-client/src/services/*.wasm.test.ts` and drive `wasm.render_page_in_project` directly. They isolate "is the Rust→WASM bridge correct" from "are the iframe-side mocks set up right." They are the safety net for the project-context coverage rule above. Pattern follows `themeFingerprint.wasm.test.ts` (commits `81e48f10` + `e6381abd`).
+
+- **`assetManifestProject.wasm.test.ts`**: render a `_quarto.yml`-rooted project doc with `![](hero.png)`, real PNG bytes via `vfs_add_file('/project/hero.png', ...)`. Assert the response's `ast_json` contains an `Image` node with `target.0 === "hero.png"` (paths preserved unchanged through the q2-preview pipeline). Then exercise the parent walker (`buildAssetManifest`) against the parsed AST + `currentFilePath="/project/index.qmd"`. Assert the manifest contains `{ "hero.png": "blob:..." }`. Catches default-project `currentFilePath` resolution bugs analogous to Plan 2A's theme path mismatch.
+- **`customNodeWireFormatProject.wasm.test.ts`**: render a `_quarto.yml`-rooted project doc containing a callout (`::: {.callout-note} body :::`). Assert the response's `ast_json` contains a `Div` with `__quarto_custom_node` in its classes and `data-custom-type=Callout` in its kvs. This catches drift between Gordon's deny-list refactor (`Q2_PREVIEW_TRANSFORM_EXCLUDED`) and what `unwrapCustomNodes` will see — if `callout-resolve` ever falls out of the exclusion list, the callout becomes plain HTML and unwrap finds nothing.
+- **`themeFingerprint.wasm.test.ts`** (already exists, **must remain**): locks Plan 2A's `theme_fingerprint` field on `RenderResponse` and the dual-write of theme CSS to `styles.css` for both single-doc and project modes. When 2B's asset-manifest plumbing modifies `pass2_renderer.rs` for `WasmPassTwoOutput` field additions or new artifact handling, do not delete or weaken this test.
+
 ### Pandoc base-type gap-fill tests (vitest integration)
 
 - One per new component (LineBlock, DefinitionList, Table family, Underline, Strikeout, Superscript, Subscript, SmallCaps, RawInline, Cite, Note). Render representative AST node, snapshot DOM.
 - **Table family integration**: render a real markdown pipe table through q2-preview pipeline, assert `<table>` / `<thead>` / `<tbody>` structure with correct cell alignment classes.
 
-### Smoke-all q2-preview infrastructure (one-time extension)
+### Smoke-all q2-preview infrastructure (landed in Plan 2A item 12)
 
-The smoke-all infrastructure on main today supports `'html' | 'q2-debug'` preview iframe kinds (commits `059dfeab` + `7102c10e` + `3ab7e1c4`). Extend it to a third kind, `'q2-preview'`:
-
-- `hub-client/e2e/helpers/previewExtraction.ts` — `PreviewIframeKind` union grows `'q2-preview'`; `previewIframeSelector` returns `'iframe[src*="q2-preview.html"]'` for the new kind. Mirror of the q2-debug extension.
-- `hub-client/e2e/helpers/smokeAllDiscovery.ts` — fixture format allow-list grows `'q2-preview'`.
-- `hub-client/e2e/smoke-all.spec.ts` — dispatch on the q2-preview kind (skip diagnostic-fetching, target the q2-preview iframe).
-
-Bundle this with Plan 2A item 12 (the format-dispatch update) so the third kind lands the same time q2-preview routes through `Q2PreviewIframe`. ~10 LOC across three files.
+The `PreviewIframeKind = 'html' | 'q2-debug' | 'q2-preview'` extension landed as part of Plan 2A item 12 (commit `fe40973b`). `hub-client/e2e/helpers/previewExtraction.ts:23` and the dispatch in `smoke-all.spec.ts` are in place. Plan 2B's only remaining smoke-all work is the fixtures themselves (next subsection).
 
 ### Smoke-all q2-preview fixtures (replaces the original "browser smoke" tests)
 
 Under `crates/quarto/tests/smoke-all/q2-preview/`:
 
-- **`multi-element-doc.qmd`** + supporting assets. One callout, one theorem, one cross-reference, one equation, one embedded image. Frontmatter assertion via `_quarto.tests.q2-preview.ensureHtmlElements` checks each component's expected class set is present in the rendered iframe DOM. Successor to the original Plan 2B test 1.
-- **`image-with-attrs.qmd`** + a real PNG asset. Single Image with `![alt](hero.png){width=400}`. Asserts `<img>` rendered with `src^="blob:"` (substring match for the blob-URL prefix produced by the parent walker), `width="400"`, and the alt-text content. Successor to the original Plan 2B test 2.
+- **`multi-element-doc.qmd`** (single-doc) + supporting assets. One callout, one theorem, one cross-reference, one equation, one embedded image. Frontmatter assertion via `_quarto.tests.q2-preview.ensureHtmlElements` checks each component's expected class set is present in the rendered iframe DOM. Successor to the original Plan 2B test 1.
+- **`image-with-attrs.qmd`** (single-doc) + a real PNG asset. Single Image with `![alt](hero.png){width=400}`. Asserts `<img>` rendered with `src^="blob:"` (substring match for the blob-URL prefix produced by the parent walker), `width="400"`, and the alt-text content. Successor to the original Plan 2B test 2.
+- **`multi-element-project/`** (project-mode) — directory containing `_quarto.yml` (default project type, no website chrome) + `index.qmd` mirroring the multi-element-doc content + a sibling `notes.qmd` so the orchestrator's pass-1 indexes more than one file. Same `ensureHtmlElements` assertions as `multi-element-doc.qmd`. **This fixture is what enforces the project-context coverage rule for 2B's smoke layer** — without it the project pass-2 renderer path (`pass2_renderer.rs::RenderToPreviewAstRenderer`) goes untested at the smoke level, exactly the blind spot that hid Plan 2A's theme bugs. Also includes a project-mode `![](hero.png)` to exercise the asset-manifest walker against the project's `currentFilePath` resolution.
+- **`with-render-components/`** (project-mode override safety net) — directory containing `_quarto.yml` + `index.qmd` with `format: q2-preview` and `render-components: [overrides.tsx]` + a small `overrides.tsx` exporting **two** components — one Pandoc-tag override (`Para` rendering as `<p class="my-para">`) and one CustomNode override (`Callout` rendering as `<div class="my-callout">`). Asserts both fire: the iframe contains `.my-para` (not just default `<p>`) and `.my-callout` (not the built-in `.callout` class). Tests both branches of the merged-registry mechanism (`mergedPreviewRegistry` for Pandoc tags, `mergedCustomNodeRegistry` for CustomNode types — see §Design decisions "User overrides win"). Replaces the manual end-to-end confirmation in §"Fork Elliot's demos".
 
-Both fixtures use `requires_js: true` (commit `3ab7e1c4`'s feature) so the CLI smoke-all runner skips them and the Playwright runner picks them up. No imperative Playwright spec files needed; the existing `smoke-all.spec.ts` runner discovers them automatically.
+All four fixtures use `requires_js: true` (commit `3ab7e1c4`'s feature) so the CLI smoke-all runner skips them and the Playwright runner picks them up. No imperative Playwright spec files needed; the existing `smoke-all.spec.ts` runner discovers them automatically.
 
-These fixtures cover the iframe boot path, blob-URL minting through the real VFS, manifest distribution to the iframe, and the end-to-end browser path (parent walker → manifest postMessage → context provider → `Image` lookup → `<img src="blob:...">`). The component-level class/text/attr assertions mostly land in vitest integration above; smoke-all's job is the integration safety net, not the per-component checks.
+These fixtures cover the iframe boot path, blob-URL minting through the real VFS, manifest distribution to the iframe, the end-to-end browser path (parent walker → manifest postMessage → context provider → `Image` lookup → `<img src="blob:...">`), **both single-doc and default-project render paths**, and the `render-components` override merge. The component-level class/text/attr assertions mostly land in vitest integration above; smoke-all's job is the integration safety net, not the per-component checks.
 
 ## Dependencies
 
-### Hard dependencies
+### Hard dependencies (all landed)
 
-- **Plan 2pre** — directory restructure. 2B's framework changes (atomic-aware gate inside `Node`, customNode.ts, types.ts CustomNode shapes, CustomBlock entries in `renderChildrenRegistry`, all in `framework/dispatch.tsx`) reference paths and structures Plan 2pre establishes.
-- **Plan 2A** — q2-preview surface scaffolding. 2B fills the registry skeleton 2A creates; consumes PreviewContext, registry barrel, entry.tsx.
-- **Plan 1** — pipeline + format detection (already shipped).
+- **Plan 2pre** ✅ — directory restructure. 2B's framework changes (atomic-aware gate inside `Node`, customNode.ts, types.ts CustomNode shapes, CustomBlock entries in `renderChildrenRegistry`, all in `framework/dispatch.tsx`) reference paths and structures Plan 2pre establishes.
+- **Plan 2A** ✅ — q2-preview surface scaffolding (commit `fe40973b` plus theme follow-ups `81e48f10`, `e6381abd`, and pipeline-construction refactor `0887a3fa`). 2B fills the registry skeleton 2A creates; consumes PreviewContext, registry barrel, entry.tsx, Q2PreviewIframe.tsx.
+- **Plan 1** ✅ — pipeline + format detection.
 
 ### Soft / activation dependencies
 
@@ -645,10 +1121,10 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2B; they
 
 ## Risk areas
 
-- **Round-trip correctness in unwrap / rewrap.** The two functions must be exact mirrors of each other and of Rust's `write_custom_block` / `read_custom_block_from_div`. Property tests catch drift.
-- **`CrossrefResolvedRef` Span vs Div wrapper handling**. Inline CustomNode, wire-format wraps in Span. Unwrap / rewrap walks must handle both wrappers uniformly.
-- **Math (KaTeX) inside Equation CustomNode**. Tagged equations need to round-trip cleanly through KaTeX. The smoke-all q2-preview multi-element fixture is the safety net.
-- **Drift between Rust's HTML output and our React rendering**. Class-compatible commitment, not DOM-equivalent. Where DOM differs, CSS may need adjustment.
+- **Round-trip correctness in unwrap / rewrap.** The two functions must be exact mirrors of each other and of Rust's `write_custom_block` / `read_custom_block_from_div`. Property tests at `customNode.test.ts` catch drift; Rust-side anchor tests at `writers/json.rs:3893, :3960, :4023` lock the wire format.
+- **Wire-format Plain-wrapper asymmetry between block and inline CustomNodes.** The block wrapper (`Div`) wraps `Inline` / `Inlines` slots in `Plain` blocks (writer at `:1340, :1351`); the inline wrapper (`Span`) does **not** (writer at `:1422, :1425`). Unwrap and rewrap have separate code paths for the two wrappers; a single "always strip Plain" or "always wrap in Plain" implementation would be wrong for one side. Test fixtures must explicitly exercise inline CustomNodes (`CrossrefResolvedRef`) to catch this — pure block-CustomNode round-trips won't.
+- **Equation `\tag{N}` is appended in JS, not Rust.** q2-preview's pipeline excludes `CrossrefRenderTransform`, so `Equation.tsx` ports the `\tag{N}` append from `crossref_render.rs:631` into JS. KaTeX renders `\tag{}` natively; the smoke-all q2-preview multi-element fixture is the safety net for the end-to-end render. Risk: future changes to `crossref_render.rs::render_equation` (e.g. different tag format, added wrapping span attributes) won't propagate to JS automatically — keep the §"`q2-preview/custom/`" Equation entry's `crossref_render.rs:601` line reference current.
+- **Element-and-structure drift between Rust's HTML output and React rendering.** §Design decisions "Visual + structural parity target" pins q2-preview to Bootstrap-flavored HTML matching Pandoc's writer choices (element + class + nesting). Drift surfaces in two ways: (a) a React component picks the wrong element (e.g. `<section>` instead of `<div>` for a Section), making child-selector CSS rules miss; (b) a component emits the right element with the right class but at the wrong nesting depth (e.g. caption under figure instead of inside it), making descendant-combinator CSS rules miss. Neither is caught by class-name unit tests — both need element-and-structure assertions. Mitigation: §"Class-compatibility test" in §Test plan extends to element-structure assertions (assert `<figure>` nesting, `<callout>` direct-child class membership, etc.); the smoke-all `multi-element-doc.qmd` fixture's `ensureHtmlElements` selectors include element selectors (e.g. `figure > figcaption`, `div.callout > div.callout-header`) so theme-CSS-relevant structure is locked.
 - **`__quarto_custom_node` class polluting rendered DOM after user override**. Resolved by design: unwrap is the single forward-path conversion, runs before any registry dispatch. The `Div` registry slot only sees real Divs.
 - **Class-taxonomy enumeration completeness**. First implementation commit enumerates classes from the named Rust source files. Mitigation: cross-check against actual q2-preview demo renders.
 - **Image alt-text edge cases**: Stringify pass must handle every Pandoc inline that can appear in alt context; missing one degrades alt to empty. Test coverage explicitly walks the inline taxonomy.
@@ -660,31 +1136,41 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2B; they
 
 | Component | Lines (rough) |
 |---|---|
-| Framework: `customNode.ts` (unwrap + rewrap) | ~160 |
+| Framework: `customNode.ts` (unwrap + rewrap, structural JSON walk, block/inline asymmetry) | ~220 |
 | Framework: `types.ts` CustomNode shapes | ~60 |
+| Framework: `Ast.tsx` co-edits (call `unwrapCustomNodes`, extract `sourceInfoPool` from astContext) | ~5 |
 | Framework: atomic gate inside `Node` (`framework/dispatch.tsx`) + tests | ~50 |
-| Framework: CustomBlock/CustomInline entries in `renderChildrenRegistry` (in `dispatch.tsx`) + `blockTypes` extension | ~30 |
+| Framework: CustomBlock/CustomInline entries in `renderChildrenRegistry` + `blockTypes` extension (8 entries) | ~50 |
+| `hub-client/src/utils/vfsPaths.ts` (NEW; extract `resolveRelativePath`/`normalizePath`/`guessMimeType`) + 3 call-site migrations | ~+10 net (~50 new, ~40 deleted) |
 | q2-preview/blocks/*.tsx (14 files; 11 existing-pattern + 3 gap fills) | ~250 |
-| q2-preview/inlines/*.tsx (20 files; 12 existing-pattern + 8 gap fills) | ~220 |
-| q2-preview/custom/*.tsx (7 files + fallback) | ~360 |
+| q2-preview/inlines/*.tsx (20 files; 12 existing-pattern + 8 gap fills + Math) | ~220 |
+| q2-preview/custom/*.tsx (7 files + Fallback; Equation grows ~30 LOC for JS-side `\tag{N}` port) | ~390 |
 | q2-preview/utils.ts (lookupAssetUrl, inlinesToPlainText, formatRefLabel, composeAttr, renderSlot) | ~110 |
 | q2-preview/quartoClasses.ts | ~80 |
-| q2-preview/registry.ts assembly | ~50 |
-| q2-preview/entry.tsx unwrap/rewrap + assetManifest extraction + provider wiring | ~25 |
-| q2-preview/assetWalker.ts (parent-side walker, cache, revocation) | ~120 |
+| q2-preview/registry.ts assembly (CustomBlock/CustomInline as `useContext`-reading wrappers) | ~60 |
+| q2-preview/CustomNodeRegistryContext.tsx (NEW) + PreviewRoot merge + provider wiring | ~25 |
+| q2-preview/entry.tsx rewrap (in `setAst` callback) + assetManifest extraction + both context providers | ~25 |
+| q2-preview/assetWalker.ts (parent-side walker, cache via base64 string, revocation) | ~110 |
 | q2-preview/AssetManifestContext.tsx | ~15 |
 | Q2PreviewIframe.tsx walker integration (cache ref, useMemo, payload extension, unmount cleanup) | ~30 |
-| Tests (round-trip, component snapshots, atomic, Derived, Image edge cases, asset walker, Q2PreviewIframe integration) | ~360 |
-| Smoke-all q2-preview infrastructure (PreviewIframeKind extension, discovery, dispatch) | ~10 |
-| Smoke-all q2-preview fixtures (multi-element-doc.qmd, image-with-attrs.qmd + assets) | ~50 |
-| **Total** | **~1980** |
+| `crates/quarto-core/src/pipeline.rs` — remove `"footnotes"` and `"appendix-structure"` from `Q2_PREVIEW_TRANSFORM_EXCLUDED` | ~2 |
+| Tests (round-trip, component snapshots, atomic, Derived, Image edge cases, asset walker, Q2PreviewIframe integration, customNode override) | ~410 |
+| WASM integration tests (assetManifestProject.wasm.test.ts + customNodeWireFormatProject.wasm.test.ts) | ~80 |
+| Smoke-all q2-preview infrastructure (PreviewIframeKind extension — bundled with Plan 2A item 12) | ~10 |
+| Smoke-all q2-preview fixtures (4 fixtures: multi-element-doc + image-with-attrs single-doc, multi-element-project + with-render-components project-mode + assets) | ~120 |
+| **Total** | **~2255** |
 
 Larger than the original Plan 2B's ~1190 LOC because Image / Figure (originally in Plan 2A item 8) plus the explicit Pandoc base-type leaves plus the asset-manifest plumbing (added 2026-05-09) are now in 2B's scope. Reasonable for two focused sessions:
 
-- **Session A**: Framework changes (customNode.ts, types.ts, dispatcher gate, renderChildren entries) + asset-manifest plumbing (assetWalker.ts, AssetManifestContext.tsx, Q2PreviewIframe.tsx integration, entry.tsx provider wiring) + q2-preview/blocks + q2-preview/inlines (incl. Image, Figure, Math, gap fills). Verifies end-to-end rendering of basic Quarto docs with image bytes flowing as blob URLs.
+- **Session A**: Framework changes (customNode.ts + Ast.tsx co-edits, types.ts, dispatcher gate, renderChildren entries, blockTypes extension) + asset-manifest plumbing (vfsPaths.ts extraction first, then assetWalker.ts, AssetManifestContext.tsx, Q2PreviewIframe.tsx integration, entry.tsx provider wiring) + q2-preview/blocks + q2-preview/inlines (incl. Image, Figure, Math, gap fills). Verifies end-to-end rendering of basic Quarto docs with image bytes flowing as blob URLs.
+  - **Sub-ordering**: customNode.ts and the Ast.tsx co-edits land in a single commit (the unwrap call and `sourceInfoPool` wiring are tightly coupled — a half-state would route un-unwrapped Divs to the format dispatcher).
+  - **Sub-ordering**: vfsPaths.ts extraction is the first commit of the asset-manifest cluster, so assetWalker.ts can import the canonical helpers. Pure refactor, no behavior change; reviews fast.
 - **Session B**: q2-preview/custom + utils + quartoClasses + registry assembly + tests. Visual parity for callouts / theorems / cross-references.
+  - **Sub-ordering**: quartoClasses.ts (the enumeration commit) lands first; per §"`q2-preview/quartoClasses.ts`", the class taxonomy must be pinned before consuming components are written.
 
-Risk: Table family is the highest-effort single component (~80 LOC). Budget extra time. Asset walker has a lot of test surface (cache hit/miss, revocation, externals filtering); budget time for those tests in Session A.
+Risk: Table family is the highest-effort single component (~80 LOC). Budget extra time. Asset walker has a lot of test surface (cache hit/miss, revocation, externals filtering); budget time for those tests in Session A. Equation's JS-side `\tag{N}` port is also non-trivial (~30 LOC mirroring `crossref_render.rs:601`).
+
+**Cross-plan ordering**: Plan 2A is fully landed (`fe40973b` + follow-ups `81e48f10` + `e6381abd` + `0887a3fa`). Plan 2B can start immediately. The smoke-all `PreviewIframeKind = 'q2-preview'` extension that 5.2 depends on landed in 2A item 12; verified at `hub-client/e2e/helpers/previewExtraction.ts`.
 
 ## Notes
 
@@ -706,3 +1192,59 @@ Risk: Table family is the highest-effort single component (~80 LOC). Budget extr
   - Risk areas: added blob-URL revocation timing, manifest-AST atomicity, manifest-miss masquerading.
   - Estimated scope: ~1750 → ~1980 LOC (added ~150 LOC for walker, context, integration, and walker tests; saved ~10 LOC by simplifying utils).
   - Rationale: aligns with Plan 2A's unified asset-transport architecture (URL strings on the wire, bytes only on the parent). Maps cleanly onto a future service-worker swap-in: replace the parent walker + manifest with SW request interception, and `<img src>` semantics in the iframe stay unchanged.
+- **2026-05-09 (downstream of 2A research follow-ups)**: 2A's `PreviewRoot` was restructured to be narrowly scoped (`PreviewContext.Provider` + link handlers + `<Ast>` mount only — theme handling moved to module-top in `entry.tsx` to fix a postMessage race). 2B's `AssetManifestContext` extension fits the same prop-forwarding pattern: 2A's top-level `updateAst(payload)` callback destructures `assetManifest` from the payload and forwards as a prop. PreviewRoot wraps the `<Ast>` mount with `<AssetManifestContext.Provider>` alongside the existing `<PreviewContext.Provider>`. No structural change to 2B; the §"AssetManifestContext.tsx" prose was tightened to reference 2A's now-explicit `PreviewRootProps` interface instead of the looser "extracts from payload state" phrasing.
+
+- **2026-05-09 (audit pass against current sources)**: comprehensive review of plan claims against `crates/pampa/src/{readers,writers}/json.rs`, `crates/quarto-core/src/{pipeline.rs,crossref/mod.rs,transforms/}`, and the post-2pre `hub-client/src/components/render/` tree. Substantive changes:
+  - **§`framework/customNode.ts`** rewritten with full algorithm (~80-line spec, structural JSON-level walk per design decision, block/inline asymmetry made explicit). Key correction: the wire format wraps `Inline` / `Inlines` slots in a `Plain` block **only** for block CustomNodes (`Div` outer); inline CustomNodes (`Span` outer) embed inlines directly with no Plain wrapper. The previous "strips the Plain wrapper from Inline / Inlines slots" blanket rule was wrong for the inline side.
+  - **Unwrap location moved out of `entry.tsx` into `framework/Ast.tsx`** to match the plan's "both formats see it" claim. Only `rewrapCustomNodes` lives in entry.tsx now (in the `setAst` callback). `Ast.tsx` gains a 2-line co-edit alongside `sourceInfoPool` extraction (Plan 2A item 4 typed the field but didn't fill it).
+  - **`blockTypes` extension is 8 entries, not 1**: gap-fill leaves (`LineBlock`, `DefinitionList`, `Table`), the `CustomBlock` post-unwrap discriminator, and four defensively-routed-as-block tags (`BlockMetadata`, `NoteDefinitionPara`, `NoteDefinitionFencedBlock`, `CaptionBlock`). Without these the format's `Inline` dispatcher would render the placeholder.
+  - **Equation `\tag{N}` is JS-side, not Rust-side**: q2-preview's pipeline excludes `CrossrefRenderTransform`, so `Equation.tsx` ports `crossref_render.rs:601` into JS. The original Open Question framing ("confirm `\tag` survives slot dispatch") was mis-framed — `\tag` was never appended on the Rust side for q2-preview.
+  - **`Math.tsx`** subsection added — near-verbatim port of Elliot's `html.tsx:259–279` with two divergences (no console statements; explicit raw-LaTeX fallback on KaTeX error).
+  - **`hub-client/src/utils/vfsPaths.ts`** extracted as a first commit — `resolveRelativePath`, `normalizePath`, `guessMimeType` had three near-duplicate private copies; consolidate to one canonical module before the asset walker introduces a fourth consumer.
+  - **Asset walker cache key** changed from `hashBytes(content)` (algorithm unspecified) to the base64 string itself — `vfsReadBinaryFile` returns base64, identical bytes → identical base64, no hash needed, fully synchronous (compatible with the `useMemo` pattern Plan 2A item 6 specifies).
+  - **`Fallback`** name canonicalized — pseudocode alternated between `GenericFallback` and `__fallback__`. Symbol is `Fallback`, file is `Fallback.tsx`, registry key is `'__fallback__'`.
+  - **CustomNode `type_name` enumeration**: six concrete strings (`"Callout"`, `"Theorem"`, `"Proof"`, `"FloatRefTarget"`, `"Equation"`, `"CrossrefResolvedRef"`) plus `"IncludeExpansion"` (Plan 8 dormant) — round-trip property test now lists them explicitly.
+  - **`renderChildrenRegistry['CustomBlock'|'CustomInline']` consumer pinned**: `Fallback`. Per-type components (Callout, Theorem, …) drive their own slot rendering via `renderSlot`; the framework registry entries are the generic-walk fallback.
+  - **`previewRegistry` typed `FormatRegistry`** (matches existing `q2-preview/registry.ts`); `customNodeRegistry` stays `Record<string, ...>` since its keys are dynamic.
+  - **Cross-plan ordering** for Plan 2A's unchecked items (6, 9, 12) made explicit in §Multi-plan contracts and §Sequencing.
+  - Estimated scope: ~1980 → ~2130 LOC (primarily customNode.ts grows ~60 LOC for the full algorithm, `q2-preview/custom/` grows ~30 LOC for Equation's `\tag{N}` port, vfsPaths.ts adds ~+10 LOC net, blockTypes extension and Ast.tsx co-edits add ~25 LOC, tests grow ~40 LOC for inline-CustomNode and asymmetry coverage).
+
+- **2026-05-09 (post-Plan-2A audit + open-question research)**: Plan 2A landed (`fe40973b` + follow-ups). Re-audit confirmed all 2B assumptions hold against the as-shipped 2A surface. Refinements:
+  - **"User overrides win"** pinned in §Design decisions, citing the encoded merge order at `q2-preview/entry.tsx:179–182` (`{ ...previewRegistry, ...customRegistry }` — user TSX shadows built-ins for colliding keys).
+  - **Class taxonomy enumerated up front** in §"`q2-preview/quartoClasses.ts`". Pinned constants for Callout (10 names + subtype/appearance prefixes), Theorem (`theorem`, `theorem-title`), Proof (`proof` only — **no `proof-title`**, the label is an inline `<em>`), Equation (no class — preserves user attr), FloatRefTarget (no class — preserves user attr), CrossrefResolvedRef (`quarto-xref` Link), Section (`section`, `level1..6`). Cross-referenced to Rust line numbers in `crates/quarto-core/src/transforms/{callout_resolve,crossref_render,float_ref_target}.rs` and `crates/pampa/src/transforms/sectionize.rs`.
+  - **Proof component fixed**: dropped the spurious `proof-title` class. The Proof CustomNode renders as `<div class="proof"><p><em>Proof.</em> ...body...</p></div>` per `crossref_render.rs:566–575`.
+  - **`plain_data.order.order` access path verified**: `crossref_index.rs:280–289` writes `plain_data.order = { section: [...], order: n }` for every numbered crossref CustomNode (Theorem, Proof, FloatRefTarget, Equation). The pseudocode in §"`q2-preview/custom/`" Equation entry was already correct — `node.plain_data?.order?.order` reads the integer.
+  - **Math.tsx uses direct ESM `import katex`** rather than `window.katex`. The entry imports katex statically (`entry.tsx:30`); reading `window.katex` from a built-in component is unsafe because `window.katex` is set inside `loadCustomComponents` and `undefined` for documents without user TSX overrides. `window.katex` continues to be set for user TSX that expects it (e.g. users who paste Elliot's `html.tsx`).
+  - **q2-preview pipeline construction refactor noted** (`0887a3fa`): `build_q2_preview_transform_pipeline` is now `build_transform_pipeline` filtered by `Q2_PREVIEW_TRANSFORM_EXCLUDED` (deny-list), not an explicit allow-list. The set of excluded transforms is unchanged (still excludes `crossref-render`, `callout-resolve`); 2B's CustomNode-survival assumption holds.
+  - **Cross-plan ordering risk dropped**: Plan 2A is fully landed, so 2B can start immediately. Phase 2 dependency note relaxed; §Hard dependencies list marked all three (2pre / 2A / 1) as ✅ landed.
+  - **Smoke-all `PreviewIframeKind = 'q2-preview'`** verified at `previewExtraction.ts:23`. §"Smoke-all q2-preview infrastructure" subsection collapsed to a one-line note.
+  - No estimated-scope change.
+
+- **2026-05-09 (verification-process gap follow-up)**: lessons from Plan 2A's manual-browser-test discovery of two project-mode bugs (`81e48f10` `theme_fingerprint` missing in default-project mode; `e6381abd` theme CSS path mismatch in project mode). Plan 2B had the same single-doc-only blind spot. Substantive changes:
+  - **Project-context coverage rule** added to §"Test-tier conventions" — every WASM-path-significant feature must have at least one test covering single-doc, default-project, and (where applicable) website-project. Hard rule, not optional.
+  - **WASM integration tests subsection** added to §"Test plan" — `assetManifestProject.wasm.test.ts` (asset manifest in project mode) and `customNodeWireFormatProject.wasm.test.ts` (CustomNode wire format in project mode), pattern follows `themeFingerprint.wasm.test.ts`. Phase 5 grew item 5.3 for these tests.
+  - **Two new smoke-all fixtures**: `multi-element-project/` (default-project counterpart of the existing `multi-element-doc.qmd`) and `with-render-components/` (project-mode override fixture replacing the manual confirmation in §"Fork Elliot's demos"). Phase 5 item 5.2 updated.
+  - **`themeFingerprint.wasm.test.ts` preservation note**: Plan 2A's regression test must remain when 2B touches `pass2_renderer.rs`. Documented in §"WASM integration tests" and as part of item 5.3.
+  - **Manual override confirmation removed**: §"Fork Elliot's demos" no longer asks for manual end-to-end browser verification — that role is now filled by the `with-render-components/` smoke fixture. Manual checks are exactly the kind of verification that hid Plan 2A's bugs.
+  - **Stale line refs updated**: `pipeline.rs:1039–1042` (which now points at the deny-list rationale doc-comment) replaced with `Q2_PREVIEW_TRANSFORM_EXCLUDED` at `pipeline.rs:1049`, with `"crossref-render"` entry at `:1061`, in two §Scope locations (Equation entry; Resolved Open Question entry). `iframeLinkHandlers.ts:116` extended to mention `normalizePath` at `:123` (both functions need extraction, not just `resolveRelativePath`).
+  - Estimated-scope change: ~2130 → ~2230 LOC (+~80 LOC for two WASM tests, +~70 LOC for two new smoke fixtures, –~50 LOC saved by dropping manual-override verification overhead).
+  - Rationale: plan-level encoding of the verification-process lesson so future Plan-N work doesn't repeat the trap. The cost of two extra fixtures and two WASM tests is small; the cost of project-mode bugs slipping past CI to manual browser sessions is high.
+
+- **2026-05-09 (final open-question pass + with-render-components fix)**: closed all surviving open questions and corrected one cascading issue.
+  - **`FootnotesTransform` included in q2-preview's pipeline** (one-line `pipeline.rs` change: drop `"footnotes"` from `Q2_PREVIEW_TRANSFORM_EXCLUDED`). v1 q2-preview is structural rendering only, so the transform's "synthesize-with-no-preimage" exclusion rationale doesn't bite yet. Effects: auto-numbered footnotes (no JS pre-walk needed), footnotes section at document end, automatic resolution of `NoteDefinitionPara` / `NoteDefinitionFencedBlock`. New classes (`footnotes`, `footnote-ref`, `footnote-back`) added to `quartoClasses.ts`. `Note.tsx` retitled as defensive fallback for the rare `reference-location: block`/`section` cases.
+  - **CustomNode override mechanism added.** Discovered while auditing the agent-added `with-render-components/` smoke fixture: the original merge order (`{ ...previewRegistry, ...customRegistry }`) only merged into the Pandoc-tag registry, so a user export of `Callout` (a CustomNode `type_name`, not a Pandoc tag) never reached the dispatch path. Fix: introduce `CustomNodeRegistryContext` (sibling of `AssetManifestContext`); `PreviewRoot` computes `mergedCustomNodeRegistry = { ...customNodeRegistry, ...customRegistry }` from the same user-TSX export bag (Pandoc tags and CustomNode type_names live in disjoint namespaces, so a single merge is unambiguous). `CustomBlock`/`CustomInline` dispatchers in `registry.ts` become `useContext`-reading wrapper components. User API unchanged (`render-components: [...]` with named exports). `with-render-components/` fixture updated to test both override directions (Para + Callout).
+  - **Cite rendering — resolved.** v1 renders `c[1]` (visible inlines) via `renderChildren`; ignores `c[0]` (citations metadata, which future bibliography rendering will consume).
+  - **Quarto Image extensions — resolved.** v1 silently ignores unknown Image kvs (current Image.tsx only passes width/height); future plan parallel to layout-chrome picks them up.
+  - **"Three WASM render entry points" reworded** to "two entry points with internal default-vs-website branch in the project entry." More accurate; doesn't water down the project-context coverage rule.
+  - Estimated scope: ~2230 → ~2255 LOC (+~25 LOC for `CustomNodeRegistryContext.tsx` + PreviewRoot extension; +~10 LOC for registry.ts dispatchers becoming `useContext`-reading wrappers; +~10 LOC tests for customNode override; +1 LOC pipeline.rs change; –~10 LOC saved by dropping JS pre-walk for note numbering).
+  - Rationale: closes the "open questions" section by either resolving each item explicitly or punting with a clear deferred-work pointer. Eliminates the with-render-components fixture / dispatch-mechanism mismatch the previous revision left in.
+
+- **2026-05-09 (visual-parity contract + extra transform inclusions + sandbox rationale)**: tightened the visual-fidelity contract from "class-compatible" to "Bootstrap-flavored visual + structural parity," researched two more transforms for inclusion, and documented the iframe-sandbox rationale for direct katex import.
+  - **§Goal** rewritten to frame visual + structural parity (not just class parity) and to call out Bootstrap as the explicit target for class names. Goal sentence references the Plan-2A theme.css plumbing that makes the parity load-bearing.
+  - **§Design decisions "Visual fidelity tier"** replaced by **"Visual + structural parity target"** — element parity (per-tag table), class parity (cross-referenced to `quartoClasses.ts`), explicit "where divergence is allowed" / "where divergence is forbidden" boundaries with the "child-selector CSS rules require child-element nesting" rationale. Closes the gap the previous "DOM may differ where it doesn't affect CSS" framing left open.
+  - **§Risk areas** "Drift between Rust's HTML output and our React rendering" rewritten to call out the two element-and-structure drift classes (wrong element vs. wrong nesting depth) and to point at the test plan's element-structure assertions and smoke-all `multi-element-doc.qmd` selector list.
+  - **`AppendixStructureTransform` included in q2-preview's pipeline** (second one-line `pipeline.rs` change: drop `"appendix-structure"` alongside `"footnotes"` from `Q2_PREVIEW_TRANSFORM_EXCLUDED`). Pure Pandoc primitive output (`Div`, `Header`, `Paragraph`, `Link`); structurally identical to the HTML pipeline. Effects: footnotes section nests inside `<div id="quarto-appendix">`; license/copyright/citation YAML metadata renders automatically; bibliography branch is inert until Citeproc lands. Five new classes added to `quartoClasses.ts` (`quarto-appendix`, `quarto-bibliography`, `quarto-reuse`, `quarto-copyright`, `quarto-citation`).
+  - **`TitleBlockTransform` deferred to a follow-up plan**, not included. Its `should_add_h1` gates on `is_html()`; q2-preview maps to HTML, so the transform no-ops. But q2-preview also bypasses the HTML template (`ApplyTemplateStage` excluded), so neither branch produces a body title. Making the transform useful for q2-preview requires a Rust change (a new `template_will_run` accessor or treating q2-preview as forced-`minimal: true`) that reaches beyond Plan 2B's scope. Pre-existing 2A gap, not a 2B regression — documented in §"Pipeline change: `TitleBlockTransform` is not included".
+  - **Iframe-sandbox + same-origin Vite bundling rationale** added to §"`q2-preview/inlines/Math.tsx`" — the `allow-same-origin` token in `Q2PreviewIframe.tsx:168`'s sandbox attribute combined with same-origin bundle resolution is what makes the static `import katex from 'katex'` safe; without it we'd fall back to the global-via-postMessage pattern. Future readers can follow the rationale without reconstructing it from sandbox-attribute first principles.
+  - Estimated scope: ~2255 → ~2255 LOC (no measurable change; transform inclusions are 2 lines in pipeline.rs, plus 5 lines of class constants, plus minor doc edits). The new visual-parity contract is process and test-plan, not LOC.
+  - Rationale: the agent-flagged ambiguity on visual fidelity ("we'll wear the same uniform but the body underneath might be shaped differently") is closed. The two transform decisions (include appendix, defer title-block) are both motivated and reversible. The sandbox rationale is the kind of one-line note that prevents a future reader from re-litigating an already-resolved design choice.
