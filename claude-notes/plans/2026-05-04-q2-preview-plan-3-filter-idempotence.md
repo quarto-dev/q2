@@ -44,6 +44,16 @@ round-trip story (Plans 4-8) rests on a stable foundation.
   - Cross-reference: `See @thm-foo`.
   - Sectionized doc: a doc with `## Section A`, content, `### Subsection`,
     content, `## Section B`, content.
+  - **Footnotes**: a doc with one inline footnote (`text^[footnote body]`) and
+    one reference-style footnote (`text[^foo]` + `[^foo]: definition`).
+    Exercises `FootnotesTransform` (now included in q2-preview's pipeline per
+    Plan 2B's audit) — produces the synthesized `<sup>` markers and the
+    `<div class="footnotes">` container.
+  - **Appendix**: a doc with `license:`, `copyright:`, and a user
+    `:::{.appendix} Body :::` block, plus footnotes from the previous fixture.
+    Exercises `AppendixStructureTransform` (also included per Plan 2B's audit)
+    — produces the `<div id="quarto-appendix">` container with footnotes,
+    license, and copyright sections nested inside.
   - Combined: a doc with several of the above interacting.
 - Idempotence test runner: takes a fixture, runs the q2-preview pipeline
   twice, hashes both ASTs via
