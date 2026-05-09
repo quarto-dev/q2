@@ -13,14 +13,20 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { act } from 'react';
 
-// Mock the VFS read so the test doesn't need WASM. The mock is keyed
-// off a per-test variable (`mockBytes`) so we can vary "the bytes for
-// the current fingerprint" between transitions.
+// Mock the VFS reads so the test doesn't need WASM. The theme mock is
+// keyed off `mockBytes`; the asset-binary mock is keyed off a per-path
+// map so the asset-manifest test can vary which paths return which bytes.
 let mockBytes: string | null = null;
+const mockBinaryByPath: Map<string, string | null> = new Map();
 vi.mock('../../../services/wasmRenderer', () => ({
     vfsReadFile: vi.fn(() => {
         if (mockBytes === null) return { success: false };
         return { success: true, content: mockBytes };
+    }),
+    vfsReadBinaryFile: vi.fn((path: string) => {
+        const bytes = mockBinaryByPath.get(path);
+        if (bytes === null || bytes === undefined) return { success: false };
+        return { success: true, content: bytes };
     }),
 }));
 
@@ -33,6 +39,7 @@ let urlCounter = 0;
 
 beforeEach(() => {
     mockBytes = null;
+    mockBinaryByPath.clear();
     urlCounter = 0;
     // Stub `URL.createObjectURL` / `revokeObjectURL` — jsdom does not
     // implement them. Each call mints a unique synthetic URL.
@@ -187,6 +194,74 @@ describe('Q2PreviewIframe theme blob-URL lifecycle', () => {
         // 7. Unmount → revoke the outstanding 'ghi' URL.
         harness.unmount();
         expect(revokeUrlSpy).toHaveBeenCalledWith('blob:mock:3');
+    });
+
+    test('UPDATE_AST payload contains assetManifest derived from the AST', () => {
+        // Image AST. The walker mints a blob URL for each unique image
+        // and includes the user-written URL string in the manifest.
+        const PNG_BYTES_B64 = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64');
+        mockBinaryByPath.set('test/hero.png', PNG_BYTES_B64);
+
+        const astJson = JSON.stringify({
+            'pandoc-api-version': [1, 23, 0],
+            meta: {},
+            blocks: [
+                {
+                    t: 'Para',
+                    c: [
+                        {
+                            t: 'Image',
+                            c: [
+                                ['', [], []],
+                                [{ t: 'Str', c: 'alt' }],
+                                ['hero.png', ''],
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const utils = render(
+            <Q2PreviewIframe
+                astJson={astJson}
+                currentFilePath="/test/index.qmd"
+                setAst={() => {}}
+            />,
+        );
+
+        const iframe = utils.container.querySelector('iframe');
+        const cw = iframe!.contentWindow!;
+        const postMessage = vi.fn();
+        Object.defineProperty(cw, 'postMessage', {
+            value: postMessage,
+            configurable: true,
+        });
+
+        act(() => {
+            window.dispatchEvent(
+                new MessageEvent('message', {
+                    data: { type: 'IFRAME_READY' },
+                    source: cw,
+                }),
+            );
+        });
+
+        const astPosts = postMessage.mock.calls
+            .map((c) => c[0])
+            .filter((m) => m?.type === 'UPDATE_AST');
+        expect(astPosts).toHaveLength(1);
+        expect(astPosts[0].payload).toMatchObject({
+            astJson,
+            currentFilePath: '/test/index.qmd',
+        });
+        expect(astPosts[0].payload.assetManifest).toBeDefined();
+        expect(astPosts[0].payload.assetManifest['hero.png']).toMatch(/^blob:/);
+
+        // Unmount revokes the asset blob URL.
+        const beforeRevokes = revokeUrlSpy.mock.calls.length;
+        utils.unmount();
+        expect(revokeUrlSpy.mock.calls.length).toBeGreaterThan(beforeRevokes);
     });
 
     test('IFRAME_READY revokes outstanding URL', () => {

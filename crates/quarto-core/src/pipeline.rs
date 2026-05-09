@@ -1054,14 +1054,24 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "callout-resolve",
     "website-favicon",
     "title-block",
-    "footnotes",
+    // "footnotes" — included in q2-preview's pipeline (Plan 2B):
+    // produces Pandoc primitives (Span/Sup/Link/Div/OrderedList) that
+    // q2-preview's leaves render natively. Note marker numbering and
+    // the document-end footnote section both come from this transform.
+    // bd-1kly tracks the upstream gap for `reference-location: block`
+    // and `section`; until that lands, q2-preview's `Note.tsx`
+    // tooltip-body fallback handles those configs.
     "toc-render",
     "navbar-render",
     "sidebar-render",
     "page-nav-render",
     "footer-render",
     "link-rewrite",
-    "appendix-structure",
+    // "appendix-structure" — included in q2-preview's pipeline (Plan 2B):
+    // pure Pandoc primitives, structurally identical to the HTML
+    // pipeline. Folds footnotes section, license/copyright/citation
+    // metadata into <div id="quarto-appendix">. Bibliography branch
+    // is inert until Citeproc lands.
     "crossref-render",
 ];
 
@@ -2045,6 +2055,54 @@ mod tests {
             output.ast_json.contains("Callout"),
             "expected Callout type-name in JSON; got:\n{}",
             snippet()
+        );
+    }
+
+    /// Plan 2B: with `FootnotesTransform` no longer in the
+    /// q2-preview deny-list, inline-footnote rendering (`^[body]`
+    /// syntax — produces `Inline::Note` directly) must emit the
+    /// standard `Span(Sup(Link))` reference and a `Div.footnotes`
+    /// body section. Catches regressions if the transform is
+    /// accidentally re-excluded.
+    ///
+    /// **Reference-style footnotes** (`[^1]: body` with `[^1]` in
+    /// prose) are NOT covered by this test: pampa's postprocess at
+    /// `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs:1134-1146`
+    /// converts `Inline::NoteReference` to a `Span(class="quarto-note-reference")`
+    /// with empty content during parsing, before any quarto-core
+    /// transform runs. Nothing downstream resolves those Spans (the
+    /// HTML pipeline drops them too, verified manually). That's a
+    /// pre-existing gap, not a Plan 2B regression. bd-1kly tracks
+    /// the related upstream work.
+    #[test]
+    fn render_qmd_to_preview_ast_emits_inline_footnote_section() {
+        let content =
+            b"---\ntitle: Test\nformat: q2-preview\n---\n\nA paragraph^[the footnote body].\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime,
+        ))
+        .expect("q2-preview render");
+
+        // The transform replaces the inline Note with a Span carrying
+        // the footnote-ref class.
+        assert!(
+            output.ast_json.contains("footnote-ref"),
+            "expected footnote-ref class in q2-preview output; full output:\n{}",
+            output.ast_json
+        );
+        // The section at end is a Div with class="footnotes".
+        assert!(
+            output.ast_json.contains("\"footnotes\""),
+            "expected footnotes class on section Div; full output:\n{}",
+            output.ast_json
         );
     }
 

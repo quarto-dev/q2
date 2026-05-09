@@ -30,6 +30,8 @@
  * never appear in the q2-preview AST.
  */
 
+import { resolveRelativePath } from './vfsPaths';
+
 export interface InstallLinkHandlersOptions {
     /** Current file path; used to resolve relative `.qmd` link targets. */
     currentFilePath: string;
@@ -113,22 +115,3 @@ function findAnchorAncestor(start: Element | null): HTMLAnchorElement | null {
     return null;
 }
 
-function resolveRelativePath(currentFile: string, relativePath: string): string {
-    if (relativePath.startsWith('/')) return relativePath;
-    const lastSlash = currentFile.lastIndexOf('/');
-    const currentDir = lastSlash >= 0 ? currentFile.substring(0, lastSlash + 1) : '/';
-    return normalizePath(currentDir + relativePath);
-}
-
-function normalizePath(path: string): string {
-    const parts = path.split('/').filter((p) => p !== '.');
-    const result: string[] = [];
-    for (const part of parts) {
-        if (part === '..') {
-            result.pop();
-        } else if (part) {
-            result.push(part);
-        }
-    }
-    return '/' + result.join('/');
-}

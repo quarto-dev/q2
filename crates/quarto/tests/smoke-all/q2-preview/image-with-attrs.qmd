@@ -1,0 +1,22 @@
+---
+title: Image with attributes
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        # Image bytes flow through the parent-side asset walker
+        # (q2-preview/assetWalker.ts), which mints a blob URL from
+        # VFS bytes and posts the manifest in UPDATE_AST.
+        # AssetManifestContext distributes the manifest to <Image>,
+        # which looks up `hero.png` and renders <img src="blob:...">.
+        -
+          - 'img[src^="blob:"]'
+          - 'img[width="400"]'
+          - 'img[alt="alt"]'
+        - []
+---
+
+![alt](hero.png){width=400}

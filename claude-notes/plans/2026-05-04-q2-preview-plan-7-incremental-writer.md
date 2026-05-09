@@ -224,6 +224,18 @@ sites; see §Scope for the verification step.
   source-bearing children get the Transparent treatment. Children's bytes
   are contiguous in source (Sectionize doesn't reorder), so emitting them
   in order produces the right output. The wrapper emits nothing.
+- **`FootnotesTransform` and `AppendixStructureTransform` containers also fit
+  the Transparent pattern.** Plan 2B's audit added both transforms to the
+  q2-preview pipeline. Their synthesized container Divs (`<div class="footnotes">`,
+  `<div id="quarto-appendix">`) have no source preimage, but their children
+  carry source_info from the user-typed footnote content / user-defined
+  `:::{.appendix}` blocks. Same Transparent treatment as Sectionize.
+  Worth noting: `FootnotesTransform`'s synthesized `<sup>` markers are NOT
+  pure Synthetic — `create_footnote_ref` at `crates/quarto-core/src/transforms/footnotes.rs:440-460`
+  clones source_info from the original `Note` inline, so the markers carry
+  the same byte range as the user's `^[footnote text]` syntax. Round-trip-friendly
+  as `Original` without extra writer work; only the bare `<div class="footnotes">`
+  wrapper is the Transparent case.
 - **Atomic detection has three paths** (all converging through the same
   `is_atomic` helper):
   1. **Derived source_info** (shortcode resolutions). Any node whose

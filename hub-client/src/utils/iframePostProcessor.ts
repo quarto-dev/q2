@@ -10,6 +10,7 @@
  */
 
 import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
+import { resolveRelativePath, guessMimeType } from './vfsPaths';
 
 /**
  * VFS path under which the website renderer flushes its
@@ -323,49 +324,6 @@ function injectPreviewStyles(doc: Document): void {
     }
   `;
   doc.head.appendChild(style);
-}
-
-/** Resolve a relative path against the current file's directory */
-function resolveRelativePath(
-  currentFile: string,
-  relativePath: string
-): string {
-  if (relativePath.startsWith('/')) {
-    return relativePath; // Already absolute
-  }
-  // Get directory of current file
-  const lastSlash = currentFile.lastIndexOf('/');
-  const currentDir =
-    lastSlash >= 0 ? currentFile.substring(0, lastSlash + 1) : '/';
-  return normalizePath(currentDir + relativePath);
-}
-
-function normalizePath(path: string): string {
-  const parts = path.split('/').filter((p) => p !== '.');
-  const result: string[] = [];
-  for (const part of parts) {
-    if (part === '..') {
-      result.pop();
-    } else if (part) {
-      result.push(part);
-    }
-  }
-  return '/' + result.join('/');
-}
-
-function guessMimeType(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase();
-  const mimeTypes: Record<string, string> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    svg: 'image/svg+xml',
-    webp: 'image/webp',
-    css: 'text/css',
-    js: 'text/javascript',
-  };
-  return mimeTypes[ext || ''] || 'application/octet-stream';
 }
 
 /**

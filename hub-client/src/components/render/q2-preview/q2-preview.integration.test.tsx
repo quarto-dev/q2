@@ -1,27 +1,47 @@
 /**
- * q2-preview surface contract for Plan 2A.
+ * q2-preview registry contract — Plan 2B Phase 5.1.
  *
- * 2A ships the iframe surface with an empty registry — every Pandoc
- * base-type hits the muted-gray "(not yet implemented)" placeholder,
- * but the dispatcher recurses into children via `renderChildren` so
- * nested nodes surface their own placeholders too. Without the
- * recursion, only top-level blocks would render and inline children
- * would be silently dropped.
+ * 2B fills the empty Plan-2A registry with real-HTML leaves for every
+ * Pandoc base type. CustomBlock / CustomInline keys are still absent
+ * (Plan 2C ships those), so unregistered custom-node `type_name`s
+ * continue to fall through to the muted-gray "(not yet implemented)"
+ * placeholder.
  *
- * This test locks the contract:
- *   - Top-level block placeholder renders with the muted-gray aesthetic
- *     (color #888, italic).
- *   - Inline child of an unrecognized block also renders as a placeholder
- *     (proves recursion via `renderChildren`).
- *   - Registry containing only `{Ast, Block, Inline}` produces this
- *     output (no stray real-HTML leaves).
+ * Per plan §"Test replacement note", four Plan-2A tests are replaced
+ * here (not appended-around or skipped):
+ *  - "renders a top-level block as a muted-gray placeholder" → real
+ *    Para → `<p>` assertion.
+ *  - "recurses into children so nested inlines also surface
+ *    placeholders" → real Str → text assertion.
+ *  - "uses the muted-gray aesthetic on the placeholder DOM" → narrowed
+ *    to an unregistered CustomNode shape.
+ *  - "renders registry containing only {Ast, Block, Inline}" →
+ *    asserts the post-2B registry shape (Pandoc base tags present,
+ *    CustomBlock/CustomInline absent).
+ *
+ * Pandoc-base gap-fill component tests, Image edge cases, atomic
+ * CustomNode read-only, recursion-contract bypass, reference-
+ * preservation, and class-compatibility tests are appended below.
  */
 
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
 import { Ast } from '../framework';
-import type { PandocAST } from '../framework';
+import type {
+    BlockNode,
+    InlineNode,
+    NodeArgs,
+    ParaBlock,
+    PandocAST,
+    FormatRegistry,
+} from '../framework';
 import { previewRegistry } from './registry';
+import { AssetManifestContext } from './AssetManifestContext';
+import {
+    SECTION,
+    SECTION_LEVEL_PREFIX,
+    FOOTNOTE_REF,
+} from './quartoClasses';
 
 function astJson(blocks: any[]): string {
     const ast: PandocAST = {
@@ -48,33 +68,480 @@ function mount(blocks: any[]) {
 }
 
 const STR = (c: string) => ({ t: 'Str', c });
-const PARA = (text: string) => ({ t: 'Para', c: [STR(text)] });
+const PARA = (...inlines: any[]) => ({ t: 'Para', c: inlines });
 
-describe('q2-preview placeholder dispatcher', () => {
-    it('renders a top-level block as a muted-gray placeholder', () => {
-        const { container } = mount([PARA('hello')]);
-        expect(container.textContent).toContain('Para (not yet implemented)');
+describe('q2-preview registry — Pandoc base types render as real HTML', () => {
+    it('renders Para → <p>', () => {
+        const { container } = mount([PARA(STR('hello'))]);
+        const p = container.querySelector('p');
+        expect(p).not.toBeNull();
+        expect(p!.textContent).toBe('hello');
     });
 
-    it('recurses into children so nested inlines also surface placeholders', () => {
-        const { container } = mount([PARA('hello')]);
-        // The Str inline child must surface its own placeholder via
-        // renderChildren in the Block miss path.
-        expect(container.textContent).toContain('Str (not yet implemented)');
+    it('renders Str inlines as text content (no placeholder)', () => {
+        const { container } = mount([PARA(STR('hello'))]);
+        expect(container.textContent).toBe('hello');
+        expect(container.textContent).not.toContain('not yet implemented');
     });
 
-    it('uses the muted-gray aesthetic on the placeholder DOM', () => {
-        const { container } = mount([PARA('hello')]);
-        const block = container.querySelector('div');
+    it('renders unregistered CustomNode type_name with the muted-gray placeholder aesthetic', () => {
+        // 2B doesn't register CustomBlock/CustomInline; the dispatcher
+        // miss path renders muted-gray. Plan 2C populates the registry.
+        const customBlockAst = JSON.stringify({
+            'pandoc-api-version': [1, 23, 0],
+            meta: {},
+            blocks: [
+                {
+                    t: 'CustomBlock',
+                    type_name: 'Callout',
+                    slots: {},
+                    plain_data: null,
+                    attr: ['', [], []],
+                },
+            ],
+        });
+        const { container } = render(
+            <Ast
+                astJson={customBlockAst}
+                currentFilePath="/project/test.qmd"
+                onNavigateToDocument={noopNav}
+                setAst={noopSet}
+                registry={previewRegistry}
+            />,
+        );
+        const block = container.querySelector('div[style*="rgb(136, 136, 136)"]');
         expect(block).not.toBeNull();
-        expect(block!.style.color).toBe('rgb(136, 136, 136)'); // #888
-        expect(block!.style.fontStyle).toBe('italic');
+        expect(block!.textContent).toContain('CustomBlock (not yet implemented)');
     });
 
-    it('renders registry containing only {Ast, Block, Inline}', () => {
-        // Validate the keys present in the skeleton — shaped as the
-        // typed-format-registry contract requires.
-        const keys = Object.keys(previewRegistry).sort();
-        expect(keys).toEqual(['Ast', 'Block', 'Inline']);
+    it('registry contains the Pandoc base tags but not CustomBlock/CustomInline', () => {
+        const keys = new Set(Object.keys(previewRegistry));
+        // Required by the framework
+        expect(keys.has('Ast')).toBe(true);
+        expect(keys.has('Block')).toBe(true);
+        expect(keys.has('Inline')).toBe(true);
+        // 2B leaves: blocks
+        for (const tag of ['Para', 'Plain', 'Header', 'CodeBlock', 'BulletList', 'OrderedList', 'BlockQuote', 'Div', 'HorizontalRule', 'RawBlock', 'Figure', 'LineBlock', 'DefinitionList', 'Table']) {
+            expect(keys.has(tag)).toBe(true);
+        }
+        // 2B leaves: inlines
+        for (const tag of ['Str', 'Space', 'SoftBreak', 'LineBreak', 'Emph', 'Strong', 'Code', 'Link', 'Image', 'Span', 'Quoted', 'Math', 'Underline', 'Strikeout', 'Superscript', 'Subscript', 'SmallCaps', 'RawInline', 'Cite', 'Note']) {
+            expect(keys.has(tag)).toBe(true);
+        }
+        // 2C populates these — must NOT be in the 2B registry
+        expect(keys.has('CustomBlock')).toBe(false);
+        expect(keys.has('CustomInline')).toBe(false);
+    });
+});
+
+describe('q2-preview Pandoc base-type gap-fill components', () => {
+    it('LineBlock → <div class="line-block"> with each line a <div>', () => {
+        const ast = [{
+            t: 'LineBlock',
+            c: [
+                [STR('line one')],
+                [STR('line two')],
+            ],
+        }];
+        const { container } = mount(ast);
+        const lb = container.querySelector('.line-block');
+        expect(lb).not.toBeNull();
+        const lines = lb!.querySelectorAll(':scope > div');
+        expect(lines).toHaveLength(2);
+        expect(lines[0].textContent).toBe('line one');
+        expect(lines[1].textContent).toBe('line two');
+    });
+
+    it('DefinitionList → <dl> with siblings <dt>/<dd>', () => {
+        const ast = [{
+            t: 'DefinitionList',
+            c: [
+                [[STR('term1')], [[PARA(STR('def1a'))], [PARA(STR('def1b'))]]],
+                [[STR('term2')], [[PARA(STR('def2'))]]],
+            ],
+        }];
+        const { container } = mount(ast);
+        const dl = container.querySelector('dl');
+        expect(dl).not.toBeNull();
+        const dts = dl!.querySelectorAll('dt');
+        const dds = dl!.querySelectorAll('dd');
+        expect(dts).toHaveLength(2);
+        expect(dds).toHaveLength(3); // term1 has two defs, term2 has one
+        expect(dts[0].textContent).toBe('term1');
+        expect(dts[1].textContent).toBe('term2');
+    });
+
+    it('Underline / Strikeout / Superscript / Subscript / SmallCaps render canonical tags', () => {
+        const ast = [PARA(
+            { t: 'Underline', c: [STR('u')] },
+            { t: 'Strikeout', c: [STR('s')] },
+            { t: 'Superscript', c: [STR('sup')] },
+            { t: 'Subscript', c: [STR('sub')] },
+            { t: 'SmallCaps', c: [STR('sc')] },
+        )];
+        const { container } = mount(ast);
+        expect(container.querySelector('u')!.textContent).toBe('u');
+        expect(container.querySelector('s')!.textContent).toBe('s');
+        expect(container.querySelector('sup')!.textContent).toBe('sup');
+        expect(container.querySelector('sub')!.textContent).toBe('sub');
+        const sc = container.querySelector('span[style*="small-caps"]');
+        expect(sc).not.toBeNull();
+        expect(sc!.textContent).toBe('sc');
+    });
+
+    it('RawInline (format=html) injects raw HTML; non-html falls back to <code>', () => {
+        const html = [PARA({ t: 'RawInline', c: ['html', '<b>bold</b>'] })];
+        const tex = [PARA({ t: 'RawInline', c: ['tex', '\\textbf{bold}'] })];
+        const r1 = mount(html).container;
+        const r2 = mount(tex).container;
+        expect(r1.querySelector('b')).not.toBeNull();
+        expect(r2.querySelector('code')!.textContent).toBe('\\textbf{bold}');
+    });
+
+    it('Cite renders c[1] inlines (visible link text); ignores citations metadata', () => {
+        const ast = [PARA({
+            t: 'Cite',
+            c: [
+                [{ id: 'citekey', mode: { t: 'NormalCitation' } }],
+                [STR('@citekey')],
+            ],
+        })];
+        const { container } = mount(ast);
+        expect(container.textContent).toBe('@citekey');
+    });
+
+    it('Quoted (DoubleQuote / SingleQuote) wraps inlines in curly quotes', () => {
+        const ast = [PARA(
+            { t: 'Quoted', c: [{ t: 'DoubleQuote' }, [STR('hello')]] },
+            STR(' '),
+            { t: 'Quoted', c: [{ t: 'SingleQuote' }, [STR('world')]] },
+        )];
+        const { container } = mount(ast);
+        expect(container.textContent).toBe('“hello” ‘world’');
+    });
+
+    it('Header renders the correct hN tag based on level', () => {
+        const ast = [
+            { t: 'Header', c: [1, ['h1-id', [], []], [STR('one')]] },
+            { t: 'Header', c: [3, ['', ['cls'], []], [STR('three')]] },
+            { t: 'Header', c: [6, ['', [], []], [STR('six')]] },
+        ];
+        const { container } = mount(ast);
+        expect(container.querySelector('h1')!.id).toBe('h1-id');
+        expect(container.querySelector('h3')!.className).toBe('cls');
+        expect(container.querySelector('h6')!.textContent).toBe('six');
+    });
+
+    it('OrderedList → <ol> with start attribute when not 1', () => {
+        const ast = [{
+            t: 'OrderedList',
+            c: [
+                [3, { t: 'Decimal' }, { t: 'Period' }],
+                [[PARA(STR('three'))], [PARA(STR('four'))]],
+            ],
+        }];
+        const { container } = mount(ast);
+        const ol = container.querySelector('ol');
+        expect(ol).not.toBeNull();
+        expect(ol!.getAttribute('start')).toBe('3');
+    });
+
+    it('CodeBlock renders <pre><code class="lang"> with language class', () => {
+        const ast = [{
+            t: 'CodeBlock',
+            c: [['', ['python'], []], 'print("hi")'],
+        }];
+        const { container } = mount(ast);
+        const code = container.querySelector('pre > code');
+        expect(code).not.toBeNull();
+        expect(code!.className).toBe('python');
+        expect(code!.textContent).toBe('print("hi")');
+    });
+
+    it('Image — manifest hit returns the blob URL', () => {
+        const ast = [PARA({
+            t: 'Image',
+            c: [['', [], []], [STR('hero alt')], ['hero.png', '']],
+        })];
+        const { container } = render(
+            <AssetManifestContext.Provider value={{ 'hero.png': 'blob:abc' }}>
+                <Ast
+                    astJson={astJson(ast)}
+                    currentFilePath="/project/test.qmd"
+                    onNavigateToDocument={noopNav}
+                    setAst={noopSet}
+                    registry={previewRegistry}
+                />
+            </AssetManifestContext.Provider>,
+        );
+        const img = container.querySelector('img')!;
+        expect(img.getAttribute('src')).toBe('blob:abc');
+        expect(img.alt).toBe('hero alt');
+    });
+
+    it('Image — external https URL passes through unchanged', () => {
+        const ast = [PARA({
+            t: 'Image',
+            c: [['', [], []], [STR('alt')], ['https://cdn.example.com/hero.png', '']],
+        })];
+        const { container } = mount(ast);
+        const img = container.querySelector('img')!;
+        expect(img.getAttribute('src')).toBe('https://cdn.example.com/hero.png');
+    });
+
+    it('Image — data: URI passes through unchanged', () => {
+        const ast = [PARA({
+            t: 'Image',
+            c: [['', [], []], [STR('alt')], ['data:image/png;base64,iVBOR', '']],
+        })];
+        const { container } = mount(ast);
+        const img = container.querySelector('img')!;
+        expect(img.getAttribute('src')).toBe('data:image/png;base64,iVBOR');
+    });
+
+    it('Image — manifest miss falls back to original URL (broken-image affordance)', () => {
+        const ast = [PARA({
+            t: 'Image',
+            c: [['', [], []], [STR('alt')], ['hero.png', '']],
+        })];
+        // Default empty manifest from the registry's default Provider.
+        const { container } = mount(ast);
+        const img = container.querySelector('img')!;
+        expect(img.getAttribute('src')).toBe('hero.png');
+    });
+
+    it('Image — width/height kvs become <img> attrs', () => {
+        const ast = [PARA({
+            t: 'Image',
+            c: [
+                ['', [], [['width', '400'], ['height', '300']]],
+                [STR('alt')],
+                ['hero.png', ''],
+            ],
+        })];
+        const { container } = mount(ast);
+        const img = container.querySelector('img')!;
+        expect(img.getAttribute('width')).toBe('400');
+        expect(img.getAttribute('height')).toBe('300');
+    });
+
+    it('Image — id, classes, title attributes propagate', () => {
+        const ast = [PARA({
+            t: 'Image',
+            c: [['my-id', ['cls-a', 'cls-b'], []], [STR('alt')], ['hero.png', 'a tooltip']],
+        })];
+        const { container } = mount(ast);
+        const img = container.querySelector('img')!;
+        expect(img.id).toBe('my-id');
+        expect(img.className).toBe('cls-a cls-b');
+        expect(img.title).toBe('a tooltip');
+    });
+
+    it('Image — alt text uses Stringify (handles Emph / Code / SoftBreak)', () => {
+        const ast = [PARA({
+            t: 'Image',
+            c: [
+                ['', [], []],
+                [
+                    STR('hello'),
+                    { t: 'Space' },
+                    { t: 'Emph', c: [STR('world')] },
+                    { t: 'SoftBreak' },
+                    { t: 'Code', c: [['', [], []], 'snippet'] },
+                ],
+                ['hero.png', ''],
+            ],
+        })];
+        const { container } = mount(ast);
+        const img = container.querySelector('img')!;
+        expect(img.alt).toBe('hello world snippet');
+    });
+
+    it('Figure renders <figure> + body + <figcaption> with body recursion', () => {
+        const ast = [{
+            t: 'Figure',
+            c: [
+                ['fig-1', [], []],
+                [null, [PARA(STR('A caption'))]],
+                [PARA(STR('body content'))],
+            ],
+        }];
+        const { container } = mount(ast);
+        const fig = container.querySelector('figure');
+        expect(fig).not.toBeNull();
+        expect(fig!.id).toBe('fig-1');
+        const cap = container.querySelector('figcaption');
+        expect(cap).not.toBeNull();
+        expect(cap!.textContent).toBe('A caption');
+        // Body content (Para 'body content') sits as a sibling outside <figcaption>.
+        expect(fig!.textContent).toContain('body content');
+    });
+});
+
+describe('Atomic-aware gate (framework Node)', () => {
+    it('atomic CustomInline (CrossrefResolvedRef) inside a Para receives a no-op setLocalAst via the framework gate', () => {
+        // Hijack Inline registry entry to capture the setLocalAst it
+        // receives. The atomic gate runs in framework's `Node` (in
+        // dispatch.tsx) before either format's Inline dispatcher,
+        // replacing setLocalAst with a NOOP for atomic content.
+        const captures: Array<{ t: string; setLocalAst: (n: unknown) => void }> = [];
+        const CapturingInline = (args: NodeArgs<InlineNode>) => {
+            captures.push({ t: args.node.t, setLocalAst: args.setLocalAst as (n: unknown) => void });
+            return <span>captured-{args.node.t}</span>;
+        };
+
+        const ast = [PARA({
+            t: 'CustomInline',
+            type_name: 'CrossrefResolvedRef',
+            slots: { suffix: { kind: 'inlines', value: [] } },
+            plain_data: {
+                identifier: 'fig-1', kind: 'Figure', ref_type: 'fig',
+                resolved: true, kind_source: 'builtin',
+                order: { section: [], order: 1 },
+            },
+            attr: ['', [], []],
+        })];
+        const merged: FormatRegistry = {
+            ...previewRegistry,
+            Inline: CapturingInline,
+        } as FormatRegistry;
+        render(
+            <Ast
+                astJson={astJson(ast)}
+                currentFilePath="/project/test.qmd"
+                onNavigateToDocument={noopNav}
+                setAst={() => {}}
+                registry={merged}
+            />,
+        );
+
+        const xrefCapture = captures.find((c) => c.t === 'CustomInline');
+        expect(xrefCapture).toBeDefined();
+        // The atomic gate's NOOP_SET_LOCAL_AST is a singleton inside the
+        // framework. Direct identity check isn't possible from outside
+        // the module, but invoking it must NOT call the parent's setAst
+        // — assert by behavioral observation: invoking it produces no
+        // side effect we can detect via setAstSpy.
+        const setAstSpy = vi.fn();
+        const ast2 = [PARA({
+            t: 'CustomInline',
+            type_name: 'CrossrefResolvedRef',
+            slots: {},
+            plain_data: null,
+            attr: ['', [], []],
+        })];
+        captures.length = 0;
+        render(
+            <Ast
+                astJson={astJson(ast2)}
+                currentFilePath="/project/test.qmd"
+                onNavigateToDocument={noopNav}
+                setAst={setAstSpy}
+                registry={merged}
+            />,
+        );
+        const fresh = captures.find((c) => c.t === 'CustomInline')!;
+        // Calling the captured setLocalAst — should be no-op.
+        fresh.setLocalAst({ t: 'Str', c: 'EDITED' });
+        expect(setAstSpy).not.toHaveBeenCalled();
+    });
+
+    it('user override that iterates node.c directly disables the atomic gate (negative regression guard)', () => {
+        // Locks the documented "Recursion contract for the atomic gate"
+        // behavior: user-TSX components that walk node.c and emit
+        // hand-rolled JSX bypass the framework's per-<Node> gate. This
+        // is the failure mode v1 accepts; the test makes the contract
+        // observable so a future hardening pass will fail it loudly.
+        const setAstSpy = vi.fn();
+
+        const BypassingPara = ({ node, setLocalAst }: NodeArgs<ParaBlock>) => (
+            <p data-testid="bypassing-para">
+                {node.c.map((child, i) => (
+                    <button
+                        key={i}
+                        data-testid={`child-${i}`}
+                        onClick={() =>
+                            setLocalAst({
+                                t: 'Para',
+                                c: [
+                                    ...node.c.slice(0, i),
+                                    { t: 'Str', c: 'EDITED' },
+                                    ...node.c.slice(i + 1),
+                                ],
+                            })
+                        }
+                    >
+                        click
+                    </button>
+                ))}
+            </p>
+        );
+
+        const ast: PandocAST = {
+            'pandoc-api-version': [1, 23, 0],
+            meta: {},
+            blocks: [{
+                t: 'Para',
+                c: [
+                    STR('see '),
+                    {
+                        t: 'CustomInline',
+                        type_name: 'CrossrefResolvedRef',
+                        slots: { suffix: { kind: 'inlines', value: [] } },
+                        plain_data: {
+                            identifier: 'fig-1', kind: 'Figure', ref_type: 'fig',
+                            resolved: true, kind_source: 'builtin',
+                            order: { section: [], order: 1 },
+                        },
+                        attr: ['', [], []],
+                    } as InlineNode,
+                ],
+            }] as BlockNode[],
+        };
+
+        const merged: FormatRegistry = {
+            ...previewRegistry,
+            Para: BypassingPara as FormatRegistry['Block'],
+        } as FormatRegistry;
+
+        const { getByTestId } = render(
+            <Ast
+                astJson={JSON.stringify(ast)}
+                currentFilePath="/project/test.qmd"
+                onNavigateToDocument={noopNav}
+                setAst={setAstSpy}
+                registry={merged}
+            />,
+        );
+
+        // Click child-1 — the atomic CrossrefResolvedRef. Because
+        // BypassingPara constructs setLocalAst outside <Node>, the
+        // gate never fires for descendants. The edit should reach
+        // setAst, demonstrating the contract's failure mode.
+        fireEvent.click(getByTestId('child-1'));
+        expect(setAstSpy).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('Class-compatibility (stub constants)', () => {
+    it('quartoClasses constants match expected strings', () => {
+        // Stub-scope sanity: catches accidental edits to the constants
+        // that the smoke-all fixtures and component renderers depend on.
+        expect(SECTION).toBe('section');
+        expect(SECTION_LEVEL_PREFIX).toBe('level');
+        expect(FOOTNOTE_REF).toBe('footnote-ref');
+    });
+
+    it('Note.tsx emits class="footnote-ref" on the inline <sup>', () => {
+        const noteAst = [PARA({
+            t: 'Note',
+            c: [PARA(STR('the note body'))],
+        })];
+        // Without NoteNumberingContext.Provider wrapping, Note falls back
+        // to '?' but still emits the canonical class.
+        const { container } = mount(noteAst);
+        const sup = container.querySelector('sup');
+        expect(sup).not.toBeNull();
+        expect(sup!.className).toBe('footnote-ref');
     });
 });
