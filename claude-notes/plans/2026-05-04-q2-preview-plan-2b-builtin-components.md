@@ -1,6 +1,6 @@
 # Plan 2B — q2-preview built-in component registry (revised post-2pre)
 
-**Date:** 2026-05-04 (revised 2026-05-07)
+**Date:** 2026-05-04 (revised 2026-05-07, 2026-05-09)
 **Branch:** feature/q2-preview
 **Status:** Implementation plan
 **Milestone:** M2. q2-preview reaches visual parity with the HTML format for documents that use Pandoc base types, callouts, theorems, proofs, figures, equations, images, and cross-references.
@@ -136,6 +136,113 @@ These two new entries are *generic* — they iterate slots without per-type know
 
 Also extend `blockTypes` to include `'CustomBlock'`. `Node`'s isBlock test already routes via this array, so the addition is a one-line change.
 
+#### Asset manifest plumbing (parent walker + iframe distribution)
+
+Per Plan 2A §"Provided: blob-URL asset contract," image bytes flow as blob URLs minted in the parent. 2B implements the contract end-to-end: a parent-side walker that produces a manifest of `{ origPath → blobUrl }`, and an iframe-side context that distributes the manifest to `Image` components.
+
+##### Parent-side asset walker
+
+**Location: `Q2PreviewIframe.tsx`** (q2-preview-specific; parent already has WASM access for `vfsReadBinaryFile`; close to the postMessage send site). Implemented as a pure function `buildAssetManifest(...)` in a new module:
+
+```ts
+// hub-client/src/components/render/q2-preview/assetWalker.ts
+
+export interface ManifestCacheEntry {
+  url: string;
+  contentHash: string;
+}
+
+export interface AssetManifestResult {
+  manifest: Record<string, string>;     // origPath → blobUrl
+  revoked: string[];                     // URLs that fell out of the manifest
+}
+
+/**
+ * Walks the AST for Image nodes, resolves paths, reads VFS bytes,
+ * mints (or reuses cached) blob URLs, and returns a manifest plus
+ * the list of URLs that should be revoked.
+ *
+ * The cache (caller-owned) memoizes by `(resolvedPath, contentHash)`
+ * so unchanged image content keeps the same blob URL across re-renders
+ * — browsers cache fetched blob URLs internally, so reuse is free.
+ */
+export function buildAssetManifest(
+  astJson: string,
+  currentFilePath: string,
+  cache: Map<string, ManifestCacheEntry>,
+): AssetManifestResult {
+  const ast = JSON.parse(astJson);
+  const imagePaths = collectImagePaths(ast);  // walks Image nodes, skips externals
+  const manifest: Record<string, string> = {};
+  const seenKeys = new Set<string>();
+
+  for (const origPath of imagePaths) {
+    const resolved = resolvePath(currentFilePath, origPath);
+    const result = vfsReadBinaryFile(resolved);
+    if (!result.success || !result.content) continue;
+    const contentHash = hashBytes(result.content);
+    const cacheKey = `${resolved}\0${contentHash}`;
+    seenKeys.add(cacheKey);
+
+    let entry = cache.get(cacheKey);
+    if (!entry) {
+      const blob = base64ToBlob(result.content, mimeFromPath(resolved));
+      entry = { url: URL.createObjectURL(blob), contentHash };
+      cache.set(cacheKey, entry);
+    }
+    manifest[origPath] = entry.url;
+  }
+
+  // Revoke and evict cache entries no longer referenced.
+  const revoked: string[] = [];
+  for (const [key, entry] of cache) {
+    if (!seenKeys.has(key)) {
+      URL.revokeObjectURL(entry.url);
+      revoked.push(entry.url);
+      cache.delete(key);
+    }
+  }
+
+  return { manifest, revoked };
+}
+```
+
+`Q2PreviewIframe` owns the cache as a ref, calls `buildAssetManifest` once per `UPDATE_AST` cycle (via `useMemo` keyed on `astJson + currentFilePath`), and revokes everything on iframe unmount.
+
+External URLs (`http://`, `https://`, `data:`, `//`) are skipped during the walk — `collectImagePaths` filters them out so the manifest only contains project-relative paths.
+
+##### Manifest distribution: rides on `UPDATE_AST`
+
+The manifest piggybacks on the existing `UPDATE_AST` payload rather than getting its own message type — manifest and AST are tightly coupled (manifest is derived from AST contents), and shipping them together guarantees ordering. The payload grows from `{ astJson, currentFilePath }` to `{ astJson, currentFilePath, assetManifest }`:
+
+```ts
+iframeRef.current.contentWindow.postMessage(
+  {
+    type: 'UPDATE_AST',
+    payload: { astJson, currentFilePath, assetManifest },
+  },
+  '*'
+);
+```
+
+Manifest size is bounded by the number of unique image paths × ~50 bytes per blob URL string. A 50-image doc → ~3KB. Negligible vs. the AST itself.
+
+##### `q2-preview/AssetManifestContext.tsx`
+
+New file. Iframe-side React context that distributes the manifest to `Image` components:
+
+```tsx
+import { createContext } from 'react';
+
+export const AssetManifestContext = createContext<Record<string, string>>({});
+```
+
+`PreviewRoot` (Plan 2A item 9, `q2-preview/entry.tsx`) extracts `assetManifest` from `UPDATE_AST` payload state and provides via `<AssetManifestContext.Provider value={manifest}>`. Image components consume via `useContext(AssetManifestContext)`.
+
+##### Manifest miss handling
+
+`lookupAssetUrl(manifest, url)` falls back to the original URL on manifest miss. The resulting `<img src="hero.png">` will fail to load in the iframe (no fetcher for project-relative paths), producing a visible broken-image affordance. This is intentional — silently swallowing missing images would hide bugs in the walker or the upload pipeline. Future enhancement: render an explicit placeholder component, but v1 lets the browser's default broken-image icon surface the issue.
+
 #### q2-preview leaf components
 
 ##### `q2-preview/blocks/`
@@ -190,15 +297,15 @@ Real-HTML implementations of every Pandoc Inline variant:
 
 ```tsx
 import { useContext } from 'react';
-import { PreviewContext } from '../PreviewContext';
-import { resolveImageSrc, inlinesToPlainText } from '../utils';
+import { AssetManifestContext } from '../AssetManifestContext';
+import { lookupAssetUrl, inlinesToPlainText } from '../utils';
 import type { ImageInline } from '../../framework/types';
 
 export function Image({ node }: { node: ImageInline }) {
   const [[id, classes, kvs], altInlines, [url, title]] = node.c;
-  const { currentFilePath } = useContext(PreviewContext) ?? { currentFilePath: '' };
+  const manifest = useContext(AssetManifestContext);
 
-  const src = resolveImageSrc(url, currentFilePath);
+  const src = lookupAssetUrl(manifest, url);
   const alt = inlinesToPlainText(altInlines);
   const kvMap = Object.fromEntries(kvs);
 
@@ -216,9 +323,11 @@ export function Image({ node }: { node: ImageInline }) {
 }
 ```
 
-`resolveImageSrc` (in `q2-preview/utils.ts`) handles VFS lookup + `data:` URI for project-relative paths; passes through `http`, `https`, `data:`, `//` URLs unchanged. `inlinesToPlainText` recursively walks inlines (`Str`, `Space`, `Code`, `SoftBreak`, `LineBreak`, etc.) into a plain string for the `alt` attribute.
+`lookupAssetUrl(manifest, url)` (in `q2-preview/utils.ts`) checks for external patterns (`https?:`, `data:`, `//`) and passes them through; otherwise looks up `url` in the manifest and returns the blob URL, falling back to the original URL on miss (the resulting broken `<img>` is a deliberate signal that resolution failed). `inlinesToPlainText` recursively walks inlines (`Str`, `Space`, `Code`, `SoftBreak`, `LineBreak`, etc.) into a plain string for the `alt` attribute.
 
-External URLs and paths that fail VFS resolution pass through unchanged. The legacy `/.quarto/...` branch from `iframePostProcessor.ts:177-210` is **not** ported — q2-preview's body AST never carries `/.quarto/...` image paths (per Plan 2A §"Multi-plan contract: page-scoped image artifacts").
+`PreviewContext` is no longer imported by `Image.tsx`. Path resolution against `currentFilePath` happens in the parent-side asset walker (see §"Asset manifest plumbing" below). `PreviewContext` continues to carry `currentFilePath` for link handlers (Plan 2A item 10).
+
+The legacy `/.quarto/...` branch from `iframePostProcessor.ts:177-210` is **not** ported — q2-preview's body AST never carries `/.quarto/...` image paths (per Plan 2A §"Provided: blob-URL asset contract").
 
 ##### `q2-preview/blocks/Figure.tsx` — `<figure>` + `<figcaption>`
 
@@ -295,7 +404,7 @@ Plan 2A's `q2-preview/dispatchers.tsx` ships `Block` and `Inline` with the muted
 
 #### `q2-preview/utils.ts` — shared component utilities
 
-- `resolveImageSrc(url, currentFilePath): string` — VFS lookup + `data:` URI; pass-through for external URLs.
+- `lookupAssetUrl(manifest, url): string` — checks for external URL patterns (`https?:`, `data:`, `//`) and passes them through; otherwise looks up in the asset manifest, falling back to the original URL on miss. ~12 LOC.
 - `inlinesToPlainText(inlines): string` — Stringify pass for alt text and other plain-text contexts.
 - `formatRefLabel(kind, number, title?): string` — produces "Theorem 1 (Pythagoras)"-style labels.
 - `composeAttr(originalAttr, extraClasses, extraKvs): Attr` — adds classes/attrs without mutating original.
@@ -394,14 +503,16 @@ Round-trip property: `unwrap(rewrap(x)) === x` and `wrap(unwrap(wireDiv)) === wi
 - `framework/types.ts` — `BlockNode`, `InlineNode`, `PandocAST`, `Attr`, `Slot`, `CustomBlockNode` placeholder (filled in 2B).
 - `framework/RegistryContext.tsx` — exported context with `sourceInfoPool` (added by 2A).
 - `framework/Ast.tsx`, `framework/dispatch.tsx` (the consolidated recursion-and-render module from 2pre — houses `Node`, `renderChildren`, `renderNode`, `blockTypes`, and the framework-internal `renderChildrenRegistry`) — used unchanged from 2A; 2B modifies `Node` (atomic gate) and adds `CustomBlock`/`CustomInline` entries to `renderChildrenRegistry`, plus extends `blockTypes` with `'CustomBlock'`. All inside `dispatch.tsx`. The mutations to `renderChildrenRegistry` are framework-evolves-itself changes — the structure is not exposed via `framework/index.ts` or any format global. See 2pre §"`renderChildrenRegistry` is framework-internal" for the contract.
-- `q2-preview/PreviewIframe.tsx`, `q2-preview/PreviewContext.tsx`, `q2-preview/registry.ts` skeleton, `q2-preview/entry.tsx` — extended by 2B with leaves and CustomNode components.
+- `q2-preview/Q2PreviewIframe.tsx`, `q2-preview/PreviewContext.tsx`, `q2-preview/registry.ts` skeleton, `q2-preview/entry.tsx` — extended by 2B with leaves, CustomNode components, asset-walker integration, and `AssetManifestContext` provider.
 - `hub-client/public/q2-preview.html` — unchanged.
 - `hub-client/src/types/sourceInfo.ts`, `hub-client/src/utils/sourceInfo.ts`, `hub-client/src/utils/atomicCustomNodes.ts` — read by the framework dispatcher gate.
 - `hub-client/src/utils/iframeLinkHandlers.ts` — installed by 2A; unchanged.
 
-### Consumed: Plan 1's page-scoped image artifacts
+### Consumed: Plan 1's page-scoped image artifacts (via Plan 2A's blob-URL asset contract)
 
-q2-preview's AST keeps `<img src>` as the user wrote it. `Image.tsx` resolves at render time via `resolveImageSrc(currentFilePath, src)` + `vfsReadBinaryFile`, reading bytes from the user's original VFS upload. The renderer does not contribute image bytes (per Plan 2A §"Multi-plan contract: page-scoped image artifacts" — bd-3gtn note).
+q2-preview's AST keeps `<img src>` as the user wrote it. Plan 2A's §"Provided: blob-URL asset contract" specifies the parent-mints-URL / iframe-consumes-URL pattern; 2B applies it to image bytes via the asset manifest plumbing described above (§"Asset manifest plumbing").
+
+The renderer does not contribute image bytes (per Plan 2A's contract — bd-3gtn note). Bytes come from the user's original VFS upload (`automergeSync` → `vfsAddBinaryFile`). The parent-side walker (in `Q2PreviewIframe.tsx`) reads via `vfsReadBinaryFile`, mints blob URLs, and posts the manifest in `UPDATE_AST`. `Image.tsx` is a pure manifest consumer — no VFS access in the iframe.
 
 ### Provided: visual parity for q2-preview
 
@@ -435,9 +546,12 @@ After 2B lands, documents using callouts, theorems, proofs, figures, equations, 
 - `hub-client/src/components/render/q2-preview/inlines/*.tsx` (NEW) — every Pandoc Inline (incl. Image).
 - `hub-client/src/components/render/q2-preview/custom/*.tsx` (NEW) — type-specific CustomNode components.
 - `hub-client/src/components/render/q2-preview/registry.ts` — populate.
-- `hub-client/src/components/render/q2-preview/utils.ts` (NEW) — `resolveImageSrc`, `inlinesToPlainText`, `formatRefLabel`, `composeAttr`, `renderSlot`.
+- `hub-client/src/components/render/q2-preview/utils.ts` (NEW) — `lookupAssetUrl`, `inlinesToPlainText`, `formatRefLabel`, `composeAttr`, `renderSlot`.
 - `hub-client/src/components/render/q2-preview/quartoClasses.ts` (NEW) — class-name constants.
-- `hub-client/src/components/render/q2-preview/entry.tsx` — call unwrap/rewrap.
+- `hub-client/src/components/render/q2-preview/assetWalker.ts` (NEW) — `buildAssetManifest` parent-side walker.
+- `hub-client/src/components/render/q2-preview/AssetManifestContext.tsx` (NEW) — iframe-side context for manifest distribution.
+- `hub-client/src/components/render/q2-preview/Q2PreviewIframe.tsx` — call asset walker, manage URL cache and revocations, post manifest in `UPDATE_AST` payload.
+- `hub-client/src/components/render/q2-preview/entry.tsx` — call unwrap/rewrap; extract `assetManifest` from `UPDATE_AST` payload; provide via `AssetManifestContext`.
 
 ### Demo files
 
@@ -460,16 +574,26 @@ The component-mount tests in the next subsection live under `hub-client/src/comp
 
 - **Unwrap / rewrap round-trip property**: for each known CustomNode type, `unwrap(rewrap(node)) === node` and `rewrap(unwrap(wireDiv)) === wireDiv`. Catches drift. (Pure logic; lives in `framework/customNode.test.ts` rather than the integration file — node env is fine.)
 - **Rust → JS → Rust round-trip**: build a CustomNode in Rust, wrap to JSON, ship to JS, unwrap, rewrap, ship back, decode in Rust, assert structural equality. (Cross-language; cargo nextest test on the Rust side.)
-- **Image renderer component tests**: mount `<Image>` with fixtures pointing at:
-  - Project-relative path (`hero.png`) — assert `<img>` has `data:` URI src.
-  - External URL (`https://...`) — assert pass-through.
+- **Image renderer component tests**: mount `<Image>` wrapped in `<AssetManifestContext.Provider value={manifest}>` with fixtures pointing at:
+  - Project-relative path (`hero.png`) with `manifest = { 'hero.png': 'blob:abc' }` — assert `<img src="blob:abc">`.
+  - External URL (`https://...`) — assert pass-through; manifest is not consulted.
   - `data:` URI — assert pass-through.
-  - Non-existent project path — assert pass-through (GIGO).
+  - Project-relative path with empty manifest (manifest miss, simulates failed VFS resolution) — assert `<img src="hero.png">` (fallback to original URL — broken-image affordance).
   - Image with `width` / `height` kvs — assert attrs on `<img>`.
   - Image with id, classes, title — assert all attributes on `<img>`.
   - Image with non-`Str` alt inlines (`Emph`, `Code`) — assert alt text contains the expanded plain text.
 
-  The `data:` URI cases need a mocked `vfsReadBinaryFile` (or equivalent VFS read primitive). The smoke-all e2e tier covers the real-VFS path.
+  No mocking of `vfsReadBinaryFile` — it's not called from `Image.tsx` under Design B. The walker tests below cover the VFS-read path in isolation.
+
+- **Asset walker tests** (vitest, `assetWalker.test.ts`): mock `vfsReadBinaryFile` and `URL.createObjectURL`/`revokeObjectURL`. Drive `buildAssetManifest` with various AST shapes:
+  - AST with one Image, valid VFS bytes → assert one `createObjectURL` call, manifest contains `{ origPath: <minted URL> }`, no revocations.
+  - Same AST re-walked with same content (cache hit) → assert no new mint, no revoke; manifest URL identical.
+  - Same AST re-walked with changed bytes (different content hash) → assert old URL revoked, new URL minted, manifest updated.
+  - AST with image removed → assert old URL revoked, manifest empty.
+  - AST with multiple images, some external (`https://...`) — assert externals are skipped (not in manifest).
+  - AST with image whose VFS read fails — assert path is omitted from manifest (no entry, no mint).
+  - Stress: AST with N=100 images → assert exactly N mints on first run, 0 on second run with same content.
+- **`Q2PreviewIframe` integration test (vitest)**: mount `<Q2PreviewIframe>` with a mock iframe and an AST containing images; assert the `UPDATE_AST` postMessage payload contains `assetManifest` matching the walker output. On unmount, assert all outstanding URLs revoke.
 - **Figure renderer**: mount `<Figure>` with fixture containing body Image and caption blocks; assert `<figure>` + `<figcaption>` structure with body recursion.
 - **Component snapshot tests**: render each base-type component and each CustomNode component with a fixed input; snapshot the rendered DOM.
 - **Generic fallback test**: render a wrapper Div with `type_name: "Unknown"` via the renderer plumbing; assert the fallback component renders with the type name visible.
@@ -497,11 +621,11 @@ Bundle this with Plan 2A item 12 (the format-dispatch update) so the third kind 
 Under `crates/quarto/tests/smoke-all/q2-preview/`:
 
 - **`multi-element-doc.qmd`** + supporting assets. One callout, one theorem, one cross-reference, one equation, one embedded image. Frontmatter assertion via `_quarto.tests.q2-preview.ensureHtmlElements` checks each component's expected class set is present in the rendered iframe DOM. Successor to the original Plan 2B test 1.
-- **`image-with-attrs.qmd`** + a real PNG asset. Single Image with `![alt](hero.png){width=400}`. Asserts `<img>` rendered with `src^="data:image/"` (substring match for the data-URI prefix), `width="400"`, and the alt-text content. Successor to the original Plan 2B test 2.
+- **`image-with-attrs.qmd`** + a real PNG asset. Single Image with `![alt](hero.png){width=400}`. Asserts `<img>` rendered with `src^="blob:"` (substring match for the blob-URL prefix produced by the parent walker), `width="400"`, and the alt-text content. Successor to the original Plan 2B test 2.
 
 Both fixtures use `requires_js: true` (commit `3ab7e1c4`'s feature) so the CLI smoke-all runner skips them and the Playwright runner picks them up. No imperative Playwright spec files needed; the existing `smoke-all.spec.ts` runner discovers them automatically.
 
-These fixtures cover the iframe boot path, `data:` URI generation through the real VFS, and the end-to-end browser path. The component-level class/text/attr assertions mostly land in vitest integration above; smoke-all's job is the integration safety net, not the per-component checks.
+These fixtures cover the iframe boot path, blob-URL minting through the real VFS, manifest distribution to the iframe, and the end-to-end browser path (parent walker → manifest postMessage → context provider → `Image` lookup → `<img src="blob:...">`). The component-level class/text/attr assertions mostly land in vitest integration above; smoke-all's job is the integration safety net, not the per-component checks.
 
 ## Dependencies
 
@@ -528,6 +652,9 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2B; they
 - **`__quarto_custom_node` class polluting rendered DOM after user override**. Resolved by design: unwrap is the single forward-path conversion, runs before any registry dispatch. The `Div` registry slot only sees real Divs.
 - **Class-taxonomy enumeration completeness**. First implementation commit enumerates classes from the named Rust source files. Mitigation: cross-check against actual q2-preview demo renders.
 - **Image alt-text edge cases**: Stringify pass must handle every Pandoc inline that can appear in alt context; missing one degrades alt to empty. Test coverage explicitly walks the inline taxonomy.
+- **Blob URL revocation timing.** Walker revokes prior URLs on cache eviction (content hash changed, or path no longer in AST). The cache-keyed-by-content-hash design avoids the revoke-then-fetch race because content-stable images keep the same URL across re-renders. Wholesale revocation only happens on iframe unmount (when the iframe is being torn down anyway). Risk: walker bug causes premature eviction → `<img>` 404s. Mitigated by the asset-walker tests above asserting the cache-hit path does not revoke.
+- **Manifest-AST atomicity.** Manifest must arrive *with* the AST it describes — an `Image` rendered before its manifest entry arrives produces a broken image. The current postMessage model guarantees atomicity (manifest and AST share the `UPDATE_AST` payload). If a future plan splits them into separate messages, this contract breaks; flag clearly in the manifest plumbing section.
+- **Manifest miss masquerading as success.** Manifest-miss fallback returns the original URL (e.g. `hero.png`), which the iframe's browser will fail to load. Looks like a broken image. Distinguishing "walker bug" from "user typo" requires looking at the manifest in DevTools. v1 accepts this; future enhancement: render an explicit "asset not found: <path>" placeholder.
 
 ## Estimated scope
 
@@ -540,21 +667,24 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2B; they
 | q2-preview/blocks/*.tsx (14 files; 11 existing-pattern + 3 gap fills) | ~250 |
 | q2-preview/inlines/*.tsx (20 files; 12 existing-pattern + 8 gap fills) | ~220 |
 | q2-preview/custom/*.tsx (7 files + fallback) | ~360 |
-| q2-preview/utils.ts (resolveImageSrc, inlinesToPlainText, formatRefLabel, composeAttr, renderSlot) | ~120 |
+| q2-preview/utils.ts (lookupAssetUrl, inlinesToPlainText, formatRefLabel, composeAttr, renderSlot) | ~110 |
 | q2-preview/quartoClasses.ts | ~80 |
 | q2-preview/registry.ts assembly | ~50 |
-| q2-preview/entry.tsx unwrap/rewrap wiring | ~10 |
-| Tests (round-trip, component snapshots, atomic, Derived, Image edge cases) | ~300 |
+| q2-preview/entry.tsx unwrap/rewrap + assetManifest extraction + provider wiring | ~25 |
+| q2-preview/assetWalker.ts (parent-side walker, cache, revocation) | ~120 |
+| q2-preview/AssetManifestContext.tsx | ~15 |
+| Q2PreviewIframe.tsx walker integration (cache ref, useMemo, payload extension, unmount cleanup) | ~30 |
+| Tests (round-trip, component snapshots, atomic, Derived, Image edge cases, asset walker, Q2PreviewIframe integration) | ~360 |
 | Smoke-all q2-preview infrastructure (PreviewIframeKind extension, discovery, dispatch) | ~10 |
 | Smoke-all q2-preview fixtures (multi-element-doc.qmd, image-with-attrs.qmd + assets) | ~50 |
-| **Total** | **~1750** |
+| **Total** | **~1980** |
 
-Larger than the original Plan 2B's ~1190 LOC because Image / Figure (originally in Plan 2A item 8) plus the explicit Pandoc base-type leaves are now in 2B's scope. Reasonable for two focused sessions:
+Larger than the original Plan 2B's ~1190 LOC because Image / Figure (originally in Plan 2A item 8) plus the explicit Pandoc base-type leaves plus the asset-manifest plumbing (added 2026-05-09) are now in 2B's scope. Reasonable for two focused sessions:
 
-- **Session A**: Framework changes (customNode.ts, types.ts, dispatcher gate, renderChildren entries) + q2-preview/blocks + q2-preview/inlines (incl. Image, Figure, Math, gap fills). Verifies end-to-end rendering of basic Quarto docs.
+- **Session A**: Framework changes (customNode.ts, types.ts, dispatcher gate, renderChildren entries) + asset-manifest plumbing (assetWalker.ts, AssetManifestContext.tsx, Q2PreviewIframe.tsx integration, entry.tsx provider wiring) + q2-preview/blocks + q2-preview/inlines (incl. Image, Figure, Math, gap fills). Verifies end-to-end rendering of basic Quarto docs with image bytes flowing as blob URLs.
 - **Session B**: q2-preview/custom + utils + quartoClasses + registry assembly + tests. Visual parity for callouts / theorems / cross-references.
 
-Risk: Table family is the highest-effort single component (~80 LOC). Budget extra time.
+Risk: Table family is the highest-effort single component (~80 LOC). Budget extra time. Asset walker has a lot of test surface (cache hit/miss, revocation, externals filtering); budget time for those tests in Session A.
 
 ## Notes
 
@@ -562,3 +692,17 @@ Risk: Table family is the highest-effort single component (~80 LOC). Budget extr
 - The atomic-aware gate moved from "modify q2-debug's dispatcher" to framework's `Node` (the single recursion chokepoint, in `framework/dispatch.tsx`) — benefits both formats automatically without modifying either format's dispatcher.
 - Image and Figure moved into 2B as the natural place for "Pandoc base type leaves with full semantics."
 - Following the user's lead: q2-preview is intended to evolve toward a system component (likely a Quarto extension), but the bundling / distribution mechanics are out of scope for 2B.
+
+### Revision history
+
+- **2026-05-09**: Asset-transport architecture switched to blob-URL manifests (Plan 2A's Design B applied to images):
+  - `Image.tsx` no longer reads VFS bytes — became a pure `AssetManifestContext` consumer that looks up `node.target.0` in the manifest. Removed `PreviewContext` dependency from `Image.tsx`. (`PreviewContext` continues to carry `currentFilePath` for link handlers.)
+  - New parent-side asset walker (`q2-preview/assetWalker.ts`) walks the AST for `Image` nodes, resolves paths against `currentFilePath`, reads VFS bytes, mints blob URLs (cache-keyed by content hash for stable URLs across re-renders), and produces a manifest. Cache eviction triggers `URL.revokeObjectURL`.
+  - New `AssetManifestContext.tsx` distributes the manifest to iframe components.
+  - Manifest piggybacks on the existing `UPDATE_AST` payload — no new message type, manifest-and-AST always arrive together.
+  - `q2-preview/utils.ts`: `resolveImageSrc` removed; `lookupAssetUrl(manifest, url)` added.
+  - Multi-plan contract section retitled to reference Plan 2A's "blob-URL asset contract" and describe 2B's image manifest as the application of that contract.
+  - Test plan: Image renderer tests stop mocking `vfsReadBinaryFile`; mock the `AssetManifestContext` value instead. New asset-walker test suite (cache hit, cache eviction with revocation, external skipping, manifest-AST atomicity via `Q2PreviewIframe` integration test). smoke-all `image-with-attrs.qmd` assertion changed from `src^="data:image/"` to `src^="blob:"`.
+  - Risk areas: added blob-URL revocation timing, manifest-AST atomicity, manifest-miss masquerading.
+  - Estimated scope: ~1750 → ~1980 LOC (added ~150 LOC for walker, context, integration, and walker tests; saved ~10 LOC by simplifying utils).
+  - Rationale: aligns with Plan 2A's unified asset-transport architecture (URL strings on the wire, bytes only on the parent). Maps cleanly onto a future service-worker swap-in: replace the parent walker + manifest with SW request interception, and `<img src>` semantics in the iframe stay unchanged.
