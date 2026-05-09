@@ -2,6 +2,7 @@ import { useMemo, Component } from 'react';
 import type { ReactNode } from 'react';
 import type { FileEntry } from '../../types/project';
 import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
+import { Q2PreviewIframe } from './q2-preview/Q2PreviewIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
@@ -74,6 +75,15 @@ interface ReactRendererProps {
   onSlideChange?: (slideIndex: number) => void;
   // Format type: 'q2-slides', 'q2-debug', or 'q2-preview'
   format: string;
+  /**
+   * Compiled theme CSS fingerprint, three-way (Plan 2A item 11):
+   *   - `string`: render produced a theme; iframe should display it.
+   *   - `null`: render succeeded with no theme intended.
+   *   - `undefined`: render failed or pre-first-render; iframe keeps
+   *     last-good styling.
+   * Forwarded to `Q2PreviewIframe` only; q2-debug ignores it.
+   */
+  themeFingerprint?: string | null;
 }
 
 /**
@@ -92,10 +102,15 @@ function ReactRenderer({
   currentSlideIndex,
   onSlideChange,
   format,
+  themeFingerprint,
 }: ReactRendererProps) {
-  // Extract component paths - only recompute when the list of paths changes
+  // Extract component paths - only recompute when the list of paths
+  // changes. The gate covers both q2-debug and q2-preview because both
+  // load user TSX overrides via the iframe's
+  // `LOAD_CUSTOM_COMPONENTS` postMessage handler. Plan 2A item 13
+  // extended the q2-debug-only gate to also include q2-preview.
   const componentPathsKey = useMemo(() => {
-    if (format !== 'q2-debug') {
+    if (format !== 'q2-debug' && format !== 'q2-preview') {
       return '';
     }
 
@@ -137,14 +152,13 @@ function ReactRenderer({
     return componentsCode;
   }, [componentPathsKey, currentFilePath]);
 
-  // Both q2-debug (raw AST view) and q2-preview (post-pipeline AST
-  // for the live preview) render through the same Q2DebugIframe — the
-  // iframe's data-shape contract is the only assumption shared, and
-  // the post-pipeline AST from q2-preview is iframe-compatible (more
-  // CustomNode wrappers + transformed metadata; Plan 2 ships the
-  // type-specific React components). q2-preview's data source
-  // diverges upstream in `ReactPreview.tsx::doRender`.
-  if (format === 'q2-debug' || format === 'q2-preview') {
+  // Plan 2A item 12: format-dispatch split. q2-debug (raw AST view)
+  // and q2-preview (post-pipeline AST for the live preview) now run
+  // through distinct iframe wrappers. q2-preview adds a parent-side
+  // theme-CSS effect that q2-debug doesn't need, so the two surfaces
+  // diverge at the wrapper level. They still share the shared
+  // `framework/` plumbing (registry, dispatchers, Ast).
+  if (format === 'q2-debug') {
     return (
       <ErrorBoundary>
         <div style={{
@@ -162,6 +176,30 @@ function ReactRenderer({
             onNavigateToDocument={onNavigateToDocument}
             setAst={setAst}
             customComponentsCode={customComponentsCode}
+          />
+        </div>
+      </ErrorBoundary>
+    );
+  }
+  if (format === 'q2-preview') {
+    return (
+      <ErrorBoundary>
+        <div style={{
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+        }}>
+          <Q2PreviewIframe
+            astJson={astJson}
+            currentFilePath={currentFilePath}
+            onNavigateToDocument={onNavigateToDocument}
+            setAst={setAst}
+            customComponentsCode={customComponentsCode}
+            themeFingerprint={themeFingerprint}
           />
         </div>
       </ErrorBoundary>

@@ -1757,6 +1757,94 @@ mod tests {
         );
     }
 
+    /// Plan 2A item 11: the artifact key produced by
+    /// `CompileThemeCssStage` is `css:theme:<fingerprint>`, where
+    /// `<fingerprint>` matches `theme_fingerprint(css)` byte-for-byte.
+    /// The WASM bridge recovers `RenderResponse.theme_fingerprint` from
+    /// this suffix without re-hashing CSS bytes; the contract this test
+    /// locks is that the suffix and the CSS-derived fingerprint stay in
+    /// sync.
+    #[test]
+    fn test_theme_fingerprint_recoverable_from_artifact_key() {
+        use crate::stage::stages::theme_fingerprint;
+
+        // Render twice with the same theme — fingerprints must match.
+        let content_a = b"---\ntitle: Test\ntheme: flatly\n---\n\nA.";
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        let mut ctx_a1 = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx_a2 = RenderContext::new(&project, &doc, &format, &binaries);
+        let config = HtmlRenderConfig::default();
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_a,
+            "test.qmd",
+            &mut ctx_a1,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_a,
+            "test.qmd",
+            &mut ctx_a2,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+
+        let key_a1 = ctx_a1
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        let key_a2 = ctx_a2
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        assert_eq!(
+            key_a1, key_a2,
+            "same theme renders must produce byte-identical fingerprint keys"
+        );
+
+        let suffix_a = key_a1
+            .strip_prefix("css:theme:")
+            .expect("key should start with css:theme:");
+        let css_a = get_css_artifact(&ctx_a1);
+        assert_eq!(
+            suffix_a,
+            theme_fingerprint(&css_a),
+            "key suffix must match theme_fingerprint(css) byte-for-byte"
+        );
+
+        // Render with a different theme — fingerprint must differ.
+        let content_b = b"---\ntitle: Test\ntheme: cosmo\n---\n\nB.";
+        let mut ctx_b = RenderContext::new(&project, &doc, &format, &binaries);
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_b,
+            "test.qmd",
+            &mut ctx_b,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+        let key_b = ctx_b
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        assert_ne!(
+            key_a1, key_b,
+            "different themes must produce different fingerprint keys"
+        );
+    }
+
     /// bd-45yw Phase 4a: `HtmlRenderConfig.engine_registry` overrides
     /// the engine registry that `EngineExecutionStage` uses, so a
     /// caller (orchestrator/CLI replay path) can substitute a

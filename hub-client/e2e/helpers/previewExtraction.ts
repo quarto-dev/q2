@@ -20,12 +20,12 @@ import type { Page } from '@playwright/test';
  * browser error is detected (e.g. WebSocket failure, WASM crash), avoiding
  * a long timeout with no diagnostic info.
  */
-export type PreviewIframeKind = 'html' | 'q2-debug';
+export type PreviewIframeKind = 'html' | 'q2-debug' | 'q2-preview';
 
 export function previewIframeSelector(kind: PreviewIframeKind): string {
-  return kind === 'q2-debug'
-    ? 'iframe[src*="q2-debug.html"]'
-    : 'iframe.preview-active';
+  if (kind === 'q2-debug') return 'iframe[src*="q2-debug.html"]';
+  if (kind === 'q2-preview') return 'iframe[src*="q2-preview.html"]';
+  return 'iframe.preview-active';
 }
 
 export async function waitForPreviewRender(

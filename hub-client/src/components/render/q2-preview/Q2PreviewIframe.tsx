@@ -1,0 +1,177 @@
+import { useEffect, useRef, useState } from 'react';
+import { vfsReadFile } from '../../../services/wasmRenderer';
+import { DEFAULT_CSS_ARTIFACT_PATH } from '../../../types/artifactPaths';
+
+interface Q2PreviewIframeProps {
+  astJson: string;
+  currentFilePath: string;
+  onNavigateToDocument?: (path: string, anchor: string | null) => void;
+  setAst: (newAst: any) => void;
+  customComponentsCode?: Record<string, string>;
+  /**
+   * Three-way theme fingerprint (Plan 2A item 11).
+   *  - `string`: render produced a theme. Read VFS bytes, mint a blob
+   *    URL, post `{ cssUrl, fingerprint }`.
+   *  - `null`: render succeeded with no theme intended. Post
+   *    `{ cssUrl: null, fingerprint: null }` so the iframe drops its
+   *    `<link data-q2-theme>` element.
+   *  - `undefined`: render failed or pre-first-render. **Skip the post
+   *    entirely** so the iframe keeps its last-good styling — a
+   *    transient YAML parse error shouldn't strip Bootstrap from the
+   *    user's view.
+   */
+  themeFingerprint?: string | null;
+}
+
+/**
+ * Wrapper component that renders q2-preview's `<Ast>` in a sandboxed
+ * iframe. Parallel to `Q2DebugIframe` with two additions:
+ *
+ *  1. Blob-URL theme transport. The iframe is sandboxed and does not
+ *     initialize WASM, so it cannot call `vfsReadFile` directly. The
+ *     parent (this component) reads the compiled theme CSS bytes,
+ *     wraps them in a `Blob`, mints a blob URL via
+ *     `URL.createObjectURL`, and posts the URL string to the iframe
+ *     in an `UPDATE_THEME` message. Iframe consumes the URL via
+ *     `<link rel="stylesheet" href={cssUrl}>`. No bytes ever ride on
+ *     the postMessage channel.
+ *
+ *  2. Blob-URL revocation lifecycle. Three triggers: (a) replacement
+ *     when the fingerprint changes and a new URL is minted, (b)
+ *     `IFRAME_READY` (a fresh iframe means any prior URL we held is
+ *     no longer referenced), (c) iframe unmount.
+ */
+export function Q2PreviewIframe({
+  astJson,
+  currentFilePath,
+  onNavigateToDocument,
+  setAst,
+  customComponentsCode,
+  themeFingerprint,
+}: Q2PreviewIframeProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeReady, setIframeReady] = useState(false);
+
+  // Track the last fingerprint we posted and the current outstanding
+  // blob URL so we can dedupe re-sends and revoke replaced URLs.
+  const lastSentThemeFingerprintRef = useRef<string | null | undefined>(
+    undefined,
+  );
+  const currentThemeBlobUrlRef = useRef<string | null>(null);
+
+  // Cleanup any outstanding blob URL on unmount.
+  useEffect(() => {
+    return () => {
+      if (currentThemeBlobUrlRef.current) {
+        URL.revokeObjectURL(currentThemeBlobUrlRef.current);
+        currentThemeBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  // Handle messages from the iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // In production, verify event.origin for security
+      if (event.data.type === 'IFRAME_READY') {
+        setIframeReady(true);
+        // Iframe restart — invalidate dedup state. Any prior blob URL
+        // we held is no longer referenced by the new iframe; revoke it.
+        lastSentThemeFingerprintRef.current = undefined;
+        if (currentThemeBlobUrlRef.current) {
+          URL.revokeObjectURL(currentThemeBlobUrlRef.current);
+          currentThemeBlobUrlRef.current = null;
+        }
+      } else if (event.data.type === 'NAVIGATE_TO_DOCUMENT') {
+        onNavigateToDocument?.(event.data.path, event.data.anchor);
+      } else if (event.data.type === 'SET_AST') {
+        setAst(event.data.ast);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onNavigateToDocument, setAst]);
+
+  // Send custom components code when iframe is ready (only once or when it changes)
+  useEffect(() => {
+    if (!iframeReady || !iframeRef.current?.contentWindow) return;
+
+    if (customComponentsCode) {
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: 'LOAD_CUSTOM_COMPONENTS',
+          componentsCode: customComponentsCode,
+        },
+        '*',
+      );
+    }
+  }, [iframeReady, customComponentsCode]);
+
+  // Send AST updates when iframe is ready
+  useEffect(() => {
+    if (!iframeReady || !iframeRef.current?.contentWindow) return;
+
+    iframeRef.current.contentWindow.postMessage(
+      {
+        type: 'UPDATE_AST',
+        payload: {
+          astJson,
+          currentFilePath,
+        },
+      },
+      '*',
+    );
+  }, [iframeReady, astJson, currentFilePath]);
+
+  // Send theme CSS when iframe is ready and fingerprint is known.
+  // Three-way semantics:
+  //   - undefined ⇒ skip post entirely; last-good CSS persists.
+  //   - null      ⇒ post explicit clear; iframe drops its <link>.
+  //   - string    ⇒ read VFS bytes, mint blob URL, post URL.
+  useEffect(() => {
+    if (!iframeReady || !iframeRef.current?.contentWindow) return;
+    if (themeFingerprint === undefined) return;
+    if (lastSentThemeFingerprintRef.current === themeFingerprint) return;
+
+    // Replace the prior blob URL (if any). The iframe is about to
+    // swap its <link href>; the browser internally retains the old
+    // bytes during the transition, so revocation immediately after
+    // posting is safe.
+    if (currentThemeBlobUrlRef.current) {
+      URL.revokeObjectURL(currentThemeBlobUrlRef.current);
+      currentThemeBlobUrlRef.current = null;
+    }
+
+    let cssUrl: string | null = null;
+    if (themeFingerprint !== null) {
+      const result = vfsReadFile(DEFAULT_CSS_ARTIFACT_PATH);
+      if (result.success && result.content) {
+        const blob = new Blob([result.content], { type: 'text/css' });
+        cssUrl = URL.createObjectURL(blob);
+        currentThemeBlobUrlRef.current = cssUrl;
+      }
+    }
+
+    iframeRef.current.contentWindow.postMessage(
+      { type: 'UPDATE_THEME', cssUrl, fingerprint: themeFingerprint },
+      '*',
+    );
+    lastSentThemeFingerprintRef.current = themeFingerprint;
+  }, [iframeReady, themeFingerprint]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      src="/q2-preview.html"
+      title="q2-preview Renderer"
+      sandbox="allow-scripts allow-same-origin"
+      style={{
+        width: '100%',
+        height: '100%',
+        border: 'none',
+        display: 'block',
+      }}
+    />
+  );
+}
