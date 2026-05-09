@@ -574,13 +574,45 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         //
         // Plan 2A item 11: capture the theme fingerprint **before**
         // the drain (see `RenderToHtmlRenderer::render` for the
-        // rationale).
-        let theme_fingerprint = ctx
+        // rationale). q2-preview also stamps the theme bytes at
+        // the stable `styles.css` path so the hub-client iframe can
+        // read them regardless of single-doc / project layout —
+        // `compile_theme_css` puts the artifact at
+        // `quarto/quarto-theme-<fp>.css` for multi-doc projects, but
+        // q2-preview previews one document at a time so the
+        // fingerprint-suffixed path adds nothing for this consumer.
+        // Honors Plan 1's stated contract that "RenderToPreviewAstRenderer
+        // writes the compiled theme CSS to
+        // /.quarto/project-artifacts/styles.css on every q2-preview render."
+        let theme_artifact_entry = ctx
             .artifacts
             .get_by_prefix("css:theme:")
             .first()
-            .and_then(|(key, _)| key.strip_prefix("css:theme:"))
+            .map(|(k, a)| (k.to_string(), a.content.clone()));
+
+        let theme_fingerprint = theme_artifact_entry
+            .as_ref()
+            .and_then(|(k, _)| k.strip_prefix("css:theme:"))
             .map(|s| s.to_string());
+
+        if let Some((_, content)) = &theme_artifact_entry {
+            // Compute the iframe-readable path directly from the VFS
+            // root rather than via `resolver.on_disk_path_for` —
+            // websites would route Project-scoped paths through
+            // `site_libs/`, but the iframe wrapper expects the
+            // unsuffixed location at `{vfs_root}/styles.css`.
+            let iframe_path = self.vfs_root.join("styles.css");
+            if let Some(parent) = iframe_path.parent() {
+                let _ = runtime.dir_create(parent, true);
+            }
+            runtime.file_write(&iframe_path, content).map_err(|e| {
+                crate::error::QuartoError::other(format!(
+                    "Failed to write q2-preview theme CSS to iframe path {}: {}",
+                    iframe_path.display(),
+                    e
+                ))
+            })?;
+        }
 
         let drained = ctx.artifacts.drain_project_scoped();
         let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
