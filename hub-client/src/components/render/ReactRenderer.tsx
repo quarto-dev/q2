@@ -116,7 +116,20 @@ function ReactRenderer({
     }
 
     const ast = JSON.parse(astJson);
-    const componentPaths = ast?.meta?.['render-components']?.c?.map?.((o: any) => o?.c?.[0]?.c) ?? [];
+    // Walk the MetaList → MetaInlines → Str(c) chain. Entries that
+    // don't resolve to a non-empty string are dropped: this includes
+    // (a) `render-components:\n  -` mid-typing, where the bullet has
+    // no value and parses to `null`, and (b) an empty MetaInlines
+    // (the user typed the path-string-open delimiter but no content
+    // yet). Without this filter, `resolveComponentPath(undefined …)`
+    // throws inside this useMemo and the iframe-host page goes blank
+    // with no upstream ErrorBoundary to catch it.
+    const rawPaths: unknown[] =
+      ast?.meta?.['render-components']?.c?.map?.((o: any) => o?.c?.[0]?.c) ??
+      [];
+    const componentPaths = rawPaths.filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
 
     return JSON.stringify(componentPaths);
   }, [format, astJson]);
