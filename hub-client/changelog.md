@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-05-10
+
+- [`fc784bb2`](https://github.com/quarto-dev/q2/commits/fc784bb2): Plan 2B Phase 1 — framework foundation for q2-preview's built-in components. Adds `framework/customNode.ts` with `unwrapCustomNodes` / `rewrapCustomNodes` walks (mirrors Rust JSON writer/reader for `__quarto_custom_node` Div/Span wrappers, structural-sharing pure to preserve subtree identity for the future Note-numbering WeakMap). Atomic-aware gate inside `framework/dispatch.tsx`'s `Node` no-ops `setLocalAst` for Derived / atomic Synthetic / atomic CustomNode subtrees — both q2-debug and q2-preview pick it up automatically. `framework/Ast.tsx` accepts a discriminated input (string OR pre-parsed AST), unconditionally unwraps custom-node wrappers, and fills the `RegistryContext.sourceInfoPool` value (Plan 2A typed it but didn't fill). New types: `Slot`, `CustomBlockNode`, `CustomInlineNode`, `CiteInline`, plus block-level gap-fill types. `blockTypes` extended from 11 to 19 entries (`LineBlock` / `DefinitionList` / `Table` for 2B's leaves; `CustomBlock` post-unwrap discriminator; `BlockMetadata` / `NoteDefinitionPara` / `NoteDefinitionFencedBlock` / `CaptionBlock` defensively-routed-as-block). `renderChildrenRegistry` gains `CustomBlock` / `CustomInline` entries (generic slot walk consumed by Plan 2C's `Fallback`). Round-trip property tests cover the six in-tree CustomNode `type_name`s plus `IncludeExpansion` placeholder, both directions, the inline-side no-Plain asymmetry, and the walker-purity reference-preservation contract.
+
 ### 2026-05-09
 
 - [`e6381abd`](https://github.com/quarto-dev/q2/commits/e6381abd): Fix q2-preview theme CSS path mismatch in project mode. The pass-2 renderer now writes a copy of the compiled theme CSS at the stable iframe-readable location `/.quarto/project-artifacts/styles.css` regardless of single-doc vs project layout, honoring Plan 1's contract.
