@@ -27,7 +27,7 @@ jobs:
     
     name: Run test suite
     if: github.repository == 'quarto-dev/q2'
-    
+
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v6
@@ -46,9 +46,16 @@ jobs:
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
 
-      # Consistent Rust setup for both platforms
+      # Consistent Rust setup for both platforms. Use the named `@nightly`
+      # ref (not `@master`, which hard-errors without an explicit
+      # `toolchain:` input) — it installs the nightly toolchain; cargo
+      # then reads the pinned dated nightly from rust-toolchain.toml
+      # (bd-at72) at build time. Matches the existing pattern on main.
       - name: Set up Rust nightly
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
 
       - name: Output rust version
         shell: bash

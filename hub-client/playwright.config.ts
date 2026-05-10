@@ -11,14 +11,21 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // Visual-regression specs run via playwright.visual.config.ts (which has
+  // the --update-snapshots-on-missing retry flow); exclude them from the
+  // functional run so a missing baseline isn't a hard failure here.
+  testIgnore: '**/*.visual.spec.ts',
   // Parallel tests are OK - they use different documents, single sync server handles concurrency
   fullyParallel: true,
   // Fail on `test.only` in CI
   forbidOnly: !!process.env.CI,
   // Retries for flaky tests in CI
   retries: process.env.CI ? 2 : 0,
-  // Parallel workers
-  workers: process.env.CI ? 4 : undefined,
+  // Parallel workers. Match the runner's CPU count: ubuntu-latest has
+  // 2 cores. Running more workers than cores causes the WASM render
+  // pipeline to stall under contention and individual tests miss the
+  // preview-render deadline non-deterministically.
+  workers: process.env.CI ? 2 : undefined,
   // HTML reporter
   reporter: 'html',
 
@@ -61,5 +68,11 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     // Timeout for server to start
     timeout: 120000,
+    // Vite proxies /auth/* and the websocket to VITE_HUB_SERVER
+    // (default http://localhost:3000). globalSetup starts the e2e hub
+    // on port 3030, so point Vite at that port.
+    env: {
+      VITE_HUB_SERVER: 'http://localhost:3030',
+    },
   },
 });

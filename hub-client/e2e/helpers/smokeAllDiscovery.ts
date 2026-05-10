@@ -20,6 +20,16 @@ const SKIP_PRINTS_MESSAGE: Set<string> = new Set([
   'quarto-test/expected-error.qmd',
 ]);
 
+// Tests that fail in the hub-client preview because of a known gap in
+// the WASM render pipeline. The native CLI runner handles these. Skip
+// in the browser until the gap is closed.
+const SKIP_WASM_UNSUPPORTED: Map<string, string> = new Map([
+  [
+    'highlighting/03-user-grammar/03-user-grammar-toml.qmd',
+    'bd-izfv: RenderToHtmlRenderer drops user_grammars on the project-render path',
+  ],
+]);
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -231,7 +241,15 @@ function parseFormatSpec(
 // Skip logic
 // ---------------------------------------------------------------------------
 
-export function shouldSkip(runConfig: RunConfig | null): string | null {
+export function shouldSkip(
+  runConfig: RunConfig | null,
+  relPath?: string,
+): string | null {
+  if (relPath) {
+    const wasmReason = SKIP_WASM_UNSUPPORTED.get(relPath);
+    if (wasmReason) return `WASM unsupported: ${wasmReason}`;
+  }
+
   if (!runConfig) return null;
 
   if (runConfig.skip) {

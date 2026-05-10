@@ -105,9 +105,9 @@ function noopCallbacks(): SyncClientCallbacks {
  * - `create()` returns `createHandle`
  * - networkSubsystem never emits 'peer', so `waitForPeer` always times out
  */
-function installMockRepo(
-  connectHandle: ReturnType<typeof createMockHandle>['handle'],
-  createHandle: ReturnType<typeof createMockHandle>['handle'],
+function installMockRepo<T>(
+  connectHandle: ReturnType<typeof createMockHandle<T>>['handle'],
+  createHandle: ReturnType<typeof createMockHandle<T>>['handle'],
 ) {
   const mockNetworkSubsystem = {
     on: vi.fn(),

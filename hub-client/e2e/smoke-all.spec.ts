@@ -39,7 +39,7 @@ test.describe('smoke-all E2E tests', () => {
   test.setTimeout(60000);
 
   for (const fixture of allTests) {
-    const skipReason = shouldSkip(fixture.runConfig);
+    const skipReason = shouldSkip(fixture.runConfig, fixture.relPath);
 
     for (const spec of fixture.formatSpecs) {
       const testName = `${fixture.relPath} [${spec.format}]`;

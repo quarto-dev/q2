@@ -5,6 +5,10 @@
  * - `seedProjectInBrowser()` runs in the browser via page.evaluate()
  */
 
+// createSyncClient instantiates IndexedDBStorageAdapter unconditionally;
+// shim indexedDB in Node so the helper can run outside the browser.
+import 'fake-indexeddb/auto';
+
 import { readFileSync } from 'node:fs';
 import {
   createSyncClient,
