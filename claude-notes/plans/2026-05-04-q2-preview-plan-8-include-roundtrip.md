@@ -16,7 +16,8 @@ anchor for the include token's source bytes — round-trip preserves
 
 This plan also adds the qmd-writer arm for `CustomNode("IncludeExpansion")`
 and the React component (transparent passthrough that doesn't propagate
-`setLocalAst` to slot children, registered with Plan 2C). The writer's
+`setLocalAst` to slot children — shipped here, not in Plan 2C; see Plan 2C's
+2026-05-10 third-pass amendment for the deferral rationale). The writer's
 atomic-violation logic from Plan 7 enforces the "edits inside an include
 are prohibited" contract — `IncludeExpansion` is registered in
 `is_atomic_custom_node`.
@@ -57,9 +58,11 @@ round-tripping; edits inside surfacing as diagnostics).
     a coarsen bug")` as a debug assertion.
 - Add a React component for `IncludeExpansion` at
   `hub-client/src/components/render/q2-preview/custom/IncludeExpansion.tsx`
-  (q2-preview's built-in custom-node registry, post-2pre / 2B / 2C; Plan 2C
-  already lands an `IncludeExpansion` placeholder component as dormant
-  wiring — Plan 8 makes the underlying CustomNode appear in the AST):
+  (q2-preview's built-in custom-node registry, post-2pre / 2B / 2C). Plan
+  2C deferred the placeholder per its third-pass amendment (2026-05-10):
+  until Plan 8 lands the AST node, `Fallback.tsx` covers the unknown
+  `type_name` gracefully, and Plan 8 ships the real component together
+  with the AST node and the `atomicCustomNodes.ts` addition:
   - Transparent passthrough: render the content slot's blocks normally.
   - Read-only: do not pass `setLocalAst` to slot children (enforced via
     the framework's atomic-aware dispatcher in `framework/dispatchers.tsx`
@@ -121,12 +124,12 @@ round-tripping; edits inside surfacing as diagnostics).
   parent-file include token. Round-trip semantics compose: untouched at any
   level → preserved; touched at any level → atomic-violation at the deepest
   affected wrapper.
-- **React component is read-only** (Plan 2C ships the per-type
-  IncludeExpansion component; Plan 2B's framework atomic gate enforces
-  read-only behavior; Plan 2A introduces the atomic-registry hand-mirror).
-  The IncludeExpansion component does not pass `setLocalAst` to children.
-  This is the primary enforcement; the writer's atomic-violation is the
-  contract guarantor.
+- **React component is read-only** (Plan 8 ships the per-type
+  IncludeExpansion component, deferred from Plan 2C per its third-pass
+  amendment; Plan 2B's framework atomic gate enforces read-only behavior;
+  Plan 2A introduces the atomic-registry hand-mirror). The IncludeExpansion
+  component does not pass `setLocalAst` to children. This is the primary
+  enforcement; the writer's atomic-violation is the contract guarantor.
 
 ## The wrapper structure
 
@@ -148,8 +151,10 @@ Block::Custom(CustomNode {
 
 The included blocks inside the slot keep their own FileId (set by the
 existing remap_file_ids logic in `IncludeExpansionStage`). They render
-correctly in q2-preview's React layer because Plan 2C's IncludeExpansion
-component renders the slot's content using the same dispatch.
+correctly in q2-preview's React layer because Plan 8's IncludeExpansion
+component renders the slot's content using the same dispatch (until
+Plan 8 ships, q2-preview's `Fallback.tsx` does the same generic slot
+walk — same visual outcome, just no per-type styling).
 
 ## Round-trip walkthrough
 
