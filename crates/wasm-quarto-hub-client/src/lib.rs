@@ -1214,9 +1214,21 @@ async fn render_single_doc_to_response(
     // on `ctx.artifacts` using the same resolver, so the iframe
     // (HTML or AST-iframe) finds the bytes at the matching VFS
     // path either way.
+    //
+    // bd-3gtn: skip empty-content artifacts. `ResourceCollectorTransform`
+    // produces manifest entries via `Artifact::from_path` whose path
+    // resolves (via `Path::join` with an absolute artifact_path) to
+    // the user's upload location; writing empty bytes there would
+    // overwrite the upload. Skipping empty content preserves manifest
+    // semantics for downstream consumers (the entries remain in
+    // `ctx.artifacts` for `ResourceReportStage` etc.) while keeping
+    // produced bytes (theme CSS, fonts, future plot images) flowing.
     let runtime = get_runtime();
     for (_key, artifact) in ctx.artifacts.iter() {
         if let Some(artifact_path) = &artifact.path {
+            if artifact.content.is_empty() {
+                continue;
+            }
             let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
             runtime.add_file(&vfs_path, artifact.content.clone());
         }
@@ -1383,10 +1395,17 @@ async fn render_project_active_page_to_response(
     // (Project-scoped artifacts were already flushed to VFS by
     // `WebsiteProjectType::post_render` → `flush_site_libs` via
     // the WASM renderer's vfs_root resolver.)
+    //
+    // bd-3gtn: skip empty-content artifacts (manifest entries from
+    // `ResourceCollectorTransform`); see the matching guard in
+    // `render_single_doc_to_response` for the rationale.
     let runtime = get_runtime();
     let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
     for (_key, artifact) in active_output.page_artifacts.iter() {
         if let Some(artifact_path) = &artifact.path {
+            if artifact.content.is_empty() {
+                continue;
+            }
             let vfs_path = resolver.on_disk_path_for(artifact.scope, artifact_path);
             runtime.add_file(&vfs_path, artifact.content.clone());
         }

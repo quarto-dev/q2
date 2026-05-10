@@ -132,19 +132,16 @@ describe('q2-preview asset manifest in project mode (Plan 2B)', () => {
             'index.qmd',
             '---\nformat: q2-preview\n---\n\n![alt](hero.png){width=400}\n',
         );
+        // Add the binary BEFORE render — the natural lifecycle: an
+        // upload precedes the first render. Asserts bd-3gtn fix:
+        // ResourceCollectorTransform's empty-content artifact must
+        // not overwrite the user's bytes during the WASM flush loop.
+        vfsAddBinaryFile('hero.png', PNG_BYTES);
 
         const json = await renderInProject('/project/index.qmd');
         const result = JSON.parse(json) as RenderResponse;
         expect(result.success).toBe(true);
         expect(result.ast_json).toBeTruthy();
-
-        // Add the binary AFTER render. The walker reads VFS at manifest-
-        // build time, not at render time — and the render path appears to
-        // overwrite project-relative paths (the bytes survive ADD but get
-        // emptied during the render's resource-flush phase). Production
-        // q2-preview always re-syncs assets through automerge between
-        // renders; the post-render add mirrors that lifecycle.
-        vfsAddBinaryFile('hero.png', PNG_BYTES);
 
         const cache = new Map<string, ManifestCacheEntry>();
         // currentFilePath is project-relative (matches production: the
@@ -165,14 +162,12 @@ describe('q2-preview asset manifest in project mode (Plan 2B)', () => {
             'sub/page.qmd',
             '---\nformat: q2-preview\n---\n\n![alt](../hero.png)\n',
         );
+        // Pre-render binary upload (bd-3gtn).
+        vfsAddBinaryFile('hero.png', PNG_BYTES);
 
         const json = await renderInProject('/project/sub/page.qmd');
         const result = JSON.parse(json) as RenderResponse;
         expect(result.success, `Render failed: ${result.error}`).toBe(true);
-
-        // Add binary AFTER render (matches the production lifecycle —
-        // automerge re-syncs assets between renders).
-        vfsAddBinaryFile('hero.png', PNG_BYTES);
 
         const cache = new Map<string, ManifestCacheEntry>();
         const { manifest } = buildAssetManifest(
