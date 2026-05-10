@@ -14,7 +14,7 @@ _quarto:
           - 'div.theorem > p > span.theorem-title > strong'
           - 'a.quarto-xref'
           - 'span#eq-einstein'
-          - 'sup.footnote-ref'
+          - 'a.footnote-ref'
           - 'div#quarto-appendix > div#footnotes'
         # must-not-match — absent from the rendered iframe DOM
         -
