@@ -160,8 +160,26 @@ export type AstProps = {
 export type AstComponent = (props: AstProps) => React.ReactNode;
 export type DispatcherComponent = (args: NodeArgs<BlockNode | InlineNode>) => React.ReactNode;
 
+/**
+ * Synthetic registry keys carry component-specific prop shapes
+ * distinct from per-tag dispatchers. Typed explicitly so user TSX
+ * overrides get compile-time prop-shape checking; Pandoc-tag and
+ * CustomNode-`type_name` keys keep their loose `(props: any)` typing
+ * via the index signature.
+ *
+ * - `__fallback__` (Plan 2C) → receives `NodeArgs<CustomBlockNode |
+ *   CustomInlineNode>` from the CustomBlock / CustomInline
+ *   dispatchers (`dispatchers.tsx:78-82`).
+ * - `__title_block__` (Plan 2D) → receives `AstProps`, parallel to
+ *   the `Ast` key. The title block operates on document-level state
+ *   (`ast.meta`), not on a node in the AST.
+ */
 export type FormatRegistry = Record<string, (props: any) => React.ReactNode> & {
     Ast: AstComponent;
     Block: DispatcherComponent;
     Inline: DispatcherComponent;
+    __fallback__?: (
+        args: NodeArgs<CustomBlockNode | CustomInlineNode>,
+    ) => React.ReactNode;
+    __title_block__?: AstComponent;
 };

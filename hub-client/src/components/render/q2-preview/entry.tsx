@@ -30,13 +30,24 @@ import React, { useEffect, useMemo } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
-import { Ast, Node, renderChildren, renderNode } from '../framework';
-import { rewrapCustomNodes } from '../framework/customNode';
+import {
+    Ast,
+    Node,
+    renderChildren,
+    renderNode,
+    rewrapCustomNodes,
+    extractMetaString,
+    extractMetaBool,
+    extractMetaStringList,
+    inlinesToPlainText,
+    blocksToPlainText,
+} from '../framework';
 import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import { Block, Inline, previewRegistry, PreviewContext } from '.';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { renderSlot } from './utils';
+import { PreviewTitleBlock } from './custom/PreviewTitleBlock';
 import {
     buildCustomRegistry,
     type ComponentExports,
@@ -53,6 +64,13 @@ import { installLinkHandlers } from '../../../utils/iframeLinkHandlers';
 // components can recurse into named slots (Callout's title/content,
 // FloatRefTarget's caption_long/caption_short, ...) without
 // reimplementing the per-slot setLocalAst plumbing.
+//
+// Plan 2D (6.0c.1) exposes the framework-tier meta and plain-text
+// helpers so a user TSX override of `__title_block__` can coerce
+// `ast.meta` values without re-implementing the Pandoc-AST walks.
+// Plan 2D (7.3.1) exposes `PreviewTitleBlock` so a user override
+// can compose the built-in chrome (e.g. wrap it and add a DOI line)
+// instead of re-implementing it from scratch.
 (window as any).__Q2_PREVIEW_RENDERER__ = {
     renderChildren,
     renderNode,
@@ -61,6 +79,12 @@ import { installLinkHandlers } from '../../../utils/iframeLinkHandlers';
     Block,
     Inline,
     previewRegistry,
+    extractMetaString,
+    extractMetaBool,
+    extractMetaStringList,
+    inlinesToPlainText,
+    blocksToPlainText,
+    PreviewTitleBlock,
 };
 
 let root: ReturnType<typeof createRoot> | null = null;

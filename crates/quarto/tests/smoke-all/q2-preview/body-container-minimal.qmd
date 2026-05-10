@@ -1,0 +1,19 @@
+---
+format: q2-preview
+minimal: true
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'p'
+        -
+          - 'div#quarto-content'
+          - 'main.content'
+          - 'h1'
+---
+
+A paragraph. The wrapper is skipped under minimal mode, and no synthetic
+h1 is added because no title is set in the metadata.

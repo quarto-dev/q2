@@ -25,6 +25,7 @@
 
 import { describe, expect, it } from 'vitest';
 import * as Custom from './custom';
+import { previewRegistry } from './registry';
 
 // Hardcoded Pandoc tag list. Update when framework/types.ts adds tags.
 const PANDOC_TAG_NAMES = new Set<string>([
@@ -87,8 +88,18 @@ describe('q2-preview registry namespace-disjoint policy', () => {
             'Equation',
             'CrossrefResolvedRef',
             'Fallback',
+            'PreviewTitleBlock',
         ]) {
             expect(customExportNames.has(name)).toBe(true);
         }
+    });
+
+    it('both synthetic registry keys point at the expected ./custom export', () => {
+        // Locks the synthetic-key registrations so a future refactor
+        // that drops either silently can't ship without breaking the
+        // test. `__fallback__` was exercised by behavior tests since
+        // 2C but never directly asserted — closing that gap here.
+        expect(previewRegistry.__fallback__).toBe(Custom.Fallback);
+        expect(previewRegistry.__title_block__).toBe(Custom.PreviewTitleBlock);
     });
 });

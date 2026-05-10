@@ -16,6 +16,13 @@ import { PreviewDocument } from './PreviewDocument';
  * the `CustomBlock` / `CustomInline` dispatchers that look them up
  * by `node.type_name`.
  *
+ * Plan 2D adds the synthetic `__title_block__` entry (parallel to
+ * `__fallback__`) for the document-title-block chrome. Synthetic
+ * keys (`__fallback__`, `__title_block__`) carry component-specific
+ * prop shapes (NodeArgs vs AstProps), distinct from the per-tag
+ * `Block`/`Inline` dispatcher contract — see `framework/types.ts`'s
+ * `FormatRegistry` typed optional entries.
+ *
  * Pandoc tag names and CustomNode `type_name`s are namespace-disjoint
  * by project policy (locked at build time by the namespace-disjoint
  * test in `registry.test.ts`). One merged map carries both — a user
@@ -24,14 +31,15 @@ import { PreviewDocument } from './PreviewDocument';
  *
  * `mergedPreviewRegistry` (in entry.tsx's PreviewRoot) layers user-TSX
  * exports on top via `{ ...previewRegistry, ...customRegistry }`, so
- * a user override of `Para` / `Image` / `Callout` / etc. wins over
- * the built-in.
+ * a user override of `Para` / `Image` / `Callout` / `__title_block__`
+ * / etc. wins over the built-in.
  */
 export const previewRegistry: FormatRegistry = {
     ...Blocks,
     ...Inlines,
-    ...Custom, // Callout, Theorem, Proof, FloatRefTarget, Equation, CrossrefResolvedRef, Fallback
+    ...Custom, // Callout, Theorem, Proof, FloatRefTarget, Equation, CrossrefResolvedRef, Fallback, PreviewTitleBlock
     __fallback__: Custom.Fallback,
+    __title_block__: Custom.PreviewTitleBlock,
     Block,
     Inline,
     CustomBlock,

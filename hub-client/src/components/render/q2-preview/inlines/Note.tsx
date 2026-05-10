@@ -1,8 +1,8 @@
 import { useContext } from 'react';
 import type { NodeArgs, NoteInline } from '../../framework';
+import { blocksToPlainText } from '../../framework';
 import { NoteNumberingContext } from '../NoteNumberingContext';
 import { FOOTNOTE_REF } from '../quartoClasses';
-import { blocksToPlainText } from '../utils';
 
 const TOOLTIP_BODY_CAP = 250;
 

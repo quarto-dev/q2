@@ -28,6 +28,7 @@ import type {
   MathInline,
   QuotedInline,
 } from './framework/types';
+import { extractMetaString } from './framework';
 
 /**
  * Represents a single slide with its content
@@ -342,32 +343,6 @@ function flattenBlocks(blocks: BlockNode[]): BlockNode[] {
   }
 
   return result;
-}
-
-/**
- * Extract a string value from Pandoc metadata
- */
-function extractMetaString(meta: unknown): string | undefined {
-  if (!meta) return undefined;
-
-  // Handle MetaInlines (most common for title/author)
-  if (typeof meta === 'object' && meta !== null && 't' in meta) {
-    const metaObj = meta as { t: string; c?: unknown };
-    if (metaObj.t === 'MetaInlines' && Array.isArray(metaObj.c)) {
-      return metaObj.c
-        .map((inline: any) => {
-          if (inline.t === 'Str') return inline.c;
-          if (inline.t === 'Space') return ' ';
-          return '';
-        })
-        .join('');
-    }
-    if (metaObj.t === 'MetaString' && typeof metaObj.c === 'string') {
-      return metaObj.c;
-    }
-  }
-
-  return undefined;
 }
 
 /**
