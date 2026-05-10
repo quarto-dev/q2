@@ -197,3 +197,71 @@ describe('q2-debug override path', () => {
     expect(container.textContent).not.toContain('Para:');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Atomic-aware gate parity (Plan 2B Phase 5.1).
+//
+// The atomic gate sits in framework's `Node` (in dispatch.tsx) so it
+// benefits both formats automatically. Locking the q2-debug behavior
+// here means a future regression in the gate (or a reorganization
+// that accidentally moves it downstream of one format's dispatcher)
+// fails on q2-debug's integration tests, not just q2-preview's.
+// ---------------------------------------------------------------------------
+
+import { vi } from 'vitest';
+
+describe('q2-debug atomic-gate parity (framework gate fires regardless of format)', () => {
+  it('atomic CustomInline (CrossrefResolvedRef) inside a Para receives a no-op setLocalAst', () => {
+    // Capture the setLocalAst the Inline dispatcher receives. The
+    // framework's atomic gate replaces it with NOOP for atomic
+    // descendants; calling NOOP must not propagate to setAst.
+    let captured: ((n: unknown) => void) | null = null;
+    const CapturingInline = (args: any) => {
+      if (args.node.t === 'CustomInline') {
+        captured = args.setLocalAst;
+      }
+      return <span>captured</span>;
+    };
+    const setAstSpy = vi.fn();
+    const ast = [
+      {
+        t: 'Para',
+        c: [
+          { t: 'Str', c: 'see ' },
+          {
+            t: 'CustomInline',
+            type_name: 'CrossrefResolvedRef',
+            slots: { suffix: { kind: 'inlines', value: [] } },
+            plain_data: {
+              identifier: 'fig-1', kind: 'Figure', ref_type: 'fig',
+              resolved: true, kind_source: 'builtin',
+              order: { section: [], order: 1 },
+            },
+            attr: ['', [], []],
+          },
+        ],
+      },
+    ];
+    const merged = {
+      ...q2DebugRegistry,
+      Inline: CapturingInline,
+    };
+
+    render(
+      <Ast
+        astJson={astJson(ast)}
+        currentFilePath="/project/test.qmd"
+        onNavigateToDocument={noopNav}
+        setAst={setAstSpy}
+        registry={merged}
+      />,
+    );
+
+    expect(captured).not.toBeNull();
+    // Invoke the captured setLocalAst with an arbitrary edit. If the
+    // gate fired, it's NOOP and setAstSpy stays uncalled. If the gate
+    // failed open, the edit propagates to setAst.
+    captured!({ t: 'Str', c: 'EDITED' });
+    expect(setAstSpy).not.toHaveBeenCalled();
+  });
+});

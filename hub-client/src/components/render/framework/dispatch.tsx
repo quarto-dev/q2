@@ -96,6 +96,12 @@ const renderChildrenRegistry: Record<string, (args: {
                 }}
             />
         )),
+    // Plan 2B inline gap fills (same {t, c: InlineNode[]} shape as Emph/Strong):
+    Underline: makeFlatInlineRenderer('Underline'),
+    Strikeout: makeFlatInlineRenderer('Strikeout'),
+    Superscript: makeFlatInlineRenderer('Superscript'),
+    Subscript: makeFlatInlineRenderer('Subscript'),
+    SmallCaps: makeFlatInlineRenderer('SmallCaps'),
     Link: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as LinkInline).c[1].map((child, i) => (
             <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
@@ -232,6 +238,25 @@ const renderChildrenRegistry: Record<string, (args: {
     CustomBlock: renderCustomNodeChildren,
     CustomInline: renderCustomNodeChildren,
 };
+
+function makeFlatInlineRenderer(tag: string) {
+    return ({ node, setLocalAst, onNavigateToDocument }: {
+        node: any;
+        setLocalAst: (newNode: any) => void;
+        onNavigateToDocument?: (path: string, anchor: string | null) => void;
+    }): React.ReactNode => {
+        const children = (node as { c: InlineNode[] }).c;
+        return children.map((child, i) => (
+            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+                setLocalAst={(newChild: BlockNode | InlineNode) => {
+                    const next = children.slice();
+                    next[i] = newChild as InlineNode;
+                    setLocalAst({ t: tag, c: next });
+                }}
+            />
+        ));
+    };
+}
 
 function renderCustomNodeChildren({
     node,
@@ -380,7 +405,7 @@ export function Node({
 
     const isCustom = node.t === 'CustomBlock' || node.t === 'CustomInline';
     const isAtomic =
-        isAtomicSourceInfo(node, sourceInfoPool, ATOMIC_SYNTHETIC_KINDS)
+        isAtomicSourceInfo(node as { s?: number }, sourceInfoPool, ATOMIC_SYNTHETIC_KINDS)
         || (isCustom && isAtomicCustomNode((node as CustomBlockNode | CustomInlineNode).type_name));
 
     const effectiveSetLocalAst = isAtomic ? NOOP_SET_LOCAL_AST : setLocalAst;

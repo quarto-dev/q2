@@ -26,15 +26,16 @@
  */
 
 import { createRoot } from 'react-dom/client';
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 import { Ast, Node, renderChildren, renderNode } from '../framework';
 import { rewrapCustomNodes } from '../framework/customNode';
-import type { FormatRegistry, PandocAST } from '../framework';
+import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import { Block, Inline, previewRegistry, PreviewContext } from '.';
 import { AssetManifestContext } from './AssetManifestContext';
+import { NoteNumberingContext } from './NoteNumberingContext';
 import {
     buildCustomRegistry,
     type ComponentExports,
@@ -170,6 +171,41 @@ interface PreviewRootProps {
     setAst: (newAst: PandocAST) => void;
 }
 
+/**
+ * Walk the parsed AST for `Note` inlines and assign each a sequential
+ * number by document order. Lookup keyed by object identity — the
+ * framework's walker-purity contract preserves Note references through
+ * `unwrapCustomNodes`, so the WeakMap built here works on both pre-
+ * and post-unwrap AST shapes.
+ *
+ * Walks pre-unwrap (over the JSON.parse output) so the same parsed
+ * object can be handed to <Ast> via the discriminated input — avoids
+ * a double-parse.
+ *
+ * Descends both `c` fields and CustomNode wrapper slot children
+ * (`c[1][i].c[1]`) so notes nested inside callout / theorem bodies
+ * are reached.
+ */
+function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
+    const map = new WeakMap<NoteInline, number>();
+    let counter = 0;
+    function visit(value: unknown) {
+        if (!value || typeof value !== 'object') return;
+        if (Array.isArray(value)) {
+            for (const v of value) visit(v);
+            return;
+        }
+        const obj = value as { t?: unknown; c?: unknown };
+        if (obj.t === 'Note') {
+            counter += 1;
+            map.set(value as NoteInline, counter);
+        }
+        if ('c' in obj) visit(obj.c);
+    }
+    visit(ast.blocks);
+    return map;
+}
+
 function PreviewRoot(props: PreviewRootProps) {
     // Install link handlers once per mount. The iframe remounts on
     // every document switch (q2-debug's existing behavior — see
@@ -194,18 +230,39 @@ function PreviewRoot(props: PreviewRootProps) {
         ...customRegistry,
     } as FormatRegistry;
 
+    // Pre-parse the AST and run the Note-numbering walk in one
+    // useMemo. The parsed AST is then passed to <Ast> via the
+    // discriminated input — no second JSON.parse. On parse failure,
+    // hand <Ast> the original astJson so its existing error pane
+    // surfaces the message.
+    const { parsed, noteNumbers } = useMemo(() => {
+        try {
+            const p = JSON.parse(props.astJson) as PandocAST;
+            return { parsed: p, noteNumbers: walkForNoteNumbers(p) };
+        } catch {
+            return { parsed: null, noteNumbers: new WeakMap<NoteInline, number>() };
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [props.astJson]);
+
+    const astProps = parsed
+        ? { ast: parsed }
+        : { astJson: props.astJson };
+
     return (
         <PreviewContext.Provider
             value={{ currentFilePath: props.currentFilePath }}
         >
             <AssetManifestContext.Provider value={props.assetManifest}>
-                <Ast
-                    astJson={props.astJson}
-                    currentFilePath={props.currentFilePath}
-                    onNavigateToDocument={props.onNavigateToDocument}
-                    setAst={props.setAst}
-                    registry={mergedRegistry}
-                />
+                <NoteNumberingContext.Provider value={noteNumbers}>
+                    <Ast
+                        {...astProps}
+                        currentFilePath={props.currentFilePath}
+                        onNavigateToDocument={props.onNavigateToDocument}
+                        setAst={props.setAst}
+                        registry={mergedRegistry}
+                    />
+                </NoteNumberingContext.Provider>
             </AssetManifestContext.Provider>
         </PreviewContext.Provider>
     );

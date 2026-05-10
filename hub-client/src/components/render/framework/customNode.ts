@@ -88,7 +88,7 @@ function unwrapAny(value: unknown): unknown {
     if (typeof obj.t !== 'string') return value;
 
     if ((obj.t === 'Div' || obj.t === 'Span') && isCustomWrapper(obj)) {
-        return decodeWrapper(obj);
+        return decodeWrapper(obj as { t: string; c?: unknown; s?: unknown });
     }
 
     if ('c' in obj) {
