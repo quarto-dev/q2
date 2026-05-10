@@ -1,0 +1,23 @@
+---
+title: Doc
+format: q2-preview
+minimal: true
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'h1'
+          - 'p'
+        -
+          - 'div#quarto-content'
+          - 'main.content'
+          - 'header#title-block-header'
+---
+
+A paragraph; with `minimal: true` and a `title`, q2-preview synthesizes
+a `<h1>Doc</h1>` ahead of the body (mirrors Rust's title-block
+transform's minimal-mode branch). The full title-block chrome is
+suppressed by the minimal wrapper-skip branch.

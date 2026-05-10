@@ -1,0 +1,20 @@
+---
+title: Doc
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'header#title-block-header.quarto-title-block'
+          - 'h1.title'
+        -
+          - 'p.subtitle'
+          - 'div.quarto-title-meta'
+          - 'div.abstract'
+---
+
+A paragraph; with only `title` set, the title-block chrome contains
+just `<h1 class="title">` — no subtitle, author meta, or abstract.

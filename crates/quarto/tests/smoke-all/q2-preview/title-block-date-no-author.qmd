@@ -1,0 +1,21 @@
+---
+title: Doc
+date: "2026-05-10"
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'header#title-block-header'
+        -
+          - 'div.quarto-title-meta'
+          - 'div.quarto-title-meta-date'
+---
+
+A paragraph; with `date` but no `author`, the Rust template's
+`$if(date)$` block is gated inside the `$if(author)$` branch so the
+date is suppressed. Locked here so the Rust quirk and q2-preview
+mirror each other.

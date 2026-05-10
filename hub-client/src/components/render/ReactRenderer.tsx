@@ -8,6 +8,7 @@ import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
 import { resolveComponentPath } from '../../utils/componentPath';
 import type { PandocAST } from './framework/types';
+import { extractMetaString } from './framework';
 
 // Simple error boundary to catch errors in custom components
 class ErrorBoundary extends Component<
@@ -208,7 +209,8 @@ function ReactRenderer({
 
   // q2-slides or revealjs format - check if it's revealjs
   const ast = JSON.parse(astJson);
-  const isRevealjs = format === 'revealjs' || (ast?.meta?.format?.t === 'MetaString' && ast.meta.format.c === 'revealjs');
+  const isRevealjs =
+    format === 'revealjs' || extractMetaString(ast?.meta?.format) === 'revealjs';
 
   return (
     <ErrorBoundary>

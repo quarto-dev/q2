@@ -1,0 +1,25 @@
+---
+title: Doc
+subtitle: Sub
+author: Jane Doe
+date: "2026-05-10"
+abstract: A short summary of the document.
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'header#title-block-header'
+          - 'h1.title'
+          - 'p.subtitle'
+          - 'div.quarto-title-meta-author'
+          - 'div.quarto-title-meta-date'
+          - 'div.abstract'
+          - 'div.abstract-title'
+        - []
+---
+
+A paragraph beneath the full title-block chrome.

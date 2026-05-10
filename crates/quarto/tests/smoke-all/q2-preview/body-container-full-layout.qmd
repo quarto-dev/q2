@@ -1,0 +1,18 @@
+---
+title: Body container full layout
+format: q2-preview
+page-layout: full
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'div#quarto-content.page-layout-full'
+          - 'main.content'
+        -
+          - 'div.page-layout-article'
+---
+
+A paragraph rendered inside the `page-layout-full` wrapper.

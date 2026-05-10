@@ -1,0 +1,18 @@
+---
+author: Jane Doe
+date: "2026-05-10"
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'p'
+        -
+          - 'header#title-block-header'
+          - 'div.quarto-title-meta'
+---
+
+Some content.

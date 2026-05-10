@@ -1,7 +1,8 @@
 import { useContext } from 'react';
 import type { ImageInline, NodeArgs } from '../../framework';
+import { inlinesToPlainText } from '../../framework';
 import { AssetManifestContext } from '../AssetManifestContext';
-import { lookupAssetUrl, inlinesToPlainText } from '../utils';
+import { lookupAssetUrl } from '../utils';
 
 /**
  * Image → `<img>`. Reads `target.0` (the user-written URL) and looks
