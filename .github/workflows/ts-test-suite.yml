@@ -27,7 +27,13 @@ jobs:
     
     name: Run test suite
     if: github.repository == 'quarto-dev/q2'
-    
+
+    # Pin nightly via env so we don't have to edit rust-toolchain.toml
+    # (which devs may override locally). Latest nightly currently crashes
+    # rustc with SIGSEGV when compiling tokio under -Zbuild-std for wasm32.
+    env:
+      RUSTUP_TOOLCHAIN: nightly-2026-05-07
+
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v6
@@ -48,7 +54,11 @@ jobs:
 
       # Consistent Rust setup for both platforms
       - name: Set up Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-07
+          targets: wasm32-unknown-unknown
+          components: rust-src
 
       - name: Output rust version
         shell: bash
