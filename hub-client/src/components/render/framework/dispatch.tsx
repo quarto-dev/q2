@@ -1,5 +1,7 @@
 import React, { useContext } from 'react';
 import { RegistryContext } from './RegistryContext';
+import { isAtomicSourceInfo, ATOMIC_SYNTHETIC_KINDS } from '../../../utils/sourceInfo';
+import { isAtomicCustomNode } from '../../../utils/atomicCustomNodes';
 import type {
     BlockNode,
     InlineNode,
@@ -19,14 +21,35 @@ import type {
     ImageInline,
     SpanInline,
     QuotedInline,
+    CustomBlockNode,
+    CustomInlineNode,
+    Slot,
 } from './types';
 
 /**
  * The set of Pandoc tags the framework treats as block-level. Used by both
  * `Node` and `renderNode` to route to the registry's 'Block' or 'Inline'
  * dispatcher.
+ *
+ * 2B additions:
+ *  - `LineBlock`, `DefinitionList`, `Table` — gap-fill leaves rendered by
+ *    q2-preview's `blocks/`.
+ *  - `CustomBlock` — post-unwrap discriminator. `unwrapCustomNodes`
+ *    rewrites custom-block wrapper Divs as `t: 'CustomBlock'`; without
+ *    membership here `Node` would route them to `Inline`.
+ *  - `BlockMetadata`, `NoteDefinitionPara`, `NoteDefinitionFencedBlock`,
+ *    `CaptionBlock` — defensive routing. These tags can appear in the
+ *    AST (writer json.rs:1242, :1251, :1257, :1263); without membership
+ *    they'd surface as inline placeholders. With it, the `Block`
+ *    dispatcher's miss path renders the muted-gray placeholder.
  */
-export const blockTypes = ['Para', 'Plain', 'Header', 'CodeBlock', 'BulletList', 'OrderedList', 'BlockQuote', 'Div', 'HorizontalRule', 'RawBlock', 'Figure'];
+export const blockTypes = [
+    'Para', 'Plain', 'Header', 'CodeBlock', 'BulletList', 'OrderedList',
+    'BlockQuote', 'Div', 'HorizontalRule', 'RawBlock', 'Figure',
+    'LineBlock', 'DefinitionList', 'Table',
+    'CustomBlock',
+    'BlockMetadata', 'NoteDefinitionPara', 'NoteDefinitionFencedBlock', 'CaptionBlock',
+];
 
 /**
  * Per-Pandoc-tag recursive-descent registry. The framework owns this
@@ -202,7 +225,64 @@ const renderChildrenRegistry: Record<string, (args: {
                 }}
             />
         )),
+    // Custom-node generic walk. Per-type components (Callout, Theorem, ...)
+    // drive their own slot rendering via `renderSlot` in q2-preview/utils.ts;
+    // these entries are the fallback consumed by the `Fallback` registry
+    // entry for unregistered custom-node `type_name`s.
+    CustomBlock: renderCustomNodeChildren,
+    CustomInline: renderCustomNodeChildren,
 };
+
+function renderCustomNodeChildren({
+    node,
+    setLocalAst,
+    onNavigateToDocument,
+}: {
+    node: any;
+    setLocalAst: (newNode: any) => void;
+    onNavigateToDocument?: (path: string, anchor: string | null) => void;
+}): React.ReactNode {
+    const customNode = node as CustomBlockNode | CustomInlineNode;
+    const slotEntries = Object.entries(customNode.slots) as Array<[string, Slot]>;
+    return slotEntries.flatMap(([name, slot]) => {
+        const setSlot = (next: Slot) =>
+            setLocalAst({ ...customNode, slots: { ...customNode.slots, [name]: next } });
+        switch (slot.kind) {
+            case 'block':
+                return [
+                    <Node key={name} node={slot.value} onNavigateToDocument={onNavigateToDocument}
+                        setLocalAst={(n) => setSlot({ kind: 'block', value: n as BlockNode })}
+                    />,
+                ];
+            case 'inline':
+                return [
+                    <Node key={name} node={slot.value} onNavigateToDocument={onNavigateToDocument}
+                        setLocalAst={(n) => setSlot({ kind: 'inline', value: n as InlineNode })}
+                    />,
+                ];
+            case 'blocks':
+                return slot.value.map((b, i) => (
+                    <Node key={`${name}-${i}`} node={b} onNavigateToDocument={onNavigateToDocument}
+                        setLocalAst={(n) => {
+                            const next = slot.value.slice();
+                            next[i] = n as BlockNode;
+                            setSlot({ kind: 'blocks', value: next });
+                        }}
+                    />
+                ));
+            case 'inlines':
+                return slot.value.map((inl, i) => (
+                    <Node key={`${name}-${i}`} node={inl} onNavigateToDocument={onNavigateToDocument}
+                        setLocalAst={(n) => {
+                            const next = slot.value.slice();
+                            next[i] = n as InlineNode;
+                            setSlot({ kind: 'inlines', value: next });
+                        }}
+                    />
+                ));
+        }
+    });
+}
 
 /**
  * Unified function to render children of any node type
@@ -259,9 +339,33 @@ export const renderNode = (args: NodeArgs<BlockNode | InlineNode>, type: string)
     return Component ? <Component {...args} /> : <span>Not registered: {args.node.t}</span>;
 }
 
+const NOOP_SET_LOCAL_AST: (newNode: BlockNode | InlineNode) => void = () => {};
+
 /**
  * Unified Node component that delegates to the format's 'Block' or
  * 'Inline' dispatcher based on the node's Pandoc tag.
+ *
+ * Atomic-aware gate (Plan 2B): three convergence paths mark a node's
+ * subtree as read-only on the iframe side, replacing `setLocalAst`
+ * with a NOOP for that subtree. Editing rendered atomic content would
+ * corrupt the source AST (e.g. `@fig-1` source vs. "Figure 1" rendered).
+ *
+ *   1. Derived source_info (Plan 6's shortcode resolutions).
+ *   2. Atomic Synthetic source_info (Plan 4's `By::is_atomic_synthesizer()`).
+ *   3. Atomic CustomNode types (`CrossrefResolvedRef` today; Plan 8 adds
+ *      `IncludeExpansion`).
+ *
+ * The gate sits at framework's `Node` so it fires once per recursion
+ * step, regardless of which format's dispatcher renders the node.
+ * Both q2-debug and q2-preview pick it up "for free" — neither
+ * dispatcher needs format-specific atomic awareness.
+ *
+ * Recursion contract: this gate fires only when a node enters via
+ * `<Node>`. User-TSX overrides registered via `render-components: [...]`
+ * MUST recurse through `<Node>` / `renderChildren` / `renderSlot` —
+ * never iterate `node.c` and emit child JSX directly. Doing so bypasses
+ * the gate for descendants. See plan §"Recursion contract for the
+ * atomic gate" + the negative regression fixture.
  */
 export function Node({
     node,
@@ -272,7 +376,14 @@ export function Node({
     onNavigateToDocument?: (path: string, anchor: string | null) => void,
     setLocalAst: (newNode: BlockNode | InlineNode) => void
 }) {
-    const { registry } = useContext(RegistryContext);
+    const { registry, sourceInfoPool } = useContext(RegistryContext);
+
+    const isCustom = node.t === 'CustomBlock' || node.t === 'CustomInline';
+    const isAtomic =
+        isAtomicSourceInfo(node, sourceInfoPool, ATOMIC_SYNTHETIC_KINDS)
+        || (isCustom && isAtomicCustomNode((node as CustomBlockNode | CustomInlineNode).type_name));
+
+    const effectiveSetLocalAst = isAtomic ? NOOP_SET_LOCAL_AST : setLocalAst;
 
     const isBlock = blockTypes.includes(node.t);
 
@@ -284,7 +395,7 @@ export function Node({
         return <BlockComponent
             node={node as BlockNode}
             onNavigateToDocument={onNavigateToDocument}
-            setLocalAst={setLocalAst as (newBlock: BlockNode) => void}
+            setLocalAst={effectiveSetLocalAst as (newBlock: BlockNode) => void}
         />;
     } else {
         const InlineComponent = registry['Inline'];
@@ -294,7 +405,7 @@ export function Node({
         return <InlineComponent
             node={node as InlineNode}
             onNavigateToDocument={onNavigateToDocument}
-            setLocalAst={setLocalAst as (newInline: InlineNode) => void}
+            setLocalAst={effectiveSetLocalAst as (newInline: InlineNode) => void}
         />;
     }
 }
