@@ -31,8 +31,10 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 import { Ast, Node, renderChildren, renderNode } from '../framework';
+import { rewrapCustomNodes } from '../framework/customNode';
 import type { FormatRegistry, PandocAST } from '../framework';
 import { Block, Inline, previewRegistry, PreviewContext } from '.';
+import { AssetManifestContext } from './AssetManifestContext';
 import {
     buildCustomRegistry,
     type ComponentExports,
@@ -63,6 +65,15 @@ let componentsLoading = false;
 interface UpdateAstPayload {
     astJson: string;
     currentFilePath: string;
+    /**
+     * Manifest of `{ origPath → blobUrl }` produced by the parent's
+     * `assetWalker.ts`. Forwarded into `AssetManifestContext` so
+     * `<Image>` can resolve project-relative URLs to blob URLs without
+     * any VFS access in the iframe. External URLs (`https?:`, `data:`,
+     * `//`) are not in the manifest — `lookupAssetUrl` passes them
+     * through.
+     */
+    assetManifest?: Record<string, string>;
 }
 
 // Module-top message handler. Registered before `IFRAME_READY` is
@@ -153,6 +164,8 @@ async function loadCustomComponents(componentsCode: Record<string, string>) {
 interface PreviewRootProps {
     astJson: string;
     currentFilePath: string;
+    /** Forwarded from `UPDATE_AST` payload; default is empty manifest. */
+    assetManifest: Record<string, string>;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
 }
@@ -185,19 +198,21 @@ function PreviewRoot(props: PreviewRootProps) {
         <PreviewContext.Provider
             value={{ currentFilePath: props.currentFilePath }}
         >
-            <Ast
-                astJson={props.astJson}
-                currentFilePath={props.currentFilePath}
-                onNavigateToDocument={props.onNavigateToDocument}
-                setAst={props.setAst}
-                registry={mergedRegistry}
-            />
+            <AssetManifestContext.Provider value={props.assetManifest}>
+                <Ast
+                    astJson={props.astJson}
+                    currentFilePath={props.currentFilePath}
+                    onNavigateToDocument={props.onNavigateToDocument}
+                    setAst={props.setAst}
+                    registry={mergedRegistry}
+                />
+            </AssetManifestContext.Provider>
         </PreviewContext.Provider>
     );
 }
 
 function updateAst(payload: UpdateAstPayload) {
-    const { astJson, currentFilePath } = payload;
+    const { astJson, currentFilePath, assetManifest } = payload;
     const rootElement = document.getElementById('root');
     if (!rootElement) {
         console.error('Root element not found');
@@ -212,6 +227,7 @@ function updateAst(payload: UpdateAstPayload) {
             <PreviewRoot
                 astJson={astJson}
                 currentFilePath={currentFilePath}
+                assetManifest={assetManifest ?? {}}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
                         { type: 'NAVIGATE_TO_DOCUMENT', path, anchor },
@@ -219,8 +235,12 @@ function updateAst(payload: UpdateAstPayload) {
                     );
                 }}
                 setAst={(newAst) => {
+                    // Rewrap JS-native CustomNodes back to wire-format
+                    // Div/Span before posting. Keeps the parent-side
+                    // (and any downstream consumer reading `data-custom-*`
+                    // attributes) on the wire shape it expects.
                     window.parent.postMessage(
-                        { type: 'SET_AST', ast: newAst },
+                        { type: 'SET_AST', ast: rewrapCustomNodes(newAst) },
                         '*',
                     );
                 }}

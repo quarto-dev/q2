@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { vfsReadFile } from '../../../services/wasmRenderer';
 import { DEFAULT_CSS_ARTIFACT_PATH } from '../../../types/artifactPaths';
+import { buildAssetManifest, type ManifestCacheEntry } from './assetWalker';
 
 interface Q2PreviewIframeProps {
   astJson: string;
@@ -59,15 +60,37 @@ export function Q2PreviewIframe({
   );
   const currentThemeBlobUrlRef = useRef<string | null>(null);
 
-  // Cleanup any outstanding blob URL on unmount.
+  // Asset-manifest cache. Owned by this component for the iframe's
+  // lifetime; entries are revoked individually as image content
+  // changes (per `buildAssetManifest`'s eviction logic), and the whole
+  // cache is drained on unmount.
+  const assetCacheRef = useRef<Map<string, ManifestCacheEntry>>(new Map());
+
+  // Cleanup any outstanding blob URL on unmount. Drains both the theme
+  // URL and the asset cache.
   useEffect(() => {
+    const assetCache = assetCacheRef.current;
     return () => {
       if (currentThemeBlobUrlRef.current) {
         URL.revokeObjectURL(currentThemeBlobUrlRef.current);
         currentThemeBlobUrlRef.current = null;
       }
+      for (const entry of assetCache.values()) {
+        URL.revokeObjectURL(entry.url);
+      }
+      assetCache.clear();
     };
   }, []);
+
+  // Build the asset manifest once per (astJson, currentFilePath) pair.
+  // Memoization keeps the walker from re-running on unrelated re-renders
+  // (e.g. theme changes don't disturb the manifest). The walker mutates
+  // `assetCacheRef.current` in place, evicting / minting blob URLs as
+  // image content changes between renders.
+  const assetManifest = useMemo(
+    () => buildAssetManifest(astJson, currentFilePath, assetCacheRef.current).manifest,
+    [astJson, currentFilePath],
+  );
 
   // Handle messages from the iframe
   useEffect(() => {
@@ -108,7 +131,11 @@ export function Q2PreviewIframe({
     }
   }, [iframeReady, customComponentsCode]);
 
-  // Send AST updates when iframe is ready
+  // Send AST updates when iframe is ready. The manifest piggybacks on
+  // the AST payload — manifest and AST are derived from the same input
+  // (manifest is built from AST contents), and shipping them together
+  // guarantees ordering: an Image rendered before its manifest entry
+  // arrived would briefly resolve to the original URL (broken).
   useEffect(() => {
     if (!iframeReady || !iframeRef.current?.contentWindow) return;
 
@@ -118,11 +145,12 @@ export function Q2PreviewIframe({
         payload: {
           astJson,
           currentFilePath,
+          assetManifest,
         },
       },
       '*',
     );
-  }, [iframeReady, astJson, currentFilePath]);
+  }, [iframeReady, astJson, currentFilePath, assetManifest]);
 
   // Send theme CSS when iframe is ready and fingerprint is known.
   // Three-way semantics:
