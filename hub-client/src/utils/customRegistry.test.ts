@@ -36,4 +36,16 @@ describe('buildCustomRegistry', () => {
     ]);
     expect(registry).toEqual({ Div: Second });
   });
+
+  it('passes a CustomNode-keyed export through to the merged map (Plan 2C)', () => {
+    // Belt-and-suspenders below the smoke-fixture layer: a future
+    // refactor to `buildCustomRegistry` cannot silently break
+    // CustomNode overrides without breaking this test too. The merge
+    // contract is the same as the Pandoc-tag case (later wins, earlier
+    // never discarded); the new assertion confirms the CustomNode
+    // type_name namespace flows through unchanged.
+    const MyCallout = () => null;
+    const registry = buildCustomRegistry([{ Callout: MyCallout }]);
+    expect(registry).toEqual({ Callout: MyCallout });
+  });
 });
