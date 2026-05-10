@@ -743,10 +743,8 @@ fn website_q2_preview_renders_through_orchestrator() {
     // ResourceCollectorTransform reads the file path lazily and
     // doesn't validate image bytes, so any contents work for the
     // wiring test. The `write` helper takes &str, so use ASCII.
-    write(
-        &project_dir.join("hero.png"),
-        "fake image bytes for q2-preview test",
-    );
+    let pre_render_image_bytes = "fake image bytes for q2-preview test";
+    write(&project_dir.join("hero.png"), pre_render_image_bytes);
 
     write(
         &project_dir.join("index.qmd"),
@@ -806,6 +804,24 @@ fn website_q2_preview_renders_through_orchestrator() {
         "expected sidebar metadata to include the sibling 'About' \
          entry's title; got:\n{}",
         snip()
+    );
+
+    // bd-3gtn assertion #5 (Plan 1 §Test plan post-bug-fix item):
+    // user-uploaded image bytes must survive the render. Before the
+    // bd-3gtn fix (commit c8a684bd), the WASM flush loop wrote
+    // empty bytes from `Artifact::from_path` manifest entries to the
+    // resolver's on-disk path; for absolute artifact paths,
+    // `Path::join` collapsed onto the user's source location and
+    // clobbered the upload. The same shape holds in the native flush
+    // (`render_to_file::write_artifacts`); this assertion is the
+    // belt-and-suspenders catch at that layer.
+    let post_render_image_bytes = std::fs::read_to_string(project_dir.join("hero.png"))
+        .expect("hero.png should still be readable after render");
+    assert_eq!(
+        post_render_image_bytes, pre_render_image_bytes,
+        "render must not modify user-uploaded image bytes (bd-3gtn). \
+         Pre-render: {pre_render_image_bytes:?}; \
+         post-render: {post_render_image_bytes:?}"
     );
 }
 
