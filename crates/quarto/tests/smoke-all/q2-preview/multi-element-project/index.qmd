@@ -1,0 +1,46 @@
+---
+title: Multi-element rendering (project mode)
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        # must-match — same as multi-element-doc.qmd; this fixture
+        # exercises the project pass-2 renderer path
+        # (pass2_renderer.rs::RenderToPreviewAstRenderer) which would
+        # otherwise go untested for CustomNode rendering.
+        -
+          - 'div.callout-note > div.callout-header > div.callout-title-container.flex-fill'
+          - 'div.callout-note > div.callout-body-container.callout-body'
+          - 'div.theorem > p > span.theorem-title > strong'
+          - 'a.quarto-xref'
+          - 'span#eq-einstein'
+          - 'sup.footnote-ref'
+          - 'div#quarto-appendix > div#footnotes'
+        # must-not-match — no fallback, no raw CustomNode wrappers
+        -
+          - 'div.q2-preview-placeholder'
+          - 'div[data-custom-type]'
+---
+
+# Multi-element rendering (project)
+
+::: {.callout-note}
+Heads up — project-mode rendering must produce the same DOM as
+single-doc mode.
+:::
+
+::: {#thm-pythagoras .theorem}
+For a right triangle with legs of length $a$ and $b$ and hypotenuse $c$,
+$a^2 + b^2 = c^2$.
+:::
+
+The Pythagorean identity is stated in @thm-pythagoras.
+
+$$e = mc^2$$ {#eq-einstein}
+
+![alt](hero.png){width=400}
+
+A paragraph with an inline footnote.^[Project-mode body footnote.]
