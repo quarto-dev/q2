@@ -264,4 +264,90 @@ describe('ReactRenderer render-components gate (Plan 2A item 13)', () => {
       '/elliot/simple.tsx': 'JS:export const Para = () => null;',
     });
   });
+
+  it('skips empty `render-components` list entries without crashing', () => {
+    // Reproduces the bug observed while typing in the YAML frontmatter:
+    //
+    //     render-components:
+    //       -
+    //
+    // The parser produces a MetaList with a single empty / null entry
+    // (no MetaInlines, no Str). Before the fix, the path extraction
+    // emitted `[undefined]`, which then crashed `resolveComponentPath`
+    // mid-type with `Cannot read properties of undefined (reading
+    // 'startsWith')`. No upstream ErrorBoundary, so the iframe-host
+    // page went blank and the user couldn't finish typing.
+    //
+    // The renderer should tolerate empty entries by skipping them,
+    // leaving the customComponentsCode map empty.
+    const malformedAst = JSON.stringify({
+      'pandoc-api-version': [1, 23, 0],
+      meta: {
+        'render-components': {
+          t: 'MetaList',
+          // single empty bullet: the parser commonly produces `null`,
+          // sometimes `{t: 'MetaString', c: ''}`, occasionally an
+          // empty MetaInlines. All three shapes must not crash.
+          c: [null],
+        },
+      },
+      blocks: [],
+    });
+
+    expect(() => {
+      render(
+        <ReactRenderer
+          astJson={malformedAst}
+          currentFilePath="elliot/index.qmd"
+          files={[]}
+          fileContents={new Map()}
+          onNavigateToDocument={() => {}}
+          setAst={() => {}}
+          format="q2-preview"
+        />,
+      );
+    }).not.toThrow();
+    expect(lastCapturedPreviewCode()).toEqual({});
+  });
+
+  it('skips `render-components` entries that resolve to empty strings', () => {
+    // Same defensive coverage for the case where the YAML entry parsed
+    // as a MetaInlines with no children (or a Str of empty text). The
+    // path extraction yields '' which would also crash downstream
+    // (well, technically empty string would skip resolveComponentPath
+    // but still attempt a `fileContents.get('')` lookup and a noisy
+    // console.warn). Treating empty paths as absent keeps the warn
+    // surface clean while the user is mid-typing.
+    const partiallyTypedAst = JSON.stringify({
+      'pandoc-api-version': [1, 23, 0],
+      meta: {
+        'render-components': {
+          t: 'MetaList',
+          c: [{ t: 'MetaInlines', c: [] }],
+        },
+      },
+      blocks: [],
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => {
+      render(
+        <ReactRenderer
+          astJson={partiallyTypedAst}
+          currentFilePath="elliot/index.qmd"
+          files={[]}
+          fileContents={new Map()}
+          onNavigateToDocument={() => {}}
+          setAst={() => {}}
+          format="q2-preview"
+        />,
+      );
+    }).not.toThrow();
+    expect(lastCapturedPreviewCode()).toEqual({});
+    // Empty-string paths should be skipped without warning — they
+    // arise from mid-typing the YAML and aren't a user error worth
+    // surfacing.
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });
