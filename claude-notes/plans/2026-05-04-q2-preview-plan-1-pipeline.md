@@ -16,9 +16,10 @@ existing `AstIframe` plumbing.
 
 This is the foundation milestone. After Plan 1 lands, Lua filters and shortcodes
 are visibly applied in q2-preview's React rendering. CustomNodes (Callout,
-Theorem, etc.) reach React as `__quarto_custom_node` wrapper Divs (Plan 2B adds
+Theorem, etc.) reach React as `__quarto_custom_node` wrapper Divs (Plan 2C adds
 type-specific React components for them; Plan 2A lands the iframe foundation
-those components depend on).
+and Plan 2B adds the framework recursion semantics, asset-manifest plumbing,
+and Pandoc-base leaves those components consume).
 
 Edit-back is **read-only** in v1 — `ReactPreview.tsx`'s `handleSetAst`
 early-returns with a console warning for `q2-preview` format. Plan 7 removes
@@ -131,7 +132,7 @@ this guard once the writer-side round-trip lands.
   ```
   Add `format` to the `useCallback` dependency array. The guard is a
   one-block diff for Plan 7 to delete. The contract this protects is
-  forward-compat for **Plan 2B**: Plan 2B's CustomNode React components
+  forward-compat for **Plan 2C**: Plan 2C's CustomNode React components
   are the things that will eventually call `setLocalAst` for
   kanban-style edits. Without the guard, those components could
   silently corrupt source through a writer path that hasn't been
@@ -139,8 +140,8 @@ this guard once the writer-side round-trip lands.
 
 ### Out of scope (deferred to other plans)
 
-- React component implementations for CustomNodes (Plan 2B; Plan 2A
-  lands the iframe foundation).
+- React component implementations for CustomNodes (Plan 2C; Plan 2A
+  lands the iframe foundation, Plan 2B lands the framework + Pandoc-base layer).
 - Filter idempotence verification (Plan 3).
 - Provenance type changes (Plans 4/5/6).
 - Edit-back round-trip via `incremental_write_qmd_for_preview` (Plan 7).
@@ -618,8 +619,9 @@ rationale for each decision.)
   test pattern).
 - **End-to-end browser smoke** (playwright): open a fixture in hub-client,
   switch format to `q2-preview`, assert the iframe renders without error
-  (visual fidelity is Plan 2B's responsibility; Plan 2A delivers theme
-  CSS + image rendering).
+  (visual fidelity for Pandoc base types is Plan 2B's responsibility;
+  visual fidelity for Quarto custom-node features is Plan 2C; Plan 2A
+  delivers theme CSS).
 - **Theme CSS artifact regression test**: after a q2-preview render of a
   fixture that triggers theme compilation, assert
   `/.quarto/project-artifacts/styles.css` exists in VFS and is non-empty.
@@ -639,8 +641,9 @@ rationale for each decision.)
 ## Dependencies
 
 - Depends on: nothing (this is the first plan to land).
-- Blocks: Plan 2A (iframe foundation), then Plan 2B (decorates the AST
-  shape this plan produces).
+- Blocks: Plan 2A (iframe foundation), then Plan 2B (framework + Pandoc-base
+  decorates the AST shape this plan produces), then Plan 2C (Quarto
+  custom-node renderers consuming what 2B exposes).
 - Independent of: Plans 4/5/6/7/8 (they extend the writer / type system).
 
 ## Multi-plan contracts
@@ -660,7 +663,7 @@ lifts the guard once `incremental_write_qmd_for_preview`'s round-trip
 machinery is in place. The guard is a one-block diff for Plan 7 to
 delete.
 
-The forward-compat contract this protects is **Plan 2B**: Plan 2B's
+The forward-compat contract this protects is **Plan 2C**: Plan 2C's
 CustomNode React components are the things that will eventually call
 `setLocalAst` for kanban-style edits. Without the guard, those
 components could silently corrupt source through a writer path that
@@ -708,10 +711,11 @@ theme-CSS injection (Plan 2A §"In scope" item 10, "AstWithAssets
 wrapper component").
 
 **Resolved by Plan 2A**: the visual-fidelity strategy is
-**class-compatible-with-bootstrap** — Plan 2B's components emit the
-same class names as Rust's HTML output, and Plan 2A's iframe entry
-reads the VFS artifact at first AST receive and injects the bytes
-as an inline `<style>` element in `document.head`. (The HTML
+**class-compatible-with-bootstrap** — Plan 2B's Pandoc-base components
+and Plan 2C's Quarto-feature components emit the same class names as
+Rust's HTML output, and Plan 2A's iframe entry reads the VFS artifact
+at first AST receive and injects the bytes as an inline `<style>`
+element in `document.head`. (The HTML
 iframe's `<link>` rewrite at `iframePostProcessor.ts:137-147`
 doesn't carry over: the AST iframe never has a `<link>` element to
 rewrite — Pandoc nodes don't produce stylesheet links — so one-shot
