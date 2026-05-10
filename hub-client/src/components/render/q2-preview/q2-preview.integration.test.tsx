@@ -1,23 +1,26 @@
 /**
- * q2-preview registry contract — Plan 2B Phase 5.1.
+ * q2-preview registry contract — Plan 2B Phase 5.1, extended in 2C.
  *
  * 2B fills the empty Plan-2A registry with real-HTML leaves for every
- * Pandoc base type. CustomBlock / CustomInline keys are still absent
- * (Plan 2C ships those), so unregistered custom-node `type_name`s
- * continue to fall through to the muted-gray "(not yet implemented)"
- * placeholder.
+ * Pandoc base type. 2C adds the CustomBlock / CustomInline dispatchers
+ * and the type-keyed CustomNode components (Callout, Theorem, ...) +
+ * the `__fallback__` entry. After 2C, an unknown CustomNode type_name
+ * routes through `__fallback__` (a styled box that displays the
+ * type_name) rather than the muted-gray "(not yet implemented)"
+ * placeholder; the placeholder still fires for unregistered Pandoc tags.
  *
  * Per plan §"Test replacement note", four Plan-2A tests are replaced
- * here (not appended-around or skipped):
+ * here:
  *  - "renders a top-level block as a muted-gray placeholder" → real
  *    Para → `<p>` assertion.
  *  - "recurses into children so nested inlines also surface
  *    placeholders" → real Str → text assertion.
  *  - "uses the muted-gray aesthetic on the placeholder DOM" → narrowed
- *    to an unregistered CustomNode shape.
+ *    to an unknown-type_name CustomNode falling through __fallback__.
  *  - "renders registry containing only {Ast, Block, Inline}" →
- *    asserts the post-2B registry shape (Pandoc base tags present,
- *    CustomBlock/CustomInline absent).
+ *    asserts the post-2C registry shape (Pandoc base tags present,
+ *    CustomBlock/CustomInline present, CustomNode type_name keys
+ *    present).
  *
  * Pandoc-base gap-fill component tests, Image edge cases, atomic
  * CustomNode read-only, recursion-contract bypass, reference-
@@ -84,16 +87,19 @@ describe('q2-preview registry — Pandoc base types render as real HTML', () => 
         expect(container.textContent).not.toContain('not yet implemented');
     });
 
-    it('renders unregistered CustomNode type_name with the muted-gray placeholder aesthetic', () => {
-        // 2B doesn't register CustomBlock/CustomInline; the dispatcher
-        // miss path renders muted-gray. Plan 2C populates the registry.
+    it('renders unknown CustomNode type_name through the Fallback styled box (not the placeholder)', () => {
+        // After 2C, CustomBlock/CustomInline dispatchers route to the
+        // `__fallback__` entry on miss. The fallback emits a styled
+        // box displaying the unknown type_name; it is NOT the
+        // muted-gray "(not yet implemented)" placeholder used for
+        // unregistered Pandoc tags.
         const customBlockAst = JSON.stringify({
             'pandoc-api-version': [1, 23, 0],
             meta: {},
             blocks: [
                 {
                     t: 'CustomBlock',
-                    type_name: 'Callout',
+                    type_name: 'UnknownExtension',
                     slots: {},
                     plain_data: null,
                     attr: ['', [], []],
@@ -109,12 +115,14 @@ describe('q2-preview registry — Pandoc base types render as real HTML', () => 
                 registry={previewRegistry}
             />,
         );
-        const block = container.querySelector('div[style*="rgb(136, 136, 136)"]');
-        expect(block).not.toBeNull();
-        expect(block!.textContent).toContain('CustomBlock (not yet implemented)');
+        // No muted-gray placeholder fires — the fallback handles the
+        // unknown type_name.
+        expect(container.querySelector('.q2-preview-placeholder')).toBeNull();
+        // The fallback emits a div displaying the type_name text.
+        expect(container.textContent).toContain('UnknownExtension');
     });
 
-    it('registry contains the Pandoc base tags but not CustomBlock/CustomInline', () => {
+    it('registry contains Pandoc base tags + CustomBlock/CustomInline + type-keyed CustomNode components', () => {
         const keys = new Set(Object.keys(previewRegistry));
         // Required by the framework
         expect(keys.has('Ast')).toBe(true);
@@ -128,9 +136,15 @@ describe('q2-preview registry — Pandoc base types render as real HTML', () => 
         for (const tag of ['Str', 'Space', 'SoftBreak', 'LineBreak', 'Emph', 'Strong', 'Code', 'Link', 'Image', 'Span', 'Quoted', 'Math', 'Underline', 'Strikeout', 'Superscript', 'Subscript', 'SmallCaps', 'RawInline', 'Cite', 'Note']) {
             expect(keys.has(tag)).toBe(true);
         }
-        // 2C populates these — must NOT be in the 2B registry
-        expect(keys.has('CustomBlock')).toBe(false);
-        expect(keys.has('CustomInline')).toBe(false);
+        // 2C dispatchers
+        expect(keys.has('CustomBlock')).toBe(true);
+        expect(keys.has('CustomInline')).toBe(true);
+        // 2C type-keyed CustomNode components
+        for (const tag of ['Callout', 'Theorem', 'Proof', 'FloatRefTarget', 'Equation', 'CrossrefResolvedRef']) {
+            expect(keys.has(tag)).toBe(true);
+        }
+        // 2C fallback
+        expect(keys.has('__fallback__')).toBe(true);
     });
 });
 
