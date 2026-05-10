@@ -1,0 +1,48 @@
+---
+title: Multi-element rendering (single-doc)
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        # must-match selectors — present in the rendered iframe DOM
+        -
+          - 'div.callout-note > div.callout-header > div.callout-title-container.flex-fill'
+          - 'div.callout-note > div.callout-body-container.callout-body'
+          - 'div.theorem > p > span.theorem-title > strong'
+          - 'a.quarto-xref'
+          - 'span#eq-einstein'
+          - 'a.footnote-ref'
+          - 'div#quarto-appendix > div#footnotes'
+        # must-not-match — absent from the rendered iframe DOM
+        -
+          - 'div.q2-preview-placeholder'
+          - 'div[data-custom-type]'
+---
+
+# Multi-element rendering
+
+This document exercises the full Quarto custom-node taxonomy that
+q2-preview's iframe must render with element-and-class parity to the
+HTML pipeline.
+
+::: {.callout-note}
+Heads up — callouts use the three-deep Bootstrap nesting pattern.
+:::
+
+::: {#thm-pythagoras .theorem}
+For a right triangle with legs of length $a$ and $b$ and hypotenuse $c$,
+$a^2 + b^2 = c^2$.
+:::
+
+The Pythagorean identity is stated in @thm-pythagoras.
+
+$$e = mc^2$$ {#eq-einstein}
+
+![alt](hero.png){width=400}
+
+A paragraph with an inline footnote.^[The inline syntax goes through
+`Inline::Note` directly; reference-style `[^1]: body` is currently
+broken in the parser postprocess and won't render here.]

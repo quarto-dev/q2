@@ -3,12 +3,19 @@
  *
  * - `createProjectOnServer()` runs in Node.js (Playwright test process)
  * - `seedProjectInBrowser()` runs in the browser via page.evaluate()
+ *
+ * Node-side polyfill: `createProjectOnServer` instantiates an
+ * `IndexedDBStorageAdapter` indirectly via `createSyncClient`. The
+ * Automerge IndexedDB adapter checks for the global `indexedDB`
+ * eagerly at construction; in the Playwright Node controller process
+ * that global is undefined. `fake-indexeddb/auto` patches the globals
+ * (`indexedDB`, `IDBKeyRange`, etc.) into Node's `globalThis` so the
+ * adapter can construct cleanly. The fake DB is in-memory and
+ * per-process — fine for the controller-side document-creation step;
+ * actual document persistence happens on the hub server (real DB).
  */
 
-// createSyncClient instantiates IndexedDBStorageAdapter unconditionally;
-// shim indexedDB in Node so the helper can run outside the browser.
 import 'fake-indexeddb/auto';
-
 import { readFileSync } from 'node:fs';
 import {
   createSyncClient,

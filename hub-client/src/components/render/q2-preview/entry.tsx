@@ -36,6 +36,7 @@ import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import { Block, Inline, previewRegistry, PreviewContext } from '.';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
+import { renderSlot } from './utils';
 import {
     buildCustomRegistry,
     type ComponentExports,
@@ -48,11 +49,14 @@ import { installLinkHandlers } from '../../../utils/iframeLinkHandlers';
 // spread) keeps framework internals (`renderChildrenRegistry`,
 // `RegistryContext`) off the global and locks the public surface.
 //
-// Plan 2B will extend this object with q2-preview's leaf components as
-// they ship.
+// Plan 2C exposes `renderSlot` so user TSX overrides of CustomNode
+// components can recurse into named slots (Callout's title/content,
+// FloatRefTarget's caption_long/caption_short, ...) without
+// reimplementing the per-slot setLocalAst plumbing.
 (window as any).__Q2_PREVIEW_RENDERER__ = {
     renderChildren,
     renderNode,
+    renderSlot,
     Node,
     Block,
     Inline,
@@ -225,7 +229,12 @@ function PreviewRoot(props: PreviewRootProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const mergedRegistry: FormatRegistry = {
+    // Single merge site: built-in preview leaves + CustomNode
+    // components (under their type_name keys) + the user's TSX
+    // overrides. Pandoc tags and CustomNode type_names share one
+    // namespace by project policy (registry.test.ts locks it), so the
+    // same `customRegistry` spread covers overrides of either kind.
+    const mergedPreviewRegistry: FormatRegistry = {
         ...previewRegistry,
         ...customRegistry,
     } as FormatRegistry;
@@ -260,7 +269,7 @@ function PreviewRoot(props: PreviewRootProps) {
                         currentFilePath={props.currentFilePath}
                         onNavigateToDocument={props.onNavigateToDocument}
                         setAst={props.setAst}
-                        registry={mergedRegistry}
+                        registry={mergedPreviewRegistry}
                     />
                 </NoteNumberingContext.Provider>
             </AssetManifestContext.Provider>
