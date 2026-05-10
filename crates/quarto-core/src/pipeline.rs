@@ -1050,14 +1050,24 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "callout-resolve",
     "website-favicon",
     "title-block",
-    "footnotes",
+    // "footnotes" — included in q2-preview's pipeline (Plan 2B):
+    // produces Pandoc primitives (Span/Sup/Link/Div/OrderedList) that
+    // q2-preview's leaves render natively. Note marker numbering and
+    // the document-end footnote section both come from this transform.
+    // bd-1kly tracks the upstream gap for `reference-location: block`
+    // and `section`; until that lands, q2-preview's `Note.tsx`
+    // tooltip-body fallback handles those configs.
     "toc-render",
     "navbar-render",
     "sidebar-render",
     "page-nav-render",
     "footer-render",
     "link-rewrite",
-    "appendix-structure",
+    // "appendix-structure" — included in q2-preview's pipeline (Plan 2B):
+    // pure Pandoc primitives, structurally identical to the HTML
+    // pipeline. Folds footnotes section, license/copyright/citation
+    // metadata into <div id="quarto-appendix">. Bibliography branch
+    // is inert until Citeproc lands.
     "crossref-render",
 ];
 
