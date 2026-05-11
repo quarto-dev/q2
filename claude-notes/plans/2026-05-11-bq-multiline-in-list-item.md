@@ -324,14 +324,56 @@ if (s->state & STATE_MATCHING) {
 
 ### Phase 4 — end-to-end verification
 
-- [ ] `cargo run --bin pampa -- -i test-2.qmd -t native` on the original
+- [x] `cargo run --bin pampa -- -i test-2.qmd -t native` on the original
       reporter file. Confirm output matches Pandoc.
-- [ ] Same with the marker variants (`*`, `+`, `1.`, ordered with `)`).
-- [ ] Same with 3-line and 4-line cases.
-- [ ] Compare against `pandoc -t native -i ...` on a handful of
+- [x] Same with the marker variants (`*`, `+`, `1.`, ordered with `)`).
+- [x] Same with 3-line and 4-line cases.
+- [x] Compare against `pandoc -t native -i ...` on a handful of
       hand-picked inputs.
-- [ ] Record the exact invocations + observed outputs in this plan doc
+- [x] Record the exact invocations + observed outputs in this plan doc
       before declaring done.
+
+#### Phase 4 — observed outputs
+
+Original reporter file (`/Users/cscheid/Desktop/daily-log/2026/05/11/test-2.qmd`,
+contents: `- > a\n  > b\n`):
+
+```
+$ cargo run --bin pampa -- -i test-2.qmd -t native
+[ BulletList [[BlockQuote [Para [Str "a", SoftBreak, Str "b"]]]] ]
+
+$ pandoc -f markdown -t native -i test-2.qmd
+[ BulletList
+    [ [ BlockQuote [ Para [ Str "a" , SoftBreak , Str "b" ] ] ]
+    ]
+]
+```
+
+Matches. The trailing whitespace differs only by formatter
+preferences (pampa's native writer is more compact); the structural
+ASTs are identical.
+
+Other variants verified (all match Pandoc):
+
+| Input | Result |
+|---|---|
+| `* > a\n  > b` | `BulletList[[BlockQuote[Para[Str a,SoftBreak,Str b]]]]` |
+| `+ > a\n  > b` | `BulletList[[BlockQuote[Para[Str a,SoftBreak,Str b]]]]` |
+| `1. > a\n   > b` | `OrderedList(1,Decimal,Period)[[BlockQuote[Para[Str a,SoftBreak,Str b]]]]` |
+| `1) > a\n   > b` | `OrderedList(1,Decimal,OneParen)[[BlockQuote[Para[Str a,SoftBreak,Str b]]]]` |
+| `- > a\n  > b\n  > c` | three strs joined by two soft breaks |
+| `- > a\n  > b\n  > c\n  > d` | four strs joined by three soft breaks |
+| `- > a\n  > b\n\nparagraph` | BulletList then Para |
+| `- > a\n  > b\n- second` | BulletList with two items |
+
+Regression sanity (these all worked before the fix and still do):
+
+| Input | Result |
+|---|---|
+| `> > a\n> > b` (bq in bq) | unchanged |
+| `- a\n\n  b` (blank-line para split in list) | unchanged |
+| `- - a\n  - b` (nested lists) | unchanged |
+| `- > a\n  b` (lazy continuation) | unchanged |
 
 ### Phase 5 — close-out
 
