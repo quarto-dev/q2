@@ -142,6 +142,49 @@ fn marker_safe(s: &str) -> String {
         .replace(END_MARKER, "[END marker scrubbed]")
 }
 
+pub fn strip_managed_section(content: &str) -> Result<String> {
+    let Some(begin_pos) = content.find(BEGIN_MARKER) else {
+        return Ok(content.to_string());
+    };
+
+    // Warn (but proceed) if a second BEGIN appears after the first.
+    let after_begin = &content[begin_pos + BEGIN_MARKER.len()..];
+    if after_begin.contains(BEGIN_MARKER) {
+        eprintln!(
+            "warning: CLAUDE.local.md contains multiple BEGIN markers \u{2014} using the first; \
+             recommend manual review of {}",
+            "CLAUDE.local.md"
+        );
+    }
+
+    let end_search_start = begin_pos + BEGIN_MARKER.len();
+    let end_rel = content[end_search_start..]
+        .find(END_MARKER)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "CLAUDE.local.md has BEGIN marker without END marker \u{2014} refusing to modify; \
+                 resolve manually"
+            )
+        })?;
+    let end_marker_end = end_search_start + end_rel + END_MARKER.len();
+
+    // Strip from the start of the BEGIN line through one trailing newline after END.
+    let begin_line_start = content[..begin_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
+
+    let mut after_end = end_marker_end;
+    let rest = &content[after_end..];
+    if rest.starts_with("\r\n") {
+        after_end += 2;
+    } else if rest.starts_with('\n') {
+        after_end += 1;
+    }
+
+    let mut out = String::with_capacity(content.len());
+    out.push_str(&content[..begin_line_start]);
+    out.push_str(&content[after_end..]);
+    Ok(out)
+}
+
 pub fn build_section(kind: &SectionKind) -> String {
     let body = match kind {
         SectionKind::Beads {
@@ -423,5 +466,51 @@ mod tests {
         assert_eq!(s.matches(END_MARKER).count(), 1);
         // BEGIN_MARKER ditto.
         assert_eq!(s.matches(BEGIN_MARKER).count(), 1);
+    }
+
+    #[test]
+    fn strip_no_marker_returns_input_unchanged() {
+        let input = "# My notes\nfoo bar\n";
+        assert_eq!(strip_managed_section(input).unwrap(), input);
+    }
+
+    #[test]
+    fn strip_full_managed_section() {
+        let input =
+            format!("{BEGIN_MARKER}\n# Worktree Context\nstuff\n{END_MARKER}\n# My notes\nfoo\n");
+        assert_eq!(strip_managed_section(&input).unwrap(), "# My notes\nfoo\n");
+    }
+
+    #[test]
+    fn strip_section_in_middle_of_file() {
+        let input = format!("# Header\n\n{BEGIN_MARKER}\nbody\n{END_MARKER}\n\n# Footer\n");
+        assert_eq!(
+            strip_managed_section(&input).unwrap(),
+            "# Header\n\n\n# Footer\n"
+        );
+    }
+
+    #[test]
+    fn strip_begin_without_end_errors() {
+        let input = format!("{BEGIN_MARKER}\nbody never closed\n");
+        let err = strip_managed_section(&input).unwrap_err().to_string();
+        assert!(err.contains("BEGIN marker without END marker"));
+    }
+
+    #[test]
+    fn strip_uses_first_of_multiple_begins() {
+        let input = format!(
+            "{BEGIN_MARKER}\nfirst\n{END_MARKER}\nmiddle\n{BEGIN_MARKER}\nsecond\n{END_MARKER}\n"
+        );
+        // First section + trailing newline stripped; everything from "middle" onward preserved.
+        let out = strip_managed_section(&input).unwrap();
+        assert!(out.starts_with("middle\n"));
+        assert!(out.contains(BEGIN_MARKER)); // second still present
+    }
+
+    #[test]
+    fn strip_handles_crlf_marker_lines() {
+        let input = format!("{BEGIN_MARKER}\r\nbody\r\n{END_MARKER}\r\nrest\r\n");
+        assert_eq!(strip_managed_section(&input).unwrap(), "rest\r\n");
     }
 }
