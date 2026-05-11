@@ -116,14 +116,10 @@ If a major-upgrade candidate's only consumer is one of the vendored/pinned crate
 ### 5. Create the worktree
 
 ```bash
-DATE=$(date +%Y-%m-%d)
-git worktree add -b cargo-upgrade-$DATE .worktrees/cargo-upgrade-$DATE main
-```
-
-Add the beads redirect (the `.beads/` directory already exists from git — do not delete or overwrite it):
-
-```bash
-echo "../../../.beads" > .worktrees/cargo-upgrade-$DATE/.beads/redirect
+cargo xtask create-worktree --upgrade
+# Creates a cargo-upgrade-YYYY-MM-DD worktree with .beads/redirect and CLAUDE.local.md.
+# Fallback for fresh clones where the xtask is not yet built:
+# see .claude/rules/worktrees.md § Manual bootstrap.
 ```
 
 Verify with `br where` from inside the worktree.
