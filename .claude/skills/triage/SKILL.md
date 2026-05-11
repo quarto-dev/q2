@@ -49,8 +49,14 @@ Read the body and every comment. If the issue contains multiple distinct reports
 Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`issue-<N>` for triage). Beads redirect setup follows § Beads Redirect.
 
 ```bash
-git worktree add -b issue-<N> .worktrees/issue-<N> main
-echo "../../../.beads" > .worktrees/issue-<N>/.beads/redirect
+cargo xtask create-worktree --issue <N>
+# Creates the worktree, .beads/redirect, and CLAUDE.local.md context stub.
+# This step runs BEFORE the beads issue is created (step 6) — the `--issue` template
+# intentionally has no Beads line. After step 6, either fill the bd-XXXX ID into
+# CLAUDE.local.md manually, or re-run `cargo xtask create-worktree <bd-id>` to
+# upgrade the section.
+# Fallback for fresh clones where the xtask is not yet built:
+# see .claude/rules/worktrees.md § Manual bootstrap.
 ```
 
 Verify with `br where` from inside the worktree.
