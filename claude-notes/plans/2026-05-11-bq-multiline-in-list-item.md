@@ -377,10 +377,30 @@ Regression sanity (these all worked before the fix and still do):
 
 ### Phase 5 — close-out
 
-- [ ] `cargo xtask verify --skip-hub-build` (Rust-only changes).
-- [ ] If any snapshot files changed, audit them per the CLAUDE.md snapshot
-      policy (count, summary, surprising changes).
-- [ ] Commit with reference to this beads issue. Do not push.
+- [x] `cargo xtask verify --skip-hub-build` (Rust-only changes).
+- [x] Full `cargo xtask verify` (after `npm install` worktree bootstrap)
+      since `tree-sitter-qmd` is transitively in the hub-client WASM
+      dependency chain. 9/9 steps passed.
+- [x] If any snapshot files changed, audit them per the CLAUDE.md snapshot
+      policy (count, summary, surprising changes). **No `.snap` files
+      changed.**
+- [x] Commit with reference to this beads issue. Do not push.
+- [x] Close bd-vet6 in beads; sync the JSONL on main.
+
+#### Phase 5 — results
+
+- `cargo xtask verify --skip-hub-build --skip-hub-tests`: passed (exit 0).
+  Rust lint + format + build (-D warnings) + tests all green.
+- After `npm install` bootstrap: `cargo xtask verify` (full, all 9 steps):
+  passed (exit 0). hub-client tests: 38 + 6 + 12 test files passed.
+  trace-viewer tests: 3 test files passed. WASM build succeeded.
+- No `.snap` files changed in this branch (only plan doc, scanner.c,
+  list.txt, and new pampa fixture qmd files).
+- Branch is `beads/bd-vet6-bq-multiline-list-item`. Not pushed.
+
+## Status
+
+**Done.** Awaiting user permission to push.
 
 ## Test artifacts
 
