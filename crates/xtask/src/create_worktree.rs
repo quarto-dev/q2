@@ -12,6 +12,7 @@ use anyhow::Context;
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 const BEGIN_MARKER: &str =
     "<!-- BEGIN WORKTREE CONTEXT — managed by cargo xtask create-worktree -->";
@@ -292,6 +293,58 @@ pub fn update_claude_local_md(path: &Path, new_section: &str) -> Result<()> {
         .with_context(|| format!("renaming {} to {}", tmp.display(), path.display()))?;
 
     Ok(())
+}
+
+pub struct BeadsMetadata {
+    pub title: String,
+    pub external_ref: Option<String>,
+}
+
+pub fn fetch_beads_metadata(id: &str) -> Result<BeadsMetadata> {
+    let output = Command::new("br")
+        .args(["show", id, "--json"])
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!(
+                    "br is required \u{2014} install via `cargo install beads-rust` or see project README"
+                )
+            } else {
+                anyhow::Error::new(e).context("spawning `br show`")
+            }
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("br show {id} failed:\n{stderr}");
+    }
+
+    let stdout = std::str::from_utf8(&output.stdout)
+        .with_context(|| format!("`br show {id} --json` produced non-UTF-8 output"))?;
+
+    // `br show --json` returns an array; take the first element.
+    let arr: Vec<serde_json::Value> = serde_json::from_str(stdout)
+        .with_context(|| format!("parsing JSON from `br show {id} --json`"))?;
+    let first = arr
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("`br show {id} --json` returned an empty array"))?;
+
+    let title = first
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("`br show {id}` JSON missing `title` field"))?
+        .to_string();
+
+    let external_ref = first
+        .get("external_ref")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
+    Ok(BeadsMetadata {
+        title,
+        external_ref,
+    })
 }
 
 pub fn run(_args: Args) -> Result<()> {
