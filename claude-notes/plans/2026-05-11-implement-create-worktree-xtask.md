@@ -1368,6 +1368,15 @@ pub fn run(args: Args) -> Result<()> {
     // From here on, on any error we roll back the worktree+branch we just
     // created so a retry is not blocked by directory/branch collision.
     let post = (|| -> Result<()> {
+        // Test-only injection point: lets the Phase E smoke test exercise the
+        // rollback path without modifying production logic.
+        if std::env::var("Q2_CREATE_WORKTREE_INJECT_FAIL").as_deref()
+            == Ok("after_worktree_add")
+        {
+            anyhow::bail!(
+                "Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add (test hook)"
+            );
+        }
         write_beads_redirect(&plan.dir)?;
         let section = build_section(&plan.kind);
         let claude_local = plan.dir.join("CLAUDE.local.md");
@@ -1377,16 +1386,58 @@ pub fn run(args: Args) -> Result<()> {
 
     if let Err(e) = post {
         eprintln!("error after worktree creation: {e:#}");
-        eprintln!("rolling back worktree {} and branch {}", plan.dir.display(), plan.branch);
-        let _ = Command::new("git")
+        eprintln!(
+            "rolling back worktree {} and branch {} ...",
+            plan.dir.display(),
+            plan.branch
+        );
+        let mut rollback_issues: Vec<String> = Vec::new();
+
+        match Command::new("git")
             .arg("worktree")
             .arg("remove")
             .arg("--force")
             .arg(plan.dir.as_os_str())
-            .status();
-        let _ = Command::new("git")
+            .output()
+        {
+            Ok(out) if out.status.success() => {}
+            Ok(out) => rollback_issues.push(format!(
+                "`git worktree remove --force {}` failed:\n    {}\n  manual cleanup: git worktree remove --force {}",
+                plan.dir.display(),
+                String::from_utf8_lossy(&out.stderr).trim().replace('\n', "\n    "),
+                plan.dir.display(),
+            )),
+            Err(spawn_err) => rollback_issues.push(format!(
+                "could not spawn `git worktree remove`: {spawn_err}\n  manual cleanup: git worktree remove --force {}",
+                plan.dir.display()
+            )),
+        }
+
+        match Command::new("git")
             .args(["branch", "-D", &plan.branch])
-            .status();
+            .output()
+        {
+            Ok(out) if out.status.success() => {}
+            Ok(out) => rollback_issues.push(format!(
+                "`git branch -D {}` failed:\n    {}\n  manual cleanup: git branch -D {}",
+                plan.branch,
+                String::from_utf8_lossy(&out.stderr).trim().replace('\n', "\n    "),
+                plan.branch,
+            )),
+            Err(spawn_err) => rollback_issues.push(format!(
+                "could not spawn `git branch -D`: {spawn_err}\n  manual cleanup: git branch -D {}",
+                plan.branch
+            )),
+        }
+
+        if rollback_issues.is_empty() {
+            eprintln!("rollback complete.");
+        } else {
+            eprintln!("rollback incomplete — manual steps required:");
+            for issue in &rollback_issues {
+                eprintln!("  - {issue}");
+            }
+        }
         return Err(e);
     }
 
@@ -1578,11 +1629,13 @@ ls .worktrees/cargo-upgrade-*-e2e-upgrade/CLAUDE.local.md   # → upgrade varian
 - [ ] **Step 5: Failure cases**
 
 ```bash
-# 5a. Existing directory collision
-mkdir -p .worktrees/collision-test
+# 5a. Existing directory collision — pre-create the COMPUTED target path.
+# For `bd-spsv --slug collision-test` the computed dir is .worktrees/bd-spsv-collision-test.
+mkdir -p .worktrees/bd-spsv-collision-test
 cargo xtask create-worktree bd-spsv --slug collision-test
-# Expected: clear error before any git operation. Then:
-rmdir .worktrees/collision-test
+# Expected: clear error before any git operation, no branch created. Then:
+rmdir .worktrees/bd-spsv-collision-test
+git branch | grep 'bd-spsv-collision-test' || echo "OK: no branch created"
 
 # 5b. Invalid --slug grammar (path-separator, traversal, whitespace)
 cargo xtask create-worktree bd-spsv --slug "foo/bar"
@@ -1595,6 +1648,19 @@ cargo xtask create-worktree bd-spsv --slug e2e-beads
 # Expected: fails with "worktree directory already exists" — by design.
 # If you need to refresh the CLAUDE.local.md section, remove the worktree
 # and recreate, or hand-edit the file (the BEGIN/END markers make this safe).
+
+# 5d. Rollback path — inject a failure AFTER git_worktree_add and confirm cleanup.
+# The Q2_CREATE_WORKTREE_INJECT_FAIL hook in run() triggers a bail inside the
+# post-worktree-add closure, which exercises the rollback code path.
+Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add \
+  cargo xtask create-worktree bd-spsv --slug rollback-test
+# Expected:
+#   - Original error message: "Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add (test hook)"
+#   - "rollback complete." on stderr (assuming git removal succeeds)
+#   - No leftover directory and no leftover branch:
+test ! -d .worktrees/bd-spsv-rollback-test && echo "OK: dir cleaned"
+git branch | grep 'beads/bd-spsv-rollback-test' && echo "FAIL: branch leaked" \
+  || echo "OK: branch cleaned"
 ```
 
 - [ ] **Step 6: Cleanup**
