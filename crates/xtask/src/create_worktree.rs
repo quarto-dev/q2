@@ -107,6 +107,16 @@ pub struct Args {
     pub base: String,
 }
 
+pub fn parse_external_ref_to_github_url(ext: Option<&str>) -> Option<String> {
+    let ext = ext?;
+    let n = ext.strip_prefix("gh-")?;
+    if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) {
+        Some(format!("https://github.com/quarto-dev/q2/issues/{n}"))
+    } else {
+        None
+    }
+}
+
 pub fn run(_args: Args) -> Result<()> {
     anyhow::bail!("create-worktree not yet implemented");
 }
@@ -185,5 +195,39 @@ mod tests {
     fn validate_slug_rejects_too_long() {
         let too_long = "a".repeat(65);
         assert!(validate_slug(&too_long).is_err());
+    }
+
+    #[test]
+    fn external_ref_gh_prefix_to_url() {
+        assert_eq!(
+            parse_external_ref_to_github_url(Some("gh-157")),
+            Some("https://github.com/quarto-dev/q2/issues/157".to_string())
+        );
+    }
+
+    #[test]
+    fn external_ref_none_returns_none() {
+        assert_eq!(parse_external_ref_to_github_url(None), None);
+    }
+
+    #[test]
+    fn external_ref_empty_string_returns_none() {
+        assert_eq!(parse_external_ref_to_github_url(Some("")), None);
+    }
+
+    #[test]
+    fn external_ref_non_gh_prefix_returns_none() {
+        assert_eq!(
+            parse_external_ref_to_github_url(Some("linear-ABC-12")),
+            None
+        );
+    }
+
+    #[test]
+    fn external_ref_malformed_gh_returns_none() {
+        // Non-numeric suffix
+        assert_eq!(parse_external_ref_to_github_url(Some("gh-foo")), None);
+        // Empty suffix
+        assert_eq!(parse_external_ref_to_github_url(Some("gh-")), None);
     }
 }
