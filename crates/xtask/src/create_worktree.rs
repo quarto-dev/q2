@@ -8,7 +8,10 @@
 //!
 //! Filesystem-only: never touches beads state. Skills own beads lifecycle.
 
+use anyhow::Context;
 use anyhow::Result;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 const BEGIN_MARKER: &str =
     "<!-- BEGIN WORKTREE CONTEXT — managed by cargo xtask create-worktree -->";
@@ -235,6 +238,62 @@ pub fn build_section(kind: &SectionKind) -> String {
     format!("{BEGIN_MARKER}\n{body}{END_MARKER}\n")
 }
 
+pub fn update_claude_local_md(path: &Path, new_section: &str) -> Result<()> {
+    // 1. Read existing content (or empty if file missing).
+    let existing = if path.exists() {
+        let meta = path
+            .symlink_metadata()
+            .with_context(|| format!("reading metadata of {}", path.display()))?;
+        if !meta.is_file() {
+            anyhow::bail!(
+                "CLAUDE.local.md exists but is not a regular file: {}",
+                path.display()
+            );
+        }
+        fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
+    } else {
+        String::new()
+    };
+
+    // 2. Detect line ending from existing content.
+    let nl = detect_line_ending(&existing);
+
+    // 3. Strip any existing managed section.
+    let body = strip_managed_section(&existing)?;
+
+    // 4. Normalize new_section to detected line ending.
+    let new_section_nl = if nl == "\r\n" {
+        new_section.replace('\n', "\r\n")
+    } else {
+        new_section.to_string()
+    };
+
+    // 5. Compose: new section + blank line + remaining body (if any).
+    let mut out = new_section_nl;
+    if !body.is_empty() {
+        if !out.ends_with(nl) {
+            out.push_str(nl);
+        }
+        out.push_str(nl); // blank line separator
+        out.push_str(&body);
+    }
+    if !out.ends_with(nl) {
+        out.push_str(nl);
+    }
+
+    // 6. Atomic write: write to .tmp then rename over target.
+    // Build the temp path by appending ".tmp" to the full OsStr — avoids the
+    // `Path::with_extension` ambiguity around dots in extensions.
+    let mut tmp_os = path.as_os_str().to_owned();
+    tmp_os.push(".tmp");
+    let tmp = PathBuf::from(tmp_os);
+    fs::write(&tmp, out.as_bytes()).with_context(|| format!("writing {}", tmp.display()))?;
+    fs::rename(&tmp, path)
+        .with_context(|| format!("renaming {} to {}", tmp.display(), path.display()))?;
+
+    Ok(())
+}
+
 pub fn run(_args: Args) -> Result<()> {
     anyhow::bail!("create-worktree not yet implemented");
 }
@@ -261,6 +320,105 @@ pub fn detect_line_ending(content: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn make_dummy_section() -> String {
+        build_section(&SectionKind::Beads {
+            id: "bd-xxxx".into(),
+            title: "Demo".into(),
+            github_url: None,
+        })
+    }
+
+    #[test]
+    fn update_creates_file_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("CLAUDE.local.md");
+        update_claude_local_md(&p, &make_dummy_section()).unwrap();
+        let out = fs::read_to_string(&p).unwrap();
+        assert!(out.starts_with(BEGIN_MARKER));
+        assert!(out.trim_end().ends_with(END_MARKER));
+        assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn update_prepends_when_no_marker_present() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("CLAUDE.local.md");
+        fs::write(&p, "# My notes\nfoo\n").unwrap();
+        update_claude_local_md(&p, &make_dummy_section()).unwrap();
+        let out = fs::read_to_string(&p).unwrap();
+        assert!(out.starts_with(BEGIN_MARKER));
+        assert!(out.contains("# My notes"));
+    }
+
+    #[test]
+    fn update_is_idempotent() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("CLAUDE.local.md");
+        update_claude_local_md(&p, &make_dummy_section()).unwrap();
+        update_claude_local_md(&p, &make_dummy_section()).unwrap();
+        let out = fs::read_to_string(&p).unwrap();
+        assert_eq!(out.matches(BEGIN_MARKER).count(), 1);
+        assert_eq!(out.matches(END_MARKER).count(), 1);
+    }
+
+    #[test]
+    fn update_preserves_user_content_below_section() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("CLAUDE.local.md");
+        update_claude_local_md(&p, &make_dummy_section()).unwrap();
+        // User edits below the managed section.
+        let mut content = fs::read_to_string(&p).unwrap();
+        content.push_str("\n# My notes\nfoo bar\n");
+        fs::write(&p, &content).unwrap();
+        // Re-run — managed section refreshed, user content stays.
+        update_claude_local_md(&p, &make_dummy_section()).unwrap();
+        let out = fs::read_to_string(&p).unwrap();
+        assert!(out.contains("# My notes"));
+        assert!(out.contains("foo bar"));
+        assert_eq!(out.matches(BEGIN_MARKER).count(), 1);
+    }
+
+    #[test]
+    fn update_preserves_crlf_when_existing_is_crlf() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("CLAUDE.local.md");
+        fs::write(&p, "# Header\r\n\r\nnotes\r\n").unwrap();
+        update_claude_local_md(&p, &make_dummy_section()).unwrap();
+        let out = fs::read(&p).unwrap();
+        // Output should contain CRLF; no bare LFs.
+        let lf_total = out.iter().filter(|&&b| b == b'\n').count();
+        let crlf_pairs = out.windows(2).filter(|w| w == b"\r\n").count();
+        assert_eq!(
+            lf_total, crlf_pairs,
+            "bare LFs found in CRLF output: {:?}",
+            out
+        );
+    }
+
+    #[test]
+    fn update_errors_when_path_is_directory() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("CLAUDE.local.md");
+        fs::create_dir(&p).unwrap();
+        let err = update_claude_local_md(&p, &make_dummy_section())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("not a regular file"));
+    }
+
+    #[test]
+    fn update_errors_on_begin_without_end() {
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("CLAUDE.local.md");
+        fs::write(&p, format!("{BEGIN_MARKER}\nbroken\n")).unwrap();
+        let err = update_claude_local_md(&p, &make_dummy_section())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("BEGIN marker without END marker"));
+    }
 
     #[test]
     fn slug_drops_stop_words_and_kebab_splits() {
