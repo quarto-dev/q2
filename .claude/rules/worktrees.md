@@ -89,8 +89,10 @@ the xtask binary is broken on the current branch), fall back to manual setup:
 ```bash
 git worktree add -b beads/<id>-<slug> .worktrees/<id>-<slug> main
 echo "../../../.beads" > .worktrees/<id>-<slug>/.beads/redirect
-# Optional but recommended: write a CLAUDE.local.md context stub manually
-# using the template from `cargo xtask create-worktree --help` output.
 ```
 
-Verify with `br where` from inside the worktree.
+Verify with `br where` from inside the worktree. CLAUDE.local.md is not part
+of the manual bootstrap — once the xtask binary is built, re-running
+`cargo xtask create-worktree` is not safe on the existing worktree (see
+above), but the template lives in `crates/xtask/src/create_worktree.rs`
+(`build_section`) for hand-copying if needed.

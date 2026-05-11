@@ -673,9 +673,16 @@ pub fn detect_line_ending(content: &str) -> &'static str {
     }
     let sniff = &content[..sniff_end];
 
-    let crlf_count = sniff.matches("\r\n").count();
+    let mut crlf_count = sniff.matches("\r\n").count();
     let lf_total = sniff.matches('\n').count();
     let bare_lf = lf_total - crlf_count;
+
+    // Boundary case: the sniff may end with `\r` and the matching `\n` falls
+    // just past the window. Peek one byte ahead so a CRLF pair split exactly
+    // on the 1 KiB boundary is not mis-classified as LF.
+    if sniff.ends_with('\r') && content.as_bytes().get(sniff_end) == Some(&b'\n') {
+        crlf_count += 1;
+    }
 
     if crlf_count > 0 && bare_lf == 0 {
         "\r\n"
@@ -925,6 +932,19 @@ mod tests {
         let mut s = "x\n".repeat(600); // 1200 bytes of LF-terminated lines
         s.push_str("z\r\n");
         assert_eq!(detect_line_ending(&s), "\n");
+    }
+
+    #[test]
+    fn detect_le_crlf_split_at_sniff_boundary() {
+        // \r at byte 1023 (last byte of sniff window), \n at byte 1024 (first
+        // byte past the window). The sniff sees no \r\n pair and no bare \n
+        // — without the boundary fix, this would mis-classify as LF.
+        let mut s = String::with_capacity(1100);
+        s.push_str(&"x".repeat(1023));
+        s.push('\r');
+        s.push('\n');
+        s.push_str("more");
+        assert_eq!(detect_line_ending(&s), "\r\n");
     }
 
     #[test]
