@@ -166,17 +166,136 @@ the line-ending gate at line 2233 can handle it instead.
 
 ### Phase 2 — neighborhood characterization (before touching scanner.c)
 
-- [ ] Enumerate every place where `STATE_MATCHING` is set/unset and every
+- [x] Enumerate every place where `STATE_MATCHING` is set/unset and every
       call site of `match_line`. Document the invariants the scanner expects
       around `STATE_MATCHING` + `STATE_WAS_SOFT_LINE_BREAK` at each call
       site.
-- [ ] Verify the bq-in-bq case-2 absence is genuinely the difference
+- [x] Verify the bq-in-bq case-2 absence is genuinely the difference
       (vs. some other coincidence) by adding `SCAN_DEBUG` traces for both
       working and failing inputs at the relevant scan call.
-- [ ] Survey existing corpus tests that depend on the LIST_ITEM `case 2`
+- [x] Survey existing corpus tests that depend on the LIST_ITEM `case 2`
       behaviour (blank-line-in-list-item) so we have a regression baseline.
-- [ ] Write down the proposed guard precisely (condition + which block it
+- [x] Write down the proposed guard precisely (condition + which block it
       gates) in this plan document before editing scanner.c.
+
+#### State flag site map (in scanner.c)
+
+`STATE_MATCHING` (bit 0):
+
+- Set at:
+  - line 2329 — first soft-line-ending gate (peek-advanced path)
+  - line 2420 — second soft-line-ending gate (post-`match_line` path),
+    **this is the path our bug-inducing SOFT_LINE_ENDING goes through**
+  - line 2445 — hard `LINE_ENDING` gate
+- Cleared at:
+  - line 1983 — inside `match_line`, when `result==0` and
+    `STATE_WAS_SOFT_LINE_BREAK` is set
+  - lines 2059, 2070 — inside `scan()` STATE_MATCHING block, when all
+    open blocks matched
+  - lines 2331, 2423, 2448 — line-ending gates when no open blocks remain
+- Read at: line 2007 (debug), line 2040 (the STATE_MATCHING gate that
+  triggers the bug)
+
+`STATE_WAS_SOFT_LINE_BREAK` (bit 1):
+
+- Set at: lines 2319, 2426 (the two soft-line-ending gates)
+- Cleared at: line 2451 (LINE_ENDING gate only)
+- Read at: line 1981 (in `match_line`), lines 2061/2065 (in `scan()`
+  STATE_MATCHING block)
+
+`match_line` call sites:
+
+- line 2042 — top-level `STATE_MATCHING` block (the buggy path)
+- line 2343 — inside the line-ending outer gate (after the leading
+  `\n` is already consumed by line 2243-2244 and the indent stripped
+  at 2253-2258)
+
+#### Invariants the existing code seems to assume
+
+1. `STATE_MATCHING` is intended to fire on entry to a NEW logical line,
+   to re-verify open block prefixes. By the time a top-level scan call
+   reaches the gate at line 2040, the scanner expects lookahead to be
+   non-newline content of a new line (or a blank-line newline that
+   should be consumed as part of list-item-blank-line handling).
+2. `STATE_WAS_SOFT_LINE_BREAK` distinguishes "we just emitted a soft
+   line break, the paragraph is still open" from "we just emitted a
+   hard line break, the paragraph is closed". The former blocks
+   `BLOCK_CLOSE` emission in the `STATE_MATCHING` block (line 2065)
+   so that lazy continuation can still resolve.
+3. **Implicit assumption (violated by our bug):** when `STATE_MATCHING`
+   fires at the top level after a SOFT_LINE_ENDING, the lookahead is
+   the FIRST CHARACTER OF THE NEXT LOGICAL LINE. The SOFT_LINE_ENDING
+   token already consumed the `\n` and any matched continuation
+   prefix. The only way to re-enter scan with `STATE_MATCHING +
+   STATE_WAS_SOFT_LINE_BREAK` AND lookahead `\n`/EOF is if the parser
+   asked for another token at the end of a content line — i.e., what
+   our 2-line case does.
+
+#### Existing tests that depend on LIST_ITEM case 2 (blank-line)
+
+`list.txt` tests 5, 6, 7, 8, 9, 10, 11-22 all exercise blank-line and
+empty-list-item behavior. None of them have the bug-triggering pattern
+(soft-line-break followed by end-of-line newline) — they all hit case 2
+via the line-ending gate (line 2343), not the STATE_MATCHING block
+(line 2042). The proposed guard does not touch the line 2343 path.
+
+#### Proposed fix (Option 2, refined)
+
+The STATE_MATCHING block at scanner.c:2040 should be skipped when the
+scanner is re-entering after a soft line break AND there is no content
+on the current line (i.e., lookahead is end-of-line). Concretely:
+
+```c
+if (s->state & STATE_MATCHING) {
+    // bd-vet6: when we re-enter STATE_MATCHING after a SOFT_LINE_ENDING
+    // (STATE_WAS_SOFT_LINE_BREAK still set) and the lookahead is the
+    // trailing \n / \r / EOF of the same logical line, do NOT call
+    // match_line here. The LIST_ITEM match() returns case 2 on \n and
+    // advances past it, breaking the line-ending gate at line 2233
+    // which expects to see the \n itself. The fix defers to that gate.
+    bool at_line_end =
+        (lexer->lookahead == '\n' ||
+         lexer->lookahead == '\r' ||
+         lexer->eof(lexer));
+    if (!((s->state & STATE_WAS_SOFT_LINE_BREAK) && at_line_end)) {
+        // ... existing STATE_MATCHING block contents ...
+    }
+}
+```
+
+**Why this works:**
+
+- For our bug case (`- > a\n  > b\n`): after `b` consumed, scan() is
+  called at lookahead `\n`. The guard fires, the block is skipped, and
+  control falls through to the line-ending gate at line 2233. That
+  gate handles `\n` cleanly — first gate fails (first_lookahead EOF
+  not > ' '), second gate fails (all_will_be_matched false), and the
+  LINE_ENDING fallback at line 2435 emits `_line_ending`, closing the
+  paragraph and the open blocks.
+
+- For the 3-line case (`- > a\n  > b\n  > c\n`): after `b` consumed,
+  same path. Guard fires, line-ending gate runs. This time first_lookahead
+  after indent strip is `>`, first gate fails. `match_line` from line
+  2343 successfully matches LIST_ITEM (indent 2) and BLOCK_QUOTE
+  (`> `). all_will_be_matched is true, second_lookahead is `c`.
+  Second gate emits `SOFT_LINE_ENDING`, continuing the paragraph.
+
+- For the case-after-LINE_ENDING (hard line break, then re-match):
+  STATE_WAS_SOFT_LINE_BREAK is cleared by the LINE_ENDING gate
+  (line 2451), so our guard does not fire. Existing logic runs.
+
+- For blank-line-inside-list-item: the relevant match_line call is at
+  line 2343 (inside the line-ending gate, after `\n` is consumed by
+  line 2243-2244). Our guard does not touch this call. Existing
+  behavior preserved.
+
+**Risks:**
+
+- If there exist parse paths where the parser legitimately needs the
+  STATE_MATCHING block to run with `STATE_WAS_SOFT_LINE_BREAK` set
+  and lookahead `\n`/EOF, this would break them. The neighborhood
+  characterization above did not find such paths in the corpus, but
+  the regression sweep in Phase 3 is the real check.
 
 ### Phase 3 — implementation
 
