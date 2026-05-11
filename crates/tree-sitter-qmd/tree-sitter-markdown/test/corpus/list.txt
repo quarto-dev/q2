@@ -426,3 +426,128 @@ b
                 (block_continuation)))
             (list_item
               (list_marker_star))))))
+================================================================================
+24 - multi-line block quote inside list item, followed by paragraph (minus)
+================================================================================
+- > a
+  > b
+
+c
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)))))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+25 - multi-line block quote inside list item, followed by paragraph (star)
+================================================================================
+* > a
+  > b
+
+c
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)))))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+26 - multi-line block quote inside list item, followed by paragraph (plus)
+================================================================================
++ > a
+  > b
+
+c
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_plus)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)))))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+27 - multi-line block quote inside list item, followed by paragraph (ordered, dot)
+================================================================================
+1. > a
+   > b
+
+c
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)))))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+28 - multi-line block quote inside list item, followed by paragraph (ordered, paren)
+================================================================================
+1) > a
+   > b
+
+c
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_parenthesis)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)))))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+29 - three-line block quote inside list item
+================================================================================
+- > a
+  > b
+  > c
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)))))))

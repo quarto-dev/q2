@@ -121,20 +121,48 @@ the line-ending gate at line 2233 can handle it instead.
 
 ### Phase 1 — failing corpus tests (TDD)
 
-- [ ] Add failing corpus test to
+- [x] Add failing corpus test to
       `crates/tree-sitter-qmd/tree-sitter-markdown/test/corpus/list.txt`:
       `- > a\n  > b` → expected tree with `pandoc_list > list_item >
       pandoc_block_quote > pandoc_paragraph` containing two `pandoc_str`
       separated by `pandoc_soft_break`.
-- [ ] Add variants for `*`, `+`, `1.`, `(N)` markers.
-- [ ] Add 3-line case (`- > a\n  > b\n  > c`).
-- [ ] Run `tree-sitter test` from the
+- [x] Add variants for `*`, `+`, `1.`, `1)` markers.
+- [x] Add 3-line case (`- > a\n  > b\n  > c`).
+- [x] Run `tree-sitter test` from the
       `crates/tree-sitter-qmd/tree-sitter-markdown` directory and confirm
       each new test fails.
-- [ ] Add pampa-level integration test (qmd → native AST) that mirrors the
+- [x] Add pampa-level integration test (qmd → native AST) that mirrors the
       Pandoc reference output.
-- [ ] Run `cargo nextest run -p pampa` for the new test and confirm it
+- [x] Run `cargo nextest run -p pampa` for the new test and confirm it
       fails.
+
+#### Phase 1 — completion notes
+
+- Tests 24–28 (marker variants) were originally written as bare
+  2-line inputs `- > a\n  > b`. They unexpectedly *passed* under
+  `tree-sitter test`. Investigation showed the corpus runner does not
+  append a trailing newline to the source block, so the scanner takes
+  the EOF path (which emits BLOCK_CLOSE cleanly) rather than the
+  end-of-line `\n` path that triggers the bug. Pampa always appends a
+  trailing newline (Q-7-1), which is why the bug shows up at the user
+  level.
+- Re-shaped tests 24–28 to follow the multi-line block quote with a
+  blank line and a paragraph (`- > a\n  > b\n\nc\n`): that forces the
+  scanner through the end-of-line `\n` path. All 6 new corpus tests now
+  fail. Total corpus: 476 tests, 470 passing, 6 failing (the new ones).
+- pampa fixtures at
+  `crates/pampa/tests/pandoc-match-corpus/markdown/bq-multiline-in-list-*.qmd`
+  panic at `readers::qmd::read(...).unwrap()` because the parse fails.
+  The panic stops the test on the first file, but that is enough to
+  confirm pampa-level reproduction; once the fix lands all six
+  fixtures will be exercised.
+- **Refined bug scope:** the bug requires a trailing `\n` after the
+  second block-quote-marked line. With no trailing newline (EOF
+  immediately after content), the scanner takes the EOF path before
+  the buggy STATE_MATCHING block and emits BLOCK_CLOSE cleanly. The
+  user-reported repro hits this because pampa auto-appends a newline
+  (Q-7-1). Three-line variants fail regardless of trailing newline,
+  because the second line's `\n` triggers the bug before EOF.
 
 ### Phase 2 — neighborhood characterization (before touching scanner.c)
 
