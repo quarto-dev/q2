@@ -35,8 +35,12 @@ const allTests: DiscoveredTest[] = discoverSmokeAllTests();
 // ---------------------------------------------------------------------------
 
 test.describe('smoke-all E2E tests', () => {
-  // Increase timeout for SASS compilation tests
-  test.setTimeout(60000);
+  // Increase timeout for SASS compilation tests. On a contended CI
+  // runner (ubuntu-latest with 2 cores, 2 workers, a vite dev server,
+  // the hub binary, and chromium per worker) the preview render can
+  // take 30-50s for the slower fixtures. 90s leaves headroom for the
+  // 75s waitForPreviewRender wait below to actually fire.
+  test.setTimeout(90000);
 
   for (const fixture of allTests) {
     const skipReason = shouldSkip(fixture.runConfig, fixture.relPath);
@@ -108,7 +112,7 @@ test.describe('smoke-all E2E tests', () => {
         // Wait for render (or error)
         if (!spec.expectsError) {
           await waitForPreviewRender(page, {
-            timeout: 45000,
+            timeout: 75000,
             consoleErrors,
             kind,
           });
