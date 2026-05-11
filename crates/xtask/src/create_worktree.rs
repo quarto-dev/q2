@@ -347,6 +347,56 @@ pub fn fetch_beads_metadata(id: &str) -> Result<BeadsMetadata> {
     })
 }
 
+pub struct GhIssue {
+    pub title: String,
+    pub url: String,
+}
+
+pub fn fetch_gh_issue(number: u32) -> Result<GhIssue> {
+    let n = number.to_string();
+    let output = Command::new("gh")
+        .args([
+            "issue",
+            "view",
+            &n,
+            "--repo",
+            "quarto-dev/q2",
+            "--json",
+            "title,url",
+        ])
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!("gh is required \u{2014} see https://cli.github.com/")
+            } else {
+                anyhow::Error::new(e).context("spawning `gh issue view`")
+            }
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("gh issue view {n} failed:\n{stderr}");
+    }
+
+    let stdout = std::str::from_utf8(&output.stdout)
+        .with_context(|| format!("`gh issue view {n}` produced non-UTF-8 output"))?;
+
+    let v: serde_json::Value = serde_json::from_str(stdout)
+        .with_context(|| format!("parsing JSON from `gh issue view {n}`"))?;
+    let title = v
+        .get("title")
+        .and_then(|x| x.as_str())
+        .ok_or_else(|| anyhow::anyhow!("`gh issue view {n}` JSON missing `title`"))?
+        .to_string();
+    let url = v
+        .get("url")
+        .and_then(|x| x.as_str())
+        .ok_or_else(|| anyhow::anyhow!("`gh issue view {n}` JSON missing `url`"))?
+        .to_string();
+
+    Ok(GhIssue { title, url })
+}
+
 pub fn run(_args: Args) -> Result<()> {
     anyhow::bail!("create-worktree not yet implemented");
 }
