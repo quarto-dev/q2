@@ -251,10 +251,12 @@ git commit -m "xtask: wire create-worktree subcommand into Command enum"
 
 Each task in this phase adds one pure function plus its test cases, following red-green-commit. All tests live in the `#[cfg(test)] mod tests { ... }` block at the bottom of `create_worktree.rs`.
 
-### Task B1: `derive_slug`
+### Task B1: `derive_slug` + `validate_slug`
+
+`derive_slug` produces an auto-slug from titles (already ASCII-only by filter); `validate_slug` enforces a grammar contract on `--slug` overrides (rejects `/`, `..`, whitespace, etc.) so the override can't produce invalid branch names or path-escape.
 
 **Files:**
-- Modify: `crates/xtask/src/create_worktree.rs` (add fn + tests)
+- Modify: `crates/xtask/src/create_worktree.rs` (add fns + tests)
 
 - [ ] **Step 1: Write failing tests**
 
@@ -296,15 +298,55 @@ mod tests {
         let err = derive_slug("!!! ??? ---").unwrap_err().to_string();
         assert!(err.contains("unable to derive slug"));
     }
+
+    #[test]
+    fn validate_slug_accepts_safe_input() {
+        assert!(validate_slug("e2e-beads").is_ok());
+        assert!(validate_slug("issue42").is_ok());
+        assert!(validate_slug("a_b-c").is_ok());
+    }
+
+    #[test]
+    fn validate_slug_rejects_empty() {
+        let err = validate_slug("").unwrap_err().to_string();
+        assert!(err.contains("must not be empty"));
+    }
+
+    #[test]
+    fn validate_slug_rejects_path_separators_and_traversal() {
+        assert!(validate_slug("foo/bar").is_err());
+        assert!(validate_slug("foo\\bar").is_err());
+        assert!(validate_slug("..").is_err());
+        assert!(validate_slug(".").is_err());
+    }
+
+    #[test]
+    fn validate_slug_rejects_whitespace_and_other_punct() {
+        assert!(validate_slug("foo bar").is_err());
+        assert!(validate_slug("foo.bar").is_err());
+        assert!(validate_slug("foo:bar").is_err());
+    }
+
+    #[test]
+    fn validate_slug_rejects_leading_or_trailing_dash() {
+        assert!(validate_slug("-leading").is_err());
+        assert!(validate_slug("trailing-").is_err());
+    }
+
+    #[test]
+    fn validate_slug_rejects_too_long() {
+        let too_long = "a".repeat(65);
+        assert!(validate_slug(&too_long).is_err());
+    }
 }
 ```
 
 - [ ] **Step 2: Run tests — expect compile failure**
 
-Run: `cargo nextest run -p xtask create_worktree::tests::slug_`
-Expected: compile error — `derive_slug` is not defined.
+Run: `cargo nextest run -p xtask create_worktree::tests::slug_ create_worktree::tests::validate_slug_`
+Expected: compile error — `derive_slug` / `validate_slug` not defined.
 
-- [ ] **Step 3: Implement `derive_slug`**
+- [ ] **Step 3: Implement `derive_slug` and `validate_slug`**
 
 Insert into `create_worktree.rs` between the constants block and the `Args` struct:
 
@@ -330,18 +372,44 @@ pub fn derive_slug(title: &str) -> Result<String> {
     }
     Ok(tokens.join("-"))
 }
+
+/// Validate a user-provided `--slug` override. Auto-derived slugs already
+/// satisfy these rules by construction; this only applies to overrides.
+pub fn validate_slug(slug: &str) -> Result<()> {
+    if slug.is_empty() {
+        anyhow::bail!("--slug must not be empty");
+    }
+    if slug.len() > 64 {
+        anyhow::bail!("--slug too long ({} chars, max 64): {slug:?}", slug.len());
+    }
+    if slug == "." || slug == ".." {
+        anyhow::bail!("--slug must not be {slug:?}");
+    }
+    if slug.starts_with('-') || slug.ends_with('-') {
+        anyhow::bail!("--slug must not start or end with '-': {slug:?}");
+    }
+    if let Some(bad) = slug
+        .chars()
+        .find(|c| !(c.is_ascii_alphanumeric() || *c == '-' || *c == '_'))
+    {
+        anyhow::bail!(
+            "--slug contains invalid character {bad:?} — only ASCII alphanumeric, '-', '_' allowed: {slug:?}"
+        );
+    }
+    Ok(())
+}
 ```
 
 - [ ] **Step 4: Run tests — expect green**
 
-Run: `cargo nextest run -p xtask create_worktree::tests::slug_`
-Expected: 5 passed.
+Run: `cargo nextest run -p xtask create_worktree::tests::slug_ create_worktree::tests::validate_slug_`
+Expected: 5 slug_ + 6 validate_slug_ = 11 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add crates/xtask/src/create_worktree.rs
-git commit -m "xtask(create-worktree): derive_slug with stop-words + ASCII filter"
+git commit -m "xtask(create-worktree): derive_slug + validate_slug grammar"
 ```
 
 ---
@@ -592,6 +660,23 @@ Append inside `mod tests`:
         assert!(!s.contains("**Beads:**"));
         assert!(!s.contains("**GitHub:**"));
     }
+
+    #[test]
+    fn section_strips_marker_from_title() {
+        // A title that literally contains the END marker must not be interpolated
+        // verbatim — `strip_managed_section` would otherwise pick it up as the
+        // section terminator on the next run.
+        let evil = format!("real title {END_MARKER} oops");
+        let s = build_section(&SectionKind::Beads {
+            id: "bd-x".into(),
+            title: evil,
+            github_url: None,
+        });
+        // END_MARKER must appear exactly once — at the section's actual close.
+        assert_eq!(s.matches(END_MARKER).count(), 1);
+        // BEGIN_MARKER ditto.
+        assert_eq!(s.matches(BEGIN_MARKER).count(), 1);
+    }
 ```
 
 - [ ] **Step 3: Run tests — expect compile failure**
@@ -599,11 +684,20 @@ Append inside `mod tests`:
 Run: `cargo nextest run -p xtask create_worktree::tests::section_`
 Expected: compile error — `build_section` not defined.
 
-- [ ] **Step 4: Implement `build_section`**
+- [ ] **Step 4: Implement `build_section` (with marker-safe title interpolation)**
 
 Add to `create_worktree.rs`:
 
 ```rust
+/// Neutralize any occurrences of BEGIN/END marker substrings inside
+/// externally-sourced text (titles from `br`/`gh`). Without this, a title
+/// containing `<!-- END WORKTREE CONTEXT -->` would terminate the section
+/// prematurely on the next idempotent strip pass.
+fn marker_safe(s: &str) -> String {
+    s.replace(BEGIN_MARKER, "[BEGIN marker scrubbed]")
+        .replace(END_MARKER, "[END marker scrubbed]")
+}
+
 pub fn build_section(kind: &SectionKind) -> String {
     let body = match kind {
         SectionKind::Beads {
@@ -611,6 +705,7 @@ pub fn build_section(kind: &SectionKind) -> String {
             title,
             github_url,
         } => {
+            let title = marker_safe(title);
             let mut s = String::new();
             s.push_str("# Worktree Context\n\n");
             s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
@@ -624,6 +719,7 @@ pub fn build_section(kind: &SectionKind) -> String {
             s
         }
         SectionKind::Issue { number, title, url } => {
+            let title = marker_safe(title);
             let mut s = String::new();
             s.push_str("# Worktree Context\n\n");
             s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
@@ -652,7 +748,7 @@ pub fn build_section(kind: &SectionKind) -> String {
 - [ ] **Step 5: Run tests — expect green**
 
 Run: `cargo nextest run -p xtask create_worktree::tests::section_`
-Expected: 4 passed.
+Expected: 5 passed.
 
 - [ ] **Step 6: Commit**
 
@@ -1075,21 +1171,11 @@ pub fn fetch_beads_metadata(id: &str) -> Result<BeadsMetadata> {
 Run: `cargo check -p xtask`
 Expected: clean.
 
-- [ ] **Step 4: Smoke test against real beads**
+(No standalone smoke test here — `run()` is still the stub, so any CLI invocation
+bails before reaching `fetch_beads_metadata`. End-to-end coverage lives in Phase E
+after `run()` is wired in Task D1.)
 
-Run from the worktree:
-
-```bash
-cargo run -q -p xtask -- create-worktree bd-spsv --slug smoke
-# Expected: bails on later step (worktree creation) — but only AFTER successfully
-# fetching metadata. If `br show` fails, the error message surfaces here.
-```
-
-(The command will not yet complete end-to-end; Phase D wires the rest. The point here is to confirm `br` parsing works.)
-
-This step is informational — the command is expected to fail at a later point. Note any error reaching this point and fix.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add crates/xtask/src/create_worktree.rs
@@ -1201,17 +1287,23 @@ pub fn git_worktree_add(branch: &str, dir: &Path, base: &str) -> Result<()> {
 
     // Pass the directory as OsStr so paths with non-UTF-8 bytes (Windows UTF-16
     // halves, weird POSIX names) still round-trip correctly.
-    let status = Command::new("git")
+    // `.output()` captures stderr so we can include git's actual error message
+    // in our anyhow context — `.status()` would just give us an exit code.
+    let output = Command::new("git")
         .arg("worktree")
         .arg("add")
         .arg("-b")
         .arg(branch)
         .arg(dir.as_os_str())
         .arg(base)
-        .status()
+        .output()
         .context("spawning `git worktree add`")?;
-    if !status.success() {
-        anyhow::bail!("git worktree add failed (exit {:?})", status.code());
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "git worktree add failed (exit {:?}):\n{stderr}",
+            output.status.code()
+        );
     }
 
     Ok(())
@@ -1272,10 +1364,32 @@ pub fn run(args: Args) -> Result<()> {
     };
 
     git_worktree_add(&plan.branch, &plan.dir, &plan.base)?;
-    write_beads_redirect(&plan.dir)?;
-    let section = build_section(&plan.kind);
-    let claude_local = plan.dir.join("CLAUDE.local.md");
-    update_claude_local_md(&claude_local, &section)?;
+
+    // From here on, on any error we roll back the worktree+branch we just
+    // created so a retry is not blocked by directory/branch collision.
+    let post = (|| -> Result<()> {
+        write_beads_redirect(&plan.dir)?;
+        let section = build_section(&plan.kind);
+        let claude_local = plan.dir.join("CLAUDE.local.md");
+        update_claude_local_md(&claude_local, &section)?;
+        Ok(())
+    })();
+
+    if let Err(e) = post {
+        eprintln!("error after worktree creation: {e:#}");
+        eprintln!("rolling back worktree {} and branch {}", plan.dir.display(), plan.branch);
+        let _ = Command::new("git")
+            .arg("worktree")
+            .arg("remove")
+            .arg("--force")
+            .arg(plan.dir.as_os_str())
+            .status();
+        let _ = Command::new("git")
+            .args(["branch", "-D", &plan.branch])
+            .status();
+        return Err(e);
+    }
+
     print_summary(&plan);
     Ok(())
 }
@@ -1290,7 +1404,10 @@ struct Plan {
 fn plan_beads(id: &str, slug_override: Option<&str>, base: &str) -> Result<Plan> {
     let meta = fetch_beads_metadata(id)?;
     let slug = match slug_override {
-        Some(s) => s.to_string(),
+        Some(s) => {
+            validate_slug(s)?;
+            s.to_string()
+        }
         None => derive_slug(&meta.title)?,
     };
     let leaf = format!("{id}-{slug}");
@@ -1319,6 +1436,9 @@ fn plan_beads(id: &str, slug_override: Option<&str>, base: &str) -> Result<Plan>
 }
 
 fn plan_issue(number: u32, slug_suffix: Option<&str>, base: &str) -> Result<Plan> {
+    if let Some(s) = slug_suffix {
+        validate_slug(s)?;
+    }
     let gh = fetch_gh_issue(number)?;
     let leaf = match slug_suffix {
         Some(s) => format!("issue-{number}-{s}"),
@@ -1337,6 +1457,9 @@ fn plan_issue(number: u32, slug_suffix: Option<&str>, base: &str) -> Result<Plan
 }
 
 fn plan_upgrade(slug_suffix: Option<&str>, base: &str) -> Result<Plan> {
+    if let Some(s) = slug_suffix {
+        validate_slug(s)?;
+    }
     let date = time::OffsetDateTime::now_utc()
         .format(&time::macros::format_description!("[year]-[month]-[day]"))
         .context("formatting today's date")?;
@@ -1414,6 +1537,10 @@ git commit -m "xtask(create-worktree): wire run() to dispatch + summary"
 
 Important: this worktree (`bd-spsv-create-worktree-xtask`) cannot be the smoke-test target — it was set up with the manual commands the xtask replaces. Smoke-test by creating a throwaway worktree per mode, then cleaning up.
 
+**Idempotency scope:** the command is **not** rerun-idempotent end-to-end — `git worktree add` errors on existing directories, by design. File-level idempotency of `update_claude_local_md` (re-running on an existing CLAUDE.local.md updates the section in place) is covered by unit tests in Task B6 (`update_is_idempotent`, `update_preserves_user_content_below_section`). Phase E does not re-verify what those tests already cover.
+
+**Shell:** these commands assume Git Bash on Windows (or any POSIX shell on Linux/macOS). On Windows: open Git Bash, not PowerShell — `cat`, `grep`, `printf`, `xargs`, `mkdir -p`, and `$(...)` substitution all rely on it.
+
 Chris runs each block; any failure is a defect to fix before proceeding to Phase F.
 
 - [ ] **Step 1: Build the binary once**
@@ -1448,35 +1575,29 @@ cargo xtask create-worktree --upgrade --slug e2e-upgrade
 ls .worktrees/cargo-upgrade-*-e2e-upgrade/CLAUDE.local.md   # → upgrade variant
 ```
 
-- [ ] **Step 5: Idempotency + user-content preservation**
+- [ ] **Step 5: Failure cases**
 
 ```bash
-# Re-running must NOT duplicate the managed section.
-cargo xtask create-worktree bd-spsv --slug e2e-beads
-grep -c "BEGIN WORKTREE CONTEXT" .worktrees/bd-spsv-e2e-beads/CLAUDE.local.md   # → 1
-
-# Add user content below the managed section, re-run, confirm preserved.
-printf '\n# My notes\nfoo\n' >> .worktrees/bd-spsv-e2e-beads/CLAUDE.local.md
-cargo xtask create-worktree bd-spsv --slug e2e-beads
-grep "My notes" .worktrees/bd-spsv-e2e-beads/CLAUDE.local.md   # → present
-```
-
-- [ ] **Step 6: Failure cases**
-
-```bash
-# 6a. Existing directory collision
+# 5a. Existing directory collision
 mkdir -p .worktrees/collision-test
 cargo xtask create-worktree bd-spsv --slug collision-test
 # Expected: clear error before any git operation. Then:
 rmdir .worktrees/collision-test
 
-# 6b. Corrupt managed section (missing END)
-printf '<!-- BEGIN WORKTREE CONTEXT -->\nbroken\n' > .worktrees/bd-spsv-e2e-beads/CLAUDE.local.md
+# 5b. Invalid --slug grammar (path-separator, traversal, whitespace)
+cargo xtask create-worktree bd-spsv --slug "foo/bar"
+# Expected: error from validate_slug — no worktree created.
+cargo xtask create-worktree bd-spsv --slug ".."
+# Expected: error from validate_slug — no worktree created.
+
+# 5c. Re-running on existing worktree (idempotency is NOT a goal here)
 cargo xtask create-worktree bd-spsv --slug e2e-beads
-# Expected: error "BEGIN marker without END marker — refusing to modify".
+# Expected: fails with "worktree directory already exists" — by design.
+# If you need to refresh the CLAUDE.local.md section, remove the worktree
+# and recreate, or hand-edit the file (the BEGIN/END markers make this safe).
 ```
 
-- [ ] **Step 7: Cleanup**
+- [ ] **Step 6: Cleanup**
 
 ```bash
 git worktree remove .worktrees/bd-spsv-e2e-beads
@@ -1489,7 +1610,7 @@ git branch -d beads/bd-spsv-e2e-beads "issue-${ISSUE}-e2e-issue"
 git branch | grep 'cargo-upgrade-.*-e2e-upgrade' | xargs -r git branch -d
 ```
 
-- [ ] **Step 8: Record the smoke-test transcript**
+- [ ] **Step 7: Record the smoke-test transcript**
 
 Capture exact output from steps 2-4 and paste into the eventual PR body under § End-to-end verification. This satisfies q2 CLAUDE.md "End-to-end verification before declaring success".
 
@@ -1605,8 +1726,14 @@ the plan).
 Status lives in beads, not in this file. Run `br show <id>` for current status + notes.
 
 The section is delimited by `<!-- BEGIN/END WORKTREE CONTEXT -->` markers so it can be
-updated by re-running the xtask without disturbing other content. The command is
-idempotent.
+refreshed in place (e.g. when a worktree is recreated, or by hand-editing the file).
+The `update_claude_local_md` rewrite is idempotent at the file level: re-running it on
+a file that already has a managed section replaces that section without duplicating it
+and preserves any user content below.
+
+`cargo xtask create-worktree` itself is **not** idempotent end-to-end — `git worktree add`
+fails fast if the directory already exists. To refresh a worktree's CLAUDE.local.md,
+either edit it by hand (the markers make this safe) or remove the worktree and recreate.
 ```
 
 - [ ] **Step 3: Add § Manual bootstrap at the end**
@@ -1780,3 +1907,11 @@ Per CLAUDE.md "NEVER push to the remote repository without explicit user permiss
 2. **`--upgrade` bool in ArgGroup:** Task A3 Step 5 explicitly tests this works in the installed clap version. If it does not, fall back per the note there before proceeding to Phase B.
 
 3. **Filesystem-pure:** the xtask never calls `br create`, `br update`, or any state-changing beads command. Skill instructions in Phase F preserve the existing per-skill beads lifecycle steps.
+
+4. **Idempotency scope (file-level only).** The design doc used the word "idempotent" loosely. The actual contract is:
+   - `update_claude_local_md` is idempotent at the **file** level — re-running it on a file with an existing managed section replaces that section in place.
+   - `cargo xtask create-worktree` is **not** idempotent at the **command** level — `git worktree add` errors fast on directory collision. A retry must first remove the partial worktree (the rollback path in `run()` does this on failure between `git_worktree_add` and `update_claude_local_md`).
+
+5. **`--slug` grammar.** Overrides go through `validate_slug` (ASCII alnum + `-` + `_`, no leading/trailing dash, no `..`/`.`, max 64 chars). Auto-derived slugs already satisfy this by construction.
+
+6. **Marker-collision defense.** Externally-sourced titles (`br`/`gh`) are passed through `marker_safe` before interpolation so a literal `<!-- END WORKTREE CONTEXT -->` in a title cannot terminate the managed section prematurely.
