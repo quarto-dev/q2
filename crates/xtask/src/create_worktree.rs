@@ -121,6 +121,25 @@ pub fn run(_args: Args) -> Result<()> {
     anyhow::bail!("create-worktree not yet implemented");
 }
 
+pub fn detect_line_ending(content: &str) -> &'static str {
+    // Sniff up to first 1 KiB, snapped to a char boundary so slicing is valid.
+    let mut sniff_end = content.len().min(1024);
+    while sniff_end > 0 && !content.is_char_boundary(sniff_end) {
+        sniff_end -= 1;
+    }
+    let sniff = &content[..sniff_end];
+
+    let crlf_count = sniff.matches("\r\n").count();
+    let lf_total = sniff.matches('\n').count();
+    let bare_lf = lf_total - crlf_count;
+
+    if crlf_count > 0 && bare_lf == 0 {
+        "\r\n"
+    } else {
+        "\n"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,5 +248,39 @@ mod tests {
         assert_eq!(parse_external_ref_to_github_url(Some("gh-foo")), None);
         // Empty suffix
         assert_eq!(parse_external_ref_to_github_url(Some("gh-")), None);
+    }
+
+    #[test]
+    fn detect_le_empty_defaults_to_lf() {
+        assert_eq!(detect_line_ending(""), "\n");
+    }
+
+    #[test]
+    fn detect_le_no_newlines_defaults_to_lf() {
+        assert_eq!(detect_line_ending("hello world"), "\n");
+    }
+
+    #[test]
+    fn detect_le_lf_only() {
+        assert_eq!(detect_line_ending("a\nb\nc\n"), "\n");
+    }
+
+    #[test]
+    fn detect_le_crlf_pure() {
+        assert_eq!(detect_line_ending("a\r\nb\r\nc\r\n"), "\r\n");
+    }
+
+    #[test]
+    fn detect_le_mixed_falls_back_to_lf() {
+        // CRLF + bare LF -> LF (do not propagate inconsistency)
+        assert_eq!(detect_line_ending("a\r\nb\nc\r\n"), "\n");
+    }
+
+    #[test]
+    fn detect_le_sniffs_only_first_1kb() {
+        // Pad the head with LF, place a CRLF beyond the sniff window
+        let mut s = "x\n".repeat(600); // 1200 bytes of LF-terminated lines
+        s.push_str("z\r\n");
+        assert_eq!(detect_line_ending(&s), "\n");
     }
 }
