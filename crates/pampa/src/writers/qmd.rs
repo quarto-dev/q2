@@ -625,11 +625,14 @@ fn write_codeblock(
 
     writeln!(buf)?;
 
-    // Write the code content
+    // Write the code content. The reader (matching Pandoc) joins content
+    // lines with `\n` and emits no trailing newline, so we always emit a
+    // separator newline before the closing fence for non-empty content. If
+    // `text` itself ends in `\n`, that newline is preserved as a content-line
+    // boundary and our extra writeln keeps the closing fence on its own line,
+    // round-tripping the trailing-blank-line case (issue #173).
     write!(buf, "{}", codeblock.text)?;
-
-    // Ensure we end on a newline
-    if !codeblock.text.ends_with('\n') {
+    if !codeblock.text.is_empty() {
         writeln!(buf)?;
     }
 
