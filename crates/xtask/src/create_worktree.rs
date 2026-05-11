@@ -397,6 +397,66 @@ pub fn fetch_gh_issue(number: u32) -> Result<GhIssue> {
     Ok(GhIssue { title, url })
 }
 
+pub fn git_worktree_add(branch: &str, dir: &Path, base: &str) -> Result<()> {
+    if dir.exists() {
+        anyhow::bail!("worktree directory already exists: {}", dir.display());
+    }
+
+    // Pre-check: does the branch already exist locally?
+    let check = Command::new("git")
+        .args([
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ])
+        .output()
+        .context("spawning `git rev-parse`")?;
+    if check.status.success() {
+        anyhow::bail!(
+            "branch already exists: {branch} \u{2014} remove it or pass --slug to disambiguate"
+        );
+    }
+
+    // Pass the directory as OsStr so paths with non-UTF-8 bytes (Windows UTF-16
+    // halves, weird POSIX names) still round-trip correctly.
+    // `.output()` captures stderr so we can include git's actual error message
+    // in our anyhow context — `.status()` would just give us an exit code.
+    let output = Command::new("git")
+        .arg("worktree")
+        .arg("add")
+        .arg("-b")
+        .arg(branch)
+        .arg(dir.as_os_str())
+        .arg(base)
+        .output()
+        .context("spawning `git worktree add`")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "git worktree add failed (exit {:?}):\n{stderr}",
+            output.status.code()
+        );
+    }
+
+    Ok(())
+}
+
+pub fn write_beads_redirect(dir: &Path) -> Result<()> {
+    let redirect = dir.join(".beads").join("redirect");
+    // `.beads/` is tracked in the new worktree — directory should exist.
+    if !redirect.parent().map(Path::is_dir).unwrap_or(false) {
+        anyhow::bail!(
+            ".beads/ directory missing in new worktree: {} \u{2014} was the base branch correct?",
+            redirect.parent().unwrap().display()
+        );
+    }
+    // LF line ending intentionally, even on Windows.
+    fs::write(&redirect, "../../../.beads\n")
+        .with_context(|| format!("writing {}", redirect.display()))?;
+    Ok(())
+}
+
 pub fn run(_args: Args) -> Result<()> {
     anyhow::bail!("create-worktree not yet implemented");
 }
