@@ -1174,6 +1174,15 @@ fn write_table(
         row_contents.push(cell_strings);
     }
 
+    // Pipe tables require a header line. A Pandoc `TableHead` with zero rows
+    // (parser output for tables whose header row was all-empty cells) would
+    // otherwise cause the first body row to be emitted as the header and lost
+    // on re-parse; insert a synthetic empty header so every body row stays a
+    // body row through round-trip.
+    if table.head.rows.is_empty() {
+        row_contents.insert(0, vec![String::new(); num_cols]);
+    }
+
     // Ensure minimum width of 3 for each column
     for width in &mut max_widths {
         if *width < 3 {
