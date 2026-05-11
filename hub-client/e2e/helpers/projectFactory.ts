@@ -19,6 +19,7 @@ import {
 import { SERVER_INFO_PATH } from './globalSetup';
 import type { ServerInfo } from './globalSetup';
 import { expect, type Page } from '@playwright/test';
+import type {} from './testHooks';
 
 export interface ProjectFile {
   path: string;
@@ -160,8 +161,10 @@ export async function seedProjectInBrowser(
 ): Promise<string> {
   return page.evaluate(
     async ({ indexDocId, syncServer, name }) => {
-      const ps = await import('/src/services/projectStorage.ts');
-      const entry = await ps.addProject(indexDocId, syncServer, name);
+      await window.__quartoTestReady;
+      const hooks = window.__quartoTest;
+      if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+      const entry = await hooks.projectStorage.addProject(indexDocId, syncServer, name);
       return entry.id;
     },
     { indexDocId, syncServer, name },

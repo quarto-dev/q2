@@ -6,6 +6,7 @@
  */
 
 import type { Page } from '@playwright/test';
+import type {} from './testHooks';
 
 /**
  * Wait for the preview iframe to render content.
@@ -101,8 +102,10 @@ export async function getPreviewHtml(
   documentPath: string,
 ): Promise<string> {
   return page.evaluate(async (docPath) => {
-    const renderer = await import('/src/services/wasmRenderer.ts');
-    const result = await renderer.renderToHtml({ documentPath: docPath });
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    const result = await hooks.wasmRenderer.renderToHtml({ documentPath: docPath });
     return result.html ?? '';
   }, documentPath);
 }
@@ -121,7 +124,10 @@ export async function getPreviewCss(page: Page): Promise<string> {
       throw new Error('No active preview iframe found');
     }
 
-    const renderer = await import('/src/services/wasmRenderer.ts');
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    const renderer = hooks.wasmRenderer;
     const links = iframe.contentDocument.querySelectorAll('link[rel="stylesheet"]');
     let combinedCss = '';
 
@@ -187,8 +193,10 @@ export async function getRenderDiagnostics(
   warnings: RenderDiagnostic[];
 }> {
   return page.evaluate(async (docPath) => {
-    const renderer = await import('/src/services/wasmRenderer.ts');
-    const result = await renderer.renderToHtml({ documentPath: docPath });
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    const result = await hooks.wasmRenderer.renderToHtml({ documentPath: docPath });
     return {
       success: result.success,
       error: result.error,

@@ -103,7 +103,16 @@ jobs:
       # q2-demos/* currently fail their vite build (they import an
       # absolute path "/src/wasm-js-bridge/cache.js" that only exists
       # in hub-client/), and trace-viewer is not under test here.
+      #
+      # VITE_E2E=1 on the hub-client build pulls in src/test-hooks.ts so
+      # the Playwright suite can reach internal services via
+      # `window.__quartoTest` (production bundles don't expose source
+      # paths the way `vite dev` did). The flag is consumed only by the
+      # `if (import.meta.env.VITE_E2E === '1')` branch in src/main.tsx;
+      # production-user builds leave it unset and tree-shake the hooks out.
       - name: Build TypeScript packages (ts-packages + hub-client)
+        env:
+          VITE_E2E: '1'
         run: |
           for pkg in ts-packages/*/; do
             if [ -f "$pkg/package.json" ]; then

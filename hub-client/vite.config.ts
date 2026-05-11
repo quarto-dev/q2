@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import wasm from 'vite-plugin-wasm'
+import compression from 'compression'
 import path from 'path'
 import { execSync } from 'child_process'
 
@@ -24,7 +25,36 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
-    wasm()
+    wasm(),
+    {
+      // vite preview's static-file middleware does not gzip by default,
+      // so a cold Playwright context downloads the ~32 MB WASM uncompressed.
+      // Gzipping at the preview layer cuts the wire size to ~5.6 MB per
+      // context, which is the main throughput win this config is after.
+      // Active only for `vite preview` (the CI E2E server); `vite dev`
+      // doesn't need it (transform pipeline is the bottleneck there).
+      name: 'preview-compression',
+      configurePreviewServer(server) {
+        // `compression` is typed as an Express RequestHandler, but vite's
+        // middleware stack is connect-based. Their (req, res, next) shapes
+        // are runtime-compatible; the cast bridges the type mismatch.
+        const middleware = compression({
+          // mime-db marks `application/wasm` as non-compressible, so the
+          // default `compression.filter` skips it. In practice the WASM
+          // gzips ~6:1 (32 MB → ~5.6 MB), which is the main win we're
+          // after. Override the filter to opt it back in.
+          filter: (req, res) => {
+            const type = res.getHeader('content-type');
+            if (typeof type === 'string' && type.startsWith('application/wasm')) {
+              return true;
+            }
+            return compression.filter(req, res);
+          },
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        server.middlewares.use(middleware as any);
+      },
+    },
   ],
   define: {
     __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
@@ -48,7 +78,14 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         debug: path.resolve(__dirname, 'debug.html'),
-        'ast-renderer': path.resolve(__dirname, 'public/ast-renderer.html'),
+        // ast-renderer.html lives at the project root, not under public/.
+        // When it was in public/ the build emitted both a transformed
+        // copy (at dist/public/ast-renderer.html) and an untransformed
+        // copy of the source file (at dist/ast-renderer.html, with a
+        // dev-only `<script src="/src/ast-renderer-entry.tsx">` reference).
+        // The iframe's `src="/ast-renderer.html"` hit the wrong one in
+        // `vite preview`, breaking the q2-debug E2E test.
+        'ast-renderer': path.resolve(__dirname, 'ast-renderer.html'),
       },
     },
   },
@@ -57,20 +94,29 @@ export default defineConfig({
       // Allow serving files from the wasm package
       allow: ['..'],
     },
-    proxy: {
-      // Forward /auth/* to the hub server (JWT validation, cookies, OAuth callback).
-      '/auth': {
-        target: hubTarget,
-        changeOrigin: true,
-      },
-      // Forward WebSocket upgrades to the hub server for Automerge sync.
-      // In dev, cookies are origin-scoped to :5173, so we proxy through Vite
-      // rather than connecting directly to the hub's port.
-      '/ws': {
-        target: hubTarget,
-        ws: true,
-        changeOrigin: true,
-      },
-    },
+    proxy: proxyConfig(),
+  },
+  // Vite preview ignores `server.proxy`, so mirror the same config for
+  // the production-build server used by Playwright E2E in CI.
+  preview: {
+    proxy: proxyConfig(),
   },
 })
+
+function proxyConfig() {
+  return {
+    // Forward /auth/* to the hub server (JWT validation, cookies, OAuth callback).
+    '/auth': {
+      target: hubTarget,
+      changeOrigin: true,
+    },
+    // Forward WebSocket upgrades to the hub server for Automerge sync.
+    // In dev, cookies are origin-scoped to :5173, so we proxy through Vite
+    // rather than connecting directly to the hub's port.
+    '/ws': {
+      target: hubTarget,
+      ws: true,
+      changeOrigin: true,
+    },
+  };
+}
