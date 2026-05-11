@@ -34,6 +34,22 @@ const _: () = {
     assert!(found, "BEGIN_MARKER must contain U+2014 em dash");
 };
 
+pub enum SectionKind {
+    Beads {
+        id: String,
+        title: String,
+        github_url: Option<String>,
+    },
+    Issue {
+        number: u32,
+        title: String,
+        url: String,
+    },
+    Upgrade {
+        date: String,
+    },
+}
+
 pub fn derive_slug(title: &str) -> Result<String> {
     let tokens: Vec<String> = title
         .to_lowercase()
@@ -115,6 +131,65 @@ pub fn parse_external_ref_to_github_url(ext: Option<&str>) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Neutralize any occurrences of BEGIN/END marker substrings inside
+/// externally-sourced text (titles from `br`/`gh`). Without this, a title
+/// containing `<!-- END WORKTREE CONTEXT -->` would terminate the section
+/// prematurely on the next idempotent strip pass.
+fn marker_safe(s: &str) -> String {
+    s.replace(BEGIN_MARKER, "[BEGIN marker scrubbed]")
+        .replace(END_MARKER, "[END marker scrubbed]")
+}
+
+pub fn build_section(kind: &SectionKind) -> String {
+    let body = match kind {
+        SectionKind::Beads {
+            id,
+            title,
+            github_url,
+        } => {
+            let title = marker_safe(title);
+            let mut s = String::new();
+            s.push_str("# Worktree Context\n\n");
+            s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
+            s.push_str(&format!("**Beads:** {id} \u{2014} {title}\n"));
+            if let Some(url) = github_url {
+                s.push_str(&format!("**GitHub:** {url}\n"));
+            }
+            s.push_str("**Plan:** <!-- fill in after creating: claude-notes/plans/YYYY-MM-DD-name.md -->\n");
+            s.push('\n');
+            s.push_str(&format!(
+                "Run `br show {id}` for current status and notes.\n"
+            ));
+            s
+        }
+        SectionKind::Issue { number, title, url } => {
+            let title = marker_safe(title);
+            let mut s = String::new();
+            s.push_str("# Worktree Context\n\n");
+            s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
+            s.push_str(&format!("**GitHub issue:** #{number} \u{2014} {title}\n"));
+            s.push_str(&format!("**URL:** {url}\n"));
+            s.push_str(&format!(
+                "**Beads:** (run `br search {number}` to find or create a beads issue)\n"
+            ));
+            s.push_str("**Plan:** <!-- fill in after creating: claude-notes/plans/YYYY-MM-DD-name.md -->\n");
+            s
+        }
+        SectionKind::Upgrade { date } => {
+            let mut s = String::new();
+            s.push_str("# Worktree Context\n\n");
+            s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
+            s.push_str(&format!(
+                "**Task:** Cargo dependency upgrade \u{2014} {date}\n"
+            ));
+            s.push_str("**Plan:** <!-- fill in if needed -->\n");
+            s
+        }
+    };
+
+    format!("{BEGIN_MARKER}\n{body}{END_MARKER}\n")
 }
 
 pub fn run(_args: Args) -> Result<()> {
@@ -282,5 +357,71 @@ mod tests {
         let mut s = "x\n".repeat(600); // 1200 bytes of LF-terminated lines
         s.push_str("z\r\n");
         assert_eq!(detect_line_ending(&s), "\n");
+    }
+
+    #[test]
+    fn section_beads_with_github() {
+        let s = build_section(&SectionKind::Beads {
+            id: "bd-1d3e".into(),
+            title: "Fix X".into(),
+            github_url: Some("https://github.com/quarto-dev/q2/issues/42".into()),
+        });
+        assert!(s.starts_with(BEGIN_MARKER));
+        assert!(s.trim_end().ends_with(END_MARKER));
+        assert!(s.contains("**Beads:** bd-1d3e — Fix X"));
+        assert!(s.contains("**GitHub:** https://github.com/quarto-dev/q2/issues/42"));
+        assert!(s.contains("Run `br show bd-1d3e`"));
+        assert!(s.contains("Main repo: `../..`"));
+    }
+
+    #[test]
+    fn section_beads_without_github_omits_line() {
+        let s = build_section(&SectionKind::Beads {
+            id: "bd-zzzz".into(),
+            title: "T".into(),
+            github_url: None,
+        });
+        assert!(!s.contains("**GitHub:**"));
+        assert!(s.contains("**Beads:** bd-zzzz — T"));
+    }
+
+    #[test]
+    fn section_issue() {
+        let s = build_section(&SectionKind::Issue {
+            number: 157,
+            title: "An issue".into(),
+            url: "https://github.com/quarto-dev/q2/issues/157".into(),
+        });
+        assert!(s.contains("**GitHub issue:** #157 — An issue"));
+        assert!(s.contains("**URL:** https://github.com/quarto-dev/q2/issues/157"));
+        assert!(s.contains("**Beads:** (run `br search 157`"));
+        assert!(!s.contains("**Beads:** bd-")); // no resolved beads id
+    }
+
+    #[test]
+    fn section_upgrade() {
+        let s = build_section(&SectionKind::Upgrade {
+            date: "2026-05-11".into(),
+        });
+        assert!(s.contains("**Task:** Cargo dependency upgrade — 2026-05-11"));
+        assert!(!s.contains("**Beads:**"));
+        assert!(!s.contains("**GitHub:**"));
+    }
+
+    #[test]
+    fn section_strips_marker_from_title() {
+        // A title that literally contains the END marker must not be interpolated
+        // verbatim — `strip_managed_section` would otherwise pick it up as the
+        // section terminator on the next run.
+        let evil = format!("real title {END_MARKER} oops");
+        let s = build_section(&SectionKind::Beads {
+            id: "bd-x".into(),
+            title: evil,
+            github_url: None,
+        });
+        // END_MARKER must appear exactly once — at the section's actual close.
+        assert_eq!(s.matches(END_MARKER).count(), 1);
+        // BEGIN_MARKER ditto.
+        assert_eq!(s.matches(BEGIN_MARKER).count(), 1);
     }
 }
