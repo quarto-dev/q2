@@ -299,16 +299,28 @@ if (s->state & STATE_MATCHING) {
 
 ### Phase 3 — implementation
 
-- [ ] Apply the guard in
+- [x] Apply the guard in
       `crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c`.
-- [ ] Confirm the failing corpus tests from Phase 1 now pass.
-- [ ] Run the full `tree-sitter test` suite from
+- [x] Confirm the failing corpus tests from Phase 1 now pass.
+- [x] Run the full `tree-sitter test` suite from
       `crates/tree-sitter-qmd/tree-sitter-markdown` and check for
       regressions. Investigate any newly-failing tests case-by-case — do
       *not* update snapshots reflexively.
-- [ ] Run `cargo nextest run -p pampa` and check for regressions.
-- [ ] Run `cargo nextest run --workspace` to check for cross-crate
+- [x] Run `cargo nextest run -p pampa` and check for regressions.
+- [x] Run `cargo nextest run --workspace` to check for cross-crate
       regressions (per CLAUDE.md monorepo rule).
+
+#### Phase 3 — results
+
+- Guard applied at scanner.c:2040 (the `STATE_MATCHING` gate). The
+  block contents are unchanged; only entry to the block is guarded.
+- `tree-sitter test`: **476 / 476 pass** (was 470 / 476 before the
+  fix). No regressions; all 6 new corpus tests (24–29) pass.
+- `cargo nextest run -p pampa`: **3685 / 3685 pass** (2 skipped). The
+  pandoc-match-corpus test now exercises all 7 new fixtures and
+  matches Pandoc's output. No regressions.
+- `cargo nextest run --workspace`: **8804 / 8804 pass** (195
+  skipped). No cross-crate regressions.
 
 ### Phase 4 — end-to-end verification
 

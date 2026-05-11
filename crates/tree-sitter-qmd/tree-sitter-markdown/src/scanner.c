@@ -2037,7 +2037,23 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return false;
     }
 
-    if (s->state & STATE_MATCHING) { // we are in the state of trying to match all currently open blocks
+    // bd-vet6: when we re-enter STATE_MATCHING after a SOFT_LINE_ENDING
+    // and the current lookahead is the trailing \n / \r of the same
+    // logical line, do NOT call match_line here. The LIST_ITEM match()
+    // returns case 2 on \n (see line ~537) and advances past it; the
+    // line-ending gate at line ~2233 then has nothing to match against
+    // and scan() returns false. The state changes get rolled back, but
+    // tree-sitter retries with another lex_external state and emits
+    // CLOSE_BLOCK, which the parser cannot shift in this position.
+    // Bypassing match_line here lets the line-ending gate run and emit
+    // the LINE_ENDING / SOFT_LINE_ENDING the parser actually expects.
+    // (EOF is handled above at line ~2027 and never reaches here.)
+    bool at_soft_break_line_end =
+        (s->state & STATE_MATCHING) &&
+        (s->state & STATE_WAS_SOFT_LINE_BREAK) &&
+        (lexer->lookahead == '\n' || lexer->lookahead == '\r');
+
+    if ((s->state & STATE_MATCHING) && !at_soft_break_line_end) { // we are in the state of trying to match all currently open blocks
         DEBUG_PRINT("scan() while STATE_MATCHING\n");
         int match_line_return = match_line(s, lexer);
         // bool might_be_soft_break = match_line_return & 2;
