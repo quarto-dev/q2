@@ -75,8 +75,11 @@ Spot-check the area: does the code the issue points at still exist with the same
 Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`beads/<id>-<slug>` where `<slug>` is a short kebab-case form of the issue title, 3–5 words). Beads redirect setup follows § Beads Redirect.
 
 ```bash
-git worktree add -b beads/<id>-<slug> .worktrees/<id>-<slug> main
-echo "../../../.beads" > .worktrees/<id>-<slug>/.beads/redirect
+cargo xtask create-worktree <id>
+# Creates the worktree, .beads/redirect, and CLAUDE.local.md context stub.
+# Slug is auto-derived from the beads title; pass `--slug X` to override.
+# Fallback for fresh clones where the xtask is not yet built:
+# see .claude/rules/worktrees.md § Manual bootstrap.
 ```
 
 Verify with `br where` from inside the worktree.
