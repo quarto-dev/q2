@@ -457,8 +457,212 @@ pub fn write_beads_redirect(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn run(_args: Args) -> Result<()> {
-    anyhow::bail!("create-worktree not yet implemented");
+pub fn run(args: Args) -> Result<()> {
+    // Mode is enforced by clap::ArgGroup(required, single).
+    let plan = if let Some(id) = args.beads_id.as_deref() {
+        plan_beads(id, args.slug.as_deref(), &args.base)?
+    } else if let Some(n) = args.issue {
+        plan_issue(n, args.slug.as_deref(), &args.base)?
+    } else if args.upgrade {
+        plan_upgrade(args.slug.as_deref(), &args.base)?
+    } else {
+        unreachable!("clap ArgGroup guarantees one mode is set");
+    };
+
+    git_worktree_add(&plan.branch, &plan.dir, &plan.base)?;
+
+    // From here on, on any error we roll back the worktree+branch we just
+    // created so a retry is not blocked by directory/branch collision.
+    let post = (|| -> Result<()> {
+        // Test-only injection point: lets the Phase E smoke test exercise the
+        // rollback path without modifying production logic.
+        if std::env::var("Q2_CREATE_WORKTREE_INJECT_FAIL").as_deref() == Ok("after_worktree_add") {
+            anyhow::bail!("Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add (test hook)");
+        }
+        write_beads_redirect(&plan.dir)?;
+        let section = build_section(&plan.kind);
+        let claude_local = plan.dir.join("CLAUDE.local.md");
+        update_claude_local_md(&claude_local, &section)?;
+        Ok(())
+    })();
+
+    if let Err(e) = post {
+        eprintln!("error after worktree creation: {e:#}");
+        eprintln!(
+            "rolling back worktree {} and branch {} ...",
+            plan.dir.display(),
+            plan.branch
+        );
+        let mut rollback_issues: Vec<String> = Vec::new();
+
+        match Command::new("git")
+            .arg("worktree")
+            .arg("remove")
+            .arg("--force")
+            .arg(plan.dir.as_os_str())
+            .output()
+        {
+            Ok(out) if out.status.success() => {}
+            Ok(out) => rollback_issues.push(format!(
+                "`git worktree remove --force {}` failed:\n    {}\n  manual cleanup: git worktree remove --force {}",
+                plan.dir.display(),
+                String::from_utf8_lossy(&out.stderr).trim().replace('\n', "\n    "),
+                plan.dir.display(),
+            )),
+            Err(spawn_err) => rollback_issues.push(format!(
+                "could not spawn `git worktree remove`: {spawn_err}\n  manual cleanup: git worktree remove --force {}",
+                plan.dir.display()
+            )),
+        }
+
+        match Command::new("git")
+            .args(["branch", "-D", &plan.branch])
+            .output()
+        {
+            Ok(out) if out.status.success() => {}
+            Ok(out) => rollback_issues.push(format!(
+                "`git branch -D {}` failed:\n    {}\n  manual cleanup: git branch -D {}",
+                plan.branch,
+                String::from_utf8_lossy(&out.stderr)
+                    .trim()
+                    .replace('\n', "\n    "),
+                plan.branch,
+            )),
+            Err(spawn_err) => rollback_issues.push(format!(
+                "could not spawn `git branch -D`: {spawn_err}\n  manual cleanup: git branch -D {}",
+                plan.branch
+            )),
+        }
+
+        if rollback_issues.is_empty() {
+            eprintln!("rollback complete.");
+        } else {
+            eprintln!("rollback incomplete \u{2014} manual steps required:");
+            for issue in &rollback_issues {
+                eprintln!("  - {issue}");
+            }
+        }
+        return Err(e);
+    }
+
+    print_summary(&plan);
+    Ok(())
+}
+
+struct Plan {
+    branch: String,
+    dir: PathBuf,
+    base: String,
+    kind: SectionKind,
+}
+
+fn plan_beads(id: &str, slug_override: Option<&str>, base: &str) -> Result<Plan> {
+    let meta = fetch_beads_metadata(id)?;
+    let slug = match slug_override {
+        Some(s) => {
+            validate_slug(s)?;
+            s.to_string()
+        }
+        None => derive_slug(&meta.title)?,
+    };
+    let leaf = format!("{id}-{slug}");
+    let github_url = parse_external_ref_to_github_url(meta.external_ref.as_deref());
+    if github_url.is_none() {
+        if let Some(other) = meta
+            .external_ref
+            .as_deref()
+            .filter(|s| !s.is_empty() && !s.starts_with("gh-"))
+        {
+            eprintln!(
+                "note: external_ref {other:?} is not a `gh-` reference; omitting GitHub line"
+            );
+        }
+    }
+    Ok(Plan {
+        branch: format!("beads/{leaf}"),
+        dir: PathBuf::from(".worktrees").join(&leaf),
+        base: base.to_string(),
+        kind: SectionKind::Beads {
+            id: id.to_string(),
+            title: meta.title,
+            github_url,
+        },
+    })
+}
+
+fn plan_issue(number: u32, slug_suffix: Option<&str>, base: &str) -> Result<Plan> {
+    if let Some(s) = slug_suffix {
+        validate_slug(s)?;
+    }
+    let gh = fetch_gh_issue(number)?;
+    let leaf = match slug_suffix {
+        Some(s) => format!("issue-{number}-{s}"),
+        None => format!("issue-{number}"),
+    };
+    Ok(Plan {
+        branch: leaf.clone(),
+        dir: PathBuf::from(".worktrees").join(&leaf),
+        base: base.to_string(),
+        kind: SectionKind::Issue {
+            number,
+            title: gh.title,
+            url: gh.url,
+        },
+    })
+}
+
+fn plan_upgrade(slug_suffix: Option<&str>, base: &str) -> Result<Plan> {
+    if let Some(s) = slug_suffix {
+        validate_slug(s)?;
+    }
+    let date = time::OffsetDateTime::now_utc()
+        .format(&time::macros::format_description!("[year]-[month]-[day]"))
+        .context("formatting today's date")?;
+    let leaf = match slug_suffix {
+        Some(s) => format!("cargo-upgrade-{date}-{s}"),
+        None => format!("cargo-upgrade-{date}"),
+    };
+    Ok(Plan {
+        branch: leaf.clone(),
+        dir: PathBuf::from(".worktrees").join(&leaf),
+        base: base.to_string(),
+        kind: SectionKind::Upgrade { date },
+    })
+}
+
+fn print_summary(plan: &Plan) {
+    println!("Created worktree: {}/", plan.dir.display());
+    println!("  Branch:  {}", plan.branch);
+    match &plan.kind {
+        SectionKind::Beads {
+            id,
+            title,
+            github_url,
+        } => {
+            println!("  Beads:   {id} \u{2014} {title}");
+            if let Some(url) = github_url {
+                println!("  GitHub:  {url}");
+            }
+        }
+        SectionKind::Issue { number, title, url } => {
+            println!("  Issue:   #{number} \u{2014} {title}");
+            println!("  URL:     {url}");
+        }
+        SectionKind::Upgrade { date } => {
+            println!("  Task:    Cargo dependency upgrade \u{2014} {date}");
+        }
+    }
+    println!();
+    println!("Next steps:");
+    println!("  1. Fill in plan file path in CLAUDE.local.md (once plan is created)");
+    println!(
+        "  2. cd {} && npm install  (if hub-client work is in scope)",
+        plan.dir.display()
+    );
+    println!("  3. Start Claude Code session in {}/", plan.dir.display());
+    if let SectionKind::Beads { id, .. } = &plan.kind {
+        println!("  4. Run: br update {id} --status in_progress");
+    }
 }
 
 pub fn detect_line_ending(content: &str) -> &'static str {
