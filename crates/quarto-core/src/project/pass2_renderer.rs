@@ -33,7 +33,9 @@
 //!
 //! [`ProjectPipeline`]: crate::project::orchestrator::ProjectPipeline
 
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -281,6 +283,14 @@ pub struct RenderToHtmlRenderer {
     /// project scope alike) lives in WASM. `RenderResolverContext::vfs_root`
     /// will be constructed with this root.
     vfs_root: std::path::PathBuf,
+
+    /// Optional user-grammar provider attached by the caller. Shared
+    /// across every page the renderer touches (one
+    /// `RenderToHtmlRenderer` may produce many pages in `ActivePage`
+    /// mode plus future multi-page modes). The pipeline is `?Send`
+    /// so `Rc<RefCell<…>>` is correct on both wasm32 and on the
+    /// native single-task executor used by tests. (bd-izfv)
+    user_grammars: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
 }
 
 impl RenderToHtmlRenderer {
@@ -289,7 +299,20 @@ impl RenderToHtmlRenderer {
     pub fn new(vfs_root: impl Into<std::path::PathBuf>) -> Self {
         Self {
             vfs_root: vfs_root.into(),
+            user_grammars: None,
         }
+    }
+
+    /// Attach a user-grammar provider. The renderer installs it on
+    /// every per-page [`crate::render::RenderContext`] before
+    /// running the pipeline, so `CodeHighlightStage` consults it
+    /// in preference to the native disk loader. (bd-izfv)
+    pub fn with_user_grammars(
+        mut self,
+        provider: Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>,
+    ) -> Self {
+        self.user_grammars = Some(provider);
+        self
     }
 }
 
@@ -337,6 +360,11 @@ impl Pass2Renderer for RenderToHtmlRenderer {
             RenderContext::new(project, doc_info, format, &binaries).with_options(options);
         ctx.project_index = Some(index);
         ctx.resource_resolver = Some(resolver.clone());
+        // bd-izfv: forward the renderer-attached user-grammar provider
+        // (if any) to the per-page context. `run_pipeline` clones the
+        // `Rc` into the inner `StageContext`, so the same handle is
+        // shared across every page this renderer renders.
+        ctx.user_grammar_provider = self.user_grammars.clone();
 
         let config = HtmlRenderConfig::with_resolver(resolver.clone());
         let source_name = doc_info.input.to_string_lossy().to_string();

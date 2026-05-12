@@ -12,7 +12,9 @@
 //! - Transforms can access project configuration and format settings
 //! - Writers use the context to determine output paths
 
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use quarto_analysis::AnalysisContext;
@@ -161,7 +163,7 @@ pub struct RenderContext<'a> {
     /// browser hub-client sets this to a `JsUserGrammars` (Phase 4.3 of
     /// the syntax-highlighting plan) so JS-backed user grammars flow
     /// through the same `CodeHighlightStage` code path.
-    pub user_grammar_provider: Option<Box<dyn quarto_highlight::UserGrammarProvider>>,
+    pub user_grammar_provider: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
 
     /// Per-document resource report (`bd-o8pr`). Mirrors
     /// [`crate::stage::StageContext::resource_report`]; `run_pipeline`

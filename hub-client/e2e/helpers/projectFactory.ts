@@ -23,8 +23,11 @@ import type {} from './testHooks';
 
 export interface ProjectFile {
   path: string;
+  /** UTF-8 text for `'text'`, base64-encoded bytes for `'binary'`. */
   content: string;
   contentType: 'text' | 'binary';
+  /** Required by `createNewProject` for binary files. */
+  mimeType?: string;
 }
 
 /**

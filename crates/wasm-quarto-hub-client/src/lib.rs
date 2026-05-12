@@ -24,7 +24,9 @@ pub mod c_shim;
 /// so they do not spam `console.error` with stack traces.
 pub struct LuaThrow;
 
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
 use quarto_core::{
@@ -1066,7 +1068,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
     if let Some(provider) = user_grammars {
-        ctx.user_grammar_provider = Some(Box::new(provider));
+        ctx.user_grammar_provider = Some(Rc::new(RefCell::new(provider)));
     }
 
     // Use the unified async pipeline (same as CLI). Phase 5:
@@ -1187,7 +1189,7 @@ pub async fn render_qmd_content(
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
     if let Some(provider) = user_grammars {
-        ctx.user_grammar_provider = Some(Box::new(provider));
+        ctx.user_grammar_provider = Some(Rc::new(RefCell::new(provider)));
     }
 
     // Use the unified async pipeline (same as CLI). Phase 5:
@@ -1363,7 +1365,7 @@ async fn render_single_doc_to_response(
 
     let mut ctx = RenderContext::new(project, &doc, &format, &binaries).with_options(options);
     if let Some(provider) = user_grammars {
-        ctx.user_grammar_provider = Some(Box::new(provider));
+        ctx.user_grammar_provider = Some(Rc::new(RefCell::new(provider)));
     }
 
     // Phase 5 VFS-root resolver — every artifact resolves under
@@ -1436,14 +1438,11 @@ async fn render_project_active_page_to_response(
         Err(e) => return error_response(e),
     };
 
-    // Note: `user_grammars` is currently dropped on the orchestrator
-    // path because the renderer constructs its own RenderContext
-    // per page. Threading user grammars through the renderer is a
-    // sub-phase 9.4 follow-up — file as bd-XXXX on close-out.
-    let _ = user_grammars;
-
     let project_type = project_type_for(&project);
-    let renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
+    let mut renderer = RenderToHtmlRenderer::new("/.quarto/project-artifacts");
+    if let Some(provider) = user_grammars {
+        renderer = renderer.with_user_grammars(Rc::new(RefCell::new(provider)));
+    }
 
     // Canonicalize the active path so it matches the form
     // `project.files` was filled with (Pass-2's `RenderMode::ActivePage`

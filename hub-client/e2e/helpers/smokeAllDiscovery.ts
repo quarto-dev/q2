@@ -22,13 +22,10 @@ const SKIP_PRINTS_MESSAGE: Set<string> = new Set([
 
 // Tests that fail in the hub-client preview because of a known gap in
 // the WASM render pipeline. The native CLI runner handles these. Skip
-// in the browser until the gap is closed.
-const SKIP_WASM_UNSUPPORTED: Map<string, string> = new Map([
-  [
-    'highlighting/03-user-grammar/03-user-grammar-toml.qmd',
-    'bd-izfv: RenderToHtmlRenderer drops user_grammars on the project-render path',
-  ],
-]);
+// in the browser until the gap is closed. (bd-izfv's user-grammar entry
+// was removed here once the project-render path started threading
+// user_grammars through; leave the slot in place for future WASM gaps.)
+const SKIP_WASM_UNSUPPORTED: Map<string, string> = new Map([]);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,8 +69,20 @@ export interface DiscoveredTest {
   relPath: string;
   /** Absolute path to the project root (containing _quarto.yml) */
   projectRoot: string;
-  /** All project files as { relativePath, content } */
-  projectFiles: { path: string; content: string }[];
+  /**
+   * All project files. Text files have UTF-8 `content`; binary fixtures
+   * (e.g. `_quarto/grammars/<lang>/*.wasm`, images) have base64-encoded
+   * `content` with `contentType: 'binary'` and an appropriate
+   * `mimeType`. The Playwright runner forwards both flavors to
+   * `createProjectOnServer`, which routes them to Automerge text vs.
+   * binary documents.
+   */
+  projectFiles: {
+    path: string;
+    content: string;
+    contentType: 'text' | 'binary';
+    mimeType?: string;
+  }[];
   /** Which file to render (relative to project root) */
   renderPath: string;
   /** Run config from frontmatter */
@@ -297,9 +306,52 @@ function findProjectRoot(qmdDir: string): string {
   return qmdDir;
 }
 
-/** Recursively read all files in a directory. */
-function readAllFiles(dir: string): { path: string; content: string }[] {
-  const files: { path: string; content: string }[] = [];
+/**
+ * Extension → MIME mapping for binary fixture files. The set is
+ * narrow: only formats the smoke-all suite actually carries (user
+ * grammars and a couple of image fixtures). Add new entries here
+ * when a future fixture needs a new binary type.
+ */
+const BINARY_EXTENSIONS: Record<string, string> = {
+  '.wasm': 'application/wasm',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+};
+
+function binaryMimeFor(path: string): string | null {
+  const dot = path.lastIndexOf('.');
+  if (dot < 0) return null;
+  return BINARY_EXTENSIONS[path.slice(dot).toLowerCase()] ?? null;
+}
+
+/**
+ * Recursively read all files in a directory. Text fixtures land as
+ * `contentType: 'text'` with UTF-8 content; binary fixtures (see
+ * {@link BINARY_EXTENSIONS}) land as `contentType: 'binary'` with the
+ * raw bytes base64-encoded — matching the shape
+ * `createProjectOnServer` expects, which forwards binary content into
+ * Automerge as a binary document instead of corrupting it through
+ * UTF-8 decoding.
+ */
+function readAllFiles(dir: string): {
+  path: string;
+  content: string;
+  contentType: 'text' | 'binary';
+  mimeType?: string;
+}[] {
+  const files: {
+    path: string;
+    content: string;
+    contentType: 'text' | 'binary';
+    mimeType?: string;
+  }[] = [];
 
   function walk(d: string) {
     const entries = readdirSync(d, { withFileTypes: true });
@@ -308,8 +360,22 @@ function readAllFiles(dir: string): { path: string; content: string }[] {
       if (entry.isDirectory()) {
         walk(full);
       } else if (entry.isFile()) {
-        const content = readFileSync(full, 'utf-8');
-        files.push({ path: full, content });
+        const mimeType = binaryMimeFor(full);
+        if (mimeType) {
+          const bytes = readFileSync(full);
+          files.push({
+            path: full,
+            content: bytes.toString('base64'),
+            contentType: 'binary',
+            mimeType,
+          });
+        } else {
+          files.push({
+            path: full,
+            content: readFileSync(full, 'utf-8'),
+            contentType: 'text',
+          });
+        }
       }
     }
   }
@@ -352,6 +418,8 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
     const projectFiles = allFiles.map((f) => ({
       path: relative(projectRoot, f.path),
       content: f.content,
+      contentType: f.contentType,
+      mimeType: f.mimeType,
     }));
 
     tests.push({

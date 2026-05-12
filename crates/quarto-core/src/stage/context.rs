@@ -16,7 +16,9 @@
 //! - Supports potential task spawning for parallelization
 //! - Allows stages to clone what they need without lifetime constraints
 
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
@@ -148,7 +150,7 @@ pub struct StageContext {
     /// - **Browser (hub-client)**: set to a `JsUserGrammars` handle that
     ///   forwards highlight requests to JS callbacks backed by
     ///   `web-tree-sitter`. See `crates/wasm-quarto-hub-client/src/lib.rs`.
-    pub user_grammar_provider: Option<Box<dyn quarto_highlight::UserGrammarProvider>>,
+    pub user_grammar_provider: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
 }
 
 impl StageContext {

@@ -105,7 +105,53 @@ export async function getPreviewHtml(
     await window.__quartoTestReady;
     const hooks = window.__quartoTest;
     if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
-    const result = await hooks.wasmRenderer.renderToHtml({ documentPath: docPath });
+    const renderer = hooks.wasmRenderer;
+
+    // Discover user grammars from the VFS so the re-render matches the
+    // in-Preview render (Preview.tsx forwards a project-file list +
+    // resolvers from automergeSync; bd-izfv made the project-render
+    // path actually honor that handle). Without this, fixtures that
+    // depend on `_quarto/grammars/<lang>/` render unhighlighted here
+    // even though the live iframe renders them correctly.
+    //
+    // `vfs_list_files` returns the VFS-absolute form (`/project/...`);
+    // `discoverUserGrammars` expects project-relative paths with no
+    // leading slash, and the resolver callbacks below mirror that
+    // shape (matches `Preview.tsx` → `automergeSync` wiring).
+    const VFS_PROJECT_PREFIX = '/project/';
+    const stripPrefix = (vfsPath: string): string | null =>
+      vfsPath.startsWith(VFS_PROJECT_PREFIX)
+        ? vfsPath.slice(VFS_PROJECT_PREFIX.length)
+        : null;
+    const toVfsPath = (relPath: string): string =>
+      relPath.startsWith('/') ? relPath : `${VFS_PROJECT_PREFIX}${relPath}`;
+
+    const listing = renderer.vfsListFiles();
+    const projectFilePaths: string[] = listing.success
+      ? (listing.files ?? [])
+          .map(stripPrefix)
+          .filter((p): p is string => p !== null)
+      : [];
+
+    const result = await renderer.renderToHtml({
+      documentPath: docPath,
+      userGrammars: {
+        files: projectFilePaths,
+        getBinaryContent: async (path: string) => {
+          const r = renderer.vfsReadBinaryFile(toVfsPath(path));
+          if (!r.success || typeof r.content !== 'string') return null;
+          // Decode base64 → Uint8Array on the page (Buffer isn't available).
+          const binary = atob(r.content);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return bytes;
+        },
+        getTextContent: async (path: string) => {
+          const r = renderer.vfsReadFile(toVfsPath(path));
+          return r.success && typeof r.content === 'string' ? r.content : null;
+        },
+      },
+    });
     return result.html ?? '';
   }, documentPath);
 }

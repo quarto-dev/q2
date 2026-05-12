@@ -527,7 +527,11 @@ pub async fn run_pipeline(
     stage_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
     // Transfer user-grammar provider (browser path sets this; native CLI
     // leaves it None and falls back to `CodeHighlightStage`'s disk scan).
-    stage_ctx.user_grammar_provider = ctx.user_grammar_provider.take();
+    // Cloning the `Rc` is cheap and keeps the provider shared across
+    // every page the renderer touches (bd-izfv: the project-render path
+    // calls `run_pipeline` once per page through a single
+    // `RenderToHtmlRenderer`).
+    stage_ctx.user_grammar_provider = ctx.user_grammar_provider.clone();
     // Transfer the project index (set by ProjectPipeline::pass_two).
     // Cloning the `Arc` is cheap and keeps the RenderContext usable
     // after the stage context is built.

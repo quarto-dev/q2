@@ -85,7 +85,8 @@ test.describe('smoke-all E2E tests', () => {
           sortedFiles.map((f) => ({
             path: f.path,
             content: f.content,
-            contentType: 'text' as const,
+            contentType: f.contentType,
+            mimeType: f.mimeType,
           })),
         );
 
