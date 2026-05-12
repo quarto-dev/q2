@@ -206,7 +206,7 @@ pub fn build_section(kind: &SectionKind) -> String {
             if let Some(url) = github_url {
                 s.push_str(&format!("**GitHub:** {url}\n"));
             }
-            s.push_str("**Plan:** <!-- fill in after creating: claude-notes/plans/YYYY-MM-DD-name.md -->\n");
+            s.push_str("**Plan:** _none yet \u{2014} replace this with `claude-notes/plans/YYYY-MM-DD-<name>.md` once you create the plan file._\n");
             s.push('\n');
             s.push_str(&format!(
                 "Run `br show {id}` for current status and notes.\n"
@@ -221,9 +221,9 @@ pub fn build_section(kind: &SectionKind) -> String {
             s.push_str(&format!("**GitHub issue:** #{number} \u{2014} {title}\n"));
             s.push_str(&format!("**URL:** {url}\n"));
             s.push_str(&format!(
-                "**Beads:** (run `br search {number}` to find or create a beads issue)\n"
+                "**Beads:** _none yet \u{2014} run `br search {number}` to find an existing issue, or `br create` to file one, then replace this line with the bd-XXXX._\n"
             ));
-            s.push_str("**Plan:** <!-- fill in after creating: claude-notes/plans/YYYY-MM-DD-name.md -->\n");
+            s.push_str("**Plan:** _none yet \u{2014} replace this with `claude-notes/plans/YYYY-MM-DD-<name>.md` once you create the plan file._\n");
             s
         }
         SectionKind::Upgrade { date } => {
@@ -233,7 +233,7 @@ pub fn build_section(kind: &SectionKind) -> String {
             s.push_str(&format!(
                 "**Task:** Cargo dependency upgrade \u{2014} {date}\n"
             ));
-            s.push_str("**Plan:** <!-- fill in if needed -->\n");
+            s.push_str("**Plan:** _none yet \u{2014} replace this with a plan file path if you create one._\n");
             s
         }
     };
@@ -711,9 +711,6 @@ fn print_summary(plan: &Plan) {
     println!("  # Per worktree");
     println!("  cargo xtask verify --skip-hub-build         # confirm HEAD is green (Rust only)");
     println!("  npm install                                 # only if hub-client work is in scope");
-    println!(
-        "                                              #   (separate from dev-setup today \u{2014} bd-7giz)"
-    );
     match &plan.kind {
         SectionKind::Beads { id, .. } => {
             println!();
@@ -723,17 +720,13 @@ fn print_summary(plan: &Plan) {
         SectionKind::Issue { .. } => {
             println!();
             println!("  # No beads issue is linked yet \u{2014} the triage skill creates one");
-            println!("  # when investigation surfaces real work. Edit the **Beads:** line in");
-            println!("  # CLAUDE.local.md with the new bd-XXXX when that happens.");
+            println!("  # when investigation surfaces real work.");
         }
         SectionKind::Upgrade { .. } => {
             println!();
             println!("  # The `upgrade-cargo-deps` skill drives the rest of this worktree.");
         }
     }
-    println!();
-    println!("  When you create a plan file at claude-notes/plans/YYYY-MM-DD-<name>.md,");
-    println!("  edit the **Plan:** line in CLAUDE.local.md to point at it.");
 }
 
 pub fn detect_line_ending(content: &str) -> &'static str {
@@ -1076,7 +1069,8 @@ mod tests {
         });
         assert!(s.contains("**GitHub issue:** #157 — An issue"));
         assert!(s.contains("**URL:** https://github.com/quarto-dev/q2/issues/157"));
-        assert!(s.contains("**Beads:** (run `br search 157`"));
+        assert!(s.contains("**Beads:** _none yet"));
+        assert!(s.contains("br search 157"));
         assert!(!s.contains("**Beads:** bd-")); // no resolved beads id
     }
 
