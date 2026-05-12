@@ -64,6 +64,7 @@ enum Command {
     ///   <bd-id>      — beads issue (positional)
     ///   --issue N    — GitHub issue triage
     ///   --upgrade    — cargo dependency upgrade (date-based branch)
+    #[command(verbatim_doc_comment)]
     CreateWorktree {
         #[command(flatten)]
         args: create_worktree::Args,
