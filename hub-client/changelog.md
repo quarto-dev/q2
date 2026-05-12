@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-05-10
+
+- [`979982bd`](https://github.com/quarto-dev/q2/commits/979982bd): Custom syntax highlighting now works in Quarto Hub projects (bd-izfv) — user-supplied tree-sitter grammars under `_quarto/grammars/<lang>/` now apply to code blocks even when the qmd file lives under a `_quarto.yml` ancestor, matching the single-file render path.
+
 ### 2026-05-05
 
 - [`5ecdfe48`](https://github.com/quarto-dev/q2/commits/5ecdfe48): Surface doctemplate diagnostics (e.g. `Q-10-2 Undefined variable`) through `quarto render` and the hub-client preview (bd-xdnk). Custom templates referencing undefined variables now produce ariadne-rendered warnings with accurate source locations instead of being silently dropped. Also fixes a separate pre-existing bug where the `template:` YAML key was ignored under `quarto render` because the lookup didn't handle `PandocInlines`-shaped scalars.
