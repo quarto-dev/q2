@@ -5,3 +5,4 @@
 # See crates/xtask/src/main.rs for available commands
 xtask = "run --package xtask --"
 dev-setup = "xtask dev-setup"
+create-worktree = "xtask create-worktree"
