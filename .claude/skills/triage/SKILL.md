@@ -54,11 +54,12 @@ If you're in the main checkout or a different worktree, create it now:
 cargo xtask create-worktree --issue <N>
 # Creates the worktree, .beads/redirect, and CLAUDE.local.md context stub.
 # This step runs BEFORE the beads issue is created (step 6). The `--issue`
-# template's Beads line is a placeholder — `(run `br search <N>` to find or
-# create a beads issue)`. After step 6 creates the bd-XXXX, edit the Beads
-# line in CLAUDE.local.md manually to point at the new ID. Do NOT re-run
-# the xtask with `<bd-id>` to "refresh" — that creates a separate beads
-# worktree at `.worktrees/<bd-id>-<slug>` rather than updating this one.
+# template's `**Beads:**` line is a self-documenting placeholder pointing
+# at `br search <N>` / `br create`. After step 6 creates the bd-XXXX,
+# edit that line in CLAUDE.local.md manually to point at the new ID.
+# Do NOT re-run the xtask with `<bd-id>` to "refresh" — that creates a
+# separate beads worktree at `.worktrees/<bd-id>-<slug>` rather than
+# updating this one.
 # Fallback for fresh clones where the xtask is not yet built:
 # see .claude/rules/worktrees.md § Manual bootstrap.
 ```

@@ -47,9 +47,12 @@ The `redirect` file is already in `.beads/.gitignore`, so it won't show as a git
 `cargo xtask create-worktree` prepends a worktree context section to `CLAUDE.local.md`.
 Claude Code loads it automatically — no need to run `br show` to orient at session start.
 
-The section contains: worktree declaration, main repo path (`../..`), beads ID,
-GitHub URL, and a placeholder for the plan file path (fill in manually after creating
-the plan).
+The section contains: worktree declaration, main repo path (`../..`), beads ID
+(or `**GitHub issue:** #N` in `--issue` mode), GitHub URL when available, an
+italic-prose placeholder for the plan file path, and a `**Skill:**` line
+naming the slash-command that continues the work (`/investigate-beads`,
+`/triage`, or `/upgrade-cargo-deps`). Placeholders are self-documenting —
+they say exactly what to replace them with.
 
 Status lives in beads, not in this file. Run `br show <id>` for current status + notes.
 
