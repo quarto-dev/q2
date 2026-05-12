@@ -127,6 +127,11 @@ pub struct Args {
     /// Base branch.
     #[arg(long, default_value = "main")]
     pub base: String,
+
+    /// Print the manual command checklist after creating the worktree.
+    /// Default output is terse and points at CLAUDE.local.md for details.
+    #[arg(short, long)]
+    pub verbose: bool,
 }
 
 pub fn parse_external_ref_to_github_url(ext: Option<&str>) -> Option<String> {
@@ -209,8 +214,24 @@ pub fn build_section(kind: &SectionKind) -> String {
             s.push_str("**Plan:** <!-- fill in after creating: claude-notes/plans/YYYY-MM-DD-name.md -->\n");
             s.push('\n');
             s.push_str(&format!(
-                "Run `br show {id}` for current status and notes.\n"
+                "Run `br show {id}` for current status and notes.\n\n"
             ));
+            s.push_str("## Initial setup\n\n");
+            s.push_str("Prep this worktree (skip steps already done):\n\n");
+            s.push_str("- `cargo xtask verify --skip-hub-build` \u{2014} confirm branch HEAD is\n");
+            s.push_str("  green. `--skip-hub-build` keeps this Rust-only so no `npm install`\n");
+            s.push_str("  is needed. If verify errors with \"tool not found\", run\n");
+            s.push_str("  `cargo xtask dev-setup` first (one-time install of cargo-nextest\n");
+            s.push_str("  and wasm-bindgen-cli).\n");
+            s.push_str("- `npm install` \u{2014} only if hub-client work is in scope. Not yet\n");
+            s.push_str("  part of `cargo xtask dev-setup` (tracked in bd-7giz).\n");
+            s.push_str(&format!(
+                "- `br update {id} --status in_progress` \u{2014} claim the beads issue.\n"
+            ));
+            s.push('\n');
+            s.push_str("When you create a plan file at\n");
+            s.push_str("`claude-notes/plans/YYYY-MM-DD-<name>.md`, edit the **Plan:** line\n");
+            s.push_str("above to point at it.\n");
             s
         }
         SectionKind::Issue { number, title, url } => {
@@ -224,6 +245,18 @@ pub fn build_section(kind: &SectionKind) -> String {
                 "**Beads:** (run `br search {number}` to find or create a beads issue)\n"
             ));
             s.push_str("**Plan:** <!-- fill in after creating: claude-notes/plans/YYYY-MM-DD-name.md -->\n");
+            s.push('\n');
+            s.push_str("## Initial setup\n\n");
+            s.push_str("Prep this worktree (skip steps already done):\n\n");
+            s.push_str("- `cargo xtask verify --skip-hub-build` \u{2014} confirm branch HEAD is\n");
+            s.push_str("  green. If verify errors with \"tool not found\", run\n");
+            s.push_str("  `cargo xtask dev-setup` first.\n");
+            s.push_str("- `npm install` \u{2014} only if hub-client work is in scope.\n");
+            s.push('\n');
+            s.push_str("No beads issue exists yet; the triage skill creates one when\n");
+            s.push_str("investigation surfaces real work. When that happens, edit the\n");
+            s.push_str("**Beads:** line above with the new bd-XXXX. Edit **Plan:** likewise\n");
+            s.push_str("once a plan or triage doc exists.\n");
             s
         }
         SectionKind::Upgrade { date } => {
@@ -233,7 +266,11 @@ pub fn build_section(kind: &SectionKind) -> String {
             s.push_str(&format!(
                 "**Task:** Cargo dependency upgrade \u{2014} {date}\n"
             ));
-            s.push_str("**Plan:** <!-- fill in if needed -->\n");
+            s.push_str("**Plan:** <!-- fill in if needed -->\n\n");
+            s.push_str("## Initial setup\n\n");
+            s.push_str("The `upgrade-cargo-deps` skill drives this worktree end-to-end. If\n");
+            s.push_str("running manually instead, start with\n");
+            s.push_str("`cargo xtask verify --skip-hub-build` to confirm HEAD is green.\n");
             s
         }
     };
@@ -583,7 +620,7 @@ pub fn run(args: Args) -> Result<()> {
         return Err(e);
     }
 
-    print_summary(&plan);
+    print_summary(&plan, args.verbose);
     Ok(())
 }
 
@@ -673,7 +710,7 @@ fn plan_upgrade(slug_suffix: Option<&str>, base: &str, repo_root: &Path) -> Resu
     })
 }
 
-fn print_summary(plan: &Plan) {
+fn print_summary(plan: &Plan, verbose: bool) {
     println!("Created worktree: {}/", plan.dir.display());
     println!("  Branch:  {}", plan.branch);
     match &plan.kind {
@@ -696,16 +733,33 @@ fn print_summary(plan: &Plan) {
         }
     }
     println!();
-    println!("Next steps:");
-    println!("  1. Fill in plan file path in CLAUDE.local.md (once plan is created)");
-    println!(
-        "  2. cd {} && npm install  (if hub-client work is in scope)",
-        plan.dir.display()
-    );
-    println!("  3. Start Claude Code session in {}/", plan.dir.display());
-    if let SectionKind::Beads { id, .. } = &plan.kind {
-        println!("  4. Run: br update {id} --status in_progress");
+
+    if !verbose {
+        // Terse default: point at the worktree and CLAUDE.local.md.
+        println!("Next: cd {}", plan.dir.display());
+        println!(
+            "Open a Claude Code session there, or read CLAUDE.local.md for the setup checklist."
+        );
+        println!();
+        println!("(Pass -v / --verbose for the manual command list.)");
+        return;
     }
+
+    // Verbose: include the manual command checklist inline.
+    println!("Next steps:");
+    println!("  cd {}", plan.dir.display());
+    println!();
+    println!("  Open a Claude Code session there \u{2014} CLAUDE.local.md has the same");
+    println!("  checklist, expanded. Or run the prep yourself:");
+    println!();
+    println!("    cargo xtask verify --skip-hub-build      # confirm branch HEAD is green");
+    println!("    npm install                              # hub-client deps (only if in scope)");
+    if let SectionKind::Beads { id, .. } = &plan.kind {
+        println!("    br update {id} --status in_progress   # claim the beads issue");
+    }
+    println!();
+    println!("  Once a plan file exists at claude-notes/plans/YYYY-MM-DD-<name>.md,");
+    println!("  edit the **Plan:** line in CLAUDE.local.md to point at it.");
 }
 
 pub fn detect_line_ending(content: &str) -> &'static str {
