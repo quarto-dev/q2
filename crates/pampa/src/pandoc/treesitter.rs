@@ -316,8 +316,39 @@ fn process_list_item(
     )
 }
 
+/// Find the column at which interior lines of a `pandoc_display_math` node
+/// "should" start — i.e. the cumulative block-continuation prefix width
+/// imposed by all enclosing block-level containers (blockquotes, list
+/// items, etc.). That width equals the start column of the nearest
+/// enclosing `pandoc_paragraph` ancestor.
+///
+/// Walking the math node's own start column is *not* sufficient: when an
+/// inline construct precedes `$$` on the opening line (e.g. `_$$`,
+/// `[$$` for `quarto-math-with-attribute` Spans, `**$$`), the math
+/// column overshoots the actual continuation prefix width and the strip
+/// either mis-eats real content or fails to strip real prefix. The
+/// paragraph's start column is constant across all interior lines of the
+/// paragraph regardless of what precedes `$$` on the opening line, which
+/// is what we want. This matches Pandoc's markdown reader behaviour.
+///
+/// Falls back to the math node's own column for the (theoretical) case
+/// where no `pandoc_paragraph` ancestor is found. In practice display
+/// math always sits inside a paragraph when it has multi-line body
+/// content; single-line contexts like table cells / captions have no
+/// interior lines to strip.
+fn block_continuation_column(node: &tree_sitter::Node) -> usize {
+    let mut current = *node;
+    while let Some(parent) = current.parent() {
+        if parent.kind() == "pandoc_paragraph" {
+            return parent.start_position().column;
+        }
+        current = parent;
+    }
+    node.start_position().column
+}
+
 /// Strip the block-continuation prefix from each interior line of
-/// display-math content (issue #181 / bd-q6ed).
+/// display-math content (issue #181 / bd-q6ed; refined for bd-qpa2).
 ///
 /// The grammar matches the math body as a single regex token, so any
 /// continuation prefixes that enclosing blocks (blockquotes, list items,
@@ -326,13 +357,17 @@ fn process_list_item(
 /// qmd writer then re-prefixes every line on output, so the prefixes
 /// double on round trip.
 ///
-/// `start_col` is the column of the opening `$$` (i.e. `node.start_position().column`).
+/// `start_col` is the cumulative block-continuation prefix width — i.e.
+/// the column where math content should land on every interior line. It
+/// is sourced from the enclosing `pandoc_paragraph` ancestor (see
+/// `block_continuation_column`), not from the column of the opening `$$`
+/// (which can be shifted by preceding inline constructs).
+///
 /// On every interior line of the math, the bytes at columns `0..start_col`
 /// are the accumulated continuation prefix added by the chain of enclosing
-/// blocks; the math content "should" start at column `start_col`. We
-/// strip those bytes — but only if they look like continuation: the only
-/// characters that ever appear in a continuation prefix are `>`, space,
-/// and tab. Anything else means the line was matched via lazy
+/// blocks. We strip those bytes — but only if they look like continuation:
+/// the only characters that ever appear in a continuation prefix are `>`,
+/// space, and tab. Anything else means the line was matched via lazy
 /// continuation (no explicit `> `), and we leave it alone rather than
 /// chewing bytes off real content.
 ///
@@ -560,9 +595,12 @@ fn native_visitor<T: Write>(
             // block-continuation prefix that enclosing blocks (blockquotes,
             // list items, etc.) would normally consume is captured verbatim
             // on interior lines. Strip those prefix bytes column-wise so the
-            // qmd writer doesn't double-prefix on round trip
-            // (issue #181 / bd-q6ed).
-            let start_col = node.start_position().column;
+            // qmd writer doesn't double-prefix on round trip (issue #181 /
+            // bd-q6ed). The strip width comes from the enclosing paragraph,
+            // not the math node, so that inline constructs preceding `$$`
+            // on the opening line (e.g. `_`, `[`, `**`) don't shift the
+            // column away from the true continuation prefix width (bd-qpa2).
+            let start_col = block_continuation_column(node);
             let text = strip_continuation_prefix(content, start_col);
 
             PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
