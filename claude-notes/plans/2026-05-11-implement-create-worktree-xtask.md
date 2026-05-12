@@ -1594,7 +1594,7 @@ Important: this worktree (`bd-spsv-create-worktree-xtask`) cannot be the smoke-t
 
 Chris runs each block; any failure is a defect to fix before proceeding to Phase F.
 
-- [ ] **Step 1: Build the binary once**
+- [x] **Step 1: Build the binary once**
 
 ```bash
 cargo build -p xtask
@@ -1602,7 +1602,7 @@ cargo xtask create-worktree --help
 # Expected: help text with [BEADS_ID], --issue, --upgrade, --slug, --base.
 ```
 
-- [ ] **Step 2: Beads mode**
+- [x] **Step 2: Beads mode**
 
 ```bash
 cargo xtask create-worktree bd-spsv --slug e2e-beads
@@ -1611,7 +1611,7 @@ cat .worktrees/bd-spsv-e2e-beads/CLAUDE.local.md      # → managed section + Be
 (cd .worktrees/bd-spsv-e2e-beads && br where)         # → main .beads via redirect
 ```
 
-- [ ] **Step 3: Issue mode (pick an open issue dynamically)**
+- [x] **Step 3: Issue mode (pick an open issue dynamically)**
 
 ```bash
 ISSUE=$(gh issue list --repo quarto-dev/q2 --state open --limit 1 --json number --jq '.[0].number')
@@ -1619,14 +1619,14 @@ cargo xtask create-worktree --issue "$ISSUE" --slug e2e-issue
 cat ".worktrees/issue-${ISSUE}-e2e-issue/CLAUDE.local.md"   # → has GitHub line, no resolved Beads line
 ```
 
-- [ ] **Step 4: Upgrade mode**
+- [x] **Step 4: Upgrade mode**
 
 ```bash
 cargo xtask create-worktree --upgrade --slug e2e-upgrade
 ls .worktrees/cargo-upgrade-*-e2e-upgrade/CLAUDE.local.md   # → upgrade variant
 ```
 
-- [ ] **Step 5: Failure cases**
+- [x] **Step 5: Failure cases**
 
 ```bash
 # 5a. Existing directory collision — pre-create the COMPUTED target path.
@@ -1663,7 +1663,7 @@ git branch | grep 'beads/bd-spsv-rollback-test' && echo "FAIL: branch leaked" \
   || echo "OK: branch cleaned"
 ```
 
-- [ ] **Step 6: Cleanup**
+- [x] **Step 6: Cleanup**
 
 ```bash
 git worktree remove .worktrees/bd-spsv-e2e-beads
@@ -1676,9 +1676,182 @@ git branch -d beads/bd-spsv-e2e-beads "issue-${ISSUE}-e2e-issue"
 git branch | grep 'cargo-upgrade-.*-e2e-upgrade' | xargs -r git branch -d
 ```
 
-- [ ] **Step 7: Record the smoke-test transcript**
+- [x] **Step 7: Record the smoke-test transcript**
 
 Capture exact output from steps 2-4 and paste into the eventual PR body under § End-to-end verification. This satisfies q2 CLAUDE.md "End-to-end verification before declaring success".
+
+### Phase E results — 2026-05-12
+
+The Phase E smoke test was executed on 2026-05-12 on Windows (Git Bash + PowerShell). All three modes, all four failure cases, and the anchor-to-repo-root invariant verified. Representative outputs below.
+
+#### `--help`
+
+```
+$ cargo xtask create-worktree --help
+Create a new git worktree with beads redirect and CLAUDE.local.md context stub.
+
+Modes (exactly one required):
+  <bd-id>      — beads issue (positional)
+  --issue N    — GitHub issue triage
+  --upgrade    — cargo dependency upgrade (date-based branch)
+
+Usage: xtask.exe create-worktree [OPTIONS] <BEADS_ID|--issue <ISSUE>|--upgrade>
+
+Arguments:
+  [BEADS_ID]
+          Beads issue ID, e.g. `bd-1d3e`. Reads `br show <id>` for title and external_ref
+
+Options:
+      --issue <ISSUE>
+          GitHub issue number, e.g. `157`. Reads `gh issue view`
+
+      --upgrade
+          Cargo dependency upgrade — uses today's date for branch name
+
+      --slug <SLUG>
+          Override auto-derived slug. In beads mode replaces the derived slug;
+          in issue/upgrade modes appended as a suffix (for parallel-worktree workflows)
+
+      --base <BASE>
+          Base branch
+
+          [default: main]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+The `Modes (exactly one required)` block renders as three separate lines thanks
+to `#[command(verbatim_doc_comment)]` on the `CreateWorktree` variant.
+
+#### Beads mode + anchor-to-root verification
+
+Invoked from `crates/xtask/` to confirm the worktree lands at the **main-repo
+root** regardless of CWD:
+
+```
+$ cd crates/xtask
+$ cargo xtask create-worktree bd-spsv --slug anchor-test
+Created worktree: C:\Users\chris\Documents\DEV_R\q2\.worktrees\bd-spsv-anchor-test/
+  Branch:  beads/bd-spsv-anchor-test
+  Beads:   bd-spsv — Add cargo xtask create-worktree command with CLAUDE.local.md stub
+
+Next:
+  cd C:\Users\chris\Documents\DEV_R\q2\.worktrees\bd-spsv-anchor-test
+
+  Open a Claude Code session there — CLAUDE.local.md gives it the
+  worktree context (branch, beads/GitHub link, base). Copy whichever of
+  the prep commands below apply:
+
+  # Once per machine (skip if already done)
+  cargo xtask dev-setup                       # installs cargo-nextest, wasm-bindgen-cli
+
+  # Per worktree
+  cargo xtask verify --skip-hub-build         # confirm HEAD is green (Rust only)
+  npm install                                 # only if hub-client work is in scope
+
+  # Per beads issue (this worktree)
+  br update bd-spsv --status in_progress      # claim it
+  # `/investigate-beads` reloads context if you need it.
+```
+
+The path is absolute and anchored at `C:\Users\chris\Documents\DEV_R\q2\` — not
+nested under `crates\xtask\.worktrees\`. `CLAUDE.local.md` contains the managed
+BEGIN/END section with `**Beads:**`, the self-documenting
+`**Plan:** _none yet — ..._` placeholder, and the
+`**Skill:** /investigate-beads ...` continuation hint.
+
+#### Issue mode
+
+```
+$ cargo xtask create-worktree --issue 184 --slug ts-issue
+Created worktree: C:\Users\chris\Documents\DEV_R\q2\.worktrees\issue-184-ts-issue/
+  Branch:  issue-184-ts-issue
+  Issue:   #184 — Indented (4-space) code blocks are parsed as paragraphs, and re-emitted unindented
+  URL:     https://github.com/quarto-dev/q2/issues/184
+
+Next:
+  cd C:\Users\chris\Documents\DEV_R\q2\.worktrees\issue-184-ts-issue
+
+  Open a Claude Code session there — CLAUDE.local.md gives it the
+  worktree context (branch, beads/GitHub link, base). Copy whichever of
+  the prep commands below apply:
+
+  # Once per machine (skip if already done)
+  cargo xtask dev-setup                       # installs cargo-nextest, wasm-bindgen-cli
+
+  # Per worktree
+  cargo xtask verify --skip-hub-build         # confirm HEAD is green (Rust only)
+  npm install                                 # only if hub-client work is in scope
+
+  # `/triage` continues the investigation — it files a beads issue
+  # when concrete work surfaces.
+```
+
+Issue title fetched via `gh issue view`. `CLAUDE.local.md` includes a
+self-documenting `**Beads:** _none yet — run \`br search 184\` ..._` placeholder
+and `**Skill:** /triage ...` continuation hint.
+
+#### Upgrade mode
+
+```
+$ cargo xtask create-worktree --upgrade --slug ts-upgrade
+Created worktree: C:\Users\chris\Documents\DEV_R\q2\.worktrees\cargo-upgrade-2026-05-12-ts-upgrade/
+  Branch:  cargo-upgrade-2026-05-12-ts-upgrade
+  Task:    Cargo dependency upgrade — 2026-05-12
+
+Next:
+  cd C:\Users\chris\Documents\DEV_R\q2\.worktrees\cargo-upgrade-2026-05-12-ts-upgrade
+
+  Open a Claude Code session there — CLAUDE.local.md gives it the
+  worktree context (branch, beads/GitHub link, base). Copy whichever of
+  the prep commands below apply:
+
+  # Once per machine (skip if already done)
+  cargo xtask dev-setup                       # installs cargo-nextest, wasm-bindgen-cli
+
+  # Per worktree
+  cargo xtask verify --skip-hub-build         # confirm HEAD is green (Rust only)
+  npm install                                 # only if hub-client work is in scope
+
+  # `/upgrade-cargo-deps` continues this worktree's work.
+```
+
+Branch name embeds today's date (`2026-05-12`). No `**Beads:**` or
+`**GitHub:**` lines — upgrade worktrees aren't tied to a single issue.
+
+#### Failure cases
+
+- **Existing directory collision (5a)** — pre-created
+  `.worktrees/bd-spsv-collision-test/`; the xtask errored before
+  `git worktree add` ran, no branch was created.
+- **Invalid `--slug` grammar (5b)** — both `foo/bar` (path separator) and `..`
+  (traversal) rejected by `validate_slug` with no FS or git side effects.
+- **Re-run on existing worktree (5c)** — failed with
+  `worktree directory already exists: <path>` (by design — file-level
+  idempotency only, see "Idempotency scope" above).
+- **Rollback path (5d)** — `Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add`
+  injects a synthetic failure between `git worktree add` and the post-add
+  steps:
+
+```
+$ Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add \
+    cargo xtask create-worktree bd-spsv --slug rollback-test
+error after worktree creation: Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add (test hook)
+rolling back worktree C:\Users\chris\Documents\DEV_R\q2\.worktrees\bd-spsv-rollback-test and branch beads/bd-spsv-rollback-test ...
+rollback complete.
+Error: Q2_CREATE_WORKTREE_INJECT_FAIL=after_worktree_add (test hook)
+```
+
+The injected failure fired **after** `git worktree add` succeeded, the rollback
+block cleaned up both the directory and the branch, and the original error
+propagated as the final exit error. Post-run verification confirmed no leftover
+dir and no leftover branch.
+
+#### Cleanup
+
+All e2e worktrees and branches removed via `git worktree remove` +
+`git branch -d`. `git worktree list` showed no e2e leftovers.
 
 ---
 
