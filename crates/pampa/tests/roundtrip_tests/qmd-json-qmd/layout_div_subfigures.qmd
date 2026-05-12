@@ -1,0 +1,8 @@
+::: {#fig-x layout-ncol="2"}
+
+![A](a.png){#fig-a}
+
+![B](b.png){#fig-b}
+
+Caption text
+:::

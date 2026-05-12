@@ -764,7 +764,13 @@ fn write_figure(
     if let Some(image) = match_implicit_figure_shape(figure) {
         let mut merged = image.clone();
         merged.attr.0 = figure.attr.0.clone();
-        return write_image(&merged, buf, ctx);
+        write_image(&merged, buf, ctx)?;
+        // Block-writer contract: every block ends with a trailing newline so
+        // the inter-block separator emitted by write_impl / write_div produces
+        // a blank line. write_image is an inline writer and does not append
+        // one. Issue #180 / bd-cpzp.
+        writeln!(buf)?;
+        return Ok(());
     }
 
     // Non-implicit shapes fall through to a fenced-div form. The current
