@@ -123,6 +123,54 @@ Either way: also verify `pandoc_math` (inline `$...$`) does not have a similar l
 
 Once a fix lands, a round-trip regression test belongs in `crates/pampa/tests/roundtrip_tests/qmd-json-qmd` (per `crates/pampa/CLAUDE.md`) using `repro.qmd` as the input.
 
+## Fix applied (this session)
+
+After attempting approach (1) — grammar restructuring — I hit a structural conflict between `_inlines`-level soft line breaks and `pandoc_display_math` as an inline element spanning multiple `_line`s, with downstream tests (`Display math with list markers`, `Display math inside fenced div`) regressing into `ERROR` nodes. The fix that landed is a refined version of approach (2):
+
+**Column-based prefix strip in the AST extractor** (`crates/pampa/src/pandoc/treesitter.rs`):
+
+The opening `$$` sits at some source column `C` = `node.start_position().column`. The math body "should" start at column `C` on every interior line; bytes at columns `0..C` on those lines are the accumulated continuation prefix added by the chain of enclosing blocks (any combination of blockquotes, list items, fenced divs, etc.). The new `strip_continuation_prefix(content, C)` helper:
+
+- Splits the body on `\n`.
+- Leaves the first piece (content immediately following the opening `$$` on the same line) untouched.
+- For every subsequent piece, strips the first `C` bytes — but **only if** every one of those bytes is in `{>, space, tab}`. Otherwise the line was matched via lazy continuation and we leave it alone rather than chewing real content off it.
+
+This handles arbitrarily-nested combinations (`> - $$`, `- > $$`, `> - > $$`, `> > $$`, `> ::: ... > $$`, etc.) uniformly without enumerating block types or computing per-ancestor offsets, because column position already encodes the cumulative prefix width.
+
+**Files changed:**
+- `crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js` — unchanged (the attempted grammar restructuring was reverted).
+- `crates/pampa/src/pandoc/treesitter.rs` — added `strip_continuation_prefix` helper; `pandoc_display_math` arm now passes the extracted body through it.
+
+**Regression coverage** in `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/`:
+- `display_math_in_blockquote.qmd` (the reporter's exact input)
+- `display_math_in_nested_blockquote.qmd`
+- `display_math_in_list_in_blockquote.qmd`
+- `display_math_in_blockquote_in_list.qmd`
+- `display_math_in_bq_list_bq.qmd`
+
+All five fixtures previously diverged on `qmd → JSON → qmd → JSON` and now round-trip cleanly.
+
+**End-to-end check.** Reporter's repro:
+
+```
+$ cargo run --bin pampa -- claude-notes/issue-reports/181/repro.qmd
+[ BlockQuote [Para [Str "Before", SoftBreak, Math DisplayMath "\np = q\n", SoftBreak, Str "After"]] ]
+
+$ cargo run --bin pampa -- -t qmd claude-notes/issue-reports/181/repro.qmd
+> Before
+> $$
+> p = q
+> $$
+> After
+
+$ cargo run --bin pampa -- -t qmd claude-notes/issue-reports/181/repro.qmd | cargo run --bin pampa --
+[ BlockQuote [Para [Str "Before", SoftBreak, Math DisplayMath "\np = q\n", SoftBreak, Str "After"]] ]
+```
+
+Output inspected: `Math DisplayMath` content is clean (`\np = q\n`), round-tripped qmd has the correct `> ` prefix on every line, and re-parsing the output yields the same AST as the original — fully idempotent.
+
+**Verification:** `cargo nextest run -p pampa` (3685 passed, 2 skipped); `cargo xtask verify --skip-hub-tests` (full Rust workspace + WASM hub-client build + trace-viewer tests) all pass. Hub-client tests were not run because there is a pre-existing `ERR_MODULE_NOT_FOUND` issue in `vitest run` on `main` HEAD that is unrelated to this change.
+
 ## Scope decision
 
 Issue contains a single defect; no scope question. Triaging the whole thing.

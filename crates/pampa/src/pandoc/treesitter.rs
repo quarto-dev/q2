@@ -316,6 +316,56 @@ fn process_list_item(
     )
 }
 
+/// Strip the block-continuation prefix from each interior line of
+/// display-math content (issue #181 / bd-q6ed).
+///
+/// The grammar matches the math body as a single regex token, so any
+/// continuation prefixes that enclosing blocks (blockquotes, list items,
+/// etc.) would normally consume — `> ` per blockquote level, indentation
+/// per list-item level — end up captured verbatim in the math text. The
+/// qmd writer then re-prefixes every line on output, so the prefixes
+/// double on round trip.
+///
+/// `start_col` is the column of the opening `$$` (i.e. `node.start_position().column`).
+/// On every interior line of the math, the bytes at columns `0..start_col`
+/// are the accumulated continuation prefix added by the chain of enclosing
+/// blocks; the math content "should" start at column `start_col`. We
+/// strip those bytes — but only if they look like continuation: the only
+/// characters that ever appear in a continuation prefix are `>`, space,
+/// and tab. Anything else means the line was matched via lazy
+/// continuation (no explicit `> `), and we leave it alone rather than
+/// chewing bytes off real content.
+///
+/// The first piece (between the opening `$$` and the first `\n`) is
+/// content right after the delimiter, never a continuation line, and is
+/// always left untouched.
+fn strip_continuation_prefix(content: &str, start_col: usize) -> String {
+    if start_col == 0 {
+        return content.to_string();
+    }
+    let mut result = String::with_capacity(content.len());
+    let mut first = true;
+    for line in content.split('\n') {
+        if first {
+            result.push_str(line);
+            first = false;
+            continue;
+        }
+        result.push('\n');
+        let line_bytes = line.as_bytes();
+        let strip_n = std::cmp::min(start_col, line_bytes.len());
+        let prefix_is_continuation = line_bytes[..strip_n]
+            .iter()
+            .all(|b| matches!(*b, b'>' | b' ' | b'\t'));
+        if prefix_is_continuation {
+            result.push_str(&line[strip_n..]);
+        } else {
+            result.push_str(line);
+        }
+    }
+    result
+}
+
 /// Detect whether a list item's tree-sitter node contains a blank line between
 /// its block-level children. This is done by checking whether any `pandoc_paragraph`
 /// child that precedes another block-level sibling contains a `block_continuation`
@@ -506,9 +556,18 @@ fn native_visitor<T: Write>(
             let full_text = node.utf8_text(input_bytes).unwrap();
             let content = &full_text[2..full_text.len() - 2]; // Strip leading and trailing $$
 
+            // The grammar matches the math body as a single regex token, so any
+            // block-continuation prefix that enclosing blocks (blockquotes,
+            // list items, etc.) would normally consume is captured verbatim
+            // on interior lines. Strip those prefix bytes column-wise so the
+            // qmd writer doesn't double-prefix on round trip
+            // (issue #181 / bd-q6ed).
+            let start_col = node.start_position().column;
+            let text = strip_continuation_prefix(content, start_col);
+
             PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
                 math_type: MathType::DisplayMath,
-                text: content.to_string(),
+                text,
                 source_info: node_source_info_with_context(node, context),
             }))
         }
