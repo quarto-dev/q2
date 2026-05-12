@@ -113,7 +113,11 @@ Don't propose changes for these — they're either upstream vendored, workspace-
 
 If a major-upgrade candidate's only consumer is one of the vendored/pinned crates, list it under "Skipped" with the reason; don't file a beads issue.
 
-### 5. Create the worktree
+### 5. Create the worktree (skip if already inside it)
+
+**First, check if you're already in the right worktree.** A `CLAUDE.local.md` whose `**Task:**` line says `Cargo dependency upgrade — YYYY-MM-DD` for today's date means the worktree exists and you're in it — skip to step 6. Re-running `cargo xtask create-worktree --upgrade` from there would fail (`git worktree add` errors on existing directories).
+
+If you're in the main checkout or a different worktree, create it now:
 
 ```bash
 cargo xtask create-worktree --upgrade

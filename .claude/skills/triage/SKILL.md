@@ -44,9 +44,11 @@ gh issue view <N> --repo quarto-dev/q2 --json title,body,author,createdAt,labels
 
 Read the body and every comment. If the issue contains multiple distinct reports (a list of unrelated bugs in one issue is common), confirm with the user which one(s) you're triaging. Capture that scope decision in the triage doc.
 
-### 3. Create the worktree
+### 3. Create the worktree (skip if already inside it)
 
-Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`issue-<N>` for triage). Beads redirect setup follows § Beads Redirect.
+**First, check if you're already in the right worktree.** A `CLAUDE.local.md` whose `**GitHub issue:**` line matches `#<N>` means the worktree exists and you're in it — skip to step 4. Re-running `cargo xtask create-worktree --issue <N>` from there would fail (`git worktree add` errors on existing directories).
+
+If you're in the main checkout or a different worktree, create it now:
 
 ```bash
 cargo xtask create-worktree --issue <N>
@@ -60,6 +62,8 @@ cargo xtask create-worktree --issue <N>
 # Fallback for fresh clones where the xtask is not yet built:
 # see .claude/rules/worktrees.md § Manual bootstrap.
 ```
+
+Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`issue-<N>` for triage). Beads redirect setup follows § Beads Redirect.
 
 Verify with `br where` from inside the worktree.
 

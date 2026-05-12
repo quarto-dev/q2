@@ -207,6 +207,7 @@ pub fn build_section(kind: &SectionKind) -> String {
                 s.push_str(&format!("**GitHub:** {url}\n"));
             }
             s.push_str("**Plan:** _none yet \u{2014} replace this with `claude-notes/plans/YYYY-MM-DD-<name>.md` once you create the plan file._\n");
+            s.push_str("**Skill:** `/investigate-beads` continues this worktree's work.\n");
             s.push('\n');
             s.push_str(&format!(
                 "Run `br show {id}` for current status and notes.\n"
@@ -224,6 +225,7 @@ pub fn build_section(kind: &SectionKind) -> String {
                 "**Beads:** _none yet \u{2014} run `br search {number}` to find an existing issue, or `br create` to file one, then replace this line with the bd-XXXX._\n"
             ));
             s.push_str("**Plan:** _none yet \u{2014} replace this with `claude-notes/plans/YYYY-MM-DD-<name>.md` once you create the plan file._\n");
+            s.push_str("**Skill:** `/triage` continues the investigation; file a beads issue once concrete work surfaces.\n");
             s
         }
         SectionKind::Upgrade { date } => {
@@ -234,6 +236,7 @@ pub fn build_section(kind: &SectionKind) -> String {
                 "**Task:** Cargo dependency upgrade \u{2014} {date}\n"
             ));
             s.push_str("**Plan:** _none yet \u{2014} replace this with a plan file path if you create one._\n");
+            s.push_str("**Skill:** `/upgrade-cargo-deps` continues this worktree's work.\n");
             s
         }
     };
@@ -716,15 +719,16 @@ fn print_summary(plan: &Plan) {
             println!();
             println!("  # Per beads issue (this worktree)");
             println!("  br update {id} --status in_progress      # claim it");
+            println!("  # `/investigate-beads` reloads context if you need it.");
         }
         SectionKind::Issue { .. } => {
             println!();
-            println!("  # No beads issue is linked yet \u{2014} the triage skill creates one");
-            println!("  # when investigation surfaces real work.");
+            println!("  # `/triage` continues the investigation \u{2014} it files a beads issue");
+            println!("  # when concrete work surfaces.");
         }
         SectionKind::Upgrade { .. } => {
             println!();
-            println!("  # The `upgrade-cargo-deps` skill drives the rest of this worktree.");
+            println!("  # `/upgrade-cargo-deps` continues this worktree's work.");
         }
     }
 }
@@ -1045,6 +1049,7 @@ mod tests {
         assert!(s.trim_end().ends_with(END_MARKER));
         assert!(s.contains("**Beads:** bd-1d3e — Fix X"));
         assert!(s.contains("**GitHub:** https://github.com/quarto-dev/q2/issues/42"));
+        assert!(s.contains("**Skill:** `/investigate-beads`"));
         assert!(s.contains("Run `br show bd-1d3e`"));
         assert!(s.contains("Main repo: `../..`"));
     }
@@ -1058,6 +1063,7 @@ mod tests {
         });
         assert!(!s.contains("**GitHub:**"));
         assert!(s.contains("**Beads:** bd-zzzz — T"));
+        assert!(s.contains("**Skill:** `/investigate-beads`"));
     }
 
     #[test]
@@ -1071,6 +1077,7 @@ mod tests {
         assert!(s.contains("**URL:** https://github.com/quarto-dev/q2/issues/157"));
         assert!(s.contains("**Beads:** _none yet"));
         assert!(s.contains("br search 157"));
+        assert!(s.contains("**Skill:** `/triage`"));
         assert!(!s.contains("**Beads:** bd-")); // no resolved beads id
     }
 
@@ -1080,6 +1087,7 @@ mod tests {
             date: "2026-05-11".into(),
         });
         assert!(s.contains("**Task:** Cargo dependency upgrade — 2026-05-11"));
+        assert!(s.contains("**Skill:** `/upgrade-cargo-deps`"));
         assert!(!s.contains("**Beads:**"));
         assert!(!s.contains("**GitHub:**"));
     }
