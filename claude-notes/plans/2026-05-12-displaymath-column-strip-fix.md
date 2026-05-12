@@ -213,10 +213,10 @@ All outputs inspected. All checks pass.
 
 ### Phase 6 — Commit and report
 
-- [ ] Stage and commit on the bd-qpa2 worktree branch
-- [ ] Sync beads on main (close bd-qpa2 with reference to the commit)
-- [ ] Report to user: diff summary, end-to-end verification output, snapshot/fixture counts
-- [ ] Optionally file the writer-polish issue (out-of-scope) at lower priority
+- [x] Stage and commit on the bd-qpa2 worktree branch (commit `bc060eec`)
+- [ ] Awaiting user review + push approval before closing bd-qpa2 on main
+- [ ] Report to user: diff summary, end-to-end verification output, fixture counts
+- [ ] (Optional) file the writer-polish issue for natural-form labeled math at lower priority
 
 ## Implementation notes
 
