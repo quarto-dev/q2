@@ -1172,18 +1172,65 @@ fn native_visitor<T: Write>(
                 let msg =
                     DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
                         .with_code("Q-2-9")
-                        .with_location(trimmed_source_info)
+                        .with_location(trimmed_source_info.clone())
                         .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
                         .add_hint("To be explicit, use: `<element>`{=html}")
                         .build();
                 error_collector.add(msg);
 
-                // Convert to RawInline with format="html"
-                PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+                // Tree-sitter may include leading/trailing whitespace in the
+                // html_element node (the closing delimiter of a preceding
+                // pandoc_code_span, for example, never carries trailing
+                // whitespace — see code_span_helpers.rs — so the gap goes
+                // here). Split that whitespace out as adjacent Space inlines
+                // so Code/RawInline siblings don't collide on round-trip.
+                // Mirrors the anchor-shorthand branch above. See bd-nkx4.
+                let leading_ws = raw_text.len() - raw_text.trim_start().len();
+                let trailing_ws = raw_text.len() - raw_text.trim_end().len();
+                let node_range = node_location(node);
+                let mut result = Vec::new();
+
+                if leading_ws > 0 {
+                    let space_range = quarto_source_map::Range {
+                        start: node_range.start.clone(),
+                        end: quarto_source_map::Location {
+                            offset: node_range.start.offset + leading_ws,
+                            row: node_range.start.row,
+                            column: node_range.start.column + leading_ws,
+                        },
+                    };
+                    result.push(Inline::Space(Space {
+                        source_info: quarto_source_map::SourceInfo::from_range(
+                            context.current_file_id(),
+                            space_range,
+                        ),
+                    }));
+                }
+
+                result.push(Inline::RawInline(RawInline {
                     format: "html".to_string(),
                     text,
-                    source_info: node_source_info_with_context(node, context),
-                }))
+                    source_info: trimmed_source_info,
+                }));
+
+                if trailing_ws > 0 {
+                    let space_range = quarto_source_map::Range {
+                        start: quarto_source_map::Location {
+                            offset: node_range.end.offset - trailing_ws,
+                            row: node_range.end.row,
+                            column: node_range.end.column - trailing_ws,
+                        },
+                        end: node_range.end.clone(),
+                    };
+                    result.push(Inline::Space(Space {
+                        source_info: quarto_source_map::SourceInfo::from_range(
+                            context.current_file_id(),
+                            space_range,
+                        ),
+                    }));
+                }
+
+                PandocNativeIntermediate::IntermediateInlines(result)
             }
         }
         _ => {

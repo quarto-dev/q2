@@ -384,6 +384,117 @@ fn test_comparison_with_explicit_raw_inline_syntax() {
     assert_eq!(raw_explicit[1], "</b>");
 }
 
+#[test]
+fn test_html_element_preserves_leading_whitespace_between_code_and_raw() {
+    // Regression test for bd-nkx4 (issue #182): the html_element node may
+    // include leading whitespace that tree-sitter attaches to its range
+    // (e.g. when the preceding sibling is a pandoc_code_span whose closing
+    // delimiter does NOT include trailing whitespace). The reader must
+    // emit that whitespace as a Space inline before the RawInline so that
+    // Code and RawInline siblings don't collide on round-trip.
+    let input = r#"See `func()` <a href="x">link</a> done."#;
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+    assert!(result.is_ok(), "Document should parse successfully");
+
+    let (pandoc, _context, _warnings) = result.unwrap();
+
+    use pampa::pandoc::{Block, Inline};
+    let para = match &pandoc.blocks[0] {
+        Block::Paragraph(p) => p,
+        _ => panic!("Expected paragraph block"),
+    };
+
+    // Find the Code node and verify what follows it.
+    let code_idx = para
+        .content
+        .iter()
+        .position(|i| matches!(i, Inline::Code(_)))
+        .expect("Expected a Code inline");
+
+    let next = para
+        .content
+        .get(code_idx + 1)
+        .expect("Expected an inline after Code");
+
+    assert!(
+        matches!(next, Inline::Space(_)),
+        "Expected Space between Code and the next inline (preserving the source whitespace), \
+         got {:?}",
+        std::mem::discriminant(next)
+    );
+
+    let after_space = para
+        .content
+        .get(code_idx + 2)
+        .expect("Expected an inline after Space");
+
+    match after_space {
+        Inline::RawInline(r) => {
+            assert_eq!(r.format, "html");
+            assert_eq!(r.text, "<a href=\"x\">");
+        }
+        other => panic!("Expected RawInline after Space, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_html_element_no_space_when_truly_adjacent() {
+    // Companion to test_html_element_preserves_leading_whitespace_*: when
+    // the source has NO whitespace between Code and the html_element, the
+    // reader must NOT invent a Space. The truly-adjacent case has no
+    // unambiguous qmd surface form (see issue #182 thread) and is
+    // intentionally left as-is.
+    let input = r#"See `func()`<a href="x">link</a> done."#;
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+    assert!(result.is_ok(), "Document should parse successfully");
+
+    let (pandoc, _context, _warnings) = result.unwrap();
+
+    use pampa::pandoc::{Block, Inline};
+    let para = match &pandoc.blocks[0] {
+        Block::Paragraph(p) => p,
+        _ => panic!("Expected paragraph block"),
+    };
+
+    let code_idx = para
+        .content
+        .iter()
+        .position(|i| matches!(i, Inline::Code(_)))
+        .expect("Expected a Code inline");
+
+    let next = para
+        .content
+        .get(code_idx + 1)
+        .expect("Expected an inline after Code");
+
+    match next {
+        Inline::RawInline(r) => {
+            assert_eq!(r.format, "html");
+            assert_eq!(r.text, "<a href=\"x\">");
+        }
+        other => panic!(
+            "Expected RawInline (no Space) directly after Code, got {:?}",
+            other
+        ),
+    }
+}
+
 // Tests for Q-2-8: Code block options in header warning
 
 #[test]
