@@ -21,6 +21,7 @@ mod dev_setup;
 mod lint;
 mod test;
 mod treesitter_crlf;
+mod util;
 mod verify;
 
 use anyhow::Result;

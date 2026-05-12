@@ -14,6 +14,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::util::with_native_separators;
+
 const BEGIN_MARKER: &str =
     "<!-- BEGIN WORKTREE CONTEXT — managed by cargo xtask create-worktree -->";
 const END_MARKER: &str = "<!-- END WORKTREE CONTEXT -->";
@@ -397,6 +399,38 @@ pub fn fetch_gh_issue(number: u32) -> Result<GhIssue> {
     Ok(GhIssue { title, url })
 }
 
+/// Absolute path to the main repository working tree, resolved via
+/// `git rev-parse --path-format=absolute --git-common-dir`.
+///
+/// Worktree creation must anchor `.worktrees/<leaf>` to this root so the
+/// new worktree always lands at `<main-repo>/.worktrees/<leaf>` regardless
+/// of whether the command is invoked from the main worktree, a nested
+/// worktree, or a subdirectory.
+pub fn repo_root() -> Result<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .output()
+        .context("spawning `git rev-parse --git-common-dir`")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "git rev-parse --git-common-dir failed (exit {:?}):\n{stderr}",
+            output.status.code()
+        );
+    }
+    let raw = String::from_utf8(output.stdout)
+        .context("git common-dir path was not valid UTF-8")?
+        .trim_end_matches(['\r', '\n'])
+        .to_string();
+    // git emits forward slashes on Windows; normalize so every downstream
+    // `PathBuf::join` and `.display()` produces a consistent separator.
+    let common_dir = with_native_separators(Path::new(&raw));
+    common_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .with_context(|| format!("git common-dir has no parent: {}", common_dir.display()))
+}
+
 pub fn git_worktree_add(branch: &str, dir: &Path, base: &str) -> Result<()> {
     if dir.exists() {
         anyhow::bail!("worktree directory already exists: {}", dir.display());
@@ -458,13 +492,17 @@ pub fn write_beads_redirect(dir: &Path) -> Result<()> {
 }
 
 pub fn run(args: Args) -> Result<()> {
+    // Always anchor new worktrees to the main repo root so the command works
+    // identically from main, from another worktree, or from any subdirectory.
+    let root = repo_root()?;
+
     // Mode is enforced by clap::ArgGroup(required, single).
     let plan = if let Some(id) = args.beads_id.as_deref() {
-        plan_beads(id, args.slug.as_deref(), &args.base)?
+        plan_beads(id, args.slug.as_deref(), &args.base, &root)?
     } else if let Some(n) = args.issue {
-        plan_issue(n, args.slug.as_deref(), &args.base)?
+        plan_issue(n, args.slug.as_deref(), &args.base, &root)?
     } else if args.upgrade {
-        plan_upgrade(args.slug.as_deref(), &args.base)?
+        plan_upgrade(args.slug.as_deref(), &args.base, &root)?
     } else {
         unreachable!("clap ArgGroup guarantees one mode is set");
     };
@@ -556,7 +594,7 @@ struct Plan {
     kind: SectionKind,
 }
 
-fn plan_beads(id: &str, slug_override: Option<&str>, base: &str) -> Result<Plan> {
+fn plan_beads(id: &str, slug_override: Option<&str>, base: &str, repo_root: &Path) -> Result<Plan> {
     let meta = fetch_beads_metadata(id)?;
     let slug = match slug_override {
         Some(s) => {
@@ -580,7 +618,7 @@ fn plan_beads(id: &str, slug_override: Option<&str>, base: &str) -> Result<Plan>
     }
     Ok(Plan {
         branch: format!("beads/{leaf}"),
-        dir: PathBuf::from(".worktrees").join(&leaf),
+        dir: repo_root.join(".worktrees").join(&leaf),
         base: base.to_string(),
         kind: SectionKind::Beads {
             id: id.to_string(),
@@ -590,7 +628,12 @@ fn plan_beads(id: &str, slug_override: Option<&str>, base: &str) -> Result<Plan>
     })
 }
 
-fn plan_issue(number: u32, slug_suffix: Option<&str>, base: &str) -> Result<Plan> {
+fn plan_issue(
+    number: u32,
+    slug_suffix: Option<&str>,
+    base: &str,
+    repo_root: &Path,
+) -> Result<Plan> {
     if let Some(s) = slug_suffix {
         validate_slug(s)?;
     }
@@ -601,7 +644,7 @@ fn plan_issue(number: u32, slug_suffix: Option<&str>, base: &str) -> Result<Plan
     };
     Ok(Plan {
         branch: leaf.clone(),
-        dir: PathBuf::from(".worktrees").join(&leaf),
+        dir: repo_root.join(".worktrees").join(&leaf),
         base: base.to_string(),
         kind: SectionKind::Issue {
             number,
@@ -611,7 +654,7 @@ fn plan_issue(number: u32, slug_suffix: Option<&str>, base: &str) -> Result<Plan
     })
 }
 
-fn plan_upgrade(slug_suffix: Option<&str>, base: &str) -> Result<Plan> {
+fn plan_upgrade(slug_suffix: Option<&str>, base: &str, repo_root: &Path) -> Result<Plan> {
     if let Some(s) = slug_suffix {
         validate_slug(s)?;
     }
@@ -624,7 +667,7 @@ fn plan_upgrade(slug_suffix: Option<&str>, base: &str) -> Result<Plan> {
     };
     Ok(Plan {
         branch: leaf.clone(),
-        dir: PathBuf::from(".worktrees").join(&leaf),
+        dir: repo_root.join(".worktrees").join(&leaf),
         base: base.to_string(),
         kind: SectionKind::Upgrade { date },
     })
@@ -696,6 +739,29 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn repo_root_returns_absolute_directory_with_dot_git() {
+        // Test runs inside this checkout, so repo_root() must succeed and
+        // point at a directory containing a `.git` entry (file or dir).
+        let root = repo_root().expect("repo_root() should succeed inside a git checkout");
+        assert!(
+            root.is_absolute(),
+            "repo_root() must return an absolute path, got {}",
+            root.display()
+        );
+        assert!(
+            root.is_dir(),
+            "repo_root() must point at an existing directory, got {}",
+            root.display()
+        );
+        let git_entry = root.join(".git");
+        assert!(
+            git_entry.exists(),
+            "repo_root() result {} should contain a .git entry",
+            root.display()
+        );
+    }
 
     fn make_dummy_section() -> String {
         build_section(&SectionKind::Beads {
