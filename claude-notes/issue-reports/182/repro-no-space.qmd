@@ -1,0 +1,1 @@
+See `func()`<a href="x">link</a> done.
