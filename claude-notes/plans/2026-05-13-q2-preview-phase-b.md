@@ -93,47 +93,81 @@ design. Revisit if a real user complains.
 
 ## Work breakdown
 
-### B.1 — Broaden FileWatcher allow-list
+### B.1 — Broaden FileWatcher allow-list — **done (bd-z529)**
 
-`crates/quarto-hub/src/watch.rs` currently filters via
-`is_qmd_file`. Replace with a richer predicate that, by default,
-admits:
+`crates/quarto-hub/src/watch.rs` previously filtered via the bare
+`is_qmd_file` helper. Replaced with a `WatchFilter` enum:
 
-- `.qmd` (existing).
-- `_quarto.yml` (project config; affects every doc).
-- `_metadata.yml` (section config; affects sibling docs in the
-  same dir).
-- `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp` (media; affects
-  any doc referencing them).
-- `.tsx` (custom React components; affects any doc using them via
-  `<Q2PreviewIframe customComponentsCode>`).
+- `WatchFilter::QmdOnly` — legacy hub behaviour; kept as the
+  `HubConfig` default so `quarto hub` semantics are unchanged.
+- `WatchFilter::PreviewBroad` — accepts in addition to `.qmd`:
+  - `_quarto.yml` / `_quarto.yaml` (project config; basename match)
+  - `_metadata.yml` / `_metadata.yaml` (section config; basename match)
+  - `.png` / `.jpg` / `.jpeg` / `.gif` / `.svg` / `.webp` (media; ext match)
+  - `.tsx` (custom React components; ext match)
 
-Keep the predicate behind a feature-gate parameter so the hub
-binary's existing semantics don't change unless the new behaviour
-is explicitly opted into. The preview-side (`crates/quarto-preview`)
-turns it on; `crates/hub` keeps the `.qmd`-only filter.
+`_extensions/**` is deferred per Q-B1 — that's the noisiest channel
+(needs gitignore-style ignore-patterns) and not yet a real-user need.
 
-**Tests first:**
-- `crates/quarto-hub/src/watch.rs` unit tests — extend
-  `test_is_qmd_file` (or add `test_preview_watch_filter`) to pin
-  each new extension and rejection cases (e.g. `.tsx.bak`,
-  `_quarto.yaml` (note: .yaml vs .yml is a real divergence —
-  decide in the test)).
-- New integration test under `crates/quarto-preview/tests/` or
-  `crates/quarto-hub/tests/`: spawn the watcher against a temp
-  project, edit `_quarto.yml`, assert the file-change event
-  surfaces within debounce + 100 ms.
+`.yml` and `.yaml` both match for the canonical Quarto config
+filenames (Q-B1 follow-up). Quarto canonicalizes to `.yml`, but
+nothing prevents `.yaml` and silently missing it would be a
+surprising failure mode. The unit tests pin both.
 
-**Implementation:**
-- Add a `WatchFilter` enum (or a `WatchConfig::accept_fn`) so
-  consumers can pick `WatchFilter::QmdOnly` (hub default) or
-  `WatchFilter::PreviewBroad` (preview default).
-- Plumb the choice through `HubConfig` (new field, default
-  `QmdOnly` to preserve hub behaviour); `quarto-preview` sets it
-  to `PreviewBroad`.
+**Predicate semantics:**
+- Basename match (not directory) for config files, so nested
+  `posts/_metadata.yml` is accepted.
+- Trailing-extension wins for backup files: `Component.tsx.bak`
+  ends in `.bak` and is correctly rejected.
+- Other YAML files (`config.yml`, `settings.yaml`) are rejected —
+  only the two canonical Quarto names match.
 
-**Acceptance:** the integration test passes; manual smoke via
-`q2 preview` + editing `_quarto.yml` re-renders the active page.
+**Wiring:**
+- `WatchFilter` lives in `crates/quarto-hub/src/watch.rs`.
+- New field `HubConfig::watch_filter: WatchFilter` (default
+  `QmdOnly`). `quarto-preview::build_hub_config` overrides to
+  `PreviewBroad`. `quarto hub` (both `crates/quarto-hub/src/main.rs`
+  and `crates/quarto/src/commands/hub.rs`) explicitly sets
+  `Default::default()` to keep narrow semantics.
+- `server::run_server_with` reads `config.watch_filter` before the
+  `HubConfig` move into `HubContext::new` and threads it through
+  `WatchConfig { filter, .. }` to `FileWatcher::new`.
+
+**Tests (all in `crates/quarto-hub/src/watch.rs`, 5 unit + 2 new
+integration):**
+- `test_watch_filter_qmd_only` — pins `QmdOnly` accepts only `.qmd`.
+- `test_watch_filter_preview_broad_accepts` — pins every accepted
+  case (config alt spellings, all image extensions, both `.tsx`
+  cases, nested paths).
+- `test_watch_filter_preview_broad_rejects` — pins rejection of
+  non-canonical YAML, `.tsx.bak`/`.yml.bak`, other image formats
+  (`.bmp`/`.tiff`), dotfiles.
+- `test_watcher_preview_broad_detects_quarto_yml_change` — new
+  integration; spawns a real `FileWatcher` with `PreviewBroad`,
+  edits `_quarto.yml`, asserts the debounced event surfaces.
+- `test_watcher_qmd_only_ignores_quarto_yml` — new integration;
+  guards against accidental future broadening of the default.
+
+**End-to-end smoke** (per CLAUDE.md):
+- Ran `q2 preview` against `/tmp/q2-b1-smoke` (with `_quarto.yml`
+  + `index.qmd`).
+- Boot log: `Started filesystem watcher path=… debounce_ms=500
+  filter=PreviewBroad` — confirms `quarto-preview` is passing the
+  broad filter through `HubConfig` end-to-end.
+- After editing `_quarto.yml`: `DEBUG File change detected
+  path=…/_quarto.yml` → `INFO Sync complete: filesystem →
+  automerge path=…/_quarto.yml new_len=48`.
+- The samod-side propagation is what B.3/B.4 will verify drives a
+  browser re-render. The watcher slice is verified end-to-end.
+
+**Status:** all six checklist items below complete.
+
+- [x] Add `WatchFilter` enum + unit tests
+- [x] Plumb through `WatchConfig` (+ caller updates)
+- [x] Plumb through `HubConfig` (default `QmdOnly`)
+- [x] Set `PreviewBroad` in `quarto-preview::build_hub_config`
+- [x] `cargo xtask verify --skip-hub-build` clean
+- [x] Manual `q2 preview` smoke: edit `_quarto.yml` surfaces an event
 
 ### B.3 — Cross-doc edges drive re-render
 

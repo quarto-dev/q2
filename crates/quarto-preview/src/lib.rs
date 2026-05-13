@@ -18,7 +18,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use include_dir::{Dir, include_dir};
-use quarto_hub::{StorageManager, context::HubConfig, server};
+use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter};
 
 /// The SPA bundle embedded at build time. See `build.rs` for how the
 /// source directory is chosen (real `q2-preview-spa/dist/` if present,
@@ -89,6 +89,10 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         // `q2 preview` responsive to edits — keep it on.
         watch_enabled: true,
         watch_debounce_ms: 500,
+        // Phase B.1 (bd-z529): preview wants config / metadata / image /
+        // .tsx edits to trigger re-render, not just .qmd. Hub keeps the
+        // default narrow filter for backwards compatibility.
+        watch_filter: WatchFilter::PreviewBroad,
         // Light periodic sync — the user can Ctrl-C any time, and
         // shutdown does a final sync anyway. 5 seconds is a reasonable
         // crash-resilience window for a *preview* invocation.

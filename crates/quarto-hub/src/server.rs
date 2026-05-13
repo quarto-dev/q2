@@ -867,6 +867,7 @@ where
     let sync_interval = config.sync_interval_secs;
     let watch_enabled = config.watch_enabled;
     let watch_debounce_ms = config.watch_debounce_ms;
+    let watch_filter = config.watch_filter;
     let project_root = storage.project_root().map(|p| p.to_path_buf());
     let has_project = project_root.is_some();
 
@@ -920,6 +921,7 @@ where
         let shutdown_rx = shutdown_rx.clone();
         let watch_config = WatchConfig {
             debounce_ms: watch_debounce_ms,
+            filter: watch_filter,
         };
         match FileWatcher::new(&project_root, watch_config) {
             Ok(watcher) => {
