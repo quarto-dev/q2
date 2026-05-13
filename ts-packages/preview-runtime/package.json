@@ -1,0 +1,43 @@
+{
+  "name": "@quarto/preview-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "description": "WASM + automerge glue for Quarto's q2-preview renderer. Shared by hub-client and the q2-preview SPA.",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@automerge/automerge": "^2.2.9",
+    "@automerge/automerge-repo": "^2.5.1",
+    "@quarto/quarto-automerge-schema": "*",
+    "@quarto/quarto-sync-client": "*",
+    "web-tree-sitter": "^0.26.8"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

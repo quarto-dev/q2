@@ -1,8 +1,9 @@
 ---
 date: 2026-05-11
-branch: feature/q2-preview
+updated: 2026-05-13
+branch: beads/bd-hfjj-hub-client-decomposition-shared
 beads: bd-hfjj (sub-epic of bd-kw93)
-status: draft — awaiting user review before implementation begins
+status: approved 2026-05-13; Phases 0–1 complete; Phase 2 next
 ---
 
 # Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa
@@ -199,13 +200,31 @@ editor-only fields leak into these types; if so, split.
 layout — meaningless to the SPA).
 
 **utils/** — the utils used by the moving components
-- `hub-client/src/utils/vfsPaths.ts` → `utils/vfsPaths.ts`
-- `hub-client/src/utils/iframeLinkHandlers.ts` →
-  `utils/iframeLinkHandlers.ts`
-- `hub-client/src/utils/iframePostProcessor.ts` →
+- `hub-client/src/utils/vfsPaths.ts` (+ `.test.ts`) →
+  `utils/vfsPaths.ts`
+- `hub-client/src/utils/iframeLinkHandlers.ts`
+  (+ `.integration.test.ts`) → `utils/iframeLinkHandlers.ts`
+- `hub-client/src/utils/iframePostProcessor.ts`
+  (+ `.test.ts`, `.integration.test.ts`) →
   `utils/iframePostProcessor.ts`
-- `hub-client/src/utils/componentPath.ts` → `utils/componentPath.ts`
-- `hub-client/src/utils/stripAnsi.ts` → `utils/stripAnsi.ts`
+- `hub-client/src/utils/componentPath.ts` (+ `.test.ts`) →
+  `utils/componentPath.ts`
+- `hub-client/src/utils/stripAnsi.ts` (+ `.test.ts`) →
+  `utils/stripAnsi.ts`
+- `hub-client/src/utils/customRegistry.ts` (+ `.test.ts`) →
+  `utils/customRegistry.ts`
+  *(Phase 0.2 drift: imported by `q2-preview/entry.tsx` (moving) and
+  `q2-debug/entry.tsx` (staying). After the move, q2-debug imports
+  from `@quarto/preview-renderer`.)*
+- `hub-client/src/utils/atomicCustomNodes.ts` →
+  `utils/atomicCustomNodes.ts`
+  *(Phase 0.2 drift: imported by `framework/dispatch.tsx`.)*
+- `hub-client/src/utils/sourceInfo.ts` (+ `.test.ts`) →
+  `utils/sourceInfo.ts`
+  *(Phase 0.2 drift: distinct from `types/sourceInfo.ts`; imported
+  by `framework/dispatch.tsx`.)*
+
+Note: `types/project.test.ts` moves with `types/project.ts`.
 
 ### Moving to `ts-packages/preview-runtime/src/`
 
@@ -436,40 +455,75 @@ is: the same set of tests passes before and after the move.
 
 ### Phase 0 — Pre-flight (no code changes)
 
-- [ ] Verify the starting workspace builds clean.
+- [x] Verify the starting workspace builds clean.
       `cd hub-client && npm run build:all && npm run test:ci`.
-- [ ] Confirm the file lists in "File-move catalogue" against
+      *(2026-05-13: build green; 84/84 tests pass across
+      `test`, `test:integration`, `test:wasm`.)*
+- [x] Confirm the file lists in "File-move catalogue" against
       current `git ls-files`. Patch the plan with any drift.
-- [ ] Decide on the test-helper / mock files under
+      *(2026-05-13: added `customRegistry`, `atomicCustomNodes`,
+      `utils/sourceInfo` to renderer moves; documented colocated
+      tests inline; flagged q2-debug's reverse import of
+      `customRegistry` after the move.)*
+- [x] Decide on the test-helper / mock files under
       `src/test-utils/` and `src/__mocks__/`: which move with
       `preview-renderer`, which with `preview-runtime`, which
       stay in hub-client. Update catalogue.
+      *(2026-05-13: dispositions recorded in §Test-helper
+      placement below.)*
 
 **Acceptance:** workspace builds and tests pass on the current
-branch; catalogue is final.
+branch; catalogue is final. ✓
+
+### Test-helper placement (Phase 0.3 resolution)
+
+Cross-referencing imports across `hub-client/src` shows only three
+files consume `test-utils/`:
+
+| Helper | Consumers | Disposition |
+|---|---|---|
+| `test-utils/mockSyncClient.ts` | `services/automergeSync.test.ts` *(moving to preview-runtime)* | **Moves with preview-runtime** → `ts-packages/preview-runtime/src/test-utils/mockSyncClient.ts` |
+| `test-utils/mockWasm.ts` | none in source tree; exported via `test-utils/index.ts` for renderer-style tests | **Moves with preview-runtime** → `ts-packages/preview-runtime/src/test-utils/mockWasm.ts` (mocks the WASM renderer the runtime owns) |
+| `test-utils/visibility.ts` | `hooks/useAutomergeSync.test.ts`, `services/presenceService.test.ts` *(both stay in hub-client)* | **Stays in hub-client** |
+| `test-utils/setup.ts` | `vitest.integration.config.ts` (hub-client) | **Stays in hub-client**; new packages get their own small `setup.ts` per `vitest.integration.config.ts` (pure jsdom polyfills — duplication is cheap and keeps boundaries clean). Promote to a shared `@quarto/test-setup` package only if the file grows. |
+| `test-utils/index.ts` | barrel for the above | Hub-client's copy keeps `visibility.ts` exports only; preview-runtime grows its own barrel. |
+| `__mocks__/userSettings.ts` | hub-client editor settings (auto-mock) | **Stays in hub-client** (editor-only). |
+
+`components/render/experimental-components/` (`.tsx.txt` and `.jsx`
+scratch files under `new/`) is untouched by the move and stays in
+hub-client — those files are not imported by the build.
 
 ### Phase 1 — Empty workspace packages
 
-- [ ] Create `ts-packages/preview-renderer/` with `package.json`,
+- [x] Create `ts-packages/preview-renderer/` with `package.json`,
       `tsconfig.json`, `vitest.config.ts`,
       `vitest.integration.config.ts`, empty `src/index.ts`
       exporting nothing.
-- [ ] Create `ts-packages/preview-runtime/` with the same
-      skeleton, including the WASM alias in `vitest.config.ts`.
-- [ ] Run `npm install` from repo root. Confirm new workspaces
+- [x] Create `ts-packages/preview-runtime/` with the same
+      skeleton, including the WASM alias in `vitest.config.ts`
+      and `vitest.integration.config.ts`.
+- [x] Run `npm install` from repo root. Confirm new workspaces
       register (`npm ls @quarto/preview-renderer @quarto/preview-runtime`).
-- [ ] Add a placeholder `test.ts` in each `src/` that runs a
+      *(2026-05-13: both registered as workspace symlinks.)*
+- [x] Add a placeholder `test.ts` in each `src/` that runs a
       trivial assertion; confirm `npm test --workspace
       @quarto/preview-renderer` (and runtime) pass.
-- [ ] `cd hub-client && npm install` to re-link; confirm hub-client
-      can `import {} from '@quarto/preview-renderer'` (compiles to
-      a no-op). Update `tsconfig.app.json` references if hub-client
-      uses project references for workspace deps (it currently
-      doesn't, but verify).
+      *(2026-05-13: 1 test/package, both green; typecheck + build
+      also succeed.)*
+- [x] Confirm hub-client can `import '@quarto/preview-renderer'`
+      and `import '@quarto/preview-runtime'`. Update
+      `tsconfig.app.json` references if hub-client uses project
+      references for workspace deps.
+      *(2026-05-13: temporary probe imports in `main.tsx` compiled
+      cleanly through `tsc --noEmit` and `vite build`. Reverted
+      after verification. tsconfig.app.json needed no changes —
+      hub-client doesn't use TS project references for workspace
+      deps; it relies on npm's `node_modules/@quarto/...` symlinks
+      + tsc's "bundler" `moduleResolution`.)*
 
 **Acceptance:** both new packages exist, are recognized by npm
 workspaces, have passing test commands, and are importable from
-hub-client (even though they export nothing yet).
+hub-client (even though they export nothing yet). ✓
 
 ### Phase 2 — Move types, contexts, and utils
 
