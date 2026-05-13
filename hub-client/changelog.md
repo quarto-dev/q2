@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-13
 
+- [`9c508c91`](https://github.com/quarto-dev/q2/commits/9c508c91): Internal — move the WASM-renderer + automerge-sync + user-grammar services from `hub-client/src/services/` into the new `@quarto/preview-runtime` package, and move `iframePostProcessor` into `@quarto/preview-renderer` (bd-hfjj Phase 5; executed before Phase 4). Hub-client now imports these surfaces via `@quarto/preview-runtime` and `@quarto/preview-renderer/utils/iframePostProcessor`. No user-visible change.
 - [`7e45d2bf`](https://github.com/quarto-dev/q2/commits/7e45d2bf): Internal — move the rendering framework (Ast, dispatch, RegistryContext, plainText, meta, customNode) from `hub-client/src/components/render/framework/` into `@quarto/preview-renderer` (bd-hfjj Phase 3). Hub-client now imports the framework barrel through `@quarto/preview-renderer/framework`. No user-visible change.
 - [`5d8bd2b3`](https://github.com/quarto-dev/q2/commits/5d8bd2b3): Internal — start carving the preview pane into shared workspace packages (bd-hfjj Phase 2). Five type modules and seven utilities move from `hub-client/src/` into the new `@quarto/preview-renderer` package; hub-client now imports them via sub-paths. No user-visible change; this prepares for the `q2 preview` SPA reusing the exact same rendering code.
 
