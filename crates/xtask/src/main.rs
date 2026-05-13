@@ -15,6 +15,7 @@
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
 
 mod build_all;
+mod build_q2_preview_spa;
 mod build_trace_viewer;
 mod create_worktree;
 mod dev_setup;
@@ -186,6 +187,13 @@ enum Command {
     /// build -p quarto-trace-server` (via `include_dir!`).
     BuildTraceViewer {},
 
+    /// Build just the q2-preview SPA.
+    ///
+    /// Faster than `build-all` when only the SPA source has changed. The
+    /// resulting `q2-preview-spa/dist/` is picked up on the next `cargo
+    /// build -p quarto-preview` (via `include_dir!`).
+    BuildQ2PreviewSpa {},
+
     /// Fresh-clone build orchestration.
     ///
     /// Runs the full build sequence in dependency order, serving as the source
@@ -194,7 +202,8 @@ enum Command {
     /// 1. npm install at the repo root (npm workspaces)
     /// 2. hub-client build (includes WASM)
     /// 3. trace-viewer build (if present; Phase 4.3+)
-    /// 4. cargo build --workspace
+    /// 4. q2-preview-spa build (if present; q2-preview Phase A.4)
+    /// 5. cargo build --workspace
     BuildAll {
         /// Skip `npm install`.
         #[arg(long)]
@@ -207,6 +216,10 @@ enum Command {
         /// Skip the trace-viewer build.
         #[arg(long)]
         skip_trace_viewer_build: bool,
+
+        /// Skip the q2-preview-spa build.
+        #[arg(long)]
+        skip_q2_preview_spa_build: bool,
 
         /// Skip the Rust workspace build.
         #[arg(long)]
@@ -281,10 +294,12 @@ fn main() -> Result<()> {
             verify::run(&config)
         }
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
+        Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
         Command::BuildAll {
             skip_npm_install,
             skip_hub_build,
             skip_trace_viewer_build,
+            skip_q2_preview_spa_build,
             skip_rust_build,
             release,
         } => {
@@ -292,6 +307,7 @@ fn main() -> Result<()> {
                 skip_npm_install,
                 skip_hub_build,
                 skip_trace_viewer_build,
+                skip_q2_preview_spa_build,
                 skip_rust_build,
                 release,
             };
