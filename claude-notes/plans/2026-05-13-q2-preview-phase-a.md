@@ -345,15 +345,20 @@ hatch when the dependency-graph misses a cross-doc relationship.
 **Tests first:**
 - `q2-preview-spa/src/components/ForceRefresh.integration.test.tsx`
   (new) — renders the button, clicks it, verifies the mocked
-  `renderPageInProject` is called.
+  `renderPageForPreview` is called (the new entry point A.5.4c
+  introduced — the original plan mentioned the deprecated-here
+  `renderPageInProject`).
 
 **Implementation:**
 - A small persistent control in the SPA's chrome (corner of the
   iframe; doesn't intrude on the rendered content).
 - Click handler re-invokes the SPA's render path against current
-  automerge state. No server roundtrip in Phase A (engines are out of
-  scope); Phase C extends to trigger server-side re-execution when
-  applicable.
+  automerge state. The render effect in PreviewApp already re-fires
+  whenever `contentTick` bumps (its dependency-array entry); the
+  button just increments that counter so we reuse one trigger
+  channel for both passive (sync event) and active (button) paths.
+  No server roundtrip in Phase A (engines are out of scope); Phase C
+  extends to trigger server-side re-execution when applicable.
 
 **Acceptance:** test passes; manual button click in `npm run dev`
 re-runs the render.

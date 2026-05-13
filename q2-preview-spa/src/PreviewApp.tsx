@@ -37,7 +37,7 @@
  *   round-trip on boot, no new server-side patterns introduced.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   initWasm,
   connect,
@@ -47,6 +47,7 @@ import {
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
 import type { FileEntry } from '@quarto/quarto-automerge-schema';
+import { ForceRefreshButton } from './components/ForceRefreshButton';
 
 type BootState = 'loading' | 'ready' | 'error';
 
@@ -125,6 +126,16 @@ const noopSetAst = () => {
 
 export default function PreviewApp() {
   const [state, setState] = useState<PreviewAppState>(INITIAL_STATE);
+
+  // Force-refresh trigger (bd-b5hf): bumping `contentTick` re-fires
+  // the render useEffect. Reuses the same channel `onFileContent`
+  // uses for sync-driven re-renders so there's one path through the
+  // render pipeline regardless of who asks. Stable identity via
+  // useCallback so the button doesn't re-mount on every state
+  // update.
+  const handleRefresh = useCallback(() => {
+    setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
+  }, []);
 
   // Boot once: WASM init + samod connect + initial file pick.
   useEffect(() => {
@@ -257,12 +268,19 @@ export default function PreviewApp() {
     );
   }
 
+  // The wrapper anchors the absolutely-positioned refresh button
+  // (and any future floating chrome) so it overlays the iframe
+  // without an extra flex/grid layer. `height: 100%` lets the
+  // iframe still fill the SPA root (set by index.html).
   return (
-    <Q2PreviewIframe
-      astJson={state.astJson}
-      currentFilePath={state.activeFile}
-      themeFingerprint={state.themeFingerprint}
-      setAst={noopSetAst}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <Q2PreviewIframe
+        astJson={state.astJson}
+        currentFilePath={state.activeFile}
+        themeFingerprint={state.themeFingerprint}
+        setAst={noopSetAst}
+      />
+      <ForceRefreshButton onRefresh={handleRefresh} />
+    </div>
   );
 }

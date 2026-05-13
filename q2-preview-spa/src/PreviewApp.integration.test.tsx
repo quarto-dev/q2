@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import type { FileEntry } from '@quarto/quarto-automerge-schema';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
@@ -202,6 +202,41 @@ describe('PreviewApp boot path', () => {
     expect(calls.length).toBeGreaterThan(0);
     const [, docIdArg] = calls[calls.length - 1];
     expect(docIdArg).toBe('automerge:4ByAxLmGYwAEYN5xZEX7Jq1GxTmU');
+  });
+
+  it('re-runs the render when the force-refresh button is clicked', async () => {
+    // bd-b5hf / Phase A.6 — the epic's resolution #4 ("force-refresh
+    // invariant") promises an always-visible UI affordance that
+    // re-runs the render pipeline against current automerge state.
+    // The dep-graph won't always know that a cross-doc edit affects
+    // the active page; the button is the user's escape hatch.
+    //
+    // What we pin here: clicking the button calls
+    // `renderPageForPreview` at least once more after the initial
+    // boot render. We deliberately don't pin the *trigger mechanism*
+    // (state-bump vs prop change vs direct call) — only the observable
+    // outcome at the runtime seam.
+    const runtime = await import('@quarto/preview-runtime');
+    const renderMock = runtime.renderPageForPreview as ReturnType<typeof vi.fn>;
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+    const initialCallCount = renderMock.mock.calls.length;
+    expect(initialCallCount).toBeGreaterThan(0);
+
+    // The button lives in PreviewApp's chrome (outside the sandboxed
+    // renderer iframe) so it's always reachable even when the inner
+    // render is misbehaving. Match by accessible name rather than
+    // by test-id so the UX label is part of the contract.
+    const refreshButton = screen.getByRole('button', {
+      name: /refresh|re-render|reload/i,
+    });
+    fireEvent.click(refreshButton);
+
+    await waitFor(() => {
+      expect(renderMock.mock.calls.length).toBeGreaterThan(initialCallCount);
+    });
   });
 
   it('surfaces a /health failure with an actionable message', async () => {
