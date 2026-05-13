@@ -28,13 +28,36 @@
 //! branches first. `--no-claim` skips the beads status update.
 
 use anyhow::{Context, Result, bail};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::create_worktree::{
     BeadsMetadata, SectionKind, build_section, derive_slug, fetch_beads_metadata,
-    parse_external_ref_to_github_url, repo_root, update_claude_local_md, validate_slug,
+    parse_external_ref_to_github_url, update_claude_local_md, validate_slug,
 };
+
+/// Find the *current worktree's* root via `git rev-parse --show-toplevel`.
+///
+/// We deliberately *don't* reuse `create_worktree::repo_root()` here:
+/// that walks up to find `Cargo.toml` with `[workspace]`, which for a
+/// worktree of a workspace lands on the *main repo* (the `[workspace]`
+/// declaration is shared across all worktrees). The CLAUDE.local.md
+/// we want to rewrite is per-worktree, so we need the worktree's own
+/// toplevel.
+fn current_worktree_root() -> Result<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .context("spawning `git rev-parse --show-toplevel`")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("`git rev-parse --show-toplevel` failed:\n{stderr}");
+    }
+    let path = std::str::from_utf8(&output.stdout)
+        .context("toplevel path is not valid UTF-8")?
+        .trim();
+    Ok(PathBuf::from(path))
+}
 
 /// Arguments for `cargo xtask switch-task`.
 pub struct Args {
@@ -51,7 +74,7 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> Result<()> {
-    let root = repo_root()?;
+    let root = current_worktree_root()?;
 
     let meta = fetch_beads_metadata(&args.beads_id)?;
     let slug = match args.slug.as_deref() {
