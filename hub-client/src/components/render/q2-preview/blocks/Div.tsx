@@ -1,5 +1,5 @@
-import { renderChildren } from '../../framework';
-import type { DivBlock, NodeArgs } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
+import type { DivBlock, NodeArgs } from '@quarto/preview-renderer/framework';
 
 export const Div = (args: NodeArgs<DivBlock>) => {
     const [[id, classes, kvs]] = args.node.c;

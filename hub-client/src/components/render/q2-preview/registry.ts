@@ -1,4 +1,4 @@
-import type { FormatRegistry } from '../framework';
+import type { FormatRegistry } from '@quarto/preview-renderer/framework';
 import * as Blocks from './blocks';
 import * as Inlines from './inlines';
 import * as Custom from './custom';

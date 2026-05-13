@@ -11,7 +11,7 @@ import RevealZoom from 'reveal.js/plugin/zoom';
 import RevealMenuPlugin from 'reveal.js-menu/plugin.js';
 const RevealMenu = RevealMenuPlugin.default || RevealMenuPlugin;
 import { parseSlides, renderBlock, type Slide as PandocSlide } from './ReactAstSlideRenderer';
-import type { PandocAST } from './framework/types';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
 
 interface RevealjsSlideRendererProps {
   astJson: string;

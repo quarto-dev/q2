@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import type { SourceInfoPool } from '@quarto/preview-renderer/types/sourceInfo';
+import type { SourceInfoPool } from '../types/sourceInfo';
 
 /**
  * Context that carries the active format's registry to the dispatchers,

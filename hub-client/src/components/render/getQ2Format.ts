@@ -1,4 +1,4 @@
-import { extractMetaString } from './framework';
+import { extractMetaString } from '@quarto/preview-renderer/framework';
 
 /**
  * Extract format string from the parsed AST metadata.

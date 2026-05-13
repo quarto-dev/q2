@@ -4,8 +4,8 @@ import {
     extractMetaString,
     extractMetaBool,
     RegistryContext,
-} from '../framework';
-import type { BlockNode, PandocAST } from '../framework';
+} from '@quarto/preview-renderer/framework';
+import type { BlockNode, PandocAST } from '@quarto/preview-renderer/framework';
 import * as Custom from './custom';
 
 /**

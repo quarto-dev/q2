@@ -3,8 +3,8 @@ import type {
     CustomInlineNode,
     InlineNode,
     NodeArgs,
-} from '../../framework';
-import { Node } from '../../framework';
+} from '@quarto/preview-renderer/framework';
+import { Node } from '@quarto/preview-renderer/framework';
 import { QUARTO_XREF } from '../quartoClasses';
 
 /**

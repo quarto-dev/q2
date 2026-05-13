@@ -19,8 +19,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { Ast } from '../framework';
-import type { FormatRegistry, NodeArgs, PandocAST } from '../framework';
+import { Ast } from '@quarto/preview-renderer/framework';
+import type { FormatRegistry, NodeArgs, PandocAST } from '@quarto/preview-renderer/framework';
 import { previewRegistry } from './registry';
 import {
     CALLOUT,

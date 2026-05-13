@@ -1,4 +1,4 @@
-import type { CodeInline, NodeArgs } from '../../framework';
+import type { CodeInline, NodeArgs } from '@quarto/preview-renderer/framework';
 
 export const Code = ({ node }: NodeArgs<CodeInline>) => {
     const [[id, classes, kvs], content] = node.c;

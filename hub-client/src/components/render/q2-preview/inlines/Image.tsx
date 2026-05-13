@@ -1,6 +1,6 @@
 import { useContext } from 'react';
-import type { ImageInline, NodeArgs } from '../../framework';
-import { inlinesToPlainText } from '../../framework';
+import type { ImageInline, NodeArgs } from '@quarto/preview-renderer/framework';
+import { inlinesToPlainText } from '@quarto/preview-renderer/framework';
 import { AssetManifestContext } from '../AssetManifestContext';
 import { lookupAssetUrl } from '../utils';
 

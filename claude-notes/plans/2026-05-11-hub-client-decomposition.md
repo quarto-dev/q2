@@ -3,7 +3,7 @@ date: 2026-05-11
 updated: 2026-05-13
 branch: beads/bd-hfjj-hub-client-decomposition-shared
 beads: bd-hfjj (sub-epic of bd-kw93)
-status: approved 2026-05-13; Phases 0–2 complete; Phase 3 next
+status: approved 2026-05-13; Phases 0–3 complete; Phase 4 next
 ---
 
 # Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa
@@ -594,15 +594,34 @@ The lowest-risk moves. Pure data + pure functions; no React tree.
 
 ### Phase 3 — Move framework/
 
-- [ ] Move `components/render/framework/` entire subtree to
+- [x] Move `components/render/framework/` entire subtree to
       `ts-packages/preview-renderer/src/framework/`.
-- [ ] Re-export through `src/index.ts`.
-- [ ] Update import paths in everything that imports from
-      `components/render/framework/...`. Confirm that the framework
-      tests (`framework/*.test.ts`) run via
+      *(2026-05-13.)*
+- [x] Expose as a single barrel via `package.json` exports
+      `./framework`. Wildcards rejected because the subtree mixes
+      `.tsx` (Ast, dispatch, RegistryContext) and `.ts` (the rest)
+      and Node's exports map can't pattern-match both extensions
+      cleanly. Every framework symbol re-exports through
+      `framework/index.ts`, so sub-file imports are not needed.
+- [x] Update import paths in everything that imports from
+      `components/render/framework/...`.
+      *(2026-05-13: 107 imports across 60 hub-client files
+      rewritten to `from '@quarto/preview-renderer/framework'`.
+      Also caught one dynamic `await import('./framework')` in
+      `parity.integration.test.tsx`.)*
+- [x] Convert framework's internal cross-dir imports (Phase 2
+      Phase-2-style `@quarto/preview-renderer/...` self-imports
+      from Ast/RegistryContext/dispatch) to relative paths
+      (`../types/sourceInfo`, `../utils/sourceInfo`, etc.).
+      Self-package imports work but are unidiomatic.
+- [x] Framework tests run via
       `npm test --workspace @quarto/preview-renderer`.
+      *(2026-05-13: 133 tests / 10 files including the moved
+      `customNode.test.ts`, `meta.test.ts`, `plainText.test.ts`.)*
 
-**Acceptance:** same as Phase 2.
+**Acceptance:** same as Phase 2. ✓
+- hub-client `typecheck`, `test:ci`, `build:all` all green.
+- `cargo xtask verify --skip-rust-tests` green.
 
 ### Phase 4 — Move q2-preview/, iframe wrappers, overlays
 

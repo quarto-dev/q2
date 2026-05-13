@@ -4,8 +4,8 @@ import type {
     InlineNode,
     NodeArgs,
     ParaBlock,
-} from '../../framework';
-import { Node } from '../../framework';
+} from '@quarto/preview-renderer/framework';
+import { Node } from '@quarto/preview-renderer/framework';
 import { THEOREM, THEOREM_TITLE } from '../quartoClasses';
 import { theoremEnvFor } from '../theoremEnvs';
 import { makeSlotSetter } from '../utils';

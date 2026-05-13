@@ -1,4 +1,4 @@
-import type { CodeBlock as CodeBlockType, NodeArgs } from '../../framework';
+import type { CodeBlock as CodeBlockType, NodeArgs } from '@quarto/preview-renderer/framework';
 
 export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     const [[id, classes, kvs], code] = node.c;

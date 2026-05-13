@@ -1,5 +1,5 @@
-import { Node } from '../../framework';
-import type { BlockNode, InlineNode, NodeArgs, TableBlock } from '../../framework';
+import { Node } from '@quarto/preview-renderer/framework';
+import type { BlockNode, InlineNode, NodeArgs, TableBlock } from '@quarto/preview-renderer/framework';
 
 /**
  * Table → `<table>` with optional `<caption>` / `<thead>` / `<tbody>` /

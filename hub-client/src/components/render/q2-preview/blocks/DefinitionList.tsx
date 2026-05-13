@@ -1,11 +1,11 @@
 import React from 'react';
-import { Node } from '../../framework';
+import { Node } from '@quarto/preview-renderer/framework';
 import type {
     BlockNode,
     DefinitionListBlock,
     InlineNode,
     NodeArgs,
-} from '../../framework';
+} from '@quarto/preview-renderer/framework';
 
 /**
  * DefinitionList → `<dl><dt>term</dt><dd>def</dd>...</dl>`. Pandoc

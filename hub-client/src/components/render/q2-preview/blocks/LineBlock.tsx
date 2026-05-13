@@ -1,5 +1,5 @@
-import { Node } from '../../framework';
-import type { BlockNode, InlineNode, LineBlockBlock, NodeArgs } from '../../framework';
+import { Node } from '@quarto/preview-renderer/framework';
+import type { BlockNode, InlineNode, LineBlockBlock, NodeArgs } from '@quarto/preview-renderer/framework';
 
 /**
  * LineBlock → `<div class="line-block">` with each line as a `<div>`

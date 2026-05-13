@@ -41,8 +41,8 @@ import {
     extractMetaStringList,
     inlinesToPlainText,
     blocksToPlainText,
-} from '../framework';
-import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
+} from '@quarto/preview-renderer/framework';
+import type { FormatRegistry, NoteInline, PandocAST } from '@quarto/preview-renderer/framework';
 import { Block, Inline, previewRegistry, PreviewContext } from '.';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';

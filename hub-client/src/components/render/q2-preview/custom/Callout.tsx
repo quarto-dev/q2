@@ -2,7 +2,7 @@ import type {
     CustomBlockNode,
     NodeArgs,
     Slot,
-} from '../../framework';
+} from '@quarto/preview-renderer/framework';
 import {
     CALLOUT,
     CALLOUT_APPEARANCE_PREFIX,

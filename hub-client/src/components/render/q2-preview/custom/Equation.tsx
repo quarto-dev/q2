@@ -4,8 +4,8 @@ import type {
     InlineNode,
     MathInline,
     NodeArgs,
-} from '../../framework';
-import { Node } from '../../framework';
+} from '@quarto/preview-renderer/framework';
+import { Node } from '@quarto/preview-renderer/framework';
 import { makeSlotSetter } from '../utils';
 
 /**

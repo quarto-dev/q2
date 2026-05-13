@@ -29,7 +29,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
-import { Ast } from '../framework';
+import { Ast } from '@quarto/preview-renderer/framework';
 import type {
     BlockNode,
     InlineNode,
@@ -37,7 +37,7 @@ import type {
     ParaBlock,
     PandocAST,
     FormatRegistry,
-} from '../framework';
+} from '@quarto/preview-renderer/framework';
 import { previewRegistry } from './registry';
 import { AssetManifestContext } from './AssetManifestContext';
 import {

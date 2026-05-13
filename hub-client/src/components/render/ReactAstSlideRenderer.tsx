@@ -27,8 +27,8 @@ import type {
   SpanInline,
   MathInline,
   QuotedInline,
-} from './framework/types';
-import { extractMetaString } from './framework';
+} from '@quarto/preview-renderer/framework';
+import { extractMetaString } from '@quarto/preview-renderer/framework';
 
 /**
  * Represents a single slide with its content

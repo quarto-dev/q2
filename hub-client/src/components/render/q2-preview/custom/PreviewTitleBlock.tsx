@@ -1,5 +1,5 @@
-import type { AstProps } from '../../framework';
-import { extractMetaString, extractMetaStringList } from '../../framework';
+import type { AstProps } from '@quarto/preview-renderer/framework';
+import { extractMetaString, extractMetaStringList } from '@quarto/preview-renderer/framework';
 
 /**
  * Built-in `__title_block__` synthetic-registry entry (Plan 2D Phase 7).

@@ -1,4 +1,4 @@
-import type { NodeArgs, RawInlineInline } from '../../framework';
+import type { NodeArgs, RawInlineInline } from '@quarto/preview-renderer/framework';
 
 /**
  * RawInline semantics mirror RawBlock:

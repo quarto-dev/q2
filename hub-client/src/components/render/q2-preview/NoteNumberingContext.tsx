@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import type { NoteInline } from '../framework';
+import type { NoteInline } from '@quarto/preview-renderer/framework';
 
 /**
  * Distributes JS-side note numbering to `Note.tsx`.

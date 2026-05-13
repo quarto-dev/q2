@@ -1,9 +1,9 @@
-import { renderChildren } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
 import type {
     CustomBlockNode,
     CustomInlineNode,
     NodeArgs,
-} from '../../framework';
+} from '@quarto/preview-renderer/framework';
 
 /**
  * Generic CustomNode renderer for unknown / not-yet-implemented

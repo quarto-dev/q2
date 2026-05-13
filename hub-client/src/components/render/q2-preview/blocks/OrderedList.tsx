@@ -1,5 +1,5 @@
-import { renderChildren } from '../../framework';
-import type { NodeArgs, OrderedListBlock } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
+import type { NodeArgs, OrderedListBlock } from '@quarto/preview-renderer/framework';
 
 /**
  * OrderedList → <ol> with `start`, `type`, and `data-list-style-delim`

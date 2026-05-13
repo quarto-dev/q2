@@ -1,5 +1,5 @@
-import { renderChildren } from '../../framework';
-import type { NodeArgs, QuotedInline } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
+import type { NodeArgs, QuotedInline } from '@quarto/preview-renderer/framework';
 
 const QUOTE_CHARS = {
     SingleQuote: ['‘', '’'] as const, // ‘ ’

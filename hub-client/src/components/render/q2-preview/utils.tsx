@@ -29,9 +29,9 @@ import type {
     CustomInlineNode,
     InlineNode,
     Slot,
-} from '../framework';
-import type { Attr } from '../framework/types';
-import { Node } from '../framework';
+} from '@quarto/preview-renderer/framework';
+import type { Attr } from '@quarto/preview-renderer/framework';
+import { Node } from '@quarto/preview-renderer/framework';
 
 // --- asset URL lookup ------------------------------------------------
 

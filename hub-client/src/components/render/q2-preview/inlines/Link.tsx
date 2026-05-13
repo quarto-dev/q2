@@ -1,5 +1,5 @@
-import { renderChildren } from '../../framework';
-import type { LinkInline, NodeArgs } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
+import type { LinkInline, NodeArgs } from '@quarto/preview-renderer/framework';
 
 export const Link = (args: NodeArgs<LinkInline>) => {
     const [[id, classes, kvs], , [url, title]] = args.node.c;

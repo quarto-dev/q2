@@ -7,8 +7,8 @@ import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
 import { resolveComponentPath } from '@quarto/preview-renderer/utils/componentPath';
-import type { PandocAST } from './framework/types';
-import { extractMetaString } from './framework';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
+import { extractMetaString } from '@quarto/preview-renderer/framework';
 
 // Simple error boundary to catch errors in custom components
 class ErrorBoundary extends Component<

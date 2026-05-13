@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import katex from 'katex';
-import type { MathInline, NodeArgs } from '../../framework';
+import type { MathInline, NodeArgs } from '@quarto/preview-renderer/framework';
 
 /**
  * Math (DisplayMath / InlineMath) → KaTeX-rendered HTML wrapped in a

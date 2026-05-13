@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { RegistryContext } from './RegistryContext';
-import { isAtomicSourceInfo, ATOMIC_SYNTHETIC_KINDS } from '@quarto/preview-renderer/utils/sourceInfo';
-import { isAtomicCustomNode } from '@quarto/preview-renderer/utils/atomicCustomNodes';
+import { isAtomicSourceInfo, ATOMIC_SYNTHETIC_KINDS } from '../utils/sourceInfo';
+import { isAtomicCustomNode } from '../utils/atomicCustomNodes';
 import type {
     BlockNode,
     InlineNode,

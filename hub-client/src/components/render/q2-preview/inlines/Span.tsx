@@ -1,5 +1,5 @@
-import { renderChildren } from '../../framework';
-import type { NodeArgs, SpanInline } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
+import type { NodeArgs, SpanInline } from '@quarto/preview-renderer/framework';
 
 export const Span = (args: NodeArgs<SpanInline>) => {
     const [[id, classes, kvs]] = args.node.c;

@@ -1,5 +1,5 @@
-import { renderChildren } from '../../framework';
-import type { NodeArgs, PlainBlock } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
+import type { NodeArgs, PlainBlock } from '@quarto/preview-renderer/framework';
 
 /** Plain renders no wrapper element — its inlines flow into the
  * surrounding context (table cells, list items, etc.). */

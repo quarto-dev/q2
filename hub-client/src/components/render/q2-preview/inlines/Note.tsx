@@ -1,6 +1,6 @@
 import { useContext } from 'react';
-import type { NodeArgs, NoteInline } from '../../framework';
-import { blocksToPlainText } from '../../framework';
+import type { NodeArgs, NoteInline } from '@quarto/preview-renderer/framework';
+import { blocksToPlainText } from '@quarto/preview-renderer/framework';
 import { NoteNumberingContext } from '../NoteNumberingContext';
 import { FOOTNOTE_REF } from '../quartoClasses';
 

@@ -1,13 +1,13 @@
 import { useContext } from 'react';
-import { RegistryContext } from '../framework/RegistryContext';
-import { renderChildren } from '../framework';
+import { RegistryContext } from '@quarto/preview-renderer/framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
 import type {
     BlockNode,
     CustomBlockNode,
     CustomInlineNode,
     InlineNode,
     NodeArgs,
-} from '../framework/types';
+} from '@quarto/preview-renderer/framework';
 
 const placeholderStyle: React.CSSProperties = {
     color: '#888',

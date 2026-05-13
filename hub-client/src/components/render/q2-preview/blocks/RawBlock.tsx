@@ -1,4 +1,4 @@
-import type { NodeArgs, RawBlock as RawBlockType } from '../../framework';
+import type { NodeArgs, RawBlock as RawBlockType } from '@quarto/preview-renderer/framework';
 
 /**
  * RawBlock semantics:

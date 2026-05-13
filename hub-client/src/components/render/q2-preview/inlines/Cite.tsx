@@ -1,5 +1,5 @@
-import { Node } from '../../framework';
-import type { BlockNode, CiteInline, InlineNode, NodeArgs } from '../../framework';
+import { Node } from '@quarto/preview-renderer/framework';
+import type { BlockNode, CiteInline, InlineNode, NodeArgs } from '@quarto/preview-renderer/framework';
 
 /**
  * Cite renders `c[1]` (the visible inlines Pandoc fills in for the

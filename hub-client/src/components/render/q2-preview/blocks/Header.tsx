@@ -1,5 +1,5 @@
-import { renderChildren } from '../../framework';
-import type { HeaderBlock, NodeArgs } from '../../framework';
+import { renderChildren } from '@quarto/preview-renderer/framework';
+import type { HeaderBlock, NodeArgs } from '@quarto/preview-renderer/framework';
 
 const headerTags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 

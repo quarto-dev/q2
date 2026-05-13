@@ -13,8 +13,8 @@
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { Ast } from '../../framework';
-import type { FormatRegistry, PandocAST } from '../../framework';
+import { Ast } from '@quarto/preview-renderer/framework';
+import type { FormatRegistry, PandocAST } from '@quarto/preview-renderer/framework';
 import { previewRegistry } from '../registry';
 import { PreviewTitleBlock } from './PreviewTitleBlock';
 

@@ -16,6 +16,11 @@
       "source": "./src/index.ts",
       "import": "./dist/index.js"
     },
+    "./framework": {
+      "types": "./src/framework/index.ts",
+      "source": "./src/framework/index.ts",
+      "import": "./dist/framework/index.js"
+    },
     "./types/*": {
       "types": "./src/types/*.ts",
       "source": "./src/types/*.ts",

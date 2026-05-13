@@ -10,8 +10,8 @@
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
-import { Ast } from '../framework';
-import type { PandocAST } from '../framework';
+import { Ast } from '@quarto/preview-renderer/framework';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
 import { previewRegistry } from './registry';
 
 function astJson(meta: Record<string, unknown>, blocks: any[] = []): string {

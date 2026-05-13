@@ -1,5 +1,5 @@
-import { Node } from '../../framework';
-import type { BlockNode, FigureBlock, InlineNode, NodeArgs } from '../../framework';
+import { Node } from '@quarto/preview-renderer/framework';
+import type { BlockNode, FigureBlock, InlineNode, NodeArgs } from '@quarto/preview-renderer/framework';
 
 /**
  * Figure → <figure> + optional <figcaption>. Reads `c[1][1]`
