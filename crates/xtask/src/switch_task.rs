@@ -64,10 +64,14 @@ pub fn run(args: Args) -> Result<()> {
     let branch = format!("beads/{}-{}", args.beads_id, slug);
 
     if let Some(from) = args.from.as_deref() {
-        git_switch_and_pull(from)?;
+        // Best-effort fetch so origin/<from> reflects the latest tip.
+        // Failure is non-fatal — the user might be offline or `<from>`
+        // might be a local-only branch.
+        git_fetch_origin(from);
+        git_switch_create_from(&branch, from)?;
+    } else {
+        git_switch_create(&branch)?;
     }
-
-    git_switch_new_branch(&branch)?;
 
     if !args.no_claim {
         claim_issue(&args.beads_id)?;
@@ -79,30 +83,34 @@ pub fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
-fn git_switch_and_pull(branch: &str) -> Result<()> {
-    eprintln!("→ git switch {branch}");
-    let status = Command::new("git")
-        .args(["switch", branch])
-        .status()
-        .context("spawning `git switch`")?;
-    if !status.success() {
-        bail!("`git switch {branch}` failed — does the branch exist locally?");
-    }
+fn git_fetch_origin(branch: &str) {
+    eprintln!("→ git fetch origin {branch} (best-effort)");
+    let _ = Command::new("git")
+        .args(["fetch", "origin", branch])
+        .status();
+}
 
-    eprintln!("→ git pull --ff-only");
+/// Create `<branch>` at the tip of `<start_point>` and check it out.
+/// Uses `git switch -c` with a start-point, which doesn't require
+/// `<start_point>` to be checked out in this worktree — so this is
+/// safe when the integration branch is already checked out in another
+/// worktree (the common case for the main repo + `.worktrees/*` setup).
+fn git_switch_create_from(branch: &str, start_point: &str) -> Result<()> {
+    eprintln!("→ git switch -c {branch} {start_point}");
     let status = Command::new("git")
-        .args(["pull", "--ff-only"])
+        .args(["switch", "-c", branch, start_point])
         .status()
-        .context("spawning `git pull`")?;
+        .context("spawning `git switch -c <branch> <start>`")?;
     if !status.success() {
-        // Non-fast-forward state is something the user should resolve;
-        // don't try to be clever here.
-        bail!("`git pull --ff-only` failed — resolve divergence and retry");
+        bail!(
+            "`git switch -c {branch} {start_point}` failed — branch may \
+             already exist; rename or delete it first"
+        );
     }
     Ok(())
 }
 
-fn git_switch_new_branch(branch: &str) -> Result<()> {
+fn git_switch_create(branch: &str) -> Result<()> {
     eprintln!("→ git switch -c {branch}");
     let status = Command::new("git")
         .args(["switch", "-c", branch])
