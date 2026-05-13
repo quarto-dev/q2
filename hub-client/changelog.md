@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-05-13
+
+- [`5d8bd2b3`](https://github.com/quarto-dev/q2/commits/5d8bd2b3): Internal — start carving the preview pane into shared workspace packages (bd-hfjj Phase 2). Five type modules and seven utilities move from `hub-client/src/` into the new `@quarto/preview-renderer` package; hub-client now imports them via sub-paths. No user-visible change; this prepares for the `q2 preview` SPA reusing the exact same rendering code.
+
 ### 2026-05-10
 
 - [`68e5ec24`](https://github.com/quarto-dev/q2/commits/68e5ec24): Custom syntax highlighting now works in Quarto Hub projects (bd-izfv) — user-supplied tree-sitter grammars under `_quarto/grammars/<lang>/` now apply to code blocks even when the qmd file lives under a `_quarto.yml` ancestor, matching the single-file render path.
