@@ -21,6 +21,26 @@
       "source": "./src/framework/index.ts",
       "import": "./dist/framework/index.js"
     },
+    "./q2-preview": {
+      "types": "./src/q2-preview/index.ts",
+      "source": "./src/q2-preview/index.ts",
+      "import": "./dist/q2-preview/index.js"
+    },
+    "./q2-preview/entry": {
+      "types": "./src/q2-preview/entry.tsx",
+      "source": "./src/q2-preview/entry.tsx",
+      "import": "./dist/q2-preview/entry.js"
+    },
+    "./iframe/*": {
+      "types": "./src/iframe/*.tsx",
+      "source": "./src/iframe/*.tsx",
+      "import": "./dist/iframe/*.js"
+    },
+    "./overlays/*": {
+      "types": "./src/overlays/*.tsx",
+      "source": "./src/overlays/*.tsx",
+      "import": "./dist/overlays/*.js"
+    },
     "./types/*": {
       "types": "./src/types/*.ts",
       "source": "./src/types/*.ts",

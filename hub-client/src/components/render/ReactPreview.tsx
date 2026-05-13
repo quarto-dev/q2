@@ -5,7 +5,8 @@ import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { parseQmdToAst, renderPageInProject, isWasmReady, incrementalWriteQmd } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '../../utils/pipelineKind';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
-import { PreviewErrorOverlay } from './PreviewErrorOverlay';
+import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
+import { usePreference } from '../../hooks/usePreference';
 import ReactRenderer from './ReactRenderer';
 
 // Preview pane state machine:
@@ -188,6 +189,10 @@ export default function ReactPreview({
   // Preview state machine for error handling
   const [previewState, setPreviewState] = useState<PreviewState>('START');
   const [currentError, setCurrentError] = useState<CurrentError | null>(null);
+  // Persist the error-overlay collapsed state in localStorage. The
+  // overlay itself is package-internal in @quarto/preview-renderer and
+  // takes the value via props (controlled component).
+  const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
   // Track previewState in a ref for use in callbacks
   const previewStateRef = useRef<PreviewState>('START');
   useEffect(() => {
@@ -359,6 +364,8 @@ export default function ReactPreview({
       <PreviewErrorOverlay
         error={currentError}
         visible={previewState === 'ERROR_FROM_GOOD'}
+        collapsed={errorOverlayCollapsed}
+        onToggleCollapsed={setErrorOverlayCollapsed}
       />
     </div>
   );

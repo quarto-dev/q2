@@ -2,7 +2,7 @@ import { useMemo, Component } from 'react';
 import type { ReactNode } from 'react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
-import { Q2PreviewIframe } from './q2-preview/Q2PreviewIframe';
+import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';

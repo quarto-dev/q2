@@ -18,7 +18,7 @@ import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { initWasm, vfsAddFile, vfsAddBinaryFile, vfsClear } from '@quarto/preview-runtime';
-import { buildAssetManifest, type ManifestCacheEntry } from '../components/render/q2-preview/assetWalker';
+import { buildAssetManifest, type ManifestCacheEntry } from '@quarto/preview-renderer/q2-preview';
 
 interface RenderResponse {
     success: boolean;

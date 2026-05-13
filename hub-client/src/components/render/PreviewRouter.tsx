@@ -6,7 +6,7 @@ import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { parseQmdToAst, isWasmReady, initWasm } from '@quarto/preview-runtime';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
-import { FallbackView, NonQmdPlaceholderView } from './PreviewStaticInfoViews';
+import { FallbackView, NonQmdPlaceholderView } from '@quarto/preview-renderer/overlays/PreviewStaticInfoViews';
 import { getQ2Format } from './getQ2Format';
 
 interface PreviewRouterProps {

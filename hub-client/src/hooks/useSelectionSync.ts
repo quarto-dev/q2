@@ -11,8 +11,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { SourceLocation } from '../components/render/DoubleBufferedIframe';
-import type { MorphIframeHandle } from '../components/render/MorphIframe';
+import type { SourceLocation } from '@quarto/preview-renderer/iframe/DoubleBufferedIframe';
+import type { MorphIframeHandle } from '@quarto/preview-renderer/iframe/MorphIframe';
 
 interface UseSelectionSyncOptions {
   /** Reference to Monaco editor instance */

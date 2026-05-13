@@ -11,6 +11,14 @@ export default defineConfig({
         __dirname,
         '../quarto-automerge-schema/src/index.ts',
       ),
+      '@quarto/quarto-sync-client': path.resolve(
+        __dirname,
+        '../quarto-sync-client/src/index.ts',
+      ),
+      '@quarto/preview-runtime': path.resolve(
+        __dirname,
+        '../preview-runtime/src',
+      ),
     },
   },
   test: {
