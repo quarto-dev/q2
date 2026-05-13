@@ -194,6 +194,7 @@ async fn main() -> anyhow::Result<()> {
         sync_interval_secs,
         watch_enabled: !args.no_watch,
         watch_debounce_ms: args.watch_debounce,
+        watch_filter: Default::default(),
         auth_config,
         allow_insecure_auth: args.allow_insecure_auth,
         register_root_ws: true,

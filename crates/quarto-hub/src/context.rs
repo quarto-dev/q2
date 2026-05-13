@@ -24,6 +24,7 @@ use crate::resource::{create_binary_document, detect_mime_type};
 use crate::storage::StorageManager;
 use crate::sync::{SyncAllResult, SyncResult, sync_all_documents, sync_file_by_path};
 use crate::sync_state::SyncState;
+use crate::watch::WatchFilter;
 
 /// Configuration for the hub.
 #[derive(Debug)]
@@ -50,6 +51,12 @@ pub struct HubConfig {
     /// Debounce duration for filesystem events in milliseconds.
     /// Default: 500ms.
     pub watch_debounce_ms: u64,
+
+    /// Which files surface as watch events. See [`WatchFilter`].
+    /// Default: `WatchFilter::QmdOnly` (legacy hub behaviour).
+    /// `quarto-preview` overrides this to `WatchFilter::PreviewBroad`
+    /// so config + asset edits trigger re-render.
+    pub watch_filter: WatchFilter,
 
     /// OAuth2 auth configuration. None = auth disabled.
     pub auth_config: Option<AuthConfig>,
@@ -78,6 +85,7 @@ impl Default for HubConfig {
             sync_interval_secs: Some(30),
             watch_enabled: true,
             watch_debounce_ms: 500,
+            watch_filter: WatchFilter::default(),
             auth_config: None,
             allow_insecure_auth: false,
             register_root_ws: true,
