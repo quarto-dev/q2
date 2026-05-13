@@ -15,7 +15,7 @@ import { readFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
-import { loadUserGrammar, type UserGrammarHighlighter } from './userGrammarHighlight';
+import { loadUserGrammar, type UserGrammarHighlighter } from './Highlight';
 
 type SpanTriple = [number, number, string];
 
@@ -23,7 +23,8 @@ let highlighter: UserGrammarHighlighter;
 
 beforeAll(async () => {
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const repoRoot = resolve(__dirname, '../../..');
+  // ts-packages/preview-runtime/src/userGrammar/ → repo root is 4 levels up.
+  const repoRoot = resolve(__dirname, '../../../..');
   const fixtureDir = join(
     repoRoot,
     'crates/quarto-highlight/tests/fixtures/user-grammar-toml',

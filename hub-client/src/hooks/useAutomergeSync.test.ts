@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-// Mock automergeSync service
-vi.mock('../services/automergeSync', () => ({
+// Mock automergeSync service (now @quarto/preview-runtime)
+vi.mock('@quarto/preview-runtime', () => ({
   getFileContent: vi.fn(),
   setImmediateFileChangeCallback: vi.fn(),
 }));
@@ -19,7 +19,7 @@ vi.mock('../utils/diffToMonacoEdits', () => ({
 }));
 
 import { useAutomergeSync } from './useAutomergeSync';
-import { getFileContent, setImmediateFileChangeCallback } from '../services/automergeSync';
+import { getFileContent, setImmediateFileChangeCallback } from '@quarto/preview-runtime';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { setVisibility, resetVisibility, fireWindowFocus } from '../test-utils/visibility';

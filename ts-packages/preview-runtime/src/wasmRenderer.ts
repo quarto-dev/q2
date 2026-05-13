@@ -5,12 +5,14 @@
  * VFS operations, QMD rendering, and SASS compilation.
  */
 
+/// <reference path="./vite-shims.d.ts" />
+
 import type { Diagnostic, RenderResponse } from '@quarto/preview-renderer/types/diagnostic';
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import type { AstResponse } from 'wasm-quarto-hub-client'
-import { discoverUserGrammars } from './userGrammarDiscovery';
-import { UserGrammarCache } from './userGrammarCache';
-import { loadUserGrammar } from './userGrammarHighlight';
+import { discoverUserGrammars } from './userGrammar/Discovery';
+import { UserGrammarCache } from './userGrammar/Cache';
+import { loadUserGrammar } from './userGrammar/Highlight';
 
 // Response types from WASM module
 interface VfsResponse {
@@ -152,8 +154,15 @@ export async function initWasm(): Promise<void> {
  */
 async function setupSassVfsCallbacks(): Promise<void> {
   try {
-    // Import the sass bridge module
-    const sassModule = await import('../wasm-js-bridge/sass.js');
+    // Import the sass bridge module. The same module is loaded by the
+    // Rust WASM at init-time via `wasm-bindgen`'s `raw_module = "/src/
+    // wasm-js-bridge/sass.js"` annotation; using the same Vite-root
+    // absolute path here lets both consumers (Rust + TS) land on the
+    // same module instance regardless of which workspace package this
+    // file is bundled into. The consumer (hub-client today, the q2
+    // preview SPA later) is required to host these bridge files at
+    // `src/wasm-js-bridge/`.
+    const sassModule = await import('/src/wasm-js-bridge/sass.js');
 
     // Create VFS read callback
     const readFn = (path: string): string | null => {

@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { initWasm, vfsAddFile, vfsAddBinaryFile, vfsClear } from './wasmRenderer';
+import { initWasm, vfsAddFile, vfsAddBinaryFile, vfsClear } from '@quarto/preview-runtime';
 import { buildAssetManifest, type ManifestCacheEntry } from '../components/render/q2-preview/assetWalker';
 
 interface RenderResponse {

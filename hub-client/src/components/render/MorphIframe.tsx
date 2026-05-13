@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useImperativeHandle } from 'react';
 import type { Ref } from 'react';
 import morphdom from 'morphdom';
-import { postProcessIframe } from '../../utils/iframePostProcessor';
+import { postProcessIframe } from '@quarto/preview-renderer/utils/iframePostProcessor';
 
 // Methods exposed via ref
 export interface MorphIframeHandle {

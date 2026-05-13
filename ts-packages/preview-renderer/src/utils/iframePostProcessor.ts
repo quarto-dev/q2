@@ -9,8 +9,8 @@
  *   switch the active editor file (bd-lnd3).
  */
 
-import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
-import { resolveRelativePath, guessMimeType } from '@quarto/preview-renderer/utils/vfsPaths';
+import { vfsReadFile, vfsReadBinaryFile } from '@quarto/preview-runtime';
+import { resolveRelativePath, guessMimeType } from './vfsPaths';
 
 /**
  * VFS path under which the website renderer flushes its

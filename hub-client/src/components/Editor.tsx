@@ -12,8 +12,8 @@ import {
   renameFile,
   exportProjectAsZip,
   type EditorContentChange,
-} from '../services/automergeSync';
-import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
+} from '@quarto/preview-runtime';
+import { vfsAddFile, isWasmReady } from '@quarto/preview-runtime';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
 import { processFileForUpload } from '../services/resourceService';
@@ -55,7 +55,7 @@ interface Props {
   /** Callback to update URL when file changes */
   onNavigateToFile: (filePath: string, options?: { anchor?: string; replace?: boolean }) => void;
   /** Actor ID -> identity mapping from the IndexDocument */
-  identities?: Record<string, import('../services/automergeSync').ActorIdentity>;
+  identities?: Record<string, import('@quarto/preview-runtime').ActorIdentity>;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
 }

@@ -39,13 +39,14 @@ vi.mock('./userSettings', () => ({
   }),
 }));
 
-// Mock the automergeSync module. Tests that need a live handle install one
-// into state.currentHandle directly via `_getStateForTesting`.
-vi.mock('./automergeSync', () => ({
+// Mock the automergeSync module (now @quarto/preview-runtime). Tests
+// that need a live handle install one into state.currentHandle directly
+// via `_getStateForTesting`.
+vi.mock('@quarto/preview-runtime', () => ({
   getFileHandle: vi.fn().mockReturnValue(null),
 }));
 
-import { getFileHandle } from './automergeSync';
+import { getFileHandle } from '@quarto/preview-runtime';
 const mockGetFileHandle = vi.mocked(getFileHandle);
 
 describe('presenceService', () => {

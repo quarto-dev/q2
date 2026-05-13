@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
-import { parseQmdToAst, renderPageInProject, isWasmReady, incrementalWriteQmd } from '../../services/wasmRenderer';
+import { parseQmdToAst, renderPageInProject, isWasmReady, incrementalWriteQmd } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '../../utils/pipelineKind';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';

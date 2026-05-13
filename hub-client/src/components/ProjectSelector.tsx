@@ -11,7 +11,7 @@ import {
   createProject as wasmCreateProject,
   type ProjectChoice,
   type ProjectFile,
-} from '../services/wasmRenderer';
+} from '@quarto/preview-runtime';
 import { DEFAULT_SYNC_SERVER, buildProjectSetLinkUrl } from '../utils/routing';
 import ShareDialog from './ShareDialog';
 import './ProjectSelector.css';

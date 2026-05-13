@@ -18,11 +18,11 @@
  * `loadUserGrammar` with an in-memory factory.
  */
 
-import type { GrammarDescriptor } from './userGrammarDiscovery';
+import type { GrammarDescriptor } from './Discovery';
 import type {
   LoadUserGrammarArgs,
   UserGrammarHighlighter,
-} from './userGrammarHighlight';
+} from './Highlight';
 
 /**
  * Minimal surface that the cache needs from a `JsUserGrammars`

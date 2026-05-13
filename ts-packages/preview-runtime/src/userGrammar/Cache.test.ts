@@ -10,12 +10,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { UserGrammarCache } from './userGrammarCache';
-import type { GrammarDescriptor } from './userGrammarDiscovery';
+import { UserGrammarCache } from './Cache';
+import type { GrammarDescriptor } from './Discovery';
 import type {
   UserGrammarHighlighter,
   LoadUserGrammarArgs,
-} from './userGrammarHighlight';
+} from './Highlight';
 
 interface FakeBinary {
   bytes: Uint8Array;

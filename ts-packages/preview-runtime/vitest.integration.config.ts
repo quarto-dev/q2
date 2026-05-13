@@ -9,6 +9,18 @@ export default defineConfig({
         __dirname,
         '../../hub-client/wasm-quarto-hub-client/wasm_quarto_hub_client.js',
       ),
+      '@quarto/quarto-automerge-schema': path.resolve(
+        __dirname,
+        '../quarto-automerge-schema/src/index.ts',
+      ),
+      '@quarto/quarto-sync-client': path.resolve(
+        __dirname,
+        '../quarto-sync-client/src/index.ts',
+      ),
+      '@quarto/preview-renderer': path.resolve(
+        __dirname,
+        '../preview-renderer/src',
+      ),
     },
   },
   test: {

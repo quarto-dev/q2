@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { vfsReadFile } from '../../../services/wasmRenderer';
+import { vfsReadFile } from '@quarto/preview-runtime';
 import { DEFAULT_CSS_ARTIFACT_PATH } from '@quarto/preview-renderer/types/artifactPaths';
 import { buildAssetManifest, type ManifestCacheEntry } from './assetWalker';
 

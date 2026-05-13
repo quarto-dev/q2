@@ -14,8 +14,8 @@ import { fileURLToPath } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { JSDOM } from 'jsdom';
 
-import { discoverUserGrammars } from './userGrammarDiscovery';
-import { loadUserGrammar } from './userGrammarHighlight';
+import { discoverUserGrammars } from '@quarto/preview-runtime/userGrammar/Discovery';
+import { loadUserGrammar } from '@quarto/preview-runtime/userGrammar/Highlight';
 
 // ---------------------------------------------------------------------------
 // Types

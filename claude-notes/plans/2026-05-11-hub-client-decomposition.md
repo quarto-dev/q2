@@ -3,7 +3,7 @@ date: 2026-05-11
 updated: 2026-05-13
 branch: beads/bd-hfjj-hub-client-decomposition-shared
 beads: bd-hfjj (sub-epic of bd-kw93)
-status: approved 2026-05-13; Phases 0–3 complete; Phase 4 next
+status: approved 2026-05-13; Phases 0–3 + 5 complete; Phase 4 next (Phase 5 ↔ Phase 4 order swapped on 2026-05-13 — see §Phase ordering note)
 ---
 
 # Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa
@@ -257,16 +257,24 @@ Note: `types/project.test.ts` moves with `types/project.ts`.
   (+ any colocated tests)
 - `hub-client/src/services/automergeSync.ts` → `automergeSync.ts`
   (+ tests)
-- `hub-client/src/components/render/q2-preview/assetWalker.ts` →
-  `assetWalker.ts` (the *implementation*; the test moves alongside
-  it here as well, since it tests the runtime function. Update the
-  preview-renderer cross-ref note above.)
 - `hub-client/src/services/userGrammarDiscovery.ts` →
   `userGrammar/Discovery.ts`
 - `hub-client/src/services/userGrammarCache.ts` →
   `userGrammar/Cache.ts`
 - `hub-client/src/services/userGrammarHighlight.ts` →
   `userGrammar/Highlight.ts`
+
+**Note (2026-05-13):** the original plan also moved
+`q2-preview/assetWalker.ts` here. Re-deciding: it stays *with*
+`q2-preview/` (i.e., it moves to preview-renderer in Phase 4 along
+with the rest of `q2-preview/`). Rationale: assetWalker is an
+AST-walker that *uses* VFS, not a VFS service itself, and moving it
+into runtime would force a circular preview-runtime → preview-renderer
+dependency (assetWalker imports `vfsPaths` from preview-renderer; the
+plan's stated invariant is unidirectional renderer → runtime). The
+plan's prior reasoning ("the test moves alongside since it tests the
+runtime function") was a weak signal — the test exercises the manifest
+walk, not the runtime per se.
 
 ### Staying in hub-client (explicit list, for review)
 
@@ -478,6 +486,22 @@ The TDD policy applies as "tests-stay-green-across-move." We are
 not adding behavior; we are relocating it. Each phase's invariant
 is: the same set of tests passes before and after the move.
 
+### Phase ordering note (2026-05-13)
+
+The phases below are labeled in their *original* order. As of
+2026-05-13, execution order is **0, 1, 2, 3, 5, 4, 6, 7** — Phase 5
+(services to preview-runtime) is done *before* Phase 4 (q2-preview /
+iframe wrappers / overlays).
+
+Reason: most Phase-4 files import `services/wasmRenderer` or
+`utils/iframePostProcessor` (which itself was deferred from Phase 2 to
+Phase 5). Moving services first means Phase 4's imports already point
+at `@quarto/preview-runtime` by the time we move them. The original
+"renderer first" ordering was a hedge against WASM-test breakage;
+"services first" turns out to be *safer* because hub-client's full
+test surface keeps validating the renderer-side code during the
+services move, so any regression surfaces immediately.
+
 ### Phase 0 — Pre-flight (no code changes)
 
 - [x] Verify the starting workspace builds clean.
@@ -667,25 +691,33 @@ internally consistent.
 
 ### Phase 5 — Move services to preview-runtime
 
-- [ ] Move `wasmRenderer.ts` → `preview-runtime/src/wasmRenderer.ts`.
-- [ ] Move `automergeSync.ts` → `preview-runtime/src/automergeSync.ts`.
-- [ ] Move `assetWalker.ts` (from `q2-preview/`) →
-      `preview-runtime/src/assetWalker.ts`.
-- [ ] Move `iframePostProcessor.ts` (+ `.test.ts`,
+*(Executed before Phase 4 — see §Phase ordering note.)*
+
+- [x] Move `wasmRenderer.ts` (+ test) → `preview-runtime/src/`.
+- [x] Move `automergeSync.ts` (+ test) → `preview-runtime/src/`.
+- [x] ~~Move `assetWalker.ts` (from `q2-preview/`) →
+      `preview-runtime/src/assetWalker.ts`.~~
+      *Re-decided 2026-05-13 (see §"Moving to preview-runtime"
+      note): assetWalker stays with `q2-preview/` and moves in
+      Phase 4. Rationale there.*
+- [x] Move `iframePostProcessor.ts` (+ `.test.ts`,
       `.integration.test.ts`) from hub-client to
       `preview-renderer/src/utils/` — deferred from Phase 2
       because it imports `vfsReadFile`/`vfsReadBinaryFile` from
       `wasmRenderer`. After this phase the import resolves via
       `@quarto/preview-runtime`.
-- [ ] Move the three `userGrammar*` files →
+- [x] Move the three `userGrammar*` files →
       `preview-runtime/src/userGrammar/` (renamed: `Discovery.ts`,
       `Cache.ts`, `Highlight.ts`).
-- [ ] Move colocated tests.
-- [ ] `preview-renderer`'s `assetWalker.ts` consumers (only the
-      Q2PreviewIframe boot path) now import from
-      `@quarto/preview-runtime`. This is a renderer→runtime
-      dependency — declare it in `preview-renderer/package.json`'s
-      `dependencies` (workspace `*`).
+- [x] Move colocated tests (Discovery.test, Cache.test,
+      Highlight.wasm.test). Updated `Highlight.wasm.test.ts`'s
+      `repoRoot` computation from `../../..` (relative to
+      `hub-client/src/services/`) to `../../../..` (relative to
+      `ts-packages/preview-runtime/src/userGrammar/`).
+- [x] `iframePostProcessor`'s consumers (now in preview-renderer)
+      import from `@quarto/preview-runtime`. This is a
+      renderer→runtime dependency — declared in
+      `preview-renderer/package.json`'s `dependencies` (workspace `*`).
 
       Tradeoff to note: this means preview-renderer is no longer
       "pure React with no WASM transitive." It pulls in
@@ -698,16 +730,35 @@ internally consistent.
       components that drive a render, runtime = the things they
       call out to." That's still useful as a split.
 
-- [ ] Update every hub-client import of these services to
+- [x] Update every hub-client import of these services to
       `@quarto/preview-runtime`.
-- [ ] Configure `preview-runtime/vitest.config.ts` (and
-      `vitest.wasm.config.ts` if needed) with the WASM alias.
-      Confirm WASM-using tests run.
+      *(38 imports across 31 files via `/tmp/rewrite-phase5-imports.py`,
+      including short-form intra-`services/` imports — the script ran in
+      two passes. Caught the unusual cases manually: `vi.mock('./...')`
+      and inline `import('...').T` type imports.)*
+- [x] Configure `preview-runtime/vitest.config.ts` (and
+      `vitest.integration.config.ts`) with the WASM alias plus
+      workspace-package aliases (mirrors hub-client's pattern).
+- [x] Set up the type plumbing so both tsc (per-package build) and
+      hub-client's transitive compilation see ambient module
+      declarations: `vite-shims.d.ts` for the `*.wasm?url` and
+      `/src/wasm-js-bridge/*.js` paths, plus `wasm-quarto-hub-client.d.ts`
+      copied alongside it. Pulled in by triple-slash references at the
+      top of `preview-runtime/src/index.ts`.
+- [x] Update hub-client's three vitest configs to alias
+      `@quarto/preview-runtime` to `ts-packages/preview-runtime/src`
+      (Vite resolves through the `source` condition; vitest needs the
+      explicit alias on fresh clones).
 
 **Acceptance:**
 - Same as Phase 4, plus:
 - `npm test --workspace @quarto/preview-runtime` passes,
-  including any WASM-using tests.
+  including any WASM-using tests. ✓ (60 tests / 6 files)
+- hub-client `test`, `test:integration`, `test:wasm`, `build:all`
+  all green. ✓
+- `cargo xtask verify --skip-rust-tests` green. ✓
+- preview-renderer tests still pass (133 unit + 8 integration). ✓
+- Both packages build via `tsc`. ✓
 - hub-client still builds and tests cleanly.
 - Manual: `npm run dev` in hub-client → preview pane renders →
   WASM init happens → q2-preview format displays.

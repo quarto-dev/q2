@@ -12,6 +12,22 @@ export default defineConfig({
         __dirname,
         '../../hub-client/wasm-quarto-hub-client/wasm_quarto_hub_client.js',
       ),
+      // Workspace-package aliases to source — mirrors the pattern in
+      // hub-client/vitest.config.ts. Vitest doesn't honor the `source`
+      // export condition on fresh clones, so workspace deps need
+      // explicit aliases when no `dist/` has been built.
+      '@quarto/quarto-automerge-schema': path.resolve(
+        __dirname,
+        '../quarto-automerge-schema/src/index.ts',
+      ),
+      '@quarto/quarto-sync-client': path.resolve(
+        __dirname,
+        '../quarto-sync-client/src/index.ts',
+      ),
+      '@quarto/preview-renderer': path.resolve(
+        __dirname,
+        '../preview-renderer/src',
+      ),
     },
   },
   test: {

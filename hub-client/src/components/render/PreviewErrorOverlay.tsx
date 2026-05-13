@@ -1,5 +1,5 @@
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
-import type { Pass1Failure } from '../../services/wasmRenderer';
+import type { Pass1Failure } from '@quarto/preview-runtime';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { usePreference } from '../../hooks/usePreference';
 

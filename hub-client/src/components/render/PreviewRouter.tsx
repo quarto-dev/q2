@@ -3,7 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { isQmdFile } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
-import { parseQmdToAst, isWasmReady, initWasm } from '../../services/wasmRenderer';
+import { parseQmdToAst, isWasmReady, initWasm } from '@quarto/preview-runtime';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
 import { FallbackView, NonQmdPlaceholderView } from './PreviewStaticInfoViews';

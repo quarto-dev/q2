@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const vfsMock = vi.fn();
-vi.mock('../../../services/wasmRenderer', () => ({
+vi.mock('@quarto/preview-runtime', () => ({
     vfsReadBinaryFile: (path: string) => vfsMock(path),
 }));
 

@@ -15,6 +15,16 @@
       "types": "./src/index.ts",
       "source": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./test-utils/*": {
+      "types": "./src/test-utils/*.ts",
+      "source": "./src/test-utils/*.ts",
+      "import": "./dist/test-utils/*.js"
+    },
+    "./userGrammar/*": {
+      "types": "./src/userGrammar/*.ts",
+      "source": "./src/userGrammar/*.ts",
+      "import": "./dist/userGrammar/*.js"
     }
   },
   "files": [
@@ -26,11 +36,14 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:wasm": "vitest run --config vitest.wasm.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@automerge/automerge": "^2.2.9",
     "@automerge/automerge-repo": "^2.5.1",
+    "@quarto/pandoc-types": "*",
+    "@quarto/preview-renderer": "*",
     "@quarto/quarto-automerge-schema": "*",
     "@quarto/quarto-sync-client": "*",
     "web-tree-sitter": "^0.26.8"

@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { discoverUserGrammars } from './userGrammarDiscovery';
+import { discoverUserGrammars } from './Discovery';
 
 describe('discoverUserGrammars', () => {
   it('returns [] for a project with no grammars directory', () => {

@@ -29,7 +29,7 @@ import {
   getFileContent,
   setImmediateFileChangeCallback,
   type EditorContentChange,
-} from '../services/automergeSync';
+} from '@quarto/preview-runtime';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 
 interface UseAutomergeSyncOptions {

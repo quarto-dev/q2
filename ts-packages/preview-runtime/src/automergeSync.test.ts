@@ -19,7 +19,7 @@ import {
   _setClientForTesting,
   _getCallbacksForTesting,
 } from './automergeSync';
-import { createMockSyncClient, type MockSyncClient } from '../test-utils/mockSyncClient';
+import { createMockSyncClient, type MockSyncClient } from './test-utils/mockSyncClient';
 
 // Mock the wasmRenderer module to avoid WASM initialization
 vi.mock('./wasmRenderer', () => ({

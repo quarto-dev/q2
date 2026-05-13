@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import { actorColor } from '../hooks/useReplayMode';
-import type { ActorIdentity } from '../services/automergeSync';
-import { getActorId } from '../services/automergeSync';
+import type { ActorIdentity } from '@quarto/preview-runtime';
+import { getActorId } from '@quarto/preview-runtime';
 import './ReplayDrawer.css';
 
 interface Props {

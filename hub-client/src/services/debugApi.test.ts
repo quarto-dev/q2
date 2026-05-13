@@ -33,8 +33,12 @@ const wasmRendererMocks = vi.hoisted(() => ({
   vfsReadBinaryFile: vi.fn<(path: string) => { success: boolean; content?: string }>(),
 }));
 
-vi.mock('./automergeSync', () => automergeSyncMocks);
-vi.mock('./wasmRenderer', () => wasmRendererMocks);
+// Both modules now live in @quarto/preview-runtime; the barrel re-exports
+// everything, so a single mock of the barrel covers both surfaces.
+vi.mock('@quarto/preview-runtime', () => ({
+  ...automergeSyncMocks,
+  ...wasmRendererMocks,
+}));
 
 import {
   installDebugApi,

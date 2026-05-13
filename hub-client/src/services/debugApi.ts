@@ -26,7 +26,7 @@ import {
   createFile,
   createBinaryFile,
   deleteFile,
-} from './automergeSync';
+} from '@quarto/preview-runtime';
 import {
   renderToHtml,
   setRenderListener,
@@ -34,7 +34,7 @@ import {
   vfsReadBinaryFile,
   type RenderResult,
   type RenderToHtmlOptions,
-} from './wasmRenderer';
+} from '@quarto/preview-runtime';
 
 export interface QuartoDebugProjectInfo {
   id: string;

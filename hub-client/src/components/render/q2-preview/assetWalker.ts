@@ -18,7 +18,7 @@
  * stable image content keeps the same blob URL across renders.
  */
 
-import { vfsReadBinaryFile } from '../../../services/wasmRenderer';
+import { vfsReadBinaryFile } from '@quarto/preview-runtime';
 import { resolveRelativePath, guessMimeType } from '@quarto/preview-renderer/utils/vfsPaths';
 
 export interface ManifestCacheEntry {

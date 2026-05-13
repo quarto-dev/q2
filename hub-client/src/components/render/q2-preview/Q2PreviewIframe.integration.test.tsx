@@ -18,7 +18,7 @@ import { act } from 'react';
 // map so the asset-manifest test can vary which paths return which bytes.
 let mockBytes: string | null = null;
 const mockBinaryByPath: Map<string, string | null> = new Map();
-vi.mock('../../../services/wasmRenderer', () => ({
+vi.mock('@quarto/preview-runtime', () => ({
     vfsReadFile: vi.fn(() => {
         if (mockBytes === null) return { success: false };
         return { success: true, content: mockBytes };

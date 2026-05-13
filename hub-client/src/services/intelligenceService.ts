@@ -19,7 +19,7 @@ import type {
   LspFoldingRangesResponse,
   LspDiagnosticsResponse,
 } from '@quarto/preview-renderer/types/intelligence';
-import { initWasm } from './wasmRenderer';
+import { initWasm } from '@quarto/preview-runtime';
 import { isQmdFile } from '@quarto/preview-renderer/types/project';
 
 // Re-export types for convenience
