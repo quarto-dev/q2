@@ -55,6 +55,14 @@ interface WasmModuleExtended {
     path: string,
     user_grammars?: unknown,
   ) => Promise<string>;
+  // Same as `render_page_in_project` but maps the default-when-absent
+  // `html` format to `q2-preview`, so a bare-markdown file rendered
+  // under `quarto preview` flows through the AST-iframe pipeline and
+  // returns `ast_json`. Explicit non-html formats pass through.
+  render_page_for_preview: (
+    path: string,
+    user_grammars?: unknown,
+  ) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
@@ -408,6 +416,24 @@ export async function renderPageInProject(
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   return JSON.parse(await wasm.render_page_in_project(path, userGrammars));
+}
+
+/**
+ * Same as [`renderPageInProject`] but applies `quarto preview`'s
+ * default-format substitution: documents whose detected format is
+ * `html` (the default when no `format:` is set in the YAML) render
+ * through the q2-preview pipeline and return `ast_json` instead of
+ * `html`. Explicit non-html formats pass through unchanged.
+ *
+ * Use this from the q2-preview SPA. hub-client keeps using
+ * `renderPageInProject` so its own format dispatch is unchanged.
+ */
+export async function renderPageForPreview(
+  path: string,
+  userGrammars?: unknown,
+): Promise<RenderResponse> {
+  const wasm = getWasm();
+  return JSON.parse(await wasm.render_page_for_preview(path, userGrammars));
 }
 
 /**

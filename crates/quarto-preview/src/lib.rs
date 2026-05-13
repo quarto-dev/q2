@@ -1,30 +1,36 @@
 //! `q2 preview` server — wraps quarto-hub and serves the embedded
 //! q2-preview-spa bundle.
 //!
-//! Phase A scope (bd-yxqt): the bundle is served, the smoke test
-//! passes, but the hub server isn't yet layered in — A.5 (bd-mflk)
-//! adds the actual `quarto_hub::server::run_server` integration plus
-//! the temp `data_dir` lifecycle. For now this crate is just an axum
-//! shell that hosts the SPA, modelled after `quarto-trace-server`.
+//! Phase A scope (bd-mflk): one process listening on one port serves
+//! both the SPA (at `/` + asset paths via fallback) AND the hub's
+//! API/auth/ws routes (`/api/*`, `/auth/*`, `/ws`). The hub registers
+//! its samod ws endpoint at `/ws` only (not `/`) so the SPA's
+//! `index.html` can own `/`; that's controlled via
+//! `HubConfig::register_root_ws = false`.
 
-use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
 use axum::{
     Router,
-    extract::State,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::get,
 };
 use include_dir::{Dir, include_dir};
+use quarto_hub::{StorageManager, context::HubConfig, server};
 
 /// The SPA bundle embedded at build time. See `build.rs` for how the
 /// source directory is chosen (real `q2-preview-spa/dist/` if present,
 /// else a placeholder).
 static EMBEDDED_SPA: Dir<'_> = include_dir!("$QUARTO_PREVIEW_EMBED_DIR");
+
+/// Optional override pointing at a SPA bundle on disk. Set once at
+/// `run()` start and read on every SPA-fallback invocation. Process-
+/// wide because the SPA fallback handler is stateless from axum's POV
+/// (it composes onto a router whose typed state is `Arc<HubContext>`,
+/// so adding handler state would require nested routers).
+static SPA_DIR_OVERRIDE: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 /// Runtime configuration for the preview server.
 #[derive(Debug, Clone)]
@@ -33,75 +39,91 @@ pub struct PreviewConfig {
     pub host: String,
     /// Port to bind to. `0` lets the OS pick a free port.
     pub port: u16,
+    /// Project root to watch + serve. Files in the VFS come from here.
+    pub project_root: Option<PathBuf>,
+    /// Directory the hub's samod store + lockfile live in. Typically a
+    /// `tempfile::TempDir` so each `q2 preview` is ephemeral. The
+    /// caller owns the `TempDir` so it survives until `run()` returns.
+    pub data_dir: PathBuf,
     /// If set, serve SPA assets from this directory at runtime instead
     /// of the embedded bundle. Same pattern as `QUARTO_TRACE_VIEWER_DIR`
     /// for the trace viewer; lets UI iteration skip Rust rebuilds.
     pub spa_dir_override: Option<PathBuf>,
 }
 
-impl Default for PreviewConfig {
-    fn default() -> Self {
-        Self {
-            host: "127.0.0.1".to_string(),
-            port: 0,
-            spa_dir_override: std::env::var("QUARTO_PREVIEW_DIR").ok().map(PathBuf::from),
-        }
-    }
-}
-
-/// Shared server state. Cloneable so axum can hand it to each handler.
-#[derive(Clone)]
-struct AppState {
-    spa_dir_override: Option<Arc<PathBuf>>,
-}
-
-/// Build the axum router. Exposed for testing — Phase A.5 will layer
-/// the hub server's router on top of this one.
-pub fn router(config: &PreviewConfig) -> Router {
-    let state = AppState {
-        spa_dir_override: config.spa_dir_override.clone().map(Arc::new),
-    };
-    Router::new().fallback(get(spa_handler)).with_state(state)
-}
-
-/// Bind the server and run it until shutdown.
-///
-/// Returns the bound address before serving so callers (e.g. the
-/// future A.5 launcher) can know what URL to advertise / pass to
-/// `open`. The actual serve runs to completion on the current task.
+/// Run the preview server. Returns when the server is shut down (ctrl-c
+/// or SIGTERM, handled inside `quarto_hub::server::run_server_with`).
 pub async fn run(config: PreviewConfig) -> Result<()> {
-    let addr: SocketAddr = format!("{}:{}", config.host, config.port)
-        .parse()
-        .with_context(|| format!("parsing bind addr {}:{}", config.host, config.port))?;
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("binding {addr}"))?;
-    let bound = listener.local_addr()?;
-    tracing::info!(addr = %bound, "q2 preview server listening");
+    // Stash the SPA override before serving so the fallback handler
+    // can read it. `set` is idempotent — calling `run()` twice in the
+    // same process (uncommon but possible in tests) is harmless: the
+    // first call's override wins.
+    let _ = SPA_DIR_OVERRIDE.set(config.spa_dir_override.clone());
 
-    let app = router(&config);
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+    let storage = build_storage(&config).context("building storage manager")?;
+    let hub_config = build_hub_config(&config);
+
+    server::run_server_with(storage, hub_config, Some(extend_with_spa))
         .await
-        .context("server error")?;
+        .context("quarto-hub server failed")?;
     Ok(())
 }
 
-async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+/// Construct the StorageManager. `project_root` decides project vs
+/// standalone mode; either way, `config.data_dir` is the storage root.
+fn build_storage(config: &PreviewConfig) -> Result<StorageManager> {
+    match &config.project_root {
+        Some(root) => StorageManager::new_with_data_dir(root, &config.data_dir)
+            .map_err(|e| anyhow::anyhow!("storage init failed: {e}")),
+        None => StorageManager::new_standalone(&config.data_dir)
+            .map_err(|e| anyhow::anyhow!("storage init failed: {e}")),
+    }
+}
+
+fn build_hub_config(config: &PreviewConfig) -> HubConfig {
+    HubConfig {
+        port: config.port,
+        host: config.host.clone(),
+        peers: Vec::new(),
+        // Phase A is engine-less, but file-watching is what makes
+        // `q2 preview` responsive to edits — keep it on.
+        watch_enabled: true,
+        watch_debounce_ms: 500,
+        // Light periodic sync — the user can Ctrl-C any time, and
+        // shutdown does a final sync anyway. 5 seconds is a reasonable
+        // crash-resilience window for a *preview* invocation.
+        sync_interval_secs: Some(5),
+        // Preview never wants OIDC: the server binds to loopback only
+        // and lives only as long as the foreground CLI invocation.
+        auth_config: None,
+        allow_insecure_auth: false,
+        // SPA owns `/`; hub gets `/ws` only.
+        register_root_ws: false,
+    }
+}
+
+/// Hub-router extension that adds the SPA fallback. Anything that
+/// doesn't match a hub route (`/api/*`, `/auth/*`, `/ws`, …) falls
+/// through to this handler, which serves `index.html` for unknown
+/// paths so client-side routing works.
+///
+/// Pub-visible because the smoke test exercises it directly without
+/// spinning up a real hub.
+pub fn extend_with_spa<S>(router: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router.fallback(spa_handler)
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
-async fn spa_handler(
-    State(state): State<AppState>,
-    req: axum::http::Request<axum::body::Body>,
-) -> Response {
+async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
     let path = req.uri().path();
     let rel = path.trim_start_matches('/');
     let rel = if rel.is_empty() { "index.html" } else { rel };
 
-    if let Some(override_dir) = state.spa_dir_override.as_deref() {
+    if let Some(Some(override_dir)) = SPA_DIR_OVERRIDE.get() {
         return serve_from_disk(override_dir, rel).await;
     }
 
@@ -109,8 +131,8 @@ async fn spa_handler(
     if let Some(file) = EMBEDDED_SPA.get_file(rel) {
         return asset_response(rel, file.contents().to_vec());
     }
-    // SPA fallback: any non-asset path gets `index.html` for client-side
-    // routing.
+    // SPA fallback: any non-asset path gets `index.html` for client-
+    // side routing.
     if let Some(index) = EMBEDDED_SPA.get_file("index.html") {
         return asset_response("index.html", index.contents().to_vec());
     }

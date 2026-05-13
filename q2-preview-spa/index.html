@@ -5,15 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quarto Preview</title>
     <style>
-      body {
+      /* The renderer iframe (Q2PreviewIframe) sizes itself to 100% of
+         its container's height, so the container chain (html → body →
+         #root) must have a definite height — `min-height: 100vh` on
+         #root alone collapses the iframe down to its intrinsic
+         content height and clips long documents at the SPA root.
+         Same pattern hub-client uses. */
+      html,
+      body,
+      #root {
         margin: 0;
         padding: 0;
+        height: 100%;
+      }
+      body {
         font-family:
           -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      }
-      #root {
-        width: 100%;
-        min-height: 100vh;
       }
     </style>
   </head>

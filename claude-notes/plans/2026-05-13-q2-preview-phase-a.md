@@ -277,6 +277,65 @@ a Quarto project pops a browser tab, the preview pane renders,
 `Ctrl-C` cleans up. Per CLAUDE.md §End-to-end verification, record
 the inspection.
 
+**Status (bd-mflk, 2026-05-13): done.** End-to-end verified against
+the real binary via Chrome DevTools — `# Hello, q2 preview!` +
+paragraph content render inside `<Q2PreviewIframe>` with the
+compiled Bootstrap theme applied; on-disk edits propagate to the
+iframe within ~2 s.
+
+The original A.5 work expanded once the binary was driven for the
+first time. Documented here for posterity (these surfaced gaps the
+plan didn't anticipate):
+
+- **A.5.4b — doc-id prefix.** `/health` returns the bare samod doc
+  id (e.g. `4ByAxLmG…`); `@quarto/preview-runtime`'s `connect()`
+  expects automerge-repo's `automerge:<id>` form. PreviewApp's
+  `fetchIndexDocId` now normalizes. Mirrors how hub-client's
+  `App.tsx` normalizes `shareRoute.indexDocId` (App.tsx:287-290).
+  Plan deviation: dropped URL-fragment indexDocId carrier (Q-A3
+  resolution) in favour of `/health` because pre-binding the
+  listener to thread the id through the CLI would have required
+  refactoring the hub's startup; the `/health` route already
+  exposes `index_document_id` and runs without auth in preview
+  mode.
+
+- **A.5.4c — `render_page_for_preview` WASM entry.** A bare-
+  markdown document with no `format:` key detected as `html`,
+  causing the WASM dispatch to take the HTML pipeline and return
+  `{ html: … }` instead of `{ ast_json: … }`. The user's
+  intent for `quarto preview` is "default `html` → render through
+  q2-preview"; added a new `#[wasm_bindgen]` entry point that
+  applies that mapping (and refactored `render_*_to_response` to
+  take a `prefer_preview_format: bool`). Hub-client's
+  `render_page_in_project` path is unchanged so its dispatch on
+  YAML-declared format is preserved.
+
+- **A.5.4d — cold-start peer race + multi-entry Vite build.**
+  Two bugs uncovered together:
+  1. `quarto-sync-client.connect()`'s 1 ms `waitForPeer` is too
+     aggressive when there is no IndexedDB cache to fall back to.
+     `findDoc()` then fired `handle.request()` before the samod
+     handshake completed, the synchronizer saw `#peers` empty,
+     and immediately marked the index doc unavailable. Added an
+     optional `peerTimeoutMs` parameter (default preserved for
+     hub-client); the q2-preview SPA passes 5000 ms.
+  2. `Q2PreviewIframe` loads `/q2-preview.html` as a sandboxed
+     renderer host. The SPA's fallback was serving `index.html`
+     for that path → recursive SPA load. Added a separate Vite
+     rollup input + the matching `q2-preview.html` + entry stub,
+     mirroring `hub-client/vite.config.ts`'s pattern.
+
+- **A.5.4e — theme styling.** `Q2PreviewIframe` already owns the
+  blob-URL + `UPDATE_THEME` plumbing for compiled theme CSS, but
+  it depends on the parent passing `themeFingerprint`. PreviewApp
+  now threads `result.theme_fingerprint` through, three-way:
+  string ⇒ post, absent ⇒ explicit clear (`null`), failed render
+  ⇒ leave (`undefined`) so transient errors don't strip styling.
+  Also: `q2-preview-spa/index.html` had `min-height: 100vh` on
+  `#root` only; the embedded iframe collapsed to its intrinsic
+  content height and clipped longer documents. Forced
+  `html/body/#root { height: 100% }`.
+
 ### A.6 — Manual force-refresh button
 
 Per the epic's resolution #4 (force-refresh invariant): the preview

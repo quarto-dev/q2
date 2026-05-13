@@ -130,12 +130,20 @@ function ensureClient(): SyncClient {
  *
  * Auth is handled via HttpOnly cookies, sent automatically by the
  * browser on same-origin WebSocket upgrades.
+ *
+ * `peerTimeoutMs` controls how long to wait for the samod handshake
+ * before falling through to offline-from-IndexedDB mode. The
+ * underlying default (1 ms) is appropriate for hub-client where
+ * IndexedDB usually has cached docs from a prior session. The
+ * q2-preview SPA hits a fresh ephemeral hub with no IndexedDB
+ * cache, so it passes a longer timeout to avoid an `findDoc`
+ * "unavailable" race on cold start.
  */
-export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string): Promise<FileEntry[]> {
+export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMs?: number): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName, color);
+  return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName, color, peerTimeoutMs);
 }
 
 /**

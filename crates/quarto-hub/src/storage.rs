@@ -269,6 +269,26 @@ impl StorageManager {
         Self::init(None, hub_dir)
     }
 
+    /// Create a StorageManager for project mode with an explicit data dir.
+    ///
+    /// Used by `quarto preview`: the project is watched (so file
+    /// changes propagate into automerge as usual), but the samod
+    /// storage lives in a caller-controlled `data_dir` — typically a
+    /// `tempfile::TempDir` that's deleted on shutdown. This keeps each
+    /// `q2 preview` invocation ephemeral instead of leaving a
+    /// `.quarto/hub/` directory in the user's project.
+    pub fn new_with_data_dir(
+        project_root: impl AsRef<Path>,
+        data_dir: impl AsRef<Path>,
+    ) -> Result<Self> {
+        let project_root = project_root.as_ref().to_path_buf();
+        if !project_root.exists() {
+            return Err(Error::ProjectNotFound(project_root));
+        }
+        let hub_dir = data_dir.as_ref().to_path_buf();
+        Self::init(Some(project_root), hub_dir)
+    }
+
     /// Shared initialization logic for both project and standalone modes.
     fn init(project_root: Option<PathBuf>, hub_dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&hub_dir).map_err(Error::CreateHubDir)?;
