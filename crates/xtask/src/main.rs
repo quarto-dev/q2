@@ -132,6 +132,14 @@ enum Command {
         #[arg(long)]
         skip_treesitter_crlf_tests: bool,
 
+        /// Skip the shared preview-renderer + preview-runtime tests.
+        #[arg(long)]
+        skip_shared_package_tests: bool,
+
+        /// Skip the q2-preview-spa placeholder build.
+        #[arg(long)]
+        skip_q2_preview_spa_build: bool,
+
         /// Include hub-client e2e tests (slower, requires browser).
         #[arg(long)]
         e2e: bool,
@@ -210,6 +218,8 @@ fn main() -> Result<()> {
             skip_trace_viewer_tests,
             skip_treesitter_tests,
             skip_treesitter_crlf_tests,
+            skip_shared_package_tests,
+            skip_q2_preview_spa_build,
             e2e,
             no_deny_warnings,
         } => {
@@ -222,6 +232,8 @@ fn main() -> Result<()> {
                 skip_trace_viewer_tests,
                 skip_treesitter_tests,
                 skip_treesitter_crlf_tests,
+                skip_shared_package_tests,
+                skip_q2_preview_spa_build,
                 include_e2e: e2e,
                 no_deny_warnings,
             };

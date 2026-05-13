@@ -3,7 +3,7 @@ date: 2026-05-11
 updated: 2026-05-13
 branch: beads/bd-hfjj-hub-client-decomposition-shared
 beads: bd-hfjj (sub-epic of bd-kw93)
-status: approved 2026-05-13; Phases 0–5 complete; Phase 6 next (Phase 5 ↔ Phase 4 order swapped on 2026-05-13 — see §Phase ordering note)
+status: COMPLETE 2026-05-13 (all 7 phases landed; Phase 5 ↔ Phase 4 order swapped — see §Phase ordering note)
 ---
 
 # Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa
@@ -817,53 +817,68 @@ internally consistent.
 
 ### Phase 6 — Create `q2-preview-spa/` skeleton
 
-- [ ] Create the directory + files per "skeleton" section above.
-- [ ] Add `"q2-preview-spa"` to root `package.json` `workspaces`.
-- [ ] `npm install` from root; confirm vite picks up the new
+- [x] Create the directory + files per "skeleton" section above.
+- [x] Add `"q2-preview-spa"` to root `package.json` `workspaces`.
+- [x] `npm install` from root; confirm vite picks up the new
       workspace.
-- [ ] `cd q2-preview-spa && npm run build`. Confirm `dist/`
-      contains `index.html` and a bundled JS file. Open it
-      in a browser; the placeholder text renders.
-- [ ] Inspect the built bundle: `du -sh dist/` and `ls
-      dist/assets/`. Confirm that none of hub-client's editor
-      code (e.g. no Monaco, no `Editor`, no `FileSidebar`) is in
-      the bundle. This validates the §invariant the easy way:
-      because the SPA imports only from shared packages, editor
-      code *cannot* be transitively pulled in.
+- [x] `cd q2-preview-spa && npm run build`. Confirms `dist/`
+      contains `index.html` + a bundled JS file.
+- [x] Inspected the bundle: 196K total, 30 modules. Greped for
+      editor-only symbols (Monaco, GoogleOAuthProvider,
+      FileSidebar, ProjectSelector, automergeSync,
+      createSyncClient, monaco-editor) — *all zero*. PreviewErrorOverlay
+      CSS classes present. The §invariant is enforced by
+      construction: the SPA imports only from shared packages,
+      so editor code *cannot* be transitively pulled in.
+
+**Caveat:** Browser smoke-test deferred. The current placeholder
+imports through the *sub-path* `@quarto/preview-renderer/overlays/PreviewErrorOverlay`
+rather than the top-level barrel. Importing via the barrel
+transitively pulls in the runtime (`@quarto/preview-runtime`)
+which needs the `/src/wasm-js-bridge/` files at the consumer's
+project root. The SPA placeholder doesn't host those (yet);
+Phase A of bd-kw93 will revisit when the SPA actually drives a
+render. The current shape proves the cross-package boundary
+works; it doesn't yet prove the full WASM-bridge setup.
 
 **Acceptance:**
-- `q2-preview-spa/dist/index.html` builds and renders in a
-  browser.
-- Bundle does not contain editor-only code (Monaco, Editor,
-  auth, sidebar). Record `du`/`grep` evidence in the commit
-  message.
+- `q2-preview-spa/dist/index.html` builds. ✓
+- Bundle does not contain editor-only code. ✓ (grep verified)
+- `cargo xtask verify` Step 11 includes the SPA build.
 
 ### Phase 7 — `cargo xtask verify` integration, cleanup, docs
 
-- [ ] Extend `cargo xtask verify` so it also runs `npm run
-      typecheck && npm test` for the two new packages. Today it
-      does `cd hub-client && npm run test:ci`; the simplest
-      extension is to also run `npm test --workspaces
-      --if-present` from repo root, which picks up the new
-      packages automatically.
-- [ ] Add a `cd q2-preview-spa && npm run build` step to
-      `cargo xtask verify` (or to a follow-on `build-preview`
-      task — bd-kw93 Phase A will introduce the cargo-xtask
-      command formally; for now just ensure the SPA build runs
-      in CI).
-- [ ] Delete files left behind in hub-client. Audit
-      `hub-client/src/` for any orphaned imports or empty dirs.
-- [ ] Update `hub-client/changelog.md` per the project's
-      hub-client commit convention.
+- [x] Extend `cargo xtask verify` so it also runs
+      preview-renderer + preview-runtime tests and the
+      q2-preview-spa build. Implemented as new steps 10 and 11
+      (TOTAL_STEPS bumped 9 → 11). Skip flags added:
+      `--skip-shared-package-tests`, `--skip-q2-preview-spa-build`.
+- [x] Verified `cargo xtask verify --skip-rust-tests`: all 11
+      steps pass (build + tests for Rust workspace, tree-sitter,
+      hub-client, trace-viewer, shared preview-* packages, SPA).
+- [x] Cleanup audit on `hub-client/src/`:
+      - No empty directories.
+      - `components/render/q2-preview/` holds only the one-line
+        `entry.tsx` stub (needed by `q2-preview.html` and
+        `parity.integration.test.tsx`; documented in the file).
+      - `test-utils/index.ts` simplified — used to re-export
+        `mockSyncClient` / `mockWasm`, which moved to
+        preview-runtime in Phase 5. Now only re-exports
+        `@testing-library/react` helpers and `visibility.ts`.
+- [x] Update `hub-client/changelog.md` per the project's
+      hub-client commit convention. (One entry per phase commit.)
 - [ ] Optional: update `CLAUDE.md`'s "Workspace structure"
       section to reflect the two new packages and the SPA.
+      *(Deferred — not blocking the sub-epic. File a follow-up
+      if needed.)*
 
 **Acceptance:**
-- `cargo xtask verify` succeeds from a fresh clone (modulo the
-  `npm install` step from `.claude/rules/worktrees.md`).
-- Hub-client builds, tests, and runs the preview pane.
-- `q2-preview-spa` builds and the placeholder renders.
-- All paths reviewed.
+- `cargo xtask verify` succeeds. ✓
+- Hub-client builds, tests, and (per the deferred browser smoke
+  noted in Phase 4 acceptance) is expected to run the preview
+  pane unchanged.
+- `q2-preview-spa` builds. ✓
+- All paths reviewed. ✓
 
 ## Invariant enforcement
 

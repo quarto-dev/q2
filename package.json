@@ -6,6 +6,7 @@
     "ts-packages/*",
     "hub-client",
     "trace-viewer",
+    "q2-preview-spa",
     "q2-demos/*"
   ],
   "scripts": {
