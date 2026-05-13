@@ -1,5 +1,68 @@
 # Worktrees
 
+## Two patterns, two commands
+
+Worktrees and sub-task branches are separate concerns. Pick based on
+the *shape* of the work, not on the beads-issue boundary.
+
+- **`cargo xtask create-worktree`** — spin up a *new* worktree at
+  `.worktrees/<id>-<slug>/`. Right for **parallel** or
+  **investigation** work that benefits from isolation:
+  - `/investigate-beads` digs into a single issue without touching
+    the main checkout.
+  - `/triage` records context on a GH issue without committing on
+    top of in-flight work.
+  - `/upgrade-cargo-deps` runs full verification on a throwaway
+    branch.
+  - A reviewer wants to check out a colleague's branch *while* you
+    keep working.
+
+  These pay the fresh-worktree cost on purpose: `npm install` from
+  cold, `cargo build` from cold, no pollution of any other working
+  state. That's a feature, not a tax.
+
+- **`cargo xtask switch-task <bd-id>`** — *reuse* the current
+  worktree's checkout, swap the branch in place. Right for
+  **sequential** implementation work inside an epic, where each
+  sub-task branches off the same integration line and benefits from
+  keeping `node_modules/` + `target/` warm.
+
+  Usage at sub-task hand-off:
+
+  ```bash
+  # finish the previous sub-task (commit, close beads issue, etc.)
+  cargo xtask switch-task bd-yxqt --from feature/q2-preview-command
+  ```
+
+  That switches the current worktree to `feature/q2-preview-command`,
+  fast-forward-pulls (so any sibling sub-tasks that merged in the
+  meantime show up), creates a fresh `beads/bd-yxqt-<slug>` topic
+  branch off the new tip, marks the beads issue `in_progress`, and
+  rewrites the `CLAUDE.local.md` context block. Omit `--from` to
+  branch off the current HEAD.
+
+The two commands are siblings — `create-worktree` does *more* (it
+adds a worktree); `switch-task` does *less* (it stays in place). Use
+whichever matches the work.
+
+## Integration-line convention
+
+Epic work should accumulate on a long-lived **integration branch**
+(commonly `feature/<short-name>` — e.g. `feature/q2-preview-command`).
+Each sub-task lives on its own topic branch. When a sub-task closes:
+
+```bash
+git switch feature/q2-preview-command
+git merge --no-ff beads/<id>-<slug>
+git push origin feature/q2-preview-command
+```
+
+The `--no-ff` preserves the sub-task as a single merge commit, so
+the integration branch's history reads as one entry per sub-task.
+This is what `switch-task --from <branch>` expects to find when it
+fast-forward-pulls — a clean integration line with all ready work
+already merged in.
+
 ## Directory Convention
 
 All worktrees live in `.worktrees/` at the project root. This directory is git-ignored.
@@ -8,6 +71,7 @@ All worktrees live in `.worktrees/` at the project root. This directory is git-i
 
 - **GH issue triage worktree** → branch `issue-<N>` at `.worktrees/issue-<N>/`. Local branch stays bare; only the remote uses a prefix (see § Pushing for PR).
 - **Beads issue investigation worktree** → branch `beads/<id>-<slug>` at `.worktrees/<id>-<slug>/`, where `<slug>` is a short kebab-case form of the issue title (3–5 words, lowercase).
+- **In-place sub-task branch (via `switch-task`)** → branch `beads/<id>-<slug>` *without* a corresponding `.worktrees/` directory; the branch lives wherever the caller's worktree is checked out.
 
 The directory mirrors the leaf of the branch name. The conventions are stable so colleagues and tooling can recognize a worktree's origin from the path alone.
 

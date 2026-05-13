@@ -19,6 +19,7 @@ mod build_trace_viewer;
 mod create_worktree;
 mod dev_setup;
 mod lint;
+mod switch_task;
 mod test;
 mod treesitter_crlf;
 mod util;
@@ -69,6 +70,35 @@ enum Command {
     CreateWorktree {
         #[command(flatten)]
         args: create_worktree::Args,
+    },
+
+    /// Switch the current worktree to a new sub-task branch (no new worktree).
+    ///
+    /// For *sequential* sub-task work in an epic: reuses the worktree's
+    /// warm node_modules/ + target/ caches instead of paying the
+    /// fresh-clone cost. Companion to `create-worktree`, which is the
+    /// right answer for *parallel* / *investigation* work.
+    ///
+    /// With `--from <branch>`, switches to that branch and fast-forward-
+    /// pulls before creating the topic branch. Without `--from`,
+    /// branches off the current HEAD. Updates CLAUDE.local.md and marks
+    /// the beads issue `in_progress`.
+    SwitchTask {
+        /// Beads issue ID to switch to (e.g. `bd-yxqt`).
+        beads_id: String,
+
+        /// Integration / epic branch to switch+pull before branching.
+        /// Omit to branch off the current HEAD.
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Optional slug override (kebab-case).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Don't mark the issue `in_progress` in beads.
+        #[arg(long)]
+        no_claim: bool,
     },
 
     /// Run workspace tests with platform-appropriate crate exclusions.
@@ -198,6 +228,17 @@ fn main() -> Result<()> {
             lint::run(&config)
         }
         Command::CreateWorktree { args } => create_worktree::run(args),
+        Command::SwitchTask {
+            beads_id,
+            from,
+            slug,
+            no_claim,
+        } => switch_task::run(switch_task::Args {
+            beads_id,
+            from,
+            slug,
+            no_claim,
+        }),
         Command::Test {
             deny_warnings,
             args,
