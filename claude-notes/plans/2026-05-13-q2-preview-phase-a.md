@@ -384,6 +384,14 @@ The integration tests above cover the pieces. A.7 covers the
 **Acceptance:** the e2e test runs in CI (extends to `--include-e2e`
 shape on `cargo xtask verify`).
 
+**Status (bd-vpsy, 2026-05-13): done.** 4/4 tests pass locally
+under `npm run test:e2e` and via `cargo xtask verify --e2e`. The
+plan's `data-stable-id` is a naming proxy — no such attribute
+exists in the rendered DOM; the actual stability is React-
+reconciler-level. The test pins it via DOM-node identity on the
+`<h1>` (generated from `# Hello`), which is preserved across edits
+that don't touch the heading.
+
 ## Tradeoffs / Open questions
 
 ### Q-A1 — bridge files duplication vs symlink

@@ -14,6 +14,7 @@
 //! 10. Run shared workspace-package tests (@quarto/preview-renderer +
 //!     @quarto/preview-runtime, both unit and integration)
 //! 11. Build q2-preview-spa placeholder
+//! 12. q2-preview-spa Playwright E2E (only when --e2e is set)
 
 use anyhow::{Context, Result, bail};
 use std::process::Command;
@@ -21,7 +22,7 @@ use std::process::Command;
 use crate::lint;
 use crate::test;
 
-const TOTAL_STEPS: u32 = 11;
+const TOTAL_STEPS: u32 = 12;
 
 /// Configuration for the verify command.
 pub struct VerifyConfig {
@@ -393,6 +394,39 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
         println!(
             "\n━━━ Step 11/{}: Skipping q2-preview-spa build ━━━\n",
             TOTAL_STEPS
+        );
+    }
+
+    // Step 12: q2-preview-spa Playwright E2E (gated on --e2e).
+    //
+    // The Playwright suite spawns the real `q2 preview` binary
+    // against a temp fixture; for that to work we need the binary
+    // built and Playwright's chromium present. The Rust build above
+    // (step 3) already produces the debug binary at target/debug/q2;
+    // the chromium browser is the developer's responsibility
+    // (`npx playwright install chromium`).
+    if config.include_e2e && have_q2_preview_spa {
+        println!(
+            "\n━━━ Step 12/{}: Running q2-preview-spa Playwright E2E ━━━\n",
+            TOTAL_STEPS
+        );
+        run_command(
+            "npm",
+            &["run", "test:e2e"],
+            &q2_preview_spa_dir,
+            None,
+            "q2-preview-spa Playwright E2E failed",
+        )?;
+        println!("✓ q2-preview-spa E2E complete");
+    } else {
+        let reason = if !have_q2_preview_spa {
+            "q2-preview-spa/ not present"
+        } else {
+            "--e2e not set"
+        };
+        println!(
+            "\n━━━ Step 12/{}: Skipping q2-preview-spa Playwright E2E ({}) ━━━\n",
+            TOTAL_STEPS, reason
         );
     }
 
