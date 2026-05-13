@@ -31,12 +31,13 @@ export default defineConfig({
       // Vite-root path `/src/wasm-js-bridge/sass.js`. In test runs the
       // bridge isn't invoked (no `initWasm()`), but Vite still resolves
       // the import statement at transform time, so the path must
-      // resolve to *something*. Hub-client owns the bridge files;
-      // alias just the bridge sub-tree (NOT plain `/src`, which would
-      // also intercept test files' own absolute paths).
+      // resolve to *something*. As of A.0 the bridge lives in
+      // `@quarto/wasm-js-bridge`; alias the sub-tree (NOT plain
+      // `/src`, which would also intercept test files' own absolute
+      // paths).
       '/src/wasm-js-bridge': path.resolve(
         __dirname,
-        '../../hub-client/src/wasm-js-bridge',
+        '../wasm-js-bridge/src',
       ),
     },
   },

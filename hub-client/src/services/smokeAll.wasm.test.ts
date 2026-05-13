@@ -110,7 +110,7 @@ beforeAll(async () => {
 
   // Set up VFS callbacks for the SASS importer so that dart-sass can resolve
   // @use/@import directives against the VFS (Bootstrap SCSS files, etc.)
-  const sassModule = await import('../wasm-js-bridge/sass.js');
+  const sassModule = await import('/src/wasm-js-bridge/sass.js');
   sassModule.setVfsCallbacks(
     (path: string): string | null => {
       try {

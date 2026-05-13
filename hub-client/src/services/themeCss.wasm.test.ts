@@ -16,7 +16,12 @@ import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { JSDOM } from 'jsdom';
-import { setVfsCallbacks } from '../wasm-js-bridge/sass.js';
+// `/src/wasm-js-bridge` is aliased to `@quarto/wasm-js-bridge/src` in
+// hub-client's vite + vitest configs (the same alias the Rust WASM
+// module's `raw_module` annotation uses). Going through the alias
+// rather than a relative path keeps hub-client unaware of the bridge
+// package's filesystem location.
+import { setVfsCallbacks } from '/src/wasm-js-bridge/sass.js';
 
 interface WasmModule {
   default: (input?: BufferSource) => Promise<void>;

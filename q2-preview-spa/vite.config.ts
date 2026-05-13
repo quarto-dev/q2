@@ -26,6 +26,15 @@ export default defineConfig({
         __dirname,
         '../hub-client/wasm-quarto-hub-client/wasm_quarto_hub_client.js',
       ),
+      // The Rust WASM module references `/src/wasm-js-bridge/sass.js`
+      // via `wasm-bindgen raw_module`. Bridge files live in
+      // `@quarto/wasm-js-bridge`; aliasing the Vite-root path keeps
+      // the WASM module unchanged. Needed by Phase A.3 once the SPA
+      // initialises WASM; landing the alias now is cheap.
+      '/src/wasm-js-bridge': path.resolve(
+        __dirname,
+        '../ts-packages/wasm-js-bridge/src',
+      ),
     },
   },
   optimizeDeps: {

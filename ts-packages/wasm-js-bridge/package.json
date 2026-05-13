@@ -1,0 +1,22 @@
+{
+  "name": "@quarto/wasm-js-bridge",
+  "version": "0.0.1",
+  "private": true,
+  "description": "JS glue loaded by wasm-quarto-hub-client via wasm-bindgen `raw_module`. Hosts each consumer's `src/wasm-js-bridge/*` path (sass, cache, fetch, template). One copy in the workspace; consumers alias `/src/wasm-js-bridge` to this package's src dir.",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "sass": "^1.77.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}
