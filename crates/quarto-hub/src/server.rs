@@ -763,9 +763,14 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
     }
 }
 
-/// Build the axum router. Auth state (decoder + JWKS refresh handle) is
-/// initialized here and owned by HubContext for the server's lifetime.
-async fn build_router(ctx: SharedContext) -> Result<Router> {
+/// Build the hub server's axum router. Composable: callers (e.g.
+/// `quarto-preview`) can chain `.fallback(...)` to add SPA serving on
+/// top, as long as `HubConfig::register_root_ws` is `false` so `/` is
+/// available.
+///
+/// Auth state (decoder + JWKS refresh handle) is initialized here and
+/// owned by HubContext for the server's lifetime.
+pub async fn build_router(ctx: SharedContext) -> Result<Router> {
     if let Some(config) = ctx.auth_config() {
         let auth_state = auth::build_auth_state(config).await.map_err(|e| {
             crate::error::Error::Server(format!("Failed to initialize OIDC JWKS decoder: {e}"))
@@ -773,6 +778,8 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         ctx.set_auth_state(auth_state)
             .map_err(|e| crate::error::Error::Server(e.to_string()))?;
     }
+
+    let register_root_ws = ctx.register_root_ws();
 
     let mut router = Router::new()
         .route("/health", get(health))
@@ -787,13 +794,18 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/refresh", post(auth_refresh))
-        // WebSocket endpoint for automerge sync
-        // Root path "/" is the standard location used by sync.automerge.org
-        // "/ws" is kept for backward compatibility
-        .route("/", get(ws_handler))
+        // WebSocket endpoint for automerge sync at `/ws` (hub-client +
+        // q2-preview SPA's canonical path).
         .route("/ws", get(ws_handler))
         .fallback(not_found)
         .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan));
+
+    if register_root_ws {
+        // Root path "/" is the additional standard location used by
+        // sync.automerge.org. `quarto preview` opts out (its embedded
+        // SPA owns `/`) by setting `register_root_ws: false`.
+        router = router.route("/", get(ws_handler));
+    }
 
     // Google-specific redirect callback: only registered when the issuer is Google.
     // Non-Google OIDC frontends should use POST /auth/refresh instead.
@@ -824,6 +836,33 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
 /// If `sync_interval_secs` is configured, a background task will periodically
 /// sync all documents to the filesystem for crash resilience.
 pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()> {
+    run_server_with(storage, config, None::<NoopExtend>).await
+}
+
+/// Convenience alias so callers can pass `None` without spelling out a
+/// concrete `FnOnce` type for the `extend_router` parameter.
+type NoopExtend = fn(Router) -> Router;
+
+/// Run the hub server, optionally extending its router before serving.
+///
+/// Same lifecycle as [`run_server`] (signal handling, periodic sync,
+/// file watcher, graceful shutdown), with the option for the caller to
+/// transform the built router *after* `build_router` and *before*
+/// `axum::serve`. This is the seam `quarto-preview` uses to layer its
+/// SPA fallback (`router.fallback(spa_handler)`) on top of the hub's
+/// API + ws routes.
+///
+/// The caller must set `HubConfig::register_root_ws` to `false` when
+/// the extension claims `/`; otherwise axum will panic on the
+/// duplicate route.
+pub async fn run_server_with<F>(
+    storage: StorageManager,
+    config: HubConfig,
+    extend_router: Option<F>,
+) -> Result<()>
+where
+    F: FnOnce(Router) -> Router + Send,
+{
     let addr = format!("{}:{}", config.host, config.port);
     let sync_interval = config.sync_interval_secs;
     let watch_enabled = config.watch_enabled;
@@ -837,7 +876,10 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
     let ctx_for_watch = ctx.clone();
     let ctx_for_shutdown = ctx.clone();
 
-    let router = build_router(ctx).await?;
+    let mut router = build_router(ctx).await?;
+    if let Some(extend) = extend_router {
+        router = extend(router);
+    }
 
     let listener = TcpListener::bind(&addr).await?;
     if has_project {

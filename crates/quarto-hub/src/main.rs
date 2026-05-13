@@ -196,6 +196,7 @@ async fn main() -> anyhow::Result<()> {
         watch_debounce_ms: args.watch_debounce,
         auth_config,
         allow_insecure_auth: args.allow_insecure_auth,
+        register_root_ws: true,
     };
 
     server::run_server(storage, config).await?;

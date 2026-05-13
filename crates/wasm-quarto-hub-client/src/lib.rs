@@ -819,6 +819,25 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
     }
 }
 
+/// Map a format string for `q2 preview`'s default-format substitution.
+///
+/// `quarto preview` treats `html` — which is also the default when no
+/// `format:` key is present in the YAML — as a request for the
+/// `q2-preview` pipeline (AST-iframe rendering), so a bare markdown
+/// file with no frontmatter previews live. Explicit non-html formats
+/// (`q2-slides`, `q2-debug`, `acm-html`, …) pass through unchanged.
+///
+/// The substitution lives here rather than in the CLI shim so the
+/// dispatch in `render_*_to_response` sees a stable format string and
+/// doesn't need a parallel preview-mode branch.
+fn map_format_for_preview(format_str: &str) -> &str {
+    if format_str == "html" {
+        "q2-preview"
+    } else {
+        format_str
+    }
+}
+
 /// Detect the format string from QMD content's YAML frontmatter.
 /// Returns the format name (e.g., "q2-slides", "q2-debug", "html", "acm-html")
 /// or "html" as default when no format key is present.
@@ -1040,7 +1059,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
     };
 
-    render_single_doc_to_response(path, &content, &project, user_grammars).await
+    render_single_doc_to_response(path, &content, &project, user_grammars, false).await
 }
 
 /// Render QMD content directly (without reading from VFS).
@@ -1063,7 +1082,7 @@ pub async fn render_qmd_content(
     // surface as `/input.qmd` to the JS layer.
     let path = Path::new("/input.qmd");
     let project = create_wasm_project_context(path);
-    render_single_doc_to_response(path, content.as_bytes(), &project, user_grammars).await
+    render_single_doc_to_response(path, content.as_bytes(), &project, user_grammars, false).await
 }
 
 /// Render a single page **in the context of its surrounding project**.
@@ -1121,7 +1140,7 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
     // Behavior is byte-identical to `render_qmd` — same single-doc
     // pipeline, same VFS-root resolver, same VFS artifact dump.
     if project.is_single_file {
-        return render_single_doc_to_response(path, &content, &project, user_grammars).await;
+        return render_single_doc_to_response(path, &content, &project, user_grammars, false).await;
     }
 
     // Multi-doc project. The discover-from-file form returns a
@@ -1136,11 +1155,57 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
             return error_response(format!("Failed to enumerate project files: {}", e));
         }
     };
-    render_project_active_page_to_response(&path_buf, &content, project, user_grammars).await
+    render_project_active_page_to_response(&path_buf, &content, project, user_grammars, false).await
+}
+
+/// Like [`render_page_in_project`], but applies the `q2 preview`
+/// format-default substitution: a document with no explicit
+/// `format:` key (which `detect_format_from_content` reports as
+/// `html`) renders through the q2-preview pipeline and returns
+/// `ast_json`. Explicit non-html formats are honoured as-is.
+///
+/// The `q2 preview` CLI calls this entry point; hub-client keeps
+/// using [`render_page_in_project`] so its existing format dispatch
+/// is unchanged.
+#[wasm_bindgen]
+pub async fn render_page_for_preview(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
+    let runtime = get_runtime();
+    let path_buf = std::path::PathBuf::from(path);
+    let path = path_buf.as_path();
+
+    let content = match runtime.file_read(path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return error_response(format!("Failed to read file: {}", e));
+        }
+    };
+
+    let project = match ProjectContext::discover(path, runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            return error_response(format!("Failed to discover project context: {}", e));
+        }
+    };
+
+    if project.is_single_file {
+        return render_single_doc_to_response(path, &content, &project, user_grammars, true).await;
+    }
+
+    let project = match ProjectContext::discover(&project.dir, runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            return error_response(format!("Failed to enumerate project files: {}", e));
+        }
+    };
+    render_project_active_page_to_response(&path_buf, &content, project, user_grammars, true).await
 }
 
 /// Single-doc render path — used by `render_qmd` directly and by
 /// `render_page_in_project` when no `_quarto.yml` ancestor exists.
+///
+/// `prefer_preview_format` is `true` only when the call originates
+/// from `render_page_for_preview`; in that mode `html` (including the
+/// no-frontmatter default) maps to `q2-preview`.
 ///
 /// Returns the [`RenderResponse`] JSON string the JS layer expects.
 async fn render_single_doc_to_response(
@@ -1148,12 +1213,18 @@ async fn render_single_doc_to_response(
     content: &[u8],
     project: &ProjectContext,
     user_grammars: Option<JsUserGrammars>,
+    prefer_preview_format: bool,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
     let content_str = std::str::from_utf8(content).unwrap_or("");
-    let format_str = detect_format_from_content(content_str);
+    let detected = detect_format_from_content(content_str);
+    let format_str = if prefer_preview_format {
+        map_format_for_preview(&detected).to_string()
+    } else {
+        detected
+    };
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,
         Err(e) => return error_response(e),
@@ -1277,6 +1348,7 @@ async fn render_project_active_page_to_response(
     _content: &[u8],
     mut project: ProjectContext,
     user_grammars: Option<JsUserGrammars>,
+    prefer_preview_format: bool,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use quarto_core::project::pass2_renderer::{
@@ -1291,7 +1363,12 @@ async fn render_project_active_page_to_response(
         Err(e) => return error_response(format!("Failed to read active file: {}", e)),
     };
     let content_str = std::str::from_utf8(&active_bytes).unwrap_or("");
-    let format_str = detect_format_from_content(content_str);
+    let detected = detect_format_from_content(content_str);
+    let format_str = if prefer_preview_format {
+        map_format_for_preview(&detected).to_string()
+    } else {
+        detected
+    };
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,
         Err(e) => return error_response(e),

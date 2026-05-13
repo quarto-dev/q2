@@ -44,6 +44,18 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      // Multi-entry build: `index.html` hosts the outer PreviewApp;
+      // `q2-preview.html` hosts the inner sandboxed iframe that
+      // Q2PreviewIframe loads (same pattern as hub-client). Vite
+      // emits a dist/q2-preview.html with its own bundled chunk so
+      // both files live inside the embedded SPA bundle the
+      // quarto-preview Rust crate serves.
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'q2-preview': path.resolve(__dirname, 'q2-preview.html'),
+      },
+    },
   },
   server: {
     port: 5175,

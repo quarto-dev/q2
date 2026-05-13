@@ -30,10 +30,12 @@ quarto-system-runtime.workspace = true
 quarto-doctemplate.workspace = true
 quarto-lsp = { workspace = true }
 quarto-hub.workspace = true
+quarto-preview = { path = "../quarto-preview" }
 quarto-publish.workspace = true
 quarto-sass.workspace = true
 quarto-test.workspace = true
 serde_yaml.workspace = true
+tempfile = "3"
 
 [build-dependencies]
 

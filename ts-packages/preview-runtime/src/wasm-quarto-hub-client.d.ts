@@ -38,6 +38,14 @@ declare module 'wasm-quarto-hub-client' {
     template_bundle: string,
     user_grammars?: JsUserGrammars,
   ): Promise<string>;
+  export function render_page_in_project(
+    path: string,
+    user_grammars?: JsUserGrammars,
+  ): Promise<string>;
+  export function render_page_for_preview(
+    path: string,
+    user_grammars?: JsUserGrammars,
+  ): Promise<string>;
 
   /** Test-only: calls the user-grammar bridge directly. Phase 4.3 of syntax-highlighting. */
   export function quarto_highlight_with_user_for_test(

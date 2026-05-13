@@ -327,8 +327,17 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    *
    * Supports offline mode: if the peer connection fails or times out,
    * the function will continue and load documents from local IndexedDB.
+   *
+   * `peerTimeoutMs` controls how long to wait for the samod handshake's
+   * `peer` event before falling through to offline mode. The default of
+   * 1 ms preserves hub-client's "probe-then-use-cached-IndexedDB"
+   * behavior. Callers without an IndexedDB cache (e.g. the q2-preview
+   * SPA, which runs against ephemeral hubs) should pass a longer
+   * value so `findDoc()` runs after at least one peer is known —
+   * otherwise automerge-repo's synchronizer marks the doc unavailable
+   * because `#peers` is empty when `handle.request()` fires.
    */
-  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string): Promise<FileEntry[]> {
+  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMs: number = 1): Promise<FileEntry[]> {
     // Disconnect from any existing connection
     await disconnect();
 
@@ -344,7 +353,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       let isOnline = false;
       try {
         console.log('Waiting for peer connection...');
-        await waitForPeer(state.repo, 1); // Quick check - auto-reconnects in background
+        await waitForPeer(state.repo, peerTimeoutMs);
         console.log('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {

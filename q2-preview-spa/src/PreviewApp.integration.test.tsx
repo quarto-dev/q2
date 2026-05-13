@@ -1,16 +1,18 @@
 /**
  * Integration test for the SPA's boot path.
  *
- * Mocks `@quarto/preview-runtime` (the WASM/automerge side) and the
- * Q2PreviewIframe (the rendering side) so we can assert the wiring
- * end-to-end: PreviewApp parses the URL fragment, calls initWasm +
- * connect, picks the first .qmd, calls renderPageInProject, and hands
- * the returned astJson + currentFilePath to <Q2PreviewIframe>.
+ * Mocks `@quarto/preview-runtime` (the WASM/automerge side), the
+ * Q2PreviewIframe (the rendering side), and `fetch` (for `/health`) so
+ * we can assert the wiring end-to-end: PreviewApp fetches
+ * `index_document_id` from `/health`, calls initWasm + connect, picks
+ * the first .qmd, calls renderPageInProject, and hands the returned
+ * astJson + currentFilePath to <Q2PreviewIframe>.
  *
- * No real WASM, no real samod — those layers are covered by their
- * own tests in @quarto/preview-runtime. This test pins the *seam*
- * the SPA owns: which methods get called, in which order, with which
- * arguments, and that the iframe ends up with the right props.
+ * No real WASM, no real samod, no real HTTP — those layers are covered
+ * by their own tests in @quarto/preview-runtime and quarto-preview's
+ * Rust-side smoke. This test pins the *seam* the SPA owns: which
+ * methods get called, in which order, with which arguments, and that
+ * the iframe ends up with the right props.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -50,7 +52,7 @@ vi.mock('@quarto/preview-runtime', () => ({
     return runtimeMockState.files;
   }),
   setSyncHandlers: vi.fn(),
-  renderPageInProject: vi.fn(async (_path: string) => runtimeMockState.renderResult),
+  renderPageForPreview: vi.fn(async (_path: string) => runtimeMockState.renderResult),
   getFilePaths: vi.fn(() => runtimeMockState.files.map((f) => f.path)),
 }));
 
@@ -63,8 +65,26 @@ beforeEach(() => {
     files: [{ path: 'index.qmd', docId: 'automerge:doc-index' }],
     renderResult: { success: true, ast_json: '{"blocks":[]}' },
   };
-  // URL fragment carries indexDocId — see plan §A.5 + Q-A3.
-  window.location.hash = '#/preview/automerge:test-index-doc';
+  // `GET /health` returns the project's index document id — see plan
+  // §A.5 + Q-A3. PreviewApp uses this on boot instead of a URL
+  // fragment because the CLI binds + serves before any docId is known
+  // browser-side.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/health')) {
+        return new Response(
+          JSON.stringify({
+            status: 'ok',
+            index_document_id: 'automerge:test-index-doc',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('not found', { status: 404 });
+    }),
+  );
 });
 
 describe('PreviewApp boot path', () => {
@@ -122,6 +142,81 @@ describe('PreviewApp boot path', () => {
       expect(screen.queryByText(/render error/i)).not.toBeNull();
     });
     expect(screen.queryByText(/kaboom/i)).not.toBeNull();
+    expect(screen.queryByTestId('q2-preview-iframe-mock')).toBeNull();
+  });
+
+  it('forwards theme_fingerprint into Q2PreviewIframe so the iframe styles itself', async () => {
+    // The hub render returns `theme_fingerprint` when a compiled
+    // theme exists. PreviewApp must thread it into Q2PreviewIframe's
+    // `themeFingerprint` prop — otherwise the iframe never knows to
+    // mint a blob URL for /.quarto/project-artifacts/styles.css and
+    // post UPDATE_THEME, leaving the output unstyled. Two cases:
+    // (a) string passed through; (b) field absent → `null` (explicit
+    // "no theme intended" rather than "preserve last").
+    runtimeMockState.renderResult = {
+      success: true,
+      ast_json: '{"blocks":[]}',
+      theme_fingerprint: 'abc123',
+    };
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+    const propsWithTheme = capturedIframeProps[capturedIframeProps.length - 1];
+    expect(propsWithTheme.themeFingerprint).toBe('abc123');
+  });
+
+  it('passes themeFingerprint=null when render succeeds without a theme', async () => {
+    runtimeMockState.renderResult = {
+      success: true,
+      ast_json: '{"blocks":[]}',
+      // theme_fingerprint deliberately absent
+    };
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+    const props = capturedIframeProps[capturedIframeProps.length - 1];
+    expect(props.themeFingerprint).toBeNull();
+  });
+
+  it('normalizes a bare /health docId by prefixing automerge:', async () => {
+    // /health returns the bare id (samod's storage form); connect()
+    // expects automerge:<id> (automerge-repo's DocumentId form). The
+    // SPA must bridge the two. This test pins that contract: connect
+    // should be called with the prefixed form even though /health
+    // returns the bare form.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify({ status: 'ok', index_document_id: '4ByAxLmGYwAEYN5xZEX7Jq1GxTmU' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+    const runtime = await import('@quarto/preview-runtime');
+    const calls = (runtime.connect as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    const [, docIdArg] = calls[calls.length - 1];
+    expect(docIdArg).toBe('automerge:4ByAxLmGYwAEYN5xZEX7Jq1GxTmU');
+  });
+
+  it('surfaces a /health failure with an actionable message', async () => {
+    // Replace the default mock with one that 500s on /health. This is
+    // the failure mode if the hub crashes before the SPA boots —
+    // surfacing it visibly beats a blank "Initializing…" screen.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('boom', { status: 500, statusText: 'Internal Server Error' })),
+    );
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByText(/render error/i)).not.toBeNull();
+    });
+    expect(screen.queryByText(/\/health/i)).not.toBeNull();
     expect(screen.queryByTestId('q2-preview-iframe-mock')).toBeNull();
   });
 });

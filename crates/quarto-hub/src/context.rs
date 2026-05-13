@@ -57,6 +57,16 @@ pub struct HubConfig {
     /// Allow auth without TLS (local dev). When true, the `Secure` flag is
     /// omitted from auth cookies so browsers send them over plain HTTP.
     pub allow_insecure_auth: bool,
+
+    /// Register `GET /` as the samod ws upgrade endpoint.
+    ///
+    /// Default: `true`. The `quarto hub` CLI keeps it true for
+    /// sync.automerge.org compatibility (the convention is that
+    /// `/` is the upgrade path). `quarto preview` sets it false so
+    /// its embedded SPA can own `/` for `index.html`; samod still
+    /// works at `/ws`, which hub-client and the q2-preview SPA both
+    /// already use as their canonical connect path.
+    pub register_root_ws: bool,
 }
 
 impl Default for HubConfig {
@@ -70,6 +80,7 @@ impl Default for HubConfig {
             watch_debounce_ms: 500,
             auth_config: None,
             allow_insecure_auth: false,
+            register_root_ws: true,
         }
     }
 }
@@ -115,6 +126,11 @@ pub struct HubContext {
     /// Whether insecure (HTTP) auth is allowed. When true, `Secure` flag
     /// is omitted from auth cookies.
     allow_insecure_auth: bool,
+
+    /// See [`HubConfig::register_root_ws`]. Stashed on the context so
+    /// `build_router` can consult it after `HubContext::new` consumes
+    /// the originating `HubConfig`.
+    register_root_ws: bool,
 
     /// Maps peer IDs to authenticated user emails.
     /// Populated by handle_websocket when auth is enabled; read by the
@@ -228,6 +244,7 @@ impl HubContext {
 
         let auth_config = config.auth_config.take();
         let allow_insecure_auth = config.allow_insecure_auth;
+        let register_root_ws = config.register_root_ws;
 
         Ok(Self {
             storage,
@@ -239,6 +256,7 @@ impl HubContext {
             auth_config,
             auth_state: OnceLock::new(),
             allow_insecure_auth,
+            register_root_ws,
             peer_emails,
         })
     }
@@ -339,6 +357,11 @@ impl HubContext {
     /// Whether auth cookies should omit the `Secure` flag (HTTP dev mode).
     pub fn allow_insecure_auth(&self) -> bool {
         self.allow_insecure_auth
+    }
+
+    /// See [`HubConfig::register_root_ws`].
+    pub fn register_root_ws(&self) -> bool {
+        self.register_root_ws
     }
 
     /// Peer→email map for document access audit logging.
