@@ -169,7 +169,7 @@ integration):**
 - [x] `cargo xtask verify --skip-hub-build` clean
 - [x] Manual `q2 preview` smoke: edit `_quarto.yml` surfaces an event
 
-### B.3 — Cross-doc edges drive re-render
+### B.3 — Cross-doc edges drive re-render (bd-pf63)
 
 The hub already re-runs `render_page_in_project` when *any* file
 doc changes (because `onFileContent` fires the render
@@ -187,28 +187,84 @@ What we *do* need to verify in Phase B:
 - Editing `_quarto.yml` re-renders the active page. (Already
   works once B.1 lands — the watcher will sync the file into
   samod, the `onFileContent` handler bumps `contentTick`, and the
-  render useEffect re-fires.)
+  render useEffect re-fires.) — covered by B.4.
 - Editing `posts/_metadata.yml` re-renders pages under `posts/`.
-  Same path as above.
+  Same path as above. — covered by B.4.
 - Cross-doc include shortcodes (`{{< include foo.qmd >}}`) cause
   the includer to re-render when `foo.qmd` changes. This requires
   that the WASM render's VFS state has the *latest* `foo.qmd`
   bytes at the time of the active doc's re-render — which
   `onFileContent` already does (it bumps `contentTick` *after*
-  `vfsAddFile` writes the new bytes).
+  `vfsAddFile` writes the new bytes). — this is bd-pf63 / B.3.
 
-**Tests first:**
-- Extend `q2-preview-spa/e2e/basic-preview.spec.ts` (or new
-  spec) — fixture with an `index.qmd` that `{{< include x.qmd >}}`
-  pulls a sibling; on-disk edit to `x.qmd` updates the index's
-  rendered content within 2 s.
+**Scope of bd-pf63.** Strictly the include-shortcode case. The
+config-edit acceptance lives in B.4's bundle so B.3 stays a
+narrow, falsifiable check on the cross-doc machinery.
 
-**Implementation:** likely zero code-side changes — the existing
-machinery should already do this once B.1 broadens the watcher.
-The work here is **verifying** with a real fixture and
+**Approach.**
+
+The existing `e2e/helpers/previewServer.ts` only seeds a single
+`.qmd` (Phase A only needed one). For B.3 we need at least two
+files in the same project. Generalise `StartOptions` to take a
+`fixtureFiles: Array<{ path: string; content: string }>` and
+migrate `basic-preview.spec.ts` to the new shape — one callsite,
+one shape, and B.4 will need the same affordance anyway.
+
+The new spec lives at `q2-preview-spa/e2e/include-shortcode.spec.ts`:
+
+- Fixture:
+  - `index.qmd` — heading + `{{< include x.qmd >}}` shortcode.
+  - `x.qmd` — paragraph containing a unique sentinel
+    (`SENTINEL-INITIAL`) so the assertion can't false-positive
+    on the includer's own text.
+- Step 1 — initial render: open browser, wait for the inner
+  iframe to show `SENTINEL-INITIAL`. This pins that the include
+  shortcode is expanded on first render against the VFS view of
+  `x.qmd`.
+- Step 2 — edit the includee: write `x.qmd` with a new sentinel
+  (`SENTINEL-EDITED`) on disk. Assert the new sentinel appears
+  in the inner iframe within 5 s (the same CI ceiling
+  `basic-preview.spec.ts` uses against a 2 s plan budget).
+
+**On red.** If the empirical test fails, *stop* and file a
+bd-issue describing the gap with the diagnostic (which leg —
+watcher event, samod sync, `vfsAddFile`, `contentTick` bump,
+include-expansion stage — fails to fire). Do not patch
+speculatively; B.3 is meant to surface gaps, not paper over
+them.
+
+**Implementation:** expected zero production-code changes — the
+existing machinery should already do this once B.1 broadens the
+watcher. The work here is **verifying** with a real fixture and
 documenting any gaps.
 
-**Acceptance:** the new e2e case passes.
+**Acceptance:** the new e2e case passes under
+`cargo xtask verify --e2e`.
+
+**Checklist:**
+
+- [x] Plan the approach (this section) and surface clarifying
+  questions to user.
+- [x] Mark bd-pf63 `in_progress`.
+- [x] Generalise `previewServer.ts` to `fixtureFiles: Array<…>`
+  and migrate `basic-preview.spec.ts`. Verified the four pre-existing
+  basic-preview cases still pass against the new helper signature.
+- [x] Add `q2-preview-spa/e2e/include-shortcode.spec.ts` with
+  initial-render + edit-propagation cases. Both pass locally — the
+  existing watcher → samod → SPA pipeline already drives includer
+  re-renders correctly with no production-code change.
+- [x] `cargo xtask verify` clean (steps 1–12 minus the e2e step
+  flagged by `bd-u6ef`; the q2-preview-spa Playwright suite runs
+  cleanly in isolation — 6/6 tests including the 2 new
+  include-shortcode cases). Hub-client e2e remains pre-existing-
+  broken under `--e2e` per `bd-u6ef`; not my fault to fix here.
+- [ ] Commit, close bd-pf63, merge `--no-ff` into
+  `feature/q2-preview-command` after user approval.
+
+**Empirical result (2026-05-13):** Phase B.3 lands with zero
+production-code changes, as the plan predicted. The cross-doc
+include path is already covered end-to-end by the Phase A wiring +
+B.1 broadened watcher. Stop-and-report contingency was not needed.
 
 ### B.4 — Acceptance bundle
 
