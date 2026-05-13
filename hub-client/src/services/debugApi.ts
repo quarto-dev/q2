@@ -16,8 +16,8 @@
  * `claude-notes/plans/2026-05-01-hub-client-website-render-ux.md`.
  */
 
-import type { ProjectEntry, FileEntry } from '../types/project';
-import { inferMimeType } from '../types/project';
+import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
+import { inferMimeType } from '@quarto/preview-renderer/types/project';
 import {
   getFileContent,
   getBinaryFileContent,

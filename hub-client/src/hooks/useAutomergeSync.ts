@@ -24,7 +24,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../types/project';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import {
   getFileContent,
   setImmediateFileChangeCallback,

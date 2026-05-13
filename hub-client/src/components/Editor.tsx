@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
-import type { ProjectEntry, FileEntry } from '../types/project';
-import { isBinaryExtension, isTextExtension } from '../types/project';
+import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension, isTextExtension } from '@quarto/preview-renderer/types/project';
 import type { Route } from '../utils/routing';
 import { buildFullUrl, buildShareableUrl } from '../utils/routing';
 import {
@@ -14,7 +14,7 @@ import {
   type EditorContentChange,
 } from '../services/automergeSync';
 import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
-import type { Diagnostic } from '../types/diagnostic';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
 import { processFileForUpload } from '../services/resourceService';
 import { usePresence } from '../hooks/usePresence';

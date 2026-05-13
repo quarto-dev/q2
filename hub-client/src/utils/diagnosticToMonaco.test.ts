@@ -8,8 +8,8 @@ import {
   lspDiagnosticsToMarkers,
   type DiagnosticsResult,
 } from './diagnosticToMonaco';
-import type { Diagnostic as LegacyDiagnostic } from '../types/diagnostic';
-import type { Diagnostic as LspDiagnostic } from '../types/intelligence';
+import type { Diagnostic as LegacyDiagnostic } from '@quarto/preview-renderer/types/diagnostic';
+import type { Diagnostic as LspDiagnostic } from '@quarto/preview-renderer/types/intelligence';
 
 describe('diagnosticsToMarkers (legacy format)', () => {
   describe('severity conversion', () => {

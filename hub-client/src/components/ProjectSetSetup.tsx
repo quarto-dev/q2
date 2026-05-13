@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import { DEFAULT_SYNC_SERVER } from '../utils/routing';
 import { exportData } from '../services/projectStorage';
 import './ProjectSetSetup.css';

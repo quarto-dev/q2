@@ -9,7 +9,7 @@
  * - Configurable responses and error injection
  */
 
-import type { Diagnostic, RenderResponse } from '../types/diagnostic';
+import type { Diagnostic, RenderResponse } from '@quarto/preview-renderer/types/diagnostic';
 
 /**
  * VFS response type matching the real wasmRenderer.ts

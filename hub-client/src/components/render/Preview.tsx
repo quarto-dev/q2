@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../../types/project';
-import type { Diagnostic } from '../../types/diagnostic';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { renderToHtml, isWasmReady, setScrollSyncEnabled, type Pass1Failure } from '../../services/wasmRenderer';
 import { getFileContent, getBinaryFileContent } from '../../services/automergeSync';
 import { useScrollSync } from '../../hooks/useScrollSync';

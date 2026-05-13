@@ -5,7 +5,7 @@
  */
 
 import { useMemo } from 'react';
-import type { Symbol } from '../types/intelligence';
+import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
 import { parseSlides } from '../components/render/ReactAstSlideRenderer';
 import type { PandocAST } from '../components/render/framework/types';
 

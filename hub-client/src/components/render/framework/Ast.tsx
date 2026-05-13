@@ -2,7 +2,7 @@ import React from 'react';
 import { RegistryContext } from './RegistryContext';
 import { unwrapCustomNodes } from './customNode';
 import type { PandocAST } from './types';
-import type { SourceInfoPool } from '../../../types/sourceInfo';
+import type { SourceInfoPool } from '@quarto/preview-renderer/types/sourceInfo';
 
 interface AstPropsCommon {
     /** Current file path for resolving relative image paths */

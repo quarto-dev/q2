@@ -4,7 +4,7 @@
  * This module provides CRUD operations for project entries and integrates
  * with the schema versioning/migration system.
  */
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { ExportData, UserSettings } from './storage/types';
 import {
   STORES,

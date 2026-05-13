@@ -21,7 +21,7 @@ vi.mock('../utils/diffToMonacoEdits', () => ({
 import { useAutomergeSync } from './useAutomergeSync';
 import { getFileContent, setImmediateFileChangeCallback } from '../services/automergeSync';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
-import type { FileEntry } from '../types/project';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { setVisibility, resetVisibility, fireWindowFocus } from '../test-utils/visibility';
 
 const mockGetFileContent = vi.mocked(getFileContent);

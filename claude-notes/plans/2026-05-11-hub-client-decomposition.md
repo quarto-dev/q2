@@ -3,7 +3,7 @@ date: 2026-05-11
 updated: 2026-05-13
 branch: beads/bd-hfjj-hub-client-decomposition-shared
 beads: bd-hfjj (sub-epic of bd-kw93)
-status: approved 2026-05-13; Phases 0–1 complete; Phase 2 next
+status: approved 2026-05-13; Phases 0–2 complete; Phase 3 next
 ---
 
 # Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa
@@ -193,8 +193,27 @@ Hub-client still needs these — it will re-import from
 `@quarto/preview-renderer`. Audit during Phase 2 to confirm no
 editor-only fields leak into these types; if so, split.
 
-**contexts/**
-- `hub-client/src/components/ThemeContext.tsx` → `contexts/ThemeContext.tsx`
+**contexts/** — **deferred (2026-05-13)**
+
+`ThemeContext.tsx` was scheduled to move, but inspection during
+Phase 2 surfaced two facts:
+
+1. **No moving file uses it.** Only `App.tsx`, `ProjectSelector
+   .tsx`, and `Editor.tsx` consume `ThemeProvider` / `useTheme` —
+   all three stay in hub-client.
+2. **It is coupled to `services/preferences/`** (localStorage-
+   backed user prefs), which is editor-only.
+
+Moving it now would either pollute preview-renderer with
+localStorage I/O or break the import. Neither is desirable; we
+also don't *need* it moved for Phase 4. The sound refactor —
+DI'ing `getPreference`/`setPreference` through props — is a
+small but real design change that has no caller yet. **Decision:
+keep `ThemeContext.tsx` in hub-client; do the DI refactor when
+the SPA actually needs a theme provider.** Note this as a
+follow-up issue (see §Open follow-ups). The `./contexts/*`
+sub-path export was removed from `preview-renderer/package.json`
+accordingly.
 
 `ViewModeContext.tsx` stays in hub-client (it controls editor
 layout — meaningless to the SPA).
@@ -206,7 +225,13 @@ layout — meaningless to the SPA).
   (+ `.integration.test.ts`) → `utils/iframeLinkHandlers.ts`
 - `hub-client/src/utils/iframePostProcessor.ts`
   (+ `.test.ts`, `.integration.test.ts`) →
-  `utils/iframePostProcessor.ts`
+  **deferred to Phase 5** (imports `vfsReadFile` /
+  `vfsReadBinaryFile` from `services/wasmRenderer`, which itself
+  moves to `@quarto/preview-runtime` in Phase 5; moving it
+  together avoids either a wrong-direction
+  preview-renderer→hub-client back-import or a premature
+  DI refactor against iframe wrappers that themselves move in
+  Phase 4)
 - `hub-client/src/utils/componentPath.ts` (+ `.test.ts`) →
   `utils/componentPath.ts`
 - `hub-client/src/utils/stripAnsi.ts` (+ `.test.ts`) →
@@ -529,26 +554,43 @@ hub-client (even though they export nothing yet). ✓
 
 The lowest-risk moves. Pure data + pure functions; no React tree.
 
-- [ ] Move the five `types/` files to
+- [x] Move the five `types/` files to
       `ts-packages/preview-renderer/src/types/`.
-- [ ] Move `ThemeContext.tsx` to
-      `ts-packages/preview-renderer/src/contexts/`.
-- [ ] Move the five `utils/` files to
+      *(2026-05-13: project + project.test, diagnostic,
+      artifactPaths, sourceInfo, intelligence moved with `git mv`.)*
+- [x] **Deferred** `ThemeContext.tsx` — see §contexts/ above.
+      Tracked as `bd-hfjj-fu-theme`.
+- [x] Move the `utils/` files to
       `ts-packages/preview-renderer/src/utils/`.
-- [ ] Add re-exports to `ts-packages/preview-renderer/src/index.ts`.
-- [ ] Update every importer in hub-client (likely ~30-50 files).
-      `find hub-client/src -name '*.tsx' -o -name '*.ts' | xargs
-      grep -l "from '\.\./.*types/project'"` etc., rewrite to
-      `from '@quarto/preview-renderer'`.
-- [ ] Audit: do any of these types/utils carry editor-specific
-      fields that the preview pane never uses? If yes, split. If
-      not, the import-path rewrite is the whole change.
+      *(2026-05-13: 7 of 8 moved — vfsPaths, iframeLinkHandlers,
+      componentPath, stripAnsi, customRegistry, atomicCustomNodes,
+      sourceInfo. iframePostProcessor deferred to Phase 5 because
+      it imports from services/wasmRenderer.)*
+- [x] Add re-exports to `ts-packages/preview-renderer/src/index.ts`.
+      *(2026-05-13: minimal — only a design comment for now.
+      Sub-path exports in package.json handle the Phase-2 surface;
+      barrel exports grow with Phases 3–4.)*
+- [x] Update every importer in hub-client.
+      *(2026-05-13: 64 imports across 44 files rewritten to
+      `@quarto/preview-renderer/types/<m>` and `/utils/<m>` via
+      `/tmp/rewrite-imports.py`. Required adding a
+      `@quarto/preview-renderer` alias to hub-client's three
+      vitest configs — vitest's exports resolution doesn't honor
+      the `source` condition the way Vite's prod build does, so
+      we follow the existing sync-client/automerge-schema
+      alias convention.)*
+- [x] Audit types/utils for editor-only fields.
+      *(2026-05-13: no splits needed. `project.ts` mentions
+      "hub-client" in a docstring but the IndexedDB-stored
+      `ProjectEntry` type is generic enough that the SPA can
+      consume or ignore it.)*
 
 **Acceptance:**
 - `cd hub-client && npm run typecheck && npm run test:ci &&
-   npm run build:all` passes.
-- `cargo xtask verify --skip-rust-tests` passes.
-- `npm test --workspace @quarto/preview-renderer` passes.
+   npm run build:all` passes. ✓
+- `cargo xtask verify --skip-rust-tests` passes. ✓
+- `npm test --workspace @quarto/preview-renderer` passes. ✓
+  (81 unit + 7 integration tests including the moved suites.)
 
 ### Phase 3 — Move framework/
 
@@ -610,6 +652,12 @@ internally consistent.
 - [ ] Move `automergeSync.ts` → `preview-runtime/src/automergeSync.ts`.
 - [ ] Move `assetWalker.ts` (from `q2-preview/`) →
       `preview-runtime/src/assetWalker.ts`.
+- [ ] Move `iframePostProcessor.ts` (+ `.test.ts`,
+      `.integration.test.ts`) from hub-client to
+      `preview-renderer/src/utils/` — deferred from Phase 2
+      because it imports `vfsReadFile`/`vfsReadBinaryFile` from
+      `wasmRenderer`. After this phase the import resolves via
+      `@quarto/preview-runtime`.
 - [ ] Move the three `userGrammar*` files →
       `preview-runtime/src/userGrammar/` (renamed: `Discovery.ts`,
       `Cache.ts`, `Highlight.ts`).
@@ -821,6 +869,14 @@ described.
    editor.
 3. **Audit shared types** for editor-only fields and split as
    needed. May surface during Phase 2's audit step.
+4. **(`bd-hfjj-fu-theme`)** Move `ThemeContext.tsx` to
+   preview-renderer with DI'd preferences. Currently deferred
+   because (a) no rendering-side component uses it and (b) the
+   current implementation hard-codes localStorage-backed
+   `services/preferences/`. Right shape: `ThemeProvider` takes
+   `getColorScheme`/`setColorScheme` as props, the SPA passes
+   no-op or sessionStorage variants. File when the SPA actually
+   needs theme switching.
 
 ## Reference
 

@@ -11,6 +11,10 @@ export default mergeConfig(
       alias: {
         '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),
         '@quarto/quarto-sync-client': path.resolve(__dirname, '../ts-packages/quarto-sync-client/src/index.ts'),
+        // Sub-path aware: preview-renderer exposes types/* and utils/*.
+        // Aliasing to the src dir lets `@quarto/preview-renderer/utils/<m>`
+        // resolve to `<dir>/utils/<m>.ts` via Vite's default extension list.
+        '@quarto/preview-renderer': path.resolve(__dirname, '../ts-packages/preview-renderer/src'),
       },
     },
     test: {

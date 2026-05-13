@@ -5,7 +5,7 @@
  * VFS operations, QMD rendering, and SASS compilation.
  */
 
-import type { Diagnostic, RenderResponse } from '../types/diagnostic';
+import type { Diagnostic, RenderResponse } from '@quarto/preview-renderer/types/diagnostic';
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import type { AstResponse } from 'wasm-quarto-hub-client'
 import { discoverUserGrammars } from './userGrammarDiscovery';
@@ -21,7 +21,7 @@ interface VfsResponse {
 }
 
 // Re-export Diagnostic type for convenience
-export type { Diagnostic } from '../types/diagnostic';
+export type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 
 // Extended WASM module type with SASS compilation functions
 interface WasmModuleExtended {

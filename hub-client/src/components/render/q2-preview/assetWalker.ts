@@ -19,7 +19,7 @@
  */
 
 import { vfsReadBinaryFile } from '../../../services/wasmRenderer';
-import { resolveRelativePath, guessMimeType } from '../../../utils/vfsPaths';
+import { resolveRelativePath, guessMimeType } from '@quarto/preview-renderer/utils/vfsPaths';
 
 export interface ManifestCacheEntry {
     url: string;

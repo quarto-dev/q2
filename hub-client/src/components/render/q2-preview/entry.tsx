@@ -51,8 +51,8 @@ import { PreviewTitleBlock } from './custom/PreviewTitleBlock';
 import {
     buildCustomRegistry,
     type ComponentExports,
-} from '../../../utils/customRegistry';
-import { installLinkHandlers } from '../../../utils/iframeLinkHandlers';
+} from '@quarto/preview-renderer/utils/customRegistry';
+import { installLinkHandlers } from '@quarto/preview-renderer/utils/iframeLinkHandlers';
 
 // Set the renderer-surface global at module top. Importing this module
 // is sufficient to populate `window.__Q2_PREVIEW_RENDERER__`. The

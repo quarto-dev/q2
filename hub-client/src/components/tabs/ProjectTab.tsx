@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { ProjectEntry } from '../../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import './ProjectTab.css';
 
 interface ProjectTabProps {

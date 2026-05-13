@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { vfsReadFile } from '../../../services/wasmRenderer';
-import { DEFAULT_CSS_ARTIFACT_PATH } from '../../../types/artifactPaths';
+import { DEFAULT_CSS_ARTIFACT_PATH } from '@quarto/preview-renderer/types/artifactPaths';
 import { buildAssetManifest, type ManifestCacheEntry } from './assetWalker';
 
 interface Q2PreviewIframeProps {

@@ -17,7 +17,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { Diagnostic } from '../../types/diagnostic';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 
 let collapsedState = true;
 const setCollapsedMock = vi.fn((v: boolean) => {

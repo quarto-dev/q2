@@ -10,7 +10,7 @@
  */
 
 import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
-import { resolveRelativePath, guessMimeType } from './vfsPaths';
+import { resolveRelativePath, guessMimeType } from '@quarto/preview-renderer/utils/vfsPaths';
 
 /**
  * VFS path under which the website renderer flushes its

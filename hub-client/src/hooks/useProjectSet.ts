@@ -17,7 +17,7 @@ import {
 import * as projectSetService from '../services/projectSetService';
 import * as projectStorage from '../services/projectStorage';
 import { reconcileIntoConnectedProjectSet } from '../services/projectSetReconciler';
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 
 // ============================================================================
 // Types

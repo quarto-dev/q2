@@ -15,6 +15,16 @@
       "types": "./src/index.ts",
       "source": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./types/*": {
+      "types": "./src/types/*.ts",
+      "source": "./src/types/*.ts",
+      "import": "./dist/types/*.js"
+    },
+    "./utils/*": {
+      "types": "./src/utils/*.ts",
+      "source": "./src/utils/*.ts",
+      "import": "./dist/utils/*.js"
     }
   },
   "files": [
@@ -29,6 +39,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@quarto/quarto-automerge-schema": "*",
     "morphdom": "^2.7.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

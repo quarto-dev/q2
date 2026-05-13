@@ -11,6 +11,7 @@ export default mergeConfig(
       alias: {
         '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),
         '@quarto/quarto-sync-client': path.resolve(__dirname, '../ts-packages/quarto-sync-client/src/index.ts'),
+        '@quarto/preview-renderer': path.resolve(__dirname, '../ts-packages/preview-renderer/src'),
       },
     },
     test: {

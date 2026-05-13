@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../../types/project';
-import { isQmdFile } from '../../types/project';
-import type { Diagnostic } from '../../types/diagnostic';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import { isQmdFile } from '@quarto/preview-renderer/types/project';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { parseQmdToAst, isWasmReady, initWasm } from '../../services/wasmRenderer';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';

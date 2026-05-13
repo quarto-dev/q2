@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from './ThemeContext';
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
 import type { ProjectSetStatus } from '../hooks/useProjectSet';
 import type { UserSettings } from '../services/storage/types';

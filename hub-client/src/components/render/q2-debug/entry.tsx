@@ -27,7 +27,7 @@ import {
     blockStyle, inlineStyle,
     q2DebugRegistry,
 } from '.';
-import { buildCustomRegistry, type ComponentExports } from '../../../utils/customRegistry';
+import { buildCustomRegistry, type ComponentExports } from '@quarto/preview-renderer/utils/customRegistry';
 
 // Set the renderer-surface global at module top so importing this
 // module is sufficient to populate `window.__REACT_AST_DEBUG_RENDERER__`

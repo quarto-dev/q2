@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { Symbol, SymbolKind } from '../types/intelligence';
+import type { Symbol, SymbolKind } from '@quarto/preview-renderer/types/intelligence';
 import type { ThumbnailMap } from '../hooks/useSectionThumbnails';
 import './OutlinePanel.css';
 

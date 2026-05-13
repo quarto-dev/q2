@@ -13,7 +13,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FileEntry } from '@quarto/quarto-automerge-schema';
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 
 const automergeSyncMocks = vi.hoisted(() => ({
   isFileBinary: vi.fn<(path: string) => boolean>(),

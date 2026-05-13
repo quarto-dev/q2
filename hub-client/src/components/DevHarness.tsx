@@ -10,7 +10,7 @@
 
 import React from 'react';
 import ProjectSetSetup from './ProjectSetSetup';
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 
 const FAKE_LEGACY_PROJECTS: ProjectEntry[] = [
   {

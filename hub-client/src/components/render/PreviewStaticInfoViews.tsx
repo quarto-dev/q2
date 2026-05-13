@@ -1,5 +1,5 @@
-import type { Diagnostic } from '../../types/diagnostic';
-import { stripAnsi } from '../../utils/stripAnsi';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
+import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 
 // Fallback component for when WASM isn't ready yet
 export function FallbackView({ content, message }: { content: string; message: string }) {
