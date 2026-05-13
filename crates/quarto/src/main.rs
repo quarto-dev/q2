@@ -140,66 +140,53 @@ enum Commands {
         pandoc_args: Vec<String>,
     },
 
-    /// Render and preview a document or website project
+    /// Render and preview a Quarto document or project (Q2 shape).
+    ///
+    /// Boots an ephemeral local quarto-hub instance serving the
+    /// q2-preview SPA, which renders through WASM and keeps stateful
+    /// JS (Bootstrap menus, MathJax, reveal.js, listings filters)
+    /// alive across edits. See claude-notes/plans/2026-05-11-q2-
+    /// preview-epic.md for architecture.
+    ///
+    /// Replaces the Q1 (`quarto preview`) flag set. The Q1 flags
+    /// (`--render`, `--no-serve`, `--no-navigate`, `--no-watch-inputs`,
+    /// `--timeout`, `--log*`, `--quiet`, `--profile`) are intentionally
+    /// gone; Q2 always serves, always watches, and logs at the binary
+    /// level.
     Preview {
-        /// File or project to preview
-        file: Option<String>,
+        /// Project root or single file to preview. Defaults to the
+        /// current directory.
+        path: Option<std::path::PathBuf>,
 
-        /// Suggested port to listen on (defaults to random value between 3000 and 8000)
+        /// Port to listen on. Defaults to a random free port.
         #[arg(long)]
         port: Option<u16>,
 
-        /// Hostname to bind to (defaults to 127.0.0.1)
+        /// Host to bind to. Defaults to `127.0.0.1`.
         #[arg(long)]
         host: Option<String>,
 
-        /// Render to the specified format(s) before previewing
-        #[arg(long, default_value = "none")]
-        render: String,
-
-        /// Don't run a local preview web server (just monitor and re-render input files)
-        #[arg(long)]
-        no_serve: bool,
-
-        /// Don't navigate the browser automatically when outputs are updated
-        #[arg(long)]
-        no_navigate: bool,
-
-        /// Don't open a browser to preview the site
+        /// Don't open a browser tab when the server starts.
         #[arg(long)]
         no_browser: bool,
 
-        /// Do not re-render input files when they change
+        /// Override the ephemeral data directory (samod storage).
+        /// Default: a fresh `tempfile::TempDir` that's deleted on
+        /// shutdown.
         #[arg(long)]
-        no_watch_inputs: bool,
+        data_dir: Option<std::path::PathBuf>,
 
-        /// Time (in seconds) after which to exit if there are no active clients
+        /// Override the served SPA bundle with a directory on disk —
+        /// useful for live iteration on `q2-preview-spa/dist/`
+        /// without rebuilding the `quarto` binary. Same pattern as
+        /// `QUARTO_TRACE_VIEWER_DIR` for the trace viewer.
         #[arg(long)]
-        timeout: Option<u32>,
+        preview_dir: Option<std::path::PathBuf>,
 
-        /// Path to log file
+        /// Run as a standalone sync server with no local project.
+        /// The opposite of the default project-mode boot.
         #[arg(long)]
-        log: Option<String>,
-
-        /// Log level (debug, info, warning, error, critical)
-        #[arg(long)]
-        log_level: Option<String>,
-
-        /// Log format (plain, json-stream)
-        #[arg(long)]
-        log_format: Option<String>,
-
-        /// Suppress console output
-        #[arg(long)]
-        quiet: bool,
-
-        /// Active project profile(s)
-        #[arg(long)]
-        profile: Vec<String>,
-
-        /// Additional arguments to forward to quarto render
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        render_args: Vec<String>,
+        no_project: bool,
     },
 
     /// Serve a Shiny interactive document
@@ -551,7 +538,23 @@ fn main() -> Result<()> {
             replay,
             debug,
         }),
-        Commands::Preview { .. } => commands::preview::execute(),
+        Commands::Preview {
+            path,
+            port,
+            host,
+            no_browser,
+            data_dir,
+            preview_dir,
+            no_project,
+        } => commands::preview::execute(commands::preview::PreviewArgs {
+            path,
+            port,
+            host,
+            no_browser,
+            data_dir,
+            preview_dir,
+            no_project,
+        }),
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create { .. } => commands::create::execute(),
         Commands::Use { .. } => commands::use_cmd::execute(),

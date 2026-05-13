@@ -1,0 +1,26 @@
+[package]
+name = "quarto-preview"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Local HTTP server hosting the q2-preview SPA. Wraps quarto-hub for collaborative sync; serves the embedded SPA bundle on top."
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+include_dir.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
+axum = "0.8"
+
+quarto-hub.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tower = "0.5"
+http-body-util = "0.1"
+http = "1"
+reqwest = { version = "0.12", features = ["blocking"] }
+
+[lints]
+workspace = true
