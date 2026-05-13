@@ -13,7 +13,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -94,26 +94,43 @@ function waitForUrl(
   });
 }
 
+export interface FixtureFile {
+  /**
+   * Path relative to the project root. Forward slashes; nested
+   * directories (e.g. `posts/index.qmd`) are created as needed.
+   */
+  path: string;
+  content: string;
+}
+
 export interface StartOptions {
-  /** Single .qmd file to seed the project with. */
-  fixtureQmd: { path: string; content: string };
+  /**
+   * Files to seed the project with. At least one entry is required
+   * (the SPA picks the first `.qmd` as the active page on boot).
+   */
+  fixtureFiles: FixtureFile[];
 }
 
 /**
  * Start the `q2 preview` binary against a fresh tempdir project.
  *
- * The project gets one .qmd at `fixtureQmd.path` with `fixtureQmd.content`.
- * The samod data dir lives in a separate tempdir so the test can
- * inspect the project dir without picking up engine artifacts.
+ * The project gets one file per entry in `fixtureFiles`. The samod
+ * data dir lives in a separate tempdir so the test can inspect the
+ * project dir without picking up engine artifacts.
  */
 export async function startPreviewServer(opts: StartOptions): Promise<PreviewServerHandle> {
+  if (opts.fixtureFiles.length === 0) {
+    throw new Error('startPreviewServer: fixtureFiles must contain at least one entry');
+  }
+
   const projectDir = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-proj-'));
   const dataDir = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-data-'));
 
-  await writeFile(
-    path.join(projectDir, opts.fixtureQmd.path),
-    opts.fixtureQmd.content,
-  );
+  for (const file of opts.fixtureFiles) {
+    const absPath = path.join(projectDir, file.path);
+    await mkdir(path.dirname(absPath), { recursive: true });
+    await writeFile(absPath, file.content);
+  }
 
   const proc = spawn(
     Q2_BINARY,

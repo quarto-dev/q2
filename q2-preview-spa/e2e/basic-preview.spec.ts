@@ -62,7 +62,7 @@ let server: PreviewServerHandle;
 
 test.beforeEach(async () => {
   server = await startPreviewServer({
-    fixtureQmd: { path: 'index.qmd', content: INITIAL_CONTENT },
+    fixtureFiles: [{ path: 'index.qmd', content: INITIAL_CONTENT }],
   });
 });
 
