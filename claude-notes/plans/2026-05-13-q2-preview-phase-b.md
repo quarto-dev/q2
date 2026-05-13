@@ -266,22 +266,117 @@ production-code changes, as the plan predicted. The cross-doc
 include path is already covered end-to-end by the Phase A wiring +
 B.1 broadened watcher. Stop-and-report contingency was not needed.
 
-### B.4 — Acceptance bundle
+### B.4 — Acceptance bundle (bd-mrx1)
 
-A single Playwright suite that pins all three plan acceptance
-criteria together:
+A single Playwright spec pinning the two **DOM-observable** plan
+acceptance criteria together:
 
-1. Editing `_quarto.yml` re-renders the active page.
-2. Editing `posts/_metadata.yml` (in a multi-section fixture)
-   re-renders only its siblings.
-3. Editing an unrelated sibling re-renders the active page when
-   (and only when) the dep graph has an edge — note: this is
-   relaxed to "always re-renders" in Phase B per the optimisation
-   deferral above. Document the relaxed contract.
+1. Editing `_quarto.yml` re-renders the active page (project-level
+   metadata change visible in rendered output).
+2. Editing `posts/_metadata.yml` re-renders pages under `posts/`
+   (section-level metadata change visible in rendered output).
+3. ~~Editing an unrelated sibling re-renders the active page when
+   (and only when) the dep graph has an edge.~~ **Deferred to
+   `bd-0mji`.** With Phase B's relaxed contract (no dep-graph
+   filter — Phase D), the SPA's render useEffect *does* re-fire
+   for every `onFileContent` callback regardless of dep-edge.
+   But when neither active-page content nor merged metadata
+   changes, the resulting render is byte-identical to the
+   previous one and invisible at the DOM. Verifying this
+   correctly requires a test-only SPA render-event hook
+   (`window.__renderTicks` or similar) — small but a production-
+   code change we don't want to fold into B.4. The follow-up
+   `bd-0mji` also covers the Phase D positive/negative dep-graph
+   filter tests once the filter lands.
 
-**Implementation:** Playwright spec in `q2-preview-spa/e2e/`,
-mirroring `basic-preview.spec.ts`'s shape; reuses
-`previewServer.ts` for setup.
+**Workflow.** Sequential sub-task off `feature/q2-preview-command`
+via `cargo xtask switch-task bd-mrx1 --from feature/q2-preview-command`
+(reuses warm `target/` + `node_modules/`).
+
+**Fixture — single, dual-purpose.**
+
+```
+_quarto.yml            title: "Initial Title"
+posts/_metadata.yml    subtitle: "Initial Subtitle"
+posts/post1.qmd        (no frontmatter, no body title)
+```
+
+`posts/post1.qmd` is the only `.qmd` so the SPA's first-`.qmd`
+selection is unambiguous. With no own title, it inherits
+`title:` from `_quarto.yml`. With no own subtitle, it inherits
+`subtitle:` from `posts/_metadata.yml`. Both knobs surface in the
+rendered title-block: `<h1 class="title">` and `<p class="subtitle">`.
+
+Empirically verified 2026-05-13 with `target/debug/q2 render`:
+- `_quarto.yml: title: "Inherited From Project"` → `<title>` and
+  `<h1 class="title">` in the rendered HTML.
+- `posts/_metadata.yml: subtitle: "Section Subtitle"` →
+  `<p class="subtitle">Section Subtitle</p>` in a doc under `posts/`.
+
+**Spec** (`q2-preview-spa/e2e/config-edits.spec.ts`).
+
+Three tests sharing the fixture via `beforeEach`:
+
+1. **Initial render** asserts both inherited values appear in DOM.
+   This is the load-bearing check that both metadata layers feed
+   the first render — otherwise the edit-phase tests would only
+   prove "re-render fires," not "config layer was picked up."
+
+2. **Edit `_quarto.yml`** changes `title:` to a new sentinel,
+   asserts the new title appears in the inner iframe's `<h1
+   class="title">` within 5 s (2 s plan budget, matches
+   `basic-preview.spec.ts` CI ceiling).
+
+3. **Edit `posts/_metadata.yml`** changes `subtitle:` to a new
+   sentinel, asserts the new subtitle appears in
+   `<p class="subtitle">` within 5 s.
+
+Both edit tests also re-check the *other* knob is still at its
+initial value, so an over-eager edit can't trivially pass by
+clobbering both layers.
+
+**Implementation note.** Reuses `fixtureFiles: Array<…>` (the
+multi-file helper generalised in B.3 / bd-pf63). No further
+changes to `previewServer.ts` needed.
+
+**Acceptance.** Spec is green in `cargo xtask verify --e2e`
+(or, equivalently, `npm run test:e2e` from `q2-preview-spa/`).
+If red, stop and report — likely indicates `_quarto.yml` or
+`posts/_metadata.yml` aren't reaching the WASM render via the
+preview's VFS sync path; that would be a real Phase B gap.
+
+**Checklist:**
+
+- [x] File bd-mrx1 (B.4) + bd-0mji (Phase D follow-up). Mark
+  bd-mrx1 `in_progress`.
+- [x] Empirical probe: confirm both `_quarto.yml: title:` and
+  `posts/_metadata.yml: subtitle:` flow through to the rendered
+  title-block (with `target/debug/q2 render`).
+- [x] `switch-task` from this worktree onto
+  `beads/bd-mrx1-phase-b4-acceptance-bundle`.
+- [x] Update plan §B.4 with approach and checklist (this section).
+- [x] Add `q2-preview-spa/e2e/config-edits.spec.ts` with the
+  three tests above.
+- [x] Run the q2-preview-spa Playwright suite — all specs green
+  (basic-preview + include-shortcode + config-edits, 9/9 tests).
+  Also `cargo xtask verify --skip-hub-build` clean (12/12).
+- [ ] Commit, close bd-mrx1, merge `--no-ff` into
+  `feature/q2-preview-command` after user approval.
+
+**Empirical result (2026-05-13):** Phase B.4 lands with zero
+production-code changes, matching B.3's pattern and the plan's
+prediction. The Phase A wiring + B.1 broadened watcher cover both
+project-level and section-level metadata propagation end-to-end.
+Stop-and-report contingency was not needed.
+
+**Aggregate Phase B status.** Both Phase B implementation sub-tasks
+(B.1 / bd-z529 — watcher allow-list broaden) and verification sub-
+tasks (B.3 / bd-pf63 — cross-doc includes; B.4 / bd-mrx1 — config
+files) have landed without touching production rendering or sync
+code. B.2 (`format: html` → `q2-preview` remap) was resolved
+incidentally during Phase A.5.4c. The remaining open Phase D
+items (bd-0mji — dep-graph filter + render-event hook) are out of
+scope for the Phase B closeout.
 
 ## Sub-task issues to file (later)
 
