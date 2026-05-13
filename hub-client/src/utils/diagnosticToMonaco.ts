@@ -10,14 +10,14 @@
  */
 
 import type * as Monaco from 'monaco-editor';
-import type { Diagnostic as LegacyDiagnostic, DiagnosticKind } from '../types/diagnostic';
+import type { Diagnostic as LegacyDiagnostic, DiagnosticKind } from '@quarto/preview-renderer/types/diagnostic';
 import type {
   Diagnostic as LspDiagnostic,
   DiagnosticSeverity,
-} from '../types/intelligence';
+} from '@quarto/preview-renderer/types/intelligence';
 
 // Re-export legacy type with alias for backwards compatibility
-export type { Diagnostic as LegacyDiagnostic } from '../types/diagnostic';
+export type { Diagnostic as LegacyDiagnostic } from '@quarto/preview-renderer/types/diagnostic';
 
 /**
  * Result of converting diagnostics to Monaco markers.

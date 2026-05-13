@@ -7,7 +7,7 @@
 
 import type { DocHandle, DocHandleEphemeralMessagePayload } from '@automerge/automerge-repo';
 import { next as A } from '@automerge/automerge';
-import { getFileHandle } from './automergeSync';
+import { getFileHandle } from '@quarto/preview-runtime';
 import { getUserIdentity } from './userSettings';
 import type { UserSettings } from './storage/types';
 

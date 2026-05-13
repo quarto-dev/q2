@@ -8,8 +8,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { discoverTemplates, hasTemplates } from './templateService';
 
-// Mock the wasmRenderer module
-vi.mock('./wasmRenderer', () => ({
+// Mock the wasmRenderer module (now @quarto/preview-runtime)
+vi.mock('@quarto/preview-runtime', () => ({
   vfsListFiles: vi.fn(),
   vfsReadFile: vi.fn(),
 }));
@@ -19,7 +19,7 @@ vi.mock('wasm-quarto-hub-client', () => ({
   prepare_template: vi.fn(),
 }));
 
-import { vfsListFiles, vfsReadFile } from './wasmRenderer';
+import { vfsListFiles, vfsReadFile } from '@quarto/preview-runtime';
 import { prepare_template } from 'wasm-quarto-hub-client';
 
 const mockVfsListFiles = vi.mocked(vfsListFiles);

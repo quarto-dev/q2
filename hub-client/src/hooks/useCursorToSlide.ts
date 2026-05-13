@@ -5,9 +5,9 @@
  */
 
 import { useMemo } from 'react';
-import type { Symbol } from '../types/intelligence';
+import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
 import { parseSlides } from '../components/render/ReactAstSlideRenderer';
-import type { PandocAST } from '../components/render/framework/types';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
 
 interface SlideMapping {
   /** The starting line (0-based) where this slide begins. */

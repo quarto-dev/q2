@@ -26,6 +26,10 @@ export default mergeConfig(
         // The WASM JS file imports from `/src/...` which only works in vite dev server.
         // Map it to the actual source directory for tests.
         '/src': path.resolve(__dirname, 'src'),
+        '@quarto/preview-renderer': path.resolve(__dirname, '../ts-packages/preview-renderer/src'),
+        '@quarto/preview-runtime': path.resolve(__dirname, '../ts-packages/preview-runtime/src'),
+        '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),
+        '@quarto/quarto-sync-client': path.resolve(__dirname, '../ts-packages/quarto-sync-client/src/index.ts'),
       },
     },
   }),

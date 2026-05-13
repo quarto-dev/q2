@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
-import type { ProjectEntry, FileEntry } from './types/project';
+import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import ProjectSelector from './components/ProjectSelector';
 import ProjectSetSetup from './components/ProjectSetSetup';
 
@@ -27,8 +27,8 @@ import {
   createNewProject,
   type ActorIdentity,
   type EditorContentChange,
-} from './services/automergeSync';
-import type { ProjectFile } from './services/wasmRenderer';
+} from '@quarto/preview-runtime';
+import type { ProjectFile } from '@quarto/preview-runtime';
 import * as projectStorage from './services/projectStorage';
 import { installDebugApi } from './services/debugApi';
 import { getUserIdentity, updateUserName } from './services/userSettings';

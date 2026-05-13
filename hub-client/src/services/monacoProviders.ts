@@ -18,7 +18,7 @@ import {
   type Symbol,
   type FoldingRange,
 } from './intelligenceService';
-import type { SymbolKind, FoldingRangeKind, Range } from '../types/intelligence';
+import type { SymbolKind, FoldingRangeKind, Range } from '@quarto/preview-renderer/types/intelligence';
 
 // ============================================================================
 // Type Conversion Utilities

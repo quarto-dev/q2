@@ -1,5 +1,5 @@
 import React from 'react';
-import { Node, renderChildren } from '../framework/dispatch';
+import { Node, renderChildren } from '@quarto/preview-renderer/framework';
 import type {
     InlineNode,
     NodeArgs,
@@ -26,7 +26,7 @@ import type {
     ImageInline,
     SpanInline,
     QuotedInline,
-} from '../framework/types';
+} from '@quarto/preview-renderer/framework';
 import { blockStyle, inlineStyle } from './styles';
 
 export const Para = (args: NodeArgs<ParaBlock>) => (

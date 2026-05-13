@@ -46,7 +46,9 @@ vi.mock('./q2-debug/Q2DebugIframe', () => ({
   },
 }));
 
-vi.mock('./q2-preview/Q2PreviewIframe', () => ({
+// Q2PreviewIframe moved to @quarto/preview-renderer/iframe/ in
+// bd-hfjj Phase 4. Mock the new location.
+vi.mock('@quarto/preview-renderer/iframe/Q2PreviewIframe', () => ({
   Q2PreviewIframe: (props: any) => {
     capturedPreviewIframeProps.push(props);
     return null;

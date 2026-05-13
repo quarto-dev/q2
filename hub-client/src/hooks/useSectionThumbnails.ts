@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import type { Symbol } from '../types/intelligence';
+import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
 
 /**
  * Map from symbol line number to thumbnail data URL.
