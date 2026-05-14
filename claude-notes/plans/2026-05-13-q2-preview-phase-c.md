@@ -3,7 +3,7 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
 **Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** C.3, C.1, C.4, C.2, C.5, C.6 landed 2026-05-14. C.7 (per-doc capture cache) is the last remaining sub-task.
+**Status:** All seven sub-tasks (C.3, C.1, C.4, C.2, C.5, C.6, C.7) merged 2026-05-14. Phase C complete.
 
 ## Progress
 
@@ -52,7 +52,14 @@ Sub-task status. Each line tracks one filed bd-issue; check off as merged.
   - [x] CLI reads `_quarto.yml` once at session start via `read_engine_policy_from_project` and stashes the result on `PreviewConfig.engine_policy`. Single-file projects (no `_quarto.yml`) get `Manual` by default.
   - [x] Tests: 9 new unit tests in `config::tests` (parse + project-read), 3 new unit tests in `capture_driver::tests` (`off_policy_skips_eager_capture_for_doc_with_code_cells`, `off_policy_makes_recompute_staleness_a_noop_even_with_capture`, `auto_policy_marks_stale_and_triggers_re_execute`). All 31 quarto-preview tests pass; full workspace `cargo nextest run --workspace` 8913/8913 green.
   - [x] Binary smoke against `/tmp/q2-c6-smoke/{manual,auto,off}` (each with a 2-line `_quarto.yml` setting `preview.engine`). With `RUST_LOG=q2=info`, the CLI emits `resolved preview engine policy engine_policy={Manual,Auto,Off}` for the matching fixture — confirms `read_engine_policy_from_project` is wired and reads the file. Real-engine Auto-re-execute path covered by the unit test against the test-passthrough engine; production jupyter/knitr smoke deferred (no R/Python in CI).
-- [ ] **C.7** (bd-kw93.7) — Per-doc capture filesystem cache (blocked by C.5).
+- [x] **C.7** (bd-kw93.7) — Per-doc capture filesystem cache. Merged 2026-05-14.
+  - [x] New `crates/quarto-preview/src/cache.rs` module: `compute_key` (hex SHA-256 of canonical `input_qmd` bytes per §Q-C6), `cache_file_path`, `read_cached` (None on missing path; Err on corrupt gzip/JSON), `write_cached` (atomic temp+fsync+rename — Windows-safe; creates parent dir).
+  - [x] `record_capture_cached` wrapper in the cache module: computes `input_qmd` via the existing `compute_input_qmd` helper (shared canonicalization with C.2 staleness — kept identical to prevent drift), derives the cache key, returns the cached EngineCapture on hit (skips the engine entirely), falls through to `record_capture` + write-back on miss. Cache-read errors downgrade to a logged miss + engine run; cache-write errors log + emit the capture anyway.
+  - [x] `PreviewConfig::cache_dir: Option<PathBuf>` (defaults to `<data_dir>/captures/`); threaded through `run_with_on_ready` → `record_eager_captures` / `recompute_staleness` (Auto path) → `re_execute::perform_re_execute`. The HTTP `re_execute_handler` reads a process-wide `CACHE_DIR: OnceLock<PathBuf>` set at server boot (same pattern as `SPA_DIR_OVERRIDE`); the internal `re_execute_with_registry_and_cache` test-entrypoint takes it explicitly.
+  - [x] `claim_and_spawn` and `trigger_auto_re_execute` updated to accept and forward `cache_dir` so the C.5 HTTP endpoint and the C.6 Auto-mode hook share the cache.
+  - [x] Tests: 8 cache primitives (round-trip, missing-key, corrupt-gzip, mkdir, overwrite, ...) + 4 wrapper unit tests (counting engine proves cache hit avoids `execute()`; cache miss on content edit; corrupt cache recovers; prose-only doc writes no cache entry). 1 new `tests/cache_hit.rs` integration test drives `record_eager_captures` twice across a sidecar reset with a shared `cache_dir` and a counting engine, asserting the engine fires exactly once. Existing C.1/C.2/C.5/C.6 tests migrated to the new signatures.
+  - [x] `cargo nextest run --workspace`: 8926/8926 pass (up from 8913 in C.6 — +13 C.7 tests). End-to-end binary smoke: `q2 preview /tmp/q2-c7-smoke --data-dir /tmp/q2-c7-data` boots cleanly with `engine_policy=Manual` and configures `cache_dir=<data_dir>/captures/`. The captures dir is created lazily on first cache write (not on boot), so a prose-only fixture leaves `/tmp/q2-c7-data/` containing only `automerge/`, `hub.json`, `sync-state.json` — confirming the cache subpath is gated on actual engine activity. Real-engine smoke (jupyter/knitr through CLI) deferred — no R/Python in CI; the unit + integration tests against the counting passthrough engine carry the cache-hit assertion.
+  - **Follow-up (open):** cache lives in the per-session `data_dir` tempdir, so cross-session reuse is not yet possible — closing and re-opening `q2 preview` against the same project always misses the cache. A per-project location (e.g. `<project_root>/.q2/captures/`) would unlock this; tracked for review.
 
 Friction-related follow-ups filed during Phase C setup:
 - bd-ojtq — `xtask create-worktree --base` should auto-detect/warn instead of defaulting to `main` (P3).
