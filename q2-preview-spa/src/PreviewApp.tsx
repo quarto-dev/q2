@@ -68,7 +68,21 @@ interface PreviewAppState {
    * receive an unintended `UPDATE_THEME { cssUrl: null }`.
    */
   themeFingerprint: string | null | undefined;
+  /**
+   * Boot-time failure (e.g. `/health` 5xx, samod connect throws). When
+   * set, the SPA replaces the UI with `<PreviewErrorOverlay>` — there's
+   * no previous render worth keeping. Distinct from `renderError`.
+   */
   error: Error | null;
+  /**
+   * Phase D.4 (bd-kw93.10): render-pipeline failure (WASM
+   * `renderPageForPreview` threw, or `result.success === false`).
+   * Render errors are *non-terminal*: the iframe keeps showing the
+   * last good `astJson` and `<PreviewErrorOverlay>` is overlaid on
+   * top so the user can see what broke without losing the prior
+   * render's context. A subsequent successful render clears this.
+   */
+  renderError: Error | null;
   /** Bumps on every onFileContent callback so the render effect re-fires. */
   contentTick: number;
   /**
@@ -88,6 +102,7 @@ const INITIAL_STATE: PreviewAppState = {
   astJson: null,
   themeFingerprint: undefined,
   error: null,
+  renderError: null,
   contentTick: 0,
   captures: {},
 };
@@ -258,10 +273,14 @@ export default function PreviewApp() {
           // with no theme intended → explicit clear (`null`). The
           // render-failure branch below leaves the value untouched so
           // last-good styling survives transient errors.
+          //
+          // Phase D.4 (bd-kw93.10): a successful render also clears
+          // `renderError` so the previous overlay (if any) goes away.
           setState((s) => ({
             ...s,
             astJson: result.ast_json ?? null,
             themeFingerprint: result.theme_fingerprint ?? null,
+            renderError: null,
           }));
         } else {
           // Log the full result so we can diagnose surprises in the
@@ -270,20 +289,27 @@ export default function PreviewApp() {
             path: state.activeFile,
             result,
           });
+          // Phase D.4: route into the non-terminal `renderError`
+          // slot. We deliberately do NOT touch `boot` or `astJson` —
+          // the iframe keeps showing the last-good render underneath
+          // and the overlay surfaces the failure on top. Distinct
+          // from boot errors, which DO replace the UI (no good
+          // render exists to fall back to).
           setState((s) => ({
             ...s,
-            error: new Error(
+            renderError: new Error(
               result.error ?? `renderPageInProject failed: ${JSON.stringify(result)}`,
             ),
-            boot: 'error',
           }));
         }
       } catch (err) {
         if (cancelled) return;
+        // Same non-terminal treatment as the non-success branch
+        // above. A render that throws (e.g. malformed qmd hits the
+        // WASM parser) overlays on top of the previous good render.
         setState((s) => ({
           ...s,
-          error: err instanceof Error ? err : new Error(String(err)),
-          boot: 'error',
+          renderError: err instanceof Error ? err : new Error(String(err)),
         }));
       }
     })();
@@ -298,6 +324,20 @@ export default function PreviewApp() {
     return (
       <PreviewErrorOverlay
         error={{ message: state.error.message }}
+        visible
+        collapsed={false}
+      />
+    );
+  }
+
+  // Phase D.4 (bd-kw93.10): if the *first* render failed (no good
+  // astJson exists to fall back to), show the overlay terminal-style.
+  // Subsequent failures with a prior good astJson take the
+  // overlay-on-top branch further down.
+  if (state.astJson === null && state.renderError) {
+    return (
+      <PreviewErrorOverlay
+        error={{ message: state.renderError.message }}
         visible
         collapsed={false}
       />
@@ -347,6 +387,16 @@ export default function PreviewApp() {
           activePath={state.activeFile}
           state={activeCapture?.state}
           lastError={activeCapture?.lastError}
+        />
+      )}
+      {/* Phase D.4 (bd-kw93.10): non-terminal render-error overlay.
+          Shown collapsed so it doesn't hide the last-good render the
+          user is looking at; click "Error" to expand for details. */}
+      {state.renderError && (
+        <PreviewErrorOverlay
+          error={{ message: state.renderError.message }}
+          visible
+          collapsed
         />
       )}
       <ForceRefreshButton onRefresh={handleRefresh} />

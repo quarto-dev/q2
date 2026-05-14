@@ -37,7 +37,13 @@ describe('StaleCaptureOverlay', () => {
   });
 
   it('POSTs to /api/preview/re-execute with the active path on click', async () => {
-    const fetchMock = vi.fn(async () => new Response('', { status: 202 }));
+    // Typed parameters so `mock.calls[0]` has the right tuple shape.
+    // Without these explicit `(_url, _init)` params vitest infers
+    // the mock as `() => Promise<Response>` and `mock.calls[0]` is
+    // `[]`, which then refuses the `[string, RequestInit]` cast.
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
+      new Response('', { status: 202 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     render(<StaleCaptureOverlay activePath="posts/post1.qmd" />);
@@ -47,7 +53,7 @@ describe('StaleCaptureOverlay', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/preview/re-execute');
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);

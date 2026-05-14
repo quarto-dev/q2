@@ -398,4 +398,147 @@ describe('PreviewApp boot path', () => {
       });
     }
   });
+
+  // ──────────────────────────────────────────────────────────────
+  // Phase D.4 (bd-kw93.10): non-terminal render errors overlay on
+  //                        top of the last-good render
+  // ──────────────────────────────────────────────────────────────
+
+  it('keeps the previous render visible when a subsequent render fails', async () => {
+    // Boot succeeds with a real render, then trigger another
+    // render where the WASM call throws. The iframe (last-good
+    // astJson) must stay mounted; PreviewErrorOverlay shows on top.
+    runtimeMockState.files = [{ path: 'index.qmd', docId: 'automerge:i' }];
+
+    const runtime = await import('@quarto/preview-runtime');
+    let renderCallCount = 0;
+    (runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mockImplementation(
+      async () => {
+        renderCallCount += 1;
+        if (renderCallCount === 1) {
+          return { success: true, ast_json: '{"blocks":[]}' };
+        }
+        // Second call fails as if a malformed qmd hit the parser.
+        throw new Error('synthetic parse error');
+      },
+    );
+
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+    expect(capturedIframeProps.length).toBeGreaterThanOrEqual(1);
+
+    // Trigger a re-render. setSyncHandlers' `onFileContent` callback
+    // is what would bump contentTick in production; we trigger the
+    // same effect via the captured handler.
+    const setHandlersCalls = (
+      runtime.setSyncHandlers as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    const lastHandlers = setHandlersCalls[setHandlersCalls.length - 1][0] as {
+      onFileContent: (path: string, content: string) => void;
+    };
+
+    lastHandlers.onFileContent('index.qmd', 'updated content');
+
+    await waitFor(() => {
+      // The overlay must surface (look for the collapsed-mode
+      // affordance — "Error" button text).
+      expect(screen.queryByText(/error/i)).not.toBeNull();
+    });
+
+    // The iframe stays mounted with the LAST GOOD ast_json — i.e. the
+    // render failure does NOT take the user back to "Initializing…".
+    expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+  });
+
+  it('clears the render-error overlay when the next render succeeds', async () => {
+    runtimeMockState.files = [{ path: 'index.qmd', docId: 'automerge:i' }];
+
+    const runtime = await import('@quarto/preview-runtime');
+    let renderCallCount = 0;
+    (runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mockImplementation(
+      async () => {
+        renderCallCount += 1;
+        if (renderCallCount === 1) {
+          return { success: true, ast_json: '{"blocks":[]}' };
+        }
+        if (renderCallCount === 2) {
+          // Second render fails …
+          throw new Error('synthetic parse error');
+        }
+        // … third render succeeds again (user fixed the qmd).
+        return { success: true, ast_json: '{"blocks":[{"recovered":true}]}' };
+      },
+    );
+
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+
+    const setHandlersCalls = (
+      runtime.setSyncHandlers as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    const lastHandlers = setHandlersCalls[setHandlersCalls.length - 1][0] as {
+      onFileContent: (path: string, content: string) => void;
+    };
+
+    // Trigger failure render.
+    lastHandlers.onFileContent('index.qmd', 'busted');
+    await waitFor(() => {
+      expect(screen.queryByText(/error/i)).not.toBeNull();
+    });
+
+    // Trigger recovery render.
+    lastHandlers.onFileContent('index.qmd', 'fixed');
+    await waitFor(() => {
+      // Overlay clears (no "Error" affordance visible).
+      expect(screen.queryByText(/^error$/i)).toBeNull();
+    });
+    // And the iframe got the new ast_json.
+    const propsAfterRecovery = capturedIframeProps[capturedIframeProps.length - 1];
+    expect(propsAfterRecovery.astJson).toBe('{"blocks":[{"recovered":true}]}');
+  });
+
+  it('shows engine errors via the stale-capture overlay (CaptureRef.lastError pass-through)', async () => {
+    // Pin the existing pass-through in StaleCaptureOverlay (Phase
+    // C.5) so a future refactor doesn't silently regress D.4.
+    runtimeMockState.files = [{ path: 'index.qmd', docId: 'automerge:i' }];
+
+    const runtime = await import('@quarto/preview-runtime');
+    const setHandlersCallsBefore = (
+      runtime.setSyncHandlers as ReturnType<typeof vi.fn>
+    ).mock.calls.length;
+
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+
+    const setHandlersCalls = (
+      runtime.setSyncHandlers as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    const handlers = setHandlersCalls[setHandlersCallsBefore][0] as {
+      onCapturesChange: (
+        captures: Record<string, { captureDocId: string; state?: string; lastError?: string }>,
+      ) => void;
+    };
+
+    // Inject a sidecar entry whose state === 'error' and carries a
+    // user-facing message.
+    handlers.onCapturesChange({
+      'index.qmd': {
+        captureDocId: 'automerge:cap',
+        state: 'error',
+        lastError: 'kernel died: ModuleNotFoundError: pandas',
+      },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/kernel died.*pandas/i),
+      ).not.toBeNull();
+    });
+  });
 });

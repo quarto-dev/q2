@@ -25,7 +25,12 @@
     - `q2 preview <project>/posts/intro.qmd` → `→ http://127.0.0.1:50814/?page=posts/intro.qmd` + `project_root=/private/tmp/q2-d2-smoke` (walked up to `_quarto.yml`)
     - `q2 preview <dir-without-index>` → `→ http://127.0.0.1:50815/` (no `?page=`)
 - [ ] **D.3** (bd-kw93.9) — Static-file resource verification (CSS in `_extensions/`, images, theme files round-trip through samod binary-doc sync).
-- [ ] **D.4** (bd-kw93.10) — Diagnostics surface: render errors / engine errors / parse errors render through `PreviewErrorOverlay` instead of failing silently.
+- [x] **D.4** (bd-kw93.10) — Diagnostics surface: render errors / engine errors / parse errors render through `PreviewErrorOverlay` instead of failing silently. Merged 2026-05-14.
+  - [x] New `renderError: Error | null` state slot in `PreviewApp.tsx`, distinct from the boot-time `error` slot. Render-pipeline failures (WASM throw or `result.success === false`) populate `renderError` *without* flipping `boot: 'error'` — the iframe keeps the last-good `astJson` mounted and `<PreviewErrorOverlay collapsed>` overlays on top. A successful render clears `renderError`.
+  - [x] First-render failure (no good `astJson` yet) takes a dedicated branch that shows the overlay terminal-style — there's no underlying render to fall back to.
+  - [x] Engine errors via `CaptureRef.lastError` continue to surface through `StaleCaptureOverlay` (already wired in C.5); D.4 pins this with a new integration test so a future refactor doesn't regress it.
+  - [x] Drive-by fix: `StaleCaptureOverlay.integration.test.tsx` had a pre-existing TS error (`mock.calls[0] as [string, RequestInit]` against a zero-param mock) that broke `npm run build`. Fixed by giving the fetch mock explicit parameter types. The production build (`tsc -b && vite build`) is now clean again.
+  - [x] Tests: 3 new SPA integration tests (last-good render stays visible when render fails; overlay clears on next successful render; engine `lastError` surfaces via `StaleCaptureOverlay`). All 21 integration + 8 unit + workspace nextest 8938/8938 pass.
 - [ ] **D.5** (bd-kw93.11) — User-facing documentation in `docs/` for `q2 preview`.
 - [ ] **D.6** (bd-kw93.12) — Dep-graph filter for re-renders (unblocks bd-0mji's regression tests).
 
