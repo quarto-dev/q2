@@ -105,29 +105,81 @@ pub(crate) async fn re_execute_with_registry(
             .into_response();
     }
 
-    // Concurrency guard: refuse a second re-execute for the same
-    // path while the first is in flight.
-    let in_flight_set = in_flight();
-    {
-        let mut guard = in_flight_set.lock().expect("in-flight mutex poisoned");
-        if !guard.insert(rel_path.clone()) {
-            return (
-                StatusCode::CONFLICT,
-                format!("Capture for '{rel_path}' is already being re-executed"),
-            )
-                .into_response();
-        }
-    }
-
-    // Mark `state: running` on the sidecar so the SPA can show a
-    // spinner. If there's no existing entry yet (unusual but
-    // possible), we create one with a placeholder captureDocId
-    // pointing at the eventual binary doc; the producer below writes
-    // the real value.
     let previous_capture_doc_id = ctx
         .index()
         .get_capture(&rel_path)
         .map(|c| c.capture_doc_id.clone());
+
+    match claim_and_spawn(ctx, rel_path.clone(), registry) {
+        ClaimOutcome::Spawned => (
+            StatusCode::ACCEPTED,
+            Json(ReExecuteAccepted {
+                previous_capture_doc_id,
+            }),
+        )
+            .into_response(),
+        ClaimOutcome::AlreadyInFlight => (
+            StatusCode::CONFLICT,
+            format!("Capture for '{rel_path}' is already being re-executed"),
+        )
+            .into_response(),
+        ClaimOutcome::MarkRunningFailed(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to mark capture as running: {e}"),
+        )
+            .into_response(),
+    }
+}
+
+/// Auto-mode (Phase C.6) entry point: kick off a re-execute from the
+/// file-watcher hook when the user's `preview.engine: auto` config
+/// said so. Caller has already confirmed staleness; we only need to
+/// claim the in-flight slot and spawn the worker.
+///
+/// This is the same machinery as the HTTP handler minus the response
+/// shape — if a run is already in flight for this path, we silently
+/// skip (a debounced flurry of edits collapses to one engine run at
+/// a time per doc, which is what users want).
+pub(crate) fn trigger_auto_re_execute(
+    ctx: SharedContext,
+    rel_path: String,
+    registry: Option<EngineRegistry>,
+) {
+    match claim_and_spawn(ctx, rel_path.clone(), registry) {
+        ClaimOutcome::Spawned => {
+            tracing::debug!(rel_path = %rel_path, "auto re-execute kicked off");
+        }
+        ClaimOutcome::AlreadyInFlight => {
+            tracing::debug!(rel_path = %rel_path, "auto re-execute skipped: already in flight");
+        }
+        ClaimOutcome::MarkRunningFailed(e) => {
+            tracing::warn!(rel_path = %rel_path, error = %e, "auto re-execute failed to mark running");
+        }
+    }
+}
+
+enum ClaimOutcome {
+    Spawned,
+    AlreadyInFlight,
+    MarkRunningFailed(String),
+}
+
+/// Shared claim-and-spawn: validates that the in-flight slot is
+/// available, marks the sidecar `state: running`, and spawns the
+/// blocking engine worker. Returns the outcome so the caller can
+/// shape the response (HTTP handler) or log (auto path).
+fn claim_and_spawn(
+    ctx: SharedContext,
+    rel_path: String,
+    registry: Option<EngineRegistry>,
+) -> ClaimOutcome {
+    let in_flight_set = in_flight();
+    {
+        let mut guard = in_flight_set.lock().expect("in-flight mutex poisoned");
+        if !guard.insert(rel_path.clone()) {
+            return ClaimOutcome::AlreadyInFlight;
+        }
+    }
 
     if let Some(existing) = ctx.index().get_capture(&rel_path) {
         let running = CaptureRef {
@@ -137,42 +189,28 @@ pub(crate) async fn re_execute_with_registry(
             last_error: None,
         };
         if let Err(e) = ctx.index().set_capture(&rel_path, &running) {
-            // Release the in-flight slot before returning.
             in_flight_set
                 .lock()
                 .expect("in-flight mutex poisoned")
                 .remove(&rel_path);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to mark capture as running: {e}"),
-            )
-                .into_response();
+            return ClaimOutcome::MarkRunningFailed(format!("{e}"));
         }
     }
 
-    // Spawn the engine run on a blocking worker. The pipeline futures
-    // are `?Send` so we use `pollster::block_on` inside
-    // `spawn_blocking` — same pattern as the C.1 eager-capture
-    // driver.
     let ctx_for_task = ctx.clone();
     let rel_path_for_task = rel_path.clone();
     let in_flight_for_task = in_flight_set.clone();
-    let registry_for_task = registry;
     tokio::task::spawn_blocking(move || {
         let result = pollster::block_on(perform_re_execute(
             ctx_for_task.clone(),
             &rel_path_for_task,
-            registry_for_task,
+            registry,
         ));
-        // Always release the in-flight slot, regardless of outcome.
         in_flight_for_task
             .lock()
             .expect("in-flight mutex poisoned")
             .remove(&rel_path_for_task);
 
-        // On failure, transition the sidecar to `state: error` with
-        // the message so the SPA can surface it. Success path
-        // already wrote `state: idle`.
         if let Err(e) = result {
             let msg = format!("{e}");
             if let Some(existing) = ctx_for_task.index().get_capture(&rel_path_for_task) {
@@ -190,13 +228,7 @@ pub(crate) async fn re_execute_with_registry(
         }
     });
 
-    (
-        StatusCode::ACCEPTED,
-        Json(ReExecuteAccepted {
-            previous_capture_doc_id,
-        }),
-    )
-        .into_response()
+    ClaimOutcome::Spawned
 }
 
 /// Drive the actual engine run, write the new binary doc, and
@@ -314,10 +346,14 @@ mod tests {
     /// existing capture; others test the no-capture branch.)
     async fn seed_capture(ctx: SharedContext) {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
-        let count =
-            crate::capture_driver::record_eager_captures(ctx, runtime, Some(make_registry()))
-                .await
-                .unwrap();
+        let count = crate::capture_driver::record_eager_captures(
+            ctx,
+            runtime,
+            Some(make_registry()),
+            crate::config::EnginePolicy::Manual,
+        )
+        .await
+        .unwrap();
         assert_eq!(count, 1, "fixture must seed a capture");
     }
 

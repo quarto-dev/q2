@@ -4114,6 +4114,7 @@ dependencies = [
  "pollster",
  "quarto-core",
  "quarto-hub",
+ "quarto-pandoc-types",
  "quarto-system-runtime",
  "quarto-trace",
  "reqwest 0.12.28",

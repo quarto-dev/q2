@@ -12,7 +12,8 @@ use std::net::TcpListener as StdTcpListener;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use quarto_preview::PreviewConfig;
+use quarto_preview::{EnginePolicy, PreviewConfig, config::read_engine_policy_from_project};
+use quarto_system_runtime::NativeRuntime;
 use tempfile::TempDir;
 use tracing::info;
 
@@ -107,6 +108,16 @@ async fn run(args: PreviewArgs) -> Result<()> {
         println!();
     }
 
+    // Phase C.6: read `preview.engine` from `_quarto.yml` so the
+    // driver knows whether to skip eager execution (`off`) or auto-
+    // re-execute on edits (`auto`). Single-file projects with no
+    // `_quarto.yml` get `Manual` (the safe pre-C.6 default).
+    let engine_policy = match project_root.as_deref() {
+        Some(root) => read_engine_policy_from_project(root, &NativeRuntime::new()),
+        None => EnginePolicy::Manual,
+    };
+    info!(?engine_policy, "resolved preview engine policy");
+
     let config = PreviewConfig {
         host,
         port,
@@ -116,6 +127,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // CLI uses the default engine registry; tests substitute a
         // passthrough engine via the integration-test surface.
         engine_registry: None,
+        engine_policy,
     };
     quarto_preview::run(config).await
 }

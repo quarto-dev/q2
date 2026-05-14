@@ -24,7 +24,10 @@ use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter}
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 pub mod capture_driver;
+pub mod config;
 pub mod re_execute;
+
+pub use config::EnginePolicy;
 
 /// The SPA bundle embedded at build time. See `build.rs` for how the
 /// source directory is chosen (real `q2-preview-spa/dist/` if present,
@@ -61,6 +64,12 @@ pub struct PreviewConfig {
     /// Production callers leave this `None` to use the default
     /// (`markdown` + native engines).
     pub engine_registry: Option<EngineRegistry>,
+    /// Engine policy resolved from `preview.engine` in the project's
+    /// `_quarto.yml` (Phase C.6). Default is [`EnginePolicy::Manual`],
+    /// matching pre-C.6 behaviour. The CLI reads this once at session
+    /// start via [`config::read_engine_policy_from_project`]; tests
+    /// substitute directly.
+    pub engine_policy: EnginePolicy,
 }
 
 /// Run the preview server. Returns when the server is shut down (ctrl-c
@@ -99,8 +108,10 @@ where
     // (see `.claude/rules/wasm.md`); `pollster::block_on` runs them
     // on the spawned thread without requiring `Send`.
     let engine_registry = config.engine_registry.clone();
+    let engine_policy = config.engine_policy;
+    let registry_for_on_ready = engine_registry.clone();
     let on_ready: server::OnReadyCallback = Box::new(move |ctx| {
-        let registry = engine_registry;
+        let registry = registry_for_on_ready;
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let ctx_for_driver = ctx.clone();
         tokio::task::spawn_blocking(move || {
@@ -108,6 +119,7 @@ where
                 ctx_for_driver,
                 runtime,
                 registry,
+                engine_policy,
             ));
             if let Err(e) = result {
                 tracing::warn!(error = %e, "eager capture driver failed");
@@ -132,6 +144,7 @@ where
     // `/private/tmp/foo` (the same symlink-resolution issue
     // `sync_file_by_path` already has — see canonicalize note in
     // tests/staleness.rs).
+    let registry_for_on_file_changed = engine_registry.clone();
     let on_file_changed: server::OnFileChangedCallback = Arc::new(move |ctx, abs_path| {
         let Some(project_root_raw) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
             return;
@@ -143,9 +156,15 @@ where
         };
         let rel_path = rel.to_string_lossy().to_string();
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let registry = registry_for_on_file_changed.clone();
         tokio::task::spawn_blocking(move || {
-            let result =
-                pollster::block_on(capture_driver::recompute_staleness(ctx, runtime, &rel_path));
+            let result = pollster::block_on(capture_driver::recompute_staleness(
+                ctx,
+                runtime,
+                &rel_path,
+                engine_policy,
+                registry,
+            ));
             if let Err(e) = result {
                 tracing::warn!(error = %e, rel_path = %rel_path, "staleness recompute failed");
             }
