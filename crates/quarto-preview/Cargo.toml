@@ -25,6 +25,7 @@ samod = { version = "0.9.0", git = "https://github.com/quarto-dev/samod.git", br
 
 quarto-core.workspace = true
 quarto-hub.workspace = true
+quarto-pandoc-types.workspace = true
 quarto-system-runtime.workspace = true
 quarto-trace.workspace = true
 

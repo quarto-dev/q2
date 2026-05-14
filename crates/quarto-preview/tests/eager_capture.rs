@@ -76,6 +76,7 @@ async fn eager_capture_populates_index_sidecar() {
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
         engine_registry: Some(registry),
+        engine_policy: Default::default(),
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();
@@ -164,6 +165,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
         engine_registry: None,
+        engine_policy: Default::default(),
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();

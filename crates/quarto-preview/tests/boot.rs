@@ -75,6 +75,7 @@ async fn boots_serves_spa_plus_hub_health() {
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
         engine_registry: None,
+        engine_policy: Default::default(),
     };
 
     // Spawn the server. `run()` blocks until shutdown; we abort the

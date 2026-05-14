@@ -33,6 +33,8 @@ use quarto_hub::resource::create_binary_document;
 use quarto_system_runtime::SystemRuntime;
 use quarto_trace::EngineCapture;
 
+use crate::config::EnginePolicy;
+
 /// MIME type marker written into the capture binary doc so the
 /// browser-side reader can verify it's looking at the right payload
 /// shape (gzipped EngineCapture JSON) instead of an unrelated resource.
@@ -53,7 +55,14 @@ pub async fn record_eager_captures(
     ctx: Arc<HubContext>,
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<EngineRegistry>,
+    policy: EnginePolicy,
 ) -> Result<usize, RecordError> {
+    // C.6: `preview.engine: off` disables all engine execution, including
+    // the eager run. Code cells render as inert source in the SPA.
+    if policy == EnginePolicy::Off {
+        tracing::debug!("eager capture driver skipped: engine policy = off");
+        return Ok(0);
+    }
     let Some(project_root) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
         // Standalone mode — nothing to record.
         return Ok(0);
@@ -175,7 +184,14 @@ pub async fn recompute_staleness(
     ctx: Arc<HubContext>,
     runtime: Arc<dyn SystemRuntime>,
     rel_path: &str,
+    policy: EnginePolicy,
+    engine_registry: Option<EngineRegistry>,
 ) -> Result<bool, RecordError> {
+    // C.6: `preview.engine: off` skips the watcher staleness hook
+    // entirely (no captures exist anyway, but defensive).
+    if policy == EnginePolicy::Off {
+        return Ok(false);
+    }
     let Some(project_root) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
         return Ok(false);
     };
@@ -227,6 +243,21 @@ pub async fn recompute_staleness(
         staleness = is_stale,
         "updated sidecar staleness",
     );
+
+    // C.6 Auto policy: when staleness just flipped to true, kick off a
+    // re-execute synchronously so the SPA sees a fresh capture without
+    // requiring the user to click the overlay. We reuse the same path
+    // the HTTP /api/preview/re-execute handler takes, including its
+    // in-flight guard (so a debounced flurry of file changes is
+    // collapsed to one engine run at a time per doc).
+    if policy == EnginePolicy::Auto && is_stale {
+        crate::re_execute::trigger_auto_re_execute(
+            ctx.clone(),
+            rel_path.to_string(),
+            engine_registry,
+        );
+    }
+
     Ok(true)
 }
 
@@ -392,7 +423,9 @@ mod tests {
         );
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
-        let count = record_eager_captures(ctx, runtime, None).await.unwrap();
+        let count = record_eager_captures(ctx, runtime, None, EnginePolicy::Manual)
+            .await
+            .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -401,7 +434,7 @@ mod tests {
         let (_tmp, ctx, runtime) =
             build_ctx_with_files(&[("doc.qmd", "---\ntitle: Prose\n---\n\nNo cells.\n")]).await;
 
-        let count = record_eager_captures(ctx.clone(), runtime, None)
+        let count = record_eager_captures(ctx.clone(), runtime, None, EnginePolicy::Manual)
             .await
             .unwrap();
         assert_eq!(count, 0);
@@ -416,9 +449,14 @@ mod tests {
         )])
         .await;
 
-        let count = record_eager_captures(ctx.clone(), runtime, Some(make_registry()))
-            .await
-            .unwrap();
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Manual,
+        )
+        .await
+        .unwrap();
         assert_eq!(count, 1);
         assert!(ctx.index().has_capture("doc.qmd"));
 
@@ -438,9 +476,14 @@ mod tests {
         )])
         .await;
 
-        let count = record_eager_captures(ctx.clone(), runtime, Some(make_registry()))
-            .await
-            .unwrap();
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Manual,
+        )
+        .await
+        .unwrap();
         assert_eq!(count, 1);
 
         let entry = ctx.index().get_capture("doc.qmd").unwrap();
@@ -472,12 +515,22 @@ mod tests {
         )])
         .await;
 
-        let first = record_eager_captures(ctx.clone(), runtime.clone(), Some(make_registry()))
-            .await
-            .unwrap();
-        let second = record_eager_captures(ctx.clone(), runtime, Some(make_registry()))
-            .await
-            .unwrap();
+        let first = record_eager_captures(
+            ctx.clone(),
+            runtime.clone(),
+            Some(make_registry()),
+            EnginePolicy::Manual,
+        )
+        .await
+        .unwrap();
+        let second = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Manual,
+        )
+        .await
+        .unwrap();
         assert_eq!(first, 1);
         assert_eq!(second, 0, "second run should be a no-op");
     }
@@ -494,9 +547,14 @@ mod tests {
         content: &str,
     ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
         let (tmp, ctx, runtime) = build_ctx_with_files(&[(rel, content)]).await;
-        let count = record_eager_captures(ctx.clone(), runtime.clone(), Some(make_registry()))
-            .await
-            .unwrap();
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime.clone(),
+            Some(make_registry()),
+            EnginePolicy::Manual,
+        )
+        .await
+        .unwrap();
         assert_eq!(count, 1, "fixture must produce a capture");
         (tmp, ctx, runtime)
     }
@@ -510,9 +568,15 @@ mod tests {
         .await;
         // Sanity: initial recompute against unchanged content is a no-op.
         assert!(
-            !recompute_staleness(ctx.clone(), runtime.clone(), "doc.qmd")
-                .await
-                .unwrap(),
+            !recompute_staleness(
+                ctx.clone(),
+                runtime.clone(),
+                "doc.qmd",
+                EnginePolicy::Manual,
+                None
+            )
+            .await
+            .unwrap(),
             "unchanged content should not flip staleness"
         );
         assert_eq!(
@@ -527,9 +591,10 @@ mod tests {
         )
         .unwrap();
 
-        let flipped = recompute_staleness(ctx.clone(), runtime, "doc.qmd")
-            .await
-            .unwrap();
+        let flipped =
+            recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
+                .await
+                .unwrap();
         assert!(flipped, "recompute should report a flip");
         assert_eq!(
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
@@ -554,9 +619,15 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n",
         )
         .unwrap();
-        let _ = recompute_staleness(ctx.clone(), runtime.clone(), "doc.qmd")
-            .await
-            .unwrap();
+        let _ = recompute_staleness(
+            ctx.clone(),
+            runtime.clone(),
+            "doc.qmd",
+            EnginePolicy::Manual,
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
             Some(true)
@@ -568,7 +639,7 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
         )
         .unwrap();
-        let _ = recompute_staleness(ctx.clone(), runtime, "doc.qmd")
+        let _ = recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
             .await
             .unwrap();
         assert_eq!(
@@ -594,7 +665,7 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\nA different paragraph.\n\n```{test-passthrough}\nx\n```\n",
         )
         .unwrap();
-        recompute_staleness(ctx.clone(), runtime, "doc.qmd")
+        recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
             .await
             .unwrap();
         assert_eq!(
@@ -612,9 +683,10 @@ mod tests {
         let (_tmp, ctx, runtime) =
             build_ctx_with_files(&[("doc.qmd", "---\ntitle: Prose\n---\n\nhi\n")]).await;
 
-        let result = recompute_staleness(ctx.clone(), runtime, "doc.qmd")
-            .await
-            .unwrap();
+        let result =
+            recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
+                .await
+                .unwrap();
         assert!(!result);
         assert!(ctx.index().get_capture("doc.qmd").is_none());
     }
@@ -631,9 +703,133 @@ mod tests {
         );
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
-        let result = recompute_staleness(ctx, runtime, "anything.qmd")
+        let result = recompute_staleness(ctx, runtime, "anything.qmd", EnginePolicy::Manual, None)
             .await
             .unwrap();
         assert!(!result);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Phase C.6: preview.engine policy (Off / Auto)
+    // ──────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn off_policy_skips_eager_capture_for_doc_with_code_cells() {
+        // §C.6 acceptance: "off skips eager + suppresses code-cell exec."
+        // A doc with a code cell that would otherwise produce a capture
+        // (covered by `doc_with_passthrough_engine_records_capture`)
+        // must produce zero captures under `Off`.
+        let (_tmp, ctx, runtime) = build_ctx_with_files(&[(
+            "doc.qmd",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n42\n```\n",
+        )])
+        .await;
+
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Off,
+        )
+        .await
+        .unwrap();
+        assert_eq!(count, 0, "Off policy must skip eager capture");
+        assert!(
+            !ctx.index().has_capture("doc.qmd"),
+            "Off policy must leave the sidecar untouched"
+        );
+    }
+
+    #[tokio::test]
+    async fn off_policy_makes_recompute_staleness_a_noop_even_with_capture() {
+        // §C.6 acceptance: under Off, the file-watcher staleness hook
+        // does nothing — even if a stale-looking capture exists from a
+        // prior session.
+        let (tmp, ctx, runtime) = build_ctx_record_then_return_root(
+            "doc.qmd",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
+        )
+        .await;
+        // Edit the cell body — under Manual this would flip staleness.
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n",
+        )
+        .unwrap();
+
+        let flipped = recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Off, None)
+            .await
+            .unwrap();
+        assert!(!flipped, "Off policy must not flip staleness");
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false),
+            "Off policy must leave the existing staleness flag alone"
+        );
+    }
+
+    #[tokio::test]
+    async fn auto_policy_marks_stale_and_triggers_re_execute() {
+        // §C.6 acceptance: "auto re-executes on every code-cell change
+        // without the overlay." We can't easily black-box assert "the
+        // SPA never showed the overlay" in a unit test, but we can
+        // assert that recompute_staleness under Auto:
+        //   (a) DOES detect the staleness flip (the SPA's invariant);
+        //   (b) The capture is eventually replaced (state: idle, new
+        //       captureDocId) without an HTTP call.
+        crate::re_execute::reset_in_flight_for_tests();
+        let (tmp, ctx, runtime) = build_ctx_record_then_return_root(
+            "doc.qmd",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
+        )
+        .await;
+        let initial_doc_id = ctx
+            .index()
+            .get_capture("doc.qmd")
+            .unwrap()
+            .capture_doc_id
+            .clone();
+
+        // Edit the cell body so the next recompute sees a mismatch.
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n",
+        )
+        .unwrap();
+
+        let flipped = recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Auto,
+            Some(make_registry()),
+        )
+        .await
+        .unwrap();
+        assert!(flipped, "Auto must still report the staleness flip");
+
+        // Auto kicked off a spawn_blocking worker; poll for the new
+        // capture (state: idle, fresh captureDocId, staleness: false).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let entry = ctx.index().get_capture("doc.qmd").unwrap();
+            if entry.state == Some(quarto_hub::index::CaptureState::Idle)
+                && entry.capture_doc_id != initial_doc_id
+            {
+                assert_eq!(
+                    entry.staleness,
+                    Some(false),
+                    "Auto re-execute must clear the staleness flag"
+                );
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                panic!(
+                    "Auto re-execute did not produce a new capture within 10s; entry = {:?}",
+                    entry
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
     }
 }
