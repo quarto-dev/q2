@@ -3,7 +3,35 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
 **Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** sub-task bd-issues filed; C.3 (bd-kw93.1) is the next ready work item.
+**Status:** C.3 landed 2026-05-14. C.1 in progress next.
+
+## Progress
+
+Sub-task status. Each line tracks one filed bd-issue; check off as merged.
+
+- [x] **C.3** (bd-kw93.1) — IndexDocument capture sidecar schema. Merged 2026-05-14.
+  - [x] TS schema (`@quarto/quarto-automerge-schema`): `CaptureRef`, `captures?` on `IndexDocument`, `CURRENT_SCHEMA_VERSION` 1→2, `migrateIndexDocument` staged V0→V1→V2.
+  - [x] sync-client (`@quarto/quarto-sync-client`): `CaptureRef` re-export, `onCapturesChange?` callback, `getCapturesFromIndex` / `notifyCapturesIfChanged` wired at connect / index-change / createProject / disconnect.
+  - [x] Rust mirror (`crates/quarto-hub/src/index.rs`): `CaptureState`, `CaptureRef`, get/set/has/remove/get_all_captures.
+  - [x] WASM signature widen — *moved to C.4* (would have been a half-finished parameter without the dispatch).
+- [ ] **C.1** (bd-kw93.2) — Server-side first-time eager capture.
+  - [ ] New `crates/quarto-core/src/engine/preview_record.rs`: `record_capture(path, project, runtime) -> Result<Option<EngineCapture>>`.
+  - [ ] Hook from `crates/quarto-hub/src/server.rs` (or `crates/quarto-preview/src/lib.rs`) into the existing `sync_file` path.
+  - [ ] Sidecar write: server uses `IndexDocument::set_capture` (landed in C.3) to publish.
+  - [ ] Unit tests: prose-only → None; code-cell → Some + correct engine_name/input_qmd/result.markdown.
+  - [ ] Integration test: end-to-end smoke against markdown-engine fixture (no R/Python in CI).
+- [ ] **C.4** (bd-kw93.3) — Browser-side replay wiring (now also owns the WASM signature widen absorbed from C.3).
+  - [ ] Widen `render_page_for_preview` to take `Option<JsValue>` (capture).
+  - [ ] WASM: `EngineRegistry::with_replay(capture)` when present, default registry otherwise.
+  - [ ] TS binding in `ts-packages/preview-runtime/src/wasmRenderer.ts`.
+  - [ ] SPA: `q2-preview-spa/src/PreviewApp.tsx` reads sidecar via `onCapturesChange`, fetches binary doc, passes to renderer.
+- [ ] **C.2** (bd-kw93.4) — Staleness detection on doc-content change (blocked by C.1).
+- [ ] **C.5** (bd-kw93.5) — Stale-capture UX overlay + `/api/preview/re-execute` (blocked by C.4 + C.2).
+- [ ] **C.6** (bd-kw93.6) — `preview.engine: manual | auto | off` config (blocked by C.5).
+- [ ] **C.7** (bd-kw93.7) — Per-doc capture filesystem cache (blocked by C.5).
+
+Friction-related follow-ups filed during Phase C setup:
+- bd-ojtq — `xtask create-worktree --base` should auto-detect/warn instead of defaulting to `main` (P3).
 
 ## Goal
 

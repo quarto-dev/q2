@@ -1,12 +1,19 @@
 //! Index document management
 //!
 //! The index document is a special automerge document that stores the mapping
-//! from file paths (relative to project root) to automerge document IDs.
+//! from file paths (relative to project root) to automerge document IDs, plus
+//! (V2+) a sidecar map of recorded engine captures keyed by the same paths.
 //!
 //! Structure:
-//! ```
+//! ```text
 //! ROOT
-//! └── files: Map<String, String>  // path -> document_id (bs58-encoded)
+//! ├── files: Map<String, String>     // path -> document_id (bs58-encoded)
+//! └── captures: Map<String, Map>     // path -> CaptureRef (V2+)
+//!     where each CaptureRef map has:
+//!       captureDocId: String       (required)
+//!       staleness:    bool         (optional)
+//!       state:        String       (optional — "idle" | "running" | "error")
+//!       lastError:    String       (optional)
 //! ```
 
 use std::collections::HashMap;
@@ -20,6 +27,60 @@ use crate::error::{Error, Result};
 
 /// Key in the ROOT map where file mappings are stored.
 const FILES_KEY: &str = "files";
+
+/// Key in the ROOT map where the capture sidecar lives (V2+).
+const CAPTURES_KEY: &str = "captures";
+
+/// Server-side state of an engine capture, mirrored in the sidecar.
+///
+/// Stored as a short string in automerge so the SPA can read it without
+/// a discriminant; serialized as JSON `"idle"`/`"running"`/`"error"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureState {
+    Idle,
+    Running,
+    Error,
+}
+
+impl CaptureState {
+    fn as_str(&self) -> &'static str {
+        match self {
+            CaptureState::Idle => "idle",
+            CaptureState::Running => "running",
+            CaptureState::Error => "error",
+        }
+    }
+
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "idle" => Some(CaptureState::Idle),
+            "running" => Some(CaptureState::Running),
+            "error" => Some(CaptureState::Error),
+            _ => None,
+        }
+    }
+}
+
+/// Rust mirror of the TS `CaptureRef` shape in `@quarto/quarto-automerge-schema`.
+///
+/// Optional fields are omitted from the automerge map when None so V2 docs
+/// without a recorded state remain forward-compatible.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureRef {
+    pub capture_doc_id: String,
+    pub staleness: Option<bool>,
+    pub state: Option<CaptureState>,
+    pub last_error: Option<String>,
+}
+
+/// Field names within a per-path capture sidecar entry. Kept in sync with
+/// the TS `CaptureRef` interface in `@quarto/quarto-automerge-schema`.
+mod capture_field {
+    pub const CAPTURE_DOC_ID: &str = "captureDocId";
+    pub const STALENESS: &str = "staleness";
+    pub const STATE: &str = "state";
+    pub const LAST_ERROR: &str = "lastError";
+}
 
 /// Handle to the project index document.
 ///
@@ -164,6 +225,135 @@ impl IndexDocument {
     pub fn handle(&self) -> &DocHandle {
         &self.handle
     }
+
+    /// Read all capture sidecar entries from the index. Returns an empty
+    /// map when the `captures` key is absent (V0/V1 docs that haven't
+    /// been written-to since the V2 schema landed).
+    pub fn get_all_captures(&self) -> HashMap<String, CaptureRef> {
+        self.handle.with_document(|doc| {
+            let mut out = HashMap::new();
+            let Some((_, captures_obj)) = doc.get(ROOT, CAPTURES_KEY).ok().flatten() else {
+                return out;
+            };
+            let paths: Vec<String> = doc.keys(&captures_obj).map(|k| k.to_string()).collect();
+            for path in paths {
+                if let Some((_, entry_obj)) = doc.get(&captures_obj, &path).ok().flatten()
+                    && let Some(cap) = read_capture_entry(doc, &entry_obj)
+                {
+                    out.insert(path, cap);
+                }
+            }
+            out
+        })
+    }
+
+    /// Read the capture sidecar entry for a single path.
+    pub fn get_capture(&self, path: &str) -> Option<CaptureRef> {
+        self.handle.with_document(|doc| {
+            let (_, captures_obj) = doc.get(ROOT, CAPTURES_KEY).ok().flatten()?;
+            let (_, entry_obj) = doc.get(&captures_obj, path).ok().flatten()?;
+            read_capture_entry(doc, &entry_obj)
+        })
+    }
+
+    /// Test whether the sidecar has an entry for the given path.
+    pub fn has_capture(&self, path: &str) -> bool {
+        self.handle.with_document(|doc| {
+            let Some((_, captures_obj)) = doc.get(ROOT, CAPTURES_KEY).ok().flatten() else {
+                return false;
+            };
+            doc.get(&captures_obj, path).ok().flatten().is_some()
+        })
+    }
+
+    /// Insert or overwrite a capture sidecar entry. Creates the `captures`
+    /// map on the ROOT object on first use (lazy V2 migration of legacy
+    /// docs — opening for read remains a no-op).
+    pub fn set_capture(&self, path: &str, capture: &CaptureRef) -> Result<()> {
+        self.handle.with_document(|doc| {
+            doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                let captures_obj = match tx.get(ROOT, CAPTURES_KEY)? {
+                    Some((_, obj)) => obj,
+                    None => tx.put_object(ROOT, CAPTURES_KEY, ObjType::Map)?,
+                };
+                // Overwrite the entry: delete-then-create to avoid leaving
+                // stale optional fields from a previous entry.
+                if tx.get(&captures_obj, path)?.is_some() {
+                    tx.delete(&captures_obj, path)?;
+                }
+                let entry_obj = tx.put_object(&captures_obj, path, ObjType::Map)?;
+                tx.put(
+                    &entry_obj,
+                    capture_field::CAPTURE_DOC_ID,
+                    capture.capture_doc_id.as_str(),
+                )?;
+                if let Some(stale) = capture.staleness {
+                    tx.put(&entry_obj, capture_field::STALENESS, stale)?;
+                }
+                if let Some(state) = capture.state {
+                    tx.put(&entry_obj, capture_field::STATE, state.as_str())?;
+                }
+                if let Some(err) = &capture.last_error {
+                    tx.put(&entry_obj, capture_field::LAST_ERROR, err.as_str())?;
+                }
+                Ok(())
+            })
+            .map(|_| ())
+            .map_err(|e| Error::IndexDocument(format!("failed to set capture: {:?}", e)))
+        })
+    }
+
+    /// Delete a capture sidecar entry, if present.
+    pub fn remove_capture(&self, path: &str) -> Result<()> {
+        self.handle.with_document(|doc| {
+            doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                if let Some((_, captures_obj)) = tx.get(ROOT, CAPTURES_KEY)?
+                    && tx.get(&captures_obj, path)?.is_some()
+                {
+                    tx.delete(&captures_obj, path)?;
+                }
+                Ok(())
+            })
+            .map(|_| ())
+            .map_err(|e| Error::IndexDocument(format!("failed to remove capture: {:?}", e)))
+        })
+    }
+}
+
+/// Read a single CaptureRef out of an automerge entry map.
+/// Returns None when the required `captureDocId` field is absent
+/// (treated as a corrupt entry — caller may ignore or log).
+fn read_capture_entry<D: ReadDoc>(doc: &D, entry_obj: &automerge::ObjId) -> Option<CaptureRef> {
+    let (capture_doc_id_val, _) = doc
+        .get(entry_obj, capture_field::CAPTURE_DOC_ID)
+        .ok()
+        .flatten()?;
+    let capture_doc_id = capture_doc_id_val.to_str()?.to_string();
+
+    let staleness = doc
+        .get(entry_obj, capture_field::STALENESS)
+        .ok()
+        .flatten()
+        .and_then(|(v, _)| v.to_bool());
+
+    let state = doc
+        .get(entry_obj, capture_field::STATE)
+        .ok()
+        .flatten()
+        .and_then(|(v, _)| v.to_str().and_then(CaptureState::from_str));
+
+    let last_error = doc
+        .get(entry_obj, capture_field::LAST_ERROR)
+        .ok()
+        .flatten()
+        .and_then(|(v, _)| v.to_str().map(|s| s.to_string()));
+
+    Some(CaptureRef {
+        capture_doc_id,
+        staleness,
+        state,
+        last_error,
+    })
 }
 
 /// Load or create the index document.
@@ -281,6 +471,157 @@ mod tests {
         // Should have created a new document
         assert!(new_id.is_some());
         assert_eq!(index.document_id(), new_id.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_captures_initially_empty() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        let captures = index.get_all_captures();
+        assert!(captures.is_empty());
+        assert!(!index.has_capture("index.qmd"));
+        assert_eq!(index.get_capture("index.qmd"), None);
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_capture() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        let cap = CaptureRef {
+            capture_doc_id: "cap-doc-1".to_string(),
+            staleness: None,
+            state: Some(CaptureState::Idle),
+            last_error: None,
+        };
+        index.set_capture("index.qmd", &cap).unwrap();
+
+        assert!(index.has_capture("index.qmd"));
+        let got = index.get_capture("index.qmd").unwrap();
+        assert_eq!(got.capture_doc_id, "cap-doc-1");
+        assert_eq!(got.state, Some(CaptureState::Idle));
+        assert_eq!(got.staleness, None);
+        assert_eq!(got.last_error, None);
+    }
+
+    #[tokio::test]
+    async fn test_set_capture_with_all_fields_roundtrips() {
+        let repo = create_test_repo().await;
+        let (index, doc_id) = IndexDocument::create(&repo).await.unwrap();
+
+        let cap = CaptureRef {
+            capture_doc_id: "cap-doc-2".to_string(),
+            staleness: Some(true),
+            state: Some(CaptureState::Error),
+            last_error: Some("engine timed out".to_string()),
+        };
+        index.set_capture("posts/post1.qmd", &cap).unwrap();
+
+        // Load via a fresh handle to verify it survives an automerge roundtrip
+        let reloaded = IndexDocument::load(&repo, &doc_id).await.unwrap().unwrap();
+        let got = reloaded.get_capture("posts/post1.qmd").unwrap();
+        assert_eq!(got.capture_doc_id, "cap-doc-2");
+        assert_eq!(got.staleness, Some(true));
+        assert_eq!(got.state, Some(CaptureState::Error));
+        assert_eq!(got.last_error, Some("engine timed out".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_overwrite_capture() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        let cap1 = CaptureRef {
+            capture_doc_id: "cap-doc-1".to_string(),
+            staleness: None,
+            state: Some(CaptureState::Running),
+            last_error: None,
+        };
+        index.set_capture("index.qmd", &cap1).unwrap();
+
+        let cap2 = CaptureRef {
+            capture_doc_id: "cap-doc-2".to_string(),
+            staleness: Some(false),
+            state: Some(CaptureState::Idle),
+            last_error: None,
+        };
+        index.set_capture("index.qmd", &cap2).unwrap();
+
+        let got = index.get_capture("index.qmd").unwrap();
+        assert_eq!(got.capture_doc_id, "cap-doc-2");
+        assert_eq!(got.state, Some(CaptureState::Idle));
+    }
+
+    #[tokio::test]
+    async fn test_remove_capture() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        let cap = CaptureRef {
+            capture_doc_id: "cap-doc-1".to_string(),
+            staleness: None,
+            state: None,
+            last_error: None,
+        };
+        index.set_capture("index.qmd", &cap).unwrap();
+        assert!(index.has_capture("index.qmd"));
+
+        index.remove_capture("index.qmd").unwrap();
+        assert!(!index.has_capture("index.qmd"));
+        assert_eq!(index.get_capture("index.qmd"), None);
+    }
+
+    #[tokio::test]
+    async fn test_get_all_captures() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        let cap_a = CaptureRef {
+            capture_doc_id: "cap-a".to_string(),
+            staleness: None,
+            state: None,
+            last_error: None,
+        };
+        let cap_b = CaptureRef {
+            capture_doc_id: "cap-b".to_string(),
+            staleness: Some(true),
+            state: Some(CaptureState::Running),
+            last_error: None,
+        };
+        index.set_capture("a.qmd", &cap_a).unwrap();
+        index.set_capture("b.qmd", &cap_b).unwrap();
+
+        let all = index.get_all_captures();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all.get("a.qmd").unwrap().capture_doc_id, "cap-a");
+        assert_eq!(all.get("b.qmd").unwrap().capture_doc_id, "cap-b");
+        assert_eq!(all.get("b.qmd").unwrap().state, Some(CaptureState::Running));
+    }
+
+    #[tokio::test]
+    async fn test_files_and_captures_are_independent_maps() {
+        // The sidecar (captures) is keyed by the same path as files
+        // but the maps are independent — removing a file does not
+        // automatically remove its capture entry, and vice versa.
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        index.add_file("index.qmd", "doc-id-1").unwrap();
+        let cap = CaptureRef {
+            capture_doc_id: "cap-1".to_string(),
+            staleness: None,
+            state: None,
+            last_error: None,
+        };
+        index.set_capture("index.qmd", &cap).unwrap();
+
+        index.remove_file("index.qmd").unwrap();
+        assert!(!index.has_file("index.qmd"));
+        // Capture sidecar entry is still present — caller is responsible
+        // for cleaning it up alongside the file (tracked as a risk in
+        // the Phase C plan §Risks #3).
+        assert!(index.has_capture("index.qmd"));
     }
 
     #[tokio::test]

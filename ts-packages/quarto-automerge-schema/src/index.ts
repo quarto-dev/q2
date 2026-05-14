@@ -11,7 +11,7 @@
 // ============================================================================
 
 /** Current schema version for IndexDocument. */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 /** Current schema version for ProjectSetDocument. */
 export const CURRENT_PROJECT_SET_SCHEMA_VERSION = 1;
@@ -27,31 +27,73 @@ export interface ActorIdentity {
 }
 
 /**
+ * Reference to a recorded engine capture for a file in the index.
+ *
+ * Stored in the `captures` sidecar map (V2+) keyed by the same path used
+ * in `files`. `captureDocId` points to a separate Automerge document
+ * holding the serialized `EngineCapture`. The other fields are surface
+ * state consumed by the q2 preview SPA.
+ *
+ * `state` is reserved as a string enum (rather than a boolean `executing`)
+ * so future error/idle states can grow without another schema bump.
+ */
+export interface CaptureRef {
+  captureDocId: string;
+  staleness?: boolean;
+  state?: 'idle' | 'running' | 'error';
+  lastError?: string;
+}
+
+/**
  * Root document that maps file paths to Automerge document IDs.
  * This is the entry point for a Quarto project in Automerge.
  *
  * `version` and `identities` are optional because V0 documents
  * (created before schema versioning) will not have them.
+ *
+ * `captures` is a sidecar map (V2+) keyed by the same paths used in
+ * `files`. Entries are absent until an engine capture is recorded for
+ * the path; the q2 preview server writes them and the SPA reads them.
  */
 export interface IndexDocument {
   files: Record<string, string>; // path -> docId mapping
-  version?: number; // schema version (1 = current)
+  version?: number; // schema version (2 = current)
   identities?: Record<string, ActorIdentity>; // actorId -> identity
+  captures?: Record<string, CaptureRef>; // path -> capture sidecar entry (V2+)
 }
 
 /**
  * Migrate an IndexDocument to the current schema version.
  * Must be called inside an Automerge `change()` callback.
  *
+ * Steps (idempotent):
+ *   V0 → V1: initialize `identities`, set `version = 1`.
+ *   V1 → V2: bump `version = 2`. No structural change — `captures` is
+ *            absent until a capture is recorded.
+ *
+ * Any preexisting `captures` sidecar (e.g. on a doc mis-tagged as V1)
+ * is preserved through the bump.
+ *
  * @returns true if the document was modified (migration applied)
  */
 export function migrateIndexDocument(doc: IndexDocument): boolean {
-  if (doc.version !== undefined) return false;
-  doc.version = CURRENT_SCHEMA_VERSION;
-  if (!doc.identities) {
-    doc.identities = {};
+  if (doc.version === CURRENT_SCHEMA_VERSION) return false;
+
+  let changed = false;
+  if (doc.version === undefined) {
+    // V0 → V1
+    if (!doc.identities) {
+      doc.identities = {};
+    }
+    doc.version = 1;
+    changed = true;
   }
-  return true;
+  if (doc.version === 1) {
+    // V1 → V2 (sidecar capture map; no structural change needed)
+    doc.version = 2;
+    changed = true;
+  }
+  return changed;
 }
 
 /**
