@@ -3,7 +3,7 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
 **Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** C.3, C.1, C.4, C.2 landed 2026-05-14. C.5 (stale-capture UX overlay) is next.
+**Status:** C.3, C.1, C.4, C.2, C.5 landed 2026-05-14. C.6 (preview.engine config) and C.7 (per-doc capture cache) are next; both are parallelisable polish.
 
 ## Progress
 
@@ -37,7 +37,13 @@ Sub-task status. Each line tracks one filed bd-issue; check off as merged.
   - [x] 9 new unit tests (5 staleness + 4 canonicalization). All `cargo xtask verify --skip-hub-build` 12 steps green.
   - [x] Binary smoke against /tmp/c2-smoke confirms watcher path fires through to `on_file_changed`. Real-engine path (jupyter/knitr) not exercised in smoke; unit tests cover the toggle exhaustively against the test-passthrough engine.
   - [ ] In-process Rust integration test for the full watcher→staleness loop deferred to bd-u3ze (flaky under `cargo nextest run` on macOS; passes standalone + under `cargo test`; suspected notify-rs/FSEvents + nextest capture interaction).
-- [ ] **C.5** (bd-kw93.5) — Stale-capture UX overlay + `/api/preview/re-execute` (blocked by C.4 + C.2).
+- [x] **C.5** (bd-kw93.5) — Stale-capture UX overlay + `/api/preview/re-execute`. Merged 2026-05-14.
+  - [x] Server: new `POST /api/preview/re-execute` in `crates/quarto-preview/src/re_execute.rs`. Validates path (400), claims in-flight slot (409), kicks off `record_capture` on a blocking worker, writes new capture binary doc + sidecar update on success. Sidecar `state: error` + `lastError` on failure.
+  - [x] Hub router refactor: `build_router_with_state` returns `Router<SharedContext>` so `extend_router` can register routes that consume `State<SharedContext>`. Final `with_state(ctx)` moves into `run_server_with`.
+  - [x] SPA: `<StaleCaptureOverlay />` component (top-left of preview pane). Shows when sidecar `staleness: true` / `state: running` / `state: error`. POSTs to the new endpoint; surfaces 409 + non-202 errors inline.
+  - [x] Tests: 3 new Rust unit tests (200/400/409 cases), 6 new SPA integration tests (button states, click behaviour, error surfacing).
+  - [x] cargo nextest run -p quarto-preview -p quarto-hub -p quarto-core: 2118/2118 pass. SPA: 16/16 integration tests pass.
+  - [ ] Playwright e2e (edit cell → overlay → click → new capture renders) deferred — needs the broader e2e harness Phase D/E will introduce.
 - [ ] **C.6** (bd-kw93.6) — `preview.engine: manual | auto | off` config (blocked by C.5).
 - [ ] **C.7** (bd-kw93.7) — Per-doc capture filesystem cache (blocked by C.5).
 
