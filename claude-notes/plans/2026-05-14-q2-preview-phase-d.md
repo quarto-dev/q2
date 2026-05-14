@@ -7,7 +7,13 @@
 
 ## Progress
 
-- [ ] **D.1** (bd-kw93.8) — Browser-tab-on-startup + port-conflict retry.
+- [x] **D.1** (bd-kw93.8) — Browser-tab-on-startup + port-conflict retry. Merged 2026-05-14.
+  - [x] `open = "5"` added to `crates/quarto/Cargo.toml` (shells out to platform-native launcher; no heavy transitive tree).
+  - [x] `open_browser_or_log(url, suppress)` in `crates/quarto/src/commands/preview.rs` — fires `open::that(url)` when not suppressed; warns + continues on failure (the URL is already printed for copy-paste). `--no-browser` short-circuits cleanly.
+  - [x] `validate_explicit_port(host, port)` pre-probes when the user pinned a specific port; on `AddrInUse`, returns a clean error naming `--port 0` as the escape hatch instead of the raw bind failure from inside `quarto_hub::server::run_server_with`.
+  - [x] Side fix: `--port 0` previously printed `http://127.0.0.1:0/` (broken URL). Now `Some(0)` and `None` are equivalent — both probe for an OS-assigned free port so the printed URL is reachable.
+  - [x] Tests: 3 new unit tests in `commands::preview::tests` (port-0 probe ok, bound-port error message includes the port number + `--port 0` hint, `open_browser_or_log` no-ops when suppressed). `cargo nextest run --workspace`: 8929/8929 pass (8926 → 8929, +3 D.1 tests).
+  - [x] Binary smoke: with a Python listener holding 127.0.0.1:50500, `q2 preview /tmp/q2-d1-smoke --no-browser --port 50500` emits `Error: port 50500 on 127.0.0.1 is already in use; pass --port 0 to let the OS pick a free port, or omit --port for the default probe behaviour`. With `--port 0`, prints `→ http://127.0.0.1:50617/` (real OS-picked port).
 - [ ] **D.2** (bd-kw93.13) — Initial-path resolution (positional `.qmd` → that page; project mode → project index).
 - [ ] **D.3** (bd-kw93.9) — Static-file resource verification (CSS in `_extensions/`, images, theme files round-trip through samod binary-doc sync).
 - [ ] **D.4** (bd-kw93.10) — Diagnostics surface: render errors / engine errors / parse errors render through `PreviewErrorOverlay` instead of failing silently.
