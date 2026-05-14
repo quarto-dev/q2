@@ -160,6 +160,73 @@ pub async fn record_capture(
     Ok(slot.take())
 }
 
+/// Build the staleness-check sub-pipeline: everything up to (and
+/// including) `PreEngineSugaringStage`. The pipeline returns the
+/// `DocumentAst` that `EngineExecutionStage` would serialize to QMD
+/// and hand to the engine — i.e. exactly what
+/// [`record_capture`] passes as `input_qmd`. The Phase C.2 staleness
+/// check serializes the same AST and compares byte-for-byte against
+/// the existing capture's `input_qmd`.
+fn build_pre_engine_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_html_pipeline_stages_with_options(None, None);
+    if let Some(idx) = stages
+        .iter()
+        .position(|s| s.name() == "pre-engine-sugaring")
+    {
+        stages.truncate(idx + 1);
+    }
+    stages
+}
+
+/// Compute the canonical QMD bytes that
+/// [`EngineExecutionStage`](crate::stage::stages::EngineExecutionStage)
+/// would hand to the engine for `path`.
+///
+/// Used by Phase C.2 to detect staleness of an existing capture
+/// (server-side, on file-watcher events). The returned bytes are the
+/// AST-serialized post-include-expansion QMD — same shape as the
+/// `input_qmd` field on the recorded `EngineCapture`. A byte-equality
+/// check against the capture is sufficient (and matches the
+/// browser-side `ReplayEngine`'s validation policy).
+///
+/// Returns the serialized QMD bytes. Pipeline errors propagate;
+/// per-doc parsing failures bubble up so the caller can log without
+/// silently leaving stale state on the sidecar.
+pub async fn compute_input_qmd(
+    path: &std::path::Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+) -> Result<Vec<u8>, PipelineError> {
+    let content = runtime
+        .file_read(path)
+        .map_err(|e| PipelineError::other(format!("Failed to read {}: {}", path.display(), e)))?;
+
+    let document = DocumentInfo::from_path(path);
+    let format = Format::from_format_string("q2-preview").map_err(|e| {
+        PipelineError::other(format!("Failed to construct q2-preview format: {}", e))
+    })?;
+
+    let mut ctx = StageContext::new(runtime, format, project.clone(), document)?;
+
+    let stages = build_pre_engine_pipeline_stages();
+    let pipeline = Pipeline::new(stages).expect("pre-engine pipeline stages should be compatible");
+
+    let input = PipelineData::LoadedSource(LoadedSource::new(path.to_path_buf(), content));
+    let final_data = pipeline.run(input, &mut ctx).await?;
+
+    let doc_ast = final_data.into_document_ast().ok_or_else(|| {
+        PipelineError::other(
+            "pre-engine pipeline did not produce DocumentAst — unexpected output kind".to_string(),
+        )
+    })?;
+
+    let mut buf = Vec::new();
+    pampa::writers::qmd::write(&doc_ast.ast, &mut buf).map_err(|diagnostics| {
+        PipelineError::stage_error_with_diagnostics("preview-record/compute-input-qmd", diagnostics)
+    })?;
+    Ok(buf)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +370,110 @@ mod tests {
             .await
             .expect("pipeline runs");
         assert!(result.is_none());
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Phase C.2: compute_input_qmd
+    // ──────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn compute_input_qmd_matches_capture_input_qmd() {
+        // The fundamental invariant: for the same doc, the QMD bytes
+        // returned by `compute_input_qmd` equal the `input_qmd` field
+        // on the EngineCapture produced by `record_capture`. Phase
+        // C.2's staleness check relies on this byte-equality.
+        let (_tmp, path, project, runtime) =
+            fixture("---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nSENTINEL\n```\n");
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(PassthroughTestEngine));
+
+        let capture = record_capture(&path, &project, runtime.clone(), Some(registry))
+            .await
+            .expect("record_capture")
+            .expect("capture present");
+
+        let computed = compute_input_qmd(&path, &project, runtime)
+            .await
+            .expect("compute_input_qmd");
+
+        let computed_str = String::from_utf8(computed).expect("UTF-8");
+        assert_eq!(
+            computed_str, capture.input_qmd,
+            "compute_input_qmd must yield the same bytes the engine receives"
+        );
+    }
+
+    #[tokio::test]
+    async fn compute_input_qmd_is_stable_for_equal_inputs() {
+        // Plan §C.2 unit test #1: "the canonicalization function
+        // returns identical bytes for two equal QMDs."
+        let content = "---\ntitle: Stable\n---\n\nHello.\n";
+        let (_tmp1, path1, project1, runtime1) = fixture(content);
+        let (_tmp2, path2, project2, runtime2) = fixture(content);
+
+        let a = compute_input_qmd(&path1, &project1, runtime1)
+            .await
+            .unwrap();
+        let b = compute_input_qmd(&path2, &project2, runtime2)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            a, b,
+            "identical content must produce identical canonical QMD"
+        );
+    }
+
+    #[tokio::test]
+    async fn compute_input_qmd_differs_when_cell_body_changes() {
+        // Plan §C.2 unit test #1 (continued): "differing bytes for
+        // edits." We change a code-cell body and verify the canonical
+        // QMD reflects that change.
+        let (_tmp1, path1, project1, runtime1) =
+            fixture("---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n");
+        let (_tmp2, path2, project2, runtime2) =
+            fixture("---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n");
+
+        let a = compute_input_qmd(&path1, &project1, runtime1)
+            .await
+            .unwrap();
+        let b = compute_input_qmd(&path2, &project2, runtime2)
+            .await
+            .unwrap();
+
+        assert_ne!(
+            a, b,
+            "different cell bodies should yield different canonical QMD"
+        );
+        // Per plan §Q-C3 v1: whole-QMD byte equality. A doc-prose
+        // edit also flips the bytes (documented v1 limitation).
+        let a_str = String::from_utf8(a).unwrap();
+        let b_str = String::from_utf8(b).unwrap();
+        assert!(a_str.contains("first"));
+        assert!(b_str.contains("second"));
+    }
+
+    #[tokio::test]
+    async fn compute_input_qmd_also_differs_for_prose_only_edits_v1_limitation() {
+        // Plan §Q-C3: v1 uses whole-QMD byte-equality, so a prose-only
+        // edit also flips canonical bytes. This is a known v1
+        // limitation tracked in the plan; this test pins the v1
+        // behaviour so a future "smarter" cell-only diff lands as a
+        // deliberate behaviour change, not a silent one.
+        let (_tmp1, path1, project1, runtime1) = fixture("---\ntitle: A\n---\n\nHello world.\n");
+        let (_tmp2, path2, project2, runtime2) = fixture("---\ntitle: A\n---\n\nHello there.\n");
+
+        let a = compute_input_qmd(&path1, &project1, runtime1)
+            .await
+            .unwrap();
+        let b = compute_input_qmd(&path2, &project2, runtime2)
+            .await
+            .unwrap();
+
+        assert_ne!(
+            a, b,
+            "prose edits ALSO change canonical QMD in v1 (known limitation per §Q-C3)"
+        );
     }
 }

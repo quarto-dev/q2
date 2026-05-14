@@ -116,9 +116,49 @@ where
         extra_on_ready(ctx);
     });
 
-    server::run_server_with(storage, hub_config, Some(extend_with_spa), Some(on_ready))
-        .await
-        .context("quarto-hub server failed")?;
+    // Phase C.2 hook: after sync_file updates samod with the new
+    // bytes, recompute capture staleness against the existing sidecar
+    // entry. Like the C.1 driver, the staleness recompute runs the
+    // pipeline (non-Send futures), so it dispatches via
+    // spawn_blocking + pollster::block_on. Errors are logged.
+    //
+    // notify-rs (the underlying file watcher on macOS / Linux) emits
+    // canonicalized paths from FSEvents/inotify, but `StorageManager`
+    // stores the project root as the caller supplied it. Canonicalize
+    // both sides before strip_prefix so the comparison holds when the
+    // caller passes `/tmp/foo` and the watcher reports
+    // `/private/tmp/foo` (the same symlink-resolution issue
+    // `sync_file_by_path` already has — see canonicalize note in
+    // tests/staleness.rs).
+    let on_file_changed: server::OnFileChangedCallback = Arc::new(move |ctx, abs_path| {
+        let Some(project_root_raw) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
+            return;
+        };
+        let project_root = project_root_raw.canonicalize().unwrap_or(project_root_raw);
+        let abs_path_canonical = abs_path.canonicalize().unwrap_or(abs_path);
+        let Ok(rel) = abs_path_canonical.strip_prefix(&project_root) else {
+            return;
+        };
+        let rel_path = rel.to_string_lossy().to_string();
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        tokio::task::spawn_blocking(move || {
+            let result =
+                pollster::block_on(capture_driver::recompute_staleness(ctx, runtime, &rel_path));
+            if let Err(e) = result {
+                tracing::warn!(error = %e, rel_path = %rel_path, "staleness recompute failed");
+            }
+        });
+    });
+
+    server::run_server_with(
+        storage,
+        hub_config,
+        Some(extend_with_spa),
+        Some(on_ready),
+        Some(on_file_changed),
+    )
+    .await
+    .context("quarto-hub server failed")?;
     Ok(())
 }
 

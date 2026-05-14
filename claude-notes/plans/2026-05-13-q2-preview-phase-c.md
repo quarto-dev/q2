@@ -3,7 +3,7 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
 **Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** C.3, C.1, C.4 landed 2026-05-14. C.2 (staleness) is next; the C.3→C.1→C.4 loop is now end-to-end (server records → automerge sidecar → browser replays).
+**Status:** C.3, C.1, C.4, C.2 landed 2026-05-14. C.5 (stale-capture UX overlay) is next.
 
 ## Progress
 
@@ -30,7 +30,13 @@ Sub-task status. Each line tracks one filed bd-issue; check off as merged.
   - [x] 2 new SPA integration tests pin the seam (with-capture path forwards bytes, no-capture path leaves arg `undefined`).
   - [x] cargo xtask verify all 12 steps green (Rust + WASM build + hub-client tests).
   - [ ] Real-WASM browser smoke (Playwright + live preview + hand-authored capture) — gap noted; not blocking.
-- [ ] **C.2** (bd-kw93.4) — Staleness detection on doc-content change (blocked by C.1).
+- [x] **C.2** (bd-kw93.4) — Staleness detection on doc-content change. Merged 2026-05-14.
+  - [x] `compute_input_qmd` in `crates/quarto-core/src/engine/preview_record.rs` — runs the q2-preview pipeline truncated at PreEngineSugaringStage and serializes the AST to QMD. Output matches what EngineExecutionStage hands the engine, so byte-equality vs the recorded capture's `input_qmd` reliably detects staleness.
+  - [x] `capture_driver::recompute_staleness(ctx, runtime, rel_path)` — compares + flips `CaptureRef.staleness`. Idempotent. No-ops cleanly for missing captures + standalone-mode contexts.
+  - [x] New `quarto_hub::server::OnFileChangedCallback` (fifth param of `run_server_with`). quarto-preview wires it from `run_with_on_ready`; dispatches via `spawn_blocking` + `pollster::block_on` since pipeline futures are `?Send`. Canonicalizes both project_root and the watcher path to survive macOS `/tmp` vs `/private/tmp`.
+  - [x] 9 new unit tests (5 staleness + 4 canonicalization). All `cargo xtask verify --skip-hub-build` 12 steps green.
+  - [x] Binary smoke against /tmp/c2-smoke confirms watcher path fires through to `on_file_changed`. Real-engine path (jupyter/knitr) not exercised in smoke; unit tests cover the toggle exhaustively against the test-passthrough engine.
+  - [ ] In-process Rust integration test for the full watcher→staleness loop deferred to bd-u3ze (flaky under `cargo nextest run` on macOS; passes standalone + under `cargo test`; suspected notify-rs/FSEvents + nextest capture interaction).
 - [ ] **C.5** (bd-kw93.5) — Stale-capture UX overlay + `/api/preview/re-execute` (blocked by C.4 + C.2).
 - [ ] **C.6** (bd-kw93.6) — `preview.engine: manual | auto | off` config (blocked by C.5).
 - [ ] **C.7** (bd-kw93.7) — Per-doc capture filesystem cache (blocked by C.5).

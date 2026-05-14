@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::record_capture;
+use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
 use quarto_core::project::ProjectContext;
 use quarto_hub::HubContext;
 use quarto_hub::index::CaptureRef;
@@ -150,6 +150,82 @@ async fn record_one(
         rel_path = %rel_path,
         engine = %capture.engine_name,
         "recorded engine capture",
+    );
+    Ok(true)
+}
+
+/// Recompute whether the active sidecar entry for `rel_path` is
+/// stale (Phase C.2). Compares the file's current canonical QMD
+/// against the recorded capture's `input_qmd` byte-for-byte (per
+/// plan §Q-C3 v1 whole-QMD policy). On mismatch, flips
+/// `CaptureRef.staleness` to `Some(true)`; on match, normalizes to
+/// `Some(false)`.
+///
+/// No-op when:
+///   - the path isn't in the project file index
+///   - no sidecar entry exists for the path
+///   - the recorded capture binary doc is missing or unparseable
+///     (logged but not propagated — we don't want a corrupt cache
+///     to spam the watcher with errors).
+///
+/// Returns `Ok(true)` when staleness flipped, `Ok(false)` when no
+/// change was needed, and `Err` for fatal failures the caller
+/// should log.
+pub async fn recompute_staleness(
+    ctx: Arc<HubContext>,
+    runtime: Arc<dyn SystemRuntime>,
+    rel_path: &str,
+) -> Result<bool, RecordError> {
+    let Some(project_root) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
+        return Ok(false);
+    };
+    let Some(existing) = ctx.index().get_capture(rel_path) else {
+        // No capture recorded for this file — nothing to invalidate.
+        return Ok(false);
+    };
+
+    // Load and decode the existing capture so we can compare its
+    // input_qmd to what the file would produce now.
+    let recorded_input_qmd = match read_capture_from_doc(&ctx, &existing.capture_doc_id).await {
+        Ok(cap) => cap.input_qmd,
+        Err(e) => {
+            tracing::warn!(
+                rel_path = %rel_path,
+                error = %e,
+                "could not read recorded capture for staleness check",
+            );
+            return Ok(false);
+        }
+    };
+
+    let abs_path = project_root.join(rel_path);
+    let project = ProjectContext::discover(&abs_path, runtime.as_ref())
+        .map_err(|e| RecordError::DiscoverFailed(format!("{}", e)))?;
+
+    let current_input_qmd = compute_input_qmd(&abs_path, &project, runtime)
+        .await
+        .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+
+    let is_stale = current_input_qmd != recorded_input_qmd.as_bytes();
+    let target_value = Some(is_stale);
+    if existing.staleness == target_value {
+        return Ok(false);
+    }
+
+    let updated = CaptureRef {
+        capture_doc_id: existing.capture_doc_id.clone(),
+        staleness: target_value,
+        state: existing.state,
+        last_error: existing.last_error.clone(),
+    };
+    ctx.index()
+        .set_capture(rel_path, &updated)
+        .map_err(|e| RecordError::SidecarFailed(format!("{}", e)))?;
+
+    tracing::debug!(
+        rel_path = %rel_path,
+        staleness = is_stale,
+        "updated sidecar staleness",
     );
     Ok(true)
 }
@@ -404,5 +480,160 @@ mod tests {
             .unwrap();
         assert_eq!(first, 1);
         assert_eq!(second, 0, "second run should be a no-op");
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Phase C.2: recompute_staleness
+    // ──────────────────────────────────────────────────────────────
+
+    /// Helper: write fixture content to the file backing rel_path,
+    /// then return paths + ctx. The path argument is relative to the
+    /// project root managed by the HubContext.
+    async fn build_ctx_record_then_return_root(
+        rel: &str,
+        content: &str,
+    ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[(rel, content)]).await;
+        let count = record_eager_captures(ctx.clone(), runtime.clone(), Some(make_registry()))
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "fixture must produce a capture");
+        (tmp, ctx, runtime)
+    }
+
+    #[tokio::test]
+    async fn recompute_staleness_marks_stale_when_cell_body_changes() {
+        let (tmp, ctx, runtime) = build_ctx_record_then_return_root(
+            "doc.qmd",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
+        )
+        .await;
+        // Sanity: initial recompute against unchanged content is a no-op.
+        assert!(
+            !recompute_staleness(ctx.clone(), runtime.clone(), "doc.qmd")
+                .await
+                .unwrap(),
+            "unchanged content should not flip staleness"
+        );
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false)
+        );
+
+        // Edit the cell body on disk — same engine, different cell.
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n",
+        )
+        .unwrap();
+
+        let flipped = recompute_staleness(ctx.clone(), runtime, "doc.qmd")
+            .await
+            .unwrap();
+        assert!(flipped, "recompute should report a flip");
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(true),
+            "sidecar should now say staleness: true"
+        );
+    }
+
+    #[tokio::test]
+    async fn recompute_staleness_clears_when_content_reverts() {
+        // After staleness is set, restoring the original content
+        // must flip staleness back to false (so users can recover by
+        // undoing). The recompute is idempotent.
+        let (tmp, ctx, runtime) = build_ctx_record_then_return_root(
+            "doc.qmd",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
+        )
+        .await;
+
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n",
+        )
+        .unwrap();
+        let _ = recompute_staleness(ctx.clone(), runtime.clone(), "doc.qmd")
+            .await
+            .unwrap();
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(true)
+        );
+
+        // Revert.
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
+        )
+        .unwrap();
+        let _ = recompute_staleness(ctx.clone(), runtime, "doc.qmd")
+            .await
+            .unwrap();
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false),
+            "reverting content should clear staleness"
+        );
+    }
+
+    #[tokio::test]
+    async fn recompute_staleness_also_flips_for_prose_only_edits_v1_limitation() {
+        // Plan §Q-C3: v1 whole-QMD byte-equality means prose-only
+        // edits also flip the staleness flag. Documented limitation;
+        // test pins the v1 behaviour.
+        let (tmp, ctx, runtime) = build_ctx_record_then_return_root(
+            "doc.qmd",
+            "---\nengine: test-passthrough\n---\n\nA paragraph.\n\n```{test-passthrough}\nx\n```\n",
+        )
+        .await;
+
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\nA different paragraph.\n\n```{test-passthrough}\nx\n```\n",
+        )
+        .unwrap();
+        recompute_staleness(ctx.clone(), runtime, "doc.qmd")
+            .await
+            .unwrap();
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(true),
+            "prose-only edit ALSO flips staleness in v1 (known limitation per §Q-C3)"
+        );
+    }
+
+    #[tokio::test]
+    async fn recompute_staleness_noop_when_no_capture() {
+        // A path without a sidecar entry (e.g. a fresh doc that
+        // never had a capture recorded) is a no-op — recompute
+        // should return Ok(false) and not error.
+        let (_tmp, ctx, runtime) =
+            build_ctx_with_files(&[("doc.qmd", "---\ntitle: Prose\n---\n\nhi\n")]).await;
+
+        let result = recompute_staleness(ctx.clone(), runtime, "doc.qmd")
+            .await
+            .unwrap();
+        assert!(!result);
+        assert!(ctx.index().get_capture("doc.qmd").is_none());
+    }
+
+    #[tokio::test]
+    async fn recompute_staleness_noop_in_standalone_mode() {
+        // Standalone hub (no project root) → nothing to recompute.
+        let temp = TempDir::with_prefix("c2-staleness-standalone-").unwrap();
+        let storage = StorageManager::new_standalone(temp.path()).unwrap();
+        let ctx = Arc::new(
+            HubContext::new(storage, HubConfig::default())
+                .await
+                .unwrap(),
+        );
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+
+        let result = recompute_staleness(ctx, runtime, "anything.qmd")
+            .await
+            .unwrap();
+        assert!(!result);
     }
 }
