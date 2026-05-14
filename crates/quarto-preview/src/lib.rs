@@ -16,6 +16,7 @@ use axum::{
     Router,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
+    routing::post,
 };
 use include_dir::{Dir, include_dir};
 use quarto_core::engine::EngineRegistry;
@@ -23,6 +24,7 @@ use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter}
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 pub mod capture_driver;
+pub mod re_execute;
 
 /// The SPA bundle embedded at build time. See `build.rs` for how the
 /// source directory is chosen (real `q2-preview-spa/dist/` if present,
@@ -153,7 +155,7 @@ where
     server::run_server_with(
         storage,
         hub_config,
-        Some(extend_with_spa),
+        Some(extend_with_preview),
         Some(on_ready),
         Some(on_file_changed),
     )
@@ -211,6 +213,21 @@ where
     S: Clone + Send + Sync + 'static,
 {
     router.fallback(spa_handler)
+}
+
+/// Hub-router extension used by the q2 preview server: the SPA
+/// fallback (above) plus the Phase C.5 `POST /api/preview/re-execute`
+/// endpoint. The route shares the hub's `SharedContext` state via
+/// the standard `State<SharedContext>` extractor in the handler.
+pub fn extend_with_preview(
+    router: Router<quarto_hub::context::SharedContext>,
+) -> Router<quarto_hub::context::SharedContext> {
+    router
+        .route(
+            "/api/preview/re-execute",
+            post(re_execute::re_execute_handler),
+        )
+        .fallback(spa_handler)
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────

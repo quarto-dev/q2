@@ -49,6 +49,7 @@ import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
 import type { CaptureRef, FileEntry } from '@quarto/quarto-automerge-schema';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
+import { StaleCaptureOverlay } from './components/StaleCaptureOverlay';
 
 type BootState = 'loading' | 'ready' | 'error';
 
@@ -313,6 +314,18 @@ export default function PreviewApp() {
   // (and any future floating chrome) so it overlays the iframe
   // without an extra flex/grid layer. `height: 100%` lets the
   // iframe still fill the SPA root (set by index.html).
+  // Phase C.5: show the stale-capture overlay when the active page's
+  // sidecar entry says staleness=true OR an in-flight re-execute is
+  // running OR a previous re-execute errored. The previous capture
+  // still drives the rendered preview underneath; the overlay just
+  // surfaces the signal + the Re-execute action.
+  const activeCapture: CaptureRef | undefined = state.captures[state.activeFile];
+  const showStaleOverlay =
+    activeCapture !== undefined &&
+    (activeCapture.staleness === true ||
+      activeCapture.state === 'running' ||
+      activeCapture.state === 'error');
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Q2PreviewIframe
@@ -321,6 +334,13 @@ export default function PreviewApp() {
         themeFingerprint={state.themeFingerprint}
         setAst={noopSetAst}
       />
+      {showStaleOverlay && (
+        <StaleCaptureOverlay
+          activePath={state.activeFile}
+          state={activeCapture?.state}
+          lastError={activeCapture?.lastError}
+        />
+      )}
       <ForceRefreshButton onRefresh={handleRefresh} />
     </div>
   );

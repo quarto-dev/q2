@@ -771,6 +771,15 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
 /// Auth state (decoder + JWKS refresh handle) is initialized here and
 /// owned by HubContext for the server's lifetime.
 pub async fn build_router(ctx: SharedContext) -> Result<Router> {
+    let router = build_router_with_state(ctx.clone()).await?;
+    Ok(router.with_state(ctx))
+}
+
+/// Same as [`build_router`] but returns the router with its state
+/// type still unbound (`Router<SharedContext>`). Callers can register
+/// additional routes that extract `State<SharedContext>` before
+/// calling `.with_state(ctx)` to finalize.
+pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<SharedContext>> {
     if let Some(config) = ctx.auth_config() {
         let auth_state = auth::build_auth_state(config).await.map_err(|e| {
             crate::error::Error::Server(format!("Failed to initialize OIDC JWKS decoder: {e}"))
@@ -824,7 +833,7 @@ pub async fn build_router(ctx: SharedContext) -> Result<Router> {
         ));
     }
 
-    Ok(router.with_state(ctx))
+    Ok(router)
 }
 
 /// Run the hub server.
@@ -841,7 +850,7 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
 
 /// Convenience alias so callers can pass `None` without spelling out a
 /// concrete `FnOnce` type for the `extend_router` parameter.
-type NoopExtend = fn(Router) -> Router;
+type NoopExtend = fn(Router<SharedContext>) -> Router<SharedContext>;
 
 /// Callback that fires once `HubContext::new` finishes (samod repo
 /// initialized, index loaded, initial filesystem sync complete) and
@@ -900,7 +909,7 @@ pub async fn run_server_with<F>(
     on_file_changed: Option<OnFileChangedCallback>,
 ) -> Result<()>
 where
-    F: FnOnce(Router) -> Router + Send,
+    F: FnOnce(Router<SharedContext>) -> Router<SharedContext> + Send,
 {
     let addr = format!("{}:{}", config.host, config.port);
     let sync_interval = config.sync_interval_secs;
@@ -924,10 +933,15 @@ where
     let ctx_for_watch = ctx.clone();
     let ctx_for_shutdown = ctx.clone();
 
-    let mut router = build_router(ctx).await?;
+    // Build the hub router *before* state binding so extensions can
+    // register routes that consume `State<SharedContext>`. After
+    // extensions land we bind state and the router becomes
+    // `Router<()>`, ready for axum::serve.
+    let mut router = build_router_with_state(ctx.clone()).await?;
     if let Some(extend) = extend_router {
         router = extend(router);
     }
+    let router = router.with_state(ctx);
 
     let listener = TcpListener::bind(&addr).await?;
     if has_project {
