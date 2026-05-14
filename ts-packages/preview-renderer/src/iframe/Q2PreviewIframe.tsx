@@ -22,6 +22,27 @@ interface Q2PreviewIframeProps {
    *    user's view.
    */
   themeFingerprint?: string | null;
+  /**
+   * Phase F.1 (bd-kw93.14): list of project file paths (no leading
+   * slash) forwarded to the iframe's link handler so artifact-rooted
+   * `.html` clicks can be reverse-mapped to the source `.qmd` for
+   * the SPA-style navigation flow.
+   */
+  projectFilePaths?: readonly string[];
+  /**
+   * Phase F.1 (bd-kw93.14): anchor (without `#`) to scroll to AFTER
+   * the iframe commits the current AST. Set by `PreviewApp` when the
+   * user clicks a cross-page link with `#frag`, or when popstate
+   * restores a hash.
+   *
+   * Paired with `pendingAnchorEpoch`: the iframe scrolls only when
+   * the epoch changes since the last scroll, so subsequent edits
+   * (which re-post UPDATE_AST with the same anchor + same epoch)
+   * don't jerk the user back. Each user-driven nav event bumps the
+   * epoch in `PreviewApp`.
+   */
+  pendingAnchor?: string | null;
+  pendingAnchorEpoch?: number;
 }
 
 /**
@@ -49,6 +70,9 @@ export function Q2PreviewIframe({
   setAst,
   customComponentsCode,
   themeFingerprint,
+  projectFilePaths,
+  pendingAnchor,
+  pendingAnchorEpoch,
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
@@ -146,11 +170,28 @@ export function Q2PreviewIframe({
           astJson,
           currentFilePath,
           assetManifest,
+          // Phase F.1 (bd-kw93.14): the iframe link handler reads
+          // `projectFilePaths` from this payload to recognize
+          // artifact-rooted `.html` hrefs as project documents.
+          projectFilePaths,
+          // Phase F.1: scroll target after React commits the new AST.
+          // Cross-page nav posts `{ ..., pendingAnchor: 'sec' }`; the
+          // iframe scrolls in a useEffect once the new DOM exists.
+          pendingAnchor,
+          pendingAnchorEpoch,
         },
       },
       '*',
     );
-  }, [iframeReady, astJson, currentFilePath, assetManifest]);
+  }, [
+    iframeReady,
+    astJson,
+    currentFilePath,
+    assetManifest,
+    projectFilePaths,
+    pendingAnchor,
+    pendingAnchorEpoch,
+  ]);
 
   // Send theme CSS when iframe is ready and fingerprint is known.
   // Three-way semantics:

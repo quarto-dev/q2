@@ -26,9 +26,32 @@
  */
 
 import { createRoot } from 'react-dom/client';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+// Phase F.1 (bd-kw93.14): Bootstrap 5 bundled JS, vendored at the
+// repo's `resources/js/bootstrap/`. We embed it as raw text and
+// inject as an inline `<script>` at module top so Bootstrap's
+// data-API click delegates are attached before any chrome HTML
+// arrives. The vendored copy is paired-versioned with the SCSS at
+// `resources/scss/bootstrap/` (5.3.1 today). See the Phase F plan
+// for the rationale: `BootstrapJsStage` could ride the WASM
+// pipeline (math_js.rs precedent), but q2-preview also excludes
+// `ApplyTemplateStage` so the JS would never get a `<script>` tag.
+// Static iframe injection is the cleaner separation — chrome JS is
+// iframe-template responsibility, not document-render responsibility.
+// `?raw` is typed via `src/global.d.ts` (Vite's `?raw` suffix
+// returns a string at build time).
+import bootstrapJsSrc from '../../../../resources/js/bootstrap/bootstrap.bundle.min.js?raw';
+
+(() => {
+    const existing = document.head.querySelector('script[data-q2-bootstrap]');
+    if (existing) return;
+    const tag = document.createElement('script');
+    tag.setAttribute('data-q2-bootstrap', '1');
+    tag.textContent = bootstrapJsSrc;
+    document.head.appendChild(tag);
+})();
 
 import {
     Ast,
@@ -103,6 +126,25 @@ interface UpdateAstPayload {
      * through.
      */
     assetManifest?: Record<string, string>;
+    /**
+     * Phase F.1 (bd-kw93.14): project file paths (no leading slash)
+     * forwarded into the iframe link handler so artifact-rooted
+     * `.html` clicks can be reverse-mapped to source `.qmd`. Used
+     * for documentation today — `installLinkHandlers` always
+     * intercepts artifact-rooted hrefs.
+     */
+    projectFilePaths?: readonly string[];
+    /**
+     * Phase F.1 (bd-kw93.14): anchor (without `#`) to scroll into
+     * view after React commits this AST. Set on cross-page nav and
+     * back/forward; null/undefined means "no pending scroll".
+     *
+     * Paired with `pendingAnchorEpoch`: the iframe scrolls only when
+     * the epoch ticks past what it last saw. Re-renders from edits
+     * carry the same epoch so they don't trigger a re-scroll.
+     */
+    pendingAnchor?: string | null;
+    pendingAnchorEpoch?: number;
 }
 
 // Module-top message handler. Registered before `IFRAME_READY` is
@@ -158,6 +200,24 @@ function applyTheme(cssUrl: string | null): void {
     link.setAttribute('href', cssUrl);
 }
 
+/**
+ * Phase F.1 (bd-kw93.14): scroll the iframe document to the element
+ * with the given id. No-op when the element doesn't exist (a stale
+ * back/forward to a section that's been removed shouldn't blow up).
+ */
+/**
+ * Scroll the iframe document to the element with the given id.
+ * Returns true when the element was found and scrolled, false when
+ * it wasn't yet in the DOM (the caller uses this to decide whether
+ * the epoch has been "consumed" — see the anchor-scroll useEffect).
+ */
+function scrollToAnchorInDocument(anchor: string): boolean {
+    const el = document.getElementById(anchor);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: 'instant', block: 'start' });
+    return true;
+}
+
 async function loadCustomComponents(componentsCode: Record<string, string>) {
     // Tied to dynamic user-TSX imports — materialize React and katex
     // when LOAD_CUSTOM_COMPONENTS arrives. q2-preview does NOT set
@@ -195,6 +255,12 @@ interface PreviewRootProps {
     currentFilePath: string;
     /** Forwarded from `UPDATE_AST` payload; default is empty manifest. */
     assetManifest: Record<string, string>;
+    /** Phase F.1: forwarded into `installLinkHandlers`. */
+    projectFilePaths?: readonly string[];
+    /** Phase F.1: post-render scroll target (no leading `#`). */
+    pendingAnchor?: string | null;
+    /** Phase F.1: monotonic epoch — scroll fires when this advances. */
+    pendingAnchorEpoch?: number;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
 }
@@ -235,6 +301,17 @@ function walkForNoteNumbers(ast: PandocAST): WeakMap<NoteInline, number> {
 }
 
 function PreviewRoot(props: PreviewRootProps) {
+    // Refs so the link-handler closure (installed once at mount)
+    // sees the *latest* currentFilePath / projectFilePaths instead
+    // of the values captured at first install. Without these, every
+    // cross-page nav would still resolve relative links against the
+    // boot-time activeFile and the same-doc fast-path would never
+    // recognize the user's current page.
+    const currentFilePathRef = useRef(props.currentFilePath);
+    currentFilePathRef.current = props.currentFilePath;
+    const onNavigateRef = useRef(props.onNavigateToDocument);
+    onNavigateRef.current = props.onNavigateToDocument;
+
     // Install link handlers once per mount. The iframe remounts on
     // every document switch (q2-debug's existing behavior — see
     // `ReactPreview.tsx` previewState reset), so closures captured
@@ -242,16 +319,59 @@ function PreviewRoot(props: PreviewRootProps) {
     useEffect(() => {
         installLinkHandlers(document, {
             currentFilePath: props.currentFilePath,
+            projectFilePaths: props.projectFilePaths,
             onQmdLinkClick: (arg) => {
                 if ('path' in arg) {
-                    props.onNavigateToDocument?.(arg.path, arg.anchor);
+                    // Phase F.1 (bd-kw93.14): same-doc cross-page
+                    // navigation (path === currentFilePath) is just
+                    // an anchor scroll. Handle locally to avoid a
+                    // pointless round-trip + re-render. Use refs so
+                    // we read the *latest* activeFile / callback,
+                    // not the boot-time values.
+                    if (arg.path === currentFilePathRef.current) {
+                        if (arg.anchor) {
+                            scrollToAnchorInDocument(arg.anchor);
+                        }
+                    } else {
+                        onNavigateRef.current?.(arg.path, arg.anchor);
+                    }
                 } else {
-                    props.onNavigateToDocument?.(props.currentFilePath, arg.anchor);
+                    // Pure `#frag` click — same-doc anchor scroll.
+                    scrollToAnchorInDocument(arg.anchor);
                 }
             },
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Phase F.1 (bd-kw93.14): scroll to the cross-page anchor after
+    // React commits the new AST. Triggered when the epoch advances —
+    // each user-driven nav event in `PreviewApp` bumps the epoch,
+    // edits don't.
+    //
+    // The race we have to guard against: the parent posts UPDATE_AST
+    // with the new pendingAnchor *before* the new astJson is ready
+    // (the React render effect runs async after activeFile changes).
+    // So this effect can fire once with the new anchor + the OLD
+    // astJson — `getElementById('intro')` returns null because that
+    // doc doesn't have it yet. Only mark the epoch consumed when the
+    // element was actually found, so the next pass (with the new
+    // astJson) tries again. requestAnimationFrame is defensive
+    // against a Firefox layout-thrash race where scrollIntoView
+    // fires before the post-commit layout pass.
+    const lastScrolledEpochRef = useRef<number>(0);
+    useEffect(() => {
+        const epoch = props.pendingAnchorEpoch ?? 0;
+        if (!props.pendingAnchor || epoch === 0) return;
+        if (epoch === lastScrolledEpochRef.current) return;
+        const anchor = props.pendingAnchor;
+        const raf = requestAnimationFrame(() => {
+            if (scrollToAnchorInDocument(anchor)) {
+                lastScrolledEpochRef.current = epoch;
+            }
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [props.pendingAnchor, props.pendingAnchorEpoch, props.astJson]);
 
     // Single merge site: built-in preview leaves + CustomNode
     // components (under their type_name keys) + the user's TSX
@@ -302,7 +422,14 @@ function PreviewRoot(props: PreviewRootProps) {
 }
 
 function updateAst(payload: UpdateAstPayload) {
-    const { astJson, currentFilePath, assetManifest } = payload;
+    const {
+        astJson,
+        currentFilePath,
+        assetManifest,
+        projectFilePaths,
+        pendingAnchor,
+        pendingAnchorEpoch,
+    } = payload;
     const rootElement = document.getElementById('root');
     if (!rootElement) {
         console.error('Root element not found');
@@ -318,6 +445,9 @@ function updateAst(payload: UpdateAstPayload) {
                 astJson={astJson}
                 currentFilePath={currentFilePath}
                 assetManifest={assetManifest ?? {}}
+                projectFilePaths={projectFilePaths}
+                pendingAnchor={pendingAnchor}
+                pendingAnchorEpoch={pendingAnchorEpoch}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
                         { type: 'NAVIGATE_TO_DOCUMENT', path, anchor },

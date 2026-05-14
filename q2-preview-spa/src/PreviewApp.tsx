@@ -58,6 +58,20 @@ interface PreviewAppState {
   boot: BootState;
   files: FileEntry[];
   activeFile: string | null;
+  /**
+   * Phase F.1 (bd-kw93.14): anchor (no leading `#`) the iframe should
+   * scroll to after the next render commits. Set when the user clicks
+   * a cross-page link with `#frag` or when popstate restores a hash;
+   * forwarded to `Q2PreviewIframe` as `pendingAnchor`.
+   *
+   * Paired with `pendingAnchorEpoch` so subsequent edits to the same
+   * page don't re-trigger the scroll: each navigation event bumps the
+   * epoch, the iframe scrolls only when the epoch changes (per-tick
+   * tracking via ref). Without the epoch, an edit-driven re-render
+   * would jerk the user back to the original anchor every time.
+   */
+  pendingAnchor: string | null;
+  pendingAnchorEpoch: number;
   astJson: string | null;
   /**
    * Three-way value matching `Q2PreviewIframe`'s `themeFingerprint`
@@ -110,6 +124,8 @@ const INITIAL_STATE: PreviewAppState = {
   boot: 'loading',
   files: [],
   activeFile: null,
+  pendingAnchor: null,
+  pendingAnchorEpoch: 0,
   astJson: null,
   themeFingerprint: undefined,
   deps: null,
@@ -204,6 +220,73 @@ export default function PreviewApp() {
     setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
   }, []);
 
+  // Phase F.1 (bd-kw93.14): the iframe posts NAVIGATE_TO_DOCUMENT
+  // when the user clicks a cross-page artifact-rooted `.html` link.
+  // Update activeFile + pendingAnchor and push a fresh history entry
+  // so the browser's back/forward walks the in-SPA navigation.
+  // History entries are keyed only on (page, anchor) — same-page
+  // same-anchor clicks are no-ops to avoid duplicate stack entries.
+  const handleNavigate = useCallback((path: string, anchor: string | null) => {
+    setState((s) => {
+      // No-op when same page + same anchor + no scroll requested
+      // (would be a duplicate history push). When the anchor is
+      // present, even a same-page click bumps the epoch so the
+      // iframe re-scrolls (a user clicking the same anchor twice
+      // is a deliberate "take me back to that section" signal).
+      if (s.activeFile === path && s.pendingAnchor === anchor && anchor === null) {
+        return s;
+      }
+      return {
+        ...s,
+        activeFile: path,
+        pendingAnchor: anchor,
+        pendingAnchorEpoch: anchor ? s.pendingAnchorEpoch + 1 : s.pendingAnchorEpoch,
+      };
+    });
+    // Build the URL the same way `pickInitialPage` reads it back so
+    // a popstate restore + a fresh-tab boot land on the same state.
+    const params = new URLSearchParams();
+    params.set('page', path);
+    const newSearch = `?${params.toString()}`;
+    const newHash = anchor ? `#${anchor}` : '';
+    if (window.location.search !== newSearch || window.location.hash !== newHash) {
+      const newUrl = `${window.location.pathname}${newSearch}${newHash}`;
+      window.history.pushState(null, '', newUrl);
+    }
+  }, []);
+
+  // Phase F.1 (bd-kw93.14): browser back/forward fires popstate; map
+  // the restored URL back to (activeFile, pendingAnchor) using the
+  // same parsing the boot path uses. Falls back gracefully when the
+  // URL points at a page no longer in the project (e.g. file got
+  // renamed mid-session) — `pickInitialPage` reverts to firstQmd.
+  useEffect(() => {
+    const onPopState = () => {
+      setState((s) => {
+        if (s.boot !== 'ready' || s.files.length === 0) return s;
+        const restored = pickInitialPage(window.location.search, s.files);
+        const restoredAnchor = window.location.hash
+          ? window.location.hash.slice(1)
+          : null;
+        if (restored === s.activeFile && restoredAnchor === s.pendingAnchor && !restoredAnchor) {
+          return s;
+        }
+        return {
+          ...s,
+          activeFile: restored,
+          pendingAnchor: restoredAnchor,
+          // Bump on any popstate that carries an anchor so the
+          // iframe re-scrolls. Same logic as `handleNavigate`.
+          pendingAnchorEpoch: restoredAnchor
+            ? s.pendingAnchorEpoch + 1
+            : s.pendingAnchorEpoch,
+        };
+      });
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   // Boot once: WASM init + samod connect + initial file pick.
   useEffect(() => {
     let cancelled = false;
@@ -280,10 +363,22 @@ export default function PreviewApp() {
           typeof window !== 'undefined' ? window.location.search : '',
           initialFiles,
         );
+        // Phase F.1 (bd-kw93.14): if the boot URL carries a hash
+        // (e.g. `?page=docs/api.qmd#install`), seed pendingAnchor so
+        // the first render scrolls into the named section. The iframe
+        // does the scrolling once the AST is committed.
+        const initialHash = (typeof window !== 'undefined' && window.location.hash)
+          ? window.location.hash.slice(1)
+          : '';
         setState((s) => ({
           ...s,
           files: initialFiles,
           activeFile,
+          pendingAnchor: initialHash || null,
+          // Boot epoch is 1 only when there's actually an anchor to
+          // scroll to; staying at 0 means "no scroll has been
+          // requested," which the iframe ignores.
+          pendingAnchorEpoch: initialHash ? 1 : 0,
           boot: 'ready',
         }));
       } catch (err) {
@@ -506,6 +601,14 @@ export default function PreviewApp() {
         astJson={state.astJson}
         currentFilePath={state.activeFile}
         themeFingerprint={state.themeFingerprint}
+        // Phase F.1 (bd-kw93.14): forward project file paths +
+        // pending-anchor so the iframe link handler recognises
+        // artifact-rooted `.html` clicks and the iframe scrolls to
+        // the cross-page anchor after committing the new AST.
+        projectFilePaths={state.files.map((f) => f.path)}
+        pendingAnchor={state.pendingAnchor}
+        pendingAnchorEpoch={state.pendingAnchorEpoch}
+        onNavigateToDocument={handleNavigate}
         setAst={noopSetAst}
       />
       {showStaleOverlay && (
