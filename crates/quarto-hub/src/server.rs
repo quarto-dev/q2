@@ -836,7 +836,7 @@ pub async fn build_router(ctx: SharedContext) -> Result<Router> {
 /// If `sync_interval_secs` is configured, a background task will periodically
 /// sync all documents to the filesystem for crash resilience.
 pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()> {
-    run_server_with(storage, config, None::<NoopExtend>, None).await
+    run_server_with(storage, config, None::<NoopExtend>, None, None).await
 }
 
 /// Convenience alias so callers can pass `None` without spelling out a
@@ -854,6 +854,22 @@ type NoopExtend = fn(Router) -> Router;
 /// `quarto-hub` to the engine layer.
 pub type OnReadyCallback =
     Box<dyn FnOnce(std::sync::Arc<crate::context::HubContext>) + Send + 'static>;
+
+/// Callback that fires once for every file change observed by the
+/// in-process file watcher, *after* the file's bytes have synced
+/// into samod (`HubContext::sync_file` succeeded). Receives a clone
+/// of the context and the project-relative path that changed (the
+/// same path keying the IndexDocument's `files` and `captures`
+/// maps).
+///
+/// Used by `quarto-preview` (Phase C.2) to drive staleness
+/// recomputation against the capture sidecar without coupling
+/// `quarto-hub` to the engine layer. `Fn` (not `FnOnce`) because the
+/// callback fires once per change event; `Send + Sync` because the
+/// watcher task may spawn handlers on other threads.
+pub type OnFileChangedCallback = std::sync::Arc<
+    dyn Fn(std::sync::Arc<crate::context::HubContext>, std::path::PathBuf) + Send + Sync + 'static,
+>;
 
 /// Run the hub server, optionally extending its router before serving.
 ///
@@ -881,6 +897,7 @@ pub async fn run_server_with<F>(
     config: HubConfig,
     extend_router: Option<F>,
     on_ready: Option<OnReadyCallback>,
+    on_file_changed: Option<OnFileChangedCallback>,
 ) -> Result<()>
 where
     F: FnOnce(Router) -> Router + Send,
@@ -956,8 +973,9 @@ where
         match FileWatcher::new(&project_root, watch_config) {
             Ok(watcher) => {
                 info!("Starting filesystem watcher");
+                let on_change = on_file_changed.clone();
                 Some(tokio::spawn(async move {
-                    run_file_watcher(ctx_for_watch, watcher, shutdown_rx).await;
+                    run_file_watcher(ctx_for_watch, watcher, shutdown_rx, on_change).await;
                 }))
             }
             Err(e) => {
@@ -1060,6 +1078,7 @@ async fn run_file_watcher(
     ctx: Arc<HubContext>,
     mut watcher: FileWatcher,
     mut shutdown_rx: watch::Receiver<bool>,
+    on_file_changed: Option<OnFileChangedCallback>,
 ) {
     loop {
         tokio::select! {
@@ -1074,6 +1093,14 @@ async fn run_file_watcher(
                                     result = ?result,
                                     "File synced successfully"
                                 );
+                                // Phase C.2 hook: fire post-sync callback so
+                                // engine-aware consumers (quarto-preview) can
+                                // recompute capture staleness. The callback
+                                // takes the absolute path on disk; it owns
+                                // the conversion to the project-relative key.
+                                if let Some(callback) = on_file_changed.as_ref() {
+                                    callback(ctx.clone(), path.clone());
+                                }
                             }
                             Ok(None) => {
                                 debug!(path = %path.display(), "File not in index, skipping");
