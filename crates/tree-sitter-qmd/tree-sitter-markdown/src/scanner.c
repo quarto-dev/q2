@@ -130,6 +130,12 @@ typedef enum {
     // so the parser raises Q-2-32 with the `**_foo_**` workaround.
     // See grammar.js (`_triple_star_error`) and CONTRIBUTING.md.
     TRIPLE_STAR,
+
+    // KNOWN LIMITATION: QMD does not support 4-space indented code blocks.
+    // Emitted when leftover line-leading indentation is >= 4 at a block-start
+    // position so the parser raises Q-2-35, suggesting fenced code blocks.
+    // See grammar.js (`_indented_code_block_error`) and CONTRIBUTING.md.
+    INDENTED_CODE_BLOCK_DISALLOWED,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -232,6 +238,7 @@ static char* token_names[] = {
     "PANDOC_LINE_BREAK",
 
     "TRIPLE_STAR", // simply for good error reporting
+    "INDENTED_CODE_BLOCK_DISALLOWED", // simply for good error reporting
 };
 
 #endif
@@ -2100,6 +2107,31 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             break;
         }
     }
+
+    // Q-2-35: QMD does not support 4-space indented code blocks. If we are at
+    // a true block-start position (signalled by ATX_H1_MARKER or
+    // BLANK_LINE_START being valid — both indicate the parser is willing to
+    // begin a fresh block here) and the leftover indentation after container
+    // matchers (block-quote, list-item) is >= 4, emit a token no rule
+    // consumes so the parser raises Q-2-35. Skip blank lines (lookahead is
+    // the line terminator) — those are handled by the BLANK_LINE_START case
+    // in the switch below.
+    //
+    // The conservative gate (block-start only, not BLOCK_CONTINUATION) is
+    // deliberate. Lazy paragraph continuations and lazy list-item
+    // continuations have leading whitespace silently dropped today but
+    // preserve document structure, so they are not the structural bug from
+    // issue #184. Multi-line shortcodes also reach this scanner with
+    // BLOCK_CONTINUATION valid; firing on them would be a false positive.
+    // Same emission pattern as TRIPLE_STAR (Q-2-32); see grammar.js
+    // (`_indented_code_block_error`).
+    if (s->indentation >= 4 &&
+        (valid_symbols[ATX_H1_MARKER] || valid_symbols[BLANK_LINE_START]) &&
+        lexer->lookahead != '\n' && lexer->lookahead != '\r') {
+        mark_end(s, lexer);
+        EMIT_TOKEN(INDENTED_CODE_BLOCK_DISALLOWED);
+    }
+
     // Decide which tokens to consider based on the first non-whitespace
     // character
     DEBUG_PRINT("before main lookahead switch\n");

@@ -17658,6 +17658,66 @@
     "name": "Q-2-34/multiple-params"
   },
   {
+    "state": 342,
+    "sym": "_indented_code_block_error",
+    "row": 2,
+    "column": 4,
+    "errorInfo": {
+      "code": "Q-2-35",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-35/basic"
+  },
+  {
+    "state": 342,
+    "sym": "_indented_code_block_error",
+    "row": 2,
+    "column": 1,
+    "errorInfo": {
+      "code": "Q-2-35",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-35/tab-indent"
+  },
+  {
+    "state": 342,
+    "sym": "_indented_code_block_error",
+    "row": 2,
+    "column": 6,
+    "errorInfo": {
+      "code": "Q-2-35",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-35/more-than-four"
+  },
+  {
+    "state": 357,
+    "sym": "_indented_code_block_error",
+    "row": 2,
+    "column": 0,
+    "errorInfo": {
+      "code": "Q-2-35",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-35/indented-blockquote"
+  },
+  {
     "state": 1671,
     "sym": "_close_block",
     "row": 0,

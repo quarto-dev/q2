@@ -1108,7 +1108,7 @@ Example 208 - https://github.github.com/gfm/#example-208
               (pandoc_soft_break)
               (pandoc_str))))))
 ================================================================================
-Example 209 - https://github.github.com/gfm/#example-209
+Example 209 - https://github.github.com/gfm/#example-209 (qmd: 4-space indent rejected as Q-2-35)
 ================================================================================
     > # Foo
     > bar
@@ -1116,18 +1116,10 @@ Example 209 - https://github.github.com/gfm/#example-209
 
 --------------------------------------------------------------------------------
     (document
-      (section
-        (pandoc_block_quote
-          (block_quote_marker)
-          (section
-            (atx_heading
-              (atx_h1_marker)
-              (pandoc_str)
-              (block_continuation))
-            (pandoc_paragraph
-              (pandoc_str)
-              (pandoc_soft_break)
-              (pandoc_str))))))
+      (ERROR
+        (shortcode_name)
+        (shortcode_name)
+        (shortcode_name)))
 ================================================================================
 Example 210 - https://github.github.com/gfm/#example-210
 ================================================================================

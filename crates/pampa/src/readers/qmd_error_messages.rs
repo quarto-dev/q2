@@ -20,20 +20,68 @@ use crate::readers::qmd_error_message_table::get_error_table;
 
 /// Produce structured DiagnosticMessage objects from parse errors.
 ///
-/// This is a QMD-specific wrapper that provides the error table automatically.
+/// This is a QMD-specific wrapper that provides the error table automatically
+/// and applies QMD-specific span adjustments after the generic generator runs.
 pub fn produce_diagnostic_messages(
     input_bytes: &[u8],
     tree_sitter_log: &TreeSitterLogObserver,
     filename: &str,
     source_context: &quarto_source_map::SourceContext,
 ) -> Vec<quarto_error_reporting::DiagnosticMessage> {
-    quarto_parse_errors::produce_diagnostic_messages(
+    let mut diagnostics = quarto_parse_errors::produce_diagnostic_messages(
         input_bytes,
         tree_sitter_log,
         get_error_table(),
         filename,
         source_context,
-    )
+    );
+
+    for diag in &mut diagnostics {
+        if diag.code.as_deref() == Some("Q-2-35") {
+            widen_diagnostic_to_line(diag, input_bytes);
+        }
+    }
+
+    diagnostics
+}
+
+/// Widen a diagnostic's location to span the entire line containing the
+/// reported position. Q-2-35 uses this so the highlight covers the leading
+/// indentation AND the line content, instead of just the first non-whitespace
+/// character. The scanner-emitted token's reported column lands after the
+/// whitespace consumption loop has run, so widening here is the simplest path
+/// without restructuring the scanner's whitespace handling.
+fn widen_diagnostic_to_line(
+    diag: &mut quarto_error_reporting::DiagnosticMessage,
+    input_bytes: &[u8],
+) {
+    use quarto_source_map::SourceInfo;
+
+    let Some(loc) = diag.location.as_ref() else {
+        return;
+    };
+    let SourceInfo::Original {
+        file_id,
+        start_offset,
+        ..
+    } = loc
+    else {
+        return;
+    };
+
+    let pivot = (*start_offset).min(input_bytes.len());
+    let line_start = input_bytes[..pivot]
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map(|p| p + 1)
+        .unwrap_or(0);
+    let line_end = input_bytes[pivot..]
+        .iter()
+        .position(|&b| b == b'\n' || b == b'\r')
+        .map(|p| pivot + p)
+        .unwrap_or(input_bytes.len());
+
+    diag.location = Some(SourceInfo::original(*file_id, line_start, line_end));
 }
 
 /// Produce error message JSON for corpus building.

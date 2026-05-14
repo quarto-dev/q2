@@ -18,10 +18,10 @@ Because this is fundamentally a Merr-style error addition, the **error-corpus sn
 
 In addition to the error-corpus harness, add focused regression tests so the test surface is durable:
 
-- [ ] **Phase 0 — Failing-test scaffolding (before any scanner / Rust changes)**
-  - [ ] Add `crates/pampa/resources/error-corpus/Q-2-35.json` with cases listed below.
-  - [ ] Run `./scripts/build_error_table.ts` — it will generate the `.qmd` case files and (because the scanner does not yet emit a parse error) the `_autogen-table.json` regeneration will surface either zero captured `(state, sym)` pairs or wrong ones. Record what happens; this is the "test fails" evidence required by CLAUDE.md.
-  - [ ] Run `cargo nextest run -p pampa --test test_error_corpus`. Capture the expected failure mode (no diagnostic emitted / snapshot mismatch).
+- [x] **Phase 0 — Failing-test scaffolding (before any scanner / Rust changes)**
+  - [x] Add `crates/pampa/resources/error-corpus/Q-2-35.json` with cases listed below. Wrote four positive cases (`basic`, `tab-indent`, `more-than-four`, `inside-list-item`); the planned negative `well-indented-list` case can't live in the error corpus (the harness panics if a case file parses successfully) so it became a separate Rust regression test in Phase B.
+  - [x] Run `./scripts/build_error_table.ts` — surface failure mode. **Result**: `Case file: resources/error-corpus/case-files/Q-2-35-basic.qmd didn't produce errors` followed by `SyntaxError: Unexpected end of JSON input` from `JSON.parse(outputStdout)`. The `--_internal-report-error-state` invocation produced empty stdout because the parser succeeded. (Aside: deno was missing on this machine; installed via `brew install deno`.)
+  - [x] Run `cargo nextest run -p pampa --test test_error_corpus`. **Result**: `test_error_corpus_ariadne_output` and `test_error_corpus_json_locations` both FAILED with `Expected resources/error-corpus/case-files/Q-2-35-basic.qmd to produce errors, but it parsed successfully` at `crates/pampa/tests/test_error_corpus.rs:71`. (The two snapshot tests glob `*.qmd` directly under `error-corpus/`, not `case-files/`, so they're unaffected by Q-2-35 case files. They'll be exercised in Phase B once the table regenerates cleanly.)
 - [ ] **Phase 1 — Round-trip regression test**
   - [ ] Add a roundtripping test (or refresh an existing snapshot fixture) showing that the reporter's input now yields a parse error rather than silent rewriting. Use `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/` or the closest existing harness; if "expected error on parse" cases are not yet supported by that harness, add the test under `crates/pampa/tests/` as a direct unit test against the reader.
 - [ ] **Phase 2 — Tree-sitter corpus test**
@@ -94,4 +94,53 @@ Use `crates/pampa/resources/error-corpus/Q-2-32.json` as the structural template
 
 ## Verification output
 
-_(fill in after Phase D)_
+### Reporter's exact repro through `cargo run --bin pampa`
+
+Invocation:
+
+```
+$ cargo run --bin pampa -- claude-notes/issue-reports/184/repro.qmd
+```
+
+Output (ANSI escapes stripped, layout preserved):
+
+```
+Error: [Q-2-35] Indented code blocks are not supported
+   ╭─[ claude-notes/issue-reports/184/repro.qmd:3:1 ]
+   │
+ 3 │     categories:
+   │ ───────┬───────
+   │        ╰─────────── Quarto Markdown does not support 4-space indented
+   │                     code blocks. Use a fenced code block (```) instead,
+   │                     or remove the leading indentation.
+───╯
+```
+
+The diagnostic spans the entire offending line — both the four leading
+spaces and the `categories:` content — pointed back to the start of line
+3 (per the user's request to "nudge" the highlight onto the indentation
+rather than the first non-whitespace character). The widening lives in
+the QMD-specific layer (`crates/pampa/src/readers/qmd_error_messages.rs`,
+`widen_diagnostic_to_line`) so the scanner stays minimal and the generic
+parse-error system is unaffected. Output was inspected directly.
+
+### Test totals
+
+- `tree-sitter test` (in `crates/tree-sitter-qmd/tree-sitter-markdown/`):
+  **480/480 pass**, including the four new Q-2-35 cases and the updated
+  GFM Example 209 (now expects an `ERROR` because Q2 deliberately rejects
+  indented blockquotes).
+- `cargo nextest run -p pampa --test test_error_corpus`: **4/4 pass**
+  (ariadne text, JSON locations, text snapshots, JSON snapshots — all
+  with the new `Q-2-35-*.qmd` case files).
+- `cargo nextest run -p pampa`: **3687/3687 pass**, no regressions.
+- `cargo xtask verify` (full, including hub-client WASM build and
+  hub-client tests after `npm install`): **All verification steps passed**.
+- `cargo xtask lint`: **705 files checked, all clean.**
+
+### Snapshot-test impact
+
+`test_error_corpus_text_snapshots` and `test_error_corpus_json_snapshots`
+created new snapshot files under `crates/pampa/snapshots/error-corpus/`
+for the Q-2-35 entries (none of the existing snapshots were modified).
+Per CLAUDE.md, these will be enumerated in the commit message.
