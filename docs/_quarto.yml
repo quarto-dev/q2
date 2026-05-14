@@ -18,6 +18,8 @@ website:
         text: Navigation
       - href: quarto-hub/index.qmd
         text: Quarto Hub
+      - href: q2-preview.qmd
+        text: Live preview
       - href: bug-reports.qmd
         text: Bug reports
       - text: "Library Docs"

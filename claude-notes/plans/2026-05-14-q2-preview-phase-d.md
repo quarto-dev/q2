@@ -3,7 +3,7 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A, B, C all merged on `feature/q2-preview-command`.
 **Date:** 2026-05-14
-**Status:** Sub-task issues filed bd-kw93.8 through bd-kw93.13; D.1–D.6 ready to pick up (mostly parallelisable).
+**Status:** All six sub-tasks (D.1 → D.6 + D.5) merged 2026-05-14. Phase D complete.
 
 ## Progress
 
@@ -38,7 +38,11 @@
   - [x] Engine errors via `CaptureRef.lastError` continue to surface through `StaleCaptureOverlay` (already wired in C.5); D.4 pins this with a new integration test so a future refactor doesn't regress it.
   - [x] Drive-by fix: `StaleCaptureOverlay.integration.test.tsx` had a pre-existing TS error (`mock.calls[0] as [string, RequestInit]` against a zero-param mock) that broke `npm run build`. Fixed by giving the fetch mock explicit parameter types. The production build (`tsc -b && vite build`) is now clean again.
   - [x] Tests: 3 new SPA integration tests (last-good render stays visible when render fails; overlay clears on next successful render; engine `lastError` surfaces via `StaleCaptureOverlay`). All 21 integration + 8 unit + workspace nextest 8938/8938 pass.
-- [ ] **D.5** (bd-kw93.11) — User-facing documentation in `docs/` for `q2 preview`.
+- [x] **D.5** (bd-kw93.11) — User-facing documentation in `docs/` for `q2 preview`. Merged 2026-05-14.
+  - [x] New `docs/q2-preview.qmd` covers: quick-start examples, what "live" means (DOM-stable re-renders + the dep-graph filter), the three `preview.engine` values (manual / auto / off), error-overlay UX, flag reference, known limitations (HTML-only, loopback-only, per-session cache, single-hop includes, conservative non-qmd filter). Written in user voice with no `claude-notes/` or `bd-…` references.
+  - [x] Added to `docs/_quarto.yml` navbar between `Quarto Hub` and `Bug reports`. Verified `quarto render docs/q2-preview.qmd` produces clean HTML.
+  - [x] Tightened the clap `///` doc-comments in `crates/quarto/src/main.rs` so `q2 preview --help` reads as user-voice documentation (was leaning developer with `claude-notes/plans/...` references, "Q1 flag set" inventory, and internal-architecture mentions of samod and SPA bundles). Verified rendered `--help` against the binary.
+  - [x] Filed `bd-9ofu` (P3) to track the broader question: `docs/` is titled "Quarto-markdown" and is pitched as a reference for the dialect + library internals, not as a front door for Q2 CLI commands. As more Q2 commands gain user-facing surface area they'll face the same placement question. D.5 ships docs at the most natural existing home; the IA decision is deferred.
 - [x] **D.6** (bd-kw93.12) — Dep-graph filter for re-renders (unblocks bd-0mji's regression tests). Merged 2026-05-14.
   - [x] New `crates/quarto-preview/src/deps.rs` module with a `GET /api/preview/deps?page=<rel>` endpoint registered in `extend_with_preview`. The handler reads the page's qmd source and runs a single-hop `{{< include … >}}` shortcode extractor (regex-based; the full `ProjectDependencyGraph` requires running per-page render pipelines and is much heavier than D.6 needs). Returns `{ "deps": [...] }` as project-relative forward-slash paths. Errors downgrade to "no deps" + a log line — a filter that misses a dep is worse than one that over-broadcasts, so fail-open.
   - [x] SPA: `PreviewApp.tsx` gets a new `deps: Set<string> | null` state slot. A `useEffect` fetches the active page's deps from the new endpoint on activeFile change and after every contentTick bump (so a newly-added include shortcode in the active page becomes visible to the filter immediately). `onFileContent(path)` now calls `shouldRerenderForTextChange(path, activeFile, deps)` — drops sibling `.qmd` edits when they're not in the active page's dep set, passes everything else through. Non-qmd edits (CSS, `_quarto.yml`, `_metadata.yml`, `.tsx`, images) always pass; only `.qmd` files get filtered. `deps === null` = unknown ⇒ fail-open. `onBinaryContent` stays unfiltered (image-ref extraction is deferred — tracked as a follow-up).

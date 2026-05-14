@@ -1,0 +1,127 @@
+---
+title: "Live preview with `q2 preview`"
+---
+
+`q2 preview` is the command-line entry point for working on a Quarto
+project with live, incremental feedback. It starts a small HTTP
+server, opens a browser tab, and watches the project on disk.
+When you save a file the preview updates within ~2 seconds — without
+losing scroll position, open menus, or other JavaScript state on the
+page.
+
+## Quick start
+
+From a project directory (one containing a `_quarto.yml`):
+
+``` bash
+q2 preview
+```
+
+This opens the project's `index.qmd` if present, otherwise the first
+`.qmd` it finds. Press <kbd>Ctrl-C</kbd> to stop.
+
+To open a specific page in a multi-file project:
+
+``` bash
+q2 preview posts/intro.qmd
+```
+
+`q2 preview` walks up from the file path looking for `_quarto.yml`,
+loads the whole project, and opens directly to the page you asked for.
+
+To preview a single `.qmd` outside any project:
+
+``` bash
+q2 preview notes.qmd
+```
+
+## What "live" means
+
+When you save a file, `q2 preview` only re-renders if your edit
+affects the page you're looking at. Specifically:
+
+  * Edits to the active `.qmd` itself always re-render.
+  * Edits to a `.qmd` that the active page **includes** (via
+    `{{< include … >}}`) re-render. Unrelated sibling `.qmd` edits do
+    not.
+  * Edits to project-wide files — `_quarto.yml`, `_metadata.yml`,
+    CSS, custom React (`.tsx`) components, and images — always
+    re-render.
+
+Across re-renders, the preview keeps the parts of the DOM that didn't
+change. If you have a math equation expanded, a Bootstrap dropdown
+open, or scrolled to a particular paragraph, that state survives.
+
+## Code execution
+
+Code-cell engines (Jupyter, knitr) are heavier than parsing and
+rendering, so `q2 preview` controls them with a config key,
+`preview.engine` in `_quarto.yml`:
+
+``` yaml
+preview:
+  engine: manual    # default
+```
+
+The three values:
+
+  * `manual` (default) — when you edit a code cell, the preview keeps
+    showing the previous output and floats a "Re-execute" button at
+    the top of the page. Clicking it re-runs the engine. This gives
+    you control over expensive computations.
+  * `auto` — every settled code-cell edit re-runs the engine
+    automatically. Best for cheap cells where the round-trip is
+    fast enough to be unobtrusive.
+  * `off` — the engine never runs. Code cells appear as inert source
+    blocks. Useful when you're writing prose and want fast saves
+    without ever paying the engine cost.
+
+Captures from previous runs are stored in the session's temporary
+data directory; if you revert a code edit back to a previous state,
+the cached output is reused without re-running the engine. Each
+`q2 preview` invocation starts with a fresh cache; cross-session
+reuse is a future enhancement.
+
+## Errors
+
+If a render fails — say you save a `.qmd` with a syntax error — the
+preview keeps showing the last good render and floats an "Error"
+button at the top. Click to expand the details. Once you fix the
+file and save, the next render clears the overlay automatically.
+
+Engine errors (Python tracebacks, R errors, kernel crashes) appear
+in a similar overlay with a Re-execute button so you can retry after
+adjusting your environment.
+
+## Flags
+
+| Flag | What it does |
+|------|--------------|
+| `--port <N>` | Listen on a specific port. Defaults to an OS-assigned free port. Use `--port 0` to explicitly request that behaviour. |
+| `--host <ADDR>` | Bind to a specific network interface. Defaults to `127.0.0.1` — the preview is loopback-only and is not reachable from other machines. |
+| `--no-browser` | Don't open a browser tab on startup. The URL is still printed on stdout. |
+| `--data-dir <PATH>` | Override the directory used for ephemeral per-session state. Default: a tempdir that is deleted when `q2 preview` exits. |
+| `--no-project` | Run as a bare sync server with no local project. The opposite of the default project-mode boot; rarely needed. |
+| `--preview-dir <PATH>` | Replace the embedded preview UI with a copy on disk. For developers iterating on the preview UI itself; most users never need this. |
+
+`q2 preview --help` is always the most up-to-date reference.
+
+## Limitations
+
+Some known gaps in the current `q2 preview`:
+
+  * **HTML only.** Other output formats (PDF, docx, revealjs) are not
+    yet supported by the preview pipeline. Use `q2 render` for those.
+  * **Loopback only.** The preview binds to `127.0.0.1` by design.
+    Cross-machine sharing is not in scope.
+  * **Per-session capture cache.** Engine output caching survives
+    edits inside a single `q2 preview` session, but a new session
+    starts with an empty cache.
+  * **Single-hop include dependencies.** The re-render filter follows
+    direct `{{< include … >}}` references; transitive includes
+    (`a.qmd` includes `b.qmd` which includes `c.qmd`) are not
+    tracked. Editing `c.qmd` will not re-render `a.qmd`.
+  * **Image and bibliography edits always re-render.** The filter
+    is currently conservative for non-`.qmd` files — it doesn't try
+    to figure out whether an image or `.bib` file is actually
+    referenced by the active page.
