@@ -4118,6 +4118,7 @@ dependencies = [
  "quarto-trace",
  "reqwest 0.12.28",
  "samod",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
