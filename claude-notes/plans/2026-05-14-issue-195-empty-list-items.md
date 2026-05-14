@@ -124,9 +124,37 @@ the way to add coverage.
 
 ### Phase 4 — Wrap
 
-- [ ] Update bd-u50w with the commit SHA and close it.
-- [ ] `br sync --flush-only` + commit JSONL on main.
+- [x] Update bd-u50w with the commit SHA and close it (commit
+      `bea39f57` cited).
+- [x] `br sync --flush-only` + commit JSONL on main (`8d837948`).
 - [ ] Prepare PR description (don't push without permission).
+
+### PR description draft
+
+Title: `Fix qmd writer for truly-empty list items (#195)`
+
+```
+## Summary
+- qmd writer now serializes truly-empty list items (`Vec<Block> = []`)
+  with a bare marker line (`*` / `-` / `1.`), so the reader recovers
+  them faithfully. Previously they were silently dropped.
+- list-table writer drops the literal `[]` placeholder when a cell has
+  no content and no attributes, so the cell round-trips as `[]` instead
+  of being mutated to `[Plain []]`.
+- The two AST shapes (`[]` vs `[Plain []]`) now serialize distinctly.
+
+## Test plan
+- [x] Six new round-trip fixtures under
+      `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/`.
+- [x] `cargo nextest run --workspace` — 8864 pass.
+- [x] `cargo xtask verify --skip-hub-build --skip-hub-tests` — clean.
+- [x] End-to-end against the reporter's exact `printf | pampa | pampa`
+      pipelines from #195. AST stable across a round trip; writer
+      output idempotent. Evidence in
+      `claude-notes/plans/2026-05-14-issue-195-empty-list-items.md`.
+
+Closes #195.
+```
 
 ## Implementation notes / open questions
 
