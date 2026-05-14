@@ -529,6 +529,30 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Fetch a binary document by its samod document ID, regardless of
+   * whether it's tracked in the project's `files` index.
+   *
+   * Phase C.4 (bd-kw93.3) uses this to resolve capture binary docs
+   * referenced from the IndexDocument's V2 capture sidecar: those
+   * docs aren't files (no path), so the path-keyed APIs above don't
+   * see them. Returns `null` if the document doesn't exist or isn't a
+   * binary document.
+   */
+  async function getBinaryDocById(
+    docId: string,
+  ): Promise<{ content: Uint8Array; mimeType: string } | null> {
+    if (!state.repo) return null;
+    try {
+      const handle = await findDoc<BinaryDocumentContent>(docId as DocumentId);
+      const doc = handle.doc();
+      if (!doc || !isBinaryDocument(doc)) return null;
+      return { content: doc.content, mimeType: doc.mimeType };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Update text file content using incremental updates.
    */
   function updateFileContent(path: string, content: string): void {
@@ -945,6 +969,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     isFileBinary,
     getFileContent,
     getBinaryFileContent,
+    getBinaryDocById,
     updateFileContent,
     applyEditorOperations,
     updateFileAst,

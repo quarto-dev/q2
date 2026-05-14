@@ -43,10 +43,11 @@ import {
   connect,
   setSyncHandlers,
   renderPageForPreview,
+  getBinaryDocById,
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
-import type { FileEntry } from '@quarto/quarto-automerge-schema';
+import type { CaptureRef, FileEntry } from '@quarto/quarto-automerge-schema';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
 
 type BootState = 'loading' | 'ready' | 'error';
@@ -68,6 +69,14 @@ interface PreviewAppState {
   error: Error | null;
   /** Bumps on every onFileContent callback so the render effect re-fires. */
   contentTick: number;
+  /**
+   * IndexDocument V2 capture sidecar (Phase C.3) — path → CaptureRef
+   * mapping. Populated by the server-side eager-capture driver (Phase
+   * C.1) and read here by the render effect (Phase C.4) so the
+   * WASM-side `EngineRegistry::with_replay` can stand in for the real
+   * engine.
+   */
+  captures: Record<string, CaptureRef>;
 }
 
 const INITIAL_STATE: PreviewAppState = {
@@ -78,6 +87,7 @@ const INITIAL_STATE: PreviewAppState = {
   themeFingerprint: undefined,
   error: null,
   contentTick: 0,
+  captures: {},
 };
 
 /**
@@ -157,6 +167,20 @@ export default function PreviewApp() {
             if (cancelled) return;
             setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
           },
+          // Phase C.4: keep the capture sidecar in state so the render
+          // effect can pick up server-recorded captures (writes by
+          // Phase C.1) and route them into WASM replay.
+          onCapturesChange: (captures) => {
+            if (cancelled) return;
+            setState((s) => ({
+              ...s,
+              captures,
+              // Bump contentTick so the render effect re-fires; the
+              // newly-recorded capture should now affect the rendered
+              // AST for the active page.
+              contentTick: s.contentTick + 1,
+            }));
+          },
           onError: (err) => {
             if (cancelled) return;
             setState((s) => ({ ...s, error: err, boot: 'error' }));
@@ -199,7 +223,24 @@ export default function PreviewApp() {
     let cancelled = false;
     void (async () => {
       try {
-        const result = await renderPageForPreview(state.activeFile!);
+        // Phase C.4: look up the capture for the active page, fetch
+        // the binary doc, and pass the gzipped JSON bytes through to
+        // the WASM renderer. The renderer constructs a ReplayEngine
+        // from them when present; absent ⇒ default registry (markdown
+        // engine; code cells render as source).
+        const captureRef = state.captures[state.activeFile!];
+        let captureGzJson: Uint8Array | undefined;
+        if (captureRef?.captureDocId) {
+          const binaryDoc = await getBinaryDocById(captureRef.captureDocId);
+          if (cancelled) return;
+          captureGzJson = binaryDoc?.content;
+        }
+
+        const result = await renderPageForPreview(
+          state.activeFile!,
+          undefined,
+          captureGzJson,
+        );
         if (cancelled) return;
         if (result.success && result.ast_json !== undefined) {
           // Three-way themeFingerprint (mirrors hub-client's
@@ -240,7 +281,7 @@ export default function PreviewApp() {
     return () => {
       cancelled = true;
     };
-  }, [state.activeFile, state.contentTick]);
+  }, [state.activeFile, state.contentTick, state.captures]);
 
   // ── Render ────────────────────────────────────────────────────────────
 

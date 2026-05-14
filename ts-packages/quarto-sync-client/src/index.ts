@@ -35,6 +35,7 @@ export type {
   FilePayload,
   SyncClientCallbacks,
   ASTOptions,
+  CaptureRef,
   CreateBinaryFileResult,
   CreateProjectOptions,
   CreateProjectResult,

@@ -52,7 +52,11 @@ vi.mock('@quarto/preview-runtime', () => ({
     return runtimeMockState.files;
   }),
   setSyncHandlers: vi.fn(),
-  renderPageForPreview: vi.fn(async (_path: string) => runtimeMockState.renderResult),
+  renderPageForPreview: vi.fn(
+    async (_path: string, _grammars?: unknown, _capture?: Uint8Array) =>
+      runtimeMockState.renderResult,
+  ),
+  getBinaryDocById: vi.fn(async (_docId: string) => null),
   getFilePaths: vi.fn(() => runtimeMockState.files.map((f) => f.path)),
 }));
 
@@ -60,6 +64,7 @@ vi.mock('@quarto/preview-runtime', () => ({
 import PreviewApp from './PreviewApp';
 
 beforeEach(() => {
+  vi.clearAllMocks();
   capturedIframeProps.length = 0;
   runtimeMockState = {
     files: [{ path: 'index.qmd', docId: 'automerge:doc-index' }],
@@ -237,6 +242,81 @@ describe('PreviewApp boot path', () => {
     await waitFor(() => {
       expect(renderMock.mock.calls.length).toBeGreaterThan(initialCallCount);
     });
+  });
+
+  it('threads a capture payload through to renderPageForPreview when the sidecar has one (Phase C.4)', async () => {
+    // Phase C.4 (bd-kw93.3): when the IndexDocument's V2 capture
+    // sidecar carries a captureDocId for the active page, PreviewApp
+    // resolves the binary doc and forwards its gzipped JSON bytes to
+    // the WASM renderer. We pin the seam shape: getBinaryDocById is
+    // called with the captureDocId from onCapturesChange, and the
+    // returned bytes are passed as the third argument to
+    // renderPageForPreview.
+    const runtime = await import('@quarto/preview-runtime');
+    const setSyncHandlersMock = runtime.setSyncHandlers as ReturnType<typeof vi.fn>;
+    const getBinaryDocByIdMock = runtime.getBinaryDocById as ReturnType<typeof vi.fn>;
+    const renderMock = runtime.renderPageForPreview as ReturnType<typeof vi.fn>;
+
+    const sentinelBytes = new Uint8Array([1, 2, 3, 4]);
+    getBinaryDocByIdMock.mockImplementation(async (docId: string) => {
+      // Only resolve the exact id we pre-fed into onCapturesChange;
+      // anything else returns null so we don't accidentally pass
+      // bytes for a different doc.
+      if (docId === 'capture-doc-1') {
+        return { content: sentinelBytes, mimeType: 'application/x-engine-capture+gzip' };
+      }
+      return null;
+    });
+
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+
+    // Invoke the onCapturesChange handler PreviewApp registered with
+    // setSyncHandlers — simulating a sync-client capture event.
+    const handlersArg = setSyncHandlersMock.mock.calls.at(-1)?.[0] as
+      | { onCapturesChange?: (captures: Record<string, unknown>) => void }
+      | undefined;
+    expect(handlersArg?.onCapturesChange).toBeTypeOf('function');
+
+    handlersArg!.onCapturesChange!({
+      'index.qmd': { captureDocId: 'capture-doc-1' },
+    });
+
+    // The render effect re-fires off the new captures state; once it
+    // has had a turn, getBinaryDocById should have been asked for our
+    // capture and the bytes should land in renderPageForPreview's
+    // third arg.
+    await waitFor(() => {
+      expect(getBinaryDocByIdMock).toHaveBeenCalledWith('capture-doc-1');
+    });
+    await waitFor(() => {
+      const lastCall = renderMock.mock.calls.at(-1);
+      expect(lastCall).toBeDefined();
+      // arg 0: path, arg 1: grammars, arg 2: capture bytes
+      expect(lastCall![2]).toBe(sentinelBytes);
+    });
+  });
+
+  it('renders without a capture when the sidecar is empty (Phase C.4 fall-through)', async () => {
+    // Default state: no onCapturesChange ever fires, so the active
+    // page renders with `captureGzJson === undefined`. Confirms the
+    // no-replay path is unchanged from pre-C.4 behaviour.
+    const runtime = await import('@quarto/preview-runtime');
+    const getBinaryDocByIdMock = runtime.getBinaryDocById as ReturnType<typeof vi.fn>;
+    const renderMock = runtime.renderPageForPreview as ReturnType<typeof vi.fn>;
+
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+
+    expect(getBinaryDocByIdMock).not.toHaveBeenCalled();
+    const firstCall = renderMock.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    // arg 2 is the capture; should be undefined.
+    expect(firstCall![2]).toBeUndefined();
   });
 
   it('surfaces a /health failure with an actionable message', async () => {

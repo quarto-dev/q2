@@ -14,6 +14,7 @@ import {
   type EditorContentChange,
   type FileEntry,
   type ActorIdentity,
+  type CaptureRef,
   type CreateBinaryFileResult,
   type CreateProjectOptions,
   type CreateProjectResult,
@@ -23,11 +24,12 @@ import {
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
 
 // Re-export types for use in other components
-export type { Patch, EditorContentChange, FileEntry, ActorIdentity, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
+export type { Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult };
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
 type IdentitiesChangeHandler = (identities: Record<string, ActorIdentity>) => void;
+type CapturesChangeHandler = (captures: Record<string, CaptureRef>) => void;
 type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
 type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
@@ -35,6 +37,7 @@ type ErrorHandler = (error: Error) => void;
 
 let onFilesChange: FilesChangeHandler | null = null;
 let onIdentitiesChange: IdentitiesChangeHandler | null = null;
+let onCapturesChange: CapturesChangeHandler | null = null;
 let onFileContent: FileContentHandler | null = null;
 let onBinaryContent: BinaryContentHandler | null = null;
 let onConnectionChange: ConnectionHandler | null = null;
@@ -60,6 +63,7 @@ let client: SyncClient | null = null;
 export function setSyncHandlers(handlers: {
   onFilesChange?: FilesChangeHandler;
   onIdentitiesChange?: IdentitiesChangeHandler;
+  onCapturesChange?: CapturesChangeHandler;
   onFileContent?: FileContentHandler;
   onBinaryContent?: BinaryContentHandler;
   onConnectionChange?: ConnectionHandler;
@@ -67,6 +71,7 @@ export function setSyncHandlers(handlers: {
 }) {
   if (handlers.onFilesChange) onFilesChange = handlers.onFilesChange;
   if (handlers.onIdentitiesChange) onIdentitiesChange = handlers.onIdentitiesChange;
+  if (handlers.onCapturesChange) onCapturesChange = handlers.onCapturesChange;
   if (handlers.onFileContent) onFileContent = handlers.onFileContent;
   if (handlers.onBinaryContent) onBinaryContent = handlers.onBinaryContent;
   if (handlers.onConnectionChange) onConnectionChange = handlers.onConnectionChange;
@@ -105,6 +110,9 @@ function createInternalCallbacks(): SyncClientCallbacks {
     },
     onIdentitiesChange: (identities: Record<string, ActorIdentity>) => {
       onIdentitiesChange?.(identities);
+    },
+    onCapturesChange: (captures: Record<string, CaptureRef>) => {
+      onCapturesChange?.(captures);
     },
     onConnectionChange: (connected: boolean) => {
       onConnectionChange?.(connected);
@@ -175,6 +183,19 @@ export function getFileContent(path: string): string | null {
  */
 export function getBinaryFileContent(path: string): { content: Uint8Array; mimeType: string } | null {
   return ensureClient().getBinaryFileContent(path);
+}
+
+/**
+ * Fetch a binary document by samod document ID (not by path).
+ *
+ * Used by Phase C.4 (bd-kw93.3) to resolve capture binary docs
+ * referenced from the IndexDocument's V2 capture sidecar.
+ * Returns `null` for unknown ids or non-binary documents.
+ */
+export async function getBinaryDocById(
+  docId: string,
+): Promise<{ content: Uint8Array; mimeType: string } | null> {
+  return ensureClient().getBinaryDocById(docId);
 }
 
 /**

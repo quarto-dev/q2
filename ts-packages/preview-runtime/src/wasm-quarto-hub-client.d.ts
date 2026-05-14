@@ -45,6 +45,7 @@ declare module 'wasm-quarto-hub-client' {
   export function render_page_for_preview(
     path: string,
     user_grammars?: JsUserGrammars,
+    capture_gz_json?: Uint8Array,
   ): Promise<string>;
 
   /** Test-only: calls the user-grammar bridge directly. Phase 4.3 of syntax-highlighting. */

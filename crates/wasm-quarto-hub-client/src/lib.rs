@@ -1059,7 +1059,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
     };
 
-    render_single_doc_to_response(path, &content, &project, user_grammars, false).await
+    render_single_doc_to_response(path, &content, &project, user_grammars, false, None).await
 }
 
 /// Render QMD content directly (without reading from VFS).
@@ -1082,7 +1082,15 @@ pub async fn render_qmd_content(
     // surface as `/input.qmd` to the JS layer.
     let path = Path::new("/input.qmd");
     let project = create_wasm_project_context(path);
-    render_single_doc_to_response(path, content.as_bytes(), &project, user_grammars, false).await
+    render_single_doc_to_response(
+        path,
+        content.as_bytes(),
+        &project,
+        user_grammars,
+        false,
+        None,
+    )
+    .await
 }
 
 /// Render a single page **in the context of its surrounding project**.
@@ -1140,7 +1148,8 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
     // Behavior is byte-identical to `render_qmd` — same single-doc
     // pipeline, same VFS-root resolver, same VFS artifact dump.
     if project.is_single_file {
-        return render_single_doc_to_response(path, &content, &project, user_grammars, false).await;
+        return render_single_doc_to_response(path, &content, &project, user_grammars, false, None)
+            .await;
     }
 
     // Multi-doc project. The discover-from-file form returns a
@@ -1155,7 +1164,8 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
             return error_response(format!("Failed to enumerate project files: {}", e));
         }
     };
-    render_project_active_page_to_response(&path_buf, &content, project, user_grammars, false).await
+    render_project_active_page_to_response(&path_buf, &content, project, user_grammars, false, None)
+        .await
 }
 
 /// Like [`render_page_in_project`], but applies the `q2 preview`
@@ -1167,8 +1177,22 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
 /// The `q2 preview` CLI calls this entry point; hub-client keeps
 /// using [`render_page_in_project`] so its existing format dispatch
 /// is unchanged.
+///
+/// Phase C.4 (bd-kw93.3): if `capture_gz_json` is provided — gzipped
+/// JSON bytes of a [`EngineCapture`], the same wire format Phase C.1
+/// writes to the capture binary doc — the WASM constructs an
+/// [`EngineRegistry::with_replay`] from it. `EngineExecutionStage` then
+/// routes calls to [`quarto_core::engine::ReplayEngine`] for the
+/// captured engine name; everything else (markdown, future engines)
+/// stays on the default registry. The SPA reads the capture binary
+/// doc out of the IndexDocument's capture sidecar (V2 schema, C.3)
+/// and threads it through this argument.
 #[wasm_bindgen]
-pub async fn render_page_for_preview(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
+pub async fn render_page_for_preview(
+    path: &str,
+    user_grammars: Option<JsUserGrammars>,
+    capture_gz_json: Option<Vec<u8>>,
+) -> String {
     let runtime = get_runtime();
     let path_buf = std::path::PathBuf::from(path);
     let path = path_buf.as_path();
@@ -1180,6 +1204,13 @@ pub async fn render_page_for_preview(path: &str, user_grammars: Option<JsUserGra
         }
     };
 
+    let engine_registry = match build_replay_registry_from(capture_gz_json) {
+        Ok(reg) => reg,
+        Err(e) => {
+            return error_response(format!("Failed to parse capture: {}", e));
+        }
+    };
+
     let project = match ProjectContext::discover(path, runtime) {
         Ok(p) => p,
         Err(e) => {
@@ -1188,7 +1219,15 @@ pub async fn render_page_for_preview(path: &str, user_grammars: Option<JsUserGra
     };
 
     if project.is_single_file {
-        return render_single_doc_to_response(path, &content, &project, user_grammars, true).await;
+        return render_single_doc_to_response(
+            path,
+            &content,
+            &project,
+            user_grammars,
+            true,
+            engine_registry,
+        )
+        .await;
     }
 
     let project = match ProjectContext::discover(&project.dir, runtime) {
@@ -1197,7 +1236,44 @@ pub async fn render_page_for_preview(path: &str, user_grammars: Option<JsUserGra
             return error_response(format!("Failed to enumerate project files: {}", e));
         }
     };
-    render_project_active_page_to_response(&path_buf, &content, project, user_grammars, true).await
+    render_project_active_page_to_response(
+        &path_buf,
+        &content,
+        project,
+        user_grammars,
+        true,
+        engine_registry,
+    )
+    .await
+}
+
+/// Ungzip + JSON-deserialize a capture payload, then turn it into an
+/// `EngineRegistry::with_replay`. `None` input → `None` output (caller
+/// uses the default registry); an empty `Vec` is treated the same as
+/// `None` for symmetry with WASM/JS callers that may pass an empty
+/// Uint8Array to mean "no capture."
+fn build_replay_registry_from(
+    capture_gz_json: Option<Vec<u8>>,
+) -> Result<Option<quarto_core::engine::EngineRegistry>, String> {
+    use std::io::Read;
+
+    let Some(bytes) = capture_gz_json else {
+        return Ok(None);
+    };
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    let mut decoder = flate2::read::GzDecoder::new(&bytes[..]);
+    let mut json = Vec::new();
+    decoder
+        .read_to_end(&mut json)
+        .map_err(|e| format!("ungzip failed: {}", e))?;
+    let capture: quarto_trace::EngineCapture =
+        serde_json::from_slice(&json).map_err(|e| format!("JSON parse failed: {}", e))?;
+    Ok(Some(quarto_core::engine::EngineRegistry::with_replay(
+        capture,
+    )))
 }
 
 /// Single-doc render path — used by `render_qmd` directly and by
@@ -1214,6 +1290,7 @@ async fn render_single_doc_to_response(
     project: &ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
+    engine_registry: Option<quarto_core::engine::EngineRegistry>,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
@@ -1260,7 +1337,15 @@ async fn render_single_doc_to_response(
     // on the unused payload field).
     let (html, ast_json, diagnostics, source_context) = match format.pipeline_kind {
         Some("preview") => {
-            match render_qmd_to_preview_ast(content, &source_name, &mut ctx, runtime_arc).await {
+            match render_qmd_to_preview_ast(
+                content,
+                &source_name,
+                &mut ctx,
+                runtime_arc,
+                engine_registry,
+            )
+            .await
+            {
                 Ok(out) => (
                     None,
                     Some(out.ast_json),
@@ -1349,6 +1434,12 @@ async fn render_project_active_page_to_response(
     mut project: ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
+    // Phase C.4: capture-replay registry threaded through from the
+    // WASM entry point. Currently consumed only by the single-doc
+    // branch (`render_qmd_to_preview_ast`); the project-pipeline path
+    // (`RenderToPreviewAstRenderer`) does not yet plumb it through
+    // pass-2 renderers — a known gap tracked alongside C.4 polish.
+    _engine_registry: Option<quarto_core::engine::EngineRegistry>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use quarto_core::project::pass2_renderer::{
