@@ -281,6 +281,29 @@ and surfaces an affordance. The user opts in.
 - [ ] **D.5** Documentation in `docs/` for user-facing preview
   command.
 
+### Phase F — Website chrome (filed late, jumped ahead of Phase E)
+
+Goal: close the chrome-rendering gap between `q2 preview` and
+`q2 render --format html` so the docs site can be authored against
+preview instead of rebuild-on-save. Done; plan at
+`claude-notes/plans/2026-05-14-q2-preview-phase-f.md`.
+
+- [x] **F.1** (bd-kw93.14) — Cross-page navigation,
+  link-rewriting, Bootstrap JS infra. Body links emit
+  artifact-rooted `.html` URLs the iframe link handler intercepts;
+  SPA-style nav with `pushState` + popstate; Bootstrap's
+  `data-bs-*` delegates work in the iframe.
+- [x] **F.2** (bd-kw93.15) — All chrome injection (navbar,
+  sidebar, page-nav, TOC, footer) + favicon + body-classes hoist
+  + docs closeout. Each chrome piece comes from
+  `meta.rendered.navigation.*` populated by the corresponding
+  Rust render transform (now included in q2-preview's pipeline)
+  and lands via `dangerouslySetInnerHTML` in `PreviewDocument`.
+
+Out of scope for F (tracked elsewhere): **bd-d8fo** replaces the
+HTML-injection approach with React components when chrome
+state-preservation becomes a real complaint.
+
 ### Phase E — Stretch (post-MVP)
 
 - Hot-reload of `.tsx` custom components from disk (not just

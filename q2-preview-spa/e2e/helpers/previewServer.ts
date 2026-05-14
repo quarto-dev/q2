@@ -143,31 +143,80 @@ export interface FixtureFile {
 
 export interface StartOptions {
   /**
-   * Files to seed the project with. At least one entry is required
-   * (the SPA picks the first `.qmd` as the active page on boot).
+   * Files to seed the project with. Mutually exclusive with
+   * `copyFromDir`; exactly one must be provided. The SPA picks the
+   * first `.qmd` as the active page on boot when the CLI doesn't
+   * encode `?page=` (the project-mode CLI sets `?page=index.qmd`
+   * automatically when `index.qmd` exists at the project root).
    */
-  fixtureFiles: FixtureFile[];
+  fixtureFiles?: FixtureFile[];
+  /**
+   * Phase F.2 (bd-kw93.15): copy the contents of an existing
+   * directory (typically `examples/websites/<name>/`) into the
+   * temp project. Used by the chrome Playwright specs which want
+   * to exercise real fixture projects without manually re-encoding
+   * each file as a string in the spec. The destination is wiped
+   * to a fresh tempdir per run so tests don't share automerge
+   * state. `_site/` is skipped — it's the rendered output, never
+   * an input. Hidden directories are skipped too.
+   */
+  copyFromDir?: string;
+}
+
+/**
+ * Recursively copy `src` into `dst`, skipping `_site` and any
+ * hidden entry. Synchronous fs operations are fine here — fixture
+ * dirs are tiny and Playwright already runs each test in its own
+ * worker.
+ */
+async function copyDirRecursive(src: string, dst: string): Promise<void> {
+  const { readdir, copyFile } = await import('node:fs/promises');
+  const entries = await readdir(src, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || entry.name === '_site') continue;
+    const srcPath = path.join(src, entry.name);
+    const dstPath = path.join(dst, entry.name);
+    if (entry.isDirectory()) {
+      await mkdir(dstPath, { recursive: true });
+      await copyDirRecursive(srcPath, dstPath);
+    } else if (entry.isFile()) {
+      await copyFile(srcPath, dstPath);
+    }
+  }
 }
 
 /**
  * Start the `q2 preview` binary against a fresh tempdir project.
  *
- * The project gets one file per entry in `fixtureFiles`. The samod
- * data dir lives in a separate tempdir so the test can inspect the
- * project dir without picking up engine artifacts.
+ * Project contents come from either `fixtureFiles` (inline
+ * content) or `copyFromDir` (snapshot of an existing dir). The
+ * samod data dir lives in a separate tempdir so the test can
+ * inspect the project dir without picking up engine artifacts.
  */
 export async function startPreviewServer(opts: StartOptions): Promise<PreviewServerHandle> {
-  if (opts.fixtureFiles.length === 0) {
-    throw new Error('startPreviewServer: fixtureFiles must contain at least one entry');
+  const inlineCount = opts.fixtureFiles?.length ?? 0;
+  if (inlineCount === 0 && !opts.copyFromDir) {
+    throw new Error(
+      'startPreviewServer: provide fixtureFiles or copyFromDir',
+    );
+  }
+  if (inlineCount > 0 && opts.copyFromDir) {
+    throw new Error(
+      'startPreviewServer: fixtureFiles and copyFromDir are mutually exclusive',
+    );
   }
 
   const projectDir = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-proj-'));
   const dataDir = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-data-'));
 
-  for (const file of opts.fixtureFiles) {
-    const absPath = path.join(projectDir, file.path);
-    await mkdir(path.dirname(absPath), { recursive: true });
-    await writeFile(absPath, file.content);
+  if (opts.copyFromDir) {
+    await copyDirRecursive(opts.copyFromDir, projectDir);
+  } else {
+    for (const file of opts.fixtureFiles!) {
+      const absPath = path.join(projectDir, file.path);
+      await mkdir(path.dirname(absPath), { recursive: true });
+      await writeFile(absPath, file.content);
+    }
   }
 
   const proc = spawn(

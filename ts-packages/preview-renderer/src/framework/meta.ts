@@ -54,6 +54,48 @@ export function extractMetaBool(meta: unknown): boolean | undefined {
 }
 
 /**
+ * Walk a dotted path through a nested Pandoc Meta value and return
+ * the leaf node. `meta` is the *top-level* meta object (a plain
+ * `Record<string, MetaValue>`); subsequent steps drop into
+ * `MetaMap.c` arrays (`{key, key_source, value}` entries — see
+ * `crates/pampa/src/writers/json.rs::write_config_value`).
+ *
+ * Returns `undefined` when any segment is missing or the shape
+ * doesn't match. The caller is expected to coerce the leaf via
+ * [`extractMetaString`] / [`extractMetaStringList`] etc.
+ *
+ * Example: `getMetaPath(meta, ['rendered', 'navigation', 'navbar'])`
+ * walks `meta.rendered` (MetaMap) → `navigation` (MetaMap) →
+ * `navbar` (MetaString).
+ */
+export function getMetaPath(
+    meta: unknown,
+    path: readonly string[],
+): unknown {
+    if (path.length === 0) return meta;
+    let cursor: unknown = meta;
+    for (let i = 0; i < path.length; i++) {
+        if (!cursor || typeof cursor !== 'object') return undefined;
+        const segment = path[i];
+        if (i === 0) {
+            // First step: top-level meta is a plain object.
+            cursor = (cursor as Record<string, unknown>)[segment];
+        } else {
+            // Subsequent steps: cursor is a MetaMap whose `c` is the
+            // entries array. (`MetaMap` is the only nested-object
+            // variant emitted by the JSON writer.)
+            const m = cursor as { t?: string; c?: unknown };
+            if (m.t !== 'MetaMap' || !Array.isArray(m.c)) return undefined;
+            const entries = m.c as Array<{ key: string; value: unknown }>;
+            const found = entries.find((e) => e.key === segment);
+            if (!found) return undefined;
+            cursor = found.value;
+        }
+    }
+    return cursor;
+}
+
+/**
  * Extract a string list from a Pandoc MetaList. Each list entry is
  * coerced via the same MetaString / MetaInlines / MetaBlocks logic
  * as `extractMetaString`. Returns an empty array for missing keys,

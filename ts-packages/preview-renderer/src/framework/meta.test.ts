@@ -7,6 +7,7 @@ import {
     extractMetaString,
     extractMetaBool,
     extractMetaStringList,
+    getMetaPath,
 } from './meta';
 
 describe('extractMetaString', () => {
@@ -182,5 +183,103 @@ describe('extractMetaStringList', () => {
         expect(extractMetaStringList(null)).toEqual([]);
         expect(extractMetaStringList({})).toEqual([]);
         expect(extractMetaStringList({ t: 'MetaBool', c: true })).toEqual([]);
+    });
+});
+
+describe('getMetaPath', () => {
+    // Top-level meta is a plain object; each subsequent step traverses
+    // a `MetaMap` whose `.c` is `[{key, key_source, value}, ...]`.
+    // Mirrors the JSON shape emitted by `crates/pampa/src/writers/json.rs`.
+    const navbarHtml = '<nav class="navbar">…</nav>';
+    const fixture = {
+        title: { t: 'MetaString', c: 'My Doc' },
+        rendered: {
+            t: 'MetaMap',
+            c: [
+                {
+                    key: 'navigation',
+                    key_source: null,
+                    value: {
+                        t: 'MetaMap',
+                        c: [
+                            {
+                                key: 'navbar',
+                                key_source: null,
+                                value: { t: 'MetaString', c: navbarHtml },
+                            },
+                            {
+                                key: 'body-classes',
+                                key_source: null,
+                                value: { t: 'MetaString', c: 'nav-sidebar floating' },
+                            },
+                        ],
+                    },
+                },
+                {
+                    key: 'includes',
+                    key_source: null,
+                    value: {
+                        t: 'MetaMap',
+                        c: [
+                            {
+                                key: 'header',
+                                key_source: null,
+                                value: {
+                                    t: 'MetaList',
+                                    c: [
+                                        { t: 'MetaString', c: '<link rel="icon" href="favicon.ico">' },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    };
+
+    it('returns the leaf at a top-level path', () => {
+        const leaf = getMetaPath(fixture, ['title']);
+        expect(extractMetaString(leaf)).toBe('My Doc');
+    });
+
+    it('walks into nested MetaMaps to retrieve a leaf string', () => {
+        const leaf = getMetaPath(fixture, ['rendered', 'navigation', 'navbar']);
+        expect(extractMetaString(leaf)).toBe(navbarHtml);
+    });
+
+    it('walks into nested MetaMaps to retrieve a hyphenated key', () => {
+        const leaf = getMetaPath(fixture, ['rendered', 'navigation', 'body-classes']);
+        expect(extractMetaString(leaf)).toBe('nav-sidebar floating');
+    });
+
+    it('walks into nested MetaMaps to retrieve a list', () => {
+        const leaf = getMetaPath(fixture, ['rendered', 'includes', 'header']);
+        expect(extractMetaStringList(leaf)).toEqual([
+            '<link rel="icon" href="favicon.ico">',
+        ]);
+    });
+
+    it('returns undefined when any path segment is missing', () => {
+        expect(
+            getMetaPath(fixture, ['rendered', 'navigation', 'sidebar']),
+        ).toBeUndefined();
+        expect(getMetaPath(fixture, ['nonexistent'])).toBeUndefined();
+        expect(getMetaPath(fixture, ['rendered', 'missing', 'x'])).toBeUndefined();
+    });
+
+    it('returns the input meta for an empty path', () => {
+        expect(getMetaPath(fixture, [])).toBe(fixture);
+    });
+
+    it('returns undefined when meta is null / undefined / non-object', () => {
+        expect(getMetaPath(undefined, ['x'])).toBeUndefined();
+        expect(getMetaPath(null, ['x'])).toBeUndefined();
+        expect(getMetaPath('hello', ['x'])).toBeUndefined();
+    });
+
+    it('returns undefined when an intermediate is not a MetaMap', () => {
+        // `title` is a MetaString — can't walk into it.
+        expect(getMetaPath(fixture, ['title', 'whatever'])).toBeUndefined();
     });
 });

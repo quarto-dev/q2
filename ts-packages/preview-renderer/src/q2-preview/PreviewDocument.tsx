@@ -3,10 +3,20 @@ import {
     renderChildren,
     extractMetaString,
     extractMetaBool,
+    extractMetaStringList,
+    getMetaPath,
     RegistryContext,
 } from '../framework';
 import type { BlockNode, PandocAST } from '../framework';
 import * as Custom from './custom';
+import {
+    NavbarSlot,
+    SidebarSlot,
+    PageNavSlot,
+    FooterSlot,
+    TocSlot,
+    HeaderIncludesEffect,
+} from './chromeSlots';
 
 /**
  * q2-preview's document-root wrapper. Registered into `registry.ts`
@@ -45,13 +55,21 @@ export const PreviewDocument = ({
     // Mirror Rust template.rs:415-417: page-layout defaults to "article".
     const pageLayout = extractMetaString(meta['page-layout']) ?? 'article';
 
-    // Mirror Rust template.rs:177 body-class default. The
-    // SidebarRenderTransform-computed value isn't in q2-preview's
-    // pipeline (Q2_PREVIEW_TRANSFORM_EXCLUDED), so the precedence here
-    // is user override → literal default. Empty string is the user's
-    // opt-out (matches Rust's $body-classes$ substitution); only
-    // `undefined` triggers the fallback.
-    const bodyClassesValue = extractMetaString(meta['body-classes']);
+    // Mirror Rust template.rs:177 body-class default + the hoist
+    // logic at template.rs:419-428. Precedence:
+    //   1. User-set top-level `body-classes` (always wins).
+    //   2. Phase F.2: `rendered.navigation.body-classes` populated
+    //      by `SidebarRenderTransform` (e.g. `nav-sidebar floating`,
+    //      `nav-sidebar docked`) — required for Bootstrap's
+    //      sidebar-aware grid layout to take effect.
+    //   3. Literal default `fullcontent`.
+    // Empty string is the user's opt-out; only `undefined` triggers
+    // the fallback chain.
+    const bodyClassesValue =
+        extractMetaString(meta['body-classes']) ??
+        extractMetaString(
+            getMetaPath(meta, ['rendered', 'navigation', 'body-classes']),
+        );
     const bodyClasses = bodyClassesValue ?? 'fullcontent';
 
     // Mirror Rust is_minimal_html() (format.rs:306-318).
@@ -94,6 +112,39 @@ export const PreviewDocument = ({
         };
     }, [meta]);
 
+    // Phase F.2 (bd-kw93.15): chrome HTML strings populated by the
+    // `*-render` transforms now in the q2-preview pipeline. Each
+    // slot is React.memo'd so an identical re-post (edit to body
+    // content) doesn't tear down the chrome DOM.
+    const navbarHtml = extractMetaString(
+        getMetaPath(meta, ['rendered', 'navigation', 'navbar']),
+    );
+    const sidebarHtml = extractMetaString(
+        getMetaPath(meta, ['rendered', 'navigation', 'sidebar']),
+    );
+    const pageNavHtml = extractMetaString(
+        getMetaPath(meta, ['rendered', 'navigation', 'page_navigation']),
+    );
+    const tocHtml = extractMetaString(
+        getMetaPath(meta, ['rendered', 'navigation', 'toc']),
+    );
+    const footerHtml = extractMetaString(
+        getMetaPath(meta, ['rendered', 'navigation', 'footer']),
+    );
+    // TocGenerateTransform always sets `navigation.toc.title`
+    // (default "Table of Contents" — toc_generate.rs:113-119), but
+    // a user can still override or set it to empty. Surface it
+    // verbatim; the slot omits the `<h2>` when the title is empty.
+    const tocTitle =
+        extractMetaString(getMetaPath(meta, ['navigation', 'toc', 'title'])) ??
+        '';
+    // `meta.rendered.includes.header` collects favicon / RSS links /
+    // any user includes-in-header (already a list; q2 render's
+    // template wires `$header-includes$` into `<head>`).
+    const headerIncludes = extractMetaStringList(
+        getMetaPath(meta, ['rendered', 'includes', 'header']),
+    );
+
     const children = renderChildren({
         node: ast as any,
         setLocalAst: setAst as any,
@@ -123,18 +174,42 @@ export const PreviewDocument = ({
     }
 
     return (
-        <div
-            id="quarto-content"
-            className={`quarto-container page-columns page-rows-contents page-layout-${pageLayout}`}
-        >
-            <main className="content" id="quarto-document-content">
-                <TitleBlock
-                    ast={ast}
-                    setAst={setAst}
-                    onNavigateToDocument={onNavigateToDocument}
-                />
-                {children}
-            </main>
-        </div>
+        <>
+            {/* Phase F.2: header-includes (favicon, RSS links, user
+                includes) appended imperatively to `document.head`. */}
+            <HeaderIncludesEffect items={headerIncludes} />
+
+            {/* Navbar lives BEFORE quarto-content (template.rs:178-180). */}
+            {navbarHtml ? <NavbarSlot html={navbarHtml} /> : null}
+
+            <div
+                id="quarto-content"
+                className={`quarto-container page-columns page-rows-contents page-layout-${pageLayout}`}
+            >
+                {/* Sidebar — INSIDE quarto-content, before TOC + main
+                    (template.rs:186-188). */}
+                {sidebarHtml ? <SidebarSlot html={sidebarHtml} /> : null}
+
+                {/* TOC — INSIDE quarto-content, before main
+                    (template.rs:189-200). */}
+                {tocHtml ? <TocSlot html={tocHtml} title={tocTitle} /> : null}
+
+                <main className="content" id="quarto-document-content">
+                    <TitleBlock
+                        ast={ast}
+                        setAst={setAst}
+                        onNavigateToDocument={onNavigateToDocument}
+                    />
+                    {children}
+                    {/* Page-nav (prev/next) — INSIDE main, after body
+                        content (template.rs:244-246). */}
+                    {pageNavHtml ? <PageNavSlot html={pageNavHtml} /> : null}
+                </main>
+            </div>
+
+            {/* Page-footer lives AFTER quarto-content
+                (template.rs:252-254). */}
+            {footerHtml ? <FooterSlot html={footerHtml} /> : null}
+        </>
     );
 };
