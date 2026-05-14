@@ -793,14 +793,18 @@ pub async fn render_qmd_to_preview_ast(
     source_name: &str,
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    engine_registry: Option<crate::engine::EngineRegistry>,
 ) -> Result<PreviewAstOutput> {
     // The q2-preview stage list excludes `CodeHighlightStage` /
     // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
     // pipeline returns `DocumentAst`, not `RenderedOutput`.
-    // `EngineExecutionStage` uses the default registry; an
-    // override is not currently exposed (no consumer needs it
-    // for v1).
-    let stages = build_q2_preview_pipeline_stages(None);
+    //
+    // Phase C.4 (bd-kw93.3): an `engine_registry` override is now
+    // threaded through so callers (the WASM `render_page_for_preview`
+    // entry point) can substitute a `ReplayEngine` constructed from
+    // an `EngineCapture` recorded server-side (Phase C.1, bd-kw93.2)
+    // without re-running the real engine in the browser.
+    let stages = build_q2_preview_pipeline_stages(engine_registry);
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     let ast = output.into_document_ast().ok_or_else(|| {
@@ -2033,7 +2037,7 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime,
+            content, "test.qmd", &mut ctx, runtime, None,
         ))
         .expect("q2-preview render");
 
@@ -2087,7 +2091,7 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime,
+            content, "test.qmd", &mut ctx, runtime, None,
         ))
         .expect("q2-preview render");
 

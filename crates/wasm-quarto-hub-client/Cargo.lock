@@ -4584,6 +4584,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "console_error_panic_hook",
+ "flate2",
  "getrandom 0.2.17",
  "include_dir",
  "js-sys",
@@ -4598,6 +4599,7 @@ dependencies = [
  "quarto-sass",
  "quarto-source-map",
  "quarto-system-runtime",
+ "quarto-trace",
  "serde",
  "serde_json",
  "serde_yaml",

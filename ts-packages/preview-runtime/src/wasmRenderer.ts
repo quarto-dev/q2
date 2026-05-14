@@ -62,6 +62,7 @@ interface WasmModuleExtended {
   render_page_for_preview: (
     path: string,
     user_grammars?: unknown,
+    capture_gz_json?: Uint8Array,
   ) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
@@ -427,13 +428,25 @@ export async function renderPageInProject(
  *
  * Use this from the q2-preview SPA. hub-client keeps using
  * `renderPageInProject` so its own format dispatch is unchanged.
+ *
+ * Phase C.4 (bd-kw93.3): when `captureGzJson` is provided — gzipped
+ * JSON bytes of a server-recorded `EngineCapture` (the same wire
+ * format Phase C.1 writes to the capture binary doc) — the WASM
+ * substitutes a `ReplayEngine` for the captured engine name so code
+ * cell output appears in the rendered AST without a second engine
+ * invocation in the browser. Pass `undefined` (or omit) to render
+ * with the default registry (markdown engine; code cells render as
+ * source).
  */
 export async function renderPageForPreview(
   path: string,
   userGrammars?: unknown,
+  captureGzJson?: Uint8Array,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(await wasm.render_page_for_preview(path, userGrammars));
+  return JSON.parse(
+    await wasm.render_page_for_preview(path, userGrammars, captureGzJson),
+  );
 }
 
 /**

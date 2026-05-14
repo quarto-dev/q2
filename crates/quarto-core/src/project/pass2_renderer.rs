@@ -590,7 +590,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         let source_name = doc_info.input.to_string_lossy().to_string();
 
         let preview_output =
-            render_qmd_to_preview_ast(&input_bytes, &source_name, &mut ctx, runtime.clone())
+            render_qmd_to_preview_ast(&input_bytes, &source_name, &mut ctx, runtime.clone(), None)
                 .await?;
 
         // Drain Project-scoped artifacts. Identical branching to
