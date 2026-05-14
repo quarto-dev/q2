@@ -2,8 +2,8 @@
 
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
-**Date:** 2026-05-13
-**Status:** plan only — sub-task bd-issues filed in a follow-up session; implementation in subsequent sessions.
+**Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
+**Status:** sub-task bd-issues filed; C.3 (bd-kw93.1) is the next ready work item.
 
 ## Goal
 
@@ -296,17 +296,19 @@ Filesystem cache at `<tempdir>/captures/<content-hash>.bin` (gzipped `EngineCapt
 
 **Acceptance:** unit + 2 integration tests.
 
-## Sub-task issues to file (later session)
+## Sub-task issues (filed 2026-05-14)
 
-One bd-issue per sub-task. Parent-child to bd-kw93. Blocks-edges per the dependency graph above (C.3 blocks C.1, C.4; C.2 blocks C.5; etc.).
+One bd-issue per sub-task, parent-child to bd-kw93, blocks-edges per the dependency graph above.
 
-- bd-XXXX (C.1) Server-side first-time eager capture.
-- bd-XXXX (C.2) Staleness detection on doc-content change.
-- bd-XXXX (C.3) IndexDocument schema extension + WASM signature widen.
-- bd-XXXX (C.4) Browser-side replay wiring.
-- bd-XXXX (C.5) Stale-capture UX overlay + `/api/preview/re-execute`.
-- bd-XXXX (C.6) `preview.engine: manual | auto | off` configuration.
-- bd-XXXX (C.7) Per-doc capture cache.
+| Sub-task | bd-id        | Blocked by                |
+|----------|--------------|---------------------------|
+| C.3      | bd-kw93.1    | — (foundational)          |
+| C.1      | bd-kw93.2    | bd-kw93.1                 |
+| C.4      | bd-kw93.3    | bd-kw93.1                 |
+| C.2      | bd-kw93.4    | bd-kw93.2                 |
+| C.5      | bd-kw93.5    | bd-kw93.3, bd-kw93.4      |
+| C.6      | bd-kw93.6    | bd-kw93.5                 |
+| C.7      | bd-kw93.7    | bd-kw93.5                 |
 
 Each sub-task lives on a `beads/<id>-<slug>` topic branch off `feature/q2-preview-command`, merged with `--no-ff` per the worktree workflow (same pattern as B.1 / B.3 / B.4).
 
