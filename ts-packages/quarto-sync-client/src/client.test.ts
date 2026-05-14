@@ -93,6 +93,7 @@ function noopCallbacks(): SyncClientCallbacks {
     onFileRemoved: vi.fn(),
     onFilesChange: vi.fn(),
     onIdentitiesChange: vi.fn(),
+    onCapturesChange: vi.fn(),
     onConnectionChange: vi.fn(),
     onError: vi.fn(),
   };
@@ -200,6 +201,49 @@ describe('createSyncClient identity', () => {
     expect(doc.identities?.['actor-456']).toEqual({
       name: 'Bob',
       color: '#00FF00',
+    });
+  });
+});
+
+describe('createSyncClient captures (Phase C.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('connect fires onCapturesChange with the empty sidecar when the index doc has no captures', async () => {
+    const indexDoc: IndexDocument = { files: {}, version: 2, identities: {} };
+    const { handle } = createMockHandle(indexDoc);
+
+    installMockRepo(handle, handle);
+
+    const cbs = noopCallbacks();
+    const client = createSyncClient(cbs);
+
+    await client.connect('ws://localhost:9999', 'mock-doc-id', 'actor-1', 'Alice', '#FF0000');
+
+    expect(cbs.onCapturesChange).toHaveBeenCalledWith({});
+  });
+
+  it('connect fires onCapturesChange with the populated sidecar when the index doc carries captures', async () => {
+    const indexDoc: IndexDocument = {
+      files: { 'index.qmd': 'doc1' },
+      version: 2,
+      identities: {},
+      captures: {
+        'index.qmd': { captureDocId: 'cap-1', state: 'idle' },
+      },
+    };
+    const { handle } = createMockHandle(indexDoc);
+
+    installMockRepo(handle, handle);
+
+    const cbs = noopCallbacks();
+    const client = createSyncClient(cbs);
+
+    await client.connect('ws://localhost:9999', 'mock-doc-id', 'actor-1', 'Alice', '#FF0000');
+
+    expect(cbs.onCapturesChange).toHaveBeenCalledWith({
+      'index.qmd': { captureDocId: 'cap-1', state: 'idle' },
     });
   });
 });

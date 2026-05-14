@@ -18,8 +18,10 @@ import type {
   BinaryDocumentContent,
   FileEntry,
   ActorIdentity,
+  CaptureRef,
 } from '@quarto/quarto-automerge-schema';
 import {
+  CURRENT_SCHEMA_VERSION,
   isTextDocument,
   isBinaryDocument,
   getDocumentType,
@@ -128,8 +130,16 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     return doc.identities ? { ...doc.identities } : {};
   }
 
+  // Helper: get captures sidecar from index document (V2+; absent on V1)
+  function getCapturesFromIndex(doc: IndexDocument): Record<string, CaptureRef> {
+    return doc.captures ? { ...doc.captures } : {};
+  }
+
   // Track last-seen identities for diffing
   let lastIdentities: Record<string, ActorIdentity> = {};
+
+  // Track last-seen captures for diffing
+  let lastCaptures: Record<string, CaptureRef> = {};
 
   // Helper: fire onIdentitiesChange if identities differ from last seen
   function notifyIdentitiesIfChanged(doc: IndexDocument): void {
@@ -137,6 +147,15 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     if (JSON.stringify(current) !== JSON.stringify(lastIdentities)) {
       lastIdentities = current;
       callbacks.onIdentitiesChange?.(current);
+    }
+  }
+
+  // Helper: fire onCapturesChange if the sidecar differs from last seen
+  function notifyCapturesIfChanged(doc: IndexDocument): void {
+    const current = getCapturesFromIndex(doc);
+    if (JSON.stringify(current) !== JSON.stringify(lastCaptures)) {
+      lastCaptures = current;
+      callbacks.onCapturesChange?.(current);
     }
   }
 
@@ -390,6 +409,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       lastIdentities = getIdentitiesFromIndex(currentDoc);
       callbacks.onIdentitiesChange?.(lastIdentities);
 
+      // Fire initial captures (may be empty on V1 docs or freshly-created projects)
+      lastCaptures = getCapturesFromIndex(currentDoc);
+      callbacks.onCapturesChange?.(lastCaptures);
+
       // Subscribe to index changes
       const indexChangeHandler = () => {
         const changedDoc = indexHandle.doc();
@@ -398,6 +421,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           syncWithFiles(newFiles);
           callbacks.onFilesChange?.(newFiles);
           notifyIdentitiesIfChanged(changedDoc);
+          notifyCapturesIfChanged(changedDoc);
         }
       };
       indexHandle.on('change', indexChangeHandler);
@@ -466,6 +490,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     state.indexHandle = null;
     state.actorId = null;
     lastIdentities = {};
+    lastCaptures = {};
 
     callbacks.onConnectionChange?.(false);
   }
@@ -761,7 +786,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // pre-generated ID so the first change uses the correct actor.
       console.log(`[createNewProject] Creating index document with ID ${indexDocId}`);
       const indexHandle = createDoc<IndexDocument>(
-        { files: {}, version: 1, identities: {} },
+        { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {} },
         indexDocId,
       );
       state.indexHandle = indexHandle;
@@ -777,6 +802,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // Fire initial identities
       lastIdentities = getIdentitiesFromIndex(indexHandle.doc()!);
       callbacks.onIdentitiesChange?.(lastIdentities);
+
+      // Fire initial captures (always empty for a fresh project)
+      lastCaptures = getCapturesFromIndex(indexHandle.doc()!);
+      callbacks.onCapturesChange?.(lastCaptures);
 
       // Phase 3: Create file documents (now using the correct actor).
       const createdFiles: FileEntry[] = [];
