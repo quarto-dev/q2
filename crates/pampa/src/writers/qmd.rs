@@ -463,12 +463,14 @@ fn write_bulletlist(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    // Determine if this is a tight list
-    // A list is tight if the first block of all items is Plain (not Para)
+    // A list is tight if every non-empty item starts with Plain (not Para).
+    // Length-0 items (Vec<Block> = []) carry no spacing information and
+    // are skipped here, so a list with a trailing empty item stays tight
+    // when its other items are tight.
     let is_tight = bulletlist
         .content
         .iter()
-        .all(|item| !item.is_empty() && matches!(item[0], Block::Plain(_)));
+        .all(|item| item.is_empty() || matches!(item[0], Block::Plain(_)));
 
     for (i, item) in bulletlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
@@ -476,7 +478,18 @@ fn write_bulletlist(
             writeln!(buf)?;
         }
 
-        // Check if this is an empty list item (single Plain/Para block with empty content)
+        if item.is_empty() {
+            // Length-0 item (Vec<Block> = []). The reader parses a bare
+            // `*` (or `-`) marker line as an item with zero blocks; that
+            // is a distinct AST shape from `[Plain []]` handled below
+            // (`* []`, which parses as an inline `[]` inside Plain).
+            writeln!(buf, "*")?;
+            continue;
+        }
+
+        // Check for the `[Plain []]` / `[Paragraph []]` shape: a single
+        // block whose inline content is empty. The reader recovers this
+        // from `* []` (inline `[]` parsed as text inside Plain).
         let is_empty_item = item.len() == 1
             && match &item[0] {
                 Block::Plain(plain) => plain.content.is_empty(),
@@ -485,7 +498,6 @@ fn write_bulletlist(
             };
 
         if is_empty_item {
-            // Write "* []" for empty list items
             writeln!(buf, "* []")?;
         } else {
             let mut item_writer = BulletListContext::new(buf);
@@ -508,12 +520,11 @@ fn write_orderedlist(
 ) -> std::io::Result<()> {
     let (start_num, number_style, delimiter) = &orderedlist.attr;
 
-    // Determine if this is a tight list
-    // A list is tight if the first block of all items is Plain (not Para)
+    // See write_bulletlist: empty items don't carry spacing info.
     let is_tight = orderedlist
         .content
         .iter()
-        .all(|item| !item.is_empty() && matches!(item[0], Block::Plain(_)));
+        .all(|item| item.is_empty() || matches!(item[0], Block::Plain(_)));
 
     for (i, item) in orderedlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
@@ -521,6 +532,25 @@ fn write_orderedlist(
             writeln!(buf)?;
         }
         let current_num = start_num + i;
+
+        if item.is_empty() {
+            // Length-0 item: emit a bare marker line (e.g. `1.`) so the
+            // reader recovers the empty Vec<Block>. Matches the bullet
+            // list bare-marker behavior — see write_bulletlist.
+            if matches!(number_style, ListNumberStyle::Example) {
+                writeln!(buf, "(@)")?;
+            } else {
+                let delim_str = match delimiter {
+                    ListNumberDelim::Period => ".",
+                    ListNumberDelim::OneParen => ")",
+                    ListNumberDelim::TwoParens => ")",
+                    _ => ".",
+                };
+                writeln!(buf, "{}{}", current_num, delim_str)?;
+            }
+            continue;
+        }
+
         let mut item_writer =
             OrderedListContext::new(buf, current_num, number_style.clone(), delimiter.clone());
         for (j, block) in item.iter().enumerate() {
@@ -1116,7 +1146,13 @@ fn write_list_table(
             }
 
             // Write cell content. Three shapes:
-            //   - empty cell: marker line carries the `[]` (or attr) placeholder only.
+            //   - empty cell without attrs: bare `-` marker line; reader
+            //     parses this as a cell with empty Vec<Block>. Writing
+            //     literal `[]` here would round-trip to `[Plain []]`
+            //     because the reader interprets `[]` as inline text.
+            //   - empty cell with attrs: `[]{...attrs}` placeholder so
+            //     the attributes parse; the reader produces `[Plain []]`
+            //     content in this branch, which round-trips faithfully.
             //   - first block is Plain/Paragraph: inlines on the marker line; any
             //     subsequent blocks emit as blank-line-separated indented stanzas.
             //   - first block is anything else (CodeBlock, BlockQuote, Div, …):
@@ -1127,9 +1163,8 @@ fn write_list_table(
             // list item "loose" so the reader treats indented content as part of
             // the cell.
             if cell.content.is_empty() {
-                if !needs_attrs {
-                    write!(buf, "[]")?;
-                }
+                // When !needs_attrs the bare `- ` token already written
+                // at L1125 is enough; no `[]` placeholder.
                 writeln!(buf)?;
             } else {
                 let (first, rest) = cell.content.split_first().unwrap();
