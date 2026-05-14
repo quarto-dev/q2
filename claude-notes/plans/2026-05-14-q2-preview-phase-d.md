@@ -39,7 +39,17 @@
   - [x] Drive-by fix: `StaleCaptureOverlay.integration.test.tsx` had a pre-existing TS error (`mock.calls[0] as [string, RequestInit]` against a zero-param mock) that broke `npm run build`. Fixed by giving the fetch mock explicit parameter types. The production build (`tsc -b && vite build`) is now clean again.
   - [x] Tests: 3 new SPA integration tests (last-good render stays visible when render fails; overlay clears on next successful render; engine `lastError` surfaces via `StaleCaptureOverlay`). All 21 integration + 8 unit + workspace nextest 8938/8938 pass.
 - [ ] **D.5** (bd-kw93.11) — User-facing documentation in `docs/` for `q2 preview`.
-- [ ] **D.6** (bd-kw93.12) — Dep-graph filter for re-renders (unblocks bd-0mji's regression tests).
+- [x] **D.6** (bd-kw93.12) — Dep-graph filter for re-renders (unblocks bd-0mji's regression tests). Merged 2026-05-14.
+  - [x] New `crates/quarto-preview/src/deps.rs` module with a `GET /api/preview/deps?page=<rel>` endpoint registered in `extend_with_preview`. The handler reads the page's qmd source and runs a single-hop `{{< include … >}}` shortcode extractor (regex-based; the full `ProjectDependencyGraph` requires running per-page render pipelines and is much heavier than D.6 needs). Returns `{ "deps": [...] }` as project-relative forward-slash paths. Errors downgrade to "no deps" + a log line — a filter that misses a dep is worse than one that over-broadcasts, so fail-open.
+  - [x] SPA: `PreviewApp.tsx` gets a new `deps: Set<string> | null` state slot. A `useEffect` fetches the active page's deps from the new endpoint on activeFile change and after every contentTick bump (so a newly-added include shortcode in the active page becomes visible to the filter immediately). `onFileContent(path)` now calls `shouldRerenderForTextChange(path, activeFile, deps)` — drops sibling `.qmd` edits when they're not in the active page's dep set, passes everything else through. Non-qmd edits (CSS, `_quarto.yml`, `_metadata.yml`, `.tsx`, images) always pass; only `.qmd` files get filtered. `deps === null` = unknown ⇒ fail-open. `onBinaryContent` stays unfiltered (image-ref extraction is deferred — tracked as a follow-up).
+  - [x] Tests: 11 unit tests in `deps::tests` (unquoted/double-quoted/single-quoted include, page-dir-relative resolution, parent-dir resolution, multi-include dedup+sort, named-arg form, single-hop pin, path-normalize). 2 new Playwright specs in `q2-preview-spa/e2e/dep-graph-filter.spec.ts` (sibling-edit drops; self-edit re-renders). Phase B.3's `include-shortcode.spec.ts` (positive: edit included file → re-render) continues to pass — confirms the filter doesn't false-block real deps.
+  - [x] `cargo nextest run --workspace`: 8949/8949 pass. SPA: 21/21 integration + 8/8 unit. Playwright: 13/13.
+  - [x] Closes bd-0mji item #2 (negative-case regression test). bd-0mji item #1 (SPA render-event hook) was already closed by D.3's `window.__renderTicks`. bd-0mji can be closed.
+
+  **Follow-ups (out of scope for the D.6 MVP):**
+  - Transitive include traversal. Today the dep set is single-hop only. Documented in `deps.rs` module docs.
+  - Image / bibliography / theme-CSS dep extraction. Non-qmd edits all pass the filter today; tightening to "only edits actually referenced by the active page" requires extracting these channels.
+  - Cross-doc channels per bd-56b0's audit.
 
 > Note: the sub-task IDs are out of D-numeric order because of a re-filing during issue creation. The plan section ordering (D.1 → D.6) reflects the logical sequence; the bd-IDs are stable identifiers.
 
