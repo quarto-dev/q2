@@ -9,7 +9,7 @@
 //! `HubConfig::register_root_ws = false`.
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
 use axum::{
@@ -18,7 +18,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use include_dir::{Dir, include_dir};
+use quarto_core::engine::EngineRegistry;
 use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter};
+use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+
+pub mod capture_driver;
 
 /// The SPA bundle embedded at build time. See `build.rs` for how the
 /// source directory is chosen (real `q2-preview-spa/dist/` if present,
@@ -33,7 +37,7 @@ static EMBEDDED_SPA: Dir<'_> = include_dir!("$QUARTO_PREVIEW_EMBED_DIR");
 static SPA_DIR_OVERRIDE: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 /// Runtime configuration for the preview server.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PreviewConfig {
     /// Host to bind to. Defaults to `127.0.0.1`.
     pub host: String,
@@ -49,6 +53,12 @@ pub struct PreviewConfig {
     /// of the embedded bundle. Same pattern as `QUARTO_TRACE_VIEWER_DIR`
     /// for the trace viewer; lets UI iteration skip Rust rebuilds.
     pub spa_dir_override: Option<PathBuf>,
+    /// Optional engine registry override forwarded to the Phase C.1
+    /// capture driver. Tests substitute a passthrough engine here so
+    /// the integration suite doesn't need a real R / Python runtime.
+    /// Production callers leave this `None` to use the default
+    /// (`markdown` + native engines).
+    pub engine_registry: Option<EngineRegistry>,
 }
 
 /// Run the preview server. Returns when the server is shut down (ctrl-c
@@ -63,7 +73,27 @@ pub async fn run(config: PreviewConfig) -> Result<()> {
     let storage = build_storage(&config).context("building storage manager")?;
     let hub_config = build_hub_config(&config);
 
-    server::run_server_with(storage, hub_config, Some(extend_with_spa))
+    // Phase C.1 hook: once the hub context is ready, spawn the eager
+    // capture driver on a blocking worker so the multi-threaded tokio
+    // runtime stays free for the HTTP listener and the file watcher.
+    // The pipeline futures inside the driver are intentionally `?Send`
+    // (see `.claude/rules/wasm.md`); `pollster::block_on` runs them
+    // on the spawned thread without requiring `Send`.
+    let engine_registry = config.engine_registry.clone();
+    let on_ready: server::OnReadyCallback = Box::new(move |ctx| {
+        let registry = engine_registry;
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        tokio::task::spawn_blocking(move || {
+            let result = pollster::block_on(capture_driver::record_eager_captures(
+                ctx, runtime, registry,
+            ));
+            if let Err(e) = result {
+                tracing::warn!(error = %e, "eager capture driver failed");
+            }
+        });
+    });
+
+    server::run_server_with(storage, hub_config, Some(extend_with_spa), Some(on_ready))
         .await
         .context("quarto-hub server failed")?;
     Ok(())

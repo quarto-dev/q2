@@ -113,6 +113,9 @@ async fn run(args: PreviewArgs) -> Result<()> {
         project_root,
         data_dir,
         spa_dir_override: args.preview_dir,
+        // CLI uses the default engine registry; tests substitute a
+        // passthrough engine via the integration-test surface.
+        engine_registry: None,
     };
     quarto_preview::run(config).await
 }
