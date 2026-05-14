@@ -50,6 +50,7 @@ import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewEr
 import type { CaptureRef, FileEntry } from '@quarto/quarto-automerge-schema';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
 import { StaleCaptureOverlay } from './components/StaleCaptureOverlay';
+import { pickInitialPage } from './pickInitialPage';
 
 type BootState = 'loading' | 'ready' | 'error';
 
@@ -196,11 +197,18 @@ export default function PreviewApp() {
         const initialFiles = await connect(wsUrl, indexDocId, undefined, undefined, undefined, 5000);
         if (cancelled) return;
 
-        const firstQmd = initialFiles.find((f) => f.path.endsWith('.qmd'));
+        // Phase D.2 (bd-kw93.13): seed `activeFile` from the boot
+        // URL's `?page=<rel>` query if the CLI carried one through.
+        // Falls back to firstQmd when missing/invalid — that's the
+        // pre-D.2 Phase A behaviour preserved verbatim.
+        const activeFile = pickInitialPage(
+          typeof window !== 'undefined' ? window.location.search : '',
+          initialFiles,
+        );
         setState((s) => ({
           ...s,
           files: initialFiles,
-          activeFile: firstQmd?.path ?? null,
+          activeFile,
           boot: 'ready',
         }));
       } catch (err) {

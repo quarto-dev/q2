@@ -14,7 +14,16 @@
   - [x] Side fix: `--port 0` previously printed `http://127.0.0.1:0/` (broken URL). Now `Some(0)` and `None` are equivalent — both probe for an OS-assigned free port so the printed URL is reachable.
   - [x] Tests: 3 new unit tests in `commands::preview::tests` (port-0 probe ok, bound-port error message includes the port number + `--port 0` hint, `open_browser_or_log` no-ops when suppressed). `cargo nextest run --workspace`: 8929/8929 pass (8926 → 8929, +3 D.1 tests).
   - [x] Binary smoke: with a Python listener holding 127.0.0.1:50500, `q2 preview /tmp/q2-d1-smoke --no-browser --port 50500` emits `Error: port 50500 on 127.0.0.1 is already in use; pass --port 0 to let the OS pick a free port, or omit --port for the default probe behaviour`. With `--port 0`, prints `→ http://127.0.0.1:50617/` (real OS-picked port).
-- [ ] **D.2** (bd-kw93.13) — Initial-path resolution (positional `.qmd` → that page; project mode → project index).
+- [x] **D.2** (bd-kw93.13) — Initial-path resolution (positional `.qmd` → that page; project mode → project index). Merged 2026-05-14.
+  - [x] `resolve_project_and_initial_page` in `crates/quarto/src/commands/preview.rs` walks up from a file path looking for `_quarto.yml`; on hit, project root becomes the ancestor dir and `initial_page` is the path-relative-to-root. For directories, returns `index.qmd` when present, else `None`. Single-file mode (no `_quarto.yml` ancestor) preserves Phase A semantics (project root = the file path itself).
+  - [x] `build_boot_url(host, port, initial_page)` appends `?page=<rel>` when present. New `percent_encode_path` helper RFC-3986-encodes the value, leaving literal `/` alone so paths read naturally.
+  - [x] SPA: new `q2-preview-spa/src/pickInitialPage.ts` parses `window.location.search`, validates the path is in the file index, rejects `..` traversal, falls through to `firstQmd` on miss. Wired into `PreviewApp.tsx` boot, replacing the unconditional `firstQmd?.path ?? null`.
+  - [x] Tests: 9 new Rust unit tests (dir-with-index, dir-without-index, file-in-project, file-at-project-root, file-without-`_quarto.yml`, two `build_boot_url` cases, two `percent_encode_path` cases) + 8 SPA unit tests on `pickInitialPage` (query hit, decode, fall-throughs, traversal rejection, empty-value handling, no-qmd index) + 2 new SPA integration tests in `PreviewApp.integration.test.tsx` (?page= seeds activeFile; ?page= names unknown file falls back to firstQmd). Existing 16 SPA integration tests unaffected.
+  - [x] `cargo nextest run --workspace`: 8938/8938 pass (8929 → 8938, +9 D.2 Rust tests). `npm test` (SPA): 8/8 pass. `npm run test:integration` (SPA): 18/18 pass.
+  - [x] Binary smoke against `/tmp/q2-d2-smoke`:
+    - `q2 preview <dir-with-index>` → `→ http://127.0.0.1:50813/?page=index.qmd`
+    - `q2 preview <project>/posts/intro.qmd` → `→ http://127.0.0.1:50814/?page=posts/intro.qmd` + `project_root=/private/tmp/q2-d2-smoke` (walked up to `_quarto.yml`)
+    - `q2 preview <dir-without-index>` → `→ http://127.0.0.1:50815/` (no `?page=`)
 - [ ] **D.3** (bd-kw93.9) — Static-file resource verification (CSS in `_extensions/`, images, theme files round-trip through samod binary-doc sync).
 - [ ] **D.4** (bd-kw93.10) — Diagnostics surface: render errors / engine errors / parse errors render through `PreviewErrorOverlay` instead of failing silently.
 - [ ] **D.5** (bd-kw93.11) — User-facing documentation in `docs/` for `q2 preview`.

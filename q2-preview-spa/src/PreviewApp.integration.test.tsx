@@ -334,4 +334,68 @@ describe('PreviewApp boot path', () => {
     expect(screen.queryByText(/\/health/i)).not.toBeNull();
     expect(screen.queryByTestId('q2-preview-iframe-mock')).toBeNull();
   });
+
+  // ──────────────────────────────────────────────────────────────
+  // Phase D.2 (bd-kw93.13): boot URL `?page=<rel>` query support
+  // ──────────────────────────────────────────────────────────────
+
+  it('seeds activeFile from ?page= when the CLI carries a requested page', async () => {
+    // CLI emits `http://127.0.0.1:N/?page=about.qmd` when the user
+    // asked for a specific page (or when the project has an
+    // `index.qmd` at the root). The SPA's pickInitialPage must
+    // honor it rather than falling through to firstQmd.
+    runtimeMockState.files = [
+      { path: 'intro.qmd', docId: 'automerge:intro' },
+      { path: 'about.qmd', docId: 'automerge:about' },
+    ];
+
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, search: '?page=about.qmd' },
+    });
+
+    try {
+      render(<PreviewApp />);
+      await waitFor(() => {
+        expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+      });
+      const props = capturedIframeProps[capturedIframeProps.length - 1];
+      expect(props.currentFilePath).toBe('about.qmd');
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
+
+  it('falls back to firstQmd when ?page= names a file not in the index', async () => {
+    // Hand-crafted URL with a stale/unknown path must not strand
+    // the SPA on an empty page — silently fall back to firstQmd.
+    runtimeMockState.files = [
+      { path: 'intro.qmd', docId: 'automerge:intro' },
+      { path: 'about.qmd', docId: 'automerge:about' },
+    ];
+
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, search: '?page=does-not-exist.qmd' },
+    });
+
+    try {
+      render(<PreviewApp />);
+      await waitFor(() => {
+        expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+      });
+      const props = capturedIframeProps[capturedIframeProps.length - 1];
+      expect(props.currentFilePath).toBe('intro.qmd');
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
 });
