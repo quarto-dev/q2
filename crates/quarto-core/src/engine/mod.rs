@@ -57,6 +57,7 @@ mod context;
 mod detection;
 mod error;
 mod markdown;
+pub mod preview_record;
 mod registry;
 mod replay;
 mod traits;
