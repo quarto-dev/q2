@@ -90,10 +90,28 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // value, drop the listener — there's a tiny race where another
     // process could steal the port before run_server rebinds, but
     // for a foreground developer tool that's an acceptable trade-off.
+    // `--port 0` and an absent `--port` are equivalent: both mean
+    // "let the OS pick a free port." We probe up front so the URL
+    // we print is reachable.
     let port = match args.port {
+        Some(0) | None => probe_free_port(&host)?,
         Some(p) => p,
-        None => probe_free_port(&host)?,
     };
+
+    // Phase D.1 (bd-kw93.8): when the user pinned a *specific* port,
+    // pre-probe to produce a friendlier error than the raw bind
+    // failure that bubbles out of `run_server_with`. There's a tiny
+    // race between this probe and the server's actual bind (another
+    // process could steal the port), but the failure mode there is
+    // the same opaque bind error we get today, so we're strictly
+    // better off. `--port 0` is the documented "let the OS pick"
+    // escape hatch — that takes the `probe_free_port` path so the
+    // printed URL carries the real bound port instead of `:0`.
+    if let Some(p) = args.port
+        && p != 0
+    {
+        validate_explicit_port(&host, p)?;
+    }
 
     let url = format!("http://{host}:{port}/");
     info!(%url, "starting q2 preview server");
@@ -101,12 +119,11 @@ async fn run(args: PreviewArgs) -> Result<()> {
     println!("  q2 preview");
     println!("  → {url}");
     println!();
-    if !args.no_browser {
-        // Phase A polish gap: no `open` / `webbrowser` crate yet.
-        // bd-vpsy (Playwright smoke) will likely pull one in.
-        eprintln!("  (--no-browser auto-open isn't implemented yet; open the URL manually)");
-        println!();
-    }
+
+    // Phase D.1 (bd-kw93.8): actually open a browser tab. Failure to
+    // open is logged + non-fatal (the URL is already printed for
+    // copy-paste). Suppressed by --no-browser.
+    open_browser_or_log(&url, args.no_browser);
 
     // Phase C.6: read `preview.engine` from `_quarto.yml` so the
     // driver knows whether to skip eager execution (`off`) or auto-
@@ -146,4 +163,78 @@ fn probe_free_port(host: &str) -> Result<u16> {
         .port();
     drop(listener);
     Ok(port)
+}
+
+/// Phase D.1: pre-probe an explicit `--port` so we can produce a
+/// clean "port N already in use" error instead of the raw bind
+/// failure from inside `quarto_hub::server::run_server_with`. The
+/// returned error message names `--port 0` as the escape hatch.
+fn validate_explicit_port(host: &str, port: u16) -> Result<()> {
+    match StdTcpListener::bind((host, port)) {
+        Ok(listener) => {
+            drop(listener);
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => Err(anyhow::anyhow!(
+            "port {port} on {host} is already in use; pass --port 0 to let the OS pick a free \
+             port, or omit --port for the default probe behaviour"
+        )),
+        Err(e) => Err(anyhow::anyhow!("could not bind to {host}:{port}: {e}")),
+    }
+}
+
+/// Phase D.1: open the boot URL in the user's default browser unless
+/// `--no-browser` was passed. Failure is logged + non-fatal — the
+/// URL was already printed for copy-paste before this fires.
+fn open_browser_or_log(url: &str, suppress: bool) {
+    if suppress {
+        return;
+    }
+    if let Err(e) = open::that(url) {
+        tracing::warn!(
+            error = %e,
+            "could not auto-open browser; the URL is printed above"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_explicit_port_ok_for_zero() {
+        // Port 0 always succeeds (OS picks). Cheap smoke that the
+        // helper doesn't reject a valid request.
+        validate_explicit_port("127.0.0.1", 0).expect("port 0 should always be bindable");
+    }
+
+    #[test]
+    fn validate_explicit_port_errors_clearly_for_bound_port() {
+        // Hold a listener on an OS-assigned port, then ask the
+        // helper to validate that same port. The probe must fail
+        // with the friendly message that names `--port 0`.
+        let held = StdTcpListener::bind("127.0.0.1:0").expect("probe bind");
+        let port = held.local_addr().expect("local_addr").port();
+
+        let err = validate_explicit_port("127.0.0.1", port)
+            .expect_err("port should be unavailable while we hold the listener");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains(&port.to_string()),
+            "error should name the port; got: {msg}"
+        );
+        assert!(
+            msg.contains("--port 0"),
+            "error should suggest the --port 0 escape hatch; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn open_browser_or_log_is_noop_when_suppressed() {
+        // The `suppress` branch must return without touching the
+        // OS — we never want a test run to fork a browser. Asserting
+        // "doesn't panic, returns" is the contract.
+        open_browser_or_log("https://invalid.example.invalid/", true);
+    }
 }

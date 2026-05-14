@@ -36,6 +36,11 @@ quarto-sass.workspace = true
 quarto-test.workspace = true
 serde_yaml.workspace = true
 tempfile = "3"
+# Phase D.1 (bd-kw93.8): auto-open browser tabs on `q2 preview`.
+# `open` shells out to the platform-native launcher (`open` on macOS,
+# `xdg-open` on Linux, `cmd /C start` on Windows). No heavy transitive
+# tree.
+open = "5"
 
 [build-dependencies]
 
