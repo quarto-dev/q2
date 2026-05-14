@@ -65,19 +65,20 @@ The **space-kv form** (`{r echo=FALSE}`) is deliberately *not* in the corpus. It
 
 ### Phase 1: upgrade Q-2-8 site to Q-2-36 error
 
-- [ ] In `crates/pampa/src/pandoc/treesitter.rs:1121-1144`, replace `DiagnosticMessageBuilder::warning(...)` with `error(...)`. Update:
-  - `code` → `"Q-2-36"`
-  - title → `"Old-style knitr chunk options are not supported"`
-  - `.problem(...)` → describe the offending header form
-  - `.add_info(...)` → recommend `#| key: value` body syntax
-  - `.add_hint(...)` → mention the Pandoc class form `{.r ...}` as the alternative spelling
-- [ ] Clip the diagnostic location to the **header line** of the code block (currently `cb.source_info.clone()` spans the whole fenced block). The simplest approach: walk `cb.source_info` to find the offset of the first `\n` in `input_bytes` and build a clipped `SourceInfo::Original`. Sibling code lives in `crates/pampa/src/readers/qmd_error_messages.rs::widen_diagnostic_to_line` — its forward-scan for `\n` is the template.
-- [ ] Run `cargo nextest run -p pampa --test test_warnings test_code_block_with_header_options_produces_q236_error`. Confirm it now PASSES.
-- [ ] Run all of `cargo nextest run -p pampa --test test_warnings`. Confirm the negative-control tests still pass (no false positives on `{.python .marimo}`, `{r .myclass eval=FALSE}`, `{python}`).
+- [x] In `crates/pampa/src/pandoc/treesitter.rs:1121-1144`, replaced `DiagnosticMessageBuilder::warning(...)` with `error(...)`. Updated code → `"Q-2-36"`, title → `"Old-style knitr chunk options are not supported"`, problem/info/hint text per plan.
+- [x] Clipped the diagnostic location to the **header line** of the code block inline at the diagnostic site (walks `cb.source_info`, finds the first `\n`/`\r` in `input_bytes`, builds a clipped `SourceInfo::Original`). Sibling `widen_diagnostic_to_line` in `qmd_error_messages.rs` would have widened correctly too, but inlining keeps path A self-contained: Phase 2's widen gate now only has to handle path B's narrow-token highlights.
+- [x] Two new TDD scaffolds in `test_warnings.rs` now PASS: `test_code_block_with_header_options_produces_q236_error`, `test_code_block_with_id_and_options_produces_q236_error`. Three negative controls (`{.python .marimo}`, `{r .myclass eval=FALSE}`, `{python}`) continue to pass.
+- [x] Surfaced 3 sibling tests in `crates/pampa/tests/test_code_block_attributes.rs` that asserted the *legal* shape of the now-rejected `{python key=value}` form. **Disposition:** deleted `test_language_with_key_value` (redundant with `test_language_with_all_attributes`); retargeted `test_language_with_multiple_key_values` and `test_quoted_attribute_value` to add a Pandoc class (`.myclass`) so they bypass Q-2-36 while preserving their unique coverage (multi-kv extraction and quoted-value-with-spaces). Added a top-of-file comment explaining the constraint.
+- [x] End-to-end smoke through `cargo run --bin pampa --`:
+  - Reporter's `q236-repro.qmd` (`{r test}`) → clean `[Q-2-36]` error, highlight on the offending token. (Path B; widen pending Phase 2.)
+  - Stdin `{r echo=FALSE}` → clean `[Q-2-36]` error, **highlight now spans only the header line** (`1 │ ` ` ```{r echo=FALSE}` ` with single-line underline). (Path A, clipped inline.)
+  - Stdin `{.r echo=FALSE}` (negative control) → parses cleanly, no diagnostic.
+- [x] Full pampa suite: **3686/3686 pass, 2 skipped, 0 failures.**
 
-### Phase 2: wire up Merr for the parse-error forms
+### Phase 2: widen path-B highlights to the full header line
 
-- [ ] Confirm that after Phase 0b the Q-2-36 corpus snapshots are reviewed (`cargo insta accept`, if `insta` is set up; otherwise inspect the diff). The diagnostic produced by the autogen mapping should already carry `code: "Q-2-36"` once the JSON is in place — the corpus pipeline writes `(state, sym) → Q-2-36` into `_autogen-table.json`, and `produce_diagnostic_messages` uses that table.
+After Phase 1 + Phase 0b, path A is already clipped to the header line (inline at the treesitter.rs site) and path B emits Q-2-36 with a narrow highlight on the offending token (`r` in `{r test}`, `r` in `{r, echo=FALSE}`, etc.). Phase 2 only widens path B.
+
 - [ ] Extend the location-widening gate in `crates/pampa/src/readers/qmd_error_messages.rs:40` so `Q-2-36` joins `Q-2-35`:
 
   ```rust
@@ -86,9 +87,9 @@ The **space-kv form** (`{r echo=FALSE}`) is deliberately *not* in the corpus. It
   }
   ```
 
-  Update the doc-comment on `widen_diagnostic_to_line` to mention both error codes.
-- [ ] Run `cargo nextest run -p pampa --test test_error_corpus`. Snapshots stabilize.
-- [ ] If `lookup_error_entry` reports multiple matches for a single `(state, sym)` (because another corpus entry already covered that state), follow the disambiguation pattern documented in `crates/quarto-parse-errors/src/error_table.rs` and Q-2-32's example.
+  Update the doc-comment on `widen_diagnostic_to_line` to mention both error codes. (Subtle but harmless interaction with path A: when a path-A diagnostic flows through this gate, `widen_diagnostic_to_line` is a no-op for a `SourceInfo::Original` that already spans exactly one line — `line_start` and `line_end` re-derive the same offsets. Confirm in Phase 3 verification.)
+- [ ] Run `cargo nextest run -p pampa --test test_error_corpus`. All pass.
+- [ ] If `lookup_error_entry` reports multiple matches for a single `(state, sym)` (because another corpus entry already covered that state), follow the disambiguation pattern documented in `crates/quarto-parse-errors/src/error_table.rs` and Q-2-32's example. (No collisions reported during Phase 0b — this is a safeguard, not an expected branch.)
 
 ### Phase 3: end-to-end verification
 

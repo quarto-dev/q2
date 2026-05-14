@@ -1118,27 +1118,52 @@ fn native_visitor<T: Write>(
         "pandoc_code_block" => {
             let result = process_fenced_code_block(node, children, context);
 
-            // Check for Q-2-8 warning: code block options in header without classes
-            // This warns about syntax like {r eval=FALSE} and suggests YAML block syntax
-            // But does NOT warn if there are additional classes like {python .marimo}
+            // Q-2-36: reject knitr-style chunk headers like {r echo=FALSE}.
+            // The grammar accepts the language token + space-separated kv form
+            // structurally; we catch it here and emit a parse error. The
+            // Pandoc class form {.r echo=FALSE} is intentionally still valid
+            // and is excluded by the literal-braces check on classes[0].
             if let PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(ref cb)) = result {
                 let (ref _id, ref classes, ref attrs) = cb.attr;
 
-                // Check if: exactly one class matching {language} pattern, and has key-value attrs
                 let has_only_braced_language =
                     classes.len() == 1 && classes[0].starts_with('{') && classes[0].ends_with('}');
                 let has_key_value_attrs = !attrs.is_empty();
 
                 if has_only_braced_language && has_key_value_attrs {
-                    let msg = DiagnosticMessageBuilder::warning("Code block options in header")
-                        .with_code("Q-2-8")
-                        .with_location(cb.source_info.clone())
-                        .problem("This code block has options specified in the header line")
-                        .add_info(
-                            "For executable code blocks, Quarto recommends using YAML block syntax",
-                        )
-                        .add_hint("Use `#| key: value` syntax inside the code block instead")
-                        .build();
+                    // Clip the highlight to just the header line. cb.source_info
+                    // spans the whole fenced block; the offending shape is in
+                    // line 1 (the fence + brace block).
+                    let header_loc = if let quarto_source_map::SourceInfo::Original {
+                        file_id,
+                        start_offset,
+                        ..
+                    } = cb.source_info
+                    {
+                        let pivot = start_offset.min(input_bytes.len());
+                        let line_end = input_bytes[pivot..]
+                            .iter()
+                            .position(|&b| b == b'\n' || b == b'\r')
+                            .map(|p| pivot + p)
+                            .unwrap_or(input_bytes.len());
+                        quarto_source_map::SourceInfo::original(file_id, start_offset, line_end)
+                    } else {
+                        cb.source_info.clone()
+                    };
+
+                    let msg = DiagnosticMessageBuilder::error(
+                        "Old-style knitr chunk options are not supported",
+                    )
+                    .with_code("Q-2-36")
+                    .with_location(header_loc)
+                    .problem("This code block uses knitr-style options in the header")
+                    .add_info(
+                        "Quarto Markdown reads chunk options from the body, not the header",
+                    )
+                    .add_hint(
+                        "Move options into the body using `#| key: value`, or — if you only want a Pandoc class — write `{.r ...}` instead of `{r ...}`",
+                    )
+                    .build();
                     error_collector.add(msg);
                 }
             }
