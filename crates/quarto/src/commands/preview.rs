@@ -128,6 +128,9 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // passthrough engine via the integration-test surface.
         engine_registry: None,
         engine_policy,
+        // Phase C.7: derive the capture cache dir from `data_dir`
+        // (per-session; tracked as a follow-up for per-project reuse).
+        cache_dir: None,
     };
     quarto_preview::run(config).await
 }

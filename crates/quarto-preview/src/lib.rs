@@ -23,6 +23,7 @@ use quarto_core::engine::EngineRegistry;
 use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
+pub mod cache;
 pub mod capture_driver;
 pub mod config;
 pub mod re_execute;
@@ -70,6 +71,12 @@ pub struct PreviewConfig {
     /// start via [`config::read_engine_policy_from_project`]; tests
     /// substitute directly.
     pub engine_policy: EnginePolicy,
+    /// Directory for the Phase C.7 capture filesystem cache. When
+    /// `None`, the cache lives at `<data_dir>/captures/` — same
+    /// per-session lifetime as `data_dir` itself. Tests substitute a
+    /// dedicated tempdir; future cross-session reuse (per-project
+    /// location) is a Phase D follow-up.
+    pub cache_dir: Option<PathBuf>,
 }
 
 /// Run the preview server. Returns when the server is shut down (ctrl-c
@@ -98,6 +105,16 @@ where
     // first call's override wins.
     let _ = SPA_DIR_OVERRIDE.set(config.spa_dir_override.clone());
 
+    // Phase C.7: tell the re-execute HTTP handler where the per-doc
+    // capture cache lives. Same OnceLock-first-wins pattern; in
+    // production this fires once at server boot.
+    re_execute::set_cache_dir(
+        config
+            .cache_dir
+            .clone()
+            .unwrap_or_else(|| config.data_dir.join("captures")),
+    );
+
     let storage = build_storage(&config).context("building storage manager")?;
     let hub_config = build_hub_config(&config);
 
@@ -109,9 +126,15 @@ where
     // on the spawned thread without requiring `Send`.
     let engine_registry = config.engine_registry.clone();
     let engine_policy = config.engine_policy;
+    let cache_dir = config
+        .cache_dir
+        .clone()
+        .unwrap_or_else(|| config.data_dir.join("captures"));
     let registry_for_on_ready = engine_registry.clone();
+    let cache_dir_for_on_ready = cache_dir.clone();
     let on_ready: server::OnReadyCallback = Box::new(move |ctx| {
         let registry = registry_for_on_ready;
+        let cache_dir = cache_dir_for_on_ready;
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let ctx_for_driver = ctx.clone();
         tokio::task::spawn_blocking(move || {
@@ -120,6 +143,7 @@ where
                 runtime,
                 registry,
                 engine_policy,
+                &cache_dir,
             ));
             if let Err(e) = result {
                 tracing::warn!(error = %e, "eager capture driver failed");
@@ -145,6 +169,7 @@ where
     // `sync_file_by_path` already has — see canonicalize note in
     // tests/staleness.rs).
     let registry_for_on_file_changed = engine_registry.clone();
+    let cache_dir_for_on_file_changed = cache_dir.clone();
     let on_file_changed: server::OnFileChangedCallback = Arc::new(move |ctx, abs_path| {
         let Some(project_root_raw) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
             return;
@@ -157,6 +182,7 @@ where
         let rel_path = rel.to_string_lossy().to_string();
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let registry = registry_for_on_file_changed.clone();
+        let cache_dir = cache_dir_for_on_file_changed.clone();
         tokio::task::spawn_blocking(move || {
             let result = pollster::block_on(capture_driver::recompute_staleness(
                 ctx,
@@ -164,6 +190,7 @@ where
                 &rel_path,
                 engine_policy,
                 registry,
+                &cache_dir,
             ));
             if let Err(e) = result {
                 tracing::warn!(error = %e, rel_path = %rel_path, "staleness recompute failed");

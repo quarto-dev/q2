@@ -19,6 +19,7 @@
 
 use std::collections::HashSet;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::{
@@ -28,7 +29,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::record_capture;
 use quarto_core::project::ProjectContext;
 use quarto_hub::HubContext;
 use quarto_hub::context::SharedContext;
@@ -38,12 +38,33 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::EngineCapture;
 use serde::{Deserialize, Serialize};
 
+use crate::cache::record_capture_cached;
 use crate::capture_driver::CAPTURE_MIME_TYPE;
 
 /// Process-wide set of paths currently being re-executed. Used to
 /// detect concurrent POSTs for the same path (→ 409). Lazy because
 /// the handler may never be called.
 static IN_FLIGHT: OnceLock<Arc<Mutex<HashSet<String>>>> = OnceLock::new();
+
+/// Process-wide cache directory for the Phase C.7 filesystem cache.
+/// Set once by `lib.rs::run_with_on_ready` and read by the HTTP
+/// `re_execute_handler` (axum can't extract user data from the
+/// router state without re-typing the State across the whole
+/// `extend_with_preview` surface; OnceLock matches the existing
+/// `SPA_DIR_OVERRIDE` pattern). Tests bypass this via the
+/// `re_execute_with_registry_and_cache` entry point.
+static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Set the process-wide cache directory used by the HTTP handler.
+/// Idempotent (first writer wins); subsequent calls in the same
+/// process are ignored. Called by [`crate::run_with_on_ready`].
+pub fn set_cache_dir(dir: PathBuf) {
+    let _ = CACHE_DIR.set(dir);
+}
+
+fn handler_cache_dir() -> Option<&'static Path> {
+    CACHE_DIR.get().map(|p| p.as_path())
+}
 
 fn in_flight() -> Arc<Mutex<HashSet<String>>> {
     IN_FLIGHT
@@ -80,17 +101,29 @@ pub async fn re_execute_handler(
     State(ctx): State<SharedContext>,
     Json(body): Json<ReExecuteRequest>,
 ) -> Response {
-    re_execute_with_registry(ctx, body, None).await
+    // The handler reads the process-wide cache directory set at server
+    // startup. If it isn't set (server-less context, e.g. a unit test
+    // calling the handler directly), fall back to a temp dir under
+    // `data_dir/captures` — but production routes through `set_cache_dir`
+    // in `run_with_on_ready`, so this branch is unusual.
+    let cache_dir = handler_cache_dir()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| std::env::temp_dir().join("q2-preview-captures-unset"));
+    re_execute_with_registry_and_cache(ctx, body, None, &cache_dir).await
 }
 
 /// Internal entry point that takes an engine_registry override.
 /// Production uses `None` (default registry); tests substitute a
 /// passthrough engine to exercise the full path without a real
 /// jupyter/knitr runtime.
-pub(crate) async fn re_execute_with_registry(
+///
+/// `cache_dir` is the Phase C.7 capture cache root (typically
+/// `<data_dir>/captures/`).
+pub(crate) async fn re_execute_with_registry_and_cache(
     ctx: SharedContext,
     body: ReExecuteRequest,
     registry: Option<EngineRegistry>,
+    cache_dir: &Path,
 ) -> Response {
     let rel_path = body.path;
 
@@ -110,7 +143,7 @@ pub(crate) async fn re_execute_with_registry(
         .get_capture(&rel_path)
         .map(|c| c.capture_doc_id.clone());
 
-    match claim_and_spawn(ctx, rel_path.clone(), registry) {
+    match claim_and_spawn(ctx, rel_path.clone(), registry, cache_dir.to_path_buf()) {
         ClaimOutcome::Spawned => (
             StatusCode::ACCEPTED,
             Json(ReExecuteAccepted {
@@ -144,8 +177,9 @@ pub(crate) fn trigger_auto_re_execute(
     ctx: SharedContext,
     rel_path: String,
     registry: Option<EngineRegistry>,
+    cache_dir: PathBuf,
 ) {
-    match claim_and_spawn(ctx, rel_path.clone(), registry) {
+    match claim_and_spawn(ctx, rel_path.clone(), registry, cache_dir) {
         ClaimOutcome::Spawned => {
             tracing::debug!(rel_path = %rel_path, "auto re-execute kicked off");
         }
@@ -172,6 +206,7 @@ fn claim_and_spawn(
     ctx: SharedContext,
     rel_path: String,
     registry: Option<EngineRegistry>,
+    cache_dir: PathBuf,
 ) -> ClaimOutcome {
     let in_flight_set = in_flight();
     {
@@ -205,6 +240,7 @@ fn claim_and_spawn(
             ctx_for_task.clone(),
             &rel_path_for_task,
             registry,
+            &cache_dir,
         ));
         in_flight_for_task
             .lock()
@@ -237,6 +273,7 @@ async fn perform_re_execute(
     ctx: SharedContext,
     rel_path: &str,
     registry: Option<EngineRegistry>,
+    cache_dir: &Path,
 ) -> Result<(), String> {
     let project_root = ctx
         .storage()
@@ -250,7 +287,7 @@ async fn perform_re_execute(
     let project = ProjectContext::discover(&abs_path, runtime.as_ref())
         .map_err(|e| format!("project discovery failed: {e}"))?;
 
-    let capture = record_capture(&abs_path, &project, runtime.clone(), registry)
+    let capture = record_capture_cached(cache_dir, &abs_path, &project, runtime.clone(), registry)
         .await
         .map_err(|e| format!("engine pipeline failed: {e}"))?
         .ok_or_else(|| "engine produced no capture (no code cells?)".to_string())?;
@@ -344,13 +381,14 @@ mod tests {
     /// Spin up the eager-capture driver so the sidecar has a
     /// captureRef to operate on. (Some C.5 paths require an
     /// existing capture; others test the no-capture branch.)
-    async fn seed_capture(ctx: SharedContext) {
+    async fn seed_capture(ctx: SharedContext, cache_dir: &Path) {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let count = crate::capture_driver::record_eager_captures(
             ctx,
             runtime,
             Some(make_registry()),
             crate::config::EnginePolicy::Manual,
+            cache_dir,
         )
         .await
         .unwrap();
@@ -364,13 +402,15 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n1\n```\n",
         )
         .await;
+        let cache_tmp = TempDir::with_prefix("c5-cache-").unwrap();
 
-        let response = re_execute_with_registry(
+        let response = re_execute_with_registry_and_cache(
             ctx,
             ReExecuteRequest {
                 path: "nonexistent.qmd".to_string(),
             },
             Some(make_registry()),
+            cache_tmp.path(),
         )
         .await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -383,17 +423,19 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n1\n```\n",
         )
         .await;
-        seed_capture(ctx.clone()).await;
+        let cache_tmp = TempDir::with_prefix("c5-cache-").unwrap();
+        seed_capture(ctx.clone(), cache_tmp.path()).await;
 
         let initial = ctx.index().get_capture("doc.qmd").unwrap();
         let initial_doc_id = initial.capture_doc_id.clone();
 
-        let response = re_execute_with_registry(
+        let response = re_execute_with_registry_and_cache(
             ctx.clone(),
             ReExecuteRequest {
                 path: "doc.qmd".to_string(),
             },
             Some(make_registry()),
+            cache_tmp.path(),
         )
         .await;
         assert_eq!(response.status(), StatusCode::ACCEPTED);
@@ -429,18 +471,20 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n1\n```\n",
         )
         .await;
-        seed_capture(ctx.clone()).await;
+        let cache_tmp = TempDir::with_prefix("c5-cache-").unwrap();
+        seed_capture(ctx.clone(), cache_tmp.path()).await;
 
         // Manually claim the in-flight slot, then call the handler;
         // it should return 409 without queuing another run.
         in_flight().lock().unwrap().insert("doc.qmd".to_string());
 
-        let response = re_execute_with_registry(
+        let response = re_execute_with_registry_and_cache(
             ctx,
             ReExecuteRequest {
                 path: "doc.qmd".to_string(),
             },
             Some(make_registry()),
+            cache_tmp.path(),
         )
         .await;
         assert_eq!(response.status(), StatusCode::CONFLICT);

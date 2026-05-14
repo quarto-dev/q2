@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
+use quarto_core::engine::preview_record::compute_input_qmd;
 use quarto_core::project::ProjectContext;
 use quarto_hub::HubContext;
 use quarto_hub::index::CaptureRef;
@@ -33,6 +33,7 @@ use quarto_hub::resource::create_binary_document;
 use quarto_system_runtime::SystemRuntime;
 use quarto_trace::EngineCapture;
 
+use crate::cache::record_capture_cached;
 use crate::config::EnginePolicy;
 
 /// MIME type marker written into the capture binary doc so the
@@ -56,6 +57,7 @@ pub async fn record_eager_captures(
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<EngineRegistry>,
     policy: EnginePolicy,
+    cache_dir: &std::path::Path,
 ) -> Result<usize, RecordError> {
     // C.6: `preview.engine: off` disables all engine execution, including
     // the eager run. Code cells render as inert source in the SPA.
@@ -98,6 +100,7 @@ pub async fn record_eager_captures(
             &ctx,
             &runtime,
             engine_registry.clone(),
+            cache_dir,
         )
         .await
         {
@@ -129,15 +132,25 @@ async fn record_one(
     ctx: &Arc<HubContext>,
     runtime: &Arc<dyn SystemRuntime>,
     engine_registry: Option<EngineRegistry>,
+    cache_dir: &std::path::Path,
 ) -> Result<bool, RecordError> {
     // Project discovery walks up for `_quarto.yml`; for single-file
     // projects this produces an is_single_file context.
     let project = ProjectContext::discover(abs_path, runtime.as_ref())
         .map_err(|e| RecordError::DiscoverFailed(format!("{}", e)))?;
 
-    let capture = record_capture(abs_path, &project, runtime.clone(), engine_registry)
-        .await
-        .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+    // C.7: route through the cache-aware wrapper so identical content
+    // across (re-)opens hits the filesystem cache instead of re-running
+    // the engine.
+    let capture = record_capture_cached(
+        cache_dir,
+        abs_path,
+        &project,
+        runtime.clone(),
+        engine_registry,
+    )
+    .await
+    .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
 
     let Some(capture) = capture else {
         return Ok(false);
@@ -186,6 +199,7 @@ pub async fn recompute_staleness(
     rel_path: &str,
     policy: EnginePolicy,
     engine_registry: Option<EngineRegistry>,
+    cache_dir: &std::path::Path,
 ) -> Result<bool, RecordError> {
     // C.6: `preview.engine: off` skips the watcher staleness hook
     // entirely (no captures exist anyway, but defensive).
@@ -255,6 +269,7 @@ pub async fn recompute_staleness(
             ctx.clone(),
             rel_path.to_string(),
             engine_registry,
+            cache_dir.to_path_buf(),
         );
     }
 
@@ -391,6 +406,21 @@ mod tests {
         reg
     }
 
+    /// Each test invocation gets a process-unique cache directory so
+    /// cross-test pollution can't accidentally turn a cache miss into
+    /// a hit (or vice versa). The OS cleans up on process exit; we
+    /// don't bother with TempDir RAII because the driver tests don't
+    /// depend on the dir being gone before they finish.
+    fn cache_dir_for_test() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("q2-c7-driver-test-{pid}-{id}"));
+        dir
+    }
+
     async fn build_ctx_with_files(
         files: &[(&str, &str)],
     ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
@@ -423,9 +453,15 @@ mod tests {
         );
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
-        let count = record_eager_captures(ctx, runtime, None, EnginePolicy::Manual)
-            .await
-            .unwrap();
+        let count = record_eager_captures(
+            ctx,
+            runtime,
+            None,
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -434,9 +470,15 @@ mod tests {
         let (_tmp, ctx, runtime) =
             build_ctx_with_files(&[("doc.qmd", "---\ntitle: Prose\n---\n\nNo cells.\n")]).await;
 
-        let count = record_eager_captures(ctx.clone(), runtime, None, EnginePolicy::Manual)
-            .await
-            .unwrap();
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            None,
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert_eq!(count, 0);
         assert!(!ctx.index().has_capture("doc.qmd"));
     }
@@ -454,6 +496,7 @@ mod tests {
             runtime,
             Some(make_registry()),
             EnginePolicy::Manual,
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
@@ -481,6 +524,7 @@ mod tests {
             runtime,
             Some(make_registry()),
             EnginePolicy::Manual,
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
@@ -520,6 +564,7 @@ mod tests {
             runtime.clone(),
             Some(make_registry()),
             EnginePolicy::Manual,
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
@@ -528,6 +573,7 @@ mod tests {
             runtime,
             Some(make_registry()),
             EnginePolicy::Manual,
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
@@ -552,6 +598,7 @@ mod tests {
             runtime.clone(),
             Some(make_registry()),
             EnginePolicy::Manual,
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
@@ -573,7 +620,8 @@ mod tests {
                 runtime.clone(),
                 "doc.qmd",
                 EnginePolicy::Manual,
-                None
+                None,
+                &cache_dir_for_test()
             )
             .await
             .unwrap(),
@@ -591,10 +639,16 @@ mod tests {
         )
         .unwrap();
 
-        let flipped =
-            recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
-                .await
-                .unwrap();
+        let flipped = recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Manual,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert!(flipped, "recompute should report a flip");
         assert_eq!(
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
@@ -625,6 +679,7 @@ mod tests {
             "doc.qmd",
             EnginePolicy::Manual,
             None,
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
@@ -639,9 +694,16 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
         )
         .unwrap();
-        let _ = recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
-            .await
-            .unwrap();
+        let _ = recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Manual,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
             Some(false),
@@ -665,9 +727,16 @@ mod tests {
             "---\nengine: test-passthrough\n---\n\nA different paragraph.\n\n```{test-passthrough}\nx\n```\n",
         )
         .unwrap();
-        recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
-            .await
-            .unwrap();
+        recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Manual,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
             Some(true),
@@ -683,10 +752,16 @@ mod tests {
         let (_tmp, ctx, runtime) =
             build_ctx_with_files(&[("doc.qmd", "---\ntitle: Prose\n---\n\nhi\n")]).await;
 
-        let result =
-            recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Manual, None)
-                .await
-                .unwrap();
+        let result = recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Manual,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert!(!result);
         assert!(ctx.index().get_capture("doc.qmd").is_none());
     }
@@ -703,9 +778,16 @@ mod tests {
         );
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
-        let result = recompute_staleness(ctx, runtime, "anything.qmd", EnginePolicy::Manual, None)
-            .await
-            .unwrap();
+        let result = recompute_staleness(
+            ctx,
+            runtime,
+            "anything.qmd",
+            EnginePolicy::Manual,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert!(!result);
     }
 
@@ -730,6 +812,7 @@ mod tests {
             runtime,
             Some(make_registry()),
             EnginePolicy::Off,
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
@@ -757,9 +840,16 @@ mod tests {
         )
         .unwrap();
 
-        let flipped = recompute_staleness(ctx.clone(), runtime, "doc.qmd", EnginePolicy::Off, None)
-            .await
-            .unwrap();
+        let flipped = recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Off,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
         assert!(!flipped, "Off policy must not flip staleness");
         assert_eq!(
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
@@ -803,6 +893,7 @@ mod tests {
             "doc.qmd",
             EnginePolicy::Auto,
             Some(make_registry()),
+            &cache_dir_for_test(),
         )
         .await
         .unwrap();
