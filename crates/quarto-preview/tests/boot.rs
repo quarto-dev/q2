@@ -74,6 +74,7 @@ async fn boots_serves_spa_plus_hub_health() {
         project_root: Some(project.path().to_path_buf()),
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
+        engine_registry: None,
     };
 
     // Spawn the server. `run()` blocks until shutdown; we abort the

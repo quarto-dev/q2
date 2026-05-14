@@ -3,7 +3,7 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
 **Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** C.3 landed 2026-05-14. C.1 in progress next.
+**Status:** C.3 + C.1 landed 2026-05-14. C.4 (browser-side replay) or C.2 (staleness) ready next.
 
 ## Progress
 
@@ -14,12 +14,14 @@ Sub-task status. Each line tracks one filed bd-issue; check off as merged.
   - [x] sync-client (`@quarto/quarto-sync-client`): `CaptureRef` re-export, `onCapturesChange?` callback, `getCapturesFromIndex` / `notifyCapturesIfChanged` wired at connect / index-change / createProject / disconnect.
   - [x] Rust mirror (`crates/quarto-hub/src/index.rs`): `CaptureState`, `CaptureRef`, get/set/has/remove/get_all_captures.
   - [x] WASM signature widen — *moved to C.4* (would have been a half-finished parameter without the dispatch).
-- [ ] **C.1** (bd-kw93.2) — Server-side first-time eager capture.
-  - [ ] New `crates/quarto-core/src/engine/preview_record.rs`: `record_capture(path, project, runtime) -> Result<Option<EngineCapture>>`.
-  - [ ] Hook from `crates/quarto-hub/src/server.rs` (or `crates/quarto-preview/src/lib.rs`) into the existing `sync_file` path.
-  - [ ] Sidecar write: server uses `IndexDocument::set_capture` (landed in C.3) to publish.
-  - [ ] Unit tests: prose-only → None; code-cell → Some + correct engine_name/input_qmd/result.markdown.
-  - [ ] Integration test: end-to-end smoke against markdown-engine fixture (no R/Python in CI).
+- [x] **C.1** (bd-kw93.2) — Server-side first-time eager capture. Merged 2026-05-14.
+  - [x] `crates/quarto-core/src/engine/preview_record.rs` exporting `record_capture(path, project, runtime, registry) -> Result<Option<EngineCapture>>`. Sub-pipeline built by truncating `build_html_pipeline_stages_with_options` at the `engine-execution` stage so future pre-engine stages flow in automatically.
+  - [x] On-ready callback added to `quarto_hub::server::run_server_with`; quarto-preview drives the new `capture_driver` from it on `tokio::task::spawn_blocking` + `pollster::block_on` (pipeline futures are `?Send` per `.claude/rules/wasm.md`).
+  - [x] Sidecar write: `quarto_hub::resource::create_binary_document` envelope (gzipped JSON of `EngineCapture`, MIME `application/x-engine-capture+gzip`) → `IndexDocument::set_capture` (landed in C.3).
+  - [x] Unit tests: 4 in `preview_record::tests` + 5 in `capture_driver::tests` cover prose-only → None, passthrough-engine → Some, AST-serialized `input_qmd`, sidecar idempotence.
+  - [x] Integration test: `tests/eager_capture.rs` drives `run_with_on_ready` end-to-end, polls the sidecar, and round-trips the binary doc back to a parseable EngineCapture.
+  - [x] Binary smoke: `cargo run --bin q2 -- preview /tmp/c1-smoke --no-browser` boots cleanly, eager driver fires (no capture for prose-only fixture, as expected). Real-engine smoke (jupyter/knitr) deferred — no R/Python in CI.
+  - bd-ojtq follow-up filed: `xtask create-worktree --base` default.
 - [ ] **C.4** (bd-kw93.3) — Browser-side replay wiring (now also owns the WASM signature widen absorbed from C.3).
   - [ ] Widen `render_page_for_preview` to take `Option<JsValue>` (capture).
   - [ ] WASM: `EngineRegistry::with_replay(capture)` when present, default registry otherwise.

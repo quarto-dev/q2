@@ -836,12 +836,24 @@ pub async fn build_router(ctx: SharedContext) -> Result<Router> {
 /// If `sync_interval_secs` is configured, a background task will periodically
 /// sync all documents to the filesystem for crash resilience.
 pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()> {
-    run_server_with(storage, config, None::<NoopExtend>).await
+    run_server_with(storage, config, None::<NoopExtend>, None).await
 }
 
 /// Convenience alias so callers can pass `None` without spelling out a
 /// concrete `FnOnce` type for the `extend_router` parameter.
 type NoopExtend = fn(Router) -> Router;
+
+/// Callback that fires once `HubContext::new` finishes (samod repo
+/// initialized, index loaded, initial filesystem sync complete) and
+/// *before* the HTTP listener binds. Receives a clone of the Arc so
+/// the caller can stash it elsewhere or spawn background tasks
+/// against it.
+///
+/// Used by `quarto-preview` to drive Phase C engine-capture recording
+/// from the q2 preview server's startup path without coupling
+/// `quarto-hub` to the engine layer.
+pub type OnReadyCallback =
+    Box<dyn FnOnce(std::sync::Arc<crate::context::HubContext>) + Send + 'static>;
 
 /// Run the hub server, optionally extending its router before serving.
 ///
@@ -852,6 +864,15 @@ type NoopExtend = fn(Router) -> Router;
 /// SPA fallback (`router.fallback(spa_handler)`) on top of the hub's
 /// API + ws routes.
 ///
+/// `on_ready`, when provided, is invoked once with an `Arc<HubContext>`
+/// after the context is constructed and its initial filesystem sync
+/// has completed, but before the listener binds. The callback runs
+/// synchronously on the calling task; if it needs to do work that
+/// shouldn't block server startup (engine execution, large I/O), it
+/// should `tokio::spawn` an internal task. Errors inside the callback
+/// are the callback's responsibility — `run_server_with` does not
+/// observe its return value.
+///
 /// The caller must set `HubConfig::register_root_ws` to `false` when
 /// the extension claims `/`; otherwise axum will panic on the
 /// duplicate route.
@@ -859,6 +880,7 @@ pub async fn run_server_with<F>(
     storage: StorageManager,
     config: HubConfig,
     extend_router: Option<F>,
+    on_ready: Option<OnReadyCallback>,
 ) -> Result<()>
 where
     F: FnOnce(Router) -> Router + Send,
@@ -873,6 +895,14 @@ where
 
     // HubContext::new is now async (initializes samod repo and performs initial sync)
     let ctx = Arc::new(HubContext::new(storage, config).await?);
+
+    // Fire the on-ready callback (if any) after initial sync, before
+    // binding the listener. Callback can clone the Arc and spawn
+    // background tasks against it; we don't observe its return.
+    if let Some(callback) = on_ready {
+        callback(ctx.clone());
+    }
+
     let ctx_for_sync = ctx.clone();
     let ctx_for_watch = ctx.clone();
     let ctx_for_shutdown = ctx.clone();
