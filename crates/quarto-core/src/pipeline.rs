@@ -1027,24 +1027,30 @@ pub fn build_transform_pipeline(
 }
 
 /// Names of transforms in [`build_transform_pipeline`] that the
-/// q2-preview pipeline drops. Three categories:
+/// q2-preview pipeline drops. The remaining excludes are:
 ///
 /// 1. **Preserve CustomNodes for React** — `callout-resolve`,
 ///    `crossref-render`. Wrappers stay so React's type-specific
 ///    components (Plan 2) can render Callout / Theorem / Proof /
 ///    FloatRefTarget / Equation / CrossrefResolvedRef.
-/// 2. **Synthesize-with-no-preimage** — `title-block`, `footnotes`,
-///    `appendix-structure`. These construct containers with no
-///    source backing; deferred to a future plan with
-///    wrapper-CustomNode round-trip support.
-/// 3. **HTML-pipeline-specific outputs** — `toc-render`,
-///    `navbar-render`, `sidebar-render`, `page-nav-render`,
-///    `footer-render`, `website-favicon`. These produce HTML strings
-///    that React consumes from structured metadata directly.
+/// 2. **Synthesize-with-no-preimage** — `title-block`. Constructs
+///    a container with no source backing; deferred to a future plan
+///    with wrapper-CustomNode round-trip support. (`footnotes` and
+///    `appendix-structure` are included — see Plan 2B notes below.)
 ///
-/// Phase F.1 (bd-kw93.14) note: `link-rewrite` was previously here
-/// but is now included so cross-page body links emit `.html` hrefs
-/// the iframe link-handler can intercept.
+/// Phase F.1 (bd-kw93.14) included `link-rewrite` so cross-page
+/// body links emit `.html` hrefs the iframe link-handler can
+/// intercept.
+///
+/// Phase F.2 (bd-kw93.15) included the chrome-render transforms
+/// (`navbar-render`, `sidebar-render`, `page-nav-render`,
+/// `toc-render`, `footer-render`, `website-favicon`). These
+/// populate `meta.rendered.navigation.*` and
+/// `meta.rendered.includes.header` with HTML strings that React's
+/// `PreviewDocument` injects via `dangerouslySetInnerHTML` slots.
+/// Tracked: bd-d8fo replaces the HTML-injection approach with
+/// proper React components when chrome state-preservation becomes
+/// a real complaint.
 ///
 /// New transforms added to [`build_transform_pipeline`] are
 /// **included by default** — q2-preview opts a transform out
@@ -1059,29 +1065,22 @@ pub fn build_transform_pipeline(
 /// in the full HTML pipeline (typo / rename guard).
 const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "callout-resolve",
-    "website-favicon",
     "title-block",
-    // "footnotes" — included in q2-preview's pipeline (Plan 2B):
-    // produces Pandoc primitives (Span/Sup/Link/Div/OrderedList) that
-    // q2-preview's leaves render natively. Note marker numbering and
-    // the document-end footnote section both come from this transform.
-    // bd-1kly tracks the upstream gap for `reference-location: block`
-    // and `section`; until that lands, q2-preview's `Note.tsx`
-    // tooltip-body fallback handles those configs.
-    "toc-render",
-    "navbar-render",
-    "sidebar-render",
-    "page-nav-render",
-    "footer-render",
-    // "link-rewrite" — included in q2-preview's pipeline (Phase F.1,
-    // bd-kw93.14): rewrites cross-page body links to artifact-rooted
-    // `.html` hrefs the SPA's iframe link-handler intercepts and
-    // routes through `onNavigateToDocument`.
-    // "appendix-structure" — included in q2-preview's pipeline (Plan 2B):
-    // pure Pandoc primitives, structurally identical to the HTML
-    // pipeline. Folds footnotes section, license/copyright/citation
-    // metadata into <div id="quarto-appendix">. Bibliography branch
-    // is inert until Citeproc lands.
+    // Other transforms previously listed here that are now INCLUDED:
+    //   - "footnotes" (Plan 2B) — emits Pandoc primitives, rendered
+    //     natively by q2-preview's leaves.
+    //   - "appendix-structure" (Plan 2B) — pure Pandoc primitives.
+    //   - "link-rewrite" (Phase F.1, bd-kw93.14) — body link
+    //     rewriting; the SPA's iframe link-handler intercepts the
+    //     resulting artifact-rooted `.html` hrefs.
+    //   - "navbar-render", "sidebar-render", "page-nav-render",
+    //     "toc-render", "footer-render", "website-favicon"
+    //     (Phase F.2, bd-kw93.15) — populate
+    //     `meta.rendered.navigation.*` and
+    //     `meta.rendered.includes.header`; PreviewDocument injects
+    //     each via `dangerouslySetInnerHTML`. bd-d8fo tracks
+    //     replacing the HTML-injection approach with React
+    //     components.
     "crossref-render",
 ];
 
@@ -2132,6 +2131,33 @@ mod tests {
             names.contains(&"link-rewrite"),
             "link-rewrite must be present in the q2-preview pipeline; got: {names:?}",
         );
+    }
+
+    /// Phase F.2 (bd-kw93.15): the chrome-rendering transforms run
+    /// in the q2-preview pipeline so React's `PreviewDocument` can
+    /// inject the produced HTML into the iframe via
+    /// `dangerouslySetInnerHTML` slots. If any of these regress out,
+    /// the SPA loses navbar/sidebar/page-nav/TOC/footer/favicon —
+    /// the user-visible "looks like q2 render" promise of Phase F.
+    #[test]
+    fn q2_preview_pipeline_includes_chrome_transforms() {
+        let runtime = make_test_runtime();
+        let pipeline =
+            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        for required in [
+            "navbar-render",
+            "sidebar-render",
+            "page-nav-render",
+            "toc-render",
+            "footer-render",
+            "website-favicon",
+        ] {
+            assert!(
+                names.contains(&required),
+                "{required} must be present in the q2-preview pipeline; got: {names:?}",
+            );
+        }
     }
 
     /// Verify every name in [`Q2_PREVIEW_STAGE_EXCLUDED`] is an

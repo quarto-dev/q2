@@ -199,3 +199,241 @@ describe('PreviewDocument iframe document.title wiring', () => {
         expect(document.title).toBe('__before-mount__');
     });
 });
+
+// ──────────────────────────────────────────────────────────────────
+// Phase F.2 (bd-kw93.15): chrome HTML-injection slots
+// ──────────────────────────────────────────────────────────────────
+
+/** Build a `MetaMap` value carrying `entries`. Mirrors the JSON
+ *  shape from `crates/pampa/src/writers/json.rs::write_config_value`
+ *  (with `key_source: null`). */
+function metaMap(entries: Array<{ key: string; value: unknown }>): unknown {
+    return {
+        t: 'MetaMap',
+        c: entries.map((e) => ({ key: e.key, key_source: null, value: e.value })),
+    };
+}
+
+/** Convenience: shape the `meta.rendered.navigation.<key>: html`
+ *  injection. Returns the top-level `meta.rendered` value. */
+function renderedNavigation(map: Record<string, string>): unknown {
+    return metaMap([
+        {
+            key: 'navigation',
+            value: metaMap(
+                Object.entries(map).map(([k, v]) => ({
+                    key: k,
+                    value: ms(v),
+                })),
+            ),
+        },
+    ]);
+}
+
+describe('PreviewDocument chrome injection (Phase F.2)', () => {
+    it('renders navbar HTML BEFORE quarto-content via dangerouslySetInnerHTML', () => {
+        const navbarHtml =
+            '<nav class="navbar navbar-expand-lg" data-test="nv">My Site</nav>';
+        const { container } = mount({
+            rendered: renderedNavigation({ navbar: navbarHtml }),
+        });
+        // The injected navbar is a sibling of #quarto-content, ordered before it.
+        const quartoContent = container.querySelector('#quarto-content');
+        expect(quartoContent).not.toBeNull();
+        const nav = container.querySelector('nav.navbar[data-test="nv"]');
+        expect(nav).not.toBeNull();
+        // Order: nav comes before #quarto-content.
+        expect(
+            nav!.compareDocumentPosition(quartoContent!) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('renders sidebar HTML INSIDE quarto-content, before <main>', () => {
+        const sidebarHtml =
+            '<nav id="quarto-sidebar" class="sidebar" data-test="sb">Items</nav>';
+        const { container } = mount({
+            rendered: renderedNavigation({ sidebar: sidebarHtml }),
+        });
+        const quartoContent = container.querySelector('#quarto-content');
+        expect(quartoContent).not.toBeNull();
+        // Sidebar lives inside quarto-content.
+        const sidebar = quartoContent!.querySelector('nav#quarto-sidebar');
+        expect(sidebar).not.toBeNull();
+        // Order: sidebar before <main>.
+        const main = quartoContent!.querySelector('main');
+        expect(
+            sidebar!.compareDocumentPosition(main!) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('wraps TOC HTML in #quarto-margin-sidebar > nav#TOC > <h2>', () => {
+        const tocInnerUl =
+            '<ul><li data-test="toc-li"><a href="#sec">Section</a></li></ul>';
+        const { container } = mount({
+            navigation: metaMap([
+                {
+                    key: 'toc',
+                    value: metaMap([{ key: 'title', value: ms('Contents') }]),
+                },
+            ]),
+            rendered: renderedNavigation({ toc: tocInnerUl }),
+        });
+        // Wrapper structure mirrors template.rs:189-200.
+        const margin = container.querySelector(
+            'div#quarto-margin-sidebar.sidebar.margin-sidebar',
+        );
+        expect(margin).not.toBeNull();
+        const tocNav = margin!.querySelector(
+            'nav#TOC[role="doc-toc"].toc-active',
+        );
+        expect(tocNav).not.toBeNull();
+        const h2 = tocNav!.querySelector('h2#toc-title');
+        expect(h2).not.toBeNull();
+        expect(h2!.textContent).toBe('Contents');
+        // The injected <ul> is in the dangerouslySetInnerHTML wrapper div.
+        expect(tocNav!.querySelector('li[data-test="toc-li"]')).not.toBeNull();
+    });
+
+    it('TOC: missing navigation.toc.title omits the <h2>', () => {
+        const tocInnerUl = '<ul><li>Sec</li></ul>';
+        const { container } = mount({
+            // No `navigation.toc.title` → tocTitle is empty → no <h2>.
+            rendered: renderedNavigation({ toc: tocInnerUl }),
+        });
+        const tocNav = container.querySelector('#quarto-margin-sidebar nav#TOC');
+        expect(tocNav).not.toBeNull();
+        expect(tocNav!.querySelector('h2#toc-title')).toBeNull();
+    });
+
+    it('renders page-navigation INSIDE main, after children', () => {
+        const pageNavHtml =
+            '<nav class="page-navigation" data-test="pn">prev | next</nav>';
+        const { container } = mount(
+            {
+                rendered: renderedNavigation({ page_navigation: pageNavHtml }),
+            },
+            [PARA(STR('Body content here.'))],
+        );
+        const main = container.querySelector('main#quarto-document-content');
+        expect(main).not.toBeNull();
+        const pageNav = main!.querySelector('nav.page-navigation');
+        expect(pageNav).not.toBeNull();
+        // Order: paragraph before page-nav inside main.
+        const para = main!.querySelector('p');
+        expect(
+            para!.compareDocumentPosition(pageNav!) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('renders footer AFTER quarto-content', () => {
+        const footerHtml =
+            '<footer class="footer" data-test="ft">my footer</footer>';
+        const { container } = mount({
+            rendered: renderedNavigation({ footer: footerHtml }),
+        });
+        const quartoContent = container.querySelector('#quarto-content');
+        const footer = container.querySelector('footer.footer');
+        expect(footer).not.toBeNull();
+        expect(
+            quartoContent!.compareDocumentPosition(footer!) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('absent meta.rendered.navigation.* keys → no chrome elements rendered', () => {
+        const { container } = mount({}, [PARA(STR('plain doc'))]);
+        // None of the chrome wrappers should exist.
+        expect(container.querySelector('#quarto-margin-sidebar')).toBeNull();
+        expect(container.querySelector('nav#quarto-sidebar')).toBeNull();
+        expect(container.querySelector('nav.page-navigation')).toBeNull();
+        expect(container.querySelector('footer.footer')).toBeNull();
+        expect(container.querySelector('nav.navbar')).toBeNull();
+    });
+
+    it('sidebar-render body-classes hoists onto document.body', () => {
+        // Phase F.2: when the user did NOT set top-level `body-classes`,
+        // `meta.rendered.navigation.body-classes` (from sidebar-render)
+        // is the source — same as Rust template.rs:419-428.
+        mount({
+            rendered: metaMap([
+                {
+                    key: 'navigation',
+                    value: metaMap([
+                        { key: 'body-classes', value: ms('nav-sidebar floating') },
+                    ]),
+                },
+            ]),
+        });
+        expect(document.body.className).toBe('nav-sidebar floating');
+    });
+
+    it('user-set top-level body-classes still wins over sidebar-render', () => {
+        // Mirror Rust template.rs:419 — user override always wins.
+        mount({
+            'body-classes': ms('user-bcs'),
+            rendered: metaMap([
+                {
+                    key: 'navigation',
+                    value: metaMap([
+                        { key: 'body-classes', value: ms('nav-sidebar floating') },
+                    ]),
+                },
+            ]),
+        });
+        expect(document.body.className).toBe('user-bcs');
+    });
+
+    it('header-includes (favicon link) lands in document.head with cleanup marker', () => {
+        // The favicon transform appends a `<link rel="icon">` HTML
+        // string to `meta.rendered.includes.header`. The
+        // `HeaderIncludesEffect` hook parses it and inserts the
+        // `<link>` into `document.head` with a `data-q2-header-include`
+        // marker for the cleanup pass.
+        const linkHtml =
+            '<link rel="icon" href="/.quarto/project-artifacts/favicon.ico" type="image/x-icon" data-test="fv">';
+        const { unmount } = mount({
+            rendered: metaMap([
+                {
+                    key: 'includes',
+                    value: metaMap([
+                        {
+                            key: 'header',
+                            value: { t: 'MetaList', c: [ms(linkHtml)] },
+                        },
+                    ]),
+                },
+            ]),
+        });
+
+        const link = document.head.querySelector(
+            'link[data-test="fv"][data-q2-header-include]',
+        );
+        expect(link).not.toBeNull();
+        expect(link!.getAttribute('rel')).toBe('icon');
+
+        // Unmount cleanup must remove the inserted node.
+        unmount();
+        expect(
+            document.head.querySelector('link[data-test="fv"]'),
+        ).toBeNull();
+    });
+
+    it('minimal mode skips chrome injection (matches Rust minimal template)', () => {
+        // Minimal mode is the rust template that has no chrome
+        // substitutions. PreviewDocument's minimal branch returns a
+        // <Fragment> with just title + children.
+        const { container } = mount({
+            minimal: mb(true),
+            rendered: renderedNavigation({
+                navbar: '<nav class="navbar" data-test="nv">x</nav>',
+                footer: '<footer class="footer" data-test="ft">y</footer>',
+            }),
+        });
+        // No chrome elements injected in minimal mode.
+        expect(container.querySelector('nav.navbar')).toBeNull();
+        expect(container.querySelector('footer.footer')).toBeNull();
+    });
+});

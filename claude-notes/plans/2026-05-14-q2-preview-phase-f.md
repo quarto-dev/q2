@@ -3,12 +3,15 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A, B, C, D all merged on `feature/q2-preview-command`.
 **Date:** 2026-05-14
-**Status:** Sub-tasks filed bd-kw93.14 (F.1) and bd-kw93.15 (F.2); both ready to pick up. Plan signed off 2026-05-14.
+**Status:** Phase F complete (2026-05-14). Both sub-tasks merged on
+`feature/q2-preview-command`. The chrome state-preservation
+trade-off (chrome rebuilds clear open dropdown state) is tracked
+as the longer-term **bd-d8fo** React-components rewrite.
 
 ## Progress
 
 - [x] **F.1** (bd-kw93.14) — Cross-page navigation + link-rewriting + Bootstrap JS.
-- [ ] **F.2** (bd-kw93.15) — All chrome injection + favicon + docs closeout. Blocked by F.1.
+- [x] **F.2** (bd-kw93.15) — All chrome injection + favicon + docs closeout.
 
 ### F.1 closeout (2026-05-14)
 
@@ -86,6 +89,61 @@
 > Q2 docs site, and none are filed yet. Phase F jumps ahead to ship the
 > website-chrome work the docs site actually needs; Phase E stays in the
 > epic plan as an explicit "later" marker.
+
+### F.2 closeout (2026-05-14)
+
+- Pipeline: removed `navbar-render`, `sidebar-render`,
+  `page-nav-render`, `toc-render`, `footer-render`, and
+  `website-favicon` from `Q2_PREVIEW_TRANSFORM_EXCLUDED`. Added
+  positive-assertion test
+  `q2_preview_pipeline_includes_chrome_transforms`.
+- Framework: added `getMetaPath(meta, ['rendered', 'navigation',
+  'navbar'])` for nested-meta access (Pandoc's `MetaMap.c` is an
+  `[{key,value}]` array, not a plain object — the framework had no
+  helper for that walk before). 8 new vitest unit tests cover it.
+- React side (`PreviewDocument.tsx`): five chrome slots
+  (`NavbarSlot`, `SidebarSlot`, `PageNavSlot`, `FooterSlot`,
+  `TocSlot`) + a `HeaderIncludesEffect` for `<head>` tags. Each
+  slot is `React.memo`'d on its HTML string so an identical re-post
+  doesn't tear down the chrome DOM. Wrapper structure mirrors
+  `template.rs:178-254` byte-for-byte.
+- Body-classes: PreviewDocument now reads
+  `meta.rendered.navigation.body-classes` (populated by
+  `SidebarRenderTransform`) as a fallback when the user did not
+  set top-level `body-classes` — same precedence as Rust
+  `template.rs:419-428`. Required for sidebar layouts to get the
+  Bootstrap-aware `nav-sidebar floating` / `nav-sidebar docked`
+  body classes.
+- Header includes (favicon, RSS feed link): managed imperatively
+  via `HeaderIncludesEffect`, which appends each parsed `<link>` /
+  `<meta>` to `document.head` with a `data-q2-header-include`
+  marker for cleanup-on-unmount.
+- Test fixtures: `previewServer.ts` extended to support
+  `copyFromDir` so Playwright specs can point at the canonical
+  `examples/websites/<name>/` projects directly instead of
+  re-encoding each file as a string.
+- Docs: `docs/q2-preview.qmd` "What 'live' means" section updated
+  to describe chrome re-render semantics (chrome rebuilds on
+  `_quarto.yml` edits, page switches; body edits don't touch
+  chrome). Notes the wholesale-rebuild trade-off and points to
+  bd-d8fo for the React-components rewrite.
+- Tests:
+  - 1 new Rust positive-assertion test.
+  - 8 new framework unit tests for `getMetaPath`.
+  - 11 new vitest integration tests in
+    `PreviewDocument.integration.test.tsx` covering each chrome
+    slot, body-class precedence, header-includes lifecycle, and
+    minimal-mode no-chrome guard.
+  - 10 new Playwright specs in `chrome.spec.ts` exercising real
+    `examples/websites/{04-navbar-footer,02-auto-sidebar,
+    03-nested-sidebar}/` fixtures + an inline TOC test + an inline
+    favicon test.
+- Verification (workspace-rooted):
+  - `cargo nextest run -p quarto-core` → 1915/1915 green.
+  - SPA integration → 26/26 green.
+  - Renderer integration → 146/146 green (was 135).
+  - Renderer unit → 164/164 green (was 156, +8 for `getMetaPath`).
+  - Playwright → 29/29 green (was 19).
 
 ## Goal
 

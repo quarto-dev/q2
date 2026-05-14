@@ -48,9 +48,27 @@ affects the page you're looking at. Specifically:
     CSS, custom React (`.tsx`) components, and images — always
     re-render.
 
-Across re-renders, the preview keeps the parts of the DOM that didn't
-change. If you have a math equation expanded, a Bootstrap dropdown
-open, or scrolled to a particular paragraph, that state survives.
+Across re-renders, the preview keeps the parts of the body DOM that
+didn't change. If you have a math equation expanded or scrolled to a
+particular paragraph, that state survives.
+
+Website chrome — navbar, sidebar, prev/next page navigation, table of
+contents, and footer — is rebuilt whenever it actually changes:
+
+  * **`_quarto.yml` edits** that touch `navbar:`, `website.sidebar:`,
+    `page-footer:`, or `website.favicon:` rebuild the chrome.
+  * **Page switches** rebuild the sidebar's active highlight and the
+    prev/next links, and rebuild the table of contents to reflect the
+    new page's headings.
+  * **Body edits** to the active page do **not** touch the chrome —
+    a paragraph edit leaves the navbar's open dropdown open, and the
+    sidebar's scroll position is preserved.
+
+The chrome rebuild today replaces the relevant DOM wholesale, so any
+JavaScript state local to a chrome element (e.g. an open Bootstrap
+dropdown inside the navbar) is reset across the rebuild events
+above. This is a known trade-off; a future change replaces wholesale
+rebuilding with React component reconciliation.
 
 ## Code execution
 
