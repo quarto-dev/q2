@@ -290,7 +290,13 @@ fn record_include(out: &mut Vec<IncludeEntry>, resolved: &Path, bytes: &[u8]) {
 
 /// Check if a block is a paragraph containing only an include shortcode.
 /// Returns the include path if so, None otherwise.
-fn extract_include_path(block: &Block) -> Option<String> {
+///
+/// Public so other crates that need the same "what does this page
+/// include?" answer (Phase D.6's `/api/preview/deps` endpoint) share
+/// the *exact* recognition rules `IncludeExpansionStage` uses — no
+/// drift between "what the renderer treats as an include" and "what
+/// the preview dep filter considers a dependency."
+pub fn extract_include_path(block: &Block) -> Option<String> {
     let Block::Paragraph(para) = block else {
         return None;
     };

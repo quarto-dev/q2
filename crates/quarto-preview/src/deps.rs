@@ -7,20 +7,31 @@
 //! incoming `onFileContent` callbacks so unrelated sibling edits no
 //! longer trigger a re-render.
 //!
-//! ## Scope of "dependency" for the MVP
+//! ## How "dependency" is decided for the MVP
 //!
-//! Extracts the `{{< include foo.qmd >}}` shortcode references that
-//! appear in the page's raw qmd source. Includes are emitted as
-//! project-relative paths (the regex result is relative to the
-//! page's directory; we normalize against the project root before
-//! returning).
+//! The handler parses the page's qmd source into a Pandoc AST and
+//! walks the *block-level* shortcodes for the same shape
+//! [`IncludeExpansionStage`] uses:
 //!
-//! Deliberately out of scope for this MVP:
+//!   - a `Block::Paragraph` containing exactly one inline,
+//!   - that inline is an `Inline::Shortcode`,
+//!   - the shortcode's `name` is `"include"`,
+//!   - the first positional argument is a string.
+//!
+//! Reusing [`extract_include_path`](quarto_core::stage::stages::extract_include_path)
+//! keeps the recognition rules in lock-step with what the renderer
+//! actually treats as an include — no drift between "this file is a
+//! dep" and "this include actually expands at render time." Going
+//! through the AST (rather than regex over raw text) is also what
+//! the Q1→Q2 migration is about: operate on the parsed syntax, not
+//! on substrings.
+//!
+//! ## Deliberately out of scope for this MVP
 //!
 //! - **Transitive includes.** If `a.qmd` includes `b.qmd` and
 //!   `b.qmd` includes `c.qmd`, this endpoint returns `[b.qmd]` for
-//!   `a.qmd`. A regression test in §D.6 pins single-hop semantics so
-//!   a future transitive expansion is a deliberate change.
+//!   `a.qmd`. A regression test pins single-hop semantics so a
+//!   future transitive expansion is a deliberate change.
 //! - **Image references.** `![](foo.png)` doesn't show up in the
 //!   text-doc dep set. The SPA keeps `onBinaryContent` callbacks
 //!   unfiltered for now — every binary edit bumps `contentTick`.
@@ -30,13 +41,12 @@
 //!   `DocumentProfile.body_link_targets` etc.; way more expensive
 //!   than D.6 needs.
 //!
-//! Errors get logged + downgraded to "no deps" rather than a 5xx.
-//! A filter that misses a real dep is bad (stale render); a filter
-//! that includes too many is just the pre-D.6 behaviour. So we'd
+//! Parse / IO errors get logged and downgraded to "no deps" — a
+//! filter that misses a real dep is bad (stale render); a filter
+//! that includes too many is just the pre-D.6 behaviour, so we'd
 //! rather over-broadcast than fail closed.
 
 use std::path::Path;
-use std::sync::LazyLock;
 
 use axum::{
     Json,
@@ -44,8 +54,8 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use quarto_core::stage::stages::extract_include_path;
 use quarto_hub::context::SharedContext;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -85,7 +95,7 @@ pub async fn deps_handler(
     let project_root = project_root.canonicalize().unwrap_or(project_root);
 
     let abs_path = project_root.join(&rel_path);
-    let source = match std::fs::read_to_string(&abs_path) {
+    let source = match std::fs::read(&abs_path) {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(
@@ -101,54 +111,56 @@ pub async fn deps_handler(
     Json(DepsResponse { deps }).into_response()
 }
 
-/// Extract include-shortcode dependencies from a qmd source string.
+/// Extract include-shortcode dependencies from a qmd source.
 ///
-/// Returns the deduplicated, sorted list of project-relative paths
-/// the source references via `{{< include ... >}}`. Paths are
-/// resolved relative to the source page's directory and emitted as
-/// forward-slash project-relative strings.
+/// Parses `source` into a Pandoc AST via `pampa::readers::qmd::read`,
+/// then walks the top-level blocks for the same "is this an include
+/// shortcode?" shape [`IncludeExpansionStage`] uses (via the shared
+/// [`extract_include_path`] helper). Paths are resolved relative to
+/// `page_rel`'s directory and emitted as forward-slash
+/// project-relative strings, deduplicated and sorted.
+///
+/// On parse failure, returns an empty list — see the module-level
+/// fail-open rationale.
 ///
 /// Public so unit tests + a potential future debugging surface can
 /// reach it without spinning up an axum router.
-pub fn extract_include_deps(source: &str, page_rel: &str) -> Vec<String> {
-    // The shortcode accepts the included path with or without
-    // quotes (single or double). The path itself can be any
-    // non-quote, non-whitespace character. We anchor on the
-    // opening `{{<` + `include` so we don't false-match other
-    // shortcodes that mention "include" in body text.
-    //
-    // Examples matched:
-    //   {{< include foo.qmd >}}
-    //   {{< include "posts/intro.qmd" >}}
-    //   {{< include 'data/setup.qmd' >}}
-    //   {{< include shortcode=foo.qmd >}}   (named-arg form)
-    static INCLUDE_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r#"\{\{<\s*include\s+(?:shortcode\s*=\s*)?(?:"([^"]+)"|'([^']+)'|(\S+))\s*>\}\}"#,
-        )
-        .expect("D.6 include regex compiles")
-    });
+pub fn extract_include_deps(source: &[u8], page_rel: &str) -> Vec<String> {
+    // Pampa's reader writes commentary to an output stream we don't
+    // care about here; sink it. Source-location tracking is off
+    // (`false` for the `track_source_locations` argument) since we
+    // don't need spans for include-name extraction.
+    let mut sink = std::io::sink();
+    let parse_result = pampa::readers::qmd::read(
+        source, false,    // loose
+        page_rel, // filename, for any error messages
+        &mut sink, false, // track_source_locations
+        None,  // parent SourceInfo
+    );
+
+    let Ok((pandoc, _ast_context, _warnings)) = parse_result else {
+        tracing::warn!(
+            page_rel = %page_rel,
+            "pampa parse failed during dep extraction; returning no deps",
+        );
+        return Vec::new();
+    };
 
     let page_dir = Path::new(page_rel)
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();
 
-    let mut deps: Vec<String> = INCLUDE_RE
-        .captures_iter(source)
-        .filter_map(|cap| {
-            // Three optional groups for the three quoting forms.
-            cap.get(1)
-                .or_else(|| cap.get(2))
-                .or_else(|| cap.get(3))
-                .map(|m| m.as_str().to_string())
-        })
+    let mut deps: Vec<String> = pandoc
+        .blocks
+        .iter()
+        .filter_map(extract_include_path)
         .map(|raw| {
-            // Resolve relative to the page's directory and emit
-            // forward-slash relative path. We don't canonicalize
-            // against the filesystem — the SPA matches against
-            // paths it gets from `onFileContent`, which arrive in
-            // the same forward-slash project-relative form.
+            // Resolve relative to the page's directory and emit a
+            // forward-slash project-relative path. We don't
+            // canonicalize against the filesystem — the SPA matches
+            // these strings against paths from `onFileContent`,
+            // which arrive in the same forward-slash form.
             let joined = page_dir.join(&raw);
             normalize_forward_slash(&joined)
         })
@@ -185,100 +197,111 @@ fn normalize_forward_slash(p: &Path) -> String {
 mod tests {
     use super::*;
 
+    fn deps_for(src: &str, page: &str) -> Vec<String> {
+        extract_include_deps(src.as_bytes(), page)
+    }
+
     #[test]
-    fn extract_returns_empty_for_no_includes() {
+    fn returns_empty_for_no_includes() {
         let src = "# Hello\n\nNo shortcodes here.\n";
-        assert!(extract_include_deps(src, "index.qmd").is_empty());
+        assert!(deps_for(src, "index.qmd").is_empty());
     }
 
     #[test]
-    fn extract_unquoted_include() {
+    fn unquoted_include() {
         let src = "# A\n\n{{< include x.qmd >}}\n";
-        assert_eq!(extract_include_deps(src, "index.qmd"), vec!["x.qmd"]);
+        assert_eq!(deps_for(src, "index.qmd"), vec!["x.qmd"]);
     }
 
     #[test]
-    fn extract_double_quoted_include() {
+    fn double_quoted_include() {
         let src = "# A\n\n{{< include \"posts/intro.qmd\" >}}\n";
-        assert_eq!(
-            extract_include_deps(src, "index.qmd"),
-            vec!["posts/intro.qmd"]
-        );
+        assert_eq!(deps_for(src, "index.qmd"), vec!["posts/intro.qmd"]);
     }
 
     #[test]
-    fn extract_single_quoted_include() {
+    fn single_quoted_include() {
         let src = "# A\n\n{{< include 'data/setup.qmd' >}}\n";
-        assert_eq!(
-            extract_include_deps(src, "index.qmd"),
-            vec!["data/setup.qmd"]
-        );
+        assert_eq!(deps_for(src, "index.qmd"), vec!["data/setup.qmd"]);
     }
 
     #[test]
-    fn extract_includes_relative_to_page_dir() {
+    fn include_resolves_relative_to_page_dir() {
         // page = posts/post1.qmd; include = setup.qmd → posts/setup.qmd
         let src = "# Post\n\n{{< include setup.qmd >}}\n";
-        assert_eq!(
-            extract_include_deps(src, "posts/post1.qmd"),
-            vec!["posts/setup.qmd"]
-        );
+        assert_eq!(deps_for(src, "posts/post1.qmd"), vec!["posts/setup.qmd"]);
     }
 
     #[test]
-    fn extract_resolves_parent_dir_includes() {
+    fn include_resolves_parent_dir() {
         // page = posts/post1.qmd; include = ../shared.qmd → shared.qmd
         let src = "# Post\n\n{{< include ../shared.qmd >}}\n";
-        assert_eq!(
-            extract_include_deps(src, "posts/post1.qmd"),
-            vec!["shared.qmd"]
+        assert_eq!(deps_for(src, "posts/post1.qmd"), vec!["shared.qmd"]);
+    }
+
+    #[test]
+    fn multiple_includes_deduped_and_sorted() {
+        let src = "# Mix\n\n{{< include z.qmd >}}\n\n{{< include a.qmd >}}\n\n{{< include z.qmd >}}\n\n{{< include \"m.qmd\" >}}\n";
+        assert_eq!(deps_for(src, "index.qmd"), vec!["a.qmd", "m.qmd", "z.qmd"]);
+    }
+
+    #[test]
+    fn unrelated_shortcodes_are_ignored() {
+        // Non-`include` shortcodes don't contribute deps. The AST
+        // walker filters by `shortcode.name == "include"`, so
+        // `{{< meta title >}}` etc. don't show up.
+        let src = "# Other\n\n{{< meta title >}}\n";
+        assert!(deps_for(src, "index.qmd").is_empty());
+    }
+
+    #[test]
+    fn inline_include_mixed_with_text_does_not_count() {
+        // `IncludeExpansionStage`'s rule: an include shortcode must
+        // be the *only* inline in its paragraph. Mixed-with-text
+        // doesn't qualify as a true include. This is the
+        // canonical Quarto-renderer behaviour — pinning it here
+        // keeps the dep filter in lock-step with the renderer.
+        let src = "# A\n\nSome prose then {{< include foo.qmd >}} inline.\n";
+        assert!(
+            deps_for(src, "index.qmd").is_empty(),
+            "an inline include doesn't expand at render time, so it isn't a dep"
         );
     }
 
     #[test]
-    fn extract_multiple_includes_deduped_and_sorted() {
-        let src = r#"# Mix
-
-{{< include z.qmd >}}
-{{< include a.qmd >}}
-{{< include z.qmd >}}
-{{< include "m.qmd" >}}
-"#;
-        assert_eq!(
-            extract_include_deps(src, "index.qmd"),
-            vec!["a.qmd", "m.qmd", "z.qmd"]
-        );
+    fn include_inside_code_block_is_not_a_dep() {
+        // Shortcode syntax inside a fenced code block is just text;
+        // the AST walker only sees a `Block::CodeBlock`, no
+        // shortcode inlines. (The regex implementation we replaced
+        // would have incorrectly matched this — that's the bug the
+        // AST-based approach fixes.)
+        let src = "# A\n\n```\n{{< include foo.qmd >}}\n```\n";
+        assert!(deps_for(src, "index.qmd").is_empty());
     }
 
     #[test]
-    fn extract_ignores_unrelated_shortcodes() {
-        let src = r#"# Other
-
-{{< meta title >}}
-{{< embed video.mp4 >}}
-Some inline ``{{ }}`` thing.
-"#;
-        assert!(extract_include_deps(src, "index.qmd").is_empty());
+    fn single_hop_is_documented_limitation() {
+        // a.qmd directly includes b.qmd. The extractor does NOT
+        // recursively open b.qmd to look at its includes; single-hop
+        // is the v1 contract. Future transitive expansion would be
+        // a deliberate behaviour change.
+        let src = "# A\n\n{{< include b.qmd >}}\n";
+        assert_eq!(deps_for(src, "a.qmd"), vec!["b.qmd"]);
     }
 
     #[test]
-    fn extract_handles_shortcode_named_arg_form() {
-        // Hand-crafted edge: some authoring tools emit the named-arg
-        // form `shortcode=path`. Accept it as a path.
-        let src = "# A\n\n{{< include shortcode=foo.qmd >}}\n";
-        assert_eq!(extract_include_deps(src, "index.qmd"), vec!["foo.qmd"]);
-    }
-
-    #[test]
-    fn extract_is_single_hop_documented_limitation() {
-        // a.qmd includes b.qmd; the function does NOT recursively
-        // open b.qmd to find its includes. Single-hop is the v1
-        // contract. Future transitive expansion is a deliberate
-        // change (different method or option).
-        let src_a = "# A\n\n{{< include b.qmd >}}\n";
-        let deps_a = extract_include_deps(src_a, "a.qmd");
-        assert_eq!(deps_a, vec!["b.qmd"]);
-        // (We don't open b.qmd. If we did, we'd return [b.qmd, c.qmd].)
+    fn pathological_input_does_not_panic() {
+        // The pampa parser is robust enough to handle invalid UTF-8
+        // and arbitrary byte garbage without panicking, but the
+        // contract this test pins is "never panics, never returns
+        // an Err to the caller, always returns a Vec." If a future
+        // pampa change makes some input genuinely return Err, the
+        // fail-open `Ok(_) else return Vec::new()` branch keeps
+        // this contract intact.
+        let garbage = b"\xff\xfe\xfd not valid utf-8 at all";
+        let _result: Vec<String> = extract_include_deps(garbage, "index.qmd");
+        // No assertion needed beyond "the call returned." The type
+        // system guarantees a Vec<String>; the contract is no panic.
     }
 
     #[test]
