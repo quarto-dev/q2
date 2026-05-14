@@ -2117,16 +2117,36 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // the line terminator) — those are handled by the BLANK_LINE_START case
     // in the switch below.
     //
-    // The conservative gate (block-start only, not BLOCK_CONTINUATION) is
-    // deliberate. Lazy paragraph continuations and lazy list-item
-    // continuations have leading whitespace silently dropped today but
-    // preserve document structure, so they are not the structural bug from
-    // issue #184. Multi-line shortcodes also reach this scanner with
-    // BLOCK_CONTINUATION valid; firing on them would be a false positive.
-    // Same emission pattern as TRIPLE_STAR (Q-2-32); see grammar.js
-    // (`_indented_code_block_error`).
+    // Container-continuation guard (issue #196). The original gate (PR #194)
+    // fired whenever ATX_H1_MARKER or BLANK_LINE_START was valid, on the
+    // theory that those signals alone identified a true block-start
+    // position. That undershoots: inside an open list-item, the parser
+    // accepts a fresh block start *and* expects a continuation indent on
+    // the same scan call. If the whitespace loop above consumed what was
+    // actually the list-item continuation indent — for instance because
+    // STATE_MATCHING was not set on this call (preceding blank line carried
+    // trailing whitespace ≥ list_item_indentation, exercising a path that
+    // skips match_line) — `s->indentation >= 4` reflects the *continuation*
+    // indent, not extra indent layered on top of it.
+    //
+    // The reliable discriminator from a trace of the misfire vs. the
+    // intended Q-2-35 cases is `valid_symbols[BLOCK_CONTINUATION] &&
+    // s->open_blocks.size > 0`. With at least one open container *and*
+    // BLOCK_CONTINUATION valid, the parser still owes the line a
+    // continuation absorption — the indent has not yet been confirmed as
+    // "extra". Q-2-35 should defer in that case. When open_blocks is empty
+    // (genuine top-level indented block) or BLOCK_CONTINUATION is invalid
+    // (in-list indent has already been absorbed and the leftover is true
+    // extra indent), the gate still fires as intended.
+    //
+    // Lazy paragraph continuations and multi-line shortcodes are filtered
+    // out higher up by ATX_H1_MARKER / BLANK_LINE_START being invalid in
+    // their parser states. The new guard layers on top of that, not in
+    // place of it. Same emission pattern as TRIPLE_STAR (Q-2-32); see
+    // grammar.js (`_indented_code_block_error`).
     if (s->indentation >= 4 &&
         (valid_symbols[ATX_H1_MARKER] || valid_symbols[BLANK_LINE_START]) &&
+        !(valid_symbols[BLOCK_CONTINUATION] && s->open_blocks.size > 0) &&
         lexer->lookahead != '\n' && lexer->lookahead != '\r') {
         mark_end(s, lexer);
         EMIT_TOKEN(INDENTED_CODE_BLOCK_DISALLOWED);

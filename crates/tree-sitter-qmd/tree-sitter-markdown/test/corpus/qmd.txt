@@ -963,3 +963,66 @@ Hello.
           (pandoc_str)
           (pandoc_soft_break)
           (pandoc_str))))
+================================================================================
+Q-2-35 negative: list-item continuation after blank line with trailing 4 spaces (issue #196)
+================================================================================
+4)  Outer:
+    
+    ![](img.png){.border}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_parenthesis)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_paragraph
+              (pandoc_image
+                (target
+                  (url))
+                (attribute_specifier
+                  (commonmark_specifier
+                    (attribute_class)))))))))
+================================================================================
+Q-2-35 negative: bullet-list-item continuation after blank line with trailing 4 spaces (issue #196)
+================================================================================
+*   Outer:
+    
+    Second paragraph.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))
+================================================================================
+Q-2-35 negative: list-item continuation after blank line with a tab (issue #196)
+================================================================================
+1)  Outer:
+	
+    Second paragraph.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_parenthesis)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))
