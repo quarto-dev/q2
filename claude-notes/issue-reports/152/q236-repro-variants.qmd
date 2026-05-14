@@ -1,0 +1,58 @@
+# Q-2-36 cases: knitr-style headers (rejected) vs. Pandoc-style headers (accepted)
+
+Sections (1)–(7) are knitr-style chunk headers — `{lang ...}` with no
+leading `.` on the language — that should fire Q-2-36. Section (8) is
+the Pandoc-style class form `{.lang ...}` that must stay valid; included
+as a negative control so the discrimination is exercised in fixtures.
+
+The block body is the same `1+1` everywhere so any non-header error is
+easy to spot.
+
+## (1) Bare label (reporter's case)
+
+```{r test}
+1+1
+```
+
+## (2) Space + key=value (single arg, R)
+
+```{r echo=FALSE}
+1+1
+```
+
+## (3) Space + key=value (quoted, R)
+
+```{r label="foo"}
+1+1
+```
+
+## (4) Comma + space + key=value (canonical knitr, R)
+
+```{r, label="foo", echo=FALSE}
+1+1
+```
+
+## (5) Space + key=value (Python)
+
+```{python echo=FALSE}
+1+1
+```
+
+## (6) Space + key=value (Julia)
+
+```{julia label="foo"}
+1+1
+```
+
+## (7) Mixed: old header + new #| option (per scope decision, must still error)
+
+```{r echo=FALSE}
+#| label: mixed
+1+1
+```
+
+## (8) Pandoc class form — MUST stay valid (negative control)
+
+```{.r echo=FALSE}
+1+1
+```
