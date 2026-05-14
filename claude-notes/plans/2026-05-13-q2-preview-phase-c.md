@@ -3,7 +3,7 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
 **Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** C.3, C.1, C.4, C.2, C.5 landed 2026-05-14. C.6 (preview.engine config) and C.7 (per-doc capture cache) are next; both are parallelisable polish.
+**Status:** C.3, C.1, C.4, C.2, C.5, C.6 landed 2026-05-14. C.7 (per-doc capture cache) is the last remaining sub-task.
 
 ## Progress
 
@@ -44,7 +44,14 @@ Sub-task status. Each line tracks one filed bd-issue; check off as merged.
   - [x] Tests: 3 new Rust unit tests (200/400/409 cases), 6 new SPA integration tests (button states, click behaviour, error surfacing).
   - [x] cargo nextest run -p quarto-preview -p quarto-hub -p quarto-core: 2118/2118 pass. SPA: 16/16 integration tests pass.
   - [ ] Playwright e2e (edit cell → overlay → click → new capture renders) deferred — needs the broader e2e harness Phase D/E will introduce.
-- [ ] **C.6** (bd-kw93.6) — `preview.engine: manual | auto | off` config (blocked by C.5).
+- [x] **C.6** (bd-kw93.6) — `preview.engine: manual | auto | off` config. Merged 2026-05-14.
+  - [x] New `crates/quarto-preview/src/config.rs` exporting `EnginePolicy::{Manual,Auto,Off}` (default Manual) and `read_engine_policy_from_metadata` / `read_engine_policy_from_project`. Handles YAML's bool-coercion gotcha (`off` parses as `false`, not `"off"`) and case-insensitive string aliases (`auto`, `off`, `none`, `no`).
+  - [x] `PreviewConfig::engine_policy` field threaded through `run_with_on_ready` to the eager driver and the file-watcher staleness hook.
+  - [x] `capture_driver::record_eager_captures(.., policy)` short-circuits on `Off`. `capture_driver::recompute_staleness(.., policy, engine_registry)` no-ops on `Off`; under `Auto`, after flipping staleness it calls `re_execute::trigger_auto_re_execute` to kick off the same engine path the HTTP handler takes (in-flight-guarded; concurrent edits collapse to one run per doc).
+  - [x] `re_execute.rs` refactored: shared `claim_and_spawn` helper underpins both the HTTP handler and the new Auto-mode entry point. Net effect for the C.5 HTTP path is identical (same status codes, same in-flight guard, same `state: running/idle/error` transitions).
+  - [x] CLI reads `_quarto.yml` once at session start via `read_engine_policy_from_project` and stashes the result on `PreviewConfig.engine_policy`. Single-file projects (no `_quarto.yml`) get `Manual` by default.
+  - [x] Tests: 9 new unit tests in `config::tests` (parse + project-read), 3 new unit tests in `capture_driver::tests` (`off_policy_skips_eager_capture_for_doc_with_code_cells`, `off_policy_makes_recompute_staleness_a_noop_even_with_capture`, `auto_policy_marks_stale_and_triggers_re_execute`). All 31 quarto-preview tests pass; full workspace `cargo nextest run --workspace` 8913/8913 green.
+  - [x] Binary smoke against `/tmp/q2-c6-smoke/{manual,auto,off}` (each with a 2-line `_quarto.yml` setting `preview.engine`). With `RUST_LOG=q2=info`, the CLI emits `resolved preview engine policy engine_policy={Manual,Auto,Off}` for the matching fixture — confirms `read_engine_policy_from_project` is wired and reads the file. Real-engine Auto-re-execute path covered by the unit test against the test-passthrough engine; production jupyter/knitr smoke deferred (no R/Python in CI).
 - [ ] **C.7** (bd-kw93.7) — Per-doc capture filesystem cache (blocked by C.5).
 
 Friction-related follow-ups filed during Phase C setup:
