@@ -1039,9 +1039,12 @@ pub fn build_transform_pipeline(
 ///    wrapper-CustomNode round-trip support.
 /// 3. **HTML-pipeline-specific outputs** — `toc-render`,
 ///    `navbar-render`, `sidebar-render`, `page-nav-render`,
-///    `footer-render`, `link-rewrite`, `website-favicon`. These
-///    produce HTML strings or `.qmd → .html` rewrites that React
-///    consumes from structured metadata directly.
+///    `footer-render`, `website-favicon`. These produce HTML strings
+///    that React consumes from structured metadata directly.
+///
+/// Phase F.1 (bd-kw93.14) note: `link-rewrite` was previously here
+/// but is now included so cross-page body links emit `.html` hrefs
+/// the iframe link-handler can intercept.
 ///
 /// New transforms added to [`build_transform_pipeline`] are
 /// **included by default** — q2-preview opts a transform out
@@ -1070,7 +1073,10 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "sidebar-render",
     "page-nav-render",
     "footer-render",
-    "link-rewrite",
+    // "link-rewrite" — included in q2-preview's pipeline (Phase F.1,
+    // bd-kw93.14): rewrites cross-page body links to artifact-rooted
+    // `.html` hrefs the SPA's iframe link-handler intercepts and
+    // routes through `onNavigateToDocument`.
     // "appendix-structure" — included in q2-preview's pipeline (Plan 2B):
     // pure Pandoc primitives, structurally identical to the HTML
     // pipeline. Folds footnotes section, license/copyright/citation
@@ -2107,6 +2113,24 @@ mod tests {
             output.ast_json.contains("\"footnotes\""),
             "expected footnotes class on section Div; full output:\n{}",
             output.ast_json
+        );
+    }
+
+    /// Phase F.1 (bd-kw93.14): `LinkRewriteTransform` runs in the
+    /// q2-preview pipeline so cross-page body links emit `.html`
+    /// hrefs that the iframe link-handler can intercept and route
+    /// through `onNavigateToDocument`. If this regresses, the SPA's
+    /// cross-page navigation breaks (clicks fall through to the
+    /// browser's default `.qmd` request, which 404s the iframe).
+    #[test]
+    fn q2_preview_pipeline_includes_link_rewrite() {
+        let runtime = make_test_runtime();
+        let pipeline =
+            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        assert!(
+            names.contains(&"link-rewrite"),
+            "link-rewrite must be present in the q2-preview pipeline; got: {names:?}",
         );
     }
 

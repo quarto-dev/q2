@@ -7,8 +7,78 @@
 
 ## Progress
 
-- [ ] **F.1** (bd-kw93.14) — Cross-page navigation + link-rewriting + Bootstrap JS.
+- [x] **F.1** (bd-kw93.14) — Cross-page navigation + link-rewriting + Bootstrap JS.
 - [ ] **F.2** (bd-kw93.15) — All chrome injection + favicon + docs closeout. Blocked by F.1.
+
+### F.1 closeout (2026-05-14)
+
+- Pipeline: removed `"link-rewrite"` from
+  `Q2_PREVIEW_TRANSFORM_EXCLUDED` (pipeline.rs:1057). Added
+  positive-assertion test
+  `q2_preview_pipeline_includes_link_rewrite`. With the existing
+  resolver attachment in `RenderToPreviewAstRenderer` (vfs_root
+  `/.quarto/project-artifacts`), body links emerge from the WASM
+  render as artifact-rooted `.html` URLs.
+- Iframe link handler: extended `iframeLinkHandlers.ts` to recognise
+  artifact-rooted `.html` hrefs and route them through
+  `onQmdLinkClick`. **Always** intercepts (not gated on
+  `projectFilePaths` — see code comments) so missing-page clicks
+  surface the D.4 overlay instead of navigating to a 404.
+- SPA navigation: `PreviewApp.handleNavigate` swaps `activeFile`,
+  bumps a `pendingAnchorEpoch` counter, and pushes a
+  `?page=…[#frag]` history entry. `popstate` listener restores
+  state from URL on browser back/forward. Iframe scrolls to
+  `pendingAnchor` once per epoch — the epoch counter is what
+  prevents subsequent edit-driven re-renders from re-jerking the
+  user back to the original anchor.
+- Bootstrap JS strategy chosen: **static iframe injection** via
+  `?raw` import of `resources/js/bootstrap/bootstrap.bundle.min.js`
+  in `entry.tsx`. The cfg-gate's "iframe re-init blows away state"
+  reasoning still applies in q2-preview, AND the q2-preview
+  pipeline excludes `ApplyTemplateStage` so the artifact-pipeline
+  path (option a) wouldn't emit a `<script>` tag even if the cfg
+  gate were lifted. Static injection is the cleaner separation:
+  chrome JS belongs to the iframe template, not the doc render.
+- Anchor-scroll race fixed: the parent posts UPDATE_AST with the
+  new pendingAnchor BEFORE the new astJson lands (the React
+  render effect runs async after activeFile changes). The iframe
+  scroll effect now only marks the epoch consumed when the target
+  element was actually found in the DOM — so the next pass with
+  the new astJson succeeds on retry.
+- Pre-existing bug found & fixed: `previewServer.ts`'s URL parser
+  appended `/` to the matched URL even when the URL had a query
+  string (Phase D.2's CLI-side `?page=` injection produced URLs
+  the helper then mutated to `?page=index.qmd/`). Replaced with
+  a `new URL()` parse that normalizes the path component only.
+- Pre-existing race fixed in `previewServer.ts`: the CLI prints
+  the URL before binding (preview.rs:124-128); the helper now
+  polls the port until accept before returning so tests don't
+  ECONNREFUSED on the first `page.goto`.
+- Tests:
+  - 1 new Rust test (positive assertion in pipeline.rs).
+  - 6 new TS unit tests in `iframeLinkHandlers.integration.test.ts`
+    covering artifact-rooted `.html` mapping + external `.html`
+    pass-through + missing-page interception + non-artifact-
+    rooted absolute path pass-through.
+  - 5 new SPA integration tests in `PreviewApp.integration.test.tsx`
+    covering `projectFilePaths` forwarding, navigation handler
+    + `pushState`, anchor-epoch bumping, popstate restore, and
+    boot-hash seeding.
+  - 6 new Playwright specs in `cross-page-nav.spec.ts` covering
+    Bootstrap JS loading, Bootstrap toggle interactivity, body
+    link click → navigate, back-button restore, cross-page
+    anchor scroll, missing-page error overlay.
+- Verification (workspace-rooted):
+  - `cargo nextest run --workspace` → 8953/8953 green.
+  - SPA integration → 26/26 green (was 21/21).
+  - SPA unit → 8/8 green.
+  - Renderer integration → 135/135 green.
+  - Renderer unit → 156/156 green (was 155 due to global.d.ts
+    addition? — actually count unchanged).
+  - Playwright → 19/19 green (was 13/13).
+  - `cargo xtask verify --skip-hub-build` fails ONLY at the
+    pre-existing tree-sitter Example 209 flake on the integration
+    branch, unrelated to F.1.
 
 > **Note on phase naming.** Phase E (epic plan §"Phase E — Stretch") is the
 > post-MVP stretch bucket: `.tsx` hot-reload, multi-window verification,

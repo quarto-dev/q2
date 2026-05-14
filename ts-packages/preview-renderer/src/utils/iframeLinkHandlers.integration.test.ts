@@ -177,4 +177,123 @@ describe('installLinkHandlers', () => {
             anchor: null,
         });
     });
+
+    // ─── Phase F.1 (bd-kw93.14): artifact-rooted .html links ────────
+    //
+    // After link-rewrite is included in the q2-preview pipeline, body
+    // hrefs like `[A](about.qmd)` become artifact-rooted .html URLs
+    // (`/.quarto/project-artifacts/about.html`). The link handler must
+    // intercept these and route them through `onQmdLinkClick` with the
+    // source-side `.qmd` path so the SPA can swap activeFile.
+
+    test('artifact-rooted .html link maps back to its .qmd via projectFilePaths', () => {
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'about.qmd', 'posts/first.qmd'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/.quarto/project-artifacts/about.html');
+        const continued = clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: 'about.qmd',
+            anchor: null,
+        });
+        expect(continued).toBe(false);
+    });
+
+    test('artifact-rooted .html#anchor preserves the anchor', () => {
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'about.qmd'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/.quarto/project-artifacts/about.html#intro');
+        clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: 'about.qmd',
+            anchor: 'intro',
+        });
+    });
+
+    test('artifact-rooted nested page maps to its .qmd', () => {
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'posts/first.qmd'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/.quarto/project-artifacts/posts/first.html');
+        clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: 'posts/first.qmd',
+            anchor: null,
+        });
+    });
+
+    test('external https://...html link is NOT hijacked by artifact-root logic', () => {
+        // Risk 2 from Phase F plan: an external link that happens to
+        // end in .html (e.g. `https://example.org/index.html`) must
+        // open in a new tab via the existing external-link handler,
+        // never route through onQmdLinkClick.
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'about.qmd'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('https://example.org/about.html');
+        clickFromBody(a);
+
+        expect(openSpy).toHaveBeenCalledWith(
+            'https://example.org/about.html',
+            '_blank',
+            'noopener,noreferrer',
+        );
+        expect(onQmdLinkClick).not.toHaveBeenCalled();
+    });
+
+    test('artifact-rooted link to a missing page still intercepts (overlay shows on failed render)', () => {
+        // Plan §F.1 acceptance: missing-page link should surface the
+        // D.4 error overlay rather than blanking the iframe with a
+        // 404 navigation. So the handler intercepts even when the
+        // reverse-map's .qmd candidate isn't in projectFilePaths;
+        // PreviewApp's render attempt fails and the overlay appears.
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'about.qmd'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/.quarto/project-artifacts/missing.html');
+        const continued = clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: 'missing.qmd',
+            anchor: null,
+        });
+        expect(continued).toBe(false);
+    });
+
+    test('non-artifact-rooted absolute path is left alone', () => {
+        // A user-authored absolute href that isn't artifact-rooted
+        // (e.g. someone hand-wrote `<a href="/about.html">`) should
+        // not be intercepted — preserves the existing pass-through
+        // behaviour for non-`.qmd`, non-`.html` links to user content.
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'about.qmd'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/about.html');
+        const continued = clickFromBody(a);
+
+        expect(onQmdLinkClick).not.toHaveBeenCalled();
+        expect(continued).toBe(true);
+    });
 });

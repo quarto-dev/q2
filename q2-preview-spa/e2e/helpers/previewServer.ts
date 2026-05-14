@@ -15,7 +15,35 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { connect } from 'node:net';
 import path from 'node:path';
+
+/**
+ * Poll-connect a TCP port until it accepts. The CLI prints its URL
+ * before binding (see callsite for the rationale); without this the
+ * first `page.goto(url)` races and gets ECONNREFUSED.
+ */
+function waitForBind(port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const tryOnce = () => {
+      const sock = connect({ host: '127.0.0.1', port });
+      sock.once('connect', () => {
+        sock.end();
+        resolve();
+      });
+      sock.once('error', () => {
+        sock.destroy();
+        if (Date.now() > deadline) {
+          reject(new Error(`port ${port} did not accept within ${timeoutMs}ms`));
+          return;
+        }
+        setTimeout(tryOnce, 25);
+      });
+    };
+    tryOnce();
+  });
+}
 
 export interface PreviewServerHandle {
   /** Base URL, e.g. `http://127.0.0.1:18557/`. Has trailing slash. */
@@ -59,7 +87,17 @@ function waitForUrl(
       // The CLI prints `→ http://127.0.0.1:<port>/` after binding.
       const match = buffer.match(/→\s+(http:\/\/[^\s]+)/);
       if (match) {
-        const url = match[1].endsWith('/') ? match[1] : `${match[1]}/`;
+        // Phase D.2 hooked the CLI to append `?page=<rel>` when the
+        // project has an `index.qmd` (or a path arg was passed). The
+        // older trailing-slash normalization (`endsWith('/')`)
+        // mistakenly appended `/` to URLs with query strings,
+        // producing `http://host/?page=index.qmd/` which the SPA
+        // then read as `page=index.qmd/` (no match → falls back to
+        // firstQmd alphabetically). Normalize by parsing the URL
+        // and ensuring the *path* (not the whole string) ends in `/`.
+        const parsed = new URL(match[1]);
+        if (!parsed.pathname.endsWith('/')) parsed.pathname += '/';
+        const url = parsed.toString();
         const portMatch = url.match(/:(\d+)\//);
         if (!portMatch) {
           cleanup();
@@ -154,6 +192,15 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
     proc.kill('SIGTERM');
     throw err;
   }
+
+  // The CLI prints the URL *before* the server has actually bound
+  // (`crates/quarto/src/commands/preview.rs:124-128` runs the
+  // `println!` lines before `quarto_preview::run(...)`'s bind). That
+  // leaves a millisecond-scale window where Playwright's
+  // `page.goto(url)` races and gets ECONNREFUSED. Poll the port
+  // until it accepts a connection before handing control back, so
+  // tests don't have to retry.
+  await waitForBind(port, 5_000);
 
   return {
     url,

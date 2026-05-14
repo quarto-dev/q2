@@ -501,6 +501,168 @@ describe('PreviewApp boot path', () => {
     expect(propsAfterRecovery.astJson).toBe('{"blocks":[{"recovered":true}]}');
   });
 
+  // ──────────────────────────────────────────────────────────────
+  // Phase F.1 (bd-kw93.14): cross-page navigation handler
+  // ──────────────────────────────────────────────────────────────
+
+  it('forwards projectFilePaths into Q2PreviewIframe so the link handler can recognise artifact-rooted .html', async () => {
+    runtimeMockState.files = [
+      { path: 'index.qmd', docId: 'automerge:i' },
+      { path: 'about.qmd', docId: 'automerge:a' },
+      { path: 'posts/first.qmd', docId: 'automerge:p1' },
+    ];
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+    const props = capturedIframeProps[capturedIframeProps.length - 1];
+    expect(props.projectFilePaths).toEqual([
+      'index.qmd',
+      'about.qmd',
+      'posts/first.qmd',
+    ]);
+  });
+
+  it('handleNavigate updates activeFile and pushes a fresh history entry', async () => {
+    runtimeMockState.files = [
+      { path: 'index.qmd', docId: 'automerge:i' },
+      { path: 'about.qmd', docId: 'automerge:a' },
+    ];
+    const pushSpy = vi.spyOn(window.history, 'pushState');
+    try {
+      render(<PreviewApp />);
+      await waitFor(() => {
+        expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+      });
+      const initial = capturedIframeProps[capturedIframeProps.length - 1];
+      expect(initial.currentFilePath).toBe('index.qmd');
+
+      // Simulate the iframe posting a NAVIGATE_TO_DOCUMENT — extract
+      // the latest onNavigateToDocument and call it directly.
+      const onNavigate = initial.onNavigateToDocument as
+        | ((path: string, anchor: string | null) => void)
+        | undefined;
+      expect(typeof onNavigate).toBe('function');
+      onNavigate!('about.qmd', null);
+
+      await waitFor(() => {
+        const latest = capturedIframeProps[capturedIframeProps.length - 1];
+        return latest.currentFilePath === 'about.qmd';
+      });
+
+      // history.pushState was called with a URL whose `?page=` is the
+      // new active file.
+      expect(pushSpy).toHaveBeenCalled();
+      const lastPush = pushSpy.mock.calls[pushSpy.mock.calls.length - 1];
+      expect(lastPush[2]).toContain('page=about.qmd');
+    } finally {
+      pushSpy.mockRestore();
+    }
+  });
+
+  it('handleNavigate with anchor bumps pendingAnchorEpoch on each call', async () => {
+    runtimeMockState.files = [
+      { path: 'index.qmd', docId: 'automerge:i' },
+      { path: 'about.qmd', docId: 'automerge:a' },
+    ];
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+
+    const initialEpoch = (
+      capturedIframeProps[capturedIframeProps.length - 1].pendingAnchorEpoch as number | undefined
+    ) ?? 0;
+
+    const onNavigate = capturedIframeProps[capturedIframeProps.length - 1]
+      .onNavigateToDocument as (path: string, anchor: string | null) => void;
+    onNavigate('about.qmd', 'intro');
+
+    await waitFor(() => {
+      const latest = capturedIframeProps[capturedIframeProps.length - 1];
+      expect(latest.pendingAnchor).toBe('intro');
+      expect(latest.pendingAnchorEpoch).toBe(initialEpoch + 1);
+    });
+
+    // Click the same anchor again — epoch must advance again so the
+    // iframe re-scrolls (deliberate "take me back there" gesture).
+    onNavigate('about.qmd', 'intro');
+    await waitFor(() => {
+      const latest = capturedIframeProps[capturedIframeProps.length - 1];
+      expect(latest.pendingAnchorEpoch).toBe(initialEpoch + 2);
+    });
+  });
+
+  it('popstate restores activeFile + pendingAnchor from the URL', async () => {
+    runtimeMockState.files = [
+      { path: 'index.qmd', docId: 'automerge:i' },
+      { path: 'about.qmd', docId: 'automerge:a' },
+    ];
+
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+
+    // Simulate the user clicking back: location is restored to a
+    // previous entry, then popstate fires. We mutate location's
+    // search/hash via Object.defineProperty (jsdom doesn't have a
+    // real history stack), then dispatch the event.
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, search: '?page=about.qmd', hash: '#section-2' },
+    });
+
+    try {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await waitFor(() => {
+        const latest = capturedIframeProps[capturedIframeProps.length - 1];
+        expect(latest.currentFilePath).toBe('about.qmd');
+        expect(latest.pendingAnchor).toBe('section-2');
+      });
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
+
+  it('seeds pendingAnchor from a boot URL hash', async () => {
+    runtimeMockState.files = [
+      { path: 'index.qmd', docId: 'automerge:i' },
+      { path: 'about.qmd', docId: 'automerge:a' },
+    ];
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        search: '?page=about.qmd',
+        hash: '#install',
+      },
+    });
+
+    try {
+      render(<PreviewApp />);
+      await waitFor(() => {
+        expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+      });
+      const props = capturedIframeProps[capturedIframeProps.length - 1];
+      expect(props.currentFilePath).toBe('about.qmd');
+      expect(props.pendingAnchor).toBe('install');
+      // Boot hash → epoch 1 (first scroll request); without a hash
+      // the epoch stays at 0.
+      expect(props.pendingAnchorEpoch).toBe(1);
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
+
   it('shows engine errors via the stale-capture overlay (CaptureRef.lastError pass-through)', async () => {
     // Pin the existing pass-through in StaleCaptureOverlay (Phase
     // C.5) so a future refactor doesn't silently regress D.4.
