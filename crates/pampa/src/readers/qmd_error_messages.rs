@@ -37,7 +37,7 @@ pub fn produce_diagnostic_messages(
     );
 
     for diag in &mut diagnostics {
-        if diag.code.as_deref() == Some("Q-2-35") {
+        if matches!(diag.code.as_deref(), Some("Q-2-35") | Some("Q-2-36")) {
             widen_diagnostic_to_line(diag, input_bytes);
         }
     }
@@ -46,11 +46,19 @@ pub fn produce_diagnostic_messages(
 }
 
 /// Widen a diagnostic's location to span the entire line containing the
-/// reported position. Q-2-35 uses this so the highlight covers the leading
-/// indentation AND the line content, instead of just the first non-whitespace
-/// character. The scanner-emitted token's reported column lands after the
-/// whitespace consumption loop has run, so widening here is the simplest path
-/// without restructuring the scanner's whitespace handling.
+/// reported position. Used when the underlying parse error reports a narrow
+/// per-token position, but the user-meaningful unit of the diagnostic is the
+/// whole line.
+///
+/// - Q-2-35 (indented code blocks): the scanner-emitted token lands after the
+///   whitespace consumption loop, so the reported column is past the leading
+///   indentation. Widening covers the indentation too.
+/// - Q-2-36 (knitr-style chunk options, Merr-mapped path-B forms — bare label
+///   `{r test}`, comma form `{r, …}`): the tree-sitter parse error points at
+///   the first offending token (`test`, `r`, etc.); widening spreads the
+///   highlight across the full chunk header, matching the path-A site in
+///   `treesitter.rs` that emits the same code with an already-line-clipped
+///   location.
 fn widen_diagnostic_to_line(
     diag: &mut quarto_error_reporting::DiagnosticMessage,
     input_bytes: &[u8],

@@ -77,9 +77,9 @@ The **space-kv form** (`{r echo=FALSE}`) is deliberately *not* in the corpus. It
 
 ### Phase 2: widen path-B highlights to the full header line
 
-After Phase 1 + Phase 0b, path A is already clipped to the header line (inline at the treesitter.rs site) and path B emits Q-2-36 with a narrow highlight on the offending token (`r` in `{r test}`, `r` in `{r, echo=FALSE}`, etc.). Phase 2 only widens path B.
+After Phase 1 + Phase 0b, path A is already clipped to the header line (inline at the treesitter.rs site) and path B emits Q-2-36 with a narrow highlight on the offending token (`test` in `{r test}`, `r` in `{r, echo=FALSE}`, etc.). Phase 2 only widens path B.
 
-- [ ] Extend the location-widening gate in `crates/pampa/src/readers/qmd_error_messages.rs:40` so `Q-2-36` joins `Q-2-35`:
+- [x] Extended the location-widening gate in `crates/pampa/src/readers/qmd_error_messages.rs:40` so `Q-2-36` joins `Q-2-35`:
 
   ```rust
   if matches!(diag.code.as_deref(), Some("Q-2-35") | Some("Q-2-36")) {
@@ -87,9 +87,13 @@ After Phase 1 + Phase 0b, path A is already clipped to the header line (inline a
   }
   ```
 
-  Update the doc-comment on `widen_diagnostic_to_line` to mention both error codes. (Subtle but harmless interaction with path A: when a path-A diagnostic flows through this gate, `widen_diagnostic_to_line` is a no-op for a `SourceInfo::Original` that already spans exactly one line — `line_start` and `line_end` re-derive the same offsets. Confirm in Phase 3 verification.)
-- [ ] Run `cargo nextest run -p pampa --test test_error_corpus`. All pass.
-- [ ] If `lookup_error_entry` reports multiple matches for a single `(state, sym)` (because another corpus entry already covered that state), follow the disambiguation pattern documented in `crates/quarto-parse-errors/src/error_table.rs` and Q-2-32's example. (No collisions reported during Phase 0b — this is a safeguard, not an expected branch.)
+  Updated the doc-comment on `widen_diagnostic_to_line` with separate bullets explaining the Q-2-35 and Q-2-36 motivations (whitespace consumption vs. narrow-token report) so future readers can decide whether to enroll a third code without re-deriving the rationale.
+- [x] **Confirmed path A and path B route through separate code paths.** Path A diagnostics are constructed in `treesitter.rs::process_fenced_code_block` and added directly to `error_collector`; they do not flow through `qmd_error_messages::produce_diagnostic_messages`, so the widen gate cannot double-apply or interfere with the inline-clipped path-A location. Verified by re-running path A inputs after Phase 2: highlights remain single-line, identical to the Phase 1 verification output.
+- [x] **E2E path B verification** — all three case files now show full-header-line highlights:
+  - `Q-2-36-bare-label.qmd` (`` ```{r test} ``): underline spans `` ```{r test} ``
+  - `Q-2-36-comma-args.qmd` (`` ```{r, echo=FALSE} ``): underline spans `` ```{r, echo=FALSE} ``
+  - `Q-2-36-comma-and-kv.qmd` (`` ```{r, label="foo", echo=FALSE} ``): underline spans the whole 31-character header.
+- [x] `cargo nextest run -p pampa --no-fail-fast`: **3686/3686 pass, 2 skipped.** No collisions, no regressions.
 
 ### Phase 3: end-to-end verification
 
