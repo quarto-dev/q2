@@ -1,0 +1,6 @@
+::: {.list-table}
+- - foo
+  - ```python
+    x
+    ```
+:::

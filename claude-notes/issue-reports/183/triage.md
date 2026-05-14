@@ -190,6 +190,24 @@ This mirrors what the writer already does for top-level loose bullet lists (and 
 
 Filed bd-oxsr (see § Cross-references). Fix is small, single-file (`crates/pampa/src/writers/qmd.rs`), TDD-able through `tests/roundtrip_tests/qmd-json-qmd` with the three fixtures already captured under `claude-notes/issue-reports/183/`.
 
+### Fix applied — 2026-05-14
+
+Fix landed on this branch. Plan: `claude-notes/plans/2026-05-14-list-table-multiblock-cell-fix.md`.
+
+Summary of the change in `crates/pampa/src/writers/qmd.rs`:
+
+- Replaced the cell-emission block in `write_list_table` (~lines 1069-1116 of the pre-fix file) with a uniform three-shape algorithm: empty cell / first block is `Plain`/`Paragraph` / first block is anything else. Subsequent blocks (2nd … nth) within any cell are emitted as blank-line-separated 4-space-indented stanzas.
+- Added two helpers: `write_cell_block_on_marker_line` (for the first block when it is not `Plain`/`Paragraph` — puts its first line on the marker line, indents continuation lines) and `write_cell_block_indented` (for every subsequent block).
+
+One refinement vs. the triage's original fix sketch: the case where the first block is non-`Plain`/non-`Paragraph` (e.g. a `CodeBlock`-only cell) does **not** leave the marker line empty followed by a blank line — that shape introduced a phantom empty `Paragraph` in the reparsed AST. Instead the block's first line continues the marker line, mirroring how a regular CommonMark list item with non-`Plain` content looks. Verified by probing the reader before committing.
+
+Validated:
+
+- `test_qmd_roundtrip_consistency` (was the regression sentinel): all three new fixtures green.
+- `cargo nextest run --workspace`: 8859/8859 pass.
+- End-to-end CLI repro: writer output for the bug-report input round-trips back to a byte-identical AST.
+- No snapshot deltas: the change does not affect any existing `list-table-*` snapshot (all use single-`Plain` cells, an unchanged path).
+
 ## Verification commands used
 
 ```bash

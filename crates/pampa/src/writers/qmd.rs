@@ -928,6 +928,55 @@ fn alignment_to_char(align: &Alignment) -> char {
     }
 }
 
+/// Emit a list-table cell block whose first line continues on the inner
+/// bullet's marker line; continuation lines are indented to column 4 so the
+/// block stays inside the cell. Used for the first block of a cell when that
+/// block is not Plain/Paragraph (e.g. CodeBlock, BlockQuote, Div).
+fn write_cell_block_on_marker_line(
+    block: &crate::pandoc::Block,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    let mut block_buf = Vec::<u8>::new();
+    write_block(block, &mut block_buf, ctx)?;
+    let content = String::from_utf8_lossy(&block_buf);
+    let mut lines = content.lines();
+    if let Some(first_line) = lines.next() {
+        writeln!(buf, "{}", first_line)?;
+    } else {
+        writeln!(buf)?;
+    }
+    for line in lines {
+        if line.is_empty() {
+            writeln!(buf)?;
+        } else {
+            writeln!(buf, "    {}", line)?;
+        }
+    }
+    Ok(())
+}
+
+/// Emit a list-table cell block as a 4-space-indented stanza. Used for every
+/// block past the first in a cell (the first is handled inline on the marker
+/// line by the caller).
+fn write_cell_block_indented(
+    block: &crate::pandoc::Block,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    let mut block_buf = Vec::<u8>::new();
+    write_block(block, &mut block_buf, ctx)?;
+    let content = String::from_utf8_lossy(&block_buf);
+    for line in content.lines() {
+        if line.is_empty() {
+            writeln!(buf)?;
+        } else {
+            writeln!(buf, "    {}", line)?;
+        }
+    }
+    Ok(())
+}
+
 /// Write a table as a list-table div.
 /// This format supports multi-line cells, rowspan, colspan, etc.
 ///
@@ -1066,54 +1115,46 @@ fn write_list_table(
                 write!(buf, "}} ")?;
             }
 
-            // Write cell content
+            // Write cell content. Three shapes:
+            //   - empty cell: marker line carries the `[]` (or attr) placeholder only.
+            //   - first block is Plain/Paragraph: inlines on the marker line; any
+            //     subsequent blocks emit as blank-line-separated indented stanzas.
+            //   - first block is anything else (CodeBlock, BlockQuote, Div, …):
+            //     the block's opening line continues the marker line and
+            //     continuation lines indent to column 4 — same shape a regular
+            //     CommonMark list item uses for non-Plain content.
+            // The blank line before each non-first block is what makes the inner
+            // list item "loose" so the reader treats indented content as part of
+            // the cell.
             if cell.content.is_empty() {
-                // Empty cell - write empty span to mark it
                 if !needs_attrs {
                     write!(buf, "[]")?;
                 }
+                writeln!(buf)?;
             } else {
-                // Write cell content inline if single block with simple content
-                // Otherwise write as nested blocks
-                if cell.content.len() == 1 {
-                    match &cell.content[0] {
-                        Block::Plain(plain) => {
-                            for inline in &plain.content {
-                                write_inline(inline, buf, ctx)?;
-                            }
+                let (first, rest) = cell.content.split_first().unwrap();
+                match first {
+                    Block::Plain(p) => {
+                        for inline in &p.content {
+                            write_inline(inline, buf, ctx)?;
                         }
-                        Block::Paragraph(para) => {
-                            for inline in &para.content {
-                                write_inline(inline, buf, ctx)?;
-                            }
-                        }
-                        other => {
-                            writeln!(buf)?;
-                            // Indent the block content
-                            let mut block_buf = Vec::<u8>::new();
-                            write_block(other, &mut block_buf, ctx)?;
-                            let content = String::from_utf8_lossy(&block_buf);
-                            for line in content.lines() {
-                                writeln!(buf, "    {}", line)?;
-                            }
-                            continue; // Skip the newline at the end since we already wrote it
-                        }
+                        writeln!(buf)?;
                     }
-                } else {
-                    // Multiple blocks - write on new lines with indentation
-                    writeln!(buf)?;
-                    for block in &cell.content {
-                        let mut block_buf = Vec::<u8>::new();
-                        write_block(block, &mut block_buf, ctx)?;
-                        let content = String::from_utf8_lossy(&block_buf);
-                        for line in content.lines() {
-                            writeln!(buf, "    {}", line)?;
+                    Block::Paragraph(p) => {
+                        for inline in &p.content {
+                            write_inline(inline, buf, ctx)?;
                         }
+                        writeln!(buf)?;
                     }
-                    continue; // Skip the newline at the end since we already wrote it
+                    _ => {
+                        write_cell_block_on_marker_line(first, buf, ctx)?;
+                    }
+                }
+                for block in rest {
+                    writeln!(buf)?; // blank-line separator
+                    write_cell_block_indented(block, buf, ctx)?;
                 }
             }
-            writeln!(buf)?;
         }
     }
 
