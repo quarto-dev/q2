@@ -97,18 +97,22 @@ After Phase 1 + Phase 0b, path A is already clipped to the header line (inline a
 
 ### Phase 3: end-to-end verification
 
-- [ ] `cargo run --bin pampa -- claude-notes/issue-reports/152/q236-repro.qmd`. Confirm a clean `[Q-2-36]` error on the header line.
-- [ ] `cargo run --bin pampa -- claude-notes/issue-reports/152/q236-repro-variants.qmd`. Walk through cases (1)–(7); all should produce Q-2-36 errors on the respective header lines. Case (8) — the Pandoc class form — must parse cleanly with no warning or error.
-- [ ] Capture the exact CLI output for the reporter's repro and paste it into a "Verification output" section at the bottom of this plan.
-- [ ] `cargo nextest run --workspace`. Watch for regressions in downstream crates (`qmd-syntax-helper`, hub-client tests).
-- [ ] `cargo xtask verify` (full, including the hub-build leg). `pampa` is a WASM-dep crate so the hub-build *can* break even when `cargo build --workspace` is green.
-- [ ] If any unrelated snapshots changed, surface the count and a one-sentence summary in the commit message (per CLAUDE.md "Snapshot Test Changes").
+- [x] `cargo run --bin pampa -- claude-notes/issue-reports/152/q236-repro.qmd` — clean `[Q-2-36]` error on the header line (line 5). Output captured in "Verification output" below.
+- [x] Variants fixture — per-case isolation: each of cases (1)–(7) fires `[Q-2-36]` when run as a single-block file (verified via `/tmp/q236-cases/case{1..8}.qmd`). Case (8) (`{.r echo=FALSE}`) parses cleanly to `[ CodeBlock ( "" , ["r"] , [("echo", "FALSE")] ) "1+1" ]`.
+- [x] **Discovered limitation, filed as `bd-jvxg`:** when the variants fixture is run as a single file (rather than one case per file), only the two **Path B** parse errors (cases 1 and 4) appear. Cases 2, 3, 5, 6, 7 are silently dropped because `crates/pampa/src/readers/qmd.rs:144` returns `Err(parse-error-diagnostics)` before `treesitter_to_pandoc` runs — and `treesitter_to_pandoc` is where the Path A diagnostic site lives. This is **pre-existing reader-architecture behavior** (would have happened at HEAD with the old Q-2-8 warnings too, just less noticeably), not a Phase 1 regression. Filed `bd-jvxg` as `discovered-from:bd-j4fe` so the architectural fix is tracked without blocking this ship.
+- [x] `cargo nextest run --workspace --no-fail-fast`: **8858 pass / 0 fail / 195 skipped.** No downstream regressions in any crate (`qmd-syntax-helper`, `quarto-core`, `wasm-quarto-hub-client`, etc.).
+- [x] `cargo xtask verify` (full, with hub-build leg): **All 9 verification steps passed.** This covered `cargo build --workspace`, `cargo nextest run --workspace`, `cargo xtask lint`, the hub-client TypeScript + Vite + WASM build, hub-client vitest, and trace-viewer vitest. Required `npm install` at worktree root first since this is a fresh worktree.
+- [x] Snapshot impact: zero. No `.snap` files changed; the only modifications to `snapshots/` would have appeared if path-A or path-B touched a snapshotted output path, and they didn't.
 
 ### Phase 4: documentation + commit
 
-- [ ] `docs/syntax-notes.md` (or the nearest user-facing doc under `docs/`): one-sentence note that knitr-style chunk options are not supported, with a pointer to `#| key: value`. Skip if no obvious user-facing location exists; do not invent a new page.
-- [ ] Commit on the `issue-152` branch. Reference bd-j4fe and issue #152.
-- [ ] From the **main** repo (not this worktree), run `br sync --flush-only && git add .beads && git commit -m "sync beads: bd-j4fe (Q-2-36 implemented)"`.
+- [x] `docs/syntax-notes.md` (or nearest user-facing doc): **skipped.** No existing page under `docs/` discusses fenced-language chunk-header syntax (`grep -l '\`\`\`{' docs/**/*.qmd` returns empty). Per plan, "do not invent a new page." The Q-2-36 diagnostic message itself carries the redirection to `#| key: value` / `{.r ...}`, which is the user's actual touchpoint.
+- [x] Three commits on `issue-152` branch:
+  - `9bbb1de1` Q-2-36 Phase 0: failing tests + Merr corpus
+  - `bd93ffa2` Q-2-36 Phase 1: upgrade Q-2-8 warning site to Q-2-36 error
+  - `e848e47e` Q-2-36 Phase 2: widen path-B highlights to the full header line
+- [ ] Phase 3 verification commit (this plan update + Phase 3 outcome) — pending.
+- [ ] From the **main** repo (not this worktree), run `br sync --flush-only && git add .beads && git commit -m "sync beads: bd-j4fe + bd-jvxg"`.
 - [ ] Wait for explicit user approval before pushing.
 
 ## Out of scope (do not creep)
@@ -121,4 +125,67 @@ After Phase 1 + Phase 0b, path A is already clipped to the header line (inline a
 
 ## Verification output
 
-_(to be filled in during Phase 3 — paste the exact `cargo run --bin pampa` output for the reporter's repro and a representative variant.)_
+### Reporter's exact case (`q236-repro.qmd`)
+
+Invocation:
+
+```
+$ cargo run --bin pampa -- claude-notes/issue-reports/152/q236-repro.qmd
+```
+
+Output (ANSI escapes stripped, hyperlink data stripped, layout preserved):
+
+```
+Error: [Q-2-36] Old-style knitr chunk options are not supported
+   ╭─[ claude-notes/issue-reports/152/q236-repro.qmd:5:1 ]
+   │
+ 5 │ ```{r test}
+   │ ─────┬─────
+   │      ╰────── Quarto Markdown does not support knitr-style chunk options in
+   │              the header. Move options into the body using `#| key: value`
+   │              syntax, or use the Pandoc class form `{.r ...}` instead of
+   │              `{r ...}`.
+───╯
+```
+
+The diagnostic spans the full header line. Output was inspected directly. (This goes through path B — the bare-label form is a tree-sitter parse error mapped through `Q-2-36.json` in the corpus, then widened to the line via `widen_diagnostic_to_line`.)
+
+### Representative path-A case (`{r echo=FALSE}`)
+
+Path A — the upgraded `treesitter.rs` site — is exercised by inputs the grammar accepts structurally:
+
+```
+$ printf '%s\n' '```{r echo=FALSE}' '1+1' '```' | cargo run --bin pampa --
+
+Error: [Q-2-36] Old-style knitr chunk options are not supported
+   ╭─[ <stdin>:1:1 ]
+   │
+ 1 │ ```{r echo=FALSE}
+   │ ─────────┬───────
+   │          ╰─────── This code block uses knitr-style options in the header
+───╯
+ℹ Quarto Markdown reads chunk options from the body, not the header
+ℹ Move options into the body using `#| key: value`, or — if you only want a Pandoc class — write `{.r ...}` instead of `{r ...}`
+```
+
+Path A uses the rich `problem/info/hint` structure (single inline ariadne span on the header, two info bullets below); path B uses a single inline message paragraph (the corpus JSON's `message` field). The two presentations differ in style but converge on the same `[Q-2-36]` code and message content, so a user encountering either form learns the same thing.
+
+### Pandoc class form (negative control) — must stay valid
+
+```
+$ printf '%s\n' '```{.r echo=FALSE}' '1+1' '```' | cargo run --bin pampa --
+[ CodeBlock ( "" , ["r"] , [("echo", "FALSE")] ) "1+1" ]
+```
+
+No diagnostic. The Pandoc-class spelling (`{.r ...}`) is parsed cleanly with `echo=FALSE` as an attribute. This is the alternative spelling the Q-2-36 diagnostic recommends.
+
+### Test totals
+
+- `cargo nextest run -p pampa --no-fail-fast`: **3686/3686 pass, 2 skipped.**
+- `cargo nextest run --workspace --no-fail-fast`: **8858/8858 pass, 195 skipped.**
+- `cargo xtask verify` (full, including hub-client TypeScript + Vite + WASM build, hub-client vitest, and trace-viewer vitest): **All 9 verification steps passed.**
+- `cargo xtask lint`: not separately run — `cargo xtask verify` runs lint as one of its steps.
+
+### Snapshot-test impact
+
+Zero modified or new `.snap` files. Confirmed via `git status` showing no changes under any `snapshots/` directory at any point during Phases 1–3.
