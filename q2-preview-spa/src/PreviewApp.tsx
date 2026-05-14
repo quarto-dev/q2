@@ -184,6 +184,17 @@ export default function PreviewApp() {
             if (cancelled) return;
             setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
           },
+          // Phase D.3 (bd-kw93.9): binary docs (images, SVGs,
+          // anything not text-shaped) sync through samod on a
+          // separate channel from text. Without this handler an
+          // edit to e.g. `assets/logo.svg` would land in the binary
+          // doc but the SPA would never re-render. Bump the same
+          // `contentTick` as text changes so downstream effects
+          // pick the change up uniformly.
+          onBinaryContent: () => {
+            if (cancelled) return;
+            setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
+          },
           // Phase C.4: keep the capture sidecar in state so the render
           // effect can pick up server-recorded captures (writes by
           // Phase C.1) and route them into WASM replay.
@@ -266,6 +277,17 @@ export default function PreviewApp() {
           captureGzJson,
         );
         if (cancelled) return;
+        // Phase D.3 (bd-kw93.9) + bd-0mji: a test-only render
+        // counter on `window`. Lets Playwright / SPA tests assert
+        // "this edit reached the SPA and produced a (re-)render"
+        // without inferring through DOM diffs. Production builds
+        // include this; it's a single integer increment, no
+        // measurable cost. Counts completed render attempts
+        // (success or non-success result), not effect firings.
+        if (typeof window !== 'undefined') {
+          const w = window as unknown as { __renderTicks?: number };
+          w.__renderTicks = (w.__renderTicks ?? 0) + 1;
+        }
         if (result.success && result.ast_json !== undefined) {
           // Three-way themeFingerprint (mirrors hub-client's
           // `ReactPreview` mapping at line 119-125): a string means a
@@ -304,6 +326,13 @@ export default function PreviewApp() {
         }
       } catch (err) {
         if (cancelled) return;
+        // Phase D.3: bump the render counter on the catch path too
+        // so "an edit triggered a render attempt" stays a reliable
+        // signal even when the render threw.
+        if (typeof window !== 'undefined') {
+          const w = window as unknown as { __renderTicks?: number };
+          w.__renderTicks = (w.__renderTicks ?? 0) + 1;
+        }
         // Same non-terminal treatment as the non-success branch
         // above. A render that throws (e.g. malformed qmd hits the
         // WASM parser) overlays on top of the previous good render.
