@@ -64,6 +64,23 @@ pub struct PreviewConfig {
 /// Run the preview server. Returns when the server is shut down (ctrl-c
 /// or SIGTERM, handled inside `quarto_hub::server::run_server_with`).
 pub async fn run(config: PreviewConfig) -> Result<()> {
+    run_with_on_ready(config, |_ctx| {}).await
+}
+
+/// Like [`run`], but also fires `extra_on_ready` with `Arc<HubContext>`
+/// once the hub has settled and the eager-capture driver has been
+/// spawned. The extra callback runs *after* the driver is enqueued so
+/// integration tests can stash the context (e.g. via a oneshot
+/// channel) and poll for capture-sidecar state through real samod /
+/// IndexDocument reads instead of re-implementing the protocol.
+///
+/// Library callers embedding q2 preview can also use this seam to
+/// attach their own startup logic (metrics, logs, custom listeners).
+/// Production CLI usage goes through [`run`] which passes a no-op.
+pub async fn run_with_on_ready<F>(config: PreviewConfig, extra_on_ready: F) -> Result<()>
+where
+    F: FnOnce(Arc<quarto_hub::HubContext>) + Send + 'static,
+{
     // Stash the SPA override before serving so the fallback handler
     // can read it. `set` is idempotent — calling `run()` twice in the
     // same process (uncommon but possible in tests) is harmless: the
@@ -83,14 +100,20 @@ pub async fn run(config: PreviewConfig) -> Result<()> {
     let on_ready: server::OnReadyCallback = Box::new(move |ctx| {
         let registry = engine_registry;
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let ctx_for_driver = ctx.clone();
         tokio::task::spawn_blocking(move || {
             let result = pollster::block_on(capture_driver::record_eager_captures(
-                ctx, runtime, registry,
+                ctx_for_driver,
+                runtime,
+                registry,
             ));
             if let Err(e) = result {
                 tracing::warn!(error = %e, "eager capture driver failed");
             }
         });
+        // Fire the extra hook after the driver is enqueued so callers
+        // can rely on it being either in-flight or already done.
+        extra_on_ready(ctx);
     });
 
     server::run_server_with(storage, hub_config, Some(extend_with_spa), Some(on_ready))

@@ -207,9 +207,11 @@ pub enum RecordError {
 }
 
 /// Resolve the captured EngineCapture out of a binary doc by its
-/// document ID. Used by tests today; Phase C.4 wires the same shape
-/// into the WASM/SPA reader.
-#[cfg(test)]
+/// document ID. The on-the-wire format (gzipped JSON of
+/// [`EngineCapture`] inside a `quarto_hub::resource::create_binary_document`
+/// envelope) is shared with Phase C.4's WASM/SPA reader, so keeping
+/// the Rust reader public lets test code and any future server-side
+/// inspector use the same path.
 pub async fn read_capture_from_doc(
     ctx: &Arc<HubContext>,
     capture_doc_id: &str,
