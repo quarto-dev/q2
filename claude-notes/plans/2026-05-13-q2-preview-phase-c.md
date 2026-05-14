@@ -3,7 +3,7 @@
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
 **Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** C.3 + C.1 landed 2026-05-14. C.4 (browser-side replay) or C.2 (staleness) ready next.
+**Status:** C.3, C.1, C.4 landed 2026-05-14. C.2 (staleness) is next; the C.3→C.1→C.4 loop is now end-to-end (server records → automerge sidecar → browser replays).
 
 ## Progress
 
@@ -22,11 +22,14 @@ Sub-task status. Each line tracks one filed bd-issue; check off as merged.
   - [x] Integration test: `tests/eager_capture.rs` drives `run_with_on_ready` end-to-end, polls the sidecar, and round-trips the binary doc back to a parseable EngineCapture.
   - [x] Binary smoke: `cargo run --bin q2 -- preview /tmp/c1-smoke --no-browser` boots cleanly, eager driver fires (no capture for prose-only fixture, as expected). Real-engine smoke (jupyter/knitr) deferred — no R/Python in CI.
   - bd-ojtq follow-up filed: `xtask create-worktree --base` default.
-- [ ] **C.4** (bd-kw93.3) — Browser-side replay wiring (now also owns the WASM signature widen absorbed from C.3).
-  - [ ] Widen `render_page_for_preview` to take `Option<JsValue>` (capture).
-  - [ ] WASM: `EngineRegistry::with_replay(capture)` when present, default registry otherwise.
-  - [ ] TS binding in `ts-packages/preview-runtime/src/wasmRenderer.ts`.
-  - [ ] SPA: `q2-preview-spa/src/PreviewApp.tsx` reads sidecar via `onCapturesChange`, fetches binary doc, passes to renderer.
+- [x] **C.4** (bd-kw93.3) — Browser-side replay wiring (also owns the WASM signature widen absorbed from C.3). Merged 2026-05-14.
+  - [x] `render_page_for_preview` (WASM entry) takes `capture_gz_json: Option<Vec<u8>>` — the same gzipped-JSON wire format Phase C.1 writes to the capture binary doc.
+  - [x] WASM internal `build_replay_registry_from` ungzips + JSON-parses + constructs `EngineRegistry::with_replay`. `render_qmd_to_preview_ast` threads it down to `build_q2_preview_pipeline_stages` → `EngineExecutionStage::with_registry`.
+  - [x] TS binding: `renderPageForPreview(path, userGrammars?, captureGzJson?)`. `sync-client.getBinaryDocById(docId)` for fetching the capture binary doc by ID (it isn't in the project file index).
+  - [x] SPA: `onCapturesChange` populates `state.captures`; render effect looks up the active page's `captureDocId`, fetches the binary doc, passes bytes to `renderPageForPreview`. Fall-through to default registry when absent.
+  - [x] 2 new SPA integration tests pin the seam (with-capture path forwards bytes, no-capture path leaves arg `undefined`).
+  - [x] cargo xtask verify all 12 steps green (Rust + WASM build + hub-client tests).
+  - [ ] Real-WASM browser smoke (Playwright + live preview + hand-authored capture) — gap noted; not blocking.
 - [ ] **C.2** (bd-kw93.4) — Staleness detection on doc-content change (blocked by C.1).
 - [ ] **C.5** (bd-kw93.5) — Stale-capture UX overlay + `/api/preview/re-execute` (blocked by C.4 + C.2).
 - [ ] **C.6** (bd-kw93.6) — `preview.engine: manual | auto | off` config (blocked by C.5).
