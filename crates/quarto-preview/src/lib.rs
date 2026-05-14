@@ -16,7 +16,7 @@ use axum::{
     Router,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
 };
 use include_dir::{Dir, include_dir};
 use quarto_core::engine::EngineRegistry;
@@ -26,6 +26,7 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 pub mod cache;
 pub mod capture_driver;
 pub mod config;
+pub mod deps;
 pub mod re_execute;
 
 pub use config::EnginePolicy;
@@ -273,6 +274,10 @@ pub fn extend_with_preview(
             "/api/preview/re-execute",
             post(re_execute::re_execute_handler),
         )
+        // Phase D.6 (bd-kw93.12): SPA fetches the active page's
+        // include-shortcode dep set here so it can filter unrelated
+        // sibling edits out of `onFileContent`-driven re-renders.
+        .route("/api/preview/deps", get(deps::deps_handler))
         .fallback(spa_handler)
 }
 

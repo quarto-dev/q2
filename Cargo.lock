@@ -4148,6 +4148,7 @@ dependencies = [
  "quarto-pandoc-types",
  "quarto-system-runtime",
  "quarto-trace",
+ "regex",
  "reqwest 0.12.28",
  "samod",
  "serde",

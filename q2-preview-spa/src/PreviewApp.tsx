@@ -69,6 +69,17 @@ interface PreviewAppState {
    */
   themeFingerprint: string | null | undefined;
   /**
+   * Phase D.6 (bd-kw93.12): dep set for the *current* `activeFile`,
+   * fetched from `/api/preview/deps`. `null` means "unknown yet";
+   * the filter in `onFileContent` falls back to pre-D.6 behaviour
+   * (every change bumps `contentTick`) when null — fail-open is
+   * correct because a missed re-render is the worse failure mode
+   * here. Paths in the set are project-relative forward-slash
+   * strings; `activeFile` itself is included in the set for a
+   * single comparison call.
+   */
+  deps: Set<string> | null;
+  /**
    * Boot-time failure (e.g. `/health` 5xx, samod connect throws). When
    * set, the SPA replaces the UI with `<PreviewErrorOverlay>` — there's
    * no previous render worth keeping. Distinct from `renderError`.
@@ -101,11 +112,40 @@ const INITIAL_STATE: PreviewAppState = {
   activeFile: null,
   astJson: null,
   themeFingerprint: undefined,
+  deps: null,
   error: null,
   renderError: null,
   contentTick: 0,
   captures: {},
 };
+
+/**
+ * Phase D.6 (bd-kw93.12): decide whether a text-file change at
+ * `changedPath` should trigger a re-render of the page named by
+ * `activeFile`, given the cached dep set `deps`.
+ *
+ * The filter is intentionally narrow: it ONLY filters `.qmd` edits.
+ * Non-qmd files (CSS, _quarto.yml, _metadata.yml, .tsx custom
+ * components, …) are project-wide signals that affect rendering
+ * regardless of the active page's include-shortcode set, so they
+ * always pass.
+ *
+ * Returns true (fail-open) when `deps` is null — the server response
+ * hasn't landed yet, and we'd rather over-render than miss a change.
+ */
+function shouldRerenderForTextChange(
+  changedPath: string,
+  activeFile: string | null,
+  deps: Set<string> | null,
+): boolean {
+  if (!activeFile) return true;
+  // Non-qmd edits always pass: they're either config (_quarto.yml,
+  // _metadata.yml) or project-wide assets (CSS, custom components)
+  // that the include-shortcode dep extractor doesn't track.
+  if (!changedPath.toLowerCase().endsWith('.qmd')) return true;
+  if (deps === null) return true;
+  return deps.has(changedPath);
+}
 
 /**
  * Fetch the project's index document id from the hub's `/health`
@@ -180,9 +220,18 @@ export default function PreviewApp() {
             if (cancelled) return;
             setState((s) => ({ ...s, files }));
           },
-          onFileContent: () => {
+          onFileContent: (path: string) => {
             if (cancelled) return;
-            setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
+            // Phase D.6 filter: read `activeFile` + `deps` via the
+            // setState callback so the filter sees the *latest*
+            // values (the closure was set up at boot time and would
+            // otherwise capture stale state).
+            setState((s) => {
+              if (!shouldRerenderForTextChange(path, s.activeFile, s.deps)) {
+                return s;
+              }
+              return { ...s, contentTick: s.contentTick + 1 };
+            });
           },
           // Phase D.3 (bd-kw93.9): binary docs (images, SVGs,
           // anything not text-shaped) sync through samod on a
@@ -251,6 +300,54 @@ export default function PreviewApp() {
       cancelled = true;
     };
   }, []);
+
+  // Phase D.6 (bd-kw93.12): fetch the dep set for the active page
+  // from `/api/preview/deps`. Re-fetch whenever the active file
+  // itself changes (different page), or whenever its content was
+  // just edited (a new include shortcode might have been added or
+  // removed). The dep set is consumed by `onFileContent`'s filter
+  // above; null = unknown ⇒ fail-open.
+  useEffect(() => {
+    if (!state.activeFile) return;
+    let cancelled = false;
+    const activePath = state.activeFile;
+    void (async () => {
+      try {
+        const resp = await fetch(
+          `/api/preview/deps?page=${encodeURIComponent(activePath)}`,
+        );
+        if (cancelled) return;
+        if (!resp.ok) {
+          // Fail-open: leave `deps` as null so the filter accepts
+          // everything (pre-D.6 behaviour). A 400 here means the
+          // server hasn't indexed the page yet; the next refetch
+          // (driven by the activeFile/contentTick deps below) will
+          // try again.
+          console.warn(
+            `deps fetch returned ${resp.status} for ${activePath}; filter falls open`,
+          );
+          return;
+        }
+        const body = (await resp.json()) as { deps?: string[] };
+        if (cancelled) return;
+        const list = body.deps ?? [];
+        // Include the active page itself in the set so the filter
+        // doesn't need a special-case for "edit my own page."
+        const set = new Set<string>([activePath, ...list]);
+        setState((s) =>
+          s.activeFile === activePath ? { ...s, deps: set } : s,
+        );
+      } catch (e) {
+        // Network errors etc. — fail-open, just log.
+        console.warn(
+          `deps fetch threw for ${activePath}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.activeFile, state.contentTick]);
 
   // Render the active page whenever it (or its content) changes.
   useEffect(() => {
