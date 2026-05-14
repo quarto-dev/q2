@@ -140,51 +140,63 @@ enum Commands {
         pandoc_args: Vec<String>,
     },
 
-    /// Render and preview a Quarto document or project (Q2 shape).
+    /// Start a live preview of a Quarto document or project.
     ///
-    /// Boots an ephemeral local quarto-hub instance serving the
-    /// q2-preview SPA, which renders through WASM and keeps stateful
-    /// JS (Bootstrap menus, MathJax, reveal.js, listings filters)
-    /// alive across edits. See claude-notes/plans/2026-05-11-q2-
-    /// preview-epic.md for architecture.
+    /// Watches the project for changes and re-renders the active
+    /// page incrementally. The preview keeps its JavaScript state
+    /// (open menus, scroll position, math rendering, listings
+    /// filters) across edits — only the parts of the page that
+    /// actually changed are updated.
     ///
-    /// Replaces the Q1 (`quarto preview`) flag set. The Q1 flags
-    /// (`--render`, `--no-serve`, `--no-navigate`, `--no-watch-inputs`,
-    /// `--timeout`, `--log*`, `--quiet`, `--profile`) are intentionally
-    /// gone; Q2 always serves, always watches, and logs at the binary
-    /// level.
+    /// Engine execution (Jupyter, knitr) is controlled by the
+    /// `preview.engine` key in `_quarto.yml`. Setting it to `manual`
+    /// (the default) makes the server detect when code has changed
+    /// and show a "Re-execute" button; `auto` re-executes on every
+    /// settled code edit; `off` skips engine execution entirely, so
+    /// code cells render as inert source.
+    ///
+    /// Press Ctrl-C to stop the server.
     Preview {
-        /// Project root or single file to preview. Defaults to the
-        /// current directory.
+        /// File or project root to preview.
+        ///
+        /// If you pass a file path inside a project (one with
+        /// `_quarto.yml` somewhere up the tree), the whole project
+        /// is loaded and the preview opens to that page. If you
+        /// pass a directory, the preview opens to `index.qmd` when
+        /// present, otherwise the first `.qmd` it finds. Defaults
+        /// to the current directory.
         path: Option<std::path::PathBuf>,
 
-        /// Port to listen on. Defaults to a random free port.
+        /// Port to listen on. Defaults to a random free port. Pass
+        /// `--port 0` to explicitly request an OS-assigned port.
         #[arg(long)]
         port: Option<u16>,
 
-        /// Host to bind to. Defaults to `127.0.0.1`.
+        /// Network interface to bind to. Defaults to `127.0.0.1`
+        /// (loopback-only — the preview is not reachable from
+        /// other machines on your network).
         #[arg(long)]
         host: Option<String>,
 
-        /// Don't open a browser tab when the server starts.
+        /// Don't open a browser tab on startup. The URL is still
+        /// printed on stdout for copy-paste.
         #[arg(long)]
         no_browser: bool,
 
-        /// Override the ephemeral data directory (samod storage).
-        /// Default: a fresh `tempfile::TempDir` that's deleted on
-        /// shutdown.
+        /// Override the directory the preview uses for ephemeral
+        /// per-session state. Default: a fresh tempdir that is
+        /// deleted when `q2 preview` exits.
         #[arg(long)]
         data_dir: Option<std::path::PathBuf>,
 
-        /// Override the served SPA bundle with a directory on disk —
-        /// useful for live iteration on `q2-preview-spa/dist/`
-        /// without rebuilding the `quarto` binary. Same pattern as
-        /// `QUARTO_TRACE_VIEWER_DIR` for the trace viewer.
+        /// Override the embedded preview UI with a copy on disk —
+        /// useful when you're iterating on the preview UI itself.
+        /// Most users never need this.
         #[arg(long)]
         preview_dir: Option<std::path::PathBuf>,
 
-        /// Run as a standalone sync server with no local project.
-        /// The opposite of the default project-mode boot.
+        /// Run as a bare sync server with no local project. The
+        /// opposite of the default project-mode boot.
         #[arg(long)]
         no_project: bool,
     },
