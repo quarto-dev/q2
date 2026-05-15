@@ -100,7 +100,13 @@ The `# heading` is silently swallowed as a one-cell row. Same with bare paragrap
 
 ## Outcome / recommended next step
 
-**Filed bd-expy** with fix scope:
+**Filed bd-expy and fixed on branch `issue-206` (commit `19e4ce9a`, 2026-05-15).**
+
+Fix details: see the plan at `claude-notes/plans/2026-05-15-fix-pipe-table-caption-collision.md`. The fix turned out to need *two* scanner changes, not one — the caption-start disambiguation alone left `:::` absorbed as a phantom pipe_table_row, so a second peek-for-`:::` gate was added to the PIPE_TABLE_LINE_ENDING dispatch to terminate the table when the next line is a fenced-div marker.
+
+---
+
+Original recommended fix scope (kept here for record):
 
 - Disambiguate the `:` caption-start from `:::` (and likely `::` in fenced-div opener too) at the scanner level so the parser doesn't commit to `caption` when the next character is also `:`. Approach (1) above is the recommended starting point.
 - Add a tree-sitter test in `crates/tree-sitter-qmd/tree-sitter-markdown/test/corpus/` covering: `:::`-after-table (the bug), `: caption`-after-table (must still work), and bare `:::` after table (no fenced div).

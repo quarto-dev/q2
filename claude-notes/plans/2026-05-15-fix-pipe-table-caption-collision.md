@@ -104,10 +104,11 @@ cargo nextest run -p pampa <new test name>      # round-trip test fails
 
 ### Phase 5 — commit + housekeeping
 
-- [ ] T5.1 Commit on the `issue-206` worktree branch with a message referencing bd-expy and issue #206. Single logical commit covering grammar + scanner + regenerated parser.c + tests.
-- [ ] T5.2 `br update bd-expy --status in_progress` then on completion `br close bd-expy --reason "Fixed via issue-206 branch, PR #..."` (the close happens after the PR is merged; for now just update status when the fix lands locally).
-- [ ] T5.3 Sync beads JSONL on main and commit (per CLAUDE.md beads workflow).
+- [x] T5.1 Committed on `issue-206` branch as `19e4ce9a` — single logical commit covering grammar + scanner + regenerated parser.c + tests.
+- [x] T5.2 `br update bd-expy --status in_progress` done. `br close` deferred to after PR merge (per workflow).
+- [x] T5.3 Beads JSONL synced + committed on main as `5350f8a6`.
 - [ ] T5.4 Update the issue-206 triage doc with the resolution note (link to the fix commit).
+- [ ] T5.5 **NOT YET**: push the branch + open a PR. Per CLAUDE.md push policy, this is an explicit user-permission gate.
 
 ## Risk / open questions
 
