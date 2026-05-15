@@ -15,6 +15,27 @@ use quarto_source_map::{FileId, SourceInfo};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::Arc;
+
+/// Per-node attribution record consumed by the JSON writer. Populated
+/// by `quarto_core::transforms::AttributionRenderTransform` and threaded
+/// in through [`JsonConfig::attribution_by_node`]. Mirrors the HTML
+/// writer's `HtmlAttributionRecord` (same fields, separate type so
+/// the writer-local Cargo deps stay clean).
+#[derive(Debug, Clone)]
+pub struct JsonAttributionRecord {
+    pub actor: Arc<str>,
+    pub time: i64,
+}
+
+/// Per-actor identity (display name + colour) carried in the
+/// `astContext.attributionActors` table. Joined per-record by the
+/// hub-client consumer; not duplicated per record on the wire.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JsonAttributionIdentity {
+    pub display_name: String,
+    pub color: String,
+}
 
 /// Configuration for JSON output format.
 #[derive(Debug, Clone, Default)]
@@ -25,6 +46,20 @@ pub struct JsonConfig {
     /// - 'b': begin position {o: offset, l: line (1-based), c: column (1-based)}
     /// - 'e': end position {o: offset, l: line (1-based), c: column (1-based)}
     pub include_inline_locations: bool,
+
+    /// Pointer-keyed lookup populated by
+    /// `quarto_core::transforms::AttributionRenderTransform`. Keys are
+    /// `&Block` / `&Inline` cast through `*const ()` to `usize`. At
+    /// each node visit the writer does a single `HashMap::get` and, on
+    /// hit, accumulates `{ s, actor, time }` for the eventual
+    /// `astContext.attribution` array. `None` means attribution is off
+    /// (the off-path JSON output is byte-identical to today's).
+    pub attribution_by_node: Option<Arc<HashMap<usize, JsonAttributionRecord>>>,
+
+    /// Actor → `(name, color)` table. Total over every actor referenced
+    /// by `attribution_by_node`, including warning-path placeholders.
+    /// Emitted as `astContext.attributionActors` when any entry is used.
+    pub attribution_actors: Option<Arc<HashMap<Arc<str>, JsonAttributionIdentity>>>,
 }
 
 // ============================================================================
@@ -335,6 +370,19 @@ impl<'a> Drop for SourceInfoSerializer<'a> {
     }
 }
 
+/// Accumulated per-node attribution record. Pushed during AST walk
+/// by `JsonWriterContext::maybe_record_attribution`; emitted in
+/// `astContext.attribution` by `stream_write_pandoc`.
+///
+/// `s` is the source-info pool ID returned by `intern` for the node's
+/// `source_info`. `actor` is an `Arc<str>` pointer-equal to the key in
+/// `JsonConfig::attribution_actors` (the Phase 1 interning invariant).
+struct AttributionRecordOut {
+    s: usize,
+    actor: Arc<str>,
+    time: i64,
+}
+
 /// Context for JSON writer containing both source info serialization and error collection.
 ///
 /// This struct combines the SourceInfoSerializer (for building the source info pool)
@@ -343,6 +391,10 @@ impl<'a> Drop for SourceInfoSerializer<'a> {
 struct JsonWriterContext<'a> {
     serializer: SourceInfoSerializer<'a>,
     errors: Vec<DiagnosticMessage>,
+    /// Records collected during the AST walk. Each entry corresponds to
+    /// a Block or Inline node whose pointer was found in
+    /// `config.attribution_by_node`. Empty when attribution is off.
+    attribution_records: Vec<AttributionRecordOut>,
 }
 
 impl<'a> JsonWriterContext<'a> {
@@ -350,6 +402,32 @@ impl<'a> JsonWriterContext<'a> {
         JsonWriterContext {
             serializer: SourceInfoSerializer::new(ast_context, config),
             errors: Vec::new(),
+            attribution_records: Vec::new(),
+        }
+    }
+
+    /// If attribution is enabled and `source_info`'s field address is
+    /// keyed in `attribution_by_node`, record `(s_id, actor, time)`.
+    /// No-op when attribution is off or no map entry exists.
+    ///
+    /// The key is `source_info as *const SourceInfo as usize` — the
+    /// address of the `source_info` field inside the owning Block /
+    /// Inline. That address is stable as long as the AST isn't moved,
+    /// which holds across the JSON serializer's read-only walk (and is
+    /// guaranteed by `AttributionRenderTransform`'s position at the end
+    /// of the Finalization Phase). The render transform uses the same
+    /// key when populating `attribution_by_node`.
+    fn maybe_record_attribution_for(&mut self, source_info: &SourceInfo, s_id: usize) {
+        let Some(map) = self.serializer.config.attribution_by_node.as_ref() else {
+            return;
+        };
+        let key = source_info as *const SourceInfo as usize;
+        if let Some(rec) = map.get(&key) {
+            self.attribution_records.push(AttributionRecordOut {
+                s: s_id,
+                actor: Arc::clone(&rec.actor),
+                time: rec.time,
+            });
         }
     }
 }
@@ -1950,6 +2028,7 @@ where
     F: FnOnce(&mut JsonStreamWriter<W>, &mut JsonWriterContext) -> io::Result<()>,
 {
     let s_id = ctx.serializer.intern(source_info);
+    ctx.maybe_record_attribution_for(source_info, s_id);
     w.begin_object()?;
     w.key("c")?;
     content(w, ctx)?;
@@ -1973,6 +2052,7 @@ fn stream_write_simple_node_no_content<W: io::Write>(
     ctx: &mut JsonWriterContext,
 ) -> io::Result<()> {
     let s_id = ctx.serializer.intern(source_info);
+    ctx.maybe_record_attribution_for(source_info, s_id);
     w.begin_object()?;
     if ctx.serializer.config.include_inline_locations {
         let ast_context = ctx.serializer.context;
@@ -2038,6 +2118,7 @@ where
     FC: FnOnce(&mut JsonStreamWriter<W>, &mut JsonWriterContext) -> io::Result<()>,
 {
     let s_id = ctx.serializer.intern(source_info);
+    ctx.maybe_record_attribution_for(source_info, s_id);
     w.begin_object()?;
     w.key("attrS")?;
     stream_write_attr_source(w, attr_source, ctx)?;
@@ -2445,6 +2526,7 @@ fn stream_write_inline<W: io::Write>(
         ),
         Inline::Link(link) => {
             let s_id = ctx.serializer.intern(&link.source_info);
+            ctx.maybe_record_attribution_for(&link.source_info, s_id);
             w.begin_object()?;
             w.key("attrS")?;
             stream_write_attr_source(w, &link.attr_source, ctx)?;
@@ -2485,6 +2567,7 @@ fn stream_write_inline<W: io::Write>(
         ),
         Inline::Image(image) => {
             let s_id = ctx.serializer.intern(&image.source_info);
+            ctx.maybe_record_attribution_for(&image.source_info, s_id);
             w.begin_object()?;
             w.key("attrS")?;
             stream_write_attr_source(w, &image.attr_source, ctx)?;
@@ -2830,6 +2913,7 @@ fn stream_write_block<W: io::Write>(
         }
         Block::Table(table) => {
             let s_id = ctx.serializer.intern(&table.source_info);
+            ctx.maybe_record_attribution_for(&table.source_info, s_id);
             w.begin_object()?;
             w.key("attrS")?;
             stream_write_attr_source(w, &table.attr_source, ctx)?;
@@ -3069,6 +3153,7 @@ fn stream_write_custom_block<W: io::Write>(
     let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
 
     let s_id = ctx.serializer.intern(&custom.source_info);
+    ctx.maybe_record_attribution_for(&custom.source_info, s_id);
     w.begin_object()?;
     w.key("c")?;
     w.begin_array()?;
@@ -3169,6 +3254,7 @@ fn stream_write_custom_inline<W: io::Write>(
     let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
 
     let s_id = ctx.serializer.intern(&custom.source_info);
+    ctx.maybe_record_attribution_for(&custom.source_info, s_id);
     w.begin_object()?;
     w.key("c")?;
     w.begin_array()?;
@@ -3511,6 +3597,53 @@ fn stream_write_pandoc<W: io::Write>(
         if !ctx.serializer.pool.is_empty() {
             w.key("sourceInfoPool")?;
             stream_write_source_info_pool(w, &ctx)?;
+        }
+
+        // attribution (Phase 5 — q2-debug wire shape).
+        //
+        // Records accumulated during the AST walk via
+        // `ctx.maybe_record_attribution_for`. Emitted only when the
+        // attribution-render transform produced a non-empty
+        // `JsonConfig::attribution_by_node` (off-path keys are absent,
+        // making the JSON byte-identical to today's output — see Phase 0
+        // test #10).
+        if !ctx.attribution_records.is_empty() {
+            w.key("attribution")?;
+            w.begin_array()?;
+            for rec in &ctx.attribution_records {
+                w.begin_object()?;
+                w.key("actor")?;
+                w.str_value(&rec.actor)?;
+                w.key("s")?;
+                w.u64_value(rec.s as u64)?;
+                w.key("time")?;
+                w.i64_value(rec.time)?;
+                w.end_object()?;
+            }
+            w.end_array()?;
+        }
+
+        // attributionActors (actor → { name, color }). Pre-pruned by
+        // the render transform; we emit verbatim, sorted by actor key
+        // for deterministic output.
+        if let Some(actors) = ctx.serializer.config.attribution_actors.as_ref() {
+            if !actors.is_empty() {
+                let mut keys: Vec<&Arc<str>> = actors.keys().collect();
+                keys.sort_by(|a, b| a.as_ref().cmp(b.as_ref()));
+                w.key("attributionActors")?;
+                w.begin_object()?;
+                for k in keys {
+                    let v = &actors[k];
+                    w.key(k.as_ref())?;
+                    w.begin_object()?;
+                    w.key("color")?;
+                    w.str_value(&v.color)?;
+                    w.key("name")?;
+                    w.str_value(&v.display_name)?;
+                    w.end_object()?;
+                }
+                w.end_object()?;
+            }
         }
 
         w.end_object()?; // astContext

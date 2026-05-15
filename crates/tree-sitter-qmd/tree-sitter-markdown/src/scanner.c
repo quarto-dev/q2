@@ -137,6 +137,12 @@ typedef enum {
     // GRID_TABLE token so pampa can surface a structured diagnostic
     // including the captured table text. See grammar.js (`grid_table`).
     GRID_TABLE,
+
+    // KNOWN LIMITATION: QMD does not support 4-space indented code blocks.
+    // Emitted when leftover line-leading indentation is >= 4 at a block-start
+    // position so the parser raises Q-2-35, suggesting fenced code blocks.
+    // See grammar.js (`_indented_code_block_error`) and CONTRIBUTING.md.
+    INDENTED_CODE_BLOCK_DISALLOWED,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -241,6 +247,8 @@ static char* token_names[] = {
     "TRIPLE_STAR", // simply for good error reporting
 
     "GRID_TABLE", // simply for good error reporting
+
+    "INDENTED_CODE_BLOCK_DISALLOWED", // simply for good error reporting
 };
 
 #endif
@@ -2169,7 +2177,23 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return false;
     }
 
-    if (s->state & STATE_MATCHING) { // we are in the state of trying to match all currently open blocks
+    // bd-vet6: when we re-enter STATE_MATCHING after a SOFT_LINE_ENDING
+    // and the current lookahead is the trailing \n / \r of the same
+    // logical line, do NOT call match_line here. The LIST_ITEM match()
+    // returns case 2 on \n (see line ~537) and advances past it; the
+    // line-ending gate at line ~2233 then has nothing to match against
+    // and scan() returns false. The state changes get rolled back, but
+    // tree-sitter retries with another lex_external state and emits
+    // CLOSE_BLOCK, which the parser cannot shift in this position.
+    // Bypassing match_line here lets the line-ending gate run and emit
+    // the LINE_ENDING / SOFT_LINE_ENDING the parser actually expects.
+    // (EOF is handled above at line ~2027 and never reaches here.)
+    bool at_soft_break_line_end =
+        (s->state & STATE_MATCHING) &&
+        (s->state & STATE_WAS_SOFT_LINE_BREAK) &&
+        (lexer->lookahead == '\n' || lexer->lookahead == '\r');
+
+    if ((s->state & STATE_MATCHING) && !at_soft_break_line_end) { // we are in the state of trying to match all currently open blocks
         DEBUG_PRINT("scan() while STATE_MATCHING\n");
         int match_line_return = match_line(s, lexer);
         // bool might_be_soft_break = match_line_return & 2;
@@ -2216,6 +2240,51 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             break;
         }
     }
+
+    // Q-2-35: QMD does not support 4-space indented code blocks. If we are at
+    // a true block-start position (signalled by ATX_H1_MARKER or
+    // BLANK_LINE_START being valid — both indicate the parser is willing to
+    // begin a fresh block here) and the leftover indentation after container
+    // matchers (block-quote, list-item) is >= 4, emit a token no rule
+    // consumes so the parser raises Q-2-35. Skip blank lines (lookahead is
+    // the line terminator) — those are handled by the BLANK_LINE_START case
+    // in the switch below.
+    //
+    // Container-continuation guard (issue #196). The original gate (PR #194)
+    // fired whenever ATX_H1_MARKER or BLANK_LINE_START was valid, on the
+    // theory that those signals alone identified a true block-start
+    // position. That undershoots: inside an open list-item, the parser
+    // accepts a fresh block start *and* expects a continuation indent on
+    // the same scan call. If the whitespace loop above consumed what was
+    // actually the list-item continuation indent — for instance because
+    // STATE_MATCHING was not set on this call (preceding blank line carried
+    // trailing whitespace ≥ list_item_indentation, exercising a path that
+    // skips match_line) — `s->indentation >= 4` reflects the *continuation*
+    // indent, not extra indent layered on top of it.
+    //
+    // The reliable discriminator from a trace of the misfire vs. the
+    // intended Q-2-35 cases is `valid_symbols[BLOCK_CONTINUATION] &&
+    // s->open_blocks.size > 0`. With at least one open container *and*
+    // BLOCK_CONTINUATION valid, the parser still owes the line a
+    // continuation absorption — the indent has not yet been confirmed as
+    // "extra". Q-2-35 should defer in that case. When open_blocks is empty
+    // (genuine top-level indented block) or BLOCK_CONTINUATION is invalid
+    // (in-list indent has already been absorbed and the leftover is true
+    // extra indent), the gate still fires as intended.
+    //
+    // Lazy paragraph continuations and multi-line shortcodes are filtered
+    // out higher up by ATX_H1_MARKER / BLANK_LINE_START being invalid in
+    // their parser states. The new guard layers on top of that, not in
+    // place of it. Same emission pattern as TRIPLE_STAR (Q-2-32); see
+    // grammar.js (`_indented_code_block_error`).
+    if (s->indentation >= 4 &&
+        (valid_symbols[ATX_H1_MARKER] || valid_symbols[BLANK_LINE_START]) &&
+        !(valid_symbols[BLOCK_CONTINUATION] && s->open_blocks.size > 0) &&
+        lexer->lookahead != '\n' && lexer->lookahead != '\r') {
+        mark_end(s, lexer);
+        EMIT_TOKEN(INDENTED_CODE_BLOCK_DISALLOWED);
+    }
+
     // Decide which tokens to consider based on the first non-whitespace
     // character
     DEBUG_PRINT("before main lookahead switch\n");

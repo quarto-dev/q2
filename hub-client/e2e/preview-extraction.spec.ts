@@ -7,6 +7,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
+  bootstrapProjectSet,
   createProjectOnServer,
   seedProjectInBrowser,
   getServerUrl,
@@ -42,8 +43,7 @@ test.describe('Preview Extraction', () => {
       },
     ]);
 
-    await page.goto('/');
-    await expect(page.locator('body')).toBeVisible();
+    await bootstrapProjectSet(page, serverUrl);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/index.qmd`);
 

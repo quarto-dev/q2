@@ -316,6 +316,91 @@ fn process_list_item(
     )
 }
 
+/// Find the column at which interior lines of a `pandoc_display_math` node
+/// "should" start — i.e. the cumulative block-continuation prefix width
+/// imposed by all enclosing block-level containers (blockquotes, list
+/// items, etc.). That width equals the start column of the nearest
+/// enclosing `pandoc_paragraph` ancestor.
+///
+/// Walking the math node's own start column is *not* sufficient: when an
+/// inline construct precedes `$$` on the opening line (e.g. `_$$`,
+/// `[$$` for `quarto-math-with-attribute` Spans, `**$$`), the math
+/// column overshoots the actual continuation prefix width and the strip
+/// either mis-eats real content or fails to strip real prefix. The
+/// paragraph's start column is constant across all interior lines of the
+/// paragraph regardless of what precedes `$$` on the opening line, which
+/// is what we want. This matches Pandoc's markdown reader behaviour.
+///
+/// Falls back to the math node's own column for the (theoretical) case
+/// where no `pandoc_paragraph` ancestor is found. In practice display
+/// math always sits inside a paragraph when it has multi-line body
+/// content; single-line contexts like table cells / captions have no
+/// interior lines to strip.
+fn block_continuation_column(node: &tree_sitter::Node) -> usize {
+    let mut current = *node;
+    while let Some(parent) = current.parent() {
+        if parent.kind() == "pandoc_paragraph" {
+            return parent.start_position().column;
+        }
+        current = parent;
+    }
+    node.start_position().column
+}
+
+/// Strip the block-continuation prefix from each interior line of
+/// display-math content (issue #181 / bd-q6ed; refined for bd-qpa2).
+///
+/// The grammar matches the math body as a single regex token, so any
+/// continuation prefixes that enclosing blocks (blockquotes, list items,
+/// etc.) would normally consume — `> ` per blockquote level, indentation
+/// per list-item level — end up captured verbatim in the math text. The
+/// qmd writer then re-prefixes every line on output, so the prefixes
+/// double on round trip.
+///
+/// `start_col` is the cumulative block-continuation prefix width — i.e.
+/// the column where math content should land on every interior line. It
+/// is sourced from the enclosing `pandoc_paragraph` ancestor (see
+/// `block_continuation_column`), not from the column of the opening `$$`
+/// (which can be shifted by preceding inline constructs).
+///
+/// On every interior line of the math, the bytes at columns `0..start_col`
+/// are the accumulated continuation prefix added by the chain of enclosing
+/// blocks. We strip those bytes — but only if they look like continuation:
+/// the only characters that ever appear in a continuation prefix are `>`,
+/// space, and tab. Anything else means the line was matched via lazy
+/// continuation (no explicit `> `), and we leave it alone rather than
+/// chewing bytes off real content.
+///
+/// The first piece (between the opening `$$` and the first `\n`) is
+/// content right after the delimiter, never a continuation line, and is
+/// always left untouched.
+fn strip_continuation_prefix(content: &str, start_col: usize) -> String {
+    if start_col == 0 {
+        return content.to_string();
+    }
+    let mut result = String::with_capacity(content.len());
+    let mut first = true;
+    for line in content.split('\n') {
+        if first {
+            result.push_str(line);
+            first = false;
+            continue;
+        }
+        result.push('\n');
+        let line_bytes = line.as_bytes();
+        let strip_n = std::cmp::min(start_col, line_bytes.len());
+        let prefix_is_continuation = line_bytes[..strip_n]
+            .iter()
+            .all(|b| matches!(*b, b'>' | b' ' | b'\t'));
+        if prefix_is_continuation {
+            result.push_str(&line[strip_n..]);
+        } else {
+            result.push_str(line);
+        }
+    }
+    result
+}
+
 /// Detect whether a list item's tree-sitter node contains a blank line between
 /// its block-level children. This is done by checking whether any `pandoc_paragraph`
 /// child that precedes another block-level sibling contains a `block_continuation`
@@ -506,9 +591,21 @@ fn native_visitor<T: Write>(
             let full_text = node.utf8_text(input_bytes).unwrap();
             let content = &full_text[2..full_text.len() - 2]; // Strip leading and trailing $$
 
+            // The grammar matches the math body as a single regex token, so any
+            // block-continuation prefix that enclosing blocks (blockquotes,
+            // list items, etc.) would normally consume is captured verbatim
+            // on interior lines. Strip those prefix bytes column-wise so the
+            // qmd writer doesn't double-prefix on round trip (issue #181 /
+            // bd-q6ed). The strip width comes from the enclosing paragraph,
+            // not the math node, so that inline constructs preceding `$$`
+            // on the opening line (e.g. `_`, `[`, `**`) don't shift the
+            // column away from the true continuation prefix width (bd-qpa2).
+            let start_col = block_continuation_column(node);
+            let text = strip_continuation_prefix(content, start_col);
+
             PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
                 math_type: MathType::DisplayMath,
-                text: content.to_string(),
+                text,
                 source_info: node_source_info_with_context(node, context),
             }))
         }
@@ -1021,27 +1118,52 @@ fn native_visitor<T: Write>(
         "pandoc_code_block" => {
             let result = process_fenced_code_block(node, children, context);
 
-            // Check for Q-2-8 warning: code block options in header without classes
-            // This warns about syntax like {r eval=FALSE} and suggests YAML block syntax
-            // But does NOT warn if there are additional classes like {python .marimo}
+            // Q-2-36: reject knitr-style chunk headers like {r echo=FALSE}.
+            // The grammar accepts the language token + space-separated kv form
+            // structurally; we catch it here and emit a parse error. The
+            // Pandoc class form {.r echo=FALSE} is intentionally still valid
+            // and is excluded by the literal-braces check on classes[0].
             if let PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(ref cb)) = result {
                 let (ref _id, ref classes, ref attrs) = cb.attr;
 
-                // Check if: exactly one class matching {language} pattern, and has key-value attrs
                 let has_only_braced_language =
                     classes.len() == 1 && classes[0].starts_with('{') && classes[0].ends_with('}');
                 let has_key_value_attrs = !attrs.is_empty();
 
                 if has_only_braced_language && has_key_value_attrs {
-                    let msg = DiagnosticMessageBuilder::warning("Code block options in header")
-                        .with_code("Q-2-8")
-                        .with_location(cb.source_info.clone())
-                        .problem("This code block has options specified in the header line")
-                        .add_info(
-                            "For executable code blocks, Quarto recommends using YAML block syntax",
-                        )
-                        .add_hint("Use `#| key: value` syntax inside the code block instead")
-                        .build();
+                    // Clip the highlight to just the header line. cb.source_info
+                    // spans the whole fenced block; the offending shape is in
+                    // line 1 (the fence + brace block).
+                    let header_loc = if let quarto_source_map::SourceInfo::Original {
+                        file_id,
+                        start_offset,
+                        ..
+                    } = cb.source_info
+                    {
+                        let pivot = start_offset.min(input_bytes.len());
+                        let line_end = input_bytes[pivot..]
+                            .iter()
+                            .position(|&b| b == b'\n' || b == b'\r')
+                            .map(|p| pivot + p)
+                            .unwrap_or(input_bytes.len());
+                        quarto_source_map::SourceInfo::original(file_id, start_offset, line_end)
+                    } else {
+                        cb.source_info.clone()
+                    };
+
+                    let msg = DiagnosticMessageBuilder::error(
+                        "Old-style knitr chunk options are not supported",
+                    )
+                    .with_code("Q-2-36")
+                    .with_location(header_loc)
+                    .problem("This code block uses knitr-style options in the header")
+                    .add_info(
+                        "Quarto Markdown reads chunk options from the body, not the header",
+                    )
+                    .add_hint(
+                        "Move options into the body using `#| key: value`, or — if you only want a Pandoc class — write `{.r ...}` instead of `{r ...}`",
+                    )
+                    .build();
                     error_collector.add(msg);
                 }
             }
@@ -1285,18 +1407,65 @@ fn native_visitor<T: Write>(
                 let msg =
                     DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
                         .with_code("Q-2-9")
-                        .with_location(trimmed_source_info)
+                        .with_location(trimmed_source_info.clone())
                         .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
                         .add_hint("To be explicit, use: `<element>`{=html}")
                         .build();
                 error_collector.add(msg);
 
-                // Convert to RawInline with format="html"
-                PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+                // Tree-sitter may include leading/trailing whitespace in the
+                // html_element node (the closing delimiter of a preceding
+                // pandoc_code_span, for example, never carries trailing
+                // whitespace — see code_span_helpers.rs — so the gap goes
+                // here). Split that whitespace out as adjacent Space inlines
+                // so Code/RawInline siblings don't collide on round-trip.
+                // Mirrors the anchor-shorthand branch above. See bd-nkx4.
+                let leading_ws = raw_text.len() - raw_text.trim_start().len();
+                let trailing_ws = raw_text.len() - raw_text.trim_end().len();
+                let node_range = node_location(node);
+                let mut result = Vec::new();
+
+                if leading_ws > 0 {
+                    let space_range = quarto_source_map::Range {
+                        start: node_range.start.clone(),
+                        end: quarto_source_map::Location {
+                            offset: node_range.start.offset + leading_ws,
+                            row: node_range.start.row,
+                            column: node_range.start.column + leading_ws,
+                        },
+                    };
+                    result.push(Inline::Space(Space {
+                        source_info: quarto_source_map::SourceInfo::from_range(
+                            context.current_file_id(),
+                            space_range,
+                        ),
+                    }));
+                }
+
+                result.push(Inline::RawInline(RawInline {
                     format: "html".to_string(),
                     text,
-                    source_info: node_source_info_with_context(node, context),
-                }))
+                    source_info: trimmed_source_info,
+                }));
+
+                if trailing_ws > 0 {
+                    let space_range = quarto_source_map::Range {
+                        start: quarto_source_map::Location {
+                            offset: node_range.end.offset - trailing_ws,
+                            row: node_range.end.row,
+                            column: node_range.end.column - trailing_ws,
+                        },
+                        end: node_range.end.clone(),
+                    };
+                    result.push(Inline::Space(Space {
+                        source_info: quarto_source_map::SourceInfo::from_range(
+                            context.current_file_id(),
+                            space_range,
+                        ),
+                    }));
+                }
+
+                PandocNativeIntermediate::IntermediateInlines(result)
             }
         }
         _ => {

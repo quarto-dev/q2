@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+$if(channel.xml-stylesheet)$<?xml-stylesheet type="text/xsl" media="screen" href="$channel.xml-stylesheet$"?>
+$endif$<rss xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:media="http://search.yahoo.com/mrss/"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     version="2.0">
+<channel>
+<title>$channel.title$</title>
+<link>$channel.link$</link>
+<atom:link href="$channel.feed-link$" rel="self" type="application/rss+xml"/>
+<description>$channel.description$</description>
+$if(channel.language)$<language>$channel.language$</language>
+$endif$$if(channel.image)$<image>
+<url>$channel.image.url$</url>
+<title>$channel.image.title$</title>
+<link>$channel.image.link$</link>
+$if(channel.image.height)$<height>$channel.image.height$</height>
+$endif$$if(channel.image.width)$<width>$channel.image.width$</width>
+$endif$</image>
+$endif$<generator>$channel.generator$</generator>
+<lastBuildDate>$channel.last-build-date$</lastBuildDate>

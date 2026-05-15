@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1860" font-family="-apple-system, system-ui, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#1F2937"/>
+    </marker>
+    <marker id="arrow-skip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#94A3B8"/>
+    </marker>
+    <marker id="arrow-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#B45309"/>
+    </marker>
+    <style>
+      .src-cli   { fill: #FEF3C7; stroke: #D97706; stroke-width: 1.5; }
+      .src-wasm  { fill: #DBEAFE; stroke: #2563EB; stroke-width: 1.5; }
+      .provider  { fill: #EDE9FE; stroke: #7C3AED; stroke-width: 1.5; }
+      .ctx       { fill: #F1F5F9; stroke: #475569; stroke-width: 1.5; }
+      .stage     { fill: #DCFCE7; stroke: #16A34A; stroke-width: 1.2; }
+      .stage-new { fill: #FED7AA; stroke: #C2410C; stroke-width: 2.5; }
+      .data      { fill: #FEF3C7; stroke: #B45309; stroke-width: 1.5; }
+      .writer    { fill: #CFFAFE; stroke: #0891B2; stroke-width: 1.5; }
+      .output    { fill: #FCE7F3; stroke: #BE185D; stroke-width: 1.5; }
+      .skip      { fill: #F3F4F6; stroke: #9CA3AF; stroke-width: 1; stroke-dasharray: 4,3; }
+      .phase     { fill: #FAFAFA; stroke: #94A3B8; stroke-width: 1.2; stroke-dasharray: 7,4; }
+      text       { fill: #111827; }
+      text.tt    { font-weight: 700; font-size: 14px; }
+      text.lbl   { font-size: 11px; fill: #4B5563; }
+      text.code  { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; fill: #1F2937; }
+      text.cdsm  { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; fill: #4B5563; }
+      text.note  { font-style: italic; font-size: 10px; fill: #6B7280; }
+      text.legend{ font-size: 11px; fill: #1F2937; }
+      .ln-sol    { stroke: #1F2937; stroke-width: 1.6; fill: none; }
+      .ln-data   { stroke: #B45309; stroke-width: 1.8; fill: none; }
+      .ln-skip   { stroke: #94A3B8; stroke-width: 1.4; fill: none; stroke-dasharray: 5,3; }
+    </style>
+  </defs>
+
+  <!-- ───────────────────────── TITLE ───────────────────────── -->
+  <text x="620" y="34" text-anchor="middle" font-size="20" font-weight="700">Attribution pipeline — data flows (v2, post-implementation)</text>
+  <text x="620" y="56" text-anchor="middle" class="note">Updates v1 to match the shipped code: writer-side lookup is a SourceInfo-pointer-keyed HashMap, not a slice; format_options is a struct (not enum); pampa writers carry their own AttributionRecord types.</text>
+
+  <!-- ───────────────────────── LEGEND ───────────────────────── -->
+  <g transform="translate(20,75)">
+    <rect width="1200" height="36" rx="4" fill="#FFFFFF" stroke="#E5E7EB"/>
+    <rect x="14" y="10" width="16" height="16" class="src-cli"/>
+    <text x="36" y="23" class="legend">CLI input</text>
+    <rect x="100" y="10" width="16" height="16" class="src-wasm"/>
+    <text x="122" y="23" class="legend">WASM input</text>
+    <rect x="200" y="10" width="16" height="16" class="provider"/>
+    <text x="222" y="23" class="legend">Provider</text>
+    <rect x="290" y="10" width="16" height="16" class="ctx"/>
+    <text x="312" y="23" class="legend">RenderContext</text>
+    <rect x="406" y="10" width="16" height="16" class="stage"/>
+    <text x="428" y="23" class="legend">Existing stage</text>
+    <rect x="514" y="10" width="16" height="16" class="stage-new"/>
+    <text x="536" y="23" class="legend">★ New stage</text>
+    <rect x="618" y="10" width="16" height="16" class="data"/>
+    <text x="640" y="23" class="legend">On-the-wire data</text>
+    <rect x="744" y="10" width="16" height="16" class="writer"/>
+    <text x="766" y="23" class="legend">Writer</text>
+    <rect x="816" y="10" width="16" height="16" class="output"/>
+    <text x="838" y="23" class="legend">Output</text>
+    <line x1="900" y1="18" x2="940" y2="18" class="ln-data" marker-end="url(#arrow-data)"/>
+    <text x="948" y="23" class="legend">data hand-off</text>
+    <line x1="1052" y1="18" x2="1092" y2="18" class="ln-skip" marker-end="url(#arrow-skip)"/>
+    <text x="1100" y="23" class="legend">skip / fallthrough</text>
+  </g>
+
+  <!-- ────────────────── SECTION 1: INPUT SOURCES ────────────────── -->
+  <text x="20" y="148" class="tt">1.  Inputs  (mutually exclusive per render invocation)</text>
+
+  <g>
+    <rect x="40" y="166" width="540" height="98" rx="8" class="src-cli"/>
+    <text x="58" y="188" class="tt">CLI / native render   (binary is  q2)</text>
+    <text x="58" y="208" class="code">$ q2 render doc.qmd --to html --attribution=git</text>
+    <text x="58" y="226" class="lbl">RenderArgs.attribution: Option&lt;AttributionMode&gt;  (None | Git | Off)   ·  crates/quarto/src/commands/render.rs:70</text>
+    <text x="58" y="242" class="lbl">YAML alt: top-level  attribution: git | off | false  (key absent ⇒ None)</text>
+    <text x="58" y="258" class="lbl">Resolution: CLI Some wins → else YAML → else Off (silent override)</text>
+  </g>
+
+  <g>
+    <rect x="660" y="166" width="540" height="98" rx="8" class="src-wasm"/>
+    <text x="678" y="188" class="tt">Hub-client / WASM   (q2-debug only in v1)</text>
+    <text x="678" y="208" class="code">parse_qmd_to_ast_with_attribution(content, attributionJson?: string)</text>
+    <text x="678" y="226" class="lbl">parse_qmd_to_ast(content) is preserved as a thin wrapper ⇒ delegates with None</text>
+    <text x="678" y="242" class="lbl">useAttribution.ts replays Automerge incrementally → RLE runs + IdentityMap; ships  { runs:[…], identities:{…} }  JSON over the WASM boundary</text>
+    <text x="678" y="258" class="lbl">Direct-invokes ★ Attribution{Generate,Render} after 3-stage parse — q2-debug excludes AstTransformsStage (lib.rs:973-1000)</text>
+  </g>
+
+  <!-- ────────────────── SECTION 2: PROVIDERS ────────────────── -->
+  <text x="20" y="298" class="tt">2.  Providers  (impl AttributionSourceProvider — single method  build(ctx) → AttributionData;  producer invariant: every actor in runs has an identities entry)</text>
+
+  <g>
+    <rect x="40" y="316" width="540" height="118" rx="8" class="provider"/>
+    <text x="58" y="338" class="tt">GitBlameProvider   (native only)</text>
+    <text x="58" y="358" class="code">spawn ctx.binaries.git  →  git blame --porcelain &lt;file&gt;</text>
+    <text x="58" y="374" class="lbl">parses porcelain → AttributionData { runs, identities }   (synthesises identities per author):</text>
+    <text x="58" y="390" class="code">  email → (mail-local-part, actor_color(fnv1a_hex8(email)))   // satisfies producer invariant</text>
+    <text x="58" y="406" class="lbl">Graceful degradation: missing git OR not in working tree</text>
+    <text x="58" y="422" class="lbl">  ⇒ DiagnosticMessage warning + empty AttributionData (render still succeeds)</text>
+  </g>
+
+  <g>
+    <rect x="660" y="316" width="540" height="118" rx="8" class="provider"/>
+    <text x="678" y="338" class="tt">PreBuiltAttributionProvider   (WASM)</text>
+    <text x="678" y="358" class="code">serde_json::from_str(&amp;attribution_json)?  →  TransportAttributionData  →  AttributionDataBuilder  →  AttributionData</text>
+    <text x="678" y="374" class="lbl">Trivial provider — no replay in Rust; runs + identities both computed in JS</text>
+    <text x="678" y="390" class="lbl">JSON is transport-only — never lands in ast.meta; builder restores the Arc&lt;str&gt; interning invariant after decode</text>
+    <text x="678" y="406" class="lbl">TS replay fills identities: Automerge metadata when present, else (actor[..8], actorColor(fnv1aHex8(actor))) — invariant holds at wire</text>
+    <text x="678" y="422" class="lbl">Avoids automerge-rs in WASM bundle (~hundreds of KB); no git, no shell-out</text>
+  </g>
+
+  <line x1="310" y1="264" x2="310" y2="316" class="ln-sol" marker-end="url(#arrow)"/>
+  <line x1="930" y1="264" x2="930" y2="316" class="ln-sol" marker-end="url(#arrow)"/>
+
+  <!-- ────────────────── SECTION 3: RENDER CONTEXT ────────────────── -->
+  <text x="20" y="468" class="tt">3.  Wire-up  on  RenderContext   (two new fields — opt-in signal + sidecar — plus BinaryDependencies.git and ctx.format_options for §7)</text>
+
+  <g>
+    <rect x="220" y="486" width="800" height="82" rx="8" class="ctx"/>
+    <text x="620" y="508" text-anchor="middle" class="tt">RenderContext   ·   crates/quarto-core/src/render.rs:271, :284</text>
+    <text x="620" y="526" text-anchor="middle" class="code">attribution_provider: Option&lt;Arc&lt;dyn AttributionSourceProvider&gt;&gt;     ←  set from §1 input</text>
+    <text x="620" y="542" text-anchor="middle" class="code">attribution_data:     Option&lt;Arc&lt;AttributionData&gt;&gt;                 ←  populated by §4, read by §6</text>
+    <text x="620" y="560" text-anchor="middle" class="note">Both default None ⇒ feature off ⇒ pipeline byte-identical to today.   Also new: BinaryDependencies.git (graceful-degrade) · RenderContext.format_options (§7).</text>
+  </g>
+
+  <path d="M 310 434 Q 310 470 470 488" class="ln-sol" marker-end="url(#arrow)"/>
+  <path d="M 930 434 Q 930 470 770 488" class="ln-sol" marker-end="url(#arrow)"/>
+
+  <!-- ────────────────── SECTION 4: NAVIGATION PHASE ────────────────── -->
+  <text x="20" y="608" class="tt">4.  Navigation Phase   (pipeline.rs:721-873;  ★ AttributionGenerate pushed at  pipeline.rs:873)</text>
+
+  <rect x="40" y="624" width="1160" height="330" rx="10" class="phase"/>
+  <text x="56" y="644" class="lbl" font-weight="700">pure generates → listings sub-block (mixed gen+render) → navigation renders → ★ AttributionGenerate as the phase tail</text>
+
+  <!-- generates sub-block label -->
+  <text x="56" y="664" class="lbl">→ pure generates sub-block:</text>
+
+  <!-- generates row: 5 small existing stages (Toc · Navbar · Sidebar · PageNav · Footer) -->
+  <g>
+    <rect x="60"  y="672" width="200" height="40" rx="4" class="stage"/>
+    <text x="160" y="696" text-anchor="middle" class="code">TocGenerateTransform</text>
+    <rect x="280" y="672" width="200" height="40" rx="4" class="stage"/>
+    <text x="380" y="696" text-anchor="middle" class="code">NavbarGenerateTransform</text>
+    <rect x="500" y="672" width="200" height="40" rx="4" class="stage"/>
+    <text x="600" y="696" text-anchor="middle" class="code">SidebarGenerateTransform</text>
+    <rect x="720" y="672" width="200" height="40" rx="4" class="stage"/>
+    <text x="820" y="696" text-anchor="middle" class="code">PageNavGenerateTransform</text>
+    <rect x="940" y="672" width="200" height="40" rx="4" class="stage"/>
+    <text x="1040" y="696" text-anchor="middle" class="code">FooterGenerateTransform</text>
+    <!-- chain arrows between generates -->
+    <line x1="260" y1="692" x2="280" y2="692" class="ln-sol" marker-end="url(#arrow)"/>
+    <line x1="480" y1="692" x2="500" y2="692" class="ln-sol" marker-end="url(#arrow)"/>
+    <line x1="700" y1="692" x2="720" y2="692" class="ln-sol" marker-end="url(#arrow)"/>
+    <line x1="920" y1="692" x2="940" y2="692" class="ln-sol" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- listings sub-block annotation (post-#169) — orthogonal to attribution -->
+  <text x="56" y="730" class="note">→ listings sub-block (post-#169): ListingGenerate · ListingRender · CategoriesSidebar · ListingFeedStage (native) / ListingFeedLink — orthogonal to attribution; does not read ctx.attribution_data.</text>
+
+  <!-- renders sub-block label -->
+  <text x="56" y="748" class="lbl">→ renders sub-block:</text>
+
+  <!-- renders row: 5 small existing stages -->
+  <g>
+    <rect x="60"  y="754" width="200" height="30" rx="4" class="stage"/>
+    <text x="160" y="773" text-anchor="middle" class="code">TocRenderTransform</text>
+    <rect x="280" y="754" width="200" height="30" rx="4" class="stage"/>
+    <text x="380" y="773" text-anchor="middle" class="code">NavbarRenderTransform</text>
+    <rect x="500" y="754" width="200" height="30" rx="4" class="stage"/>
+    <text x="600" y="773" text-anchor="middle" class="code">SidebarRenderTransform</text>
+    <rect x="720" y="754" width="200" height="30" rx="4" class="stage"/>
+    <text x="820" y="773" text-anchor="middle" class="code">PageNavRenderTransform</text>
+    <rect x="940" y="754" width="200" height="30" rx="4" class="stage"/>
+    <text x="1040" y="773" text-anchor="middle" class="code">FooterRenderTransform</text>
+  </g>
+
+  <!-- ★ AttributionGenerateTransform — tail of the Navigation Phase, after every other website transform -->
+  <g>
+    <rect x="60" y="800" width="1080" height="140" rx="6" class="stage-new"/>
+    <text x="600" y="822" text-anchor="middle" class="tt">★  AttributionGenerateTransform     (new — last entry in the Navigation Phase, after every navbar/sidebar/listings/footer/feeds transform)</text>
+    <text x="600" y="838" text-anchor="middle" class="lbl">name() = "attribution-generate"  ·  pushed at pipeline.rs:873 (after FooterRenderTransform), immediately before LinkRewriteTransform opens the Finalization Phase</text>
+
+    <text x="80" y="862" class="cdsm">if !format_supports_attribution(ctx.format) { return Ok(()); }     // PDF / typst / native: no writer hook</text>
+    <text x="80" y="878" class="cdsm">if is_feature_disabled(&amp;ast.meta, "attribution") { return Ok(()); }</text>
+    <text x="80" y="894" class="cdsm">let Some(provider) = ctx.attribution_provider.clone() else { return Ok(()); };</text>
+    <text x="80" y="910" class="cdsm">// (no "user runs override" rule — users don't author byte-range tuples in YAML)</text>
+
+    <text x="600" y="862" class="cdsm">// run provider, merge user identities, set sidecar:</text>
+    <text x="600" y="878" class="cdsm">let mut data = provider.build(ctx)?;             // AttributionData { runs, identities }</text>
+    <text x="600" y="894" class="cdsm">data.identities = merge_user_over(from_config_value(&amp;ast.meta), data.identities);   // user wins on collision</text>
+    <text x="600" y="910" class="cdsm">ctx.attribution_data = Some(Arc::new(data));    // ⇒ §5 sidecar (NOT ast.meta)</text>
+    <text x="600" y="930" class="note" text-anchor="middle">Reads ctx.attribution_provider (§3) + user-authored meta.attribution.identities only.  Writes ctx.attribution_data (§5).  End-of-Navigation-Phase keeps it grouped with other *-generate work.</text>
+  </g>
+
+  <!-- skip-ladder annotation — exits ★ AttributionGenerate to the left -->
+  <line x1="60" y1="886" x2="44" y2="886" class="ln-skip" marker-end="url(#arrow-skip)"/>
+  <text x="40" y="862" class="note" text-anchor="end">any skip ⇒ no</text>
+  <text x="40" y="874" class="note" text-anchor="end">provider call ·</text>
+  <text x="40" y="886" class="note" text-anchor="end">ctx.attribution_data</text>
+  <text x="40" y="898" class="note" text-anchor="end">stays None ·</text>
+  <text x="40" y="910" class="note" text-anchor="end">user meta untouched</text>
+
+  <!-- ────────────────── SECTION 5: ctx.attribution_data sidecar ────────────────── -->
+  <text x="20" y="978" class="tt">5.  ctx.attribution_data   ::   typed sidecar contract between §4 generate and §6 render   (NOT in ast.meta — see plan §"Why a sidecar, not meta.attribution")</text>
+
+  <g>
+    <rect x="40" y="996" width="1160" height="106" rx="8" class="data"/>
+    <text x="58" y="1018" class="tt">ctx.attribution_data   ::   Option&lt;Arc&lt;AttributionData&gt;&gt;   (typed sidecar — ~20× smaller per run than a ConfigValue::Map round-trip would be)</text>
+    <text x="58" y="1038" class="code">// in-memory shape — Rust struct on RenderContext. Serde derives exist solely for the WASM transport boundary (§1, PreBuilt path).</text>
+    <text x="58" y="1054" class="code">AttributionData { runs:       AttributionMap (Vec&lt;AttributionRun { start, end, actor: Arc&lt;str&gt;, time }&gt;),</text>
+    <text x="58" y="1070" class="code">                  identities: IdentityMap     (HashMap&lt;Arc&lt;str&gt;, Identity { display_name, color }&gt;) }   // Arc keys ⟂ run actors (interned)</text>
+    <text x="58" y="1088" class="lbl">User-authored `meta.attribution.identities` (small ConfigValue::Map from YAML) is read by §4 and merged in (user wins on collision).   v2 multi-file: just changes `runs` field type to HashMap&lt;PathBuf, AttributionMap&gt; — no wire-format gymnastics.</text>
+  </g>
+
+  <!-- writes arrow: ★ AttributionGenerate (tail of §4, ends y=940) writes DOWN to the sidecar data box (§5, top y=996) -->
+  <path d="M 770 940 L 770 996" class="ln-data" marker-end="url(#arrow-data)"/>
+  <text x="780" y="970" class="lbl">writes  ctx.attribution_data</text>
+
+  <!-- ────────────────── SECTION 6: FINALIZATION PHASE ────────────────── -->
+  <text x="20" y="1140" class="tt">6.  Finalization Phase   (★ AttributionRender pushed at  pipeline.rs:895)</text>
+
+  <rect x="40" y="1158" width="1160" height="278" rx="10" class="phase"/>
+  <text x="56" y="1178" class="lbl" font-weight="700">order: LinkRewrite · AppendixStructure · CrossrefRender · ResourceCollector · ★ AttributionRender (last)</text>
+
+  <rect x="60" y="1194" width="280" height="42" rx="5" class="stage"/>
+  <text x="200" y="1219" text-anchor="middle" class="code">… earlier finalization stages …</text>
+
+  <rect x="60" y="1244" width="280" height="42" rx="5" class="stage"/>
+  <text x="200" y="1269" text-anchor="middle" class="code">ResourceCollectorTransform</text>
+
+  <g>
+    <rect x="360" y="1194" width="820" height="236" rx="6" class="stage-new"/>
+    <text x="770" y="1216" text-anchor="middle" class="tt">★  AttributionRenderTransform     (very last transform in the HTML pipeline; also direct-invoked by the q2-debug WASM path)</text>
+    <text x="770" y="1234" text-anchor="middle" class="lbl">name() = "attribution-render"  ·  reads ctx.attribution_data  ·  builds a pointer-keyed lookup map + walk-order slice + actors table  ·  no AST mutation</text>
+
+    <text x="380" y="1258" class="cdsm">let Some(data) = ctx.attribution_data.clone() else { return Ok(()); };   // sidecar — None ⇒ no-op</text>
+
+    <text x="380" y="1278" class="cdsm">// 1. Build actors table up-front from every distinct actor in data.runs.  ≤K identity resolves, ≤K warnings — not N.</text>
+    <text x="380" y="1294" class="cdsm">let mut actors: IdentityMap = IdentityMap::new();</text>
+    <text x="380" y="1310" class="cdsm">for run in data.runs.as_slice() {</text>
+    <text x="380" y="1326" class="cdsm">    if actors.contains_key(&amp;run.actor) { continue; }</text>
+    <text x="380" y="1342" class="cdsm">    let identity = data.identities.get(&amp;run.actor).cloned().unwrap_or_else(|| { ctx.diagnostics.push(warn!(…)); UNKNOWN_IDENTITY }); }</text>
+
+    <text x="380" y="1362" class="cdsm">// 2. Single AST walk: query each node's SourceInfo and populate slice + by_node map.</text>
+    <text x="380" y="1378" class="cdsm">let mut slice: Vec&lt;Option&lt;AttributionRecord&gt;&gt; = Vec::new();   let mut by_node: HashMap&lt;usize, AttributionRecord&gt; = HashMap::new();</text>
+    <text x="380" y="1394" class="cdsm">walk(ast, |source_info| { let r = query(source_info, &amp;data.runs); if let Some(r)=&amp;r { by_node.insert(source_info as *const _ as usize, r.clone()); } slice.push(r); });</text>
+
+    <text x="380" y="1414" class="cdsm">// 3. Six direct assignments — no set_attribution() method.  html + json each get all three artefacts; the Arcs are shared.</text>
+    <text x="380" y="1430" class="cdsm">ctx.format_options.{html,json}.{attribution_lookup, attribution_by_node, attribution_identities|attribution_actors} = Some(Arc::clone(…));</text>
+  </g>
+
+  <line x1="200" y1="1236" x2="200" y2="1244" class="ln-sol" marker-end="url(#arrow)"/>
+  <line x1="340" y1="1265" x2="360" y2="1265" class="ln-sol" marker-end="url(#arrow)"/>
+
+  <!-- reads arrow: ctx.attribution_data (§5 bottom y=1102) → ★ AttributionRender (top y=1194) — natural downward flow now that generate is upstream of the sidecar box -->
+  <path d="M 590 1102 Q 590 1148 770 1194" class="ln-data" marker-end="url(#arrow-data)"/>
+  <text x="610" y="1136" class="lbl">reads ctx.attribution_data</text>
+
+  <!-- query() footnote -->
+  <text x="20" y="1454" class="note">query() chain-resolves SourceInfo via local resolve_byte_range (Original / Substring only; Concat &amp; FilterProvenance ⇒ None) then enforces the v1 single-doc invariant: file_id ≠ 0 ⇒ skip (no map_offset / SourceContext needed).</text>
+
+  <!-- ────────────────── SECTION 7: format_options carrier ────────────────── -->
+  <text x="20" y="1488" class="tt">7.  Carrier  on  RenderContext.format_options   (struct, not enum — both sub-blocks populated unconditionally so the transform stays format-agnostic)</text>
+
+  <g>
+    <rect x="40" y="1506" width="1160" height="84" rx="8" class="ctx"/>
+    <text x="620" y="1528" text-anchor="middle" class="tt">struct FormatOptions { pub html: HtmlFormatOptions,  pub json: JsonFormatOptions }     ·   render.rs:44-94</text>
+    <text x="620" y="1546" text-anchor="middle" class="code">HtmlFormatOptions { attribution_lookup: Option&lt;Arc&lt;[Option&lt;AttributionRecord&gt;]&gt;&gt;,  attribution_by_node: Option&lt;Arc&lt;HashMap&lt;usize, AttributionRecord&gt;&gt;&gt;,  attribution_identities: Option&lt;Arc&lt;IdentityMap&gt;&gt; }</text>
+    <text x="620" y="1562" text-anchor="middle" class="code">JsonFormatOptions { attribution_lookup: Option&lt;Arc&lt;[…]&gt;&gt;,                              attribution_by_node: Option&lt;Arc&lt;HashMap&lt;usize, AttributionRecord&gt;&gt;&gt;,  attribution_actors:     Option&lt;Arc&lt;IdentityMap&gt;&gt; }</text>
+    <text x="620" y="1578" text-anchor="middle" class="note">attribution_lookup survives as a regression invariant ("non-empty when attribution is on"); writers read attribution_by_node for O(1) lookup keyed by &amp;SourceInfo as *const _ as usize.</text>
+  </g>
+
+  <line x1="770" y1="1430" x2="620" y2="1506" class="ln-data" marker-end="url(#arrow-data)"/>
+  <text x="640" y="1465" class="lbl">six direct assignments (3 per sub-block; the Arcs are shared)</text>
+
+  <!-- ────────────────── SECTION 8: WRITER DISPATCH ────────────────── -->
+  <text x="20" y="1626" class="tt">8.  Writer dispatch   (pampa-local record types; only by_node + identities/actors cross the boundary — the slice does NOT reach the writer)</text>
+
+  <g>
+    <rect x="40" y="1644" width="560" height="106" rx="8" class="writer"/>
+    <text x="58" y="1666" class="tt">pampa::writers::html::HtmlConfig   ·   writers/html.rs:51,58</text>
+    <text x="58" y="1684" class="code">attribution_by_node: Option&lt;Arc&lt;HashMap&lt;usize, HtmlAttributionRecord&gt;&gt;&gt;</text>
+    <text x="58" y="1700" class="code">attribution_identities: Option&lt;Arc&lt;HashMap&lt;Arc&lt;str&gt;, HtmlAttributionIdentity&gt;&gt;&gt;</text>
+    <text x="58" y="1716" class="cdsm">get_block_attribution / get_inline_attribution: by_node.get(&amp;source_info ptr) ⇒ data-attr-actor · data-attr-time · data-attr-name · data-attr-color</text>
+    <text x="58" y="1732" class="lbl">Coalesces contiguous same-(actor,time) PROSE inlines into one outer wrapper; structured inlines (Code/Emph/Link/Span/Math) get their own wrappers.  data-attr-* ⟂ data-sid/data-loc.</text>
+  </g>
+
+  <g>
+    <rect x="640" y="1644" width="560" height="106" rx="8" class="writer"/>
+    <text x="658" y="1666" class="tt">pampa::writers::json::JsonConfig   ·   writers/json.rs:57,62</text>
+    <text x="658" y="1684" class="code">attribution_by_node: Option&lt;Arc&lt;HashMap&lt;usize, JsonAttributionRecord&gt;&gt;&gt;</text>
+    <text x="658" y="1700" class="code">attribution_actors:  Option&lt;Arc&lt;HashMap&lt;Arc&lt;str&gt;, JsonAttributionIdentity&gt;&gt;&gt;</text>
+    <text x="658" y="1716" class="cdsm">maybe_record_attribution_for(source_info, s_id): by_node.get(ptr) ⇒ push { s, actor, time } into astContext.attribution; actors emitted once as astContext.attributionActors.</text>
+    <text x="658" y="1732" class="lbl">skip_serializing_if on both fields ⇒ both keys absent when off (byte-identical to today's output).</text>
+  </g>
+
+  <text x="20" y="1772" class="note">Boundary translation at writer-config construction: quarto_core::attribution::{AttributionRecord, Identity}  →  Html/Json{AttributionRecord, AttributionIdentity}. Pampa keeps its own types so the crate stays free of quarto-core dependencies.</text>
+
+  <line x1="500" y1="1590" x2="320" y2="1644" class="ln-data" marker-end="url(#arrow-data)"/>
+  <line x1="740" y1="1590" x2="920" y2="1644" class="ln-data" marker-end="url(#arrow-data)"/>
+
+  <!-- ────────────────── SECTION 9: OUTPUTS ────────────────── -->
+  <text x="20" y="1798" class="tt">9.  Outputs   (consumers — wire shape unchanged from v1)</text>
+
+  <g>
+    <rect x="40" y="1810" width="560" height="40" rx="8" class="output"/>
+    <text x="58" y="1828" class="tt">HTML body  →  browser / static viewer</text>
+    <text x="58" y="1844" class="code">&lt;span data-attr-actor=… data-attr-time=… data-attr-name=… data-attr-color=…&gt; (coalesced prose run) &lt;/span&gt;</text>
+  </g>
+
+  <g>
+    <rect x="640" y="1810" width="560" height="40" rx="8" class="output"/>
+    <text x="658" y="1828" class="tt">AST JSON  →  hub-client ReactAstDebugRenderer</text>
+    <text x="658" y="1844" class="code">astContext.attribution: [{s, actor, time}, …]   astContext.attributionActors: { actor: {name, color} }</text>
+  </g>
+
+  <line x1="320" y1="1750" x2="320" y2="1810" class="ln-data" marker-end="url(#arrow-data)"/>
+  <line x1="920" y1="1750" x2="920" y2="1810" class="ln-data" marker-end="url(#arrow-data)"/>
+</svg>

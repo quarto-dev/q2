@@ -1,0 +1,7 @@
+The reporter's exact case from issue #152 (2026-05-04 comment) — a
+chunk header with a bare label, which old knitr accepts but Quarto 2
+does not.
+
+```{r test}
+1+1
+```

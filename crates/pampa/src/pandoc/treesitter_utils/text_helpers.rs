@@ -7,8 +7,6 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, LineBreak, SoftBreak, Space};
 use crate::pandoc::location::node_location;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
-use once_cell::sync::Lazy;
-use regex::Regex;
 
 /// Helper function to filter out delimiter nodes
 pub fn filter_delimiter_children(
@@ -21,19 +19,43 @@ pub fn filter_delimiter_children(
         .collect()
 }
 
-/// Helper function to extract text from string quotes
+/// Helper function to extract text from string quotes.
+///
+/// Strips surrounding `"..."` or `'...'` and applies CommonMark/Pandoc-style
+/// backslash escapes: `\X` collapses to `X` when `X` is ASCII punctuation,
+/// otherwise the backslash is preserved literally. Bare (unquoted) values
+/// are returned unchanged.
 pub fn extract_quoted_text(text: &str) -> String {
-    if text.starts_with('"') && text.ends_with('"') {
-        let escaped_double_quote_re: Lazy<Regex> = Lazy::new(|| Regex::new("[\\\\][\"]").unwrap());
-        let value = &text[1..text.len() - 1];
-        escaped_double_quote_re.replace_all(value, "\"").to_string()
-    } else if text.starts_with('\'') && text.ends_with('\'') {
-        let escaped_single_quote_re: Lazy<Regex> = Lazy::new(|| Regex::new("[\\\\][']").unwrap());
-        let value = &text[1..text.len() - 1];
-        escaped_single_quote_re.replace_all(value, "'").to_string()
+    let is_double = text.starts_with('"') && text.ends_with('"') && text.len() >= 2;
+    let is_single = text.starts_with('\'') && text.ends_with('\'') && text.len() >= 2;
+    if is_double || is_single {
+        unescape_punctuation(&text[1..text.len() - 1])
     } else {
         text.to_string()
     }
+}
+
+/// Collapse `\X` to `X` when `X` is ASCII punctuation. Otherwise the
+/// backslash is preserved. A trailing backslash with no following
+/// character is preserved as-is.
+fn unescape_punctuation(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some(next) if next.is_ascii_punctuation() => out.push(next),
+                Some(next) => {
+                    out.push('\\');
+                    out.push(next);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// Helper function to process inline emphasis-like constructs
@@ -126,30 +148,40 @@ pub fn apply_smart_quotes(text: String) -> String {
     text.replace('\'', "\u{2019}")
 }
 
-/// Process backslash escapes in text according to Pandoc rules
-/// A backslash before any ASCII punctuation character is treated as an escape
-/// and the backslash is removed, leaving only the escaped character.
+/// Process backslash escapes in text according to Pandoc rules.
 ///
-/// According to Pandoc spec, these characters can be escaped:
-/// !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+/// - A backslash before any ASCII punctuation character is treated as an
+///   escape and the backslash is removed, leaving only the escaped
+///   character. Pandoc-escapable characters: `!"#$%&'()*+,-./:;<=>?@[\]^_\`{|}~`.
+/// - A backslash followed by an ASCII space is Pandoc's non-breaking-space
+///   shorthand: the pair collapses to a single U+00A0 (NO-BREAK SPACE).
+///   See <https://pandoc.org/MANUAL.html#non-breaking-spaces>.
+/// - Any other `\X` is left as the literal two characters.
 pub fn process_backslash_escapes(text: String) -> String {
     let mut result = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
 
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            // Check if next character is ASCII punctuation
+            // Check if next character is ASCII punctuation, an ASCII space,
+            // or anything else.
             if let Some(&next_ch) = chars.peek() {
                 if is_escapable_punctuation(next_ch) {
-                    // This is an escape sequence - skip the backslash and include the character
-                    chars.next(); // consume the next character
+                    // Backslash escape for a punctuation char: drop the
+                    // backslash, emit the punctuation.
+                    chars.next();
                     result.push(next_ch);
+                } else if next_ch == ' ' {
+                    // Pandoc non-breaking-space shorthand: `\<space>` collapses
+                    // to U+00A0. The original space is consumed.
+                    chars.next();
+                    result.push('\u{00A0}');
                 } else {
-                    // Not an escape sequence - keep the backslash
+                    // Not an escape sequence - keep the backslash.
                     result.push(ch);
                 }
             } else {
-                // Backslash at end of string - keep it
+                // Backslash at end of string - keep it.
                 result.push(ch);
             }
         } else {
@@ -432,4 +464,42 @@ where
 
     // Wrap with Space nodes as needed
     wrap_inline_with_delimiter_spaces(inline, &space_info, context)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_quoted_text;
+
+    #[test]
+    fn double_quoted_escape_punctuation() {
+        // CommonMark/Pandoc rule: backslash before ASCII punctuation collapses.
+        assert_eq!(extract_quoted_text(r#""\[1,2\]""#), "[1,2]");
+        assert_eq!(extract_quoted_text(r#""a\"b""#), "a\"b");
+        assert_eq!(extract_quoted_text(r#""a\\b""#), "a\\b");
+    }
+
+    #[test]
+    fn double_quoted_no_escape_nonpunctuation() {
+        // Backslash before a non-punctuation char is preserved.
+        assert_eq!(extract_quoted_text(r#""a\bc""#), "a\\bc");
+    }
+
+    #[test]
+    fn single_quoted_escape_punctuation() {
+        assert_eq!(extract_quoted_text(r"'a\'b'"), "a'b");
+        assert_eq!(extract_quoted_text(r"'a\\b'"), "a\\b");
+    }
+
+    #[test]
+    fn unquoted_text_passthrough() {
+        // Bare values get no escape processing.
+        assert_eq!(extract_quoted_text(r"a\b"), "a\\b");
+        assert_eq!(extract_quoted_text("plain"), "plain");
+    }
+
+    #[test]
+    fn trailing_backslash_preserved() {
+        // A dangling backslash with nothing after it stays literal.
+        assert_eq!(extract_quoted_text(r#""abc\""#), "abc\\");
+    }
 }

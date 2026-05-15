@@ -127,8 +127,10 @@ async fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String>
         .map_err(|e| e.to_string())?;
     let body = String::from_utf8_lossy(&body_buf).into_owned();
 
-    // Render with template
-    let html =
+    // Render with template (diagnostics from the doctemplate evaluator
+    // are dropped here; this test fixture pre-dates bd-xdnk and exercises
+    // a slim-fixture path that does not surface them).
+    let (html, _diags) =
         quarto_core::template::render_with_resources(&body, &pandoc.meta, &resource_paths.css)
             .map_err(|e| e.to_string())?;
 

@@ -20,6 +20,13 @@ const SKIP_PRINTS_MESSAGE: Set<string> = new Set([
   'quarto-test/expected-error.qmd',
 ]);
 
+// Tests that fail in the hub-client preview because of a known gap in
+// the WASM render pipeline. The native CLI runner handles these. Skip
+// in the browser until the gap is closed. (bd-izfv's user-grammar entry
+// was removed here once the project-render path started threading
+// user_grammars through; leave the slot in place for future WASM gaps.)
+const SKIP_WASM_UNSUPPORTED: Map<string, string> = new Map([]);
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -29,6 +36,14 @@ export interface RunConfig {
   ci?: boolean;
   os?: string[];
   not_os?: string[];
+  /**
+   * True when the fixture's format requires a JS runtime to render
+   * (e.g. q2-debug renders via React inside an iframe). Honored by
+   * runners that can't execute JS — the CLI smoke-all runner skips
+   * these. The Playwright runner always has JS, so this is a no-op
+   * here; we parse the field for consistency with the Rust side.
+   */
+  requires_js?: boolean;
 }
 
 export interface FormatTestSpec {
@@ -54,8 +69,20 @@ export interface DiscoveredTest {
   relPath: string;
   /** Absolute path to the project root (containing _quarto.yml) */
   projectRoot: string;
-  /** All project files as { relativePath, content } */
-  projectFiles: { path: string; content: string }[];
+  /**
+   * All project files. Text files have UTF-8 `content`; binary fixtures
+   * (e.g. `_quarto/grammars/<lang>/*.wasm`, images) have base64-encoded
+   * `content` with `contentType: 'binary'` and an appropriate
+   * `mimeType`. The Playwright runner forwards both flavors to
+   * `createProjectOnServer`, which routes them to Automerge text vs.
+   * binary documents.
+   */
+  projectFiles: {
+    path: string;
+    content: string;
+    contentType: 'text' | 'binary';
+    mimeType?: string;
+  }[];
   /** Which file to render (relative to project root) */
   renderPath: string;
   /** Run config from frontmatter */
@@ -223,7 +250,15 @@ function parseFormatSpec(
 // Skip logic
 // ---------------------------------------------------------------------------
 
-export function shouldSkip(runConfig: RunConfig | null): string | null {
+export function shouldSkip(
+  runConfig: RunConfig | null,
+  relPath?: string,
+): string | null {
+  if (relPath) {
+    const wasmReason = SKIP_WASM_UNSUPPORTED.get(relPath);
+    if (wasmReason) return `WASM unsupported: ${wasmReason}`;
+  }
+
   if (!runConfig) return null;
 
   if (runConfig.skip) {
@@ -271,9 +306,52 @@ function findProjectRoot(qmdDir: string): string {
   return qmdDir;
 }
 
-/** Recursively read all files in a directory. */
-function readAllFiles(dir: string): { path: string; content: string }[] {
-  const files: { path: string; content: string }[] = [];
+/**
+ * Extension → MIME mapping for binary fixture files. The set is
+ * narrow: only formats the smoke-all suite actually carries (user
+ * grammars and a couple of image fixtures). Add new entries here
+ * when a future fixture needs a new binary type.
+ */
+const BINARY_EXTENSIONS: Record<string, string> = {
+  '.wasm': 'application/wasm',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+};
+
+function binaryMimeFor(path: string): string | null {
+  const dot = path.lastIndexOf('.');
+  if (dot < 0) return null;
+  return BINARY_EXTENSIONS[path.slice(dot).toLowerCase()] ?? null;
+}
+
+/**
+ * Recursively read all files in a directory. Text fixtures land as
+ * `contentType: 'text'` with UTF-8 content; binary fixtures (see
+ * {@link BINARY_EXTENSIONS}) land as `contentType: 'binary'` with the
+ * raw bytes base64-encoded — matching the shape
+ * `createProjectOnServer` expects, which forwards binary content into
+ * Automerge as a binary document instead of corrupting it through
+ * UTF-8 decoding.
+ */
+function readAllFiles(dir: string): {
+  path: string;
+  content: string;
+  contentType: 'text' | 'binary';
+  mimeType?: string;
+}[] {
+  const files: {
+    path: string;
+    content: string;
+    contentType: 'text' | 'binary';
+    mimeType?: string;
+  }[] = [];
 
   function walk(d: string) {
     const entries = readdirSync(d, { withFileTypes: true });
@@ -282,8 +360,22 @@ function readAllFiles(dir: string): { path: string; content: string }[] {
       if (entry.isDirectory()) {
         walk(full);
       } else if (entry.isFile()) {
-        const content = readFileSync(full, 'utf-8');
-        files.push({ path: full, content });
+        const mimeType = binaryMimeFor(full);
+        if (mimeType) {
+          const bytes = readFileSync(full);
+          files.push({
+            path: full,
+            content: bytes.toString('base64'),
+            contentType: 'binary',
+            mimeType,
+          });
+        } else {
+          files.push({
+            path: full,
+            content: readFileSync(full, 'utf-8'),
+            contentType: 'text',
+          });
+        }
       }
     }
   }
@@ -313,9 +405,15 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
       skipPrintsMessage: SKIP_PRINTS_MESSAGE.has(relPath),
     });
 
-    // Only include HTML format specs
-    const htmlSpecs = formatSpecs.filter((s) => s.format === 'html');
-    if (htmlSpecs.length === 0) continue;
+    // Only formats the e2e runner knows how to drive: html (preview iframe),
+    // q2-debug (AstIframe), and q2-preview (Q2PreviewIframe — Plan 2A).
+    const supportedSpecs = formatSpecs.filter(
+      (s) =>
+        s.format === 'html' ||
+        s.format === 'q2-debug' ||
+        s.format === 'q2-preview',
+    );
+    if (supportedSpecs.length === 0) continue;
 
     const qmdDir = dirname(qmdPath);
     const projectRoot = findProjectRoot(qmdDir);
@@ -323,6 +421,8 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
     const projectFiles = allFiles.map((f) => ({
       path: relative(projectRoot, f.path),
       content: f.content,
+      contentType: f.contentType,
+      mimeType: f.mimeType,
     }));
 
     tests.push({
@@ -332,7 +432,7 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
       projectFiles,
       renderPath: relative(projectRoot, qmdPath),
       runConfig,
-      formatSpecs: htmlSpecs,
+      formatSpecs: supportedSpecs,
     });
   }
 

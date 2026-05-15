@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
-import { actorColor } from '../hooks/useReplayMode';
+import { actorColor } from '../utils/palette';
 import type { ActorIdentity } from '../services/automergeSync';
 import { getActorId } from '../services/automergeSync';
 import './ReplayDrawer.css';
@@ -10,6 +10,60 @@ interface Props {
   controls: ReplayControls;
   disabled?: boolean;
   identities?: Record<string, ActorIdentity>;
+  /**
+   * Authorship overlay state. Lives alongside replay because both
+   * surfaces share the same per-actor colour palette and the
+   * authorship inspection is a peer of replay. Both props must be
+   * supplied to render the toggle; if either is omitted (e.g. in
+   * a non-editor surface) the toggle is hidden.
+   *
+   * Session-only — kept as React state in the parent, never
+   * persisted, so the overlay resets on reload.
+   */
+  authorshipOn?: boolean;
+  onAuthorshipChange?: (next: boolean) => void;
+  /**
+   * Whether the attribution producer (`useAttribution` in
+   * ReactPreview) is currently building or updating the payload.
+   * When true the pill border animates with a rotating gradient so
+   * the user knows work is happening on a large document. Default
+   * `false`; effectively gated by `authorshipOn` upstream because
+   * the hook only generates when the toggle is on.
+   */
+  authorshipGenerating?: boolean;
+}
+
+interface AuthorshipToggleProps {
+  authorshipOn: boolean;
+  onAuthorshipChange: (next: boolean) => void;
+  generating: boolean;
+}
+
+function AuthorshipToggle({ authorshipOn, onAuthorshipChange, generating }: AuthorshipToggleProps) {
+  const classes = [
+    'replay-drawer__authorship',
+    authorshipOn && 'replay-drawer__authorship--on',
+    generating && 'replay-drawer__authorship--generating',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <button
+      type="button"
+      className={classes}
+      onClick={(e) => {
+        e.stopPropagation();
+        onAuthorshipChange(!authorshipOn);
+      }}
+      aria-pressed={authorshipOn}
+      aria-label={`Authorship overlay ${authorshipOn ? 'on' : 'off'}`}
+      aria-busy={generating || undefined}
+      title="Highlight authors"
+    >
+      <span className="replay-drawer__authorship-dot" />
+      <span className="replay-drawer__authorship-label">Authorship</span>
+    </button>
+  );
 }
 
 function formatRelativeTime(ts: number): string {
@@ -39,7 +93,17 @@ function formatFullTimestamp(ts: number | null): string {
   return date.toLocaleString();
 }
 
-export default function ReplayDrawer({ state, controls, disabled, identities }: Props) {
+export default function ReplayDrawer({
+  state,
+  controls,
+  disabled,
+  identities,
+  authorshipOn,
+  onAuthorshipChange,
+  authorshipGenerating,
+}: Props) {
+  const showAuthorshipToggle =
+    authorshipOn !== undefined && onAuthorshipChange !== undefined;
   const currentActorId = getActorId();
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +207,13 @@ export default function ReplayDrawer({ state, controls, disabled, identities }: 
           <span className="replay-drawer__chevron">&#x25B6;</span>
           <span>Replay</span>
         </button>
+        {showAuthorshipToggle && (
+          <AuthorshipToggle
+            authorshipOn={authorshipOn!}
+            onAuthorshipChange={onAuthorshipChange!}
+            generating={!!authorshipGenerating}
+          />
+        )}
       </div>
     );
   }
@@ -198,6 +269,13 @@ export default function ReplayDrawer({ state, controls, disabled, identities }: 
           </span>
         </div>
 
+        {showAuthorshipToggle && (
+          <AuthorshipToggle
+            authorshipOn={authorshipOn!}
+            onAuthorshipChange={onAuthorshipChange!}
+            generating={!!authorshipGenerating}
+          />
+        )}
       </div>
 
       <div className="replay-drawer__controls">

@@ -14,3 +14,14 @@ interface ImportMeta {
 declare const __GIT_COMMIT_HASH__: string
 declare const __GIT_COMMIT_DATE__: string
 declare const __BUILD_TIME__: string
+
+/**
+ * Default export = the contents of `resources/attribution/viewer.css`,
+ * embedded at build time by `attributionViewerCssPlugin` in
+ * `vite.config.ts`. Shared with the CLI's
+ * `AttributionViewerTransform` via `include_str!`.
+ */
+declare module 'virtual:quarto-attribution-viewer-css' {
+  const content: string
+  export default content
+}

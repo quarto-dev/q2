@@ -166,16 +166,20 @@ impl PipelineStage for ApplyTemplateStage {
         let css_paths = collect_artifact_urls(ctx, "css:", self.config.resolver.as_ref());
         let script_paths = collect_artifact_urls(ctx, "js:", self.config.resolver.as_ref());
 
-        // Extract custom template/partials from merged metadata
-        let custom_template_path = metadata.get("template").and_then(|v| v.as_str());
+        // Extract custom template/partials from merged metadata.
+        //
+        // bd-xdnk note: YAML scalars like `template: custom.html` are parsed
+        // as `ConfigValueKind::PandocInlines` by the document loader
+        // (consistent with how Pandoc treats inline-content metadata
+        // values). `as_str()` only matches `String` / `Path` and would
+        // silently miss the inlines case — that's why `template:` from a
+        // qmd front-matter never reached the renderer before this fix.
+        // Use `as_plain_text()`, which also extracts text from inlines.
+        let custom_template_path = metadata.get("template").and_then(|v| v.as_plain_text());
         let partial_paths: Vec<String> = metadata
             .get("template-partials")
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
+            .map(|arr| arr.iter().filter_map(|v| v.as_plain_text()).collect())
             .unwrap_or_default();
 
         // Apply template: metadata-driven selection
@@ -184,7 +188,12 @@ impl PipelineStage for ApplyTemplateStage {
             .parent()
             .unwrap_or_else(|| Path::new("."));
 
-        let html = match custom_template_path {
+        // bd-xdnk: thread the document's `SourceContext` through template
+        // compilation so doctemplate diagnostics (Q-10-2 Undefined variable
+        // etc.) carry FileIds the renderer can resolve back to source for
+        // ariadne carets. The context is owned by `rendered.source_context`
+        // (forwarded here by `RenderHtmlStage`).
+        let (html, template_diags) = match custom_template_path {
             Some(template_path) => {
                 // Custom template from extension or document metadata
                 let abs_path = document_dir.join(template_path);
@@ -198,17 +207,19 @@ impl PipelineStage for ApplyTemplateStage {
                 let compiled = if partial_paths.is_empty() {
                     // Custom template, no explicit partials: use RuntimeResolver
                     let resolver = RuntimeResolver::new(ctx.runtime.as_ref());
-                    Template::compile_with_resolver(&template_content, &abs_path, &resolver, 0)
-                        .map_err(|e| {
-                            PipelineError::stage_error(
-                                self.name(),
-                                format!(
-                                    "failed to compile template '{}': {}",
-                                    abs_path.display(),
-                                    e
-                                ),
-                            )
-                        })?
+                    Template::compile_with_resolver_and_context(
+                        &template_content,
+                        &abs_path,
+                        &resolver,
+                        0,
+                        &mut rendered.source_context,
+                    )
+                    .map_err(|e| {
+                        PipelineError::stage_error(
+                            self.name(),
+                            format!("failed to compile template '{}': {}", abs_path.display(), e),
+                        )
+                    })?
                 } else {
                     // Custom template + explicit partials: chain MemoryResolver → RuntimeResolver
                     let memory = build_partial_resolver(
@@ -219,17 +230,19 @@ impl PipelineStage for ApplyTemplateStage {
                     )?;
                     let runtime = RuntimeResolver::new(ctx.runtime.as_ref());
                     let chained = ChainedResolver::new(memory, runtime);
-                    Template::compile_with_resolver(&template_content, &abs_path, &chained, 0)
-                        .map_err(|e| {
-                            PipelineError::stage_error(
-                                self.name(),
-                                format!(
-                                    "failed to compile template '{}': {}",
-                                    abs_path.display(),
-                                    e
-                                ),
-                            )
-                        })?
+                    Template::compile_with_resolver_and_context(
+                        &template_content,
+                        &abs_path,
+                        &chained,
+                        0,
+                        &mut rendered.source_context,
+                    )
+                    .map_err(|e| {
+                        PipelineError::stage_error(
+                            self.name(),
+                            format!("failed to compile template '{}': {}", abs_path.display(), e),
+                        )
+                    })?
                 };
 
                 template::render_with_compiled_template(
@@ -242,15 +255,23 @@ impl PipelineStage for ApplyTemplateStage {
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }
             None if !partial_paths.is_empty() => {
-                // No custom template, but explicit partials: compile built-in with partials
+                // No custom template, but explicit partials: compile built-in with partials.
+                // Built-in templates have no unguarded `$var$` references
+                // (verified pre-flight, bd-xdnk plan §Phase 0); we still
+                // thread the SourceContext so any future tweak that does
+                // emit diagnostics attributes correctly.
                 let memory = build_partial_resolver(
                     &partial_paths,
                     document_dir,
                     ctx.runtime.as_ref(),
                     self.name(),
                 )?;
-                let compiled = template::compile_builtin_template_with_partials(&metadata, &memory)
-                    .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+                let compiled = template::compile_builtin_template_with_partials(
+                    &metadata,
+                    &memory,
+                    &mut rendered.source_context,
+                )
+                .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
 
                 template::render_with_compiled_template(
                     &compiled,
@@ -280,9 +301,15 @@ impl PipelineStage for ApplyTemplateStage {
         trace_event!(
             ctx,
             EventLevel::Debug,
-            "template applied, {} bytes of HTML",
-            html.len()
+            "template applied, {} bytes of HTML, {} diagnostics",
+            html.len(),
+            template_diags.len()
         );
+
+        // Surface template diagnostics (e.g. Q-10-2 Undefined variable) to
+        // the pipeline's diagnostic stream so the CLI / hub-client can
+        // render them. bd-xdnk.
+        ctx.diagnostics.extend(template_diags);
 
         // Update content with full HTML document
         rendered.content = html;
@@ -535,6 +562,7 @@ mod tests {
             metadata: quarto_pandoc_types::ConfigValue::null(
                 quarto_source_map::SourceInfo::default(),
             ),
+            source_context: quarto_source_map::SourceContext::new(),
         };
 
         let input = PipelineData::RenderedOutput(rendered);
@@ -565,6 +593,7 @@ mod tests {
             is_intermediate: false,
             supporting_files: vec![],
             metadata,
+            source_context: quarto_source_map::SourceContext::new(),
         }
     }
 
@@ -576,6 +605,28 @@ mod tests {
                 key: "template".to_string(),
                 key_source: si.clone(),
                 value: quarto_pandoc_types::ConfigValue::new_path(template_path.to_string(), si),
+            }],
+            quarto_source_map::SourceInfo::default(),
+        )
+    }
+
+    /// bd-xdnk: real YAML front-matter parses `template: custom.html` as
+    /// `PandocInlines`, not as a `Path` scalar. This helper mirrors the
+    /// shape the qmd parser actually produces, so regression tests can
+    /// catch the "as_str() returns None for inlines" bug that hid
+    /// custom templates from `quarto render`.
+    fn meta_with_template_as_inlines(template_path: &str) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, Inline, Str};
+        let si = quarto_source_map::SourceInfo::default();
+        let inlines: quarto_pandoc_types::Inlines = vec![Inline::Str(Str {
+            text: template_path.to_string(),
+            source_info: si.clone(),
+        })];
+        quarto_pandoc_types::ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "template".to_string(),
+                key_source: si.clone(),
+                value: quarto_pandoc_types::ConfigValue::new_inlines(inlines, si),
             }],
             quarto_source_map::SourceInfo::default(),
         )
@@ -652,6 +703,144 @@ mod tests {
         );
     }
 
+    /// bd-xdnk regression: real qmd front-matter parses
+    /// `template: custom.html` as `PandocInlines`. The previous
+    /// `metadata.get("template").as_str()` lookup returned `None` for
+    /// inlines, so the custom template was silently ignored under
+    /// `quarto render`. This test mirrors the inlines shape to lock
+    /// in `as_plain_text()` as the correct lookup.
+    #[tokio::test]
+    async fn test_custom_template_path_from_pandoc_inlines() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let project_dir = tmp.path().to_path_buf();
+
+        let template_content = "<!DOCTYPE html><html><body>FROM-INLINES: $body$</body></html>";
+        std::fs::write(project_dir.join("custom.html"), template_content).unwrap();
+
+        let qmd_path = project_dir.join("test.qmd");
+        std::fs::write(&qmd_path, "").unwrap();
+
+        let runtime = Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let project = ProjectContext {
+            dir: project_dir.clone(),
+            config: crate::project::ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: project_dir.clone(),
+        };
+        let doc = DocumentInfo::from_path(&qmd_path);
+        let format = Format::html();
+        let mut ctx = StageContext::new(runtime, format.clone(), project, doc).unwrap();
+
+        let stage = ApplyTemplateStage::new();
+        let metadata = meta_with_template_as_inlines("custom.html");
+        let rendered = make_rendered_output_with_metadata(qmd_path, metadata);
+
+        let input = PipelineData::RenderedOutput(rendered);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_rendered_output().unwrap();
+
+        assert!(
+            result.content.contains("FROM-INLINES: <p>Hello</p>"),
+            "PandocInlines `template:` value should select the custom \
+             template; got:\n{}",
+            result.content
+        );
+    }
+
+    /// bd-xdnk: an undefined variable in a custom template must produce a
+    /// `Q-10-2` warning in `ctx.diagnostics`, with a source location that
+    /// points back into the template file.
+    #[tokio::test]
+    async fn test_custom_template_undefined_variable_emits_diagnostic() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let project_dir = tmp.path().to_path_buf();
+
+        // Custom template references a variable that the document never
+        // defines. Render must succeed (warning, not error) and the
+        // stage must publish the warning into ctx.diagnostics.
+        let template_content =
+            "<!DOCTYPE html><html><body><header>by $author-greeting$</header>$body$</body></html>";
+        std::fs::write(project_dir.join("custom.html"), template_content).unwrap();
+
+        let qmd_path = project_dir.join("test.qmd");
+        std::fs::write(&qmd_path, "").unwrap();
+
+        let runtime = Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let project = ProjectContext {
+            dir: project_dir.clone(),
+            config: crate::project::ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: project_dir.clone(),
+        };
+        let doc = DocumentInfo::from_path(&qmd_path);
+        let format = Format::html();
+        let mut ctx = StageContext::new(runtime, format.clone(), project, doc).unwrap();
+
+        let stage = ApplyTemplateStage::new();
+        let metadata = meta_with_template("custom.html");
+        let rendered = make_rendered_output_with_metadata(qmd_path, metadata);
+
+        let input = PipelineData::RenderedOutput(rendered);
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("stage should succeed (warning, not error)");
+
+        let result = output.into_rendered_output().unwrap();
+        assert!(
+            result.content.contains("<p>Hello</p>"),
+            "body should still render, got: {}",
+            result.content
+        );
+
+        let undef = ctx.diagnostics.iter().find(|d| {
+            d.code.as_deref() == Some("Q-10-2")
+                && d.kind == quarto_error_reporting::DiagnosticKind::Warning
+        });
+        assert!(
+            undef.is_some(),
+            "expected Q-10-2 warning for undefined variable in ctx.diagnostics, got: {:?}",
+            ctx.diagnostics
+        );
+
+        // The diagnostic's location should resolve to the template file
+        // via the shared SourceContext (so ariadne can slice source for
+        // the caret). Walk to the root SourceInfo and look up the FileId
+        // in `result.source_context`.
+        let diag = undef.unwrap();
+        let location = diag
+            .details
+            .iter()
+            .find_map(|d| d.location.as_ref())
+            .or(diag.location.as_ref())
+            .expect("diagnostic should carry a SourceInfo location");
+
+        fn root_file_id(info: &quarto_source_map::SourceInfo) -> Option<quarto_source_map::FileId> {
+            match info {
+                quarto_source_map::SourceInfo::Original { file_id, .. } => Some(*file_id),
+                quarto_source_map::SourceInfo::Substring { parent, .. } => root_file_id(parent),
+                quarto_source_map::SourceInfo::Concat { pieces } => {
+                    pieces.first().and_then(|p| root_file_id(&p.source_info))
+                }
+                quarto_source_map::SourceInfo::FilterProvenance { .. } => None,
+            }
+        }
+
+        let file_id =
+            root_file_id(location).expect("diagnostic location should have a resolvable FileId");
+        let file = result
+            .source_context
+            .get_file(file_id)
+            .expect("template file should be registered in shared SourceContext");
+        assert!(
+            file.path.contains("custom.html"),
+            "diagnostic should attribute to custom.html, got path = {}",
+            file.path
+        );
+    }
+
     #[tokio::test]
     async fn test_custom_template_with_partials() {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -724,6 +913,7 @@ mod tests {
             metadata: quarto_pandoc_types::ConfigValue::null(
                 quarto_source_map::SourceInfo::default(),
             ),
+            source_context: quarto_source_map::SourceContext::new(),
         };
 
         let input = PipelineData::RenderedOutput(rendered);

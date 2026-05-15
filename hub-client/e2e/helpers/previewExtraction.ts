@@ -6,25 +6,40 @@
  */
 
 import type { Page } from '@playwright/test';
+import type {} from './testHooks';
 
 /**
  * Wait for the preview iframe to render content.
  *
- * The DoubleBufferedIframe component injects a `<!-- render-<timestamp> -->`
- * comment on each render. We wait for:
- * 1. An iframe with class `preview-active` to exist
- * 2. Its body to have non-empty innerHTML (content rendered)
+ * For html-style previews (the default) the DoubleBufferedIframe component
+ * mounts an `iframe.preview-active` whose body is populated when render
+ * completes. For `format: q2-debug`, the renderer mounts a Q2DebugIframe
+ * whose `src` ends in `q2-debug.html`; we wait for that iframe and for
+ * its body to receive content from the postMessage flow.
  *
  * If `consoleErrors` is provided, the wait will abort early when a fatal
  * browser error is detected (e.g. WebSocket failure, WASM crash), avoiding
  * a long timeout with no diagnostic info.
  */
+export type PreviewIframeKind = 'html' | 'q2-debug' | 'q2-preview';
+
+export function previewIframeSelector(kind: PreviewIframeKind): string {
+  if (kind === 'q2-debug') return 'iframe[src*="q2-debug.html"]';
+  if (kind === 'q2-preview') return 'iframe[src*="q2-preview.html"]';
+  return 'iframe.preview-active';
+}
+
 export async function waitForPreviewRender(
   page: Page,
-  opts: { timeout?: number; consoleErrors?: string[] } = {},
+  opts: {
+    timeout?: number;
+    consoleErrors?: string[];
+    kind?: PreviewIframeKind;
+  } = {},
 ): Promise<void> {
   const timeout = opts.timeout ?? 30000;
   const consoleErrors = opts.consoleErrors;
+  const iframeSelector = previewIframeSelector(opts.kind ?? 'html');
 
   // Poll for render completion, but also check for fatal console errors
   // so we can fail fast with a useful message instead of timing out.
@@ -54,11 +69,11 @@ export async function waitForPreviewRender(
     }
 
     // Check if the preview iframe has rendered content
-    const rendered = await page.evaluate(() => {
-      const iframe = document.querySelector('iframe.preview-active') as HTMLIFrameElement | null;
+    const rendered = await page.evaluate((selector) => {
+      const iframe = document.querySelector(selector) as HTMLIFrameElement | null;
       if (!iframe?.contentDocument?.body) return false;
       return iframe.contentDocument.body.innerHTML.length > 0;
-    });
+    }, iframeSelector);
 
     if (rendered) return;
 
@@ -87,8 +102,56 @@ export async function getPreviewHtml(
   documentPath: string,
 ): Promise<string> {
   return page.evaluate(async (docPath) => {
-    const renderer = await import('/src/services/wasmRenderer.ts');
-    const result = await renderer.renderToHtml({ documentPath: docPath });
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    const renderer = hooks.wasmRenderer;
+
+    // Discover user grammars from the VFS so the re-render matches the
+    // in-Preview render (Preview.tsx forwards a project-file list +
+    // resolvers from automergeSync; bd-izfv made the project-render
+    // path actually honor that handle). Without this, fixtures that
+    // depend on `_quarto/grammars/<lang>/` render unhighlighted here
+    // even though the live iframe renders them correctly.
+    //
+    // `vfs_list_files` returns the VFS-absolute form (`/project/...`);
+    // `discoverUserGrammars` expects project-relative paths with no
+    // leading slash, and the resolver callbacks below mirror that
+    // shape (matches `Preview.tsx` → `automergeSync` wiring).
+    const VFS_PROJECT_PREFIX = '/project/';
+    const stripPrefix = (vfsPath: string): string | null =>
+      vfsPath.startsWith(VFS_PROJECT_PREFIX)
+        ? vfsPath.slice(VFS_PROJECT_PREFIX.length)
+        : null;
+    const toVfsPath = (relPath: string): string =>
+      relPath.startsWith('/') ? relPath : `${VFS_PROJECT_PREFIX}${relPath}`;
+
+    const listing = renderer.vfsListFiles();
+    const projectFilePaths: string[] = listing.success
+      ? (listing.files ?? [])
+          .map(stripPrefix)
+          .filter((p): p is string => p !== null)
+      : [];
+
+    const result = await renderer.renderToHtml({
+      documentPath: docPath,
+      userGrammars: {
+        files: projectFilePaths,
+        getBinaryContent: async (path: string) => {
+          const r = renderer.vfsReadBinaryFile(toVfsPath(path));
+          if (!r.success || typeof r.content !== 'string') return null;
+          // Decode base64 → Uint8Array on the page (Buffer isn't available).
+          const binary = atob(r.content);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return bytes;
+        },
+        getTextContent: async (path: string) => {
+          const r = renderer.vfsReadFile(toVfsPath(path));
+          return r.success && typeof r.content === 'string' ? r.content : null;
+        },
+      },
+    });
     return result.html ?? '';
   }, documentPath);
 }
@@ -107,7 +170,10 @@ export async function getPreviewCss(page: Page): Promise<string> {
       throw new Error('No active preview iframe found');
     }
 
-    const renderer = await import('/src/services/wasmRenderer.ts');
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    const renderer = hooks.wasmRenderer;
     const links = iframe.contentDocument.querySelectorAll('link[rel="stylesheet"]');
     let combinedCss = '';
 
@@ -173,8 +239,10 @@ export async function getRenderDiagnostics(
   warnings: RenderDiagnostic[];
 }> {
   return page.evaluate(async (docPath) => {
-    const renderer = await import('/src/services/wasmRenderer.ts');
-    const result = await renderer.renderToHtml({ documentPath: docPath });
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    const result = await hooks.wasmRenderer.renderToHtml({ documentPath: docPath });
     return {
       success: result.success,
       error: result.error,

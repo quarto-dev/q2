@@ -1,0 +1,32 @@
+{
+  "code": "Q-2-35",
+  "title": "Indented code blocks are not supported",
+  "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+  "notes": [],
+  "cases": [
+    {
+      "name": "basic",
+      "description": "4 leading spaces start a new block after a blank line",
+      "content": "Before.\n\n    foo\n\nAfter.\n",
+      "captures": []
+    },
+    {
+      "name": "tab-indent",
+      "description": "A single leading tab expands to 4 columns and triggers the same error",
+      "content": "Before.\n\n\tfoo\n\nAfter.\n",
+      "captures": []
+    },
+    {
+      "name": "more-than-four",
+      "description": "More than 4 leading spaces is the same error (CommonMark indented code is 4 or more)",
+      "content": "Before.\n\n      foo\n\nAfter.\n",
+      "captures": []
+    },
+    {
+      "name": "indented-blockquote",
+      "description": "Indented blockquote (CommonMark would treat the 4 spaces as opening an indented code block; Q2 rejects both)",
+      "content": "Before.\n\n    > Foo\n",
+      "captures": []
+    }
+  ]
+}

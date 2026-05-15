@@ -11,14 +11,21 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // Visual-regression specs run via playwright.visual.config.ts (which has
+  // the --update-snapshots-on-missing retry flow); exclude them from the
+  // functional run so a missing baseline isn't a hard failure here.
+  testIgnore: '**/*.visual.spec.ts',
   // Parallel tests are OK - they use different documents, single sync server handles concurrency
   fullyParallel: true,
   // Fail on `test.only` in CI
   forbidOnly: !!process.env.CI,
   // Retries for flaky tests in CI
   retries: process.env.CI ? 2 : 0,
-  // Parallel workers
-  workers: process.env.CI ? 4 : undefined,
+  // Parallel workers. Match the runner's CPU count: ubuntu-latest has
+  // 2 cores. Running more workers than cores causes the WASM render
+  // pipeline to stall under contention and individual tests miss the
+  // preview-render deadline non-deterministically.
+  workers: process.env.CI ? 2 : undefined,
   // HTML reporter
   reporter: 'html',
 
@@ -53,13 +60,34 @@ export default defineConfig({
     // },
   ],
 
-  // Run local dev server before tests
+  // Serve the prebuilt hub-client bundle via `vite preview` rather than
+  // `vite dev`. Why this matters for E2E throughput:
+  //   - A cold Playwright browser context fetches ~50 MB of assets
+  //     (the ~32 MB WASM dominates). Through `vite dev` that goes
+  //     uncompressed and serialized through the transform pipeline;
+  //     through `vite preview` (with our gzip middleware in vite.config.ts)
+  //     it's ~5.6 MB on the wire and served as static files.
+  //   - `vite dev` also re-transforms ~500 TS/JSX modules per page load;
+  //     the production bundle is ~10 chunks.
+  //   - Under 2 Playwright workers contending for one dev server on a
+  //     2-core CI runner this was the source of the "preview iframe
+  //     didn't render in 45s" flakes. Do NOT revert this to `npm run dev`
+  //     to get HMR back — HMR isn't used by tests and dev mode reintroduces
+  //     the contention.
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run preview -- --port 5173',
     url: 'http://localhost:5173',
     // Reuse existing server in dev mode for faster iteration
     reuseExistingServer: !process.env.CI,
-    // Timeout for server to start
+    // Timeout for server to start (preview is near-instant; the bundle
+    // must already be built, which the CI workflow does explicitly).
     timeout: 120000,
+    // Vite preview reads VITE_HUB_SERVER at config-eval time to wire
+    // preview.proxy at the target. globalSetup starts the e2e hub on
+    // port 3030, so point preview at that port. The env is server-side
+    // only — it isn't baked into the built client bundle.
+    env: {
+      VITE_HUB_SERVER: 'http://localhost:3030',
+    },
   },
 });

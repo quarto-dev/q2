@@ -10,6 +10,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  bootstrapProjectSet,
   createProjectOnServer,
   seedProjectInBrowser,
   getServerUrl,
@@ -34,8 +35,7 @@ async function loadProjectFile(
   targetFile: string,
 ) {
   const indexDocId = await createProjectOnServer(serverUrl, files);
-  await page.goto('/');
-  await expect(page.locator('body')).toBeVisible();
+  await bootstrapProjectSet(page, serverUrl);
   const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
   await page.goto(`/#/p/${localId}/file/${encodeURIComponent(targetFile)}`);
   await waitForPreviewRender(page, { timeout: 60000 });

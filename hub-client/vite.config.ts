@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import wasm from 'vite-plugin-wasm'
+import compression from 'compression'
 import path from 'path'
+import { readFileSync } from 'fs'
 import { execSync } from 'child_process'
 
 function getGitInfo() {
@@ -16,6 +19,36 @@ function getGitInfo() {
 
 const gitInfo = getGitInfo()
 
+/**
+ * Expose `virtual:quarto-attribution-viewer-css` as a module whose
+ * default export is the contents of `resources/attribution/viewer.css`.
+ *
+ * `resources/attribution/viewer.css` is the single source of truth
+ * shared with the CLI's `AttributionViewerTransform` (via
+ * `include_str!`). Vite / Vitest silently return empty for `?raw`
+ * imports of files outside the project root even with
+ * `server.fs.allow: ['..']`, so the virtual-module indirection is the
+ * supported way to embed an out-of-tree asset's contents at
+ * build/test time.
+ */
+function attributionViewerCssPlugin(): Plugin {
+  const VIRTUAL_ID = 'virtual:quarto-attribution-viewer-css';
+  const RESOLVED_ID = '\0' + VIRTUAL_ID;
+  const sourcePath = path.resolve(__dirname, '../resources/attribution/viewer.css');
+  return {
+    name: 'quarto-attribution-viewer-css',
+    resolveId(id) {
+      if (id === VIRTUAL_ID) return RESOLVED_ID;
+    },
+    load(id) {
+      if (id === RESOLVED_ID) {
+        const css = readFileSync(sourcePath, 'utf-8');
+        return `export default ${JSON.stringify(css)};`;
+      }
+    },
+  };
+}
+
 /** Hub server URL. Override with VITE_HUB_SERVER env var. */
 const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000';
 
@@ -24,7 +57,37 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
-    wasm()
+    wasm(),
+    attributionViewerCssPlugin(),
+    {
+      // vite preview's static-file middleware does not gzip by default,
+      // so a cold Playwright context downloads the ~32 MB WASM uncompressed.
+      // Gzipping at the preview layer cuts the wire size to ~5.6 MB per
+      // context, which is the main throughput win this config is after.
+      // Active only for `vite preview` (the CI E2E server); `vite dev`
+      // doesn't need it (transform pipeline is the bottleneck there).
+      name: 'preview-compression',
+      configurePreviewServer(server) {
+        // `compression` is typed as an Express RequestHandler, but vite's
+        // middleware stack is connect-based. Their (req, res, next) shapes
+        // are runtime-compatible; the cast bridges the type mismatch.
+        const middleware = compression({
+          // mime-db marks `application/wasm` as non-compressible, so the
+          // default `compression.filter` skips it. In practice the WASM
+          // gzips ~6:1 (32 MB → ~5.6 MB), which is the main win we're
+          // after. Override the filter to opt it back in.
+          filter: (req, res) => {
+            const type = res.getHeader('content-type');
+            if (typeof type === 'string' && type.startsWith('application/wasm')) {
+              return true;
+            }
+            return compression.filter(req, res);
+          },
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        server.middlewares.use(middleware as any);
+      },
+    },
   ],
   define: {
     __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
@@ -48,7 +111,17 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         debug: path.resolve(__dirname, 'debug.html'),
-        'ast-renderer': path.resolve(__dirname, 'public/ast-renderer.html'),
+        // q2-debug.html and q2-preview.html live at the hub-client root,
+        // not under public/. When they were in public/, the build emitted
+        // both a transformed copy (at dist/public/q2-{debug,preview}.html)
+        // and an untransformed copy of the source file (at
+        // dist/q2-{debug,preview}.html, referencing the dev-only
+        // `<script src="/src/...">` path). The iframes' `src="/q2-*.html"`
+        // hit the wrong one under `vite preview`, leaving the iframe blank
+        // and breaking the q2-debug + q2-preview E2E suite. Same fix as
+        // PR #172 applied to ast-renderer.html on main.
+        'q2-debug': path.resolve(__dirname, 'q2-debug.html'),
+        'q2-preview': path.resolve(__dirname, 'q2-preview.html'),
       },
     },
   },
@@ -57,20 +130,29 @@ export default defineConfig({
       // Allow serving files from the wasm package
       allow: ['..'],
     },
-    proxy: {
-      // Forward /auth/* to the hub server (JWT validation, cookies, OAuth callback).
-      '/auth': {
-        target: hubTarget,
-        changeOrigin: true,
-      },
-      // Forward WebSocket upgrades to the hub server for Automerge sync.
-      // In dev, cookies are origin-scoped to :5173, so we proxy through Vite
-      // rather than connecting directly to the hub's port.
-      '/ws': {
-        target: hubTarget,
-        ws: true,
-        changeOrigin: true,
-      },
-    },
+    proxy: proxyConfig(),
+  },
+  // Vite preview ignores `server.proxy`, so mirror the same config for
+  // the production-build server used by Playwright E2E in CI.
+  preview: {
+    proxy: proxyConfig(),
   },
 })
+
+function proxyConfig() {
+  return {
+    // Forward /auth/* to the hub server (JWT validation, cookies, OAuth callback).
+    '/auth': {
+      target: hubTarget,
+      changeOrigin: true,
+    },
+    // Forward WebSocket upgrades to the hub server for Automerge sync.
+    // In dev, cookies are origin-scoped to :5173, so we proxy through Vite
+    // rather than connecting directly to the hub's port.
+    '/ws': {
+      target: hubTarget,
+      ws: true,
+      changeOrigin: true,
+    },
+  };
+}

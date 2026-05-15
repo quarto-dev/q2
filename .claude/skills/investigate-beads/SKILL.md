@@ -70,14 +70,21 @@ If the description references a plan file (`claude-notes/plans/...`), read it. I
 
 Spot-check the area: does the code the issue points at still exist with the same shape? Beads issues age — a six-month-old issue may have been overtaken by a refactor.
 
-### 5. Create the worktree
+### 5. Create the worktree (skip if already inside it)
 
-Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`beads/<id>-<slug>` where `<slug>` is a short kebab-case form of the issue title, 3–5 words). Beads redirect setup follows § Beads Redirect.
+**First, check if you're already in the right worktree.** A `CLAUDE.local.md` whose `**Beads:**` line matches `<id>` means the worktree exists and you're in it — skip to step 6. This skill is often re-invoked from inside an existing worktree to reload context; re-running `cargo xtask create-worktree` from there would fail noisily (`git worktree add` errors on existing directories).
+
+If you're in the main checkout or a different worktree, create it now:
 
 ```bash
-git worktree add -b beads/<id>-<slug> .worktrees/<id>-<slug> main
-echo "../../../.beads" > .worktrees/<id>-<slug>/.beads/redirect
+cargo xtask create-worktree <id>
+# Creates the worktree, .beads/redirect, and CLAUDE.local.md context stub.
+# Slug is auto-derived from the beads title; pass `--slug X` to override.
+# Fallback for fresh clones where the xtask is not yet built:
+# see .claude/rules/worktrees.md § Manual bootstrap.
 ```
+
+Branch + directory naming follows `.claude/rules/worktrees.md` § Branch naming (`beads/<id>-<slug>` where `<slug>` is a short kebab-case form of the issue title, 3–5 words). Beads redirect setup follows § Beads Redirect.
 
 Verify with `br where` from inside the worktree.
 

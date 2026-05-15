@@ -628,6 +628,82 @@ fn default_project_native_theme_writes_under_files_dir() {
     );
 }
 
+/// bd-xdnk: when a custom Pandoc-style template references a variable
+/// the document does not define, the doctemplate engine emits a
+/// `Q-10-2` warning. That warning must surface on stderr through the
+/// real `quarto render` path (it has been silently dropped before this
+/// fix). The render itself should succeed with a zero exit (warning,
+/// not error).
+#[test]
+fn custom_template_undefined_variable_emits_warning_on_stderr() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(&project.join("_quarto.yml"), "project:\n  type: default\n");
+
+    // Custom template references `$author-greeting$`, which the qmd
+    // file does not provide. Use a distinct file name (not `post.html`)
+    // so it doesn't collide with `post.qmd`'s output path.
+    write_file(
+        &project.join("custom.html"),
+        "<!doctype html>\n\
+         <html lang=\"en\">\n\
+         <head><meta charset=\"utf-8\"><title>$title$</title></head>\n\
+         <body>\n\
+         <header>by $author-greeting$</header>\n\
+         <main>$body$</main>\n\
+         </body>\n\
+         </html>\n",
+    );
+
+    write_file(
+        &project.join("post.qmd"),
+        "---\n\
+         title: Source-tracked template diagnostics\n\
+         template: custom.html\n\
+         ---\n\
+         \n\
+         Body content.\n",
+    );
+
+    let out = run_q2(&project, &["post.qmd"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    assert!(
+        out.status.success(),
+        "render should succeed (warning, not error).\nstdout: {stdout}\nstderr: {stderr}",
+    );
+
+    // The diagnostic should appear on stderr with its error code, the
+    // identifying message, and an attribution to the template file
+    // (the ariadne renderer prints `path:line:col` on the location line).
+    assert!(
+        stderr.contains("Q-10-2"),
+        "expected Q-10-2 in stderr; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("Undefined variable") && stderr.contains("author-greeting"),
+        "expected 'Undefined variable: author-greeting' message in stderr; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("custom.html"),
+        "diagnostic should attribute to custom.html (ariadne path:line:col); got: {stderr}"
+    );
+
+    // The rendered HTML should still exist (non-fatal warning).
+    let out_html = project.join("post.html");
+    assert!(
+        out_html.exists(),
+        "expected output {} to exist after warning render; stderr: {stderr}",
+        out_html.display()
+    );
+    let html = std::fs::read_to_string(&out_html).unwrap();
+    assert!(
+        html.contains("Body content"),
+        "rendered HTML should still contain the body; got:\n{html}",
+    );
+}
+
 /// Test (negative): multiple stand-alone `.qmd` files outside any
 /// project ⇒ "one project per render" error.
 #[test]

@@ -1,0 +1,8 @@
+::: {.list-table}
+- - foo
+  - Add values:
+
+    ```python
+    x
+    ```
+:::

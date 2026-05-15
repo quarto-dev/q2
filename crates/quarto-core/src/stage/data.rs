@@ -400,6 +400,15 @@ pub struct RenderedOutput {
     pub supporting_files: Vec<PathBuf>,
     /// Document metadata from the AST (for template rendering)
     pub metadata: ConfigValue,
+    /// Source context for ariadne attribution of cross-file diagnostics.
+    ///
+    /// Carried forward from the document's `DocumentAst.source_context`
+    /// by `RenderHtmlStage`. `ApplyTemplateStage` extends it with
+    /// template + partial files via `compile_with_resolver_and_context`
+    /// so doctemplate warnings (e.g. `Q-10-2 Undefined variable`)
+    /// resolve to a real file slice in the renderer's stderr output.
+    /// See bd-xdnk.
+    pub source_context: SourceContext,
 }
 
 /// Final output after relocation.

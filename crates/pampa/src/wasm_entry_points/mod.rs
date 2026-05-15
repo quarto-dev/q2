@@ -16,6 +16,7 @@ fn pandoc_to_json(
     let mut buf = Vec::new();
     let config = JsonConfig {
         include_inline_locations: include_resolved_locations,
+        ..JsonConfig::default()
     };
     match crate::writers::json::write_with_config(doc, context, &mut buf, &config) {
         Ok(_) => {

@@ -78,17 +78,15 @@ impl PipelineStage for CodeHighlightStage {
         // over the native disk-loader path. This lets both targets share
         // one code path without cfg-gating at the call site.
         //
-        // Manual `&mut **b` rather than `as_deref_mut()` because the
-        // latter preserves the trait-object's implicit `'static` bound,
-        // which then fights the async-trait `'static` future-lifetime
-        // check. `&mut **b` produces a fresh borrow with the natural
-        // (method-body) lifetime.
-        let result = if ctx.user_grammar_provider.is_some() {
-            let user = ctx
-                .user_grammar_provider
-                .as_mut()
-                .map(|b| &mut **b as &mut dyn quarto_highlight::UserGrammarProvider);
-            quarto_highlight::annotate_pandoc(&mut doc.ast, user)
+        // The provider lives in an `Rc<RefCell<…>>` (bd-izfv) so a single
+        // handle can be shared across every page a renderer touches. We
+        // hold a `RefMut` only for the duration of the `annotate_pandoc`
+        // call; the trait's `&mut self` methods on `highlight` don't
+        // re-enter the provider, so the borrow is straight-line.
+        let result = if let Some(rc) = ctx.user_grammar_provider.as_ref() {
+            let mut guard = rc.borrow_mut();
+            let user_ref = Some(&mut *guard as &mut dyn quarto_highlight::UserGrammarProvider);
+            quarto_highlight::annotate_pandoc(&mut doc.ast, user_ref)
         } else {
             #[cfg(not(target_arch = "wasm32"))]
             {

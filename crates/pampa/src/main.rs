@@ -479,6 +479,7 @@ fn main() {
                         .json_source_location
                         .as_ref()
                         .is_some_and(|s| s == "full"),
+                    ..writers::json::JsonConfig::default()
                 };
                 writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
             }

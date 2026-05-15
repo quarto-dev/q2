@@ -1710,6 +1710,49 @@
       title: string
       subtitle: string
 
+# Per-document advertisement for listings consumers. Authors set this
+# at frontmatter top level; the listings code path reads it from
+# `DocumentProfile::listing_item`. See `bd-n8a4` and the L0 sub-plan at
+# `claude-notes/plans/2026-05-05-listings-L0-profile-extension.md`.
+- id: listing-item
+  object:
+    closed: false
+    properties:
+      title:
+        string:
+          description: Override for the title displayed in listings.
+      subtitle:
+        string:
+          description: Override for the subtitle displayed in listings.
+      description:
+        string:
+          description: Listing description (text shown under the title).
+      image:
+        string:
+          description: Listing image src.
+      image-alt:
+        string:
+          description: Alt text for the listing image.
+      date:
+        string:
+          description: Listing display date.
+      date-modified:
+        string:
+          description: Date the document was last modified.
+      categories:
+        maybeArrayOf:
+          string:
+            description: Listing categories.
+      reading-time-minutes:
+        number:
+          description: Estimated reading time in minutes (semantic value; display formatting is a render-time concern).
+      word-count:
+        number:
+          description: Document body word count.
+      extra:
+        object:
+          description: Free-form fields advertised for custom listing templates. Keys here are author-defined; the schema does not constrain them.
+
 - id: csl-date
   anyOf:
     - string

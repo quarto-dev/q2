@@ -99,13 +99,24 @@ impl TryFrom<&str> for FormatIdentifier {
     }
 }
 
-/// Builtin pseudo-formats that map to a known base format.
-/// Temporary bridge until the extensions system provides this mapping.
-/// Each entry should become an extension when that system lands.
-fn builtin_pseudo_format(name: &str) -> Option<&'static str> {
+/// Builtin pseudo-formats that map to a known base format and an
+/// optional pipeline-kind selector.
+///
+/// `pipeline_kind` is the structured replacement for string-literal
+/// `target_format` matches in pipeline-dispatching code. Per Plan 1's
+/// §"Multi-plan contract: cleanup owed to Plan 7", `q2-preview` maps
+/// to `Some("preview")` so `AstTransformsStage` (and the JS-side
+/// data-source switch, eventually) can dispatch on a typed selector
+/// instead of grepping on `target_format == "q2-preview"`.
+///
+/// Temporary bridge until the extensions system provides this
+/// mapping. Each entry should become an extension when that system
+/// lands.
+fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static str>)> {
     match name {
-        "q2-slides" => Some("html"),
-        "q2-debug" => Some("html"),
+        "q2-slides" => Some(("html", None)),
+        "q2-debug" => Some(("html", None)),
+        "q2-preview" => Some(("html", Some("preview"))),
         _ => None,
     }
 }
@@ -146,6 +157,13 @@ pub struct Format {
 
     /// Whether this format uses the native Rust pipeline
     pub native_pipeline: bool,
+
+    /// Structured pipeline selector. `Some("preview")` for the
+    /// `q2-preview` pseudo-format; `None` for everything else
+    /// today. Pipeline-dispatching stages (e.g.
+    /// `AstTransformsStage::run()`) read this instead of
+    /// string-matching on `target_format`.
+    pub pipeline_kind: Option<&'static str>,
 }
 
 impl Format {
@@ -158,6 +176,7 @@ impl Format {
             display_name: "HTML".to_string(),
             output_extension: "html".to_string(),
             native_pipeline: true,
+            pipeline_kind: None,
         }
     }
 
@@ -170,6 +189,7 @@ impl Format {
             display_name: "PDF".to_string(),
             output_extension: "pdf".to_string(),
             native_pipeline: false,
+            pipeline_kind: None,
         }
     }
 
@@ -182,6 +202,7 @@ impl Format {
             display_name: "DOCX".to_string(),
             output_extension: "docx".to_string(),
             native_pipeline: false,
+            pipeline_kind: None,
         }
     }
 
@@ -190,7 +211,8 @@ impl Format {
     /// Accepts:
     /// - Known base formats: "html", "pdf", "docx", etc.
     /// - Extension-style formats: "acm-html", "my-journal-pdf"
-    /// - Builtin pseudo-formats: "q2-slides", "q2-debug" (temporary, until extensions)
+    /// - Builtin pseudo-formats: "q2-slides", "q2-debug", "q2-preview"
+    ///   (temporary, until extensions)
     ///
     /// Returns Err for unrecognized format strings.
     pub fn from_format_string(format_str: &str) -> Result<Self, String> {
@@ -203,6 +225,7 @@ impl Format {
                 display_name: identifier.as_str().to_uppercase(),
                 output_extension: output_extension_for(identifier),
                 native_pipeline: identifier.is_native(),
+                pipeline_kind: None,
             });
         }
 
@@ -219,11 +242,15 @@ impl Format {
                 display_name: format_str.to_string(),
                 output_extension: output_extension_for(identifier),
                 native_pipeline: identifier.is_native(),
+                pipeline_kind: None,
             });
         }
 
-        // 3. Try as a builtin pseudo-format: "q2-slides" -> base "html"
-        if let Some(base) = builtin_pseudo_format(format_str) {
+        // 3. Try as a builtin pseudo-format: "q2-preview" -> base "html"
+        // with `pipeline_kind = Some("preview")`. The (base, kind)
+        // pair is the single source of truth; pipeline-dispatching
+        // stages read `pipeline_kind` instead of string-matching.
+        if let Some((base, pipeline_kind)) = builtin_pseudo_format(format_str) {
             let identifier = FormatIdentifier::try_from(base).unwrap();
             return Ok(Self {
                 identifier,
@@ -232,6 +259,7 @@ impl Format {
                 display_name: format_str.to_string(),
                 output_extension: output_extension_for(identifier),
                 native_pipeline: identifier.is_native(),
+                pipeline_kind,
             });
         }
 
@@ -639,6 +667,27 @@ mod tests {
         assert_eq!(f.extension_name, None);
         assert_eq!(f.output_extension, "html");
         assert!(f.native_pipeline);
+        // q2-slides has no pipeline_kind today; future plan migrates
+        // it to the q2-preview pipeline (Plan 1 Decision A).
+        assert_eq!(f.pipeline_kind, None);
+    }
+
+    #[test]
+    fn test_from_format_string_q2_preview() {
+        let f = Format::from_format_string("q2-preview").unwrap();
+        // q2-preview is HTML-based; the pseudo-format mapping
+        // gives it `identifier: Html` while preserving the original
+        // string in `target_format`.
+        assert_eq!(f.identifier, FormatIdentifier::Html);
+        assert_eq!(f.target_format, "q2-preview");
+        assert_eq!(f.extension_name, None);
+        assert_eq!(f.output_extension, "html");
+        assert!(f.native_pipeline);
+        // The structured selector pipeline-dispatching code reads.
+        // `AstTransformsStage::run()` will branch on this in a
+        // later commit (Plan 7 cleanup retires the temporary
+        // `target_format == "q2-preview"` string match).
+        assert_eq!(f.pipeline_kind, Some("preview"));
     }
 
     #[test]

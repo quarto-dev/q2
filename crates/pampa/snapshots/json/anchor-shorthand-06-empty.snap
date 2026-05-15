@@ -1,5 +1,6 @@
 ---
 source: crates/pampa/tests/test.rs
+assertion_line: 362
 expression: output
 ---
-{"blocks":[{"c":[{"c":"This","s":1,"t":"Str"},{"c":["html","<#>"],"s":2,"t":"RawInline"},{"s":3,"t":"Space"},{"c":"stays","s":4,"t":"Str"},{"s":5,"t":"Space"},{"c":"raw.","s":6,"t":"Str"}],"s":0,"t":"Para"}],"meta":{},"pandoc-api-version":[1,23,1],"astContext":{"files":[{"line_breaks":[19],"name":"tests/snapshots/json/anchor-shorthand-06-empty.qmd","total_length":20}],"sourceInfoPool":[{"d":0,"r":[0,20],"t":0},{"d":0,"r":[0,4],"t":0},{"d":0,"r":[4,8],"t":0},{"d":0,"r":[8,9],"t":0},{"d":0,"r":[9,14],"t":0},{"d":0,"r":[14,15],"t":0},{"d":0,"r":[15,19],"t":0}]}}
+{"blocks":[{"c":[{"c":"This","s":1,"t":"Str"},{"s":2,"t":"Space"},{"c":["html","<#>"],"s":3,"t":"RawInline"},{"s":4,"t":"Space"},{"c":"stays","s":5,"t":"Str"},{"s":6,"t":"Space"},{"c":"raw.","s":7,"t":"Str"}],"s":0,"t":"Para"}],"meta":{},"pandoc-api-version":[1,23,1],"astContext":{"files":[{"line_breaks":[19],"name":"tests/snapshots/json/anchor-shorthand-06-empty.qmd","total_length":20}],"sourceInfoPool":[{"d":0,"r":[0,20],"t":0},{"d":0,"r":[0,4],"t":0},{"d":0,"r":[4,5],"t":0},{"d":0,"r":[5,8],"t":0},{"d":0,"r":[8,9],"t":0},{"d":0,"r":[9,14],"t":0},{"d":0,"r":[14,15],"t":0},{"d":0,"r":[15,19],"t":0}]}}

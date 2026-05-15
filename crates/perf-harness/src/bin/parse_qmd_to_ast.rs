@@ -88,6 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = Vec::new();
         let json_config = pampa::writers::json::JsonConfig {
             include_inline_locations: true,
+            ..pampa::writers::json::JsonConfig::default()
         };
         pampa::writers::json::write_with_config(&result.ast, &ast_context, &mut buf, &json_config)
             .map_err(|e| format!("json::write_with_config: {:?}", e))?;

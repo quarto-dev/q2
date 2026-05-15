@@ -61,6 +61,14 @@ interface RunConfig {
   ci?: boolean;
   os?: string[];
   not_os?: string[];
+  /**
+   * Set on fixtures whose format requires a JS runtime to render. Parsed
+   * for consistency with the Rust runner, which uses it to skip CLI runs.
+   * Not enforced here — the WASM unit test already filters by
+   * `format !== 'html'`, so q2-debug fixtures are skipped at the format
+   * gate before this matters.
+   */
+  requires_js?: boolean;
 }
 
 interface FormatSpec {

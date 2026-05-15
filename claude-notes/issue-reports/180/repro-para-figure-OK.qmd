@@ -1,0 +1,3 @@
+Lead-in text.
+
+![cap](img.png){#fig-x}

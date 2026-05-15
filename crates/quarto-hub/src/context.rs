@@ -147,6 +147,7 @@ impl HubContext {
                 config_count = files.config_files.len(),
                 binary_count = files.binary_files.len(),
                 extension_count = files.extension_files.len(),
+                source_count = files.source_files.len(),
                 "Discovered project files"
             );
             Some(files)

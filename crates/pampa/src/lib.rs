@@ -6,6 +6,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+#[cfg(feature = "filters")]
 pub mod citeproc_filter;
 pub mod errors;
 pub mod filter_context;
@@ -21,6 +22,7 @@ pub mod template;
 pub mod toc;
 pub mod transforms;
 pub mod traversals;
+#[cfg(feature = "filters")]
 pub mod unified_filter;
 pub mod utils;
 pub mod wasm_entry_points;

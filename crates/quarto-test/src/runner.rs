@@ -81,6 +81,14 @@ pub fn run_test_file(path: &Path) -> Result<TestResult> {
         if let Some(reason) = config.should_skip() {
             return Ok(TestResult::Skipped(reason));
         }
+        // CLI runner has no JS; skip fixtures that need a JS-capable
+        // renderer (q2-debug, q2-slides, etc.). These are exercised via
+        // Playwright e2e under hub-client/.
+        if config.requires_js {
+            return Ok(TestResult::Skipped(
+                "tests.run.requires_js: true (no JS in CLI runner)".to_string(),
+            ));
+        }
     }
 
     // If no test specs, nothing to do

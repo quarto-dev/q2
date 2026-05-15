@@ -176,6 +176,7 @@ pub fn apply_json_filter(
     let mut json_buf = Vec::new();
     let json_config = writers::json::JsonConfig {
         include_inline_locations: true,
+        ..writers::json::JsonConfig::default()
     };
     writers::json::write_with_config(pandoc, context, &mut json_buf, &json_config).map_err(
         |diags| {

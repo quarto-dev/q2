@@ -5,6 +5,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
+  bootstrapProjectSet,
   createProjectOnServer,
   seedProjectInBrowser,
   getServerUrl,
@@ -36,9 +37,9 @@ test.describe('Project Loading', () => {
       },
     ]);
 
-    // Navigate to app root first (initializes Vite modules)
-    await page.goto('/');
-    await expect(page.locator('body')).toBeVisible();
+    // Initialize the synced project set so the App reaches `connected`
+    // status before we add the legacy IDB project entry.
+    await bootstrapProjectSet(page, serverUrl);
 
     // Seed the project in browser IndexedDB
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);

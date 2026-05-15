@@ -22,6 +22,14 @@ pathdiff = "0.2"
 sha2 = "0.11"
 hex = "0.4"
 glob = "0.3"
+# `time` for date formatting (used by L1 ListingItemInfoStage; see
+# claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md §D12).
+# `formatting` enables `OffsetDateTime::format`; `parsing` enables
+# `OffsetDateTime::parse` and `Date::parse` (added in L9 for the
+# RSS feed binding's `pub_date_rfc822` field, which accepts
+# RFC 3339 / RFC 2822 / ISO date-only inputs); `macros` enables the
+# compile-time `format_description!` macro. WASM-compatible.
+time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
 
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
@@ -44,22 +52,54 @@ pampa = { workspace = true, features = ["lua-filter", "json-filter"] }
 # wasm32-unknown-unknown target.
 quarto-highlight.workspace = true
 
+# Used by the listings module's `b64_encode_unicode` helper (mirroring
+# Q1's `b64EncodeUnicode` for the categories click handler). Available
+# on both native and wasm32; `wasm-quarto-hub-client` already lists
+# `base64 = "0.22"` directly. The encoding is small enough that the
+# follow-up bd-754f review may replace it with a Q2-native scheme.
+base64.workspace = true
+
+# Optional clap dep so types exposed to the CLI (e.g. `AttributionMode`)
+# can carry `ValueEnum` derives without forcing clap into the WASM tree
+# or other non-CLI consumers. The `quarto` crate enables this via
+# `quarto-core/clap`; no other consumer needs it.
+clap = { workspace = true, optional = true, features = ["derive"] }
+
+[features]
+clap = ["dep:clap"]
+
 # Native-only dependencies (for execution engines and resource extraction)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"
 include_dir = "0.7"
 which = "8"
 regex = "1.12"
+# `scraper` (CSS-selector HTML reader) for the L7 post-render upgrade
+# (`bd-qf7r`). Native-only by construction: post_render runs only
+# under `quarto render`, never in the WASM hub-client preview. The
+# crate's transitive deps include `html5ever` + a couple of crates
+# that don't build for `wasm32-unknown-unknown`; gating here keeps
+# them out of the WASM tree. See plan §"scraper dep gating".
+scraper = { workspace = true }
+# `imagesize` (header-only image dimensions/MIME detection) for the L9
+# RSS feed `<media:content>` emission (`bd-o90m`). Native-only —
+# feeds are written by `quarto render`'s post_render step; the WASM
+# hub-client preview doesn't generate feeds. The crate parses image
+# headers only (no full decode) and has no wasm-incompatible deps,
+# but stays target-gated to keep the WASM bundle smaller. See
+# `claude-notes/plans/2026-05-08-listings-L9-rss-feeds.md`
+# §"Image metadata via `imagesize`".
+imagesize = "0.13"
 
 # Jupyter engine dependencies (native only)
 runtimelib = { version = "2.0", features = ["tokio-runtime"] }
 jupyter-protocol = "2.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
-base64.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+insta.workspace = true
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros"] }
 

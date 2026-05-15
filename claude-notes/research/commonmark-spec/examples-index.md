@@ -1,0 +1,664 @@
+# CommonMark Spec — Examples Index
+
+655 numbered examples from `external-sources/commonmark/spec.txt`
+(CommonMark v0.31.2). Each example is the block delimited by 32-backtick
+fences containing an input, a `.` separator, and the expected HTML output.
+
+The line range below covers both fence lines (inclusive). To extract a
+single example's body without the fences, use `scripts/spec-example.sh`.
+
+- Example 1 (§2.2 Tabs): lines 355-360
+- Example 2 (§2.2 Tabs): lines 362-367
+- Example 3 (§2.2 Tabs): lines 369-376
+- Example 4 (§2.2 Tabs): lines 382-393
+- Example 5 (§2.2 Tabs): lines 395-407
+- Example 6 (§2.2 Tabs): lines 418-425
+- Example 7 (§2.2 Tabs): lines 427-436
+- Example 8 (§2.2 Tabs): lines 439-446
+- Example 9 (§2.2 Tabs): lines 448-464
+- Example 10 (§2.2 Tabs): lines 466-470
+- Example 11 (§2.2 Tabs): lines 472-476
+- Example 12 (§2.4 Backslash escapes): lines 489-493
+- Example 13 (§2.4 Backslash escapes): lines 499-503
+- Example 14 (§2.4 Backslash escapes): lines 509-529
+- Example 15 (§2.4 Backslash escapes): lines 534-538
+- Example 16 (§2.4 Backslash escapes): lines 543-549
+- Example 17 (§2.4 Backslash escapes): lines 555-559
+- Example 18 (§2.4 Backslash escapes): lines 562-567
+- Example 19 (§2.4 Backslash escapes): lines 570-577
+- Example 20 (§2.4 Backslash escapes): lines 580-584
+- Example 21 (§2.4 Backslash escapes): lines 587-591
+- Example 22 (§2.4 Backslash escapes): lines 597-601
+- Example 23 (§2.4 Backslash escapes): lines 604-610
+- Example 24 (§2.4 Backslash escapes): lines 613-620
+- Example 25 (§2.5 Entity and numeric character references): lines 649-657
+- Example 26 (§2.5 Entity and numeric character references): lines 668-672
+- Example 27 (§2.5 Entity and numeric character references): lines 681-685
+- Example 28 (§2.5 Entity and numeric character references): lines 690-700
+- Example 29 (§2.5 Entity and numeric character references): lines 707-711
+- Example 30 (§2.5 Entity and numeric character references): lines 717-721
+- Example 31 (§2.5 Entity and numeric character references): lines 728-732
+- Example 32 (§2.5 Entity and numeric character references): lines 735-739
+- Example 33 (§2.5 Entity and numeric character references): lines 742-748
+- Example 34 (§2.5 Entity and numeric character references): lines 751-758
+- Example 35 (§2.5 Entity and numeric character references): lines 764-768
+- Example 36 (§2.5 Entity and numeric character references): lines 771-776
+- Example 37 (§2.5 Entity and numeric character references): lines 783-789
+- Example 38 (§2.5 Entity and numeric character references): lines 791-800
+- Example 39 (§2.5 Entity and numeric character references): lines 802-808
+- Example 40 (§2.5 Entity and numeric character references): lines 810-814
+- Example 41 (§2.5 Entity and numeric character references): lines 817-821
+- Example 42 (§3.1 Precedence): lines 840-848
+- Example 43 (§4.1 Thematic breaks): lines 879-887
+- Example 44 (§4.1 Thematic breaks): lines 892-896
+- Example 45 (§4.1 Thematic breaks): lines 899-903
+- Example 46 (§4.1 Thematic breaks): lines 908-916
+- Example 47 (§4.1 Thematic breaks): lines 921-929
+- Example 48 (§4.1 Thematic breaks): lines 934-939
+- Example 49 (§4.1 Thematic breaks): lines 942-948
+- Example 50 (§4.1 Thematic breaks): lines 953-957
+- Example 51 (§4.1 Thematic breaks): lines 962-966
+- Example 52 (§4.1 Thematic breaks): lines 969-973
+- Example 53 (§4.1 Thematic breaks): lines 976-980
+- Example 54 (§4.1 Thematic breaks): lines 985-989
+- Example 55 (§4.1 Thematic breaks): lines 994-1004
+- Example 56 (§4.1 Thematic breaks): lines 1010-1014
+- Example 57 (§4.1 Thematic breaks): lines 1019-1031
+- Example 58 (§4.1 Thematic breaks): lines 1036-1044
+- Example 59 (§4.1 Thematic breaks): lines 1053-1060
+- Example 60 (§4.1 Thematic breaks): lines 1066-1078
+- Example 61 (§4.1 Thematic breaks): lines 1083-1093
+- Example 62 (§4.2 ATX headings): lines 1112-1126
+- Example 63 (§4.2 ATX headings): lines 1131-1135
+- Example 64 (§4.2 ATX headings): lines 1146-1153
+- Example 65 (§4.2 ATX headings): lines 1158-1162
+- Example 66 (§4.2 ATX headings): lines 1167-1171
+- Example 67 (§4.2 ATX headings): lines 1176-1180
+- Example 68 (§4.2 ATX headings): lines 1185-1193
+- Example 69 (§4.2 ATX headings): lines 1198-1203
+- Example 70 (§4.2 ATX headings): lines 1206-1212
+- Example 71 (§4.2 ATX headings): lines 1217-1223
+- Example 72 (§4.2 ATX headings): lines 1228-1234
+- Example 73 (§4.2 ATX headings): lines 1239-1243
+- Example 74 (§4.2 ATX headings): lines 1250-1254
+- Example 75 (§4.2 ATX headings): lines 1259-1263
+- Example 76 (§4.2 ATX headings): lines 1269-1277
+- Example 77 (§4.2 ATX headings): lines 1283-1291
+- Example 78 (§4.2 ATX headings): lines 1294-1302
+- Example 79 (§4.2 ATX headings): lines 1307-1315
+- Example 80 (§4.3 Setext headings): lines 1347-1356
+- Example 81 (§4.3 Setext headings): lines 1361-1368
+- Example 82 (§4.3 Setext headings): lines 1375-1382
+- Example 83 (§4.3 Setext headings): lines 1387-1396
+- Example 84 (§4.3 Setext headings): lines 1402-1415
+- Example 85 (§4.3 Setext headings): lines 1420-1433
+- Example 86 (§4.3 Setext headings): lines 1439-1444
+- Example 87 (§4.3 Setext headings): lines 1449-1455
+- Example 88 (§4.3 Setext headings): lines 1460-1471
+- Example 89 (§4.3 Setext headings): lines 1476-1481
+- Example 90 (§4.3 Setext headings): lines 1486-1491
+- Example 91 (§4.3 Setext headings): lines 1497-1510
+- Example 92 (§4.3 Setext headings): lines 1516-1524
+- Example 93 (§4.3 Setext headings): lines 1527-1537
+- Example 94 (§4.3 Setext headings): lines 1540-1548
+- Example 95 (§4.3 Setext headings): lines 1555-1562
+- Example 96 (§4.3 Setext headings): lines 1568-1580
+- Example 97 (§4.3 Setext headings): lines 1585-1590
+- Example 98 (§4.3 Setext headings): lines 1597-1603
+- Example 99 (§4.3 Setext headings): lines 1606-1614
+- Example 100 (§4.3 Setext headings): lines 1617-1624
+- Example 101 (§4.3 Setext headings): lines 1627-1635
+- Example 102 (§4.3 Setext headings): lines 1641-1646
+- Example 103 (§4.3 Setext headings): lines 1672-1682
+- Example 104 (§4.3 Setext headings): lines 1688-1700
+- Example 105 (§4.3 Setext headings): lines 1706-1716
+- Example 106 (§4.3 Setext headings): lines 1721-1731
+- Example 107 (§4.4 Indented code blocks): lines 1749-1756
+- Example 108 (§4.4 Indented code blocks): lines 1763-1774
+- Example 109 (§4.4 Indented code blocks): lines 1777-1790
+- Example 110 (§4.4 Indented code blocks): lines 1797-1808
+- Example 111 (§4.4 Indented code blocks): lines 1813-1830
+- Example 112 (§4.4 Indented code blocks): lines 1836-1845
+- Example 113 (§4.4 Indented code blocks): lines 1851-1858
+- Example 114 (§4.4 Indented code blocks): lines 1865-1872
+- Example 115 (§4.4 Indented code blocks): lines 1878-1893
+- Example 116 (§4.4 Indented code blocks): lines 1898-1905
+- Example 117 (§4.4 Indented code blocks): lines 1911-1920
+- Example 118 (§4.4 Indented code blocks): lines 1925-1930
+- Example 119 (§4.5 Fenced code blocks): lines 1980-1989
+- Example 120 (§4.5 Fenced code blocks): lines 1994-2003
+- Example 121 (§4.5 Fenced code blocks): lines 2007-2013
+- Example 122 (§4.5 Fenced code blocks): lines 2018-2027
+- Example 123 (§4.5 Fenced code blocks): lines 2030-2039
+- Example 124 (§4.5 Fenced code blocks): lines 2044-2053
+- Example 125 (§4.5 Fenced code blocks): lines 2056-2065
+- Example 126 (§4.5 Fenced code blocks): lines 2071-2075
+- Example 127 (§4.5 Fenced code blocks): lines 2078-2088
+- Example 128 (§4.5 Fenced code blocks): lines 2091-2102
+- Example 129 (§4.5 Fenced code blocks): lines 2107-2116
+- Example 130 (§4.5 Fenced code blocks): lines 2121-2126
+- Example 131 (§4.5 Fenced code blocks): lines 2133-2142
+- Example 132 (§4.5 Fenced code blocks): lines 2145-2156
+- Example 133 (§4.5 Fenced code blocks): lines 2159-2170
+- Example 134 (§4.5 Fenced code blocks): lines 2175-2184
+- Example 135 (§4.5 Fenced code blocks): lines 2190-2197
+- Example 136 (§4.5 Fenced code blocks): lines 2200-2207
+- Example 137 (§4.5 Fenced code blocks): lines 2212-2220
+- Example 138 (§4.5 Fenced code blocks): lines 2226-2232
+- Example 139 (§4.5 Fenced code blocks): lines 2235-2243
+- Example 140 (§4.5 Fenced code blocks): lines 2249-2260
+- Example 141 (§4.5 Fenced code blocks): lines 2266-2278
+- Example 142 (§4.5 Fenced code blocks): lines 2288-2299
+- Example 143 (§4.5 Fenced code blocks): lines 2302-2313
+- Example 144 (§4.5 Fenced code blocks): lines 2316-2321
+- Example 145 (§4.5 Fenced code blocks): lines 2326-2332
+- Example 146 (§4.5 Fenced code blocks): lines 2337-2344
+- Example 147 (§4.5 Fenced code blocks): lines 2349-2356
+- Example 148 (§4.6 HTML blocks): lines 2429-2444
+- Example 149 (§4.6 HTML blocks): lines 2458-2477
+- Example 150 (§4.6 HTML blocks): lines 2480-2488
+- Example 151 (§4.6 HTML blocks): lines 2493-2499
+- Example 152 (§4.6 HTML blocks): lines 2504-2514
+- Example 153 (§4.6 HTML blocks): lines 2520-2528
+- Example 154 (§4.6 HTML blocks): lines 2531-2539
+- Example 155 (§4.6 HTML blocks): lines 2543-2552
+- Example 156 (§4.6 HTML blocks): lines 2559-2565
+- Example 157 (§4.6 HTML blocks): lines 2568-2574
+- Example 158 (§4.6 HTML blocks): lines 2580-2586
+- Example 159 (§4.6 HTML blocks): lines 2592-2596
+- Example 160 (§4.6 HTML blocks): lines 2599-2607
+- Example 161 (§4.6 HTML blocks): lines 2616-2626
+- Example 162 (§4.6 HTML blocks): lines 2629-2635
+- Example 163 (§4.6 HTML blocks): lines 2642-2650
+- Example 164 (§4.6 HTML blocks): lines 2655-2663
+- Example 165 (§4.6 HTML blocks): lines 2666-2674
+- Example 166 (§4.6 HTML blocks): lines 2677-2683
+- Example 167 (§4.6 HTML blocks): lines 2692-2700
+- Example 168 (§4.6 HTML blocks): lines 2707-2717
+- Example 169 (§4.6 HTML blocks): lines 2725-2729
+- Example 170 (§4.6 HTML blocks): lines 2731-2741
+- Example 171 (§4.6 HTML blocks): lines 2753-2769
+- Example 172 (§4.6 HTML blocks): lines 2774-2788
+- Example 173 (§4.6 HTML blocks): lines 2793-2809
+- Example 174 (§4.6 HTML blocks): lines 2813-2829
+- Example 175 (§4.6 HTML blocks): lines 2836-2846
+- Example 176 (§4.6 HTML blocks): lines 2849-2860
+- Example 177 (§4.6 HTML blocks): lines 2863-2873
+- Example 178 (§4.6 HTML blocks): lines 2878-2884
+- Example 179 (§4.6 HTML blocks): lines 2887-2893
+- Example 180 (§4.6 HTML blocks): lines 2899-2907
+- Example 181 (§4.6 HTML blocks): lines 2912-2924
+- Example 182 (§4.6 HTML blocks): lines 2930-2944
+- Example 183 (§4.6 HTML blocks): lines 2949-2953
+- Example 184 (§4.6 HTML blocks): lines 2958-2986
+- Example 185 (§4.6 HTML blocks): lines 2992-3000
+- Example 186 (§4.6 HTML blocks): lines 3003-3011
+- Example 187 (§4.6 HTML blocks): lines 3017-3027
+- Example 188 (§4.6 HTML blocks): lines 3034-3044
+- Example 189 (§4.6 HTML blocks): lines 3049-3057
+- Example 190 (§4.6 HTML blocks): lines 3090-3100
+- Example 191 (§4.6 HTML blocks): lines 3103-3111
+- Example 192 (§4.6 HTML blocks): lines 3125-3145
+- Example 193 (§4.6 HTML blocks): lines 3152-3173
+- Example 194 (§4.7 Link reference definitions): lines 3201-3207
+- Example 195 (§4.7 Link reference definitions): lines 3210-3218
+- Example 196 (§4.7 Link reference definitions): lines 3221-3227
+- Example 197 (§4.7 Link reference definitions): lines 3230-3238
+- Example 198 (§4.7 Link reference definitions): lines 3243-3257
+- Example 199 (§4.7 Link reference definitions): lines 3262-3272
+- Example 200 (§4.7 Link reference definitions): lines 3277-3284
+- Example 201 (§4.7 Link reference definitions): lines 3289-3296
+- Example 202 (§4.7 Link reference definitions): lines 3301-3307
+- Example 203 (§4.7 Link reference definitions): lines 3312-3319
+- Example 204 (§4.7 Link reference definitions): lines 3325-3331
+- Example 205 (§4.7 Link reference definitions): lines 3336-3342
+- Example 206 (§4.7 Link reference definitions): lines 3348-3355
+- Example 207 (§4.7 Link reference definitions): lines 3361-3367
+- Example 208 (§4.7 Link reference definitions): lines 3370-3376
+- Example 209 (§4.7 Link reference definitions): lines 3385-3388
+- Example 210 (§4.7 Link reference definitions): lines 3393-3400
+- Example 211 (§4.7 Link reference definitions): lines 3406-3410
+- Example 212 (§4.7 Link reference definitions): lines 3415-3420
+- Example 213 (§4.7 Link reference definitions): lines 3426-3434
+- Example 214 (§4.7 Link reference definitions): lines 3440-3450
+- Example 215 (§4.7 Link reference definitions): lines 3455-3464
+- Example 216 (§4.7 Link reference definitions): lines 3470-3479
+- Example 217 (§4.7 Link reference definitions): lines 3481-3489
+- Example 218 (§4.7 Link reference definitions): lines 3491-3498
+- Example 219 (§4.7 Link reference definitions): lines 3504-3517
+- Example 220 (§4.7 Link reference definitions): lines 3525-3533
+- Example 221 (§4.8 Paragraphs): lines 3547-3554
+- Example 222 (§4.8 Paragraphs): lines 3559-3570
+- Example 223 (§4.8 Paragraphs): lines 3575-3583
+- Example 224 (§4.8 Paragraphs): lines 3588-3594
+- Example 225 (§4.8 Paragraphs): lines 3600-3608
+- Example 226 (§4.8 Paragraphs): lines 3614-3620
+- Example 227 (§4.8 Paragraphs): lines 3623-3630
+- Example 228 (§4.8 Paragraphs): lines 3637-3643
+- Example 229 (§4.9 Blank lines): lines 3654-3666
+- Example 230 (§5.1 Block quotes): lines 3722-3732
+- Example 231 (§5.1 Block quotes): lines 3737-3747
+- Example 232 (§5.1 Block quotes): lines 3752-3762
+- Example 233 (§5.1 Block quotes): lines 3767-3776
+- Example 234 (§5.1 Block quotes): lines 3782-3792
+- Example 235 (§5.1 Block quotes): lines 3798-3808
+- Example 236 (§5.1 Block quotes): lines 3822-3830
+- Example 237 (§5.1 Block quotes): lines 3842-3854
+- Example 238 (§5.1 Block quotes): lines 3860-3870
+- Example 239 (§5.1 Block quotes): lines 3873-3883
+- Example 240 (§5.1 Block quotes): lines 3889-3897
+- Example 241 (§5.1 Block quotes): lines 3913-3918
+- Example 242 (§5.1 Block quotes): lines 3921-3928
+- Example 243 (§5.1 Block quotes): lines 3933-3941
+- Example 244 (§5.1 Block quotes): lines 3946-3957
+- Example 245 (§5.1 Block quotes): lines 3968-3976
+- Example 246 (§5.1 Block quotes): lines 3981-3990
+- Example 247 (§5.1 Block quotes): lines 3995-4003
+- Example 248 (§5.1 Block quotes): lines 4009-4021
+- Example 249 (§5.1 Block quotes): lines 4027-4035
+- Example 250 (§5.1 Block quotes): lines 4038-4047
+- Example 251 (§5.1 Block quotes): lines 4050-4059
+- Example 252 (§5.1 Block quotes): lines 4066-4078
+- Example 253 (§5.1 Block quotes): lines 4081-4095
+- Example 254 (§5.1 Block quotes): lines 4103-4115
+- Example 255 (§5.2 List items): lines 4157-4172
+- Example 256 (§5.2 List items): lines 4179-4198
+- Example 257 (§5.2 List items): lines 4212-4221
+- Example 258 (§5.2 List items): lines 4224-4235
+- Example 259 (§5.2 List items): lines 4238-4248
+- Example 260 (§5.2 List items): lines 4251-4262
+- Example 261 (§5.2 List items): lines 4273-4288
+- Example 262 (§5.2 List items): lines 4300-4313
+- Example 263 (§5.2 List items): lines 4319-4326
+- Example 264 (§5.2 List items): lines 4332-4344
+- Example 265 (§5.2 List items): lines 4349-4371
+- Example 266 (§5.2 List items): lines 4377-4395
+- Example 267 (§5.2 List items): lines 4399-4405
+- Example 268 (§5.2 List items): lines 4408-4412
+- Example 269 (§5.2 List items): lines 4417-4423
+- Example 270 (§5.2 List items): lines 4426-4432
+- Example 271 (§5.2 List items): lines 4437-4441
+- Example 272 (§5.2 List items): lines 4460-4472
+- Example 273 (§5.2 List items): lines 4477-4489
+- Example 274 (§5.2 List items): lines 4496-4508
+- Example 275 (§5.2 List items): lines 4511-4527
+- Example 276 (§5.2 List items): lines 4533-4549
+- Example 277 (§5.2 List items): lines 4560-4567
+- Example 278 (§5.2 List items): lines 4570-4579
+- Example 279 (§5.2 List items): lines 4587-4598
+- Example 280 (§5.2 List items): lines 4614-4635
+- Example 281 (§5.2 List items): lines 4640-4647
+- Example 282 (§5.2 List items): lines 4654-4663
+- Example 283 (§5.2 List items): lines 4668-4678
+- Example 284 (§5.2 List items): lines 4683-4693
+- Example 285 (§5.2 List items): lines 4698-4708
+- Example 286 (§5.2 List items): lines 4713-4719
+- Example 287 (§5.2 List items): lines 4723-4734
+- Example 288 (§5.2 List items): lines 4745-4764
+- Example 289 (§5.2 List items): lines 4769-4788
+- Example 290 (§5.2 List items): lines 4793-4812
+- Example 291 (§5.2 List items): lines 4817-4832
+- Example 292 (§5.2 List items): lines 4847-4866
+- Example 293 (§5.2 List items): lines 4871-4879
+- Example 294 (§5.2 List items): lines 4884-4898
+- Example 295 (§5.2 List items): lines 4901-4915
+- Example 296 (§5.2 List items): lines 4929-4950
+- Example 297 (§5.2 List items): lines 4955-4967
+- Example 298 (§5.2 List items): lines 4972-4983
+- Example 299 (§5.2 List items): lines 4988-4998
+- Example 300 (§5.2 List items): lines 5003-5013
+- Example 301 (§5.2 List items): lines 5016-5030
+- Example 302 (§5.2 List items): lines 5035-5049
+- Example 303 (§5.3 Lists): lines 5271-5283
+- Example 304 (§5.3 Lists): lines 5286-5298
+- Example 305 (§5.3 Lists): lines 5305-5315
+- Example 306 (§5.3 Lists): lines 5382-5388
+- Example 307 (§5.3 Lists): lines 5392-5400
+- Example 308 (§5.3 Lists): lines 5406-5425
+- Example 309 (§5.3 Lists): lines 5427-5449
+- Example 310 (§5.3 Lists): lines 5457-5475
+- Example 311 (§5.3 Lists): lines 5478-5501
+- Example 312 (§5.3 Lists): lines 5509-5527
+- Example 313 (§5.3 Lists): lines 5530-5548
+- Example 314 (§5.3 Lists): lines 5554-5568
+- Example 315 (§5.3 Lists): lines 5574-5591
+- Example 316 (§5.3 Lists): lines 5597-5614
+- Example 317 (§5.3 Lists): lines 5619-5634
+- Example 318 (§5.3 Lists): lines 5641-5660
+- Example 319 (§5.3 Lists): lines 5663-5681
+- Example 320 (§5.3 Lists): lines 5686-5705
+- Example 321 (§5.3 Lists): lines 5712-5730
+- Example 322 (§5.3 Lists): lines 5736-5750
+- Example 323 (§5.3 Lists): lines 5756-5774
+- Example 324 (§5.3 Lists): lines 5779-5785
+- Example 325 (§5.3 Lists): lines 5788-5799
+- Example 326 (§5.3 Lists): lines 5805-5819
+- Example 327 (§5.3 Lists): lines 5824-5839
+- Example 328 (§5.3 Lists): lines 5842-5867
+- Example 329 (§6 Inlines): lines 5876-5880
+- Example 330 (§6.1 Code spans): lines 5908-5912
+- Example 331 (§6.1 Code spans): lines 5919-5923
+- Example 332 (§6.1 Code spans): lines 5929-5933
+- Example 333 (§6.1 Code spans): lines 5937-5941
+- Example 334 (§6.1 Code spans): lines 5946-5950
+- Example 335 (§6.1 Code spans): lines 5955-5959
+- Example 336 (§6.1 Code spans): lines 5963-5969
+- Example 337 (§6.1 Code spans): lines 5974-5982
+- Example 338 (§6.1 Code spans): lines 5984-5990
+- Example 339 (§6.1 Code spans): lines 5995-6000
+- Example 340 (§6.1 Code spans): lines 6012-6016
+- Example 341 (§6.1 Code spans): lines 6023-6027
+- Example 342 (§6.1 Code spans): lines 6029-6033
+- Example 343 (§6.1 Code spans): lines 6041-6045
+- Example 344 (§6.1 Code spans): lines 6050-6054
+- Example 345 (§6.1 Code spans): lines 6060-6064
+- Example 346 (§6.1 Code spans): lines 6069-6073
+- Example 347 (§6.1 Code spans): lines 6078-6082
+- Example 348 (§6.1 Code spans): lines 6087-6091
+- Example 349 (§6.1 Code spans): lines 6097-6101
+- Example 350 (§6.1 Code spans): lines 6104-6108
+- Example 351 (§6.1 Code spans): lines 6113-6117
+- Example 352 (§6.2 Emphasis and strong emphasis): lines 6330-6334
+- Example 353 (§6.2 Emphasis and strong emphasis): lines 6340-6344
+- Example 354 (§6.2 Emphasis and strong emphasis): lines 6351-6355
+- Example 355 (§6.2 Emphasis and strong emphasis): lines 6360-6364
+- Example 356 (§6.2 Emphasis and strong emphasis): lines 6369-6382
+- Example 357 (§6.2 Emphasis and strong emphasis): lines 6387-6391
+- Example 358 (§6.2 Emphasis and strong emphasis): lines 6394-6398
+- Example 359 (§6.2 Emphasis and strong emphasis): lines 6403-6407
+- Example 360 (§6.2 Emphasis and strong emphasis): lines 6413-6417
+- Example 361 (§6.2 Emphasis and strong emphasis): lines 6423-6427
+- Example 362 (§6.2 Emphasis and strong emphasis): lines 6432-6436
+- Example 363 (§6.2 Emphasis and strong emphasis): lines 6439-6443
+- Example 364 (§6.2 Emphasis and strong emphasis): lines 6446-6450
+- Example 365 (§6.2 Emphasis and strong emphasis): lines 6456-6460
+- Example 366 (§6.2 Emphasis and strong emphasis): lines 6467-6471
+- Example 367 (§6.2 Emphasis and strong emphasis): lines 6479-6483
+- Example 368 (§6.2 Emphasis and strong emphasis): lines 6489-6493
+- Example 369 (§6.2 Emphasis and strong emphasis): lines 6498-6504
+- Example 370 (§6.2 Emphasis and strong emphasis): lines 6511-6515
+- Example 371 (§6.2 Emphasis and strong emphasis): lines 6521-6525
+- Example 372 (§6.2 Emphasis and strong emphasis): lines 6530-6534
+- Example 373 (§6.2 Emphasis and strong emphasis): lines 6543-6547
+- Example 374 (§6.2 Emphasis and strong emphasis): lines 6553-6557
+- Example 375 (§6.2 Emphasis and strong emphasis): lines 6562-6566
+- Example 376 (§6.2 Emphasis and strong emphasis): lines 6571-6575
+- Example 377 (§6.2 Emphasis and strong emphasis): lines 6578-6582
+- Example 378 (§6.2 Emphasis and strong emphasis): lines 6585-6589
+- Example 379 (§6.2 Emphasis and strong emphasis): lines 6596-6600
+- Example 380 (§6.2 Emphasis and strong emphasis): lines 6605-6609
+- Example 381 (§6.2 Emphasis and strong emphasis): lines 6615-6619
+- Example 382 (§6.2 Emphasis and strong emphasis): lines 6626-6630
+- Example 383 (§6.2 Emphasis and strong emphasis): lines 6635-6639
+- Example 384 (§6.2 Emphasis and strong emphasis): lines 6644-6648
+- Example 385 (§6.2 Emphasis and strong emphasis): lines 6654-6658
+- Example 386 (§6.2 Emphasis and strong emphasis): lines 6662-6668
+- Example 387 (§6.2 Emphasis and strong emphasis): lines 6674-6678
+- Example 388 (§6.2 Emphasis and strong emphasis): lines 6683-6687
+- Example 389 (§6.2 Emphasis and strong emphasis): lines 6690-6694
+- Example 390 (§6.2 Emphasis and strong emphasis): lines 6697-6701
+- Example 391 (§6.2 Emphasis and strong emphasis): lines 6704-6708
+- Example 392 (§6.2 Emphasis and strong emphasis): lines 6715-6719
+- Example 393 (§6.2 Emphasis and strong emphasis): lines 6728-6732
+- Example 394 (§6.2 Emphasis and strong emphasis): lines 6741-6745
+- Example 395 (§6.2 Emphasis and strong emphasis): lines 6751-6755
+- Example 396 (§6.2 Emphasis and strong emphasis): lines 6758-6764
+- Example 397 (§6.2 Emphasis and strong emphasis): lines 6767-6771
+- Example 398 (§6.2 Emphasis and strong emphasis): lines 6776-6780
+- Example 399 (§6.2 Emphasis and strong emphasis): lines 6788-6792
+- Example 400 (§6.2 Emphasis and strong emphasis): lines 6798-6802
+- Example 401 (§6.2 Emphasis and strong emphasis): lines 6808-6812
+- Example 402 (§6.2 Emphasis and strong emphasis): lines 6817-6821
+- Example 403 (§6.2 Emphasis and strong emphasis): lines 6824-6828
+- Example 404 (§6.2 Emphasis and strong emphasis): lines 6831-6835
+- Example 405 (§6.2 Emphasis and strong emphasis): lines 6842-6846
+- Example 406 (§6.2 Emphasis and strong emphasis): lines 6854-6858
+- Example 407 (§6.2 Emphasis and strong emphasis): lines 6861-6867
+- Example 408 (§6.2 Emphasis and strong emphasis): lines 6873-6877
+- Example 409 (§6.2 Emphasis and strong emphasis): lines 6880-6884
+- Example 410 (§6.2 Emphasis and strong emphasis): lines 6887-6891
+- Example 411 (§6.2 Emphasis and strong emphasis): lines 6894-6898
+- Example 412 (§6.2 Emphasis and strong emphasis): lines 6901-6905
+- Example 413 (§6.2 Emphasis and strong emphasis): lines 6907-6911
+- Example 414 (§6.2 Emphasis and strong emphasis): lines 6931-6935
+- Example 415 (§6.2 Emphasis and strong emphasis): lines 6944-6948
+- Example 416 (§6.2 Emphasis and strong emphasis): lines 6951-6955
+- Example 417 (§6.2 Emphasis and strong emphasis): lines 6958-6962
+- Example 418 (§6.2 Emphasis and strong emphasis): lines 6969-6973
+- Example 419 (§6.2 Emphasis and strong emphasis): lines 6975-6979
+- Example 420 (§6.2 Emphasis and strong emphasis): lines 6984-6988
+- Example 421 (§6.2 Emphasis and strong emphasis): lines 6991-6995
+- Example 422 (§6.2 Emphasis and strong emphasis): lines 7000-7004
+- Example 423 (§6.2 Emphasis and strong emphasis): lines 7007-7011
+- Example 424 (§6.2 Emphasis and strong emphasis): lines 7020-7024
+- Example 425 (§6.2 Emphasis and strong emphasis): lines 7027-7033
+- Example 426 (§6.2 Emphasis and strong emphasis): lines 7039-7043
+- Example 427 (§6.2 Emphasis and strong emphasis): lines 7046-7050
+- Example 428 (§6.2 Emphasis and strong emphasis): lines 7053-7057
+- Example 429 (§6.2 Emphasis and strong emphasis): lines 7060-7064
+- Example 430 (§6.2 Emphasis and strong emphasis): lines 7067-7071
+- Example 431 (§6.2 Emphasis and strong emphasis): lines 7074-7078
+- Example 432 (§6.2 Emphasis and strong emphasis): lines 7081-7085
+- Example 433 (§6.2 Emphasis and strong emphasis): lines 7088-7092
+- Example 434 (§6.2 Emphasis and strong emphasis): lines 7097-7103
+- Example 435 (§6.2 Emphasis and strong emphasis): lines 7106-7110
+- Example 436 (§6.2 Emphasis and strong emphasis): lines 7115-7119
+- Example 437 (§6.2 Emphasis and strong emphasis): lines 7122-7126
+- Example 438 (§6.2 Emphasis and strong emphasis): lines 7132-7136
+- Example 439 (§6.2 Emphasis and strong emphasis): lines 7139-7143
+- Example 440 (§6.2 Emphasis and strong emphasis): lines 7146-7150
+- Example 441 (§6.2 Emphasis and strong emphasis): lines 7153-7157
+- Example 442 (§6.2 Emphasis and strong emphasis): lines 7160-7164
+- Example 443 (§6.2 Emphasis and strong emphasis): lines 7167-7171
+- Example 444 (§6.2 Emphasis and strong emphasis): lines 7178-7182
+- Example 445 (§6.2 Emphasis and strong emphasis): lines 7185-7189
+- Example 446 (§6.2 Emphasis and strong emphasis): lines 7192-7196
+- Example 447 (§6.2 Emphasis and strong emphasis): lines 7199-7203
+- Example 448 (§6.2 Emphasis and strong emphasis): lines 7206-7210
+- Example 449 (§6.2 Emphasis and strong emphasis): lines 7213-7217
+- Example 450 (§6.2 Emphasis and strong emphasis): lines 7223-7227
+- Example 451 (§6.2 Emphasis and strong emphasis): lines 7230-7234
+- Example 452 (§6.2 Emphasis and strong emphasis): lines 7237-7241
+- Example 453 (§6.2 Emphasis and strong emphasis): lines 7244-7248
+- Example 454 (§6.2 Emphasis and strong emphasis): lines 7251-7255
+- Example 455 (§6.2 Emphasis and strong emphasis): lines 7258-7262
+- Example 456 (§6.2 Emphasis and strong emphasis): lines 7265-7269
+- Example 457 (§6.2 Emphasis and strong emphasis): lines 7276-7280
+- Example 458 (§6.2 Emphasis and strong emphasis): lines 7283-7287
+- Example 459 (§6.2 Emphasis and strong emphasis): lines 7290-7294
+- Example 460 (§6.2 Emphasis and strong emphasis): lines 7297-7301
+- Example 461 (§6.2 Emphasis and strong emphasis): lines 7304-7308
+- Example 462 (§6.2 Emphasis and strong emphasis): lines 7314-7318
+- Example 463 (§6.2 Emphasis and strong emphasis): lines 7321-7325
+- Example 464 (§6.2 Emphasis and strong emphasis): lines 7328-7332
+- Example 465 (§6.2 Emphasis and strong emphasis): lines 7335-7339
+- Example 466 (§6.2 Emphasis and strong emphasis): lines 7345-7349
+- Example 467 (§6.2 Emphasis and strong emphasis): lines 7352-7356
+- Example 468 (§6.2 Emphasis and strong emphasis): lines 7363-7367
+- Example 469 (§6.2 Emphasis and strong emphasis): lines 7372-7376
+- Example 470 (§6.2 Emphasis and strong emphasis): lines 7379-7383
+- Example 471 (§6.2 Emphasis and strong emphasis): lines 7388-7392
+- Example 472 (§6.2 Emphasis and strong emphasis): lines 7395-7399
+- Example 473 (§6.2 Emphasis and strong emphasis): lines 7404-7408
+- Example 474 (§6.2 Emphasis and strong emphasis): lines 7411-7415
+- Example 475 (§6.2 Emphasis and strong emphasis): lines 7420-7424
+- Example 476 (§6.2 Emphasis and strong emphasis): lines 7427-7431
+- Example 477 (§6.2 Emphasis and strong emphasis): lines 7434-7438
+- Example 478 (§6.2 Emphasis and strong emphasis): lines 7441-7445
+- Example 479 (§6.2 Emphasis and strong emphasis): lines 7448-7452
+- Example 480 (§6.2 Emphasis and strong emphasis): lines 7455-7459
+- Example 481 (§6.2 Emphasis and strong emphasis): lines 7462-7466
+- Example 482 (§6.2 Emphasis and strong emphasis): lines 7469-7473
+- Example 483 (§6.2 Emphasis and strong emphasis): lines 7476-7480
+- Example 484 (§6.3 Links): lines 7564-7568
+- Example 485 (§6.3 Links): lines 7574-7578
+- Example 486 (§6.3 Links): lines 7580-7584
+- Example 487 (§6.3 Links): lines 7587-7591
+- Example 488 (§6.3 Links): lines 7594-7598
+- Example 489 (§6.3 Links): lines 7601-7605
+- Example 490 (§6.3 Links): lines 7610-7614
+- Example 491 (§6.3 Links): lines 7616-7620
+- Example 492 (§6.3 Links): lines 7625-7631
+- Example 493 (§6.3 Links): lines 7633-7639
+- Example 494 (§6.3 Links): lines 7644-7648
+- Example 495 (§6.3 Links): lines 7652-7656
+- Example 496 (§6.3 Links): lines 7661-7669
+- Example 497 (§6.3 Links): lines 7673-7677
+- Example 498 (§6.3 Links): lines 7682-7686
+- Example 499 (§6.3 Links): lines 7691-7695
+- Example 500 (§6.3 Links): lines 7698-7702
+- Example 501 (§6.3 Links): lines 7705-7709
+- Example 502 (§6.3 Links): lines 7715-7719
+- Example 503 (§6.3 Links): lines 7724-7734
+- Example 504 (§6.3 Links): lines 7740-7744
+- Example 505 (§6.3 Links): lines 7756-7760
+- Example 506 (§6.3 Links): lines 7767-7771
+- Example 507 (§6.3 Links): lines 7776-7784
+- Example 508 (§6.3 Links): lines 7790-7794
+- Example 509 (§6.3 Links): lines 7801-7805
+- Example 510 (§6.3 Links): lines 7810-7814
+- Example 511 (§6.3 Links): lines 7819-7823
+- Example 512 (§6.3 Links): lines 7844-7849
+- Example 513 (§6.3 Links): lines 7855-7859
+- Example 514 (§6.3 Links): lines 7865-7869
+- Example 515 (§6.3 Links): lines 7872-7876
+- Example 516 (§6.3 Links): lines 7879-7883
+- Example 517 (§6.3 Links): lines 7886-7890
+- Example 518 (§6.3 Links): lines 7895-7899
+- Example 519 (§6.3 Links): lines 7902-7906
+- Example 520 (§6.3 Links): lines 7911-7915
+- Example 521 (§6.3 Links): lines 7918-7922
+- Example 522 (§6.3 Links): lines 7925-7929
+- Example 523 (§6.3 Links): lines 7935-7939
+- Example 524 (§6.3 Links): lines 7942-7946
+- Example 525 (§6.3 Links): lines 7952-7956
+- Example 526 (§6.3 Links): lines 7962-7966
+- Example 527 (§6.3 Links): lines 7969-7973
+- Example 528 (§6.3 Links): lines 7976-7980
+- Example 529 (§6.3 Links): lines 8014-8020
+- Example 530 (§6.3 Links): lines 8029-8035
+- Example 531 (§6.3 Links): lines 8038-8044
+- Example 532 (§6.3 Links): lines 8049-8055
+- Example 533 (§6.3 Links): lines 8058-8064
+- Example 534 (§6.3 Links): lines 8069-8075
+- Example 535 (§6.3 Links): lines 8078-8084
+- Example 536 (§6.3 Links): lines 8093-8099
+- Example 537 (§6.3 Links): lines 8102-8108
+- Example 538 (§6.3 Links): lines 8114-8120
+- Example 539 (§6.3 Links): lines 8123-8129
+- Example 540 (§6.3 Links): lines 8132-8138
+- Example 541 (§6.3 Links): lines 8143-8149
+- Example 542 (§6.3 Links): lines 8154-8160
+- Example 543 (§6.3 Links): lines 8166-8173
+- Example 544 (§6.3 Links): lines 8179-8185
+- Example 545 (§6.3 Links): lines 8188-8196
+- Example 546 (§6.3 Links): lines 8229-8237
+- Example 547 (§6.3 Links): lines 8244-8250
+- Example 548 (§6.3 Links): lines 8256-8263
+- Example 549 (§6.3 Links): lines 8266-8273
+- Example 550 (§6.3 Links): lines 8276-8283
+- Example 551 (§6.3 Links): lines 8286-8292
+- Example 552 (§6.3 Links): lines 8297-8303
+- Example 553 (§6.3 Links): lines 8309-8316
+- Example 554 (§6.3 Links): lines 8319-8330
+- Example 555 (§6.3 Links): lines 8342-8348
+- Example 556 (§6.3 Links): lines 8351-8357
+- Example 557 (§6.3 Links): lines 8362-8368
+- Example 558 (§6.3 Links): lines 8375-8383
+- Example 559 (§6.3 Links): lines 8395-8401
+- Example 560 (§6.3 Links): lines 8404-8410
+- Example 561 (§6.3 Links): lines 8413-8419
+- Example 562 (§6.3 Links): lines 8422-8428
+- Example 563 (§6.3 Links): lines 8433-8439
+- Example 564 (§6.3 Links): lines 8444-8450
+- Example 565 (§6.3 Links): lines 8456-8462
+- Example 566 (§6.3 Links): lines 8468-8474
+- Example 567 (§6.3 Links): lines 8480-8487
+- Example 568 (§6.3 Links): lines 8489-8495
+- Example 569 (§6.3 Links): lines 8499-8505
+- Example 570 (§6.3 Links): lines 8507-8513
+- Example 571 (§6.3 Links): lines 8518-8524
+- Example 572 (§6.3 Links): lines 8530-8537
+- Example 573 (§6.3 Links): lines 8543-8550
+- Example 574 (§6.4 Images): lines 8566-8570
+- Example 575 (§6.4 Images): lines 8573-8579
+- Example 576 (§6.4 Images): lines 8582-8586
+- Example 577 (§6.4 Images): lines 8589-8593
+- Example 578 (§6.4 Images): lines 8603-8609
+- Example 579 (§6.4 Images): lines 8612-8618
+- Example 580 (§6.4 Images): lines 8621-8625
+- Example 581 (§6.4 Images): lines 8628-8632
+- Example 582 (§6.4 Images): lines 8635-8639
+- Example 583 (§6.4 Images): lines 8642-8646
+- Example 584 (§6.4 Images): lines 8651-8657
+- Example 585 (§6.4 Images): lines 8660-8666
+- Example 586 (§6.4 Images): lines 8671-8677
+- Example 587 (§6.4 Images): lines 8680-8686
+- Example 588 (§6.4 Images): lines 8691-8697
+- Example 589 (§6.4 Images): lines 8703-8711
+- Example 590 (§6.4 Images): lines 8716-8722
+- Example 591 (§6.4 Images): lines 8725-8731
+- Example 592 (§6.4 Images): lines 8736-8743
+- Example 593 (§6.4 Images): lines 8748-8754
+- Example 594 (§6.4 Images): lines 8760-8766
+- Example 595 (§6.4 Images): lines 8772-8778
+- Example 596 (§6.5 Autolinks): lines 8805-8809
+- Example 597 (§6.5 Autolinks): lines 8812-8816
+- Example 598 (§6.5 Autolinks): lines 8819-8823
+- Example 599 (§6.5 Autolinks): lines 8828-8832
+- Example 600 (§6.5 Autolinks): lines 8840-8844
+- Example 601 (§6.5 Autolinks): lines 8847-8851
+- Example 602 (§6.5 Autolinks): lines 8854-8858
+- Example 603 (§6.5 Autolinks): lines 8861-8865
+- Example 604 (§6.5 Autolinks): lines 8870-8874
+- Example 605 (§6.5 Autolinks): lines 8879-8883
+- Example 606 (§6.5 Autolinks): lines 8901-8905
+- Example 607 (§6.5 Autolinks): lines 8908-8912
+- Example 608 (§6.5 Autolinks): lines 8917-8921
+- Example 609 (§6.5 Autolinks): lines 8926-8930
+- Example 610 (§6.5 Autolinks): lines 8933-8937
+- Example 611 (§6.5 Autolinks): lines 8940-8944
+- Example 612 (§6.5 Autolinks): lines 8947-8951
+- Example 613 (§6.5 Autolinks): lines 8954-8958
+- Example 614 (§6.5 Autolinks): lines 8961-8965
+- Example 615 (§6.6 Raw HTML): lines 9041-9045
+- Example 616 (§6.6 Raw HTML): lines 9050-9054
+- Example 617 (§6.6 Raw HTML): lines 9059-9065
+- Example 618 (§6.6 Raw HTML): lines 9070-9076
+- Example 619 (§6.6 Raw HTML): lines 9081-9085
+- Example 620 (§6.6 Raw HTML): lines 9090-9094
+- Example 621 (§6.6 Raw HTML): lines 9099-9103
+- Example 622 (§6.6 Raw HTML): lines 9108-9112
+- Example 623 (§6.6 Raw HTML): lines 9117-9127
+- Example 624 (§6.6 Raw HTML): lines 9132-9136
+- Example 625 (§6.6 Raw HTML): lines 9141-9145
+- Example 626 (§6.6 Raw HTML): lines 9150-9154
+- Example 627 (§6.6 Raw HTML): lines 9159-9165
+- Example 628 (§6.6 Raw HTML): lines 9167-9174
+- Example 629 (§6.6 Raw HTML): lines 9179-9183
+- Example 630 (§6.6 Raw HTML): lines 9188-9192
+- Example 631 (§6.6 Raw HTML): lines 9197-9201
+- Example 632 (§6.6 Raw HTML): lines 9207-9211
+- Example 633 (§6.6 Raw HTML): lines 9216-9220
+- Example 634 (§6.6 Raw HTML): lines 9223-9227
+- Example 635 (§6.6 Raw HTML): lines 9233-9241
+- Example 636 (§6.7 Hard line breaks): lines 9251-9257
+- Example 637 (§6.7 Hard line breaks): lines 9263-9269
+- Example 638 (§6.7 Hard line breaks): lines 9274-9280
+- Example 639 (§6.7 Hard line breaks): lines 9285-9291
+- Example 640 (§6.7 Hard line breaks): lines 9294-9300
+- Example 641 (§6.7 Hard line breaks): lines 9306-9312
+- Example 642 (§6.7 Hard line breaks): lines 9315-9321
+- Example 643 (§6.7 Hard line breaks): lines 9326-9331
+- Example 644 (§6.7 Hard line breaks): lines 9334-9339
+- Example 645 (§6.7 Hard line breaks): lines 9344-9350
+- Example 646 (§6.7 Hard line breaks): lines 9353-9359
+- Example 647 (§6.7 Hard line breaks): lines 9366-9370
+- Example 648 (§6.7 Hard line breaks): lines 9373-9377
+- Example 649 (§6.7 Hard line breaks): lines 9380-9384
+- Example 650 (§6.7 Hard line breaks): lines 9387-9391
+- Example 651 (§6.8 Soft line breaks): lines 9402-9408
+- Example 652 (§6.8 Soft line breaks): lines 9414-9420
+- Example 653 (§6.9 Textual content): lines 9434-9438
+- Example 654 (§6.9 Textual content): lines 9441-9445
+- Example 655 (§6.9 Textual content): lines 9450-9454

@@ -1,0 +1,3 @@
+*   Outer:
+    
+    ![](img.png){.border}

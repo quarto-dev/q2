@@ -8,6 +8,7 @@
 //! Available commands:
 //! - `dev-setup`: Install required development tools (cargo-nextest, wasm-bindgen-cli)
 //! - `lint`: Run custom lint checks on the codebase
+//! - `create-worktree`: Create git worktree with beads redirect and CLAUDE.local.md
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
@@ -15,10 +16,12 @@
 
 mod build_all;
 mod build_trace_viewer;
+mod create_worktree;
 mod dev_setup;
 mod lint;
 mod test;
 mod treesitter_crlf;
+mod util;
 mod verify;
 
 use anyhow::Result;
@@ -54,6 +57,18 @@ enum Command {
         /// Only show errors, no progress or summary.
         #[arg(short, long)]
         quiet: bool,
+    },
+
+    /// Create a new git worktree with beads redirect and CLAUDE.local.md context stub.
+    ///
+    /// Modes (exactly one required):
+    ///   <bd-id>      — beads issue (positional)
+    ///   --issue N    — GitHub issue triage
+    ///   --upgrade    — cargo dependency upgrade (date-based branch)
+    #[command(verbatim_doc_comment)]
+    CreateWorktree {
+        #[command(flatten)]
+        args: create_worktree::Args,
     },
 
     /// Run workspace tests with platform-appropriate crate exclusions.
@@ -174,6 +189,7 @@ fn main() -> Result<()> {
             let config = lint::LintConfig { verbose, quiet };
             lint::run(&config)
         }
+        Command::CreateWorktree { args } => create_worktree::run(args),
         Command::Test {
             deny_warnings,
             args,

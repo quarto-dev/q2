@@ -21,6 +21,7 @@ import {
   createProjectOnServer,
   getServerUrl,
 } from './helpers/projectFactory';
+import type {} from './helpers/testHooks';
 
 /**
  * Bootstrap the receiver browser with an existing synced project set.
@@ -201,8 +202,10 @@ test.describe('Share link → synced project set', () => {
           .poll(
             () =>
               sharePage.evaluate(async (docId) => {
-                const ps = await import('/src/services/projectStorage.ts');
-                const entry = await ps.getProjectByIndexDocId(`automerge:${docId}`);
+                await window.__quartoTestReady;
+                const hooks = window.__quartoTest;
+                if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+                const entry = await hooks.projectStorage.getProjectByIndexDocId(`automerge:${docId}`);
                 return !!entry;
               }, sharedIndexDocId),
             { timeout: 15000 },
@@ -268,8 +271,10 @@ test.describe('Share link → synced project set', () => {
         // nothing about — this is exactly the state Bug A produces.
         await bootstrapPage.evaluate(
           async ({ indexDocId, server }) => {
-            const ps = await import('/src/services/projectStorage.ts');
-            await ps.addProject(`automerge:${indexDocId}`, server, 'Orphan Demo');
+            await window.__quartoTestReady;
+            const hooks = window.__quartoTest;
+            if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+            await hooks.projectStorage.addProject(`automerge:${indexDocId}`, server, 'Orphan Demo');
           },
           { indexDocId: orphanIndexDocId, server: syncServer },
         );

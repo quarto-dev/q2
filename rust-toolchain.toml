@@ -1,4 +1,13 @@
 [toolchain]
-channel = "nightly"
+# bd-at72: pinned to the last-known-good nightly. The nightly published on
+# 2026-05-11 (rustc commit 4b0c9d76a, dated 2026-05-10) introduced a
+# regression that SIGSEGVs in LLVM ThinLTO codegen at opt-level=3 when
+# building this workspace for wasm32-unknown-unknown. The crash hits
+# multiple crates (quarto-pandoc-types, quarto-ast-reconcile, tokio) and
+# escalates: rustc keeps suggesting larger RUST_MIN_STACK values without
+# actually fixing the underlying overflow. Pinning is the durable fix
+# until the upstream regression is resolved; bump the date when nightly
+# stabilizes again.
+channel = "nightly-2026-04-28"
 components = ["rust-src","rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]

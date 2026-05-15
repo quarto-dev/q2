@@ -1,3 +1,5 @@
+import { extractMetaString } from './framework';
+
 /**
  * Extract format string from the parsed AST metadata.
  * Returns null if no format is found or format is not handled by ReactPreview,
@@ -6,15 +8,10 @@
 export function getQ2Format(astJson: string): string | null {
   try {
     const ast = JSON.parse(astJson);
-    const fmt = ast?.meta?.format;
-    if (!fmt) return null;
-    let formatStr: string | null = null;
-    // MetaString: { t: "MetaString", c: "q2-slides" }
-    if (fmt.t === 'MetaString') formatStr = fmt.c;
-    // MetaInlines: { t: "MetaInlines", c: [{ t: "Str", c: "q2-slides" }] }
-    if (fmt.t === 'MetaInlines') formatStr = fmt.c?.[0]?.c;
+    const formatStr = extractMetaString(ast?.meta?.format);
+    if (!formatStr) return null;
     // Only return formats handled by ReactPreview
-    if (formatStr?.startsWith('q2-') || formatStr === 'revealjs') return formatStr;
+    if (formatStr.startsWith('q2-') || formatStr === 'revealjs') return formatStr;
     return null;
   } catch (err) {
     console.error('[PreviewRouter] Failed to parse AST:', err);

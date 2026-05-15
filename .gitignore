@@ -34,3 +34,6 @@ crates/wasm-quarto-hub-client/pkg/
 /.luarc.json
 
 .claude/scheduled_tasks.lock
+
+# Per-session local context (managed by `cargo xtask create-worktree` for worktrees)
+CLAUDE.local.md

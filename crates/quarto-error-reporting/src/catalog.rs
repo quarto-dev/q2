@@ -135,4 +135,52 @@ mod tests {
         assert!(get_error_info("Q-999-999").is_none()); // quarto-error-code-audit-ignore
         assert!(get_docs_url("Q-999-999").is_none()); // quarto-error-code-audit-ignore
     }
+
+    // L8 / bd-rqgx test #1: Q-12-14 catalog presence.
+    #[test]
+    fn error_catalog_has_q_12_14() {
+        let info = get_error_info("Q-12-14").expect("Q-12-14 must be in the catalog");
+        assert_eq!(info.subsystem, "listing");
+        assert_eq!(info.title, "Listing Type custom Without template Path");
+        assert!(
+            info.message_template.contains("type: custom"),
+            "Q-12-14 message must mention `type: custom`; got: {}",
+            info.message_template
+        );
+        assert!(
+            info.message_template.contains("default"),
+            "Q-12-14 message must mention the default fallback; got: {}",
+            info.message_template
+        );
+    }
+
+    // L9 / bd-o90m test #1: Q-12-15 + Q-12-16 catalog presence.
+    #[test]
+    fn error_catalog_has_q_12_15_and_q_12_16() {
+        let q15 = get_error_info("Q-12-15").expect("Q-12-15 must be in the catalog");
+        assert_eq!(q15.subsystem, "listing");
+        assert!(
+            q15.title.to_lowercase().contains("feed"),
+            "Q-12-15 title must mention feed; got: {}",
+            q15.title
+        );
+        assert!(
+            q15.message_template.contains("site-url"),
+            "Q-12-15 message must mention `site-url`; got: {}",
+            q15.message_template
+        );
+
+        let q16 = get_error_info("Q-12-16").expect("Q-12-16 must be in the catalog");
+        assert_eq!(q16.subsystem, "listing");
+        assert!(
+            q16.title.to_lowercase().contains("feed"),
+            "Q-12-16 title must mention feed; got: {}",
+            q16.title
+        );
+        assert!(
+            q16.message_template.contains("description"),
+            "Q-12-16 message must mention the empty description fallback; got: {}",
+            q16.message_template
+        );
+    }
 }

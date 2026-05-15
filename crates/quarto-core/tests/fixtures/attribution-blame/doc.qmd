@@ -1,0 +1,7 @@
+---
+title: "Attribution Test Document"
+---
+
+Alice wrote this paragraph.
+
+Bob wrote that paragraph.

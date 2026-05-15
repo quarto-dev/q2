@@ -1,0 +1,7 @@
+::: {.quarto-listing-table-wrapper}
+
+| Title | Date | Author |
+|-------|------|--------|
+$items:item-table()$
+
+:::

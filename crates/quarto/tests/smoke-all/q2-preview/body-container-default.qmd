@@ -1,0 +1,17 @@
+---
+title: Body container default
+format: q2-preview
+_quarto:
+  tests:
+    run:
+      requires_js: true
+    q2-preview:
+      ensureHtmlElements:
+        -
+          - 'div#quarto-content.page-layout-article'
+          - 'main.content#quarto-document-content'
+          - 'body.fullcontent'
+        - []
+---
+
+A paragraph in the default-layout body container.

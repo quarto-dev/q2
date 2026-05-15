@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>q2-preview Renderer (Sandboxed)</title>
+  <style>
+    /* Minimal body styling; theme CSS posted via UPDATE_THEME dominates
+       once it lands and the document picks up Bootstrap typography from
+       there. */
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    #root {
+      width: 100%;
+      height: 100vh;
+      overflow: auto;
+    }
+  </style>
+  <script>
+    // Stub out React Fast Refresh runtime for iframe context
+    // Must be done before any modules load
+    window.$RefreshReg$ = function () { };
+    window.$RefreshSig$ = function () { return function (type) { return type; }; };
+  </script>
+</head>
+<body>
+  <div id="root">Loading q2-preview renderer...</div>
+  <script type="module" src="/src/components/render/q2-preview/entry.tsx"></script>
+</body>
+</html>

@@ -3,8 +3,19 @@
  *
  * - `createProjectOnServer()` runs in Node.js (Playwright test process)
  * - `seedProjectInBrowser()` runs in the browser via page.evaluate()
+ *
+ * Node-side polyfill: `createProjectOnServer` instantiates an
+ * `IndexedDBStorageAdapter` indirectly via `createSyncClient`. The
+ * Automerge IndexedDB adapter checks for the global `indexedDB`
+ * eagerly at construction; in the Playwright Node controller process
+ * that global is undefined. `fake-indexeddb/auto` patches the globals
+ * (`indexedDB`, `IDBKeyRange`, etc.) into Node's `globalThis` so the
+ * adapter can construct cleanly. The fake DB is in-memory and
+ * per-process — fine for the controller-side document-creation step;
+ * actual document persistence happens on the hub server (real DB).
  */
 
+import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import {
   createSyncClient,
@@ -14,12 +25,16 @@ import {
 } from '@quarto/quarto-sync-client';
 import { SERVER_INFO_PATH } from './globalSetup';
 import type { ServerInfo } from './globalSetup';
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import type {} from './testHooks';
 
 export interface ProjectFile {
   path: string;
+  /** UTF-8 text for `'text'`, base64-encoded bytes for `'binary'`. */
   content: string;
   contentType: 'text' | 'binary';
+  /** Required by `createNewProject` for binary files. */
+  mimeType?: string;
 }
 
 /**
@@ -104,9 +119,48 @@ async function waitForServerDocuments(
 }
 
 /**
+ * Drive the first-time-setup UI to create a synced project set on the running
+ * hub server and store its pointer in the browser's IDB. Must be called once
+ * per fresh Playwright browser context before {@link seedProjectInBrowser},
+ * otherwise the legacy project entry triggers the "Upgrade: Synced Project
+ * List" migration screen and blocks all navigation.
+ *
+ * Modeled after the share-link spec's `bootstrapReceiverProjectSet` — driving
+ * the UI lets the app's own `useProjectSet` race-free state machine put us in
+ * `connected` status rather than racing a hand-rolled createProjectSet call
+ * against the migration check.
+ */
+export async function bootstrapProjectSet(
+  page: Page,
+  syncServer: string,
+): Promise<void> {
+  await page.goto('/');
+  await expect(page.locator('body')).toBeVisible();
+
+  await expect(
+    page.getByRole('heading', { name: 'Quarto Hub' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Get started by creating a new project set/i),
+  ).toBeVisible();
+
+  await page.locator('#setup-sync-server').fill(syncServer);
+  await page
+    .getByRole('button', { name: /Create New Project Set/i })
+    .click();
+
+  await expect(
+    page.getByRole('heading', { name: 'Your Projects' }),
+  ).toBeVisible({ timeout: 20000 });
+}
+
+/**
  * Seed a project entry in the browser's IndexedDB so the app can load it.
  *
- * Must be called after page.goto('/') so Vite modules are available.
+ * Call {@link bootstrapProjectSet} once per browser context first so the
+ * synced project set is initialized; otherwise the App lands on the
+ * needs-migration screen.
+ *
  * Returns the local project ID (UUID) used in URL navigation.
  */
 export async function seedProjectInBrowser(
@@ -117,8 +171,10 @@ export async function seedProjectInBrowser(
 ): Promise<string> {
   return page.evaluate(
     async ({ indexDocId, syncServer, name }) => {
-      const ps = await import('/src/services/projectStorage.ts');
-      const entry = await ps.addProject(indexDocId, syncServer, name);
+      await window.__quartoTestReady;
+      const hooks = window.__quartoTest;
+      if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+      const entry = await hooks.projectStorage.addProject(indexDocId, syncServer, name);
       return entry.id;
     },
     { indexDocId, syncServer, name },

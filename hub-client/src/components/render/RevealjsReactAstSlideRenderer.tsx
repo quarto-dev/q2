@@ -10,7 +10,8 @@ import RevealZoom from 'reveal.js/plugin/zoom';
 // @ts-ignore - no type definitions
 import RevealMenuPlugin from 'reveal.js-menu/plugin.js';
 const RevealMenu = RevealMenuPlugin.default || RevealMenuPlugin;
-import { parseSlides, renderBlock, type PandocAST, type Slide as PandocSlide } from './ReactAstSlideRenderer';
+import { parseSlides, renderBlock, type Slide as PandocSlide } from './ReactAstSlideRenderer';
+import type { PandocAST } from './framework/types';
 
 interface RevealjsSlideRendererProps {
   astJson: string;

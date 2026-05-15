@@ -1,0 +1,3 @@
+```{r, label="foo", echo=FALSE}
+1+1
+```

@@ -5072,6 +5072,10 @@
     {
       "type": "SYMBOL",
       "name": "grid_table"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_indented_code_block_error"
     }
   ],
   "inline": [],

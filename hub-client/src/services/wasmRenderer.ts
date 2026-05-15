@@ -53,10 +53,26 @@ interface WasmModuleExtended {
     path: string,
     user_grammars?: unknown,
   ) => Promise<string>;
+  // Attribution-aware sibling. When `attribution_json` is `undefined`,
+  // behaviour is byte-identical to `render_page_in_project` (the
+  // former is a one-line wrapper that forwards `None`). When
+  // populated, the active-page `RenderContext` gets a
+  // `PreBuiltAttributionProvider` installed, the q2-preview transform
+  // pipeline's attribution stages fire, and the returned AST JSON
+  // carries `astContext.attribution` + `astContext.attributionActors`.
+  render_page_in_project_with_attribution: (
+    path: string,
+    user_grammars?: unknown,
+    attribution_json?: string,
+  ) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
   parse_qmd_to_ast: (content: string) => Promise<string>;
+  parse_qmd_to_ast_with_attribution: (
+    content: string,
+    attribution_json: string | undefined,
+  ) => Promise<string>;
   write_qmd: (astJson: string) => Promise<string>;
   incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
   convert: (document: string, inputFormat: string, outputFormat: string) => Promise<string>;
@@ -397,8 +413,47 @@ export async function renderPageInProject(
   path: string,
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
+  return renderPageInProjectWithAttribution(path, userGrammars, null);
+}
+
+/**
+ * Render a single page **in the context of its surrounding project**,
+ * optionally with attribution data.
+ *
+ * Q2-preview sibling of `parseQmdToAstWithAttribution`. When
+ * `attributionJson` is non-null, the JSON string is shipped to the
+ * Rust `PreBuiltAttributionProvider` installed on the active page's
+ * `RenderContext`; the q2-preview transform pipeline's attribution
+ * stages fire and the returned AST JSON carries
+ * `astContext.attribution` (`{s, actor, time}` records) and
+ * `astContext.attributionActors` (actor → `{name, color}` table).
+ * The `<Ast>` component picks these keys up automatically and
+ * threads them through `AttributionLookupContext`, which the
+ * leaf renderers consume to paint per-author backgrounds and
+ * provide author tooltips.
+ *
+ * When `null`, the call is byte-identical to
+ * `renderPageInProject(path, userGrammars)` — same code path, no
+ * provider installed, no transforms surface attribution data.
+ *
+ * The producer of `attributionJson` is responsible for satisfying
+ * the Phase 6 invariant: every actor referenced in `runs` must have
+ * an entry in `identities`. See `useAttribution` for the hub-client
+ * producer that builds this payload from Automerge history.
+ */
+export async function renderPageInProjectWithAttribution(
+  path: string,
+  userGrammars: unknown,
+  attributionJson: string | null,
+): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(await wasm.render_page_in_project(path, userGrammars));
+  return JSON.parse(
+    await wasm.render_page_in_project_with_attribution(
+      path,
+      userGrammars,
+      attributionJson ?? undefined,
+    ),
+  );
 }
 
 /**
@@ -490,10 +545,37 @@ export interface ConvertResult {
 export async function parseQmdToAst(
   qmdContent: string
 ): Promise<ParseResult> {
+  return parseQmdToAstWithAttribution(qmdContent, null);
+}
+
+/**
+ * Parse QMD content to Pandoc AST JSON, optionally with attribution.
+ *
+ * When `attributionJson` is non-null, the JSON string is shipped to the
+ * Rust `PreBuiltAttributionProvider`, which decodes runs + identities
+ * and drives `AttributionGenerateTransform` + `AttributionRenderTransform`.
+ * The resulting AST carries `astContext.attribution` (sparse `{s, actor,
+ * time}` records) and `astContext.attributionActors` (actor →
+ * `{name, color}` table). When `null`, the call is byte-identical to
+ * `parseQmdToAst(content)` — same code path, no provider installed,
+ * no transforms fire (Phase 0 test #10 contract).
+ *
+ * The producer of `attributionJson` is responsible for satisfying the
+ * Phase 6 invariant: every actor referenced in `runs` must have an
+ * entry in `identities`. See `useAttribution` for the hub-client
+ * producer that builds this payload from Automerge history.
+ */
+export async function parseQmdToAstWithAttribution(
+  qmdContent: string,
+  attributionJson: string | null,
+): Promise<ParseResult> {
   try {
     await initWasm();
     const wasm = getWasm();
-    const responseJson = await wasm.parse_qmd_to_ast(qmdContent);
+    const responseJson = await wasm.parse_qmd_to_ast_with_attribution(
+      qmdContent,
+      attributionJson ?? undefined,
+    );
 
     const response: ParseResult = JSON.parse(responseJson);
 
@@ -504,7 +586,6 @@ export async function parseQmdToAst(
         warnings: response.warnings,
       };
     } else {
-      // Extract error message
       const errorMsg = response.error || 'Unknown parse error';
 
       return {
@@ -690,6 +771,14 @@ export interface RenderResult {
   html: string;
   success: boolean;
   error?: string;
+  /**
+   * Serialized Pandoc AST JSON for the q2-preview format.
+   * Populated by the q2-preview pipeline branch (added in a
+   * later commit), `undefined` for HTML / error responses.
+   * Consumers dispatch on which of `html` / `ast_json` is
+   * present.
+   */
+  ast_json?: string;
   /** Structured error diagnostics with line/column information for Monaco. */
   diagnostics?: Diagnostic[];
   /** Structured warning diagnostics with line/column information for Monaco. */

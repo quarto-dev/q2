@@ -59,21 +59,24 @@ use crate::stage::stages::BootstrapJsStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
     EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage, LinkResolutionStage,
-    LoadedSource, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
-    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, StageContext,
-    UnwrapProfileStage, UserFiltersStage,
+    ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage,
+    Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage,
+    ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, CrossrefIndexTransform,
-    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
-    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesTransform, LinkRewriteTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
-    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
-    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    AppendixStructureTransform, AttributionGenerateTransform, AttributionRenderTransform,
+    AttributionViewerTransform, CalloutResolveTransform, CalloutTransform,
+    CategoriesSidebarTransform, CrossrefIndexTransform, CrossrefRenderTransform,
+    CrossrefResolveTransform, EquationLabelTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
+    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
+    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
+    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
+    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
+    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
+    WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -148,6 +151,33 @@ pub struct AstOutput {
     pub source_context: SourceContext,
 }
 
+/// Output of [`render_qmd_to_preview_ast`] — the q2-preview entry-point
+/// sibling of [`render_qmd_to_html`].
+///
+/// Carries the **already-serialized** AST JSON (not the typed
+/// `Pandoc`) so the renderer can plumb it straight into
+/// `Pass2Payload::AstJson` without re-running the JSON writer.
+/// Compared to [`AstOutput`], `PreviewAstOutput` skips the typed
+/// `Pandoc` field — the q2-preview pipeline runs the full transform
+/// pipeline, which mutates the AST extensively, so the typed value
+/// is no longer interesting to callers; only the serialized form is.
+#[derive(Debug)]
+pub struct PreviewAstOutput {
+    /// The transformed Pandoc AST, serialized as JSON via
+    /// `pampa::writers::json::write_with_config` with
+    /// `include_inline_locations: true`. Ready to ship to the
+    /// React iframe.
+    pub ast_json: String,
+    /// Diagnostics emitted by the head pipeline plus every Pass-2
+    /// stage that ran. Pipe to `RenderResponse.warnings` after
+    /// translation via `diagnostics_to_json`.
+    pub diagnostics: Vec<DiagnosticMessage>,
+    /// Source-context handle for translating diagnostic offsets
+    /// into line/column positions on the JS side. Same shape as
+    /// [`RenderOutput::source_context`].
+    pub source_context: SourceContext,
+}
+
 /// Build the standard HTML pipeline stages.
 ///
 /// Returns the stages as a vector, allowing callers to customize before
@@ -157,18 +187,20 @@ pub struct AstOutput {
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 3. `IncludeExpansionStage` - Splice in `{{< include child.qmd >}}` bodies
-/// 4. `DocumentProfileStage` - Extract the static profile at the checkpoint
-/// 5. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
-/// 6. `UnwrapProfileStage` - Hand the AST back to downstream stages
-/// 6. `PreEngineSugaringStage` - Seed crossref registry / desugar shorthand
-/// 7. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
-/// 8. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 9. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
-/// 10. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 11. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 12. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
-/// 13. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 14. `ApplyTemplateStage` - Apply HTML template
+/// 4. `IncludeResolveStage` - Resolve `include-in-header` etc. authored keys
+/// 5. `ListingItemInfoStage` - Auto-fill `meta.listing-item.*` (L1, `bd-izqh`)
+/// 6. `DocumentProfileStage` - Extract the static profile at the checkpoint
+/// 7. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
+/// 8. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 9. `PreEngineSugaringStage` - Seed crossref registry / desugar shorthand
+/// 10. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
+/// 11. `CompileThemeCssStage` - Compile theme CSS from merged metadata
+/// 12. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 13. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 14. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 15. `CodeHighlightStage` - Annotate CodeBlock/Code with `data-hl-spans`
+/// 16. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 17. `ApplyTemplateStage` - Apply HTML template
 pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
     build_html_pipeline_stages_with_apply_config(None)
 }
@@ -232,6 +264,13 @@ pub fn build_html_pipeline_stages_with_options(
         // folded later by ApplyTemplateStage's late-drain.
         // Plan: claude-notes/plans/2026-05-04-includes-feature.md.
         Box::new(IncludeResolveStage::new()),
+        // Auto-fill `meta.listing-item.*` (description, image, word
+        // count, reading time, mtime) when the author hasn't supplied
+        // them. Runs pre-checkpoint so the values land in
+        // `DocumentProfile.listing_item` for the listings feature
+        // (epic `bd-61cd`, L1 = `bd-izqh`). Author values always win.
+        // See `claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md`.
+        Box::new(ListingItemInfoStage::new()),
         // Profile checkpoint: post-merge, pre-mutation. See
         // `claude-notes/designs/document-profile-contract.md`.
         Box::new(DocumentProfileStage::new()),
@@ -261,12 +300,60 @@ pub fn build_html_pipeline_stages_with_options(
     // (defends against filters that mutate `meta.resources`).
     stages.push(Box::new(ResourceReportStage::new()));
     stages.push(Box::new(CodeHighlightStage::new()));
+    // Math-mode (bd-w5ov): walk the post-transform AST and, when math
+    // is present, populate `meta.math` with the engine's config + loader
+    // markup. Sits right before render-html-body so any late-introduced
+    // math (engine output, sugar transforms, crossref `\tag{N}`
+    // injection) is visible to the walk. Included on both native and
+    // WASM pipelines — see math_js.rs module docs for the rationale.
+    stages.push(Box::new(MathJsStage::new()));
     stages.push(Box::new(RenderHtmlBodyStage::new()));
     let apply_stage = match apply_config {
         Some(cfg) => ApplyTemplateStage::with_config(cfg),
         None => ApplyTemplateStage::new(),
     };
     stages.push(Box::new(apply_stage));
+    stages
+}
+
+/// Names of stages in [`build_html_pipeline_stages_with_options`]
+/// that the q2-preview pipeline drops. All three turn the AST into
+/// an HTML string (or wrap one); q2-preview returns the AST itself
+/// to the React iframe.
+///
+/// New stages added to the HTML pipeline are **included by default**
+/// — q2-preview opts a stage out only when its output is HTML-only.
+/// `CompileThemeCssStage` is included so the compiled theme CSS
+/// lands in VFS at `/.quarto/project-artifacts/styles.css` after a
+/// q2-preview render (Plan 1 §"Multi-plan contract: theme CSS
+/// artifact"); Plan 2A's iframe entry reads it.
+///
+/// The unknown-name validator
+/// (`q2_preview_stage_excluded_names_exist_in_html_pipeline`)
+/// fails the test suite if any name here is not an actual stage in
+/// the full HTML pipeline (typo / rename guard).
+const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &[
+    "code-highlight",
+    "math-js",
+    "render-html-body",
+    "apply-template",
+];
+
+/// Build the q2-preview pipeline stages (Plan 1).
+///
+/// Constructed as [`build_html_pipeline_stages_with_options`] with
+/// the names in [`Q2_PREVIEW_STAGE_EXCLUDED`] removed. Order is
+/// preserved.
+///
+/// `AstTransformsStage` runs in both pipelines; it dispatches at
+/// run-time on `ctx.format.pipeline_kind` between
+/// `build_transform_pipeline` (HTML) and
+/// `build_q2_preview_transform_pipeline` (q2-preview).
+pub fn build_q2_preview_pipeline_stages(
+    engine_registry: Option<crate::engine::EngineRegistry>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_html_pipeline_stages_with_options(None, engine_registry);
+    stages.retain(|s| !Q2_PREVIEW_STAGE_EXCLUDED.contains(&s.name()));
     stages
 }
 
@@ -306,15 +393,17 @@ pub fn build_html_pipeline() -> Pipeline {
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
 /// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
 /// 3. `IncludeExpansionStage` - Splice in `{{< include child.qmd >}}` bodies
-/// 4. `DocumentProfileStage` - Extract the static profile at the checkpoint
-/// 5. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
-/// 6. `UnwrapProfileStage` - Hand the AST back to downstream stages
-/// 6. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 7. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
-/// 8. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
-/// 9. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 10. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 11. `ApplyTemplateStage` - Apply HTML template
+/// 4. `IncludeResolveStage` - Resolve `include-in-header` etc. authored keys
+/// 5. `ListingItemInfoStage` - Auto-fill `meta.listing-item.*` (L1, `bd-izqh`)
+/// 6. `DocumentProfileStage` - Extract the static profile at the checkpoint
+/// 7. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
+/// 8. `UnwrapProfileStage` - Hand the AST back to downstream stages
+/// 9. `CompileThemeCssStage` - Compile theme CSS from merged metadata
+/// 10. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
+/// 11. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
+/// 12. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
+/// 13. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 14. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -336,6 +425,13 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         // land in `profile.includes` for cache invalidation
         // (bd-r82e). See `claude-notes/plans/2026-05-04-includes-feature.md`.
         Box::new(IncludeResolveStage::new()),
+        // Auto-fill `meta.listing-item.*` for the listings feature
+        // (L1, `bd-izqh`). Same position and contract as the native
+        // pipeline. mtime via `SystemRuntime::path_metadata`; the
+        // WASM impl currently returns `modified: None`, so
+        // hub-client renders skip `date_modified` until `bd-a3we`
+        // teaches the Automerge VFS to surface change-history time.
+        Box::new(ListingItemInfoStage::new()),
         // Profile checkpoint: post-merge, pre-mutation. Hub-client
         // Phase 9 will intercept this variant to build project-wide
         // nav state.
@@ -351,6 +447,12 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         Box::new(ResourceReportStage::new()),
     ];
     stages.push(Box::new(CodeHighlightStage::new()));
+    // Math-mode (bd-w5ov): unlike Bootstrap (which we omit from WASM
+    // because iframe reinit blows away stateful components), math
+    // display is safe under iframe reinit — each load gets a fresh DOM
+    // and the engine typesets once. Hub-client preview should typeset
+    // math live, so include the stage here too.
+    stages.push(Box::new(MathJsStage::new()));
     stages.push(Box::new(RenderHtmlBodyStage::new()));
     stages.push(Box::new(ApplyTemplateStage::new()));
 
@@ -494,7 +596,11 @@ pub async fn run_pipeline(
     stage_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
     // Transfer user-grammar provider (browser path sets this; native CLI
     // leaves it None and falls back to `CodeHighlightStage`'s disk scan).
-    stage_ctx.user_grammar_provider = ctx.user_grammar_provider.take();
+    // Cloning the `Rc` is cheap and keeps the provider shared across
+    // every page the renderer touches (bd-izfv: the project-render path
+    // calls `run_pipeline` once per page through a single
+    // `RenderToHtmlRenderer`).
+    stage_ctx.user_grammar_provider = ctx.user_grammar_provider.clone();
     // Transfer the project index (set by ProjectPipeline::pass_two).
     // Cloning the `Arc` is cheap and keeps the RenderContext usable
     // after the stage context is built.
@@ -504,6 +610,10 @@ pub async fn run_pipeline(
     // the inner `RenderContext` consumed by AST transforms (notably
     // `LinkRewriteTransform`).
     stage_ctx.resource_resolver = ctx.resource_resolver.clone();
+    // Attribution: forward the opt-in provider from the outer ctx
+    // so `AttributionGenerateTransform` (inside `AstTransformsStage`)
+    // sees it. `None` is the default and means "attribution off".
+    stage_ctx.attribution_provider = ctx.attribution_provider.clone();
     // bd-o8pr Phase 2: transfer the per-doc resource report into
     // the stage context so engine + filter stages can append to it.
     stage_ctx.resource_report = std::mem::take(&mut ctx.resource_report);
@@ -523,6 +633,14 @@ pub async fn run_pipeline(
     // bd-o8pr Phase 2: transfer engine/filter-collected resources
     // back to the caller (`render_document_to_file` reads this).
     ctx.resource_report = stage_ctx.resource_report;
+    // Transfer writer-side `format_options` populated by transforms
+    // running inside the pipeline (e.g. `AttributionRenderTransform`
+    // writes `attribution_by_node` / `attribution_actors` here). The
+    // q2-preview JSON writer runs *outside* `AstTransformsStage`,
+    // so it reads the populated data from the outer ctx after the
+    // pipeline returns. Pre-pipeline callers don't write
+    // `ctx.format_options`, so the overwrite is safe.
+    ctx.format_options = stage_ctx.format_options;
 
     result
         .map_err(|e| match e {
@@ -643,13 +761,110 @@ pub async fn render_qmd_to_html(
         crate::error::QuartoError::Other("Pipeline did not produce RenderedOutput".to_string())
     })?;
 
-    // Create source context for the output
+    // bd-xdnk: forward the document's SourceContext (populated by
+    // ParseDocumentStage, IncludeExpansionStage, ApplyTemplateStage)
+    // so cross-file diagnostics — template warnings, includes — can
+    // resolve back to the right source slice when ariadne renders.
+    Ok(RenderOutput {
+        html: rendered.content,
+        diagnostics,
+        source_context: rendered.source_context,
+    })
+}
+
+/// Render QMD content to AST JSON for the q2-preview format (Plan 1).
+///
+/// Sibling of [`render_qmd_to_html`]. Drives the q2-preview stage
+/// list (everything through `ResourceReportStage`, no HTML
+/// rendering) and serializes the resulting Pandoc AST to JSON via
+/// `pampa::writers::json::write_with_config` so the React iframe
+/// can render it directly.
+///
+/// # Arguments
+///
+/// * `content` - The QMD source content as bytes
+/// * `source_name` - Name of the source file (for error messages
+///   and the `ASTContext::filenames` slot the JSON writer reads)
+/// * `ctx` - Render context. Should have a `resource_resolver`
+///   set so `ResourceCollectorTransform` rewrites image URLs to
+///   the same path the consumer (e.g. `RenderToPreviewAstRenderer`)
+///   uses when flushing artifacts to VFS.
+/// * `runtime` - System runtime for filesystem operations
+///
+/// # Returns
+///
+/// A [`PreviewAstOutput`] carrying the serialized AST plus
+/// diagnostics and source context.
+///
+/// # Errors
+///
+/// Returns an error if parsing fails, transforms fail, or the JSON
+/// serialization fails (e.g. due to a non-UTF-8 byte sequence in
+/// the writer output, which would indicate a writer bug).
+pub async fn render_qmd_to_preview_ast(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<PreviewAstOutput> {
+    // The q2-preview stage list excludes `CodeHighlightStage` /
+    // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
+    // pipeline returns `DocumentAst`, not `RenderedOutput`.
+    // `EngineExecutionStage` uses the default registry; an
+    // override is not currently exposed (no consumer needs it
+    // for v1).
+    let stages = build_q2_preview_pipeline_stages(None);
+
+    let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    let ast = output.into_document_ast().ok_or_else(|| {
+        crate::error::QuartoError::Other(
+            "q2-preview pipeline did not produce DocumentAst".to_string(),
+        )
+    })?;
+
+    // Source context for translating diagnostic offsets into
+    // line/column on the JS side.
     let mut source_context = SourceContext::new();
     let content_str = String::from_utf8_lossy(content).to_string();
     source_context.add_file(source_name.to_string(), Some(content_str));
 
-    Ok(RenderOutput {
-        html: rendered.content,
+    // Build an `ASTContext` from the source context — the JSON
+    // writer needs this to emit `[file_id, start, end]` source-
+    // location triples for inlines (`include_inline_locations:
+    // true`). This shape is lifted verbatim from the q2-debug
+    // entry point (`wasm-quarto-hub-client/src/lib.rs:914-916`)
+    // so q2-preview's JSON envelope matches q2-debug's at the
+    // wire level.
+    let ast_context = pampa::pandoc::ASTContext {
+        filenames: vec![source_name.to_string()],
+        example_list_counter: std::cell::Cell::new(1),
+        source_context: source_context.clone(),
+        parent_source_info: None,
+    };
+    // When `AttributionRenderTransform` ran (i.e. a provider was
+    // installed on `ctx.attribution_provider`), forward
+    // `ctx.format_options.json` into `JsonConfig` so the writer emits
+    // `astContext.attribution` and `astContext.attributionActors`.
+    // Off-path (provider absent), both fields stay `None` and the
+    // JSON output is byte-identical to today's.
+    let (attribution_by_node, attribution_actors) =
+        crate::attribution::json_attribution_fields(&ctx.format_options.json);
+    let json_config = pampa::writers::json::JsonConfig {
+        include_inline_locations: true,
+        attribution_by_node,
+        attribution_actors,
+    };
+    let mut buf = Vec::new();
+    pampa::writers::json::write_with_config(&ast.ast, &ast_context, &mut buf, &json_config)
+        .map_err(|e| {
+            crate::error::QuartoError::Other(format!("q2-preview JSON serialization failed: {e:?}"))
+        })?;
+    let ast_json = String::from_utf8(buf).map_err(|e| {
+        crate::error::QuartoError::Other(format!("q2-preview JSON output was not valid UTF-8: {e}"))
+    })?;
+
+    Ok(PreviewAstOutput {
+        ast_json,
         diagnostics,
         source_context,
     })
@@ -694,6 +909,9 @@ pub async fn render_qmd_to_html(
 /// 14. `NavbarRenderTransform` - Render navbar to HTML for template insertion
 /// 15. `SidebarRenderTransform` - Render sidebar to HTML (w/ .qmd→.html rewrite)
 /// 16. `FooterRenderTransform` - Render page footer to HTML for template insertion
+/// 16a. `AttributionGenerateTransform` - Tail-of-phase: call the installed
+///     `AttributionSourceProvider` (if any) and merge identities into the
+///     `RenderContext` sidecar for the Render-side transform to read
 ///
 /// ## Finalization Phase
 /// 17. `LinkRewriteTransform` - Rewrite body-content `.qmd` links to relative output URLs (Phase 6)
@@ -748,6 +966,14 @@ pub fn build_transform_pipeline(
     // === NAVIGATION PHASE ===
     // All generates run before any renders so a future user filter or
     // non-HTML pipeline sees a complete navigation.* subtree before rendering.
+    // TODO(bd-0fd0): there is no Lua-filter slot between this Generate
+    // sub-phase and the Render sub-phase below — `UserFiltersStage::pre`
+    // and `::post` bracket the whole `AstTransformsStage`. The L3 plan's
+    // D2 ("resolved data lives at meta.listings.<id>") was revised in
+    // light of this for listings (data flows via a typed RenderContext
+    // field instead). The same forward-compat note applies to the
+    // navbar/sidebar/footer generates here.
+    //
     // TocGenerate must run after SectionizeTransform so section IDs are
     // available; navbar/footer generates only read top-level metadata.
     pipeline.push(Box::new(TocGenerateTransform::new()));
@@ -757,11 +983,69 @@ pub fn build_transform_pipeline(
     // resolved `navigation.sidebar` for the current page.
     pipeline.push(Box::new(PageNavGenerateTransform::new()));
     pipeline.push(Box::new(FooterGenerateTransform::new()));
+    // ListingGenerateTransform runs after the navigation generates
+    // because a future Lua-filter slot (bd-0fd0) should see the full
+    // generated set in one place. ListingRenderTransform runs *before*
+    // the navigation renders so listing markup gets a stable place in
+    // ast.blocks before any rendered-HTML emission for templates.
+    pipeline.push(Box::new(ListingGenerateTransform::new()));
+    pipeline.push(Box::new(ListingRenderTransform::new()));
+    // CategoriesSidebarTransform runs after ListingRenderTransform
+    // so it reads `RenderContext::resolved_listings` (which the
+    // render transform restores after consumption) and aggregates
+    // categories across all listings on the host page. It must run
+    // before TocRenderTransform so both `rendered.navigation.*`
+    // keys land before ApplyTemplate reads them.
+    //
+    // TODO(bd-0fd0): same Lua-filter slot caveat as the listing
+    // generate/render transforms above — when the slot lands the
+    // resolved-listing data path becomes user-mutable.
+    pipeline.push(Box::new(CategoriesSidebarTransform::new()));
+    // L9 (bd-o90m): emit one staged feed file per feed-configured
+    // listing on the host page. Reads `ctx.resolved_listings` and
+    // writes `<output_dir>/<dir>/<stem>.feed-{type}-staged` to disk
+    // synchronously. Native-only — the entire feed staging module
+    // is gated to `cfg(not(target_arch = "wasm32"))` (it depends on
+    // `imagesize` and synchronous `std::fs::write`, neither of
+    // which makes sense in the in-browser VFS). The
+    // `ListingFeedLinkTransform` registered just below DOES run on
+    // both targets so the rendered HTML's head metadata stays
+    // byte-for-byte identical between the CLI and hub-client preview.
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(
+        crate::project::listing::feed::ListingFeedStageTransform::new(),
+    ));
+    // L9 (bd-o90m): inject `<link rel="alternate" type="application/rss+xml">`
+    // into `rendered.includes.header` for every feed-configured
+    // listing. Runs on both native AND WASM (registered in both
+    // pipeline builders) so the rendered HTML matches between the
+    // CLI render and the hub-client preview. The link points at
+    // a feed file the hub-client doesn't write — clicking it 404s
+    // in preview, which is acceptable v1 behavior (documented in
+    // the L11 listings reference page).
+    pipeline.push(Box::new(
+        crate::project::listing::feed::ListingFeedLinkTransform::new(),
+    ));
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     pipeline.push(Box::new(FooterRenderTransform::new()));
+
+    // Tail of Navigation Phase: attribution data generation. Reads the
+    // opt-in provider from `ctx.attribution_provider` (installed by the
+    // CLI `--attribution=git` flag plumbing or the WASM
+    // `parse_qmd_to_ast_with_attribution` entry point), calls
+    // `build()`, merges identities with any user-authored
+    // `meta.attribution.identities`, and stores
+    // `ctx.attribution_data`. No-op when no provider is installed —
+    // the unflagged HTML path stays byte-identical. The entire
+    // Finalization Phase runs between this stage and
+    // `AttributionRenderTransform`; no transform there reads or
+    // writes the sidecar. See
+    // `claude-notes/plans/2026-05-06-attribution-pipeline.md` for the
+    // sidecar / placement design notes.
+    pipeline.push(Box::new(AttributionGenerateTransform::new()));
 
     // === FINALIZATION PHASE ===
     // LinkRewriteTransform runs first in the Finalization Phase
@@ -776,6 +1060,109 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
+    // Very last transform: bake the per-node attribution lookup and
+    // the pruned actors table onto `ctx.format_options`. No-op when
+    // `ctx.attribution_data` is None (i.e. no provider was installed,
+    // or generate skipped). Placing this at the very end means any
+    // future finalization stage that mutates `SourceInfo` is
+    // automatically covered without having to remember to insert it
+    // before attribution-render.
+    pipeline.push(Box::new(AttributionRenderTransform::new()));
+
+    // After attribution-render: auto-inject the default viewer
+    // CSS+JS pair into `rendered.includes.{header,after-body}` so
+    // `--attribution=git` produces a visible default rather than
+    // inert `data-attr-*` attributes. Internally gated on
+    // `attribution_by_node.is_some()` AND
+    // `attribution_viewer_enabled`, so the off-path is a no-op.
+    // CLI-only: q2-preview omits this transform via
+    // `Q2_PREVIEW_TRANSFORM_EXCLUDED` (hub-client ignores
+    // `rendered.includes.*` and binds hover via React props).
+    pipeline.push(Box::new(AttributionViewerTransform::new()));
+
+    pipeline
+}
+
+/// Names of transforms in [`build_transform_pipeline`] that the
+/// q2-preview pipeline drops. Three categories:
+///
+/// 1. **Preserve CustomNodes for React** — `callout-resolve`,
+///    `crossref-render`. Wrappers stay so React's type-specific
+///    components (Plan 2) can render Callout / Theorem / Proof /
+///    FloatRefTarget / Equation / CrossrefResolvedRef.
+/// 2. **Synthesize-with-no-preimage** — `title-block`, `footnotes`,
+///    `appendix-structure`. These construct containers with no
+///    source backing; deferred to a future plan with
+///    wrapper-CustomNode round-trip support.
+/// 3. **HTML-pipeline-specific outputs** — `toc-render`,
+///    `navbar-render`, `sidebar-render`, `page-nav-render`,
+///    `footer-render`, `link-rewrite`, `website-favicon`. These
+///    produce HTML strings or `.qmd → .html` rewrites that React
+///    consumes from structured metadata directly.
+///
+/// New transforms added to [`build_transform_pipeline`] are
+/// **included by default** — q2-preview opts a transform out
+/// only when there's a concrete reason (one of the three
+/// categories above). This is the deliberate inversion of the
+/// original Plan 1 explicit-list framing: see commit message of
+/// the deny-list flip for the empirical motivation.
+///
+/// The unknown-name validator
+/// (`q2_preview_transform_excluded_names_exist_in_html_pipeline`)
+/// fails the test suite if any name here is not an actual transform
+/// in the full HTML pipeline (typo / rename guard).
+const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
+    "callout-resolve",
+    "website-favicon",
+    // `attribution-viewer` injects raw <style>/<script> tags into
+    // `rendered.includes.{header,after-body}`, which the HTML
+    // template wires into the final HTML. q2-preview's React leaves
+    // ignore those slots entirely — the hub-client's own
+    // `framework/attribution.tsx` carries the visual presentation
+    // (badge classes, hover wiring) and would double-mount if this
+    // transform ran here. CLI-only by design.
+    "attribution-viewer",
+    "title-block",
+    // "footnotes" — included in q2-preview's pipeline (Plan 2B):
+    // produces Pandoc primitives (Span/Sup/Link/Div/OrderedList) that
+    // q2-preview's leaves render natively. Note marker numbering and
+    // the document-end footnote section both come from this transform.
+    // bd-1kly tracks the upstream gap for `reference-location: block`
+    // and `section`; until that lands, q2-preview's `Note.tsx`
+    // tooltip-body fallback handles those configs.
+    "toc-render",
+    "navbar-render",
+    "sidebar-render",
+    "page-nav-render",
+    "footer-render",
+    "link-rewrite",
+    // "appendix-structure" — included in q2-preview's pipeline (Plan 2B):
+    // pure Pandoc primitives, structurally identical to the HTML
+    // pipeline. Folds footnotes section, license/copyright/citation
+    // metadata into <div id="quarto-appendix">. Bibliography branch
+    // is inert until Citeproc lands.
+    "crossref-render",
+];
+
+/// Build the q2-preview transform pipeline (Plan 1).
+///
+/// Constructed as [`build_transform_pipeline`] with the names in
+/// [`Q2_PREVIEW_TRANSFORM_EXCLUDED`] removed. Order is preserved.
+/// Constructor args (notably `shortcode_paths`, `extensions`,
+/// `runtime`, `target_format`) are forwarded verbatim so
+/// shortcode-and-Lua semantics match the HTML pipeline.
+///
+/// `AstTransformsStage::run()` dispatches between this and
+/// `build_transform_pipeline` based on `ctx.format.pipeline_kind`.
+pub fn build_q2_preview_transform_pipeline(
+    shortcode_paths: Vec<std::path::PathBuf>,
+    extensions: Vec<crate::extension::types::Extension>,
+    runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
+    target_format: String,
+) -> TransformPipeline {
+    let mut pipeline =
+        build_transform_pipeline(shortcode_paths, extensions, runtime, target_format);
+    pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
     pipeline
 }
 
@@ -1124,7 +1511,7 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 18);
+        assert_eq!(stages.len(), 20);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
@@ -1134,31 +1521,40 @@ mod tests {
         // the profile checkpoint so file-slot include dependencies are
         // recorded into `profile.includes` for cache invalidation.
         assert_eq!(stages[3].name(), "include-resolve");
+        // Listings auto-fill (bd-izqh, L1) sits between include-resolve
+        // and the profile checkpoint so `meta.listing-item.*` enrichment
+        // is visible to `DocumentProfile.listing_item`.
+        assert_eq!(stages[4].name(), "listing-item-info");
         // Profile checkpoint (Phase 0 website epic, bd-f3jc).
-        assert_eq!(stages[4].name(), "document-profile");
+        assert_eq!(stages[5].name(), "document-profile");
         // Cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
-        assert_eq!(stages[5].name(), "link-resolution");
-        assert_eq!(stages[6].name(), "unwrap-profile");
-        assert_eq!(stages[7].name(), "pre-engine-sugaring");
-        assert_eq!(stages[8].name(), "engine-execution");
-        assert_eq!(stages[9].name(), "compile-theme-css");
+        assert_eq!(stages[6].name(), "link-resolution");
+        assert_eq!(stages[7].name(), "unwrap-profile");
+        assert_eq!(stages[8].name(), "pre-engine-sugaring");
+        assert_eq!(stages[9].name(), "engine-execution");
+        assert_eq!(stages[10].name(), "compile-theme-css");
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
-        assert_eq!(stages[10].name(), "bootstrap-js");
-        assert_eq!(stages[11].name(), "user-filters-pre");
-        assert_eq!(stages[12].name(), "ast-transforms");
-        assert_eq!(stages[13].name(), "user-filters-post");
+        assert_eq!(stages[11].name(), "bootstrap-js");
+        assert_eq!(stages[12].name(), "user-filters-pre");
+        assert_eq!(stages[13].name(), "ast-transforms");
+        assert_eq!(stages[14].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[14].name(), "resource-report");
-        assert_eq!(stages[15].name(), "code-highlight");
-        assert_eq!(stages[16].name(), "render-html-body");
-        assert_eq!(stages[17].name(), "apply-template");
+        assert_eq!(stages[15].name(), "resource-report");
+        assert_eq!(stages[16].name(), "code-highlight");
+        // Math-mode (bd-w5ov) walks the post-transform AST and
+        // populates meta.math when math is present. Sits just before
+        // render-html-body so any late-introduced math (sugar, user
+        // filters, crossref `\tag{N}`) is visible.
+        assert_eq!(stages[17].name(), "math-js");
+        assert_eq!(stages[18].name(), "render-html-body");
+        assert_eq!(stages[19].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 18);
+        assert_eq!(pipeline.len(), 20);
     }
 
     #[test]
@@ -1168,7 +1564,11 @@ mod tests {
         // `engine-execution` and `bootstrap-js`. Includes the
         // `include-resolve` stage (bd-8kp3) so the same
         // `rendered.includes.*` contract holds in the browser.
-        assert_eq!(pipeline.len(), 16);
+        // Includes `listing-item-info` (bd-izqh) so listing-item
+        // metadata is auto-filled symmetrically.
+        // Includes `math-js` (bd-w5ov) — math display is safe under
+        // hub-client iframe reinit and we want live math in preview.
+        assert_eq!(pipeline.len(), 18);
         let names = pipeline.stage_names();
         // bd-4eyf: hub-client iframe reinit blows away stateful
         // Bootstrap components, so we deliberately omit `bootstrap-js`
@@ -1176,6 +1576,13 @@ mod tests {
         assert!(
             !names.contains(&"bootstrap-js"),
             "wasm pipeline must not include bootstrap-js (hub-client iframe reinit)"
+        );
+        // bd-w5ov: math display IS safe under iframe reinit (each load
+        // gets a fresh DOM and the engine typesets once). The hub-client
+        // preview should typeset math live, so `math-js` is included.
+        assert!(
+            names.contains(&"math-js"),
+            "wasm pipeline must include math-js (live math in hub-client preview)"
         );
     }
 
@@ -1414,6 +1821,94 @@ mod tests {
         );
     }
 
+    /// Plan 2A item 11: the artifact key produced by
+    /// `CompileThemeCssStage` is `css:theme:<fingerprint>`, where
+    /// `<fingerprint>` matches `theme_fingerprint(css)` byte-for-byte.
+    /// The WASM bridge recovers `RenderResponse.theme_fingerprint` from
+    /// this suffix without re-hashing CSS bytes; the contract this test
+    /// locks is that the suffix and the CSS-derived fingerprint stay in
+    /// sync.
+    #[test]
+    fn test_theme_fingerprint_recoverable_from_artifact_key() {
+        use crate::stage::stages::theme_fingerprint;
+
+        // Render twice with the same theme — fingerprints must match.
+        let content_a = b"---\ntitle: Test\ntheme: flatly\n---\n\nA.";
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        let mut ctx_a1 = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx_a2 = RenderContext::new(&project, &doc, &format, &binaries);
+        let config = HtmlRenderConfig::default();
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_a,
+            "test.qmd",
+            &mut ctx_a1,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_a,
+            "test.qmd",
+            &mut ctx_a2,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+
+        let key_a1 = ctx_a1
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        let key_a2 = ctx_a2
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        assert_eq!(
+            key_a1, key_a2,
+            "same theme renders must produce byte-identical fingerprint keys"
+        );
+
+        let suffix_a = key_a1
+            .strip_prefix("css:theme:")
+            .expect("key should start with css:theme:");
+        let css_a = get_css_artifact(&ctx_a1);
+        assert_eq!(
+            suffix_a,
+            theme_fingerprint(&css_a),
+            "key suffix must match theme_fingerprint(css) byte-for-byte"
+        );
+
+        // Render with a different theme — fingerprint must differ.
+        let content_b = b"---\ntitle: Test\ntheme: cosmo\n---\n\nB.";
+        let mut ctx_b = RenderContext::new(&project, &doc, &format, &binaries);
+        let _ = pollster::block_on(render_qmd_to_html(
+            content_b,
+            "test.qmd",
+            &mut ctx_b,
+            &config,
+            make_test_runtime(),
+        ))
+        .unwrap();
+        let key_b = ctx_b
+            .artifacts
+            .get_by_prefix("css:theme:")
+            .first()
+            .map(|(k, _)| k.to_string())
+            .expect("expected one css:theme:* artifact");
+        assert_ne!(
+            key_a1, key_b,
+            "different themes must produce different fingerprint keys"
+        );
+    }
+
     /// bd-45yw Phase 4a: `HtmlRenderConfig.engine_registry` overrides
     /// the engine registry that `EngineExecutionStage` uses, so a
     /// caller (orchestrator/CLI replay path) can substitute a
@@ -1549,6 +2044,247 @@ mod tests {
             !output.html.contains("Original body"),
             "rendered HTML must not contain the original body — replay should override; got:\n{}",
             &output.html,
+        );
+    }
+
+    // ─── q2-preview pipeline (Plan 1) ────────────────────────────
+
+    /// Drift-protection helper for subset transform pipelines.
+    ///
+    /// Asserts that `subset` is exactly `full` filtered by
+    /// `expected_excluded`, preserving order. Catches every drift
+    /// mode in one shot: a transform added to `full`, renamed,
+    /// reordered on either side, or removed from `subset`.
+    /// Verify every name in [`Q2_PREVIEW_TRANSFORM_EXCLUDED`] is an
+    /// actual transform in the full HTML pipeline. Catches the one
+    /// drift mode the deny-list construction *can't* catch on its
+    /// own: a transform gets renamed and the exclusion list silently
+    /// no-ops on the old name (so the renamed transform leaks into
+    /// q2-preview).
+    ///
+    /// New transforms added to `build_transform_pipeline` are
+    /// included in q2-preview by default — that's the whole point
+    /// of the deny-list flip — so this test does NOT fail on
+    /// HTML-pipeline additions.
+    #[test]
+    fn q2_preview_transform_excluded_names_exist_in_html_pipeline() {
+        let runtime = make_test_runtime();
+        let html = build_transform_pipeline(vec![], vec![], runtime, "html".to_string());
+        let html_names: Vec<&str> = html.iter().map(|t| t.name()).collect();
+
+        let unknown: Vec<&&str> = Q2_PREVIEW_TRANSFORM_EXCLUDED
+            .iter()
+            .filter(|n| !html_names.contains(n))
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "Q2_PREVIEW_TRANSFORM_EXCLUDED contains names not in build_transform_pipeline: \
+             {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
+             Full HTML transform list: {html_names:?}",
+        );
+    }
+
+    /// `render_qmd_to_preview_ast` runs the q2-preview pipeline
+    /// (CalloutTransform sugar, no CalloutResolveTransform) so a
+    /// callout survives as a `__quarto_custom_node` wrapper Div in
+    /// the serialized JSON. This is the contract Plan 2 (React
+    /// CustomNode components) consumes.
+    #[test]
+    fn render_qmd_to_preview_ast_preserves_callout_custom_node() {
+        let content = b"---\ntitle: Test\nformat: q2-preview\n---\n\n\
+                        ::: {.callout-warning}\n## Watch Out\n\nBe careful!\n:::\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime,
+        ))
+        .expect("q2-preview render");
+
+        let snippet = || &output.ast_json[..output.ast_json.len().min(800)];
+
+        // JSON should contain the wrapper Div class + the
+        // type-name attribute pampa emits for CustomNodes.
+        assert!(
+            output.ast_json.contains("__quarto_custom_node"),
+            "expected wrapper class in q2-preview JSON; got:\n{}",
+            snippet()
+        );
+        assert!(
+            output.ast_json.contains("data-custom-type"),
+            "expected data-custom-type attribute; got:\n{}",
+            snippet()
+        );
+        assert!(
+            output.ast_json.contains("Callout"),
+            "expected Callout type-name in JSON; got:\n{}",
+            snippet()
+        );
+    }
+
+    /// Plan 2B: with `FootnotesTransform` no longer in the
+    /// q2-preview deny-list, inline-footnote rendering (`^[body]`
+    /// syntax — produces `Inline::Note` directly) must emit the
+    /// standard `Span(Sup(Link))` reference and a `Div.footnotes`
+    /// body section. Catches regressions if the transform is
+    /// accidentally re-excluded.
+    ///
+    /// **Reference-style footnotes** (`[^1]: body` with `[^1]` in
+    /// prose) are NOT covered by this test: pampa's postprocess at
+    /// `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs:1134-1146`
+    /// converts `Inline::NoteReference` to a `Span(class="quarto-note-reference")`
+    /// with empty content during parsing, before any quarto-core
+    /// transform runs. Nothing downstream resolves those Spans (the
+    /// HTML pipeline drops them too, verified manually). That's a
+    /// pre-existing gap, not a Plan 2B regression. bd-1kly tracks
+    /// the related upstream work.
+    #[test]
+    fn render_qmd_to_preview_ast_emits_inline_footnote_section() {
+        let content =
+            b"---\ntitle: Test\nformat: q2-preview\n---\n\nA paragraph^[the footnote body].\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime,
+        ))
+        .expect("q2-preview render");
+
+        // The transform replaces the inline Note with a Span carrying
+        // the footnote-ref class.
+        assert!(
+            output.ast_json.contains("footnote-ref"),
+            "expected footnote-ref class in q2-preview output; full output:\n{}",
+            output.ast_json
+        );
+        // The section at end is a Div with class="footnotes".
+        assert!(
+            output.ast_json.contains("\"footnotes\""),
+            "expected footnotes class on section Div; full output:\n{}",
+            output.ast_json
+        );
+    }
+
+    /// Verify every name in [`Q2_PREVIEW_STAGE_EXCLUDED`] is an
+    /// actual stage in the full HTML pipeline. Same drift-mode
+    /// guard as
+    /// `q2_preview_transform_excluded_names_exist_in_html_pipeline`,
+    /// but at the stage level.
+    #[test]
+    fn q2_preview_stage_excluded_names_exist_in_html_pipeline() {
+        let html_stages = build_html_pipeline_stages_with_options(None, None);
+        let html_names: Vec<&str> = html_stages.iter().map(|s| s.name()).collect();
+
+        let unknown: Vec<&&str> = Q2_PREVIEW_STAGE_EXCLUDED
+            .iter()
+            .filter(|n| !html_names.contains(n))
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "Q2_PREVIEW_STAGE_EXCLUDED contains names not in build_html_pipeline_stages: \
+             {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
+             Full HTML stage list: {html_names:?}",
+        );
+    }
+
+    /// Phase 0 test #1 from `2026-05-13-q2-preview-attribution.md`.
+    ///
+    /// With a `PreBuiltAttributionProvider` installed on the
+    /// `RenderContext`, `render_qmd_to_preview_ast` must surface
+    /// `astContext.attribution` and `astContext.attributionActors` in
+    /// the emitted JSON. Without a provider, those keys are absent
+    /// — the byte-identicality regression guard for unflagged
+    /// q2-preview renders.
+    #[test]
+    fn render_qmd_to_preview_ast_surfaces_attribution_when_provider_installed() {
+        let content = b"---\ntitle: Test\nformat: q2-preview\n---\n\nHello world!\n".as_slice();
+
+        // Run #1: no provider — keys must be absent.
+        let baseline = {
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let format = Format::from_format_string("q2-preview").unwrap();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            let runtime = make_test_runtime();
+            pollster::block_on(render_qmd_to_preview_ast(
+                content, "test.qmd", &mut ctx, runtime,
+            ))
+            .expect("baseline q2-preview render")
+        };
+        assert!(
+            !baseline.ast_json.contains("\"attribution\""),
+            "no-provider baseline must omit `attribution` key; got:\n{}",
+            baseline.ast_json
+        );
+        assert!(
+            !baseline.ast_json.contains("\"attributionActors\""),
+            "no-provider baseline must omit `attributionActors` key; got:\n{}",
+            baseline.ast_json
+        );
+
+        // Run #2: provider installed — keys must be present, with
+        // the expected actor + identity surfaced.
+        let attribution_json = serde_json::json!({
+            "runs": [
+                { "start": 0, "end": 10_000, "actor": "alice", "time": 42 }
+            ],
+            "identities": {
+                "alice": { "name": "Alice", "color": "#ff0000" }
+            }
+        })
+        .to_string();
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.attribution_provider = Some(Arc::new(
+            crate::attribution::PreBuiltAttributionProvider::new(attribution_json),
+        ));
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime,
+        ))
+        .expect("attributed q2-preview render");
+
+        assert!(
+            output.ast_json.contains("\"attribution\""),
+            "expected `attribution` key in attributed q2-preview output; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"attributionActors\""),
+            "expected `attributionActors` key in attributed q2-preview output; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"actor\":\"alice\""),
+            "expected at least one record naming alice; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"name\":\"Alice\""),
+            "expected alice's identity entry with display name; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"color\":\"#ff0000\""),
+            "expected alice's identity entry with color; got:\n{}",
+            output.ast_json
         );
     }
 }

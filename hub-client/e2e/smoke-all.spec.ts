@@ -16,6 +16,7 @@ import {
   type DiscoveredTest,
 } from './helpers/smokeAllDiscovery';
 import {
+  bootstrapProjectSet,
   createProjectOnServer,
   seedProjectInBrowser,
   getServerUrl,
@@ -34,11 +35,15 @@ const allTests: DiscoveredTest[] = discoverSmokeAllTests();
 // ---------------------------------------------------------------------------
 
 test.describe('smoke-all E2E tests', () => {
-  // Increase timeout for SASS compilation tests
-  test.setTimeout(60000);
+  // Increase timeout for SASS compilation tests. On a contended CI
+  // runner (ubuntu-latest with 2 cores, 2 workers, a vite dev server,
+  // the hub binary, and chromium per worker) the preview render can
+  // take 30-50s for the slower fixtures. 90s leaves headroom for the
+  // 75s waitForPreviewRender wait below to actually fire.
+  test.setTimeout(90000);
 
   for (const fixture of allTests) {
-    const skipReason = shouldSkip(fixture.runConfig);
+    const skipReason = shouldSkip(fixture.runConfig, fixture.relPath);
 
     for (const spec of fixture.formatSpecs) {
       const testName = `${fixture.relPath} [${spec.format}]`;
@@ -80,13 +85,16 @@ test.describe('smoke-all E2E tests', () => {
           sortedFiles.map((f) => ({
             path: f.path,
             content: f.content,
-            contentType: 'text' as const,
+            contentType: f.contentType,
+            mimeType: f.mimeType,
           })),
         );
 
-        // Load in browser
-        await page.goto('/');
-        await expect(page.locator('body')).toBeVisible();
+        // Load in browser. bootstrapProjectSet drives the first-time-setup UI
+        // so the App lands in `connected` status before we add the legacy IDB
+        // project entry; otherwise the entry would trigger the
+        // "Upgrade: Synced Project List" screen and block navigation.
+        await bootstrapProjectSet(page, serverUrl);
         const localId = await seedProjectInBrowser(
           page,
           indexDocId,
@@ -98,11 +106,22 @@ test.describe('smoke-all E2E tests', () => {
           `/#/p/${localId}/file/${encodeURIComponent(fixture.renderPath)}`,
         );
 
+        // Format-driven dispatch: q2-debug uses the AstIframe,
+        // q2-preview uses the Q2PreviewIframe (Plan 2A), everything
+        // else uses the html preview iframe.
+        const kind =
+          spec.format === 'q2-debug'
+            ? 'q2-debug'
+            : spec.format === 'q2-preview'
+              ? 'q2-preview'
+              : 'html';
+
         // Wait for render (or error)
         if (!spec.expectsError) {
           await waitForPreviewRender(page, {
-            timeout: 45000,
+            timeout: 75000,
             consoleErrors,
+            kind,
           });
         } else {
           // For expected errors, wait a bit for the render attempt to complete
@@ -115,6 +134,7 @@ test.describe('smoke-all E2E tests', () => {
           fixture.renderPath,
           spec.assertions,
           spec.expectsError,
+          { kind },
         );
       });
     }

@@ -3,6 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../../types/project';
 import { isQmdFile } from '../../types/project';
 import type { Diagnostic } from '../../types/diagnostic';
+import type { ActorIdentity } from '../../services/automergeSync';
 import { parseQmdToAst, isWasmReady, initWasm } from '../../services/wasmRenderer';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
@@ -29,6 +30,26 @@ interface PreviewRouterProps {
   onSlideChange?: (slideIndex: number) => void;
   onFormatChange?: (format: string | null) => void;
   onContentRewrite: (content: string) => void;
+  /**
+   * Automerge actor → display identity (name + colour). Threaded
+   * through to ReactPreview's `useAttribution` so the Authorship
+   * overlay uses profile-metadata names where available, instead
+   * of the `actor.slice(0, 8)` fallback hash.
+   */
+  identities?: Record<string, ActorIdentity>;
+  /**
+   * Authorship overlay on/off. Session-only — owned by `Editor.tsx`
+   * as `useState`, threaded down here and into `ReactPreview` to
+   * drive `useAttribution`.
+   */
+  authorshipOn: boolean;
+  /**
+   * Reports `useAttribution`'s in-flight state up to `Editor.tsx` so
+   * the Authorship pill can animate its border while attribution
+   * data is being generated. Only fires from the ReactPreview branch;
+   * the non-React `Preview` branch never computes attribution.
+   */
+  onAttributionGeneratingChange?: (generating: boolean) => void;
 }
 
 /**
@@ -113,8 +134,10 @@ export default function PreviewRouter(props: PreviewRouterProps) {
     return <NonQmdPlaceholderView filename={props.currentFile?.path ?? 'no currentFile path'} />;
   }
 
-  // Render the appropriate preview component with shared WASM error banner
-  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onFormatChange, onContentRewrite, fileContents, ...commonProps } = props;
+  // Render the appropriate preview component with shared WASM error banner.
+  // `identities` and `authorshipOn` are for ReactPreview only — Preview
+  // doesn't know about either.
+  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onFormatChange, onContentRewrite, fileContents, identities, authorshipOn, onAttributionGeneratingChange, ...commonProps } = props;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -124,7 +147,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
       )}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {reactFormat ? (
-          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} />
+          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} authorshipOn={authorshipOn} onAttributionGeneratingChange={onAttributionGeneratingChange} />
         ) : (
           // Phase 9 Decision 6: pass `fileContents` so any sibling
           // edit (including `_quarto.yml`) triggers a re-render via

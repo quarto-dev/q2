@@ -1,0 +1,63 @@
+::: {.quarto-post .image-right}
+
+$if(image-html)$
+::: thumbnail
+[`$image-html$`{=html}]($path$){.no-external}
+:::
+$else$
+::: thumbnail
+[`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}]($path$){.no-external}
+:::
+$endif$
+
+::: body
+
+$if(title)$
+### [$title$]($path$){.no-anchor .no-external .listing-title}
+$endif$
+
+$if(subtitle)$
+[$subtitle$]($path$){.no-external .listing-subtitle}
+$endif$
+
+$if(show.categories)$
+$if(category-html)$
+```{=html}
+$category-html$
+```
+$endif$
+$endif$
+
+$if(description)$
+::: {.delink .listing-description}
+```{=html}
+$description-placeholder-begin$
+```
+
+$description$
+
+```{=html}
+$description-placeholder-end$
+```
+:::
+$endif$
+
+:::
+
+::: metadata
+
+$if(date)$
+[$date$]{.listing-date}
+$endif$
+
+$if(author)$
+[$author$]{.listing-author}
+$endif$
+
+$if(reading-time)$
+[$reading-time$]{.listing-reading-time}
+$endif$
+
+:::
+
+:::

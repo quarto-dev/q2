@@ -23,6 +23,9 @@ pub struct ProjectFiles {
 
     /// All text files discovered inside `_extensions/` directories (paths relative to project root)
     pub extension_files: Vec<PathBuf>,
+
+    /// Other text source files (currently `.tsx`, paths relative to project root)
+    pub source_files: Vec<PathBuf>,
 }
 
 impl ProjectFiles {
@@ -90,6 +93,15 @@ impl ProjectFiles {
                     continue;
                 }
 
+                // Check for .tsx source files
+                if ext == Some("tsx") {
+                    if let Ok(relative) = path.strip_prefix(project_root) {
+                        debug!(?relative, "Discovered .tsx source file");
+                        files.source_files.push(relative.to_path_buf());
+                    }
+                    continue;
+                }
+
                 // Check for binary resource files (images, PDFs, etc.)
                 if let Some(ext_str) = ext {
                     if is_binary_extension(ext_str) {
@@ -107,6 +119,7 @@ impl ProjectFiles {
         files.config_files.sort();
         files.binary_files.sort();
         files.extension_files.sort();
+        files.source_files.sort();
 
         files
     }
@@ -117,11 +130,15 @@ impl ProjectFiles {
             + self.config_files.len()
             + self.binary_files.len()
             + self.extension_files.len()
+            + self.source_files.len()
     }
 
-    /// Returns the count of text files (config + qmd + extension text files).
+    /// Returns the count of text files (config + qmd + extension text + source files).
     pub fn text_file_count(&self) -> usize {
-        self.qmd_files.len() + self.config_files.len() + self.extension_files.len()
+        self.qmd_files.len()
+            + self.config_files.len()
+            + self.extension_files.len()
+            + self.source_files.len()
     }
 
     /// Returns an iterator over all discovered file paths.
@@ -130,15 +147,17 @@ impl ProjectFiles {
             .iter()
             .chain(self.qmd_files.iter())
             .chain(self.extension_files.iter())
+            .chain(self.source_files.iter())
             .chain(self.binary_files.iter())
     }
 
-    /// Returns an iterator over text files only (config + qmd + extension text files).
+    /// Returns an iterator over text files only (config + qmd + extension text + source files).
     pub fn text_files(&self) -> impl Iterator<Item = &PathBuf> {
         self.config_files
             .iter()
             .chain(self.qmd_files.iter())
             .chain(self.extension_files.iter())
+            .chain(self.source_files.iter())
     }
 }
 
@@ -366,6 +385,45 @@ mod tests {
         assert_eq!(text.len(), 2);
         assert!(text.contains(&&PathBuf::from("_quarto.yml")));
         assert!(text.contains(&&PathBuf::from("index.qmd")));
+    }
+
+    #[test]
+    fn test_discover_tsx_files() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::write(
+            temp.path().join("App.tsx"),
+            "export const App = () => null;",
+        )
+        .unwrap();
+        fs::create_dir(temp.path().join("components")).unwrap();
+        fs::write(
+            temp.path().join("components/Widget.tsx"),
+            "export const Widget = () => null;",
+        )
+        .unwrap();
+
+        // .ts (not .tsx) should NOT be picked up
+        fs::write(temp.path().join("util.ts"), "export const x = 1;").unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        assert_eq!(files.source_files.len(), 2);
+        assert!(files.source_files.contains(&PathBuf::from("App.tsx")));
+        assert!(
+            files
+                .source_files
+                .contains(&PathBuf::from("components/Widget.tsx"))
+        );
+
+        // .tsx flows through text_files() so it gets synced as text
+        let text: Vec<_> = files.text_files().collect();
+        assert!(text.contains(&&PathBuf::from("App.tsx")));
+        assert!(text.contains(&&PathBuf::from("components/Widget.tsx")));
+
+        // .ts is silently dropped (only .tsx is included)
+        assert!(!files.source_files.contains(&PathBuf::from("util.ts")));
     }
 
     #[test]

@@ -196,9 +196,17 @@ fn resolve_variable<'a>(
 fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
     match resolve_variable(var, ctx.variables) {
         Some(value) => {
+            // Pipes apply to the resolved value before any further
+            // shape interpretation. The separator handling below sees
+            // the post-pipe value.
+            let value = if var.pipes.is_empty() {
+                value.clone()
+            } else {
+                crate::pipes::apply_pipes(value.clone(), &var.pipes, ctx)
+            };
             // Handle literal separator for arrays: $var[, ]$
             if let Some(sep) = &var.separator
-                && let TemplateValue::List(items) = value
+                && let TemplateValue::List(items) = &value
             {
                 let docs: Vec<Doc> = items
                     .iter()
@@ -206,7 +214,6 @@ fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
                     .collect();
                 return intersperse_docs(docs, Doc::text(sep));
             }
-            // TODO: Apply pipes
             // Strip final newline from variable values (matches Pandoc's removeFinalNl)
             value.to_doc().remove_final_newline()
         }
@@ -334,13 +341,10 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
         }
     };
 
-    // TODO: Apply pipes to partial output
-    let _ = pipes;
-
-    match var {
+    let raw_result = match var {
         None => {
             // Bare partial: evaluate with current context
-            evaluate_nodes(nodes, ctx)
+            evaluate_nodes(nodes, ctx)?
         }
         Some(var_ref) => {
             // Applied partial: evaluate with var's value as context
@@ -355,7 +359,7 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
                         format!("Undefined variable: {}", var_path),
                         &var_ref.source_info,
                     );
-                    Ok(Doc::Empty)
+                    return Ok(Doc::Empty);
                 }
                 Some(TemplateValue::List(items)) => {
                     // Iterate over list items
@@ -370,9 +374,9 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
 
                     // Join with separator
                     if let Some(sep) = separator {
-                        Ok(intersperse_docs(results, Doc::text(sep)))
+                        intersperse_docs(results, Doc::text(sep))
                     } else {
-                        Ok(concat_docs(results))
+                        concat_docs(results)
                     }
                 }
                 Some(value) => {
@@ -381,11 +385,25 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
                     let mut child_ctx = ctx.child(&item_ctx);
                     let result = evaluate_nodes(nodes, &mut child_ctx)?;
                     ctx.merge_diagnostics(child_ctx);
-                    Ok(result)
+                    result
                 }
             }
         }
+    };
+
+    // Pipes on partials operate on the rendered string output. This
+    // matches Pandoc's doctemplates semantics: the partial first
+    // produces text, then pipes transform that text. Applying pipes
+    // here loses Doc structure (indentation/breakable spaces collapse
+    // through the string round-trip), which is the correct
+    // trade-off — a pipe like `uppercase` is meaningless on Doc nodes.
+    if pipes.is_empty() {
+        return Ok(raw_result);
     }
+    let rendered = raw_result.render(None);
+    let value = TemplateValue::String(rendered);
+    let transformed = crate::pipes::apply_pipes(value, pipes, ctx);
+    Ok(transformed.to_doc())
 }
 
 // Re-export the old evaluate function for backwards compatibility
@@ -947,5 +965,86 @@ mod tests {
             ctx.get("it"),
             Some(&TemplateValue::String("hello".to_string()))
         );
+    }
+
+    // -- Pipe end-to-end tests through the full parse + render path
+    // (L4.1 wiring; the unit tests for individual pipe behavior live
+    // in `pipes::tests`).
+
+    #[test]
+    fn pipe_uppercase_through_full_pipeline() {
+        let template = compile("$name/uppercase$");
+        let mut c = ctx();
+        c.insert("name", TemplateValue::String("alice".to_string()));
+        assert_eq!(template.render(&c).unwrap(), "ALICE");
+    }
+
+    #[test]
+    fn pipe_length_on_list_through_full_pipeline() {
+        let template = compile("$xs/length$");
+        let mut c = ctx();
+        c.insert(
+            "xs",
+            TemplateValue::List(vec![
+                TemplateValue::String("a".to_string()),
+                TemplateValue::String("b".to_string()),
+                TemplateValue::String("c".to_string()),
+            ]),
+        );
+        assert_eq!(template.render(&c).unwrap(), "3");
+    }
+
+    #[test]
+    fn pipe_chain_first_then_uppercase() {
+        let template = compile("$xs/first/uppercase$");
+        let mut c = ctx();
+        c.insert(
+            "xs",
+            TemplateValue::List(vec![
+                TemplateValue::String("alice".to_string()),
+                TemplateValue::String("bob".to_string()),
+            ]),
+        );
+        assert_eq!(template.render(&c).unwrap(), "ALICE");
+    }
+
+    #[test]
+    fn pipe_left_with_width_through_full_pipeline() {
+        // Pandoc's grammar for `left` requires the full triple:
+        // width + leftborder + rightborder, even if borders are
+        // empty. Empty borders produce no extra output around the
+        // padded value.
+        let template = compile(r#"[$name/left 8 "" ""$]"#);
+        let mut c = ctx();
+        c.insert("name", TemplateValue::String("ab".to_string()));
+        assert_eq!(template.render(&c).unwrap(), "[ab      ]");
+    }
+
+    // Note: Q-10-6 ("Unknown Pipe") is not reachable through the
+    // standard parser today — the tree-sitter grammar enumerates a
+    // fixed pipe set and rejects unknown names at parse time. The
+    // dispatch in `pipes::apply_pipe` still emits Q-10-6 for
+    // synthetic Pipe nodes (covered in `pipes::tests`); a future
+    // grammar extension that admits new pipe names would also rely
+    // on the dispatch's error path.
+
+    #[test]
+    fn pipe_on_partial_output_uppercases_string() {
+        // Use MemoryResolver via Template::compile_with_resolver to
+        // exercise the partial-pipe path. Bare partial — current
+        // context — output goes through `uppercase`.
+        use crate::resolver::MemoryResolver;
+        use std::path::Path;
+        let resolver = MemoryResolver::with_partials([("greeting", "hello, $name$")]);
+        let template = Template::compile_with_resolver(
+            "$greeting()/uppercase$",
+            Path::new("test.template"),
+            &resolver,
+            0,
+        )
+        .expect("should compile");
+        let mut c = ctx();
+        c.insert("name", TemplateValue::String("world".to_string()));
+        assert_eq!(template.render(&c).unwrap(), "HELLO, WORLD");
     }
 }

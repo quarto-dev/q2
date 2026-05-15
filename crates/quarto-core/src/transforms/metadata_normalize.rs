@@ -107,7 +107,13 @@ fn extract_plain_text(meta: &ConfigValue) -> Option<String> {
 }
 
 /// Convert inlines to plain text.
-fn inlines_to_plain_text(inlines: &[Inline]) -> String {
+///
+/// Visibility note: also reused by `crate::stage::stages::listing_item_info`
+/// (`bd-izqh`) for L1 description/word-count derivation. If a third
+/// in-crate consumer arrives, file `bd-zzke` to consolidate the six
+/// in-tree variants of this helper into one options-driven shared form
+/// rather than continuing to add new call sites here.
+pub(crate) fn inlines_to_plain_text(inlines: &[Inline]) -> String {
     let mut result = String::new();
     for inline in inlines {
         match inline {

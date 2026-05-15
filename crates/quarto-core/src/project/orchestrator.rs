@@ -258,6 +258,28 @@ impl ProjectType for WebsiteProjectType {
             copy_favicon(project, runtime, diagnostics)?;
             write_sitemap(project, index, output_paths, runtime)?;
             write_robots_txt(project, runtime)?;
+            // L7 (`bd-qf7r`): replace listing description / image
+            // placeholder envelopes with engine-rendered preview
+            // content read from sibling outputs. Bracketed feature
+            // — see `super::listing::post_render_upgrade` header
+            // comment for the discipline this enforces.
+            super::listing::post_render_upgrade::substitute_listing_placeholders(
+                project,
+                output_paths,
+                runtime,
+                diagnostics,
+            )?;
+            // L9 (`bd-o90m`): finalize staged RSS feeds. Walks
+            // `project.output_dir` for `*.feed-{full|partial|metadata}-staged`
+            // files emitted by `ListingFeedStageTransform`,
+            // substitutes the description-element placeholder
+            // envelopes against engine-rendered sibling HTML
+            // (using a per-call sibling-read cache), writes the
+            // final `.xml`, and removes the staged file. Runs
+            // *after* L7 so any host-page HTML that L7 rewrote
+            // is finalized before the L9 reader extractors read
+            // sibling content.
+            super::listing::feed::complete_staged_feeds(project, runtime, diagnostics)?;
         }
         // Suppress unused-warnings on WASM where the cfg block above
         // is empty. The signature is fixed by the trait, and these

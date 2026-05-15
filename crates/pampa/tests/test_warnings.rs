@@ -384,11 +384,125 @@ fn test_comparison_with_explicit_raw_inline_syntax() {
     assert_eq!(raw_explicit[1], "</b>");
 }
 
-// Tests for Q-2-8: Code block options in header warning
+#[test]
+fn test_html_element_preserves_leading_whitespace_between_code_and_raw() {
+    // Regression test for bd-nkx4 (issue #182): the html_element node may
+    // include leading whitespace that tree-sitter attaches to its range
+    // (e.g. when the preceding sibling is a pandoc_code_span whose closing
+    // delimiter does NOT include trailing whitespace). The reader must
+    // emit that whitespace as a Space inline before the RawInline so that
+    // Code and RawInline siblings don't collide on round-trip.
+    let input = r#"See `func()` <a href="x">link</a> done."#;
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+    assert!(result.is_ok(), "Document should parse successfully");
+
+    let (pandoc, _context, _warnings) = result.unwrap();
+
+    use pampa::pandoc::{Block, Inline};
+    let para = match &pandoc.blocks[0] {
+        Block::Paragraph(p) => p,
+        _ => panic!("Expected paragraph block"),
+    };
+
+    // Find the Code node and verify what follows it.
+    let code_idx = para
+        .content
+        .iter()
+        .position(|i| matches!(i, Inline::Code(_)))
+        .expect("Expected a Code inline");
+
+    let next = para
+        .content
+        .get(code_idx + 1)
+        .expect("Expected an inline after Code");
+
+    assert!(
+        matches!(next, Inline::Space(_)),
+        "Expected Space between Code and the next inline (preserving the source whitespace), \
+         got {:?}",
+        std::mem::discriminant(next)
+    );
+
+    let after_space = para
+        .content
+        .get(code_idx + 2)
+        .expect("Expected an inline after Space");
+
+    match after_space {
+        Inline::RawInline(r) => {
+            assert_eq!(r.format, "html");
+            assert_eq!(r.text, "<a href=\"x\">");
+        }
+        other => panic!("Expected RawInline after Space, got {:?}", other),
+    }
+}
 
 #[test]
-fn test_code_block_with_header_options_produces_warning() {
-    // {r eval=FALSE} should produce a Q-2-8 warning
+fn test_html_element_no_space_when_truly_adjacent() {
+    // Companion to test_html_element_preserves_leading_whitespace_*: when
+    // the source has NO whitespace between Code and the html_element, the
+    // reader must NOT invent a Space. The truly-adjacent case has no
+    // unambiguous qmd surface form (see issue #182 thread) and is
+    // intentionally left as-is.
+    let input = r#"See `func()`<a href="x">link</a> done."#;
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+    assert!(result.is_ok(), "Document should parse successfully");
+
+    let (pandoc, _context, _warnings) = result.unwrap();
+
+    use pampa::pandoc::{Block, Inline};
+    let para = match &pandoc.blocks[0] {
+        Block::Paragraph(p) => p,
+        _ => panic!("Expected paragraph block"),
+    };
+
+    let code_idx = para
+        .content
+        .iter()
+        .position(|i| matches!(i, Inline::Code(_)))
+        .expect("Expected a Code inline");
+
+    let next = para
+        .content
+        .get(code_idx + 1)
+        .expect("Expected an inline after Code");
+
+    match next {
+        Inline::RawInline(r) => {
+            assert_eq!(r.format, "html");
+            assert_eq!(r.text, "<a href=\"x\">");
+        }
+        other => panic!(
+            "Expected RawInline (no Space) directly after Code, got {:?}",
+            other
+        ),
+    }
+}
+
+// Tests for Q-2-36: knitr-style chunk options in header are rejected
+// (formerly Q-2-8 *warning*; upgraded to a Q-2-36 *error* under bd-j4fe / issue #152)
+
+#[test]
+fn test_code_block_with_header_options_produces_q236_error() {
+    // {r eval=FALSE} should produce a Q-2-36 parse error pointing users at
+    // the #| key: value body syntax. The Pandoc class form {.r ...} is still
+    // accepted — see the negative-control tests below.
     let input = "```{r eval=FALSE}\ncat(\"hello\")\n```\n";
 
     let result = readers::qmd::read(
@@ -400,31 +514,47 @@ fn test_code_block_with_header_options_produces_warning() {
         None,
     );
 
-    assert!(result.is_ok(), "Should parse successfully");
-    let (_pandoc, _context, warnings) = result.unwrap();
+    // Parsing returns Err when errors (not just warnings) are produced.
+    let diagnostics = match result {
+        Ok((_pandoc, _context, warnings)) => panic!(
+            "Expected Q-2-36 error, but parse succeeded with warnings: {:?}",
+            warnings
+                .iter()
+                .map(|w| w.code.as_deref())
+                .collect::<Vec<_>>()
+        ),
+        Err(diags) => diags,
+    };
 
-    // Should have a Q-2-8 warning
-    let q28_warnings: Vec<_> = warnings
+    let q236_errors: Vec<_> = diagnostics
         .iter()
-        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .filter(|d| d.code.as_deref() == Some("Q-2-36"))
         .collect();
 
     assert_eq!(
-        q28_warnings.len(),
+        q236_errors.len(),
         1,
-        "Should have exactly one Q-2-8 warning for code block with header options"
+        "Should have exactly one Q-2-36 error for knitr-style chunk header; got: {:?}",
+        diagnostics
+            .iter()
+            .map(|d| (d.code.as_deref(), d.kind))
+            .collect::<Vec<_>>()
     );
 
-    // Verify it's a warning, not an error
     assert_eq!(
-        q28_warnings[0].kind,
-        quarto_error_reporting::DiagnosticKind::Warning
+        q236_errors[0].kind,
+        quarto_error_reporting::DiagnosticKind::Error,
+        "Q-2-36 must be reported as an error, not a warning"
     );
 }
 
+// Negative controls for Q-2-36: forms that look superficially similar to the
+// rejected knitr-style header but are intentionally still accepted because
+// they carry a Pandoc-style class.
+
 #[test]
-fn test_code_block_with_class_no_warning() {
-    // {python .marimo} should NOT produce a Q-2-8 warning (has a class)
+fn test_code_block_with_class_no_q236() {
+    // {python .marimo} carries a class — Pandoc-style spelling, must parse cleanly.
     let input = "```{python .marimo}\ncode()\n```\n";
 
     let result = readers::qmd::read(
@@ -436,24 +566,26 @@ fn test_code_block_with_class_no_warning() {
         None,
     );
 
-    assert!(result.is_ok(), "Should parse successfully");
+    assert!(
+        result.is_ok(),
+        "Should parse successfully (Pandoc-style class form)"
+    );
     let (_pandoc, _context, warnings) = result.unwrap();
 
-    // Should NOT have a Q-2-8 warning
-    let q28_warnings: Vec<_> = warnings
+    let q236_or_q28: Vec<_> = warnings
         .iter()
-        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .filter(|w| matches!(w.code.as_deref(), Some("Q-2-36") | Some("Q-2-8")))
         .collect();
 
     assert!(
-        q28_warnings.is_empty(),
-        "Should NOT have Q-2-8 warning when class is present"
+        q236_or_q28.is_empty(),
+        "Should NOT flag {{python .marimo}} as a knitr-style header"
     );
 }
 
 #[test]
-fn test_code_block_with_class_and_options_no_warning() {
-    // {r .class key=value} should NOT produce a Q-2-8 warning (has a class)
+fn test_code_block_with_class_and_options_no_q236() {
+    // {r .myclass eval=FALSE} carries a class — still Pandoc-shaped, must parse cleanly.
     let input = "```{r .myclass eval=FALSE}\ncode()\n```\n";
 
     let result = readers::qmd::read(
@@ -465,24 +597,26 @@ fn test_code_block_with_class_and_options_no_warning() {
         None,
     );
 
-    assert!(result.is_ok(), "Should parse successfully");
+    assert!(
+        result.is_ok(),
+        "Should parse successfully (class present alongside options)"
+    );
     let (_pandoc, _context, warnings) = result.unwrap();
 
-    // Should NOT have a Q-2-8 warning
-    let q28_warnings: Vec<_> = warnings
+    let q236_or_q28: Vec<_> = warnings
         .iter()
-        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .filter(|w| matches!(w.code.as_deref(), Some("Q-2-36") | Some("Q-2-8")))
         .collect();
 
     assert!(
-        q28_warnings.is_empty(),
-        "Should NOT have Q-2-8 warning when class is present alongside options"
+        q236_or_q28.is_empty(),
+        "Should NOT flag {{r .myclass eval=FALSE}} — the class makes it Pandoc-shaped"
     );
 }
 
 #[test]
-fn test_simple_code_block_no_warning() {
-    // {python} should NOT produce a Q-2-8 warning (no key-value options)
+fn test_simple_code_block_no_q236() {
+    // {python} with no options is just a language specifier — nothing to flag.
     let input = "```{python}\ncode()\n```\n";
 
     let result = readers::qmd::read(
@@ -497,21 +631,21 @@ fn test_simple_code_block_no_warning() {
     assert!(result.is_ok(), "Should parse successfully");
     let (_pandoc, _context, warnings) = result.unwrap();
 
-    // Should NOT have a Q-2-8 warning
-    let q28_warnings: Vec<_> = warnings
+    let q236_or_q28: Vec<_> = warnings
         .iter()
-        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .filter(|w| matches!(w.code.as_deref(), Some("Q-2-36") | Some("Q-2-8")))
         .collect();
 
     assert!(
-        q28_warnings.is_empty(),
-        "Should NOT have Q-2-8 warning for simple language specifier"
+        q236_or_q28.is_empty(),
+        "Should NOT flag a bare {{python}} header"
     );
 }
 
 #[test]
-fn test_code_block_with_id_and_options_produces_warning() {
-    // {python #fig-test key=value} should produce warning (has id but no class)
+fn test_code_block_with_id_and_options_produces_q236_error() {
+    // {python #fig-test key=value} — id alone does NOT make it Pandoc-shaped;
+    // only a class does. Must still fire Q-2-36.
     let input = "```{python #fig-test key=value}\ncode()\n```\n";
 
     let result = readers::qmd::read(
@@ -523,18 +657,25 @@ fn test_code_block_with_id_and_options_produces_warning() {
         None,
     );
 
-    assert!(result.is_ok(), "Should parse successfully");
-    let (_pandoc, _context, warnings) = result.unwrap();
+    let diagnostics = match result {
+        Ok((_pandoc, _context, warnings)) => panic!(
+            "Expected Q-2-36 error, but parse succeeded with warnings: {:?}",
+            warnings
+                .iter()
+                .map(|w| w.code.as_deref())
+                .collect::<Vec<_>>()
+        ),
+        Err(diags) => diags,
+    };
 
-    // Should have a Q-2-8 warning (id doesn't count as a class)
-    let q28_warnings: Vec<_> = warnings
+    let q236_errors: Vec<_> = diagnostics
         .iter()
-        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .filter(|d| d.code.as_deref() == Some("Q-2-36"))
         .collect();
 
     assert_eq!(
-        q28_warnings.len(),
+        q236_errors.len(),
         1,
-        "Should have Q-2-8 warning - id does not prevent warning, only classes do"
+        "Should have Q-2-36 error — id does not prevent flagging, only a class does"
     );
 }

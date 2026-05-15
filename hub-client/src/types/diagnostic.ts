@@ -57,10 +57,26 @@ export interface RenderResponse {
   success: boolean;
   error?: string;
   html?: string;
+  /**
+   * Serialized Pandoc AST JSON for the q2-preview format.
+   * Populated by the q2-preview pipeline branch, `undefined` for
+   * HTML / error responses. Consumers dispatch on which of `html`
+   * / `ast_json` is present (typically via
+   * `pipelineKindForFormat(format)` to decide which is expected).
+   */
+  ast_json?: string;
   /** Structured diagnostics (errors) with line/column information for Monaco. */
   diagnostics?: Diagnostic[];
   /** Structured warnings with line/column information for Monaco. */
   warnings?: Diagnostic[];
   /** Sibling-page Pass-1 failures (bd-rqba). */
   pass1_failures?: Pass1Failure[];
+  /**
+   * Compiled theme CSS fingerprint (Plan 2A item 11). Recovered
+   * from the `css:theme:<fingerprint>` artifact key. The hub-client
+   * iframe wrapper dedupes blob-URL re-mints when this hasn't
+   * changed. `undefined` when no theme artifact was produced
+   * (errors, q2-debug, themeless single-doc).
+   */
+  theme_fingerprint?: string;
 }

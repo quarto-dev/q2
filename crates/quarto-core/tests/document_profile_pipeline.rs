@@ -491,6 +491,46 @@ async fn profile_records_transitive_includes() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// L0 — listings epic (`bd-n8a4`): pipeline-level extraction of
+// `listing-item:` frontmatter. The full pipeline (MetadataMergeStage,
+// IncludeExpansionStage, DocumentProfileStage) runs end-to-end here;
+// the assertion is that author values land on
+// `profile.listing_item.*` after the checkpoint.
+// ---------------------------------------------------------------------------
+
+// NOTE: Do not use `\<newline>` line continuations inside this fixture
+// — they strip leading whitespace, which silently flattens the YAML
+// nesting into a malformed listing-item: null with sibling keys.
+const LISTING_ITEM_FIXTURE_QMD: &[u8] = b"---
+title: Outer
+listing-item:
+  title: Listing title
+  description: Listing desc
+  reading-time-minutes: 12
+  categories: [a, b]
+  extra:
+    status: draft
+---
+
+Body paragraph.
+";
+
+#[tokio::test]
+async fn pipeline_extracts_listing_item_from_frontmatter() {
+    let bundle = run_head_pipeline(LISTING_ITEM_FIXTURE_QMD).await;
+    let li = &bundle.profile.listing_item;
+    assert_eq!(li.title.as_deref(), Some("Listing title"));
+    assert_eq!(li.description.as_deref(), Some("Listing desc"));
+    assert_eq!(li.reading_time_minutes, Some(12));
+    assert_eq!(li.categories, vec!["a".to_string(), "b".to_string()]);
+    let status = li
+        .extra
+        .get("status")
+        .expect("status entry present in extra");
+    assert_eq!(status.as_plain_text().as_deref(), Some("draft"));
+}
+
 #[test]
 fn include_expansion_precedes_document_profile() {
     // Structural guard against future refactors silently reordering the
@@ -516,4 +556,81 @@ fn include_expansion_precedes_document_profile() {
          computed from the pre-include AST and cross-document features \
          (sidebars, nav, incremental rebuilds) see inconsistent state"
     );
+}
+
+// ---------------------------------------------------------------------------
+// L1 listings (`bd-izqh`): ListingItemInfoStage runs between
+// IncludeExpansionStage and DocumentProfileStage and auto-fills
+// `meta.listing-item.*` from the post-include AST. The extracted
+// `profile.listing_item` then carries those values for the
+// listings consumer (L3).
+//
+// Plan: claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md
+// ---------------------------------------------------------------------------
+
+const L1_FIXTURE_QMD: &[u8] = b"---\n\
+title: Hello\n\
+---\n\
+\n\
+This is the first paragraph that L1 will harvest as the description.\n\
+\n\
+![](figs/cover.png)\n";
+
+#[tokio::test]
+async fn pipeline_listing_item_autofill_end_to_end() {
+    // No `listing-item:` key in frontmatter; L1 derives every field
+    // from the AST and mtime, then DocumentProfileStage extracts a
+    // populated ListingItemInfo into the profile.
+    let bundle = run_head_pipeline(L1_FIXTURE_QMD).await;
+    let li = &bundle.profile.listing_item;
+
+    assert_eq!(
+        li.description.as_deref(),
+        Some("This is the first paragraph that L1 will harvest as the description.")
+    );
+    assert_eq!(li.image.as_deref(), Some("figs/cover.png"));
+    // 12 words in the paragraph (image alt-text excluded; image is
+    // its own block-level paragraph in the AST but contributes no
+    // word-bearing prose).
+    assert_eq!(li.word_count, Some(12));
+    // 12 / 200 wpm → ceiling 1 minute.
+    assert_eq!(li.reading_time_minutes, Some(1));
+}
+
+#[tokio::test]
+async fn pipeline_listing_item_author_overrides_winner() {
+    // Author sets `listing-item.description` explicitly; L1 must not
+    // overwrite. The body paragraph is what the auto-fill *would*
+    // produce — proving the override (not the fallback) flows
+    // through.
+    // NOTE: must NOT use Rust `\<newline>` line continuations inside
+    // YAML fixtures. The continuation eats leading whitespace, which
+    // collapses two-space-indented sub-keys to top-level keys and the
+    // YAML parser then sees `listing-item:` (null) and a sibling
+    // `description:` instead of a nested map. Risk handoff item 8 in
+    // the L1 sub-plan.
+    let fixture: &[u8] = b"---\ntitle: Hello\nlisting-item:\n  description: Author wrote this\n---\n\nAuto-fill would have used this paragraph instead.\n";
+    let bundle = run_head_pipeline(fixture).await;
+    let li = &bundle.profile.listing_item;
+    assert_eq!(li.description.as_deref(), Some("Author wrote this"));
+}
+
+#[tokio::test]
+async fn pipeline_clone_and_resume_listing_item_visible_in_profile() {
+    // Companion to `pipeline_at_profile_to_end_produces_expected_html`.
+    // L1's auto-fills land in `meta.listing-item.*` *before* the
+    // checkpoint clone, so resume-from-clone tests still see the
+    // populated `profile.listing_item`. The byte-identical render
+    // assertion is the existing test's job; this one locks in the
+    // checkpoint-side observation.
+    let bundle = run_head_pipeline(FIXTURE_QMD).await;
+    let li = &bundle.profile.listing_item;
+
+    // FIXTURE_QMD has paragraphs ("Hello.", "More hello.", "Goodbye.")
+    // separated by headings. L1's first non-empty paragraph wins.
+    assert_eq!(li.description.as_deref(), Some("Hello."));
+    // Word count: "Hello.", "More hello.", "Goodbye." plus heading
+    // text ("Section one", "Subsection", "Section two") = 9 words.
+    assert_eq!(li.word_count, Some(9));
+    assert_eq!(li.reading_time_minutes, Some(1));
 }

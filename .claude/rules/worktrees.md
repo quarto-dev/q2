@@ -13,15 +13,32 @@ The directory mirrors the leaf of the branch name. The conventions are stable so
 
 ## Fresh worktree bootstrap
 
-A fresh worktree has no `node_modules/`. `cargo xtask verify` runs the hub-client TypeScript build, which fails on missing npm deps. Bootstrap with `npm install` from the worktree root before re-running verify:
+Use `cargo xtask create-worktree <bd-id>` (or `--issue N` / `--upgrade`) for new worktrees —
+it handles `git worktree add`, `.beads/redirect`, and the CLAUDE.local.md context stub in
+one shot. After it finishes, run `npm install` from the new worktree if hub-client is in scope:
 
 ```bash
-cd .worktrees/<name>
-npm install
-cargo xtask verify --skip-hub-build  # or full verify if hub-client is in scope
+cargo xtask create-worktree bd-XXXX
+cd .worktrees/<id>-<slug>
+npm install                              # only if hub-client work is in scope
+cargo xtask verify --skip-hub-build      # confirm green at branch HEAD
 ```
 
-`cargo xtask dev-setup` exists for Rust dev tools (cargo-nextest, wasm-bindgen-cli) but does not currently run `npm install`. bd-7giz tracks extending it; once that lands, the bootstrap step above becomes a single `cargo xtask dev-setup`.
+`--base` defaults to `main` when omitted. **If the beads issue has an
+open parent epic, the command prints a warning** nudging you toward
+the epic's integration branch (e.g. `feature/<name>`). Pass
+`--base <branch>` to branch off the integration line, or `--base main`
+explicitly to silence the warning when `main` really is what you want.
+For sequential sub-task work *inside* an existing worktree, reach for
+`cargo xtask switch-task` (see the two-patterns section above) — it
+fast-forwards the integration branch and branches off its current tip
+automatically.
+
+If the xtask is not yet built (fresh clone, or a branch where `cargo build -p xtask` has
+not run), see § Manual bootstrap below.
+
+`cargo xtask dev-setup` exists for Rust dev tools (cargo-nextest, wasm-bindgen-cli) but
+does not currently run `npm install`. bd-7giz tracks extending it.
 
 ## Beads Redirect
 
@@ -34,6 +51,30 @@ echo "../../../.beads" > .worktrees/<name>/.beads/redirect
 ```
 
 The `redirect` file is already in `.beads/.gitignore`, so it won't show as a git change. Verify with `br where` from inside the worktree.
+
+## CLAUDE.local.md
+
+`cargo xtask create-worktree` prepends a worktree context section to `CLAUDE.local.md`.
+Claude Code loads it automatically — no need to run `br show` to orient at session start.
+
+The section contains: worktree declaration, main repo path (`../..`), beads ID
+(or `**GitHub issue:** #N` in `--issue` mode), GitHub URL when available, an
+italic-prose placeholder for the plan file path, and a `**Skill:**` line
+naming the slash-command that continues the work (`/investigate-beads`,
+`/triage`, or `/upgrade-cargo-deps`). Placeholders are self-documenting —
+they say exactly what to replace them with.
+
+Status lives in beads, not in this file. Run `br show <id>` for current status + notes.
+
+The section is delimited by `<!-- BEGIN/END WORKTREE CONTEXT -->` markers so it can be
+refreshed in place (e.g. when a worktree is recreated, or by hand-editing the file).
+The `update_claude_local_md` rewrite is idempotent at the file level: re-running it on
+a file that already has a managed section replaces that section without duplicating it
+and preserves any user content below.
+
+`cargo xtask create-worktree` itself is **not** idempotent end-to-end — `git worktree add`
+fails fast if the directory already exists. To refresh a worktree's CLAUDE.local.md,
+either edit it by hand (the markers make this safe) or remove the worktree and recreate.
 
 ## Committing beads changes
 
@@ -52,3 +93,19 @@ git push -u origin beads/<id>-<slug>:feature/<id>-<slug>
 ```
 
 This keeps local branches short and consistent while remote refs are self-describing in PR lists.
+
+## Manual bootstrap
+
+If `cargo xtask create-worktree` is unavailable (fresh clone before first build, or
+the xtask binary is broken on the current branch), fall back to manual setup:
+
+```bash
+git worktree add -b beads/<id>-<slug> .worktrees/<id>-<slug> main
+echo "../../../.beads" > .worktrees/<id>-<slug>/.beads/redirect
+```
+
+Verify with `br where` from inside the worktree. CLAUDE.local.md is not part
+of the manual bootstrap — once the xtask binary is built, re-running
+`cargo xtask create-worktree` is not safe on the existing worktree (see
+above), but the template lives in `crates/xtask/src/create_worktree.rs`
+(`build_section`) for hand-copying if needed.

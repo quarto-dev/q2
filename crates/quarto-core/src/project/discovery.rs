@@ -188,6 +188,52 @@ fn to_forward_slashes(path: &Path) -> String {
         .join("/")
 }
 
+/// Match a `path`-shaped string against a glob `pattern`. Both are
+/// expected to be forward-slash separated and project-relative (or
+/// host-relative — the matcher itself is purely string-based).
+///
+/// The pattern grammar is the project's narrow glob vocabulary:
+/// literal segments, `?` (single char), `*` (any chars in one
+/// segment), `**` (zero or more whole segments). This is the same
+/// matcher used internally by `expand_patterns` for `_quarto.yml`'s
+/// `project.render`. Phase-8 (incremental rebuilds) and L3
+/// (listings item discovery) reuse it without duplication.
+pub fn glob_match_path(pattern: &str, path: &str) -> bool {
+    glob_match(&normalize_pattern(pattern), &normalize_pattern(path))
+}
+
+/// Convert a `Path` to a forward-slash project-relative string.
+/// Public so callers (e.g. listings item discovery in L3) can match
+/// the same convention `expand_patterns` uses internally.
+pub fn path_to_forward_slashes(path: &Path) -> String {
+    to_forward_slashes(path)
+}
+
+/// Compute `path` relative to `base_dir`, both expressed as
+/// forward-slash project-relative strings. Returns `None` when
+/// `path` is not under `base_dir`. Empty `base_dir` means the
+/// project root, in which case the project-relative form is the
+/// host-relative form.
+///
+/// Shared by:
+///
+/// - the L3 [`crate::transforms::listing_generate::ListingGenerateTransform`]
+///   when matching a candidate sibling against a listing's `contents:`
+///   glob at render time;
+/// - the L6 [`crate::project::dependency_graph::ProjectDependencyGraph::build`]
+///   when computing dep-graph edges from the same globs at graph-build
+///   time.
+///
+/// Both call sites use the same host-relative-first / project-
+/// relative-fallback rule, so they must agree on this primitive.
+pub(crate) fn relative_to_dir(path: &str, base_dir: &str) -> Option<String> {
+    if base_dir.is_empty() {
+        return Some(path.to_string());
+    }
+    let prefix = format!("{}/", base_dir);
+    path.strip_prefix(&prefix).map(|s| s.to_string())
+}
+
 /// Minimal glob matcher: supports literals, `*`, `?`, and `**`.
 ///
 /// This is narrow by design — we accept the glob vocabulary we want to

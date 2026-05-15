@@ -34,7 +34,9 @@ use tempfile::TempDir;
 use quarto_core::format::Format;
 use quarto_core::project::ProjectContext;
 use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
-use quarto_core::project::pass2_renderer::{RenderToHtmlRenderer, WasmPassTwoOutput};
+use quarto_core::project::pass2_renderer::{
+    RenderToHtmlRenderer, RenderToPreviewAstRenderer, WasmPassTwoOutput,
+};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn write(path: &Path, contents: &str) {
@@ -131,22 +133,22 @@ fn website_sidebar_includes_sibling_pages() {
     let output = render_active_page(&project_dir, &active);
 
     assert!(
-        output.html.contains("class=\"sidebar"),
+        output.html().contains("class=\"sidebar"),
         "rendered HTML should contain the sidebar block; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     assert!(
-        output.html.contains(">About<") || output.html.contains(">About\n<"),
+        output.html().contains(">About<") || output.html().contains(">About\n<"),
         "sidebar should reference the sibling 'About' entry; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     // The vfs_root resolver makes URLs absolute under the synthetic
     // root; the cross-doc link rewriter still resolves the page
     // identity to `about.html`, just prefixed with the vfs root.
     assert!(
-        output.html.contains("about.html\""),
+        output.html().contains("about.html\""),
         "sidebar entry for about.qmd should rewrite to about.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -175,9 +177,9 @@ fn sibling_title_edit_reflects_in_sidebar() {
     let active = canonical(&project_dir.join("index.qmd"));
     let first = render_active_page(&project_dir, &active);
     assert!(
-        first.html.contains(">About v1<"),
+        first.html().contains(">About v1<"),
         "first render should show 'About v1'; got {}",
-        snippet(&first.html)
+        snippet(&first.html())
     );
 
     // Edit about.qmd's title and re-render the (unchanged) index.
@@ -187,14 +189,14 @@ fn sibling_title_edit_reflects_in_sidebar() {
     );
     let second = render_active_page(&project_dir, &active);
     assert!(
-        second.html.contains(">About v2<"),
+        second.html().contains(">About v2<"),
         "second render should reflect the new sibling title; got {}",
-        snippet(&second.html)
+        snippet(&second.html())
     );
     assert!(
-        !second.html.contains(">About v1<"),
+        !second.html().contains(">About v1<"),
         "second render should *not* still show the old title; got {}",
-        snippet(&second.html)
+        snippet(&second.html())
     );
 }
 
@@ -214,14 +216,14 @@ fn single_file_no_sidebar() {
     let output = render_active_page(&project_dir, &active);
 
     assert!(
-        !output.html.contains("class=\"sidebar"),
+        !output.html().contains("class=\"sidebar"),
         "single-file render should have no sidebar; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     assert!(
-        output.html.contains("Only"),
+        output.html().contains("Only"),
         "rendered HTML should contain the page title; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -255,16 +257,16 @@ fn cross_document_link_rewrites_to_html() {
     // resolver's job. Match on the suffix to stay agnostic to the
     // prefix while still asserting the .qmd → .html rewrite.
     assert!(
-        output.html.contains("about.html\""),
+        output.html().contains("about.html\""),
         "[link](about.qmd) should rewrite to ...about.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     // And there must be NO `about.qmd` reference left in the body —
     // every internal-doc reference must have been rewritten.
     assert!(
-        !output.html.contains("about.qmd\""),
+        !output.html().contains("about.qmd\""),
         "no rewritten about.qmd should remain in body; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -290,9 +292,9 @@ fn title_prefix_applied_in_website_render() {
     // Phase-7 title-prefix transform: the page title is suffixed
     // with the website title separated by an en-dash.
     assert!(
-        output.html.contains("<title>Home – Test Site</title>"),
+        output.html().contains("<title>Home – Test Site</title>"),
         "title prefix should be applied; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 }
 
@@ -317,14 +319,14 @@ fn hub_smoke_fixture_renders_cleanly() {
     // URLs prefixed by the synthetic root. Match on the suffix to
     // stay agnostic to the prefix.
     assert!(
-        output.html.contains("about.html\""),
+        output.html().contains("about.html\""),
         "sidebar should link to ...about.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
     assert!(
-        output.html.contains("posts/first.html\""),
+        output.html().contains("posts/first.html\""),
         "sidebar should link to ...posts/first.html; got {}",
-        snippet(&output.html)
+        snippet(&output.html())
     );
 
     // Cross-doc body link from index.qmd's body rewrites too —
@@ -332,7 +334,7 @@ fn hub_smoke_fixture_renders_cleanly() {
     // sidebar). Both forms now route through `page_url_for` so the
     // emitted URL is identical at both call sites; counting suffix
     // matches stays robust to the resolver flavor.
-    let about_links = output.html.matches("about.html\"").count();
+    let about_links = output.html().matches("about.html\"").count();
     assert!(
         about_links >= 2,
         "expected at least one body href + one sidebar href ending in about.html; got {} matches",
@@ -557,7 +559,7 @@ fn default_project_theme_artifact_lands_in_vfs() {
     let vfs_root_str = vfs_root.to_string_lossy().to_string();
     let needle_prefix = format!("{}/quarto/quarto-theme-", vfs_root_str);
     let theme_link = output
-        .html
+        .html()
         .lines()
         .filter(|line| line.contains(&needle_prefix) && line.contains(".css"))
         .next()
@@ -565,7 +567,7 @@ fn default_project_theme_artifact_lands_in_vfs() {
             panic!(
                 "expected a theme <link> under {}quarto/quarto-theme-…; html: {}",
                 vfs_root_str,
-                snippet(&output.html),
+                snippet(&output.html()),
             )
         });
 
@@ -625,10 +627,390 @@ fn copy_dir_recursive(src: &Path, dst: &Path) {
     }
 }
 
-fn snippet(s: &str) -> String {
+fn snippet(s: impl AsRef<str>) -> String {
+    let s = s.as_ref();
     if s.len() <= 200 {
         s.to_string()
     } else {
         format!("{}…", &s[..200])
     }
+}
+
+// ─── q2-preview Plan 1 commit 5 ─────────────────────────────────────
+//
+// Native E2E coverage of the orchestrator path through
+// `RenderToPreviewAstRenderer`. Mirrors `render_active_page` (HTML)
+// but constructs a q2-preview renderer; both renderers share
+// `Output = WasmPassTwoOutput` (commit 2's enum-payload payoff), so
+// the orchestrator and summary handling are identical and the only
+// observable divergence is the payload variant.
+
+/// Drive `ProjectPipeline<RenderToPreviewAstRenderer>` with
+/// `RenderMode::ActivePage(active)`. Sibling of [`render_active_page`]
+/// — same project discovery and orchestrator wiring; differs only
+/// in the renderer choice and (consequently) the payload variant
+/// of the resulting `WasmPassTwoOutput`.
+fn render_active_page_preview(project_dir: &Path, active: &Path) -> WasmPassTwoOutput {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(active, runtime.as_ref()).unwrap();
+    if !project.is_single_file {
+        project = ProjectContext::discover(&project.dir, runtime.as_ref()).unwrap();
+    }
+    let _ = project_dir;
+
+    let project_type = project_type_for(&project);
+    let vfs_root = project.dir.join(".quarto/project-artifacts");
+    let renderer = RenderToPreviewAstRenderer::new(&vfs_root);
+
+    // The orchestrator reads `format` to drive Pass-1 + Pass-2.
+    // For q2-preview the format is HTML-based with
+    // `pipeline_kind = Some("preview")`; that's what the renderer
+    // and `AstTransformsStage` dispatch on.
+    let format =
+        Format::from_format_string("q2-preview").expect("q2-preview is a recognized pseudo-format");
+
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        format,
+        "q2-preview",
+        runtime.clone(),
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active.to_path_buf()));
+
+    let summary = pollster::block_on(pipeline.run()).expect("q2-preview pipeline run");
+    assert!(
+        summary.pass1_failures.is_empty(),
+        "unexpected pass-1 failures: {:?}",
+        summary.pass1_failures,
+    );
+    assert!(
+        summary.pass2_failures.is_empty(),
+        "unexpected pass-2 failures: {:?}",
+        summary.pass2_failures,
+    );
+    assert_eq!(
+        summary.outputs.len(),
+        1,
+        "ActivePage mode should produce exactly one output"
+    );
+    summary.outputs.into_iter().next().unwrap()
+}
+
+/// Asserts the q2-preview output's payload is `Pass2Payload::AstJson`.
+/// Convenience companion to [`WasmPassTwoOutput::html`] (the panicking
+/// HTML accessor used by HTML tests above).
+fn ast_json(output: &WasmPassTwoOutput) -> &str {
+    output
+        .payload
+        .as_ast_json()
+        .expect("q2-preview renderer must produce Pass2Payload::AstJson")
+}
+
+/// q2-preview commit 5 E2E: a website fixture with a callout and an
+/// embedded image renders through `RenderToPreviewAstRenderer`,
+/// producing AST JSON with:
+/// - the callout encoded as `__quarto_custom_node` Div with
+///   `data-custom-type=Callout` (preserves the wrapper for React);
+/// - the embedded image's URL rewritten under the synthetic
+///   `vfs_root` (matching the path the renderer flushes the image
+///   bytes to);
+/// - sidebar metadata populated via `SidebarGenerateTransform`
+///   (which is in the q2-preview transform list).
+///
+/// This is the primary regression test for the wiring this commit
+/// adds (single-doc + project-active dispatch on `pipeline_kind`).
+/// It guards Plan 1's "Multi-plan contract: page-scoped image
+/// artifacts" — Plan 2 will rely on the embedded URL and the VFS
+/// path agreeing.
+#[test]
+fn website_q2_preview_renders_through_orchestrator() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n\
+         website:\n  title: Test Site\n  \
+         sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+    );
+    write(
+        &project_dir.join("about.qmd"),
+        "---\ntitle: About\n---\n\nAbout this site.\n",
+    );
+
+    // ResourceCollectorTransform reads the file path lazily and
+    // doesn't validate image bytes, so any contents work for the
+    // wiring test. The `write` helper takes &str, so use ASCII.
+    let pre_render_image_bytes = "fake image bytes for q2-preview test";
+    write(&project_dir.join("hero.png"), pre_render_image_bytes);
+
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\nformat: q2-preview\n---\n\n\
+         ::: {.callout-note}\n## Heads-up\n\nWelcome.\n:::\n\n\
+         ![Hero](hero.png)\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page_preview(&project_dir, &active);
+
+    let json = ast_json(&output);
+    let snip = || snippet(json);
+
+    // Wrapper survives → React's CustomNode component (Plan 2)
+    // can dispatch on type-name.
+    assert!(
+        json.contains("__quarto_custom_node"),
+        "expected wrapper class in q2-preview AST JSON; got:\n{}",
+        snip()
+    );
+    assert!(
+        json.contains("data-custom-type"),
+        "expected data-custom-type attribute; got:\n{}",
+        snip()
+    );
+    assert!(
+        json.contains("Callout"),
+        "expected Callout type-name in JSON; got:\n{}",
+        snip()
+    );
+
+    // ResourceCollectorTransform rewrites the image URL relative
+    // to the resolver's vfs_root. The renderer flushes the bytes
+    // to a path under `<project_dir>/.quarto/project-artifacts/`
+    // (the native test's stand-in for the WASM VFS).
+    assert!(
+        json.contains("hero"),
+        "expected the image filename to appear in the AST URL; got:\n{}",
+        snip()
+    );
+    // page_artifacts carries the image as an artifact entry.
+    assert!(
+        !output.page_artifacts.is_empty(),
+        "expected ResourceCollectorTransform to emit a page-scoped \
+         artifact for hero.png; got empty page_artifacts"
+    );
+
+    // SidebarGenerateTransform is in the q2-preview transform
+    // list; with a website project + sidebar config, the
+    // structured `navigation.sidebar` should land in `meta`.
+    // Sniff the JSON for the sibling page's title (title resolution
+    // is a sidebar-generate side effect when ProjectIndex is
+    // populated).
+    assert!(
+        json.contains("\"title\"") && json.contains("About"),
+        "expected sidebar metadata to include the sibling 'About' \
+         entry's title; got:\n{}",
+        snip()
+    );
+
+    // bd-3gtn assertion #5 (Plan 1 §Test plan post-bug-fix item):
+    // user-uploaded image bytes must survive the render. Before the
+    // bd-3gtn fix (commit c8a684bd), the WASM flush loop wrote
+    // empty bytes from `Artifact::from_path` manifest entries to the
+    // resolver's on-disk path; for absolute artifact paths,
+    // `Path::join` collapsed onto the user's source location and
+    // clobbered the upload. The same shape holds in the native flush
+    // (`render_to_file::write_artifacts`); this assertion is the
+    // belt-and-suspenders catch at that layer.
+    let post_render_image_bytes = std::fs::read_to_string(project_dir.join("hero.png"))
+        .expect("hero.png should still be readable after render");
+    assert_eq!(
+        post_render_image_bytes, pre_render_image_bytes,
+        "render must not modify user-uploaded image bytes (bd-3gtn). \
+         Pre-render: {pre_render_image_bytes:?}; \
+         post-render: {post_render_image_bytes:?}"
+    );
+}
+
+/// Plan 1 §"Multi-plan contract: theme CSS artifact": the q2-preview
+/// pipeline includes `CompileThemeCssStage`, and
+/// `RenderToPreviewAstRenderer` mirrors the HTML renderer's
+/// Project-scoped artifact flush. After a q2-preview render of a
+/// fixture that triggers theme compilation, the compiled theme CSS
+/// must land in VFS so Plan 2A's iframe entry can read it.
+///
+/// Sibling of [`default_project_theme_artifact_lands_in_vfs`] (the
+/// HTML version), which extracts the path from the rendered HTML's
+/// `<link>` tag. q2-preview returns AST JSON — there's no `<link>` —
+/// so this test walks the on-disk VFS root for the theme file
+/// directly. The path shape is asserted by
+/// `theme_artifact_key_and_path` (multi-doc:
+/// `quarto/quarto-theme-<fingerprint>.css`).
+#[test]
+fn default_project_theme_artifact_lands_in_vfs_under_q2_preview() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: default\n",
+    );
+    // `format: q2-preview` triggers the q2-preview pipeline, but
+    // theme compilation reads `format.html.theme` from metadata.
+    // Both keys must be present.
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: T\nformat:\n  q2-preview: default\n  html:\n    theme: flatly\n---\n\nhi\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let _output = render_active_page_preview(&project_dir, &active);
+
+    // Walk the synthetic vfs_root for the theme artifact. The
+    // multi-doc path shape is `quarto/quarto-theme-<fingerprint>.css`;
+    // see `theme_artifact_key_and_path`.
+    let vfs_root = project_dir.join(".quarto/project-artifacts");
+    let theme_dir = vfs_root.join("quarto");
+    assert!(
+        theme_dir.exists(),
+        "expected the renderer to flush the theme CSS into {}; \
+         directory does not exist",
+        theme_dir.display(),
+    );
+    let entries: Vec<PathBuf> = std::fs::read_dir(&theme_dir)
+        .unwrap_or_else(|e| panic!("read_dir({}) failed: {}", theme_dir.display(), e))
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("quarto-theme-") && n.ends_with(".css"))
+                .unwrap_or(false)
+        })
+        .collect();
+    assert_eq!(
+        entries.len(),
+        1,
+        "expected exactly one quarto-theme-*.css under {}; got {:?}",
+        theme_dir.display(),
+        entries,
+    );
+
+    let css_path = &entries[0];
+    let bytes = std::fs::read(css_path)
+        .unwrap_or_else(|e| panic!("read({}) failed: {}", css_path.display(), e));
+    assert!(
+        !bytes.is_empty(),
+        "theme CSS at {} should be non-empty",
+        css_path.display(),
+    );
+    let css_text = std::str::from_utf8(&bytes).unwrap_or("");
+    assert!(
+        css_text.contains("flatly") || css_text.contains("body") || css_text.contains(":root"),
+        "theme CSS at {} should look like compiled CSS; first 200 bytes: {}",
+        css_path.display(),
+        snippet(css_text),
+    );
+}
+
+/// Phase 0 test #2 from `2026-05-13-q2-preview-attribution.md`
+/// (the WASM-boundary contract, exercised natively).
+///
+/// `wasm-quarto-hub-client` is `cdylib`-only — its
+/// `render_page_in_project_with_attribution` entry point can't be
+/// driven from native tests. Both branches of that entry point
+/// converge on `RenderToPreviewAstRenderer::with_attribution(json)`
+/// for the multi-doc case, so a native renderer-level test pins
+/// the same contract: when the renderer is configured with a
+/// transport JSON payload, the orchestrator's q2-preview output
+/// carries `astContext.attribution` and `astContext.attributionActors`.
+#[test]
+fn render_to_preview_ast_renderer_with_attribution_surfaces_keys() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    // Minimal website fixture; a single qmd file is enough to drive
+    // a project-mode render through `RenderMode::ActivePage`.
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello world!\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+
+    // Single run covering the whole document (10_000 is a generous
+    // upper bound — actual content is < 100 bytes). The `name` field
+    // is `Identity::display_name`'s serde alias (see types.rs).
+    let attribution_json = serde_json::json!({
+        "runs": [
+            { "start": 0, "end": 10_000, "actor": "alice", "time": 42 }
+        ],
+        "identities": {
+            "alice": { "name": "Alice", "color": "#ff0000" }
+        }
+    })
+    .to_string();
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(&active, runtime.as_ref()).unwrap();
+    if !project.is_single_file {
+        project = ProjectContext::discover(&project.dir, runtime.as_ref()).unwrap();
+    }
+
+    let project_type = project_type_for(&project);
+    let vfs_root = project.dir.join(".quarto/project-artifacts");
+    let renderer = RenderToPreviewAstRenderer::new(&vfs_root).with_attribution(attribution_json);
+
+    let format =
+        Format::from_format_string("q2-preview").expect("q2-preview is a recognized pseudo-format");
+
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        format,
+        "q2-preview",
+        runtime.clone(),
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active.clone()));
+
+    let summary = pollster::block_on(pipeline.run()).expect("q2-preview pipeline run");
+    assert!(
+        summary.pass1_failures.is_empty(),
+        "unexpected pass-1 failures: {:?}",
+        summary.pass1_failures,
+    );
+    assert!(
+        summary.pass2_failures.is_empty(),
+        "unexpected pass-2 failures: {:?}",
+        summary.pass2_failures,
+    );
+    let output = summary
+        .outputs
+        .into_iter()
+        .next()
+        .expect("ActivePage mode should produce exactly one output");
+
+    let json = ast_json(&output);
+    assert!(
+        json.contains("\"attribution\""),
+        "expected `attribution` key in attributed q2-preview output; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"attributionActors\""),
+        "expected `attributionActors` key in attributed q2-preview output; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"actor\":\"alice\""),
+        "expected a record naming alice; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"name\":\"Alice\""),
+        "expected alice's identity entry with display name; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"color\":\"#ff0000\""),
+        "expected alice's identity entry with color; got:\n{}",
+        snippet(json),
+    );
 }

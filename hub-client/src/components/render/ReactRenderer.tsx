@@ -1,10 +1,14 @@
 import { useMemo, Component } from 'react';
 import type { ReactNode } from 'react';
 import type { FileEntry } from '../../types/project';
-import { AstIframe } from './AstIframe';
+import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
+import { Q2PreviewIframe } from './q2-preview/Q2PreviewIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
+import { resolveComponentPath } from '../../utils/componentPath';
+import type { PandocAST } from './framework/types';
+import { extractMetaString } from './framework';
 
 // Simple error boundary to catch errors in custom components
 class ErrorBoundary extends Component<
@@ -53,13 +57,6 @@ class ErrorBoundary extends Component<
   }
 }
 
-// Simplified Pandoc AST type for setAst callback
-interface PandocAST {
-  'pandoc-api-version': [number, number, number];
-  meta: Record<string, unknown>;
-  blocks: unknown[];
-}
-
 interface ReactRendererProps {
   // Pandoc AST as JSON string
   astJson: string;
@@ -77,8 +74,17 @@ interface ReactRendererProps {
   currentSlideIndex?: number;
   // Callback when slide changes (for manual navigation via arrows/buttons)
   onSlideChange?: (slideIndex: number) => void;
-  // Format type: 'q2-slides' or 'q2-debug'
+  // Format type: 'q2-slides', 'q2-debug', or 'q2-preview'
   format: string;
+  /**
+   * Compiled theme CSS fingerprint, three-way (Plan 2A item 11):
+   *   - `string`: render produced a theme; iframe should display it.
+   *   - `null`: render succeeded with no theme intended.
+   *   - `undefined`: render failed or pre-first-render; iframe keeps
+   *     last-good styling.
+   * Forwarded to `Q2PreviewIframe` only; q2-debug ignores it.
+   */
+  themeFingerprint?: string | null;
 }
 
 /**
@@ -97,15 +103,33 @@ function ReactRenderer({
   currentSlideIndex,
   onSlideChange,
   format,
+  themeFingerprint,
 }: ReactRendererProps) {
-  // Extract component paths - only recompute when the list of paths changes
+  // Extract component paths - only recompute when the list of paths
+  // changes. The gate covers both q2-debug and q2-preview because both
+  // load user TSX overrides via the iframe's
+  // `LOAD_CUSTOM_COMPONENTS` postMessage handler. Plan 2A item 13
+  // extended the q2-debug-only gate to also include q2-preview.
   const componentPathsKey = useMemo(() => {
-    if (format !== 'q2-debug') {
+    if (format !== 'q2-debug' && format !== 'q2-preview') {
       return '';
     }
 
     const ast = JSON.parse(astJson);
-    const componentPaths = ast?.meta?.['render-components']?.c?.map?.((o: any) => o?.c?.[0]?.c) ?? [];
+    // Walk the MetaList → MetaInlines → Str(c) chain. Entries that
+    // don't resolve to a non-empty string are dropped: this includes
+    // (a) `render-components:\n  -` mid-typing, where the bullet has
+    // no value and parses to `null`, and (b) an empty MetaInlines
+    // (the user typed the path-string-open delimiter but no content
+    // yet). Without this filter, `resolveComponentPath(undefined …)`
+    // throws inside this useMemo and the iframe-host page goes blank
+    // with no upstream ErrorBoundary to catch it.
+    const rawPaths: unknown[] =
+      ast?.meta?.['render-components']?.c?.map?.((o: any) => o?.c?.[0]?.c) ??
+      [];
+    const componentPaths = rawPaths.filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    );
 
     return JSON.stringify(componentPaths);
   }, [format, astJson]);
@@ -118,10 +142,14 @@ function ReactRenderer({
 
     const componentPaths = JSON.parse(componentPathsKey) as string[];
 
-    // Transpile each component using the latest fileContents from the ref
     const componentsCode: Record<string, string> = {};
     for (const path of componentPaths) {
-      const tsxCode = fileContents.get(path);
+      // render-components entries can be either project-root-absolute
+      // (leading slash) or relative to the current document's directory.
+      // fileContents is keyed by project-root-relative paths without the
+      // leading slash, so resolve before lookup.
+      const lookupPath = resolveComponentPath(path, currentFilePath);
+      const tsxCode = fileContents.get(lookupPath);
       if (!tsxCode) {
         console.warn(`[ReactRenderer] Component file not found: ${path}`);
         continue;
@@ -136,8 +164,14 @@ function ReactRenderer({
     }
 
     return componentsCode;
-  }, [componentPathsKey]);
+  }, [componentPathsKey, currentFilePath]);
 
+  // Plan 2A item 12: format-dispatch split. q2-debug (raw AST view)
+  // and q2-preview (post-pipeline AST for the live preview) now run
+  // through distinct iframe wrappers. q2-preview adds a parent-side
+  // theme-CSS effect that q2-debug doesn't need, so the two surfaces
+  // diverge at the wrapper level. They still share the shared
+  // `framework/` plumbing (registry, dispatchers, Ast).
   if (format === 'q2-debug') {
     return (
       <ErrorBoundary>
@@ -150,7 +184,7 @@ function ReactRenderer({
           right: 0,
           bottom: 0,
         }}>
-          <AstIframe
+          <Q2DebugIframe
             astJson={astJson}
             currentFilePath={currentFilePath}
             onNavigateToDocument={onNavigateToDocument}
@@ -161,10 +195,35 @@ function ReactRenderer({
       </ErrorBoundary>
     );
   }
+  if (format === 'q2-preview') {
+    return (
+      <ErrorBoundary>
+        <div style={{
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+        }}>
+          <Q2PreviewIframe
+            astJson={astJson}
+            currentFilePath={currentFilePath}
+            onNavigateToDocument={onNavigateToDocument}
+            setAst={setAst}
+            customComponentsCode={customComponentsCode}
+            themeFingerprint={themeFingerprint}
+          />
+        </div>
+      </ErrorBoundary>
+    );
+  }
 
   // q2-slides or revealjs format - check if it's revealjs
   const ast = JSON.parse(astJson);
-  const isRevealjs = format === 'revealjs' || (ast?.meta?.format?.t === 'MetaString' && ast.meta.format.c === 'revealjs');
+  const isRevealjs =
+    format === 'revealjs' || extractMetaString(ast?.meta?.format) === 'revealjs';
 
   return (
     <ErrorBoundary>

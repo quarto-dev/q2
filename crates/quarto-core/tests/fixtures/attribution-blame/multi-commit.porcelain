@@ -1,0 +1,29 @@
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 1 2
+author Alice
+author-mail <alice@example.com>
+author-time 1700000000
+author-tz +0000
+committer Alice
+committer-mail <alice@example.com>
+committer-time 1700000000
+committer-tz +0000
+summary alice: initial
+boundary
+filename doc.qmd
+	line1
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 2 2
+	世界
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 3 3 2
+author Bob
+author-mail <bob@example.com>
+author-time 1700100000
+author-tz +0000
+committer Bob
+committer-mail <bob@example.com>
+committer-time 1700100000
+committer-tz +0000
+summary bob: append
+filename doc.qmd
+	line3
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 4 4
+	line4

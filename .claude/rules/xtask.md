@@ -21,6 +21,7 @@ paths:
 |---------|-------|---------|
 | `cargo xtask dev-setup` | `cargo dev-setup` | Install required dev tools (cargo-nextest, wasm-bindgen-cli) |
 | `cargo xtask lint` | — | Run custom lint checks |
+| `cargo xtask create-worktree` | `cargo create-worktree` | Create git worktree + `.beads/redirect` + CLAUDE.local.md context stub |
 | `cargo xtask verify` | — | Full project verification (build + tests for Rust and hub-client) |
 
 ## Dev tool version pinning

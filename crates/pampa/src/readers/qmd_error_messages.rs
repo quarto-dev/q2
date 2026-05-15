@@ -20,20 +20,76 @@ use crate::readers::qmd_error_message_table::get_error_table;
 
 /// Produce structured DiagnosticMessage objects from parse errors.
 ///
-/// This is a QMD-specific wrapper that provides the error table automatically.
+/// This is a QMD-specific wrapper that provides the error table automatically
+/// and applies QMD-specific span adjustments after the generic generator runs.
 pub fn produce_diagnostic_messages(
     input_bytes: &[u8],
     tree_sitter_log: &TreeSitterLogObserver,
     filename: &str,
     source_context: &quarto_source_map::SourceContext,
 ) -> Vec<quarto_error_reporting::DiagnosticMessage> {
-    quarto_parse_errors::produce_diagnostic_messages(
+    let mut diagnostics = quarto_parse_errors::produce_diagnostic_messages(
         input_bytes,
         tree_sitter_log,
         get_error_table(),
         filename,
         source_context,
-    )
+    );
+
+    for diag in &mut diagnostics {
+        if matches!(diag.code.as_deref(), Some("Q-2-35") | Some("Q-2-36")) {
+            widen_diagnostic_to_line(diag, input_bytes);
+        }
+    }
+
+    diagnostics
+}
+
+/// Widen a diagnostic's location to span the entire line containing the
+/// reported position. Used when the underlying parse error reports a narrow
+/// per-token position, but the user-meaningful unit of the diagnostic is the
+/// whole line.
+///
+/// - Q-2-35 (indented code blocks): the scanner-emitted token lands after the
+///   whitespace consumption loop, so the reported column is past the leading
+///   indentation. Widening covers the indentation too.
+/// - Q-2-36 (knitr-style chunk options, Merr-mapped path-B forms — bare label
+///   `{r test}`, comma form `{r, …}`): the tree-sitter parse error points at
+///   the first offending token (`test`, `r`, etc.); widening spreads the
+///   highlight across the full chunk header, matching the path-A site in
+///   `treesitter.rs` that emits the same code with an already-line-clipped
+///   location.
+fn widen_diagnostic_to_line(
+    diag: &mut quarto_error_reporting::DiagnosticMessage,
+    input_bytes: &[u8],
+) {
+    use quarto_source_map::SourceInfo;
+
+    let Some(loc) = diag.location.as_ref() else {
+        return;
+    };
+    let SourceInfo::Original {
+        file_id,
+        start_offset,
+        ..
+    } = loc
+    else {
+        return;
+    };
+
+    let pivot = (*start_offset).min(input_bytes.len());
+    let line_start = input_bytes[..pivot]
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map(|p| p + 1)
+        .unwrap_or(0);
+    let line_end = input_bytes[pivot..]
+        .iter()
+        .position(|&b| b == b'\n' || b == b'\r')
+        .map(|p| pivot + p)
+        .unwrap_or(input_bytes.len());
+
+    diag.location = Some(SourceInfo::original(*file_id, line_start, line_end));
 }
 
 /// Produce error message JSON for corpus building.

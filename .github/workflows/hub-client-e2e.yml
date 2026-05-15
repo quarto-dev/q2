@@ -6,6 +6,10 @@ on:
     paths:
       - 'hub-client/**'
       - '.github/workflows/hub-client-e2e.yml'
+  pull_request:
+    paths:
+      - 'hub-client/**'
+      - '.github/workflows/hub-client-e2e.yml'
   workflow_dispatch:
     inputs:
       recreate-all-snapshots:
@@ -15,9 +19,14 @@ on:
 
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest-8x
+    runs-on: ubuntu-latest
     name: Hub-Client E2E Tests
     if: github.repository == 'quarto-dev/q2'
+
+    # Needed for the "Commit new baselines" step to push back to the
+    # workflow branch. Default GITHUB_TOKEN is read-only.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repo
@@ -32,11 +41,17 @@ jobs:
             [ "$time" != "@0" ] && touch -d "$time" "$file" 2>/dev/null || true
           done
 
-      # Rust toolchain for WASM build
+      # Rust toolchain for WASM build. Use the named `@nightly` ref
+      # (not `@master`, which hard-errors without an explicit `toolchain:`
+      # input) — it installs the nightly toolchain; cargo then reads the
+      # pinned dated nightly from rust-toolchain.toml (bd-at72) at build
+      # time. Matches the pattern Carlos established for ts-test-suite.yml
+      # on main.
       - name: Set up Rust nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
           targets: wasm32-unknown-unknown
+          components: rust-src
 
       - name: Set up Clang
         uses: egor-tensin/setup-clang@v2
@@ -50,6 +65,14 @@ jobs:
 
       - name: Install wasm-pack
         run: cargo install wasm-pack
+
+      # build-wasm.js verifies wasm-bindgen CLI matches the version
+      # pinned in Cargo.lock; install that exact version.
+      - name: Install wasm-bindgen-cli
+        run: |
+          VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
+          echo "Installing wasm-bindgen-cli $VERSION"
+          cargo install -f wasm-bindgen-cli --version "$VERSION"
 
       # tree-sitter for grammar builds
       - name: Set up tree-sitter CLI
@@ -69,14 +92,40 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build TypeScript packages
-        run: npm run build
-
-      # Build WASM module
+      # WASM artifacts must exist before any package's `vite build` runs
+      # (hub-client and q2-demos/* all import the WASM module).
       - name: Build WASM
         run: |
           cd hub-client
           npm run build:wasm
+
+      # Build only the workspaces the e2e tests actually exercise.
+      # q2-demos/* currently fail their vite build (they import an
+      # absolute path "/src/wasm-js-bridge/cache.js" that only exists
+      # in hub-client/), and trace-viewer is not under test here.
+      #
+      # VITE_E2E=1 on the hub-client build pulls in src/test-hooks.ts so
+      # the Playwright suite can reach internal services via
+      # `window.__quartoTest` (production bundles don't expose source
+      # paths the way `vite dev` did). The flag is consumed only by the
+      # `if (import.meta.env.VITE_E2E === '1')` branch in src/main.tsx;
+      # production-user builds leave it unset and tree-shake the hooks out.
+      - name: Build TypeScript packages (ts-packages + hub-client)
+        env:
+          VITE_E2E: '1'
+        run: |
+          for pkg in ts-packages/*/; do
+            if [ -f "$pkg/package.json" ]; then
+              npm run build --workspace "$pkg" --if-present
+            fi
+          done
+          npm run build --workspace hub-client --if-present
+
+      # globalSetup launches the hub via `cargo run --bin hub` with a 120s
+      # readiness timeout. On a cold CI runner the compile alone exceeds
+      # that, so pre-build it here.
+      - name: Pre-build hub binary
+        run: cargo build --bin hub
 
       # Install Playwright browsers
       - name: Install Playwright
@@ -112,13 +161,16 @@ jobs:
           cd hub-client
           npx playwright test --config playwright.visual.config.ts --update-snapshots=missing
 
-      # If retry passed (only missing baselines), commit them back
+      # If retry passed (only missing baselines), commit them back.
+      # Use `find` instead of a `**` glob — bash globstar isn't enabled
+      # by default and visual specs sit directly under hub-client/e2e/,
+      # not one directory deeper.
       - name: Commit new baselines
         if: steps.visual.outcome == 'failure' && steps.visual-retry.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f hub-client/e2e/**/*-snapshots/
+          find hub-client/e2e -type d -name '*-snapshots' -exec git add -f {} +
           git diff --cached --quiet || git commit -m "Add missing Playwright visual regression baselines"
           git push
 

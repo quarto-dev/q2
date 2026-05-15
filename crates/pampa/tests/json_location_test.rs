@@ -37,6 +37,7 @@ fn test_json_location_enabled() {
     let mut buf = Vec::new();
     let config = JsonConfig {
         include_inline_locations: true,
+        ..JsonConfig::default()
     };
     write_with_config(&pandoc, &context, &mut buf, &config).expect("Failed to write JSON");
 
@@ -80,6 +81,7 @@ fn test_json_location_multiline() {
     let mut buf = Vec::new();
     let config = JsonConfig {
         include_inline_locations: true,
+        ..JsonConfig::default()
     };
     write_with_config(&pandoc, &context, &mut buf, &config).expect("Failed to write JSON");
 
@@ -113,6 +115,7 @@ fn test_json_location_1_indexed() {
     let mut buf = Vec::new();
     let config = JsonConfig {
         include_inline_locations: true,
+        ..JsonConfig::default()
     };
     write_with_config(&pandoc, &context, &mut buf, &config).expect("Failed to write JSON");
 
