@@ -1,0 +1,6 @@
+---
+source: crates/pampa/tests/test.rs
+assertion_line: 362
+expression: output
+---
+[ Div ( "" , ["foo"] , [] ) [Table ( "" , [] , [] ) (Caption Nothing []) [(AlignCenter, ColWidthDefault), (AlignCenter, ColWidthDefault)] (TableHead ( "" , [] , [] ) []) [TableBody ( "" , [] , [] ) (RowHeadColumns 0) [] [Row ( "" , [] , [] ) [Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "a"]] , Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "b"]] ] ]] (TableFoot ( "" , [] , [] ) [] )] ]

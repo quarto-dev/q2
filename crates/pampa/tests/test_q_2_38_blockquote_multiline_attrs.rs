@@ -22,43 +22,43 @@ fn parse_err(input: &str) -> Vec<quarto_error_reporting::DiagnosticMessage> {
 }
 
 #[test]
-fn test_blockquote_multiline_image_attrs_emits_q_2_37() {
+fn test_blockquote_multiline_image_attrs_emits_q_2_38() {
     let input = "> ![](img.png){\n>   .cls1\n>   width=\"200px\"\n> }\n";
     let diagnostics = parse_err(input);
 
-    let q237: Vec<_> = diagnostics
+    let q238: Vec<_> = diagnostics
         .iter()
-        .filter(|d| d.code.as_deref() == Some("Q-2-37"))
+        .filter(|d| d.code.as_deref() == Some("Q-2-38"))
         .collect();
 
     assert_eq!(
-        q237.len(),
+        q238.len(),
         1,
-        "expected exactly one Q-2-37; got diagnostics: {:?}",
+        "expected exactly one Q-2-38; got diagnostics: {:?}",
         diagnostics
             .iter()
             .map(|d| d.code.as_deref())
             .collect::<Vec<_>>()
     );
 
-    let diag = q237[0];
+    let diag = q238[0];
     assert_eq!(
         diag.title,
         "Multi-line inline attribute list inside blockquote"
     );
-    assert!(!diag.hints.is_empty(), "Q-2-37 should include a hint");
+    assert!(!diag.hints.is_empty(), "Q-2-38 should include a hint");
 }
 
 #[test]
-fn test_blockquote_multiline_span_attrs_emits_q_2_37() {
+fn test_blockquote_multiline_span_attrs_emits_q_2_38() {
     let input = "> a [text]{\n>   .cls\n> } end\n";
     let diagnostics = parse_err(input);
 
     assert!(
         diagnostics
             .iter()
-            .any(|d| d.code.as_deref() == Some("Q-2-37")),
-        "expected a Q-2-37 diagnostic; got: {:?}",
+            .any(|d| d.code.as_deref() == Some("Q-2-38")),
+        "expected a Q-2-38 diagnostic; got: {:?}",
         diagnostics
             .iter()
             .map(|d| d.code.as_deref())
@@ -67,15 +67,15 @@ fn test_blockquote_multiline_span_attrs_emits_q_2_37() {
 }
 
 #[test]
-fn test_blockquote_with_leading_indent_emits_q_2_37() {
+fn test_blockquote_with_leading_indent_emits_q_2_38() {
     let input = "   > ![](img.png){\n   >   .cls\n   > }\n";
     let diagnostics = parse_err(input);
 
     assert!(
         diagnostics
             .iter()
-            .any(|d| d.code.as_deref() == Some("Q-2-37")),
-        "leading whitespace before `>` should still upgrade to Q-2-37; got: {:?}",
+            .any(|d| d.code.as_deref() == Some("Q-2-38")),
+        "leading whitespace before `>` should still upgrade to Q-2-38; got: {:?}",
         diagnostics
             .iter()
             .map(|d| d.code.as_deref())
@@ -86,7 +86,7 @@ fn test_blockquote_with_leading_indent_emits_q_2_37() {
 #[test]
 fn test_toplevel_unclosed_attr_stays_q_2_2() {
     // A regular unclosed `{[` outside a blockquote must remain Q-2-2, not be
-    // mistakenly upgraded to Q-2-37 by the contextual check.
+    // mistakenly upgraded to Q-2-38 by the contextual check.
     let input = "A bad [attribute]{[\n";
     let diagnostics = parse_err(input);
 
@@ -103,8 +103,8 @@ fn test_toplevel_unclosed_attr_stays_q_2_2() {
     assert!(
         !diagnostics
             .iter()
-            .any(|d| d.code.as_deref() == Some("Q-2-37")),
-        "top-level case must not produce Q-2-37; got: {:?}",
+            .any(|d| d.code.as_deref() == Some("Q-2-38")),
+        "top-level case must not produce Q-2-38; got: {:?}",
         diagnostics
             .iter()
             .map(|d| d.code.as_deref())

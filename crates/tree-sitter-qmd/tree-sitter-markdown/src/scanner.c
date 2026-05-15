@@ -136,6 +136,13 @@ typedef enum {
     // position so the parser raises Q-2-35, suggesting fenced code blocks.
     // See grammar.js (`_indented_code_block_error`) and CONTRIBUTING.md.
     INDENTED_CODE_BLOCK_DISALLOWED,
+
+    // Issue #206: emit a ':' caption-start token only when ':' is followed by
+    // inline whitespace (or newline / EOF), NOT another ':'. Replaces the bare
+    // ':' literal in the `caption` grammar rule and kills the ambiguity with
+    // `:::` (fenced div open/close) after a pipe table row. Emission site:
+    // parse_fenced_div_marker (`level == 1` branch).
+    CAPTION_START,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -239,6 +246,7 @@ static char* token_names[] = {
 
     "TRIPLE_STAR", // simply for good error reporting
     "INDENTED_CODE_BLOCK_DISALLOWED", // simply for good error reporting
+    "CAPTION_START",
 };
 
 #endif
@@ -590,6 +598,20 @@ static bool parse_fenced_div_marker(Scanner *s, TSLexer *lexer,
     }
     mark_end(s, lexer);
     if (level < 3) {
+        // Issue #206: a single ':' followed by inline whitespace (or
+        // newline/EOF) is a caption-start. Emit CAPTION_START so the parser
+        // can match the `caption` rule (which used to key off a literal ':'
+        // and collided with `:::`). Note that ':::' (level >= 3) has already
+        // taken the fenced-div path above, so this branch only fires for
+        // level == 1 or level == 2; level == 2 ('::') is not a valid caption
+        // start because the second char is ':' not whitespace, so the
+        // lookahead check below excludes it.
+        if (level == 1 && valid_symbols[CAPTION_START] &&
+            (lexer->eof(lexer) ||
+             lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
+             lexer->lookahead == '\n' || lexer->lookahead == '\r')) {
+            EMIT_TOKEN(CAPTION_START);
+        }
         return false;
     }
 
@@ -2325,10 +2347,53 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
 
-            if (lexer->lookahead != '\n' && lexer->lookahead != '\r' && valid_symbols[PIPE_TABLE_LINE_ENDING]) {
+            // Issue #206: a `:::` line that follows a pipe-table row must
+            // terminate the table rather than be absorbed as another row. The
+            // _caption_start scanner gate (in parse_fenced_div_marker, level
+            // == 1 branch) prevents the parser from shifting `:` as caption,
+            // but the pipe_table_row rule's "single cell, no `|`" alternative
+            // will otherwise eat `:::` as cell content (3 × pandoc_str).
+            //
+            // To avoid that, peek (without mark_end) for a `:::` run followed
+            // by inline whitespace / newline / EOF. If we see one, fall
+            // through to the LINE_ENDING path below so the pipe_table
+            // terminates via its `choice(_newline, _eof)` tail. The parser
+            // then proceeds to a state where FENCED_DIV_END is valid and
+            // parse_fenced_div_marker can emit it on the next scan call —
+            // for bare `:::` outside a fenced div, FENCED_DIV_END is not
+            // valid and the line errors out at a sensible place rather than
+            // silently producing a phantom row.
+            bool next_line_is_fenced_div_marker = false;
+            if (lexer->lookahead == ':') {
+                int level = 0;
+                // Match parse_fenced_div_marker's unbounded colon-run count.
+                // pandoc allows arbitrary fence widths for nested divs.
+                while (lexer->lookahead == ':') {
+                    advance(s, lexer);
+                    level++;
+                }
+                if (level >= 3 && (lexer->eof(lexer) ||
+                                   lexer->lookahead == ' ' ||
+                                   lexer->lookahead == '\t' ||
+                                   lexer->lookahead == '\n' ||
+                                   lexer->lookahead == '\r')) {
+                    next_line_is_fenced_div_marker = true;
+                }
+                // No mark_end past the peeked colons: tree-sitter rewinds to
+                // the last mark_end (set at line 2341, post-newline /
+                // pre-indent) between scan calls, so the advance is undone
+                // for the LINE_ENDING fall-through path. Same idiom used by
+                // the backtick / asterisk peeks below.
+            }
+
+            if (lexer->lookahead != '\n' && lexer->lookahead != '\r' &&
+                !next_line_is_fenced_div_marker &&
+                valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                 EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
             }
-            if ((lexer->lookahead == '\n' || lexer->lookahead == '\r') && valid_symbols[PIPE_TABLE_LINE_ENDING]) {
+            if (((lexer->lookahead == '\n' || lexer->lookahead == '\r') ||
+                 next_line_is_fenced_div_marker) &&
+                valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                 EMIT_TOKEN(LINE_ENDING);
             }
 

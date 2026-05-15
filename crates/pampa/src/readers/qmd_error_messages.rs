@@ -41,14 +41,14 @@ pub fn produce_diagnostic_messages(
             widen_diagnostic_to_line(diag, input_bytes);
         }
         if diag.code.as_deref() == Some("Q-2-2") {
-            upgrade_q22_to_q237_if_in_blockquote(diag, input_bytes);
+            upgrade_q22_to_q238_if_in_blockquote(diag, input_bytes);
         }
     }
 
     diagnostics
 }
 
-/// Upgrade a generic Q-2-2 attribute-specifier diagnostic to Q-2-37 when the
+/// Upgrade a generic Q-2-2 attribute-specifier diagnostic to Q-2-38 when the
 /// failing `{` sits on a blockquote-prefixed line.
 ///
 /// Background: with bd-rfqz the tree-sitter grammar accepts multi-line inline
@@ -64,13 +64,13 @@ pub fn produce_diagnostic_messages(
 /// Detection rule: if the line containing the diagnostic's reported position,
 /// after stripping leading whitespace, begins with `>` (a blockquote prefix),
 /// the user almost certainly hit the blockquote limitation rather than an
-/// arbitrary unclosed `{`. Rewrite the diagnostic to point at Q-2-37 with a
+/// arbitrary unclosed `{`. Rewrite the diagnostic to point at Q-2-38 with a
 /// blockquote-specific message and hint.
 ///
-/// Q-2-37 is defined in `resources/error-corpus/Q-2-37.json` (with empty
+/// Q-2-38 is defined in `resources/error-corpus/Q-2-38.json` (with empty
 /// `cases:`, so the auto-generated state table does not contain it — this
 /// override is the sole emitter).
-fn upgrade_q22_to_q237_if_in_blockquote(
+fn upgrade_q22_to_q238_if_in_blockquote(
     diag: &mut quarto_error_reporting::DiagnosticMessage,
     input_bytes: &[u8],
 ) {
@@ -105,7 +105,7 @@ fn upgrade_q22_to_q237_if_in_blockquote(
         return;
     }
 
-    diag.code = Some("Q-2-37".to_string());
+    diag.code = Some("Q-2-38".to_string());
     diag.title = "Multi-line inline attribute list inside blockquote".to_string();
     diag.problem = Some(
         "Inside a blockquote, an inline `{...}` attribute list cannot span multiple lines.".into(),

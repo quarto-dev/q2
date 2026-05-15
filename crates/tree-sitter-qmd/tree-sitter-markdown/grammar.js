@@ -233,11 +233,11 @@ module.exports = grammar({
         // This is the same principle we use for attributes in headings and equations.
 
         caption: $ => seq(
-            ":",
+            $._caption_start,
             $._inline_whitespace,
             $._inlines,
             choice($._newline, $._eof)
-        ),            
+        ),
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // pipe tables
@@ -1068,6 +1068,16 @@ module.exports = grammar({
         // EMIT_TOKEN(INDENTED_CODE_BLOCK_DISALLOWED).
         // See CONTRIBUTING.md "Known limitations" for the full list.
         $._indented_code_block_error,
+
+        // Pipe-table × caption disambiguation (issue #206).
+        // The literal `:` first-token of `caption` collides with `:::` at the
+        // start of a line that follows a pipe table row: the parser shifts the
+        // first `:` as caption-start and then errors on the second `:`. To kill
+        // the ambiguity, the scanner emits this token only when `:` is followed
+        // by inline whitespace (space, tab, newline, EOF) — NOT another `:` —
+        // so `:::` no longer matches caption-start. Emission site: scanner.c,
+        // EMIT_TOKEN(CAPTION_START) inside parse_fenced_div_marker.
+        $._caption_start,
     ],
     precedences: $ => [],
     extras: $ => [],

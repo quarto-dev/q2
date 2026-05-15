@@ -1,0 +1,10 @@
+{
+  "code": "Q-2-38",
+  "title": "Multi-line inline attribute list inside blockquote",
+  "message": "Inside a blockquote, an inline `{...}` attribute list cannot span multiple lines.",
+  "notes": [],
+  "hints": [
+    "Put the attribute list on a single line, or move this construct out of the blockquote."
+  ],
+  "cases": []
+}
