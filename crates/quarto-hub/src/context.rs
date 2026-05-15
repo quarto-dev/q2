@@ -448,7 +448,7 @@ async fn reconcile_files_with_index(
         // Add to index
         index.add_file(&path_str, &doc_id)?;
 
-        info!(path = %path_str, doc_id = %doc_id, content_len = file_content.len(), "Added new text file to index");
+        debug!(path = %path_str, doc_id = %doc_id, content_len = file_content.len(), "Added new text file to index");
         added += 1;
     }
 
@@ -494,7 +494,7 @@ async fn reconcile_files_with_index(
         // Add to index
         index.add_file(&path_str, &doc_id)?;
 
-        info!(
+        debug!(
             path = %path_str,
             doc_id = %doc_id,
             content_len = file_content.len(),

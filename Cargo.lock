@@ -3963,6 +3963,7 @@ dependencies = [
  "jsonwebtoken",
  "notify",
  "notify-debouncer-mini",
+ "quarto-util",
  "rand 0.9.4",
  "reqwest 0.13.3",
  "samod",

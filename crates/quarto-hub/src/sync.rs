@@ -17,7 +17,7 @@ use std::str::FromStr;
 
 use automerge::{ROOT, ReadDoc, transaction::Transactable};
 use samod::{DocHandle, DocumentId, Repo};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::error::{Error, Result};
 use crate::index::IndexDocument;
@@ -174,7 +174,7 @@ pub fn sync_document(
             debug!(doc_id = %doc_id, path = %file_path.display(), "Sync complete: no changes");
         }
         Ok(SyncResult::AutomergeChanged { new_len }) => {
-            info!(
+            debug!(
                 doc_id = %doc_id,
                 path = %file_path.display(),
                 new_len = new_len,
@@ -182,7 +182,7 @@ pub fn sync_document(
             );
         }
         Ok(SyncResult::FilesystemChanged { new_len }) => {
-            info!(
+            debug!(
                 doc_id = %doc_id,
                 path = %file_path.display(),
                 new_len = new_len,
@@ -190,7 +190,7 @@ pub fn sync_document(
             );
         }
         Ok(SyncResult::BothChanged { merged_len }) => {
-            info!(
+            debug!(
                 doc_id = %doc_id,
                 path = %file_path.display(),
                 merged_len = merged_len,
@@ -330,7 +330,7 @@ pub fn sync_binary_document(
             debug!(doc_id = %doc_id, path = %file_path.display(), "Binary sync: no changes");
         }
         Ok(SyncResult::AutomergeChanged { new_len }) => {
-            info!(
+            debug!(
                 doc_id = %doc_id,
                 path = %file_path.display(),
                 new_len = new_len,
@@ -338,7 +338,7 @@ pub fn sync_binary_document(
             );
         }
         Ok(SyncResult::FilesystemChanged { new_len }) => {
-            info!(
+            debug!(
                 doc_id = %doc_id,
                 path = %file_path.display(),
                 new_len = new_len,
@@ -346,7 +346,7 @@ pub fn sync_binary_document(
             );
         }
         Ok(SyncResult::BothChanged { merged_len }) => {
-            info!(
+            debug!(
                 doc_id = %doc_id,
                 path = %file_path.display(),
                 merged_len = merged_len,
@@ -499,7 +499,7 @@ pub async fn sync_all_documents(
     // Get all file mappings from the index
     let files = index.get_all_files();
 
-    info!(count = files.len(), "Starting sync of all documents");
+    debug!(count = files.len(), "Starting sync of all documents");
 
     for (file_path_str, doc_id_str) in &files {
         let file_path = project_root.join(file_path_str);
@@ -583,7 +583,7 @@ pub async fn sync_all_documents(
         warn!(error = %e, "Failed to save sync state");
     }
 
-    info!(
+    debug!(
         no_changes = result.no_changes,
         automerge_changed = result.automerge_changed,
         filesystem_changed = result.filesystem_changed,
@@ -622,6 +622,16 @@ impl SyncAllResult {
     /// Total number of documents successfully synced
     pub fn total_synced(&self) -> usize {
         self.no_changes + self.automerge_changed + self.filesystem_changed + self.both_changed
+    }
+
+    /// Whether any documents actually changed during this sync — i.e.
+    /// automerge → filesystem, filesystem → automerge, or both. Excludes
+    /// `no_changes` (idempotent checks) and `skipped` (files missing on
+    /// disk, which the per-file loop already `warn!`s about). Useful as
+    /// the gate on summary log lines that should fire only when work
+    /// actually happened.
+    pub fn has_changes(&self) -> bool {
+        self.automerge_changed + self.filesystem_changed + self.both_changed > 0
     }
 
     /// Whether any errors occurred
@@ -669,6 +679,47 @@ mod tests {
     use samod::Repo;
     use samod::storage::InMemoryStorage;
     use tempfile::TempDir;
+
+    #[test]
+    fn has_changes_only_counts_real_changes() {
+        // no_changes is bookkeeping — files that were checked but didn't
+        // need syncing. It must NOT make has_changes() true; otherwise the
+        // periodic-sync gate fires on every tick.
+        let r = SyncAllResult {
+            no_changes: 5,
+            ..Default::default()
+        };
+        assert!(!r.has_changes());
+        assert_eq!(r.total_synced(), 5);
+
+        // automerge_changed, filesystem_changed, both_changed each
+        // independently flip has_changes().
+        let r = SyncAllResult {
+            automerge_changed: 1,
+            ..Default::default()
+        };
+        assert!(r.has_changes());
+
+        let r = SyncAllResult {
+            filesystem_changed: 1,
+            ..Default::default()
+        };
+        assert!(r.has_changes());
+
+        let r = SyncAllResult {
+            both_changed: 1,
+            ..Default::default()
+        };
+        assert!(r.has_changes());
+
+        // Skipped + errors are reported elsewhere; has_changes() is
+        // strictly about "did syncing produce a state change?".
+        let r = SyncAllResult {
+            skipped: 3,
+            ..Default::default()
+        };
+        assert!(!r.has_changes());
+    }
 
     /// Helper to create a test repo
     async fn create_test_repo() -> Repo {

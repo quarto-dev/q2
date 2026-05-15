@@ -731,7 +731,7 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
                         }
                         connected_peer_id = Some(peer_info.peer_id);
 
-                        info!(
+                        debug!(
                             peer_id = peer_id_str,
                             storage_id,
                             email = email.as_deref().unwrap_or("-"),
@@ -747,7 +747,7 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
                             ctx.peer_emails().lock().unwrap().remove(peer_id);
                         }
 
-                        info!(
+                        debug!(
                             email = email.as_deref().unwrap_or("-"),
                             reason = ?reason,
                             "WebSocket client disconnected"
@@ -954,8 +954,8 @@ async fn run_periodic_sync(
             _ = interval.tick() => {
                 debug!("Running periodic filesystem sync...");
                 let result = ctx.sync_all().await;
-                if result.total_synced() > 0 || result.has_errors() {
-                    info!(
+                if result.has_changes() || result.has_errors() {
+                    debug!(
                         synced = result.total_synced(),
                         no_changes = result.no_changes,
                         automerge_changed = result.automerge_changed,
