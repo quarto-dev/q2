@@ -769,8 +769,8 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": ":"
+          "type": "SYMBOL",
+          "name": "_caption_start"
         },
         {
           "type": "SYMBOL",
@@ -5068,6 +5068,10 @@
     {
       "type": "SYMBOL",
       "name": "_indented_code_block_error"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_caption_start"
     }
   ],
   "inline": [],

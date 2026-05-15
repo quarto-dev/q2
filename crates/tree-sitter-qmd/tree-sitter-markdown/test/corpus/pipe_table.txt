@@ -424,3 +424,61 @@ Pipe table with "blank-line caption" (NB it's a separate block)
           (pandoc_str))))
     (caption
       (pandoc_str))))
+
+================================================================================
+issue #206 - Fenced div close ::: directly after a pipe table row
+================================================================================
+::: foo
+|   |   |
+|:-:|:-:|
+| a | b |
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_div
+      (info_string)
+      (block_continuation)
+      (pipe_table
+        (pipe_table_header
+          (pipe_table_cell)
+          (pipe_table_cell))
+        (block_continuation)
+        (pipe_table_delimiter_row
+          (pipe_table_delimiter_cell
+            (pipe_table_align_left)
+            (pipe_table_align_right))
+          (pipe_table_delimiter_cell
+            (pipe_table_align_left)
+            (pipe_table_align_right)))
+        (pipe_table_row
+          (pipe_table_cell
+            (pandoc_str))
+          (pipe_table_cell
+            (pandoc_str)))))))
+
+================================================================================
+issue #206 - Caption (single colon + space) still parses after a pipe table row
+================================================================================
+| a |
+|---|
+| c |
+: My caption
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pipe_table
+      (pipe_table_header
+        (pipe_table_cell
+          (pandoc_str)))
+      (pipe_table_delimiter_row
+        (pipe_table_delimiter_cell))
+      (pipe_table_row
+        (pipe_table_cell
+          (pandoc_str)))
+      (caption
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))))
