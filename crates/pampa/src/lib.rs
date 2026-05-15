@@ -6,6 +6,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+pub mod attribution;
 #[cfg(feature = "filters")]
 pub mod citeproc_filter;
 pub mod errors;

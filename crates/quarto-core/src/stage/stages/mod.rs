@@ -23,6 +23,7 @@
 
 mod apply_template;
 mod ast_transforms;
+mod attribution_generate;
 // Bootstrap JS is a native-only stage: hub-client's iframe-per-render
 // preview blows away stateful Bootstrap components, and excluding the
 // stage on WASM keeps the 80KB bundle out of the WASM binary. See the
@@ -51,6 +52,7 @@ mod user_filters;
 
 pub use apply_template::{ApplyTemplateConfig, ApplyTemplateStage};
 pub use ast_transforms::AstTransformsStage;
+pub use attribution_generate::AttributionGenerateStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use bootstrap_js::BootstrapJsStage;
 pub use code_highlight::CodeHighlightStage;

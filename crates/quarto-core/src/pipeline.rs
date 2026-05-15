@@ -57,26 +57,25 @@ use crate::stage::stages::ApplyTemplateConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::BootstrapJsStage;
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
-    EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage, LinkResolutionStage,
-    ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage,
-    Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage,
-    ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
+    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
+    DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
+    LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage,
+    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AppendixStructureTransform, AttributionGenerateTransform, AttributionRenderTransform,
-    AttributionViewerTransform, CalloutResolveTransform, CalloutTransform,
-    CategoriesSidebarTransform, CrossrefIndexTransform, CrossrefRenderTransform,
-    CrossrefResolveTransform, EquationLabelTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
-    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
+    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform, CrossrefIndexTransform,
+    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
+    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -293,6 +292,11 @@ pub fn build_html_pipeline_stages_with_options(
     // omits this stage. See bootstrap_js.rs for full rationale.
     #[cfg(not(target_arch = "wasm32"))]
     stages.push(Box::new(BootstrapJsStage::new()));
+    // Attribution-generate runs *before* user filters so the
+    // `quarto.attribution.*` Lua host binding sees a populated
+    // sidecar in both `pre` and `post` filter passes. No-op when
+    // no provider is installed (`ctx.attribution_provider` is None).
+    stages.push(Box::new(AttributionGenerateStage::new()));
     stages.push(Box::new(UserFiltersStage::pre()));
     stages.push(Box::new(AstTransformsStage::new()));
     stages.push(Box::new(UserFiltersStage::post()));
@@ -441,6 +445,8 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(CompileThemeCssStage::new()),
+        // See native pipeline for the placement rationale.
+        Box::new(AttributionGenerateStage::new()),
         Box::new(UserFiltersStage::pre()),
         Box::new(AstTransformsStage::new()),
         Box::new(UserFiltersStage::post()),
@@ -1032,21 +1038,6 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     pipeline.push(Box::new(FooterRenderTransform::new()));
 
-    // Tail of Navigation Phase: attribution data generation. Reads the
-    // opt-in provider from `ctx.attribution_provider` (installed by the
-    // CLI `--attribution=git` flag plumbing or the WASM
-    // `parse_qmd_to_ast_with_attribution` entry point), calls
-    // `build()`, merges identities with any user-authored
-    // `meta.attribution.identities`, and stores
-    // `ctx.attribution_data`. No-op when no provider is installed —
-    // the unflagged HTML path stays byte-identical. The entire
-    // Finalization Phase runs between this stage and
-    // `AttributionRenderTransform`; no transform there reads or
-    // writes the sidecar. See
-    // `claude-notes/plans/2026-05-06-attribution-pipeline.md` for the
-    // sidecar / placement design notes.
-    pipeline.push(Box::new(AttributionGenerateTransform::new()));
-
     // === FINALIZATION PHASE ===
     // LinkRewriteTransform runs first in the Finalization Phase
     // (Phase 6 of the website-projects epic). It walks every
@@ -1511,7 +1502,7 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 20);
+        assert_eq!(stages.len(), 21);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
@@ -1536,25 +1527,29 @@ mod tests {
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
         assert_eq!(stages[11].name(), "bootstrap-js");
-        assert_eq!(stages[12].name(), "user-filters-pre");
-        assert_eq!(stages[13].name(), "ast-transforms");
-        assert_eq!(stages[14].name(), "user-filters-post");
+        // Attribution-generate runs before user filters so the
+        // `quarto.attribution.*` Lua host binding sees a populated
+        // sidecar (bd-0fd0). No-op when no provider is installed.
+        assert_eq!(stages[12].name(), "attribution-generate");
+        assert_eq!(stages[13].name(), "user-filters-pre");
+        assert_eq!(stages[14].name(), "ast-transforms");
+        assert_eq!(stages[15].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[15].name(), "resource-report");
-        assert_eq!(stages[16].name(), "code-highlight");
+        assert_eq!(stages[16].name(), "resource-report");
+        assert_eq!(stages[17].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[17].name(), "math-js");
-        assert_eq!(stages[18].name(), "render-html-body");
-        assert_eq!(stages[19].name(), "apply-template");
+        assert_eq!(stages[18].name(), "math-js");
+        assert_eq!(stages[19].name(), "render-html-body");
+        assert_eq!(stages[20].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 20);
+        assert_eq!(pipeline.len(), 21);
     }
 
     #[test]
@@ -1568,7 +1563,10 @@ mod tests {
         // metadata is auto-filled symmetrically.
         // Includes `math-js` (bd-w5ov) — math display is safe under
         // hub-client iframe reinit and we want live math in preview.
-        assert_eq!(pipeline.len(), 18);
+        // Includes `attribution-generate` (bd-0fd0) so hub-client
+        // preview filters see the same `quarto.attribution.*` host
+        // binding as the CLI.
+        assert_eq!(pipeline.len(), 19);
         let names = pipeline.stage_names();
         // bd-4eyf: hub-client iframe reinit blows away stateful
         // Bootstrap components, so we deliberately omit `bootstrap-js`

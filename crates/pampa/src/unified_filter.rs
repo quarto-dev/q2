@@ -20,6 +20,7 @@ use quarto_error_reporting::DiagnosticMessage;
 
 use quarto_system_runtime::SystemRuntime;
 
+use crate::attribution::AttributionLookup;
 use crate::pandoc::Pandoc;
 use crate::pandoc::ast_context::ASTContext;
 
@@ -211,6 +212,21 @@ pub async fn apply_filter(
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
 ) -> Result<FilterOutput, FilterError> {
+    apply_filter_with_attribution(pandoc, context, filter, target_format, runtime, None).await
+}
+
+/// Variant of [`apply_filter`] that exposes the
+/// `quarto.attribution.*` Lua host binding backed by the supplied
+/// handle. See [`crate::lua::apply_lua_filter_with_attribution`] for
+/// the contract; non-Lua filters ignore the handle.
+pub async fn apply_filter_with_attribution(
+    pandoc: Pandoc,
+    context: ASTContext,
+    filter: &FilterSpec,
+    target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn AttributionLookup>>,
+) -> Result<FilterOutput, FilterError> {
     match filter {
         FilterSpec::Citeproc => {
             let (new_pandoc, new_context, diagnostics) =
@@ -230,12 +246,13 @@ pub async fn apply_filter(
 
         #[cfg(feature = "lua-filter")]
         FilterSpec::Lua(path) => {
-            let lua_output = crate::lua::apply_lua_filters(
+            let lua_output = crate::lua::apply_lua_filters_with_attribution(
                 pandoc,
                 context,
                 &[path.clone()],
                 target_format,
                 runtime,
+                attribution,
             )
             .await?;
             Ok(FilterOutput {
@@ -291,6 +308,23 @@ pub async fn apply_filters(
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
 ) -> Result<FilterOutput, FilterError> {
+    apply_filters_with_attribution(pandoc, context, filters, target_format, runtime, None).await
+}
+
+/// Variant of [`apply_filters`] that threads an
+/// `Option<Arc<dyn AttributionLookup>>` handle through each Lua
+/// filter pass so the `quarto.attribution.*` host binding is alive.
+/// `quarto-core`'s
+/// [`UserFiltersStage`](../../quarto_core/stage/stages/struct.UserFiltersStage.html)
+/// routes through this function for both pre and post passes.
+pub async fn apply_filters_with_attribution(
+    pandoc: Pandoc,
+    context: ASTContext,
+    filters: &[FilterSpec],
+    target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn AttributionLookup>>,
+) -> Result<FilterOutput, FilterError> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
     let mut all_diagnostics = Vec::new();
@@ -302,12 +336,13 @@ pub async fn apply_filters(
     let mut all_resources = Vec::new();
 
     for filter in filters {
-        let output = apply_filter(
+        let output = apply_filter_with_attribution(
             current_pandoc,
             current_context,
             filter,
             target_format,
             runtime.clone(),
+            attribution.clone(),
         )
         .await?;
         current_pandoc = output.pandoc;

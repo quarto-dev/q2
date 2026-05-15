@@ -141,13 +141,25 @@ pub struct StageContext {
 
     /// Optional attribution-data producer, set by the CLI
     /// `--attribution` flag plumbing or the WASM
-    /// `parse_qmd_to_ast_with_attribution` entry point and bridged
-    /// into [`crate::transforms::AttributionGenerateTransform`]'s
-    /// inner `RenderContext` by
-    /// [`crate::stage::stages::AstTransformsStage`]. `None` means
-    /// attribution is off for this render — the transform short-
-    /// circuits and the sidecar stays empty.
+    /// `parse_qmd_to_ast_with_attribution` entry point. Consumed by
+    /// [`crate::stage::stages::AttributionGenerateStage`], which
+    /// runs *before* [`UserFiltersStage::pre`] so user filters can
+    /// query attribution via the `quarto.attribution.*` Lua surface.
+    /// `None` means attribution is off for this render — the
+    /// generate stage short-circuits and `attribution_data` stays
+    /// `None`.
     pub attribution_provider: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
+
+    /// Per-document attribution sidecar, populated by
+    /// [`crate::stage::stages::AttributionGenerateStage`] before
+    /// user filters run, then bridged into the inner `RenderContext`
+    /// by [`crate::stage::stages::AstTransformsStage`] so
+    /// `AttributionRenderTransform` can bake the writer-side lookup
+    /// table. The Lua host binding registered by
+    /// [`crate::stage::stages::UserFiltersStage`] reads this directly
+    /// to back the `quarto.attribution.*` namespace. `None` when no
+    /// provider was installed.
+    pub attribution_data: Option<Arc<crate::attribution::AttributionData>>,
 
     /// Per-format writer-side options, populated by Render-phase
     /// transforms inside [`crate::stage::stages::AstTransformsStage`]
@@ -222,6 +234,7 @@ impl StageContext {
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
             attribution_provider: None,
+            attribution_data: None,
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
         })

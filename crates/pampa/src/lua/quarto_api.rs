@@ -12,6 +12,9 @@
 use base64::prelude::*;
 use mlua::{Lua, MultiValue, Result, Table, Value};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
+
+use crate::attribution::AttributionLookup;
 
 /// Extends the `quarto` global (already created by register_quarto_namespace)
 /// with additional API sub-namespaces: quarto.json, quarto.log, quarto.utils.
@@ -208,6 +211,141 @@ pub fn current_script_dir(lua: &Lua) -> Result<String> {
     } else {
         Ok(String::new())
     }
+}
+
+// =========================================================================
+// quarto.attribution — bd-0fd0 host binding (read-only)
+// =========================================================================
+
+/// Register the `quarto.attribution.*` host binding on the existing
+/// `quarto` global. Reads from the optional [`AttributionLookup`]
+/// handle supplied by the filter runner (typically wrapping the
+/// `Arc<AttributionData>` sidecar produced by
+/// [`crate::stage::stages::AttributionGenerateStage`](../../quarto_core/stage/stages/struct.AttributionGenerateStage.html)
+/// in `quarto-core`).
+///
+/// API exposed:
+///
+/// ```lua
+/// -- Convenience: resolves identity automatically, reads
+/// -- `el.source_info:byte_range()` internally. Returns nil for nodes
+/// -- whose chain resolves to Concat/FilterProvenance, or non-primary
+/// -- file (v1 single-doc invariant), or with no provider installed.
+/// local hit = quarto.attribution.lookup(el)
+/// -- => { actor = "alice@example.com", time = 1715000000000,
+/// --      name = "Alice", color = "#ff0000" }
+///
+/// -- Primitive: arbitrary byte range against the primary file. No
+/// -- identity join. Returns nil on no overlap, no provider, or
+/// -- start >= end.
+/// local raw = quarto.attribution.lookup_range(start, end)
+/// -- => { actor = "alice@example.com", time = 1715000000000 }
+///
+/// -- Identity map snapshot, keyed by actor. Empty table when no
+/// -- provider is installed.
+/// local idents = quarto.attribution.identities()
+/// -- => { ["alice@example.com"] = { name = "Alice", color = "#ff0000" } }
+/// ```
+///
+/// When `handle` is `None`, the registered functions become no-op
+/// stubs (lookup/lookup_range return nil; identities returns an
+/// empty table). This keeps the binding present in the Lua
+/// environment regardless of whether attribution is on, so filters
+/// can call into it unconditionally.
+pub fn register_quarto_attribution(
+    lua: &Lua,
+    handle: Option<Arc<dyn AttributionLookup>>,
+) -> Result<()> {
+    let quarto: Table = lua.globals().get("quarto")?;
+    let attribution = lua.create_table()?;
+
+    // `quarto.attribution.lookup_range(start, end)` — primitive raw
+    // lookup. Returns `{actor, time}` table on hit, nil otherwise.
+    let h_for_range = handle.clone();
+    attribution.set(
+        "lookup_range",
+        lua.create_function(move |lua, (start, end_): (usize, usize)| {
+            let Some(h) = h_for_range.as_ref() else {
+                return Ok(Value::Nil);
+            };
+            let Some(hit) = h.lookup_range(start, end_) else {
+                return Ok(Value::Nil);
+            };
+            let t = lua.create_table()?;
+            t.set("actor", hit.actor)?;
+            t.set("time", hit.time)?;
+            Ok(Value::Table(t))
+        })?,
+    )?;
+
+    // `quarto.attribution.identities()` — read-only snapshot of the
+    // identity map keyed by actor. Empty table when no handle.
+    let h_for_ids = handle.clone();
+    attribution.set(
+        "identities",
+        lua.create_function(move |lua, ()| {
+            let t = lua.create_table()?;
+            if let Some(h) = h_for_ids.as_ref() {
+                for entry in h.identities() {
+                    let inner = lua.create_table()?;
+                    inner.set("name", entry.name)?;
+                    inner.set("color", entry.color)?;
+                    t.set(entry.actor, inner)?;
+                }
+            }
+            Ok(t)
+        })?,
+    )?;
+
+    // Publish the table on `quarto.attribution` *before* compiling
+    // the `lookup` thunk below — the thunk reads
+    // `quarto.attribution.{lookup_range,identities}` at chunk-load
+    // time into upvalues, so the table must already be reachable
+    // through the `quarto` global.
+    quarto.set("attribution", attribution.clone())?;
+
+    // `quarto.attribution.lookup(el)` — convenience. Reads
+    // `el.source_info:byte_range()`, calls `lookup_range`, joins the
+    // identity entry. Returns nil when the source_info chain doesn't
+    // resolve (Concat/FilterProvenance), when the resolved file_id
+    // isn't 0 (v1 single-doc invariant), when no run overlaps the
+    // range, or when no handle is installed.
+    //
+    // The implementation is a small Lua thunk that delegates to the
+    // Rust-backed functions registered above — keeps the per-call
+    // path purely Lua-side (no Rust closure to capture).
+    lua.load(
+        r#"
+        local lookup_range = quarto.attribution.lookup_range
+        local identities = quarto.attribution.identities
+        return function(el)
+            local si = el.source_info
+            if si == nil then return nil end
+            local r = si:byte_range()
+            if r == nil then return nil end
+            -- v1 single-doc invariant: skip non-primary file.
+            local fid = si:file_id()
+            if fid ~= nil and fid ~= 0 then return nil end
+            local hit = lookup_range(r[1], r[2])
+            if hit == nil then return nil end
+            local idents = identities()
+            local id = idents[hit.actor]
+            if id == nil then
+                return { actor = hit.actor, time = hit.time }
+            end
+            return {
+                actor = hit.actor,
+                time = hit.time,
+                name = id.name,
+                color = id.color,
+            }
+        end
+        "#,
+    )
+    .eval::<mlua::Function>()
+    .and_then(|f| attribution.set("lookup", f))?;
+
+    Ok(())
 }
 
 /// `quarto.utils` — utility functions

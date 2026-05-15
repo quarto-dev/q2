@@ -119,6 +119,27 @@ pub async fn apply_lua_filter(
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
 ) -> FilterResult<FilterOutput> {
+    apply_lua_filter_with_attribution(pandoc, context, filter_path, target_format, runtime, None)
+        .await
+}
+
+/// Variant of [`apply_lua_filter`] that exposes the
+/// `quarto.attribution.*` Lua host binding backed by the supplied
+/// `Option<Arc<dyn AttributionLookup>>`. The `None` case registers
+/// no-op stubs and behaves byte-identically to [`apply_lua_filter`].
+///
+/// Production callers route through this from
+/// `unified_filter::apply_filters_with_attribution`; tests that
+/// don't care about attribution can keep calling the simpler
+/// [`apply_lua_filter`].
+pub async fn apply_lua_filter_with_attribution(
+    pandoc: &Pandoc,
+    context: &ASTContext,
+    filter_path: &Path,
+    target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn crate::attribution::AttributionLookup>>,
+) -> FilterResult<FilterOutput> {
     // Read filter file via runtime (supports VFS on WASM)
     let filter_bytes = runtime.file_read(filter_path).map_err(|e| {
         LuaFilterError::FileReadError(
@@ -159,6 +180,12 @@ pub async fn apply_lua_filter(
 
     // Register quarto.json, quarto.log, quarto.utils
     register_quarto_api(&lua)?;
+
+    // Register quarto.attribution.{lookup, lookup_range, identities}.
+    // When `attribution` is `None`, registers no-op stubs:
+    //   - `lookup` / `lookup_range` return nil
+    //   - `identities` returns an empty table
+    super::quarto_api::register_quarto_attribution(&lua, attribution)?;
 
     // Register quarto.doc namespace (is_format, add_html_dependency, etc.)
     super::quarto_doc::register_quarto_doc(&lua)?;
@@ -259,6 +286,22 @@ pub async fn apply_lua_filters(
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
 ) -> FilterResult<FilterOutput> {
+    apply_lua_filters_with_attribution(pandoc, context, filter_paths, target_format, runtime, None)
+        .await
+}
+
+/// Variant of [`apply_lua_filters`] that threads an
+/// `Option<Arc<dyn AttributionLookup>>` handle to each per-filter
+/// Lua state via [`apply_lua_filter_with_attribution`]. See its
+/// doc-comment for the contract.
+pub async fn apply_lua_filters_with_attribution(
+    pandoc: Pandoc,
+    context: ASTContext,
+    filter_paths: &[std::path::PathBuf],
+    target_format: &str,
+    runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn crate::attribution::AttributionLookup>>,
+) -> FilterResult<FilterOutput> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
     let mut all_diagnostics = Vec::new();
@@ -267,12 +310,13 @@ pub async fn apply_lua_filters(
     let mut all_resources = Vec::new();
 
     for filter_path in filter_paths {
-        let output = apply_lua_filter(
+        let output = apply_lua_filter_with_attribution(
             &current_pandoc,
             &current_context,
             filter_path,
             target_format,
             runtime.clone(),
+            attribution.clone(),
         )
         .await?;
         current_pandoc = output.pandoc;

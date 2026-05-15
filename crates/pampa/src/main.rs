@@ -9,6 +9,7 @@ use clap::Parser;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use std::io::{self, Read, Write};
 
+mod attribution;
 mod citeproc_filter;
 mod errors;
 mod filter_context;

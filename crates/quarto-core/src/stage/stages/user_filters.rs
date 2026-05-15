@@ -133,6 +133,18 @@ impl PipelineStage for UserFiltersStage {
 
         let target_format = ctx.format.identifier.as_str();
 
+        // Build the attribution lookup handle when a sidecar is
+        // present. `AttributionGenerateStage` runs before this stage
+        // on both pre and post sub-passes, so the sidecar (when
+        // attribution is on) is already populated. The handle is
+        // cheap — wraps an `Arc<AttributionData>`.
+        let attribution: Option<std::sync::Arc<dyn pampa::attribution::AttributionLookup>> =
+            ctx.attribution_data.as_ref().map(|data| {
+                std::sync::Arc::new(crate::attribution::AttributionLookupHandle::new(
+                    data.clone(),
+                )) as std::sync::Arc<dyn pampa::attribution::AttributionLookup>
+            });
+
         // The Lua filter future is !Send (mlua::Lua is !Send), but this
         // pipeline stage runs under #[async_trait] which requires Send on native.
         // On WASM (single-threaded, ?Send), we can .await directly.
@@ -142,28 +154,31 @@ impl PipelineStage for UserFiltersStage {
             let ast = doc.ast;
             let ast_context = doc.ast_context;
             let runtime = ctx.runtime.clone();
+            let attribution = attribution.clone();
             tokio::task::block_in_place(|| {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
-                rt.block_on(pampa::unified_filter::apply_filters(
+                rt.block_on(pampa::unified_filter::apply_filters_with_attribution(
                     ast,
                     ast_context,
                     filters,
                     target_format,
                     runtime,
+                    attribution,
                 ))
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))
             })
         };
         #[cfg(target_arch = "wasm32")]
-        let filter_result = pampa::unified_filter::apply_filters(
+        let filter_result = pampa::unified_filter::apply_filters_with_attribution(
             doc.ast,
             doc.ast_context,
             filters,
             target_format,
             ctx.runtime.clone(),
+            attribution,
         )
         .await
         .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()));

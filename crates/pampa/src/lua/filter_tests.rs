@@ -5884,3 +5884,509 @@ end
         other => panic!("Expected Paragraph, got {:?}", other),
     }
 }
+
+// ============================================================================
+// source_info accessor (bd-0fd0 attribution Lua binding — Phase 3)
+// ============================================================================
+
+#[tokio::test]
+async fn test_source_info_byte_range_on_inline() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("source_info_test.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local r = elem.source_info:byte_range()
+    local cls
+    if r then
+        cls = "bytes-" .. tostring(r[1]) .. "-" .. tostring(r[2])
+    else
+        cls = "unresolved"
+    end
+    return pandoc.Span(elem.content, pandoc.Attr("", {cls}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "hi".to_string(),
+                    source_info: quarto_source_map::SourceInfo::original(
+                        quarto_source_map::FileId(0),
+                        5,
+                        7,
+                    ),
+                })],
+                source_info: quarto_source_map::SourceInfo::original(
+                    quarto_source_map::FileId(0),
+                    5,
+                    7,
+                ),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap()
+        .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => assert_eq!(s.attr.1, vec!["bytes-5-7".to_string()]),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_source_info_file_id_on_block() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("file_id_test.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Para(elem)
+    local fid = elem.source_info:file_id()
+    if fid then
+        return pandoc.Para({pandoc.Str("file-" .. tostring(fid))})
+    end
+    return elem
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "orig".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::original(
+                quarto_source_map::FileId(3),
+                0,
+                10,
+            ),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap()
+        .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "file-3"),
+            other => panic!("Expected Str, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_source_info_unresolved_for_filter_provenance() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("unresolved_test.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local r = elem.source_info:byte_range()
+    if r == nil then
+        return pandoc.Span(elem.content, pandoc.Attr("", {"unresolved"}, {}))
+    end
+    return elem
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                source_info: quarto_source_map::SourceInfo::filter_provenance("test.lua", 1),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap()
+        .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => assert_eq!(s.attr.1, vec!["unresolved".to_string()]),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+// ============================================================================
+// quarto.attribution.* host binding (bd-0fd0 — Phase 4)
+// ============================================================================
+
+/// Local stub implementation of `crate::attribution::AttributionLookup`
+/// for filter integration tests. The production handle lives in
+/// `quarto-core::attribution::handle`, which `pampa` can't depend
+/// on, so the test fabricates a tiny equivalent.
+#[derive(Clone)]
+struct TestAttributionLookup {
+    runs: Vec<(usize, usize, String, i64)>,
+    identities: Vec<(String, String, String)>, // (actor, name, color)
+}
+
+impl crate::attribution::AttributionLookup for TestAttributionLookup {
+    fn lookup_range(&self, start: usize, end: usize) -> Option<crate::attribution::LookupHit> {
+        if start >= end {
+            return None;
+        }
+        let mut best: Option<&(usize, usize, String, i64)> = None;
+        for r in &self.runs {
+            if r.1 <= start || r.0 >= end {
+                continue;
+            }
+            match best {
+                Some(b) if r.3 <= b.3 => {}
+                _ => best = Some(r),
+            }
+        }
+        best.map(|r| crate::attribution::LookupHit {
+            actor: r.2.clone(),
+            time: r.3,
+        })
+    }
+
+    fn identities(&self) -> Vec<crate::attribution::IdentityEntry> {
+        self.identities
+            .iter()
+            .map(|(actor, name, color)| crate::attribution::IdentityEntry {
+                actor: actor.clone(),
+                name: name.clone(),
+                color: color.clone(),
+            })
+            .collect()
+    }
+}
+
+fn make_test_handle() -> std::sync::Arc<dyn crate::attribution::AttributionLookup> {
+    std::sync::Arc::new(TestAttributionLookup {
+        runs: vec![
+            (0, 5, "alice@example.com".to_string(), 100),
+            (5, 10, "bob@example.com".to_string(), 200),
+        ],
+        identities: vec![
+            (
+                "alice@example.com".to_string(),
+                "Alice".to_string(),
+                "#ff0000".to_string(),
+            ),
+            (
+                "bob@example.com".to_string(),
+                "Bob".to_string(),
+                "#00ff00".to_string(),
+            ),
+        ],
+    })
+}
+
+#[tokio::test]
+async fn test_quarto_attribution_lookup_range_returns_hit() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("lookup_range.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local hit = quarto.attribution.lookup_range(2, 8)
+    if hit then
+        return pandoc.Span(elem.content, pandoc.Attr("", {"hit-" .. hit.actor}, {}))
+    end
+    return pandoc.Span(elem.content, pandoc.Attr("", {"miss"}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = crate::lua::apply_lua_filter_with_attribution(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        Some(make_test_handle()),
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            // Range [2, 8) overlaps both runs; bob's run has the
+            // higher time, so it wins.
+            Inline::Span(s) => assert_eq!(s.attr.1, vec!["hit-bob@example.com".to_string()]),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_quarto_attribution_identities_returns_map() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("identities.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Para(elem)
+    local idents = quarto.attribution.identities()
+    local alice = idents["alice@example.com"]
+    if alice and alice.name == "Alice" then
+        return pandoc.Para({pandoc.Str("alice-" .. alice.color)})
+    end
+    return pandoc.Para({pandoc.Str("missing")})
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "original".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = crate::lua::apply_lua_filter_with_attribution(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        Some(make_test_handle()),
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "alice-#ff0000"),
+            other => panic!("Expected Str, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_quarto_attribution_no_provider_returns_nil() {
+    // No handle installed → lookup_range returns nil, identities
+    // returns an empty table. Filter exercises both.
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("no_provider.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local hit = quarto.attribution.lookup_range(0, 10)
+    local idents = quarto.attribution.identities()
+    local n = 0
+    for _, _ in pairs(idents) do n = n + 1 end
+    local cls = "hit-" .. tostring(hit ~= nil) .. "-ids-" .. tostring(n)
+    return pandoc.Span(elem.content, pandoc.Attr("", {cls}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
+        .await
+        .unwrap()
+        .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => {
+                assert_eq!(s.attr.1, vec!["hit-false-ids-0".to_string()]);
+            }
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_quarto_attribution_lookup_joins_identity() {
+    // `quarto.attribution.lookup(el)` reads el.source_info, calls
+    // lookup_range internally, and joins the identity entry. Returns
+    // a table with actor/time/name/color when everything resolves.
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("lookup_join.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local hit = quarto.attribution.lookup(elem)
+    if hit then
+        local cls = hit.actor .. "/" .. hit.name .. "/" .. hit.color
+        return pandoc.Span(elem.content, pandoc.Attr("", {cls}, {}))
+    end
+    return pandoc.Span(elem.content, pandoc.Attr("", {"miss"}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                // Source range [0, 5) — entirely inside Alice's run.
+                source_info: quarto_source_map::SourceInfo::original(
+                    quarto_source_map::FileId(0),
+                    0,
+                    5,
+                ),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = crate::lua::apply_lua_filter_with_attribution(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        Some(make_test_handle()),
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => {
+                assert_eq!(
+                    s.attr.1,
+                    vec!["alice@example.com/Alice/#ff0000".to_string()]
+                );
+            }
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_quarto_attribution_lookup_skips_non_primary_file() {
+    // v1 single-doc invariant: nodes whose SourceInfo resolves to
+    // file_id != 0 must return nil. Parallels the existing
+    // `attribution_render_skips_non_primary_file_nodes` test in
+    // quarto-core.
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("non_primary.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local hit = quarto.attribution.lookup(elem)
+    if hit == nil then
+        return pandoc.Span(elem.content, pandoc.Attr("", {"non-primary-nil"}, {}))
+    end
+    return pandoc.Span(elem.content, pandoc.Attr("", {"unexpected-hit"}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                // file_id = 1 → non-primary; lookup_range would
+                // otherwise hit Alice's run.
+                source_info: quarto_source_map::SourceInfo::original(
+                    quarto_source_map::FileId(1),
+                    0,
+                    5,
+                ),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = crate::lua::apply_lua_filter_with_attribution(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        Some(make_test_handle()),
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => assert_eq!(s.attr.1, vec!["non-primary-nil".to_string()]),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
