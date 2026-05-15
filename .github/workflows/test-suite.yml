@@ -59,6 +59,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          # cache-bin: false avoids clobbering the freshly-installed
+          # ~/.cargo/bin/{cargo,rustup,...} with stale proxies from a
+          # previous run. Intermittently broke macOS CI on 2026-05-14
+          # with `cargo xtask … → rustup-init: unexpected argument`.
+          # cargo-nextest / cargo-insta re-install via taiki-e/install-
+          # action's prebuilts each run, which is cheap (~1-2s).
+          cache-bin: false
           shared-key: "rust-test-suite"
 
       # Cache cargo-nextest and insta separately to avoid reinstalling

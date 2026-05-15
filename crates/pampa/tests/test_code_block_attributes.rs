@@ -94,19 +94,13 @@ fn test_language_with_id_and_class() {
     assert!(attrs.is_empty());
 }
 
-#[test]
-fn test_language_with_key_value() {
-    // {python key=value} should produce:
-    // - id: ""
-    // - classes: ["{python}"]
-    // - attrs: [("key", "value")]
-    let input = "```{python key=value}\ncode()\n```\n";
-    let (id, classes, attrs) = parse_code_block_attrs(input);
-
-    assert_eq!(id, "");
-    assert_eq!(classes, vec!["{python}"]);
-    assert_eq!(attrs, vec![("key".to_string(), "value".to_string())]);
-}
+// Note (bd-j4fe / Q-2-36, 2026-05-14): the bare `{python key=value}` /
+// `{r echo=FALSE}` form — a braced language token with kv pairs and no
+// Pandoc class — is now a Q-2-36 *error*, not a valid construct. Tests
+// in this file therefore only exercise kv extraction in forms that carry
+// at least one Pandoc class (`.something`). The kv-extraction logic
+// itself is unchanged; we just can't exercise it on a header shape we
+// also reject.
 
 #[test]
 fn test_language_with_all_attributes() {
@@ -138,15 +132,17 @@ fn test_language_with_multiple_classes() {
 
 #[test]
 fn test_language_with_multiple_key_values() {
-    // {python key1=value1 key2=value2} should produce:
+    // {python .myclass key1=value1 key2=value2} should produce:
     // - id: ""
-    // - classes: ["{python}"]
+    // - classes: ["{python}", "myclass"]
     // - attrs: [("key1", "value1"), ("key2", "value2")]
-    let input = "```{python key1=value1 key2=value2}\ncode()\n```\n";
+    // Class is required to bypass Q-2-36; the test is about multi-kv
+    // extraction, which is what we still care about.
+    let input = "```{python .myclass key1=value1 key2=value2}\ncode()\n```\n";
     let (id, classes, attrs) = parse_code_block_attrs(input);
 
     assert_eq!(id, "");
-    assert_eq!(classes, vec!["{python}"]);
+    assert_eq!(classes, vec!["{python}", "myclass"]);
     assert_eq!(
         attrs,
         vec![
@@ -183,12 +179,14 @@ fn test_r_with_attributes() {
 
 #[test]
 fn test_quoted_attribute_value() {
-    // {python key="value with spaces"} should handle quoted values
-    let input = "```{python key=\"value with spaces\"}\ncode()\n```\n";
+    // {python .myclass key="value with spaces"} should handle quoted values.
+    // Class is required to bypass Q-2-36; the test is about quoted-value
+    // extraction with embedded spaces, which is still in scope.
+    let input = "```{python .myclass key=\"value with spaces\"}\ncode()\n```\n";
     let (id, classes, attrs) = parse_code_block_attrs(input);
 
     assert_eq!(id, "");
-    assert_eq!(classes, vec!["{python}"]);
+    assert_eq!(classes, vec!["{python}", "myclass"]);
     assert_eq!(
         attrs,
         vec![("key".to_string(), "value with spaces".to_string())]

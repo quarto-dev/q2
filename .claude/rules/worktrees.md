@@ -88,6 +88,16 @@ npm install                              # only if hub-client work is in scope
 cargo xtask verify --skip-hub-build      # confirm green at branch HEAD
 ```
 
+`--base` defaults to `main` when omitted. **If the beads issue has an
+open parent epic, the command prints a warning** nudging you toward
+the epic's integration branch (e.g. `feature/<name>`). Pass
+`--base <branch>` to branch off the integration line, or `--base main`
+explicitly to silence the warning when `main` really is what you want.
+For sequential sub-task work *inside* an existing worktree, reach for
+`cargo xtask switch-task` (see the two-patterns section above) — it
+fast-forwards the integration branch and branches off its current tip
+automatically.
+
 If the xtask is not yet built (fresh clone, or a branch where `cargo build -p xtask` has
 not run), see § Manual bootstrap below.
 

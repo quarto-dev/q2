@@ -25,10 +25,14 @@ cargo-fuzz = true
 default = ["terminal-support", "json-filter", "lua-filter", "template-fs"]
 terminal-support = ["dep:crossterm", "dep:supports-hyperlinks"]
 terminal-hyperlinks = ["dep:supports-hyperlinks"]
+# Enable filter pipeline support (pulls in quarto-system-runtime / deno_core / v8).
+# Parser-only consumers can disable this with `default-features = false` to avoid
+# the v8 link dependency, which is problematic in shared-library builds on Linux.
+filters = ["dep:quarto-system-runtime"]
 # Enable JSON filter support (requires subprocess spawning, disable for WASM)
-json-filter = []
+json-filter = ["filters"]
 # Enable Lua filter support (disable for WASM, where mlua is not available)
-lua-filter = ["dep:mlua"]
+lua-filter = ["filters", "dep:mlua"]
 # Enable filesystem-based template resolution (disable for WASM)
 template-fs = []
 
@@ -49,7 +53,7 @@ quarto-ast-reconcile = { path = "../quarto-ast-reconcile" }
 quarto-doctemplate = { workspace = true }
 quarto-citeproc = { path = "../quarto-citeproc" }
 quarto-csl = { path = "../quarto-csl" }
-quarto-system-runtime = { workspace = true }
+quarto-system-runtime = { workspace = true, optional = true }
 regex = { version = "1.12.3", features = ["unicode"] }
 clap = { version = "4.5", features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }

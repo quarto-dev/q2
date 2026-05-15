@@ -5064,6 +5064,10 @@
     {
       "type": "SYMBOL",
       "name": "_triple_star_error"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_indented_code_block_error"
     }
   ],
   "inline": [],

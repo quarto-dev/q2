@@ -124,9 +124,12 @@ pub struct Args {
     #[arg(long)]
     pub slug: Option<String>,
 
-    /// Base branch.
-    #[arg(long, default_value = "main")]
-    pub base: String,
+    /// Base branch. When omitted, falls back to `main` — but in beads
+    /// mode, if the issue has an open parent epic, a warning is
+    /// printed nudging you toward the epic's integration branch.
+    /// Pass `--base main` explicitly to silence that warning.
+    #[arg(long)]
+    pub base: Option<String>,
 }
 
 pub fn parse_external_ref_to_github_url(ext: Option<&str>) -> Option<String> {
@@ -303,6 +306,20 @@ pub fn update_claude_local_md(path: &Path, new_section: &str) -> Result<()> {
 pub struct BeadsMetadata {
     pub title: String,
     pub external_ref: Option<String>,
+    /// The issue's parent epic, when this is a sub-task. Read from
+    /// the first `dependency_type: "parent-child"` entry in `br
+    /// show --json`'s `dependencies` array. Used by the
+    /// default-base warning (bd-ojtq) — if the parent epic is
+    /// open, the user probably meant to branch off an integration
+    /// branch rather than `main`.
+    pub parent_epic: Option<ParentEpic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParentEpic {
+    pub id: String,
+    pub title: String,
+    pub status: String,
 }
 
 pub fn fetch_beads_metadata(id: &str) -> Result<BeadsMetadata> {
@@ -327,6 +344,13 @@ pub fn fetch_beads_metadata(id: &str) -> Result<BeadsMetadata> {
     let stdout = std::str::from_utf8(&output.stdout)
         .with_context(|| format!("`br show {id} --json` produced non-UTF-8 output"))?;
 
+    parse_beads_metadata(id, stdout)
+}
+
+/// Parse `br show --json` output into [`BeadsMetadata`]. Split from
+/// [`fetch_beads_metadata`] so unit tests can drive it with fixture
+/// JSON without spawning the real `br` binary.
+pub fn parse_beads_metadata(id: &str, stdout: &str) -> Result<BeadsMetadata> {
     // `br show --json` returns an array; take the first element.
     let arr: Vec<serde_json::Value> = serde_json::from_str(stdout)
         .with_context(|| format!("parsing JSON from `br show {id} --json`"))?;
@@ -346,10 +370,48 @@ pub fn fetch_beads_metadata(id: &str) -> Result<BeadsMetadata> {
         .and_then(|v| v.as_str())
         .map(str::to_string);
 
+    // First `parent-child` edge in `dependencies` is the parent epic.
+    // Multiple parents are unusual but if present we just take the
+    // first — the warning is informational, not load-bearing.
+    let parent_epic = first
+        .get("dependencies")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .find_map(|dep| {
+            let kind = dep.get("dependency_type").and_then(|v| v.as_str())?;
+            if kind != "parent-child" {
+                return None;
+            }
+            Some(ParentEpic {
+                id: dep.get("id").and_then(|v| v.as_str())?.to_string(),
+                title: dep.get("title").and_then(|v| v.as_str())?.to_string(),
+                status: dep.get("status").and_then(|v| v.as_str())?.to_string(),
+            })
+        });
+
     Ok(BeadsMetadata {
         title,
         external_ref,
+        parent_epic,
     })
+}
+
+/// Build the user-facing warning shown when `--base` was left at its
+/// default but the issue has an open parent epic. Returned as a
+/// `String` so it's directly testable without capturing stderr.
+pub fn default_base_warning(child_id: &str, parent: &ParentEpic) -> String {
+    format!(
+        "\nwarning: `--base` not specified \u{2014} falling back to `main`.\n  \
+         {child_id} has parent {parent_id} ({status}): {parent_title}\n  \
+         Sub-tasks of an open epic typically branch off the epic's integration\n  \
+         branch (commonly `feature/<name>`). If that's what you meant, re-run\n  \
+         with `--base <branch>`. Pass `--base main` explicitly to silence this.\n",
+        child_id = child_id,
+        parent_id = parent.id,
+        status = parent.status,
+        parent_title = parent.title,
+    )
 }
 
 pub struct GhIssue {
@@ -499,16 +561,36 @@ pub fn run(args: Args) -> Result<()> {
     // identically from main, from another worktree, or from any subdirectory.
     let root = repo_root()?;
 
+    // `args.base.is_none()` means the user didn't pass `--base`; we
+    // fall back to `main` (the pre-bd-ojtq behaviour) but remember
+    // *that* we fell back, so beads mode can warn when a parent epic
+    // is open.
+    let base_explicit = args.base.is_some();
+    let base = args.base.clone().unwrap_or_else(|| "main".to_string());
+
     // Mode is enforced by clap::ArgGroup(required, single).
     let plan = if let Some(id) = args.beads_id.as_deref() {
-        plan_beads(id, args.slug.as_deref(), &args.base, &root)?
+        plan_beads(id, args.slug.as_deref(), &base, &root)?
     } else if let Some(n) = args.issue {
-        plan_issue(n, args.slug.as_deref(), &args.base, &root)?
+        plan_issue(n, args.slug.as_deref(), &base, &root)?
     } else if args.upgrade {
-        plan_upgrade(args.slug.as_deref(), &args.base, &root)?
+        plan_upgrade(args.slug.as_deref(), &base, &root)?
     } else {
         unreachable!("clap ArgGroup guarantees one mode is set");
     };
+
+    // bd-ojtq: nudge the user when `--base` was implicit and this
+    // sub-task has an open parent epic. The warning is informational;
+    // the worktree gets created on `main` regardless. To silence the
+    // warning, the user re-runs with `--base main` (or whatever
+    // integration branch they meant).
+    if !base_explicit {
+        if let (Some(id), Some(parent)) = (args.beads_id.as_deref(), plan.parent_epic.as_ref()) {
+            if parent.status == "open" {
+                eprintln!("{}", default_base_warning(id, parent));
+            }
+        }
+    }
 
     git_worktree_add(&plan.branch, &plan.dir, &plan.base)?;
 
@@ -595,6 +677,10 @@ struct Plan {
     dir: PathBuf,
     base: String,
     kind: SectionKind,
+    /// bd-ojtq: when in beads mode, the issue's parent epic (if any),
+    /// passed up so `run` can emit the default-base warning. `None`
+    /// for issue / upgrade modes — those don't have epic structure.
+    parent_epic: Option<ParentEpic>,
 }
 
 fn plan_beads(id: &str, slug_override: Option<&str>, base: &str, repo_root: &Path) -> Result<Plan> {
@@ -628,6 +714,7 @@ fn plan_beads(id: &str, slug_override: Option<&str>, base: &str, repo_root: &Pat
             title: meta.title,
             github_url,
         },
+        parent_epic: meta.parent_epic,
     })
 }
 
@@ -654,6 +741,7 @@ fn plan_issue(
             title: gh.title,
             url: gh.url,
         },
+        parent_epic: None,
     })
 }
 
@@ -673,6 +761,7 @@ fn plan_upgrade(slug_suffix: Option<&str>, base: &str, repo_root: &Path) -> Resu
         dir: repo_root.join(".worktrees").join(&leaf),
         base: base.to_string(),
         kind: SectionKind::Upgrade { date },
+        parent_epic: None,
     })
 }
 
@@ -764,6 +853,138 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    // ──────────────────────────────────────────────────────────────
+    // bd-ojtq: parent-epic detection in beads JSON +
+    //          default-base warning text
+    // ──────────────────────────────────────────────────────────────
+
+    /// Helper: synthesize a `br show --json` payload. The real
+    /// command emits many more fields; the parser only reads
+    /// title / external_ref / dependencies, so the fixtures stay
+    /// tight.
+    fn beads_json(title: &str, dependencies: serde_json::Value) -> String {
+        serde_json::to_string(&serde_json::json!([{
+            "id": "bd-test",
+            "title": title,
+            "dependencies": dependencies,
+        }]))
+        .unwrap()
+    }
+
+    #[test]
+    fn parse_beads_metadata_reads_title_and_no_parent_when_no_dependencies() {
+        let json = beads_json("standalone task", serde_json::json!([]));
+        let meta = parse_beads_metadata("bd-test", &json).unwrap();
+        assert_eq!(meta.title, "standalone task");
+        assert!(meta.parent_epic.is_none());
+        assert!(meta.external_ref.is_none());
+    }
+
+    #[test]
+    fn parse_beads_metadata_extracts_parent_child_dep() {
+        // Mirrors the real shape we saw in `br show bd-kw93.5 --json`:
+        // one parent-child entry alongside non-parent blocks edges.
+        let json = beads_json(
+            "Phase C.5 sub-task",
+            serde_json::json!([
+                {
+                    "id": "bd-sibling",
+                    "title": "Sibling",
+                    "status": "closed",
+                    "dependency_type": "blocks",
+                },
+                {
+                    "id": "bd-parent",
+                    "title": "Parent epic title",
+                    "status": "open",
+                    "dependency_type": "parent-child",
+                },
+            ]),
+        );
+        let meta = parse_beads_metadata("bd-test", &json).unwrap();
+        let parent = meta.parent_epic.expect("parent extracted");
+        assert_eq!(parent.id, "bd-parent");
+        assert_eq!(parent.title, "Parent epic title");
+        assert_eq!(parent.status, "open");
+    }
+
+    #[test]
+    fn parse_beads_metadata_ignores_non_parent_edges() {
+        // Issues with only `blocks` / `related` / `discovered-from`
+        // edges should NOT report a parent epic.
+        let json = beads_json(
+            "task with non-parent edges",
+            serde_json::json!([
+                {
+                    "id": "bd-other",
+                    "title": "Other",
+                    "status": "open",
+                    "dependency_type": "discovered-from",
+                },
+                {
+                    "id": "bd-blocker",
+                    "title": "Blocker",
+                    "status": "closed",
+                    "dependency_type": "blocks",
+                },
+            ]),
+        );
+        let meta = parse_beads_metadata("bd-test", &json).unwrap();
+        assert!(
+            meta.parent_epic.is_none(),
+            "non-parent-child edges must not surface as parent_epic; got: {:?}",
+            meta.parent_epic
+        );
+    }
+
+    #[test]
+    fn parse_beads_metadata_takes_first_parent_when_multiple_present() {
+        // Defensive: if a sub-task has multiple parent-child edges
+        // (unusual but legal), take the first. The warning is
+        // informational, not load-bearing.
+        let json = beads_json(
+            "doubly parented",
+            serde_json::json!([
+                {"id": "bd-p1", "title": "P1", "status": "open", "dependency_type": "parent-child"},
+                {"id": "bd-p2", "title": "P2", "status": "open", "dependency_type": "parent-child"},
+            ]),
+        );
+        let meta = parse_beads_metadata("bd-test", &json).unwrap();
+        let parent = meta.parent_epic.expect("parent");
+        assert_eq!(parent.id, "bd-p1");
+    }
+
+    #[test]
+    fn default_base_warning_names_child_parent_and_branch_convention() {
+        let parent = ParentEpic {
+            id: "bd-kw93".to_string(),
+            title: "q2 preview epic".to_string(),
+            status: "open".to_string(),
+        };
+        let msg = default_base_warning("bd-kw93.7", &parent);
+        // Child + parent IDs both surfaced.
+        assert!(
+            msg.contains("bd-kw93.7"),
+            "child id named in warning: {msg}"
+        );
+        assert!(msg.contains("bd-kw93"), "parent id named in warning: {msg}");
+        // Parent title surfaced (so the user can identify which epic).
+        assert!(
+            msg.contains("q2 preview epic"),
+            "parent title surfaced: {msg}"
+        );
+        // Convention named so the user knows what to type.
+        assert!(
+            msg.contains("feature/"),
+            "branch convention named so the user knows the recovery: {msg}"
+        );
+        // The override path is documented.
+        assert!(
+            msg.contains("--base"),
+            "warning names the flag to silence/override: {msg}"
+        );
+    }
 
     #[test]
     fn repo_root_returns_absolute_directory_with_dot_git() {

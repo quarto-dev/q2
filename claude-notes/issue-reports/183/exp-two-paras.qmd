@@ -1,0 +1,6 @@
+::: {.list-table}
+- - foo
+  - Add values:
+
+    Then more text.
+:::

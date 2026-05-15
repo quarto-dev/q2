@@ -84,6 +84,22 @@ We will, aspirationally, treat unintentional differences as bugs.
 The "reader" syntax allows users to recover the exact Pandoc markdown behavior when desired.
 With this feature, however, other quarto-markdown conveniences will be absent: no error messages, source tracking, etc.
 
+## Library usage
+
+When used as a library, pampa's default features include filter support
+(`json-filter`, `lua-filter`), which transitively pull in
+`quarto-system-runtime` and `deno_core`. Parser-only consumers (e.g. tooling
+that only needs the qmd reader and writers) can opt out:
+
+```toml
+[dependencies]
+pampa = { ..., default-features = false }
+```
+
+This drops the v8 link dependency, which avoids shared-library link failures
+on Linux x86_64 (`R_X86_64_TPOFF32` against v8 TLS symbols) for consumers
+building a `cdylib`.
+
 ## Current state
 
 Parses [quarto-web](https://github.com/quarto-dev/quarto-web) with a small number of changes

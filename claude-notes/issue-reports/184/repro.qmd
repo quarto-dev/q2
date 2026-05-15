@@ -1,0 +1,7 @@
+Before.
+
+    categories:
+      - A
+      - B
+
+After.
