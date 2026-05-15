@@ -13,6 +13,13 @@ mod commands;
 #[command(version = quarto_util::cli_version())]
 #[command(about = "Quarto CLI", long_about = None)]
 struct Cli {
+    /// Increase log verbosity. Repeat for more detail:
+    /// `-v` adds info, `-vv` adds debug + samod=info,
+    /// `-vvv` adds trace + samod=debug + tower_http=debug.
+    /// `RUST_LOG` overrides this flag entirely when set.
+    #[arg(short = 'v', long = "verbose", global = true, action = clap::ArgAction::Count)]
+    verbose: u8,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -518,16 +525,20 @@ enum TraceCommand {
 }
 
 fn main() -> Result<()> {
-    // Initialize logging
+    let cli = Cli::parse();
+
+    // Initialize logging. The `-v` flag chooses a default filter
+    // directive (see `quarto_util::verbose_to_filter`); `RUST_LOG`,
+    // when set, takes precedence and is parsed directly by
+    // `try_from_default_env`. This matches the long-standing
+    // convention in the workspace.
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "quarto=info".into()),
+                .unwrap_or_else(|_| quarto_util::verbose_to_filter(cli.verbose).into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-
-    let cli = Cli::parse();
 
     match cli.command {
         Commands::Render {
