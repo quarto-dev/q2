@@ -1376,9 +1376,20 @@ fn reverse_smart_quotes(text: &str) -> String {
 // This follows Pandoc's escaping strategy: escape characters that have special
 // markdown meaning to ensure proper roundtripping (qmd -> AST -> qmd).
 // We escape characters defensively when they could trigger markdown syntax.
+//
+// The ASCII apostrophe `'` is escaped when the reader would otherwise
+// misclassify it as a smart-quote open/close: whenever the previous char in
+// the Str body is Unicode alphanumeric AND the next char in the Str body is
+// either absent or non-alphanumeric. The reader's smart-quote-apostrophe
+// classification accepts `'` only when it sits between two alphanumeric
+// characters (e.g. `don't`, `it's`, `ab'9`); in any other position the
+// apostrophe is treated as a quotation mark and produces a Q-2-7 or Q-2-10
+// parse error on the regenerated qmd. See bd-8lcm / issue #201.
 fn escape_markdown(text: &str) -> String {
     let mut result = String::new();
-    for ch in text.chars() {
+    let mut chars = text.chars().peekable();
+    let mut prev_char: Option<char> = None;
+    while let Some(ch) = chars.next() {
         match ch {
             // Characters that must be escaped to avoid triggering markdown syntax:
             '\\' => result.push_str("\\\\"), // Escape character itself
@@ -1400,13 +1411,24 @@ fn escape_markdown(text: &str) -> String {
             '{' => result.push_str("\\{"), // Attribute span open: bare { in
             '}' => result.push_str("\\}"), // a Str body is always a parse
             // error in qmd. Always escape.
+            '\'' => {
+                let next_in_str = chars.peek().copied();
+                let prev_is_alnum = prev_char.is_some_and(|c| c.is_alphanumeric());
+                let next_is_alnum = next_in_str.is_some_and(|c| c.is_alphanumeric());
+                if prev_is_alnum && !next_is_alnum {
+                    result.push_str("\\'");
+                } else {
+                    result.push('\'');
+                }
+            }
 
             // Characters that don't need escaping in most contexts:
-            // . , - + ! ? = : ; / ( ) % & ' "
+            // . , - + ! ? = : ; / ( ) % & "
             // These are only special in very specific contexts and escaping them
             // everywhere would make output unnecessarily verbose.
             _ => result.push(ch),
         }
+        prev_char = Some(ch);
     }
     result
 }
