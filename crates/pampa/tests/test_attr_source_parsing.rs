@@ -426,6 +426,54 @@ fn test_image_with_classes_has_attr_source() {
     assert_source_matches(input, center_source, ".center");
 }
 
+#[test]
+fn test_image_with_multiline_attrs_parses_and_preserves_attrs() {
+    let input = "\
+![](featured.png){
+  .hero-banner
+  .img-fluid
+  fig-align=\"center\"
+  width=\"600px\"
+}
+";
+    let pandoc = parse_qmd(input);
+
+    let Block::Paragraph(para) = &pandoc.blocks[0] else {
+        panic!("Expected Paragraph block, got {:?}", pandoc.blocks[0]);
+    };
+
+    let Inline::Image(image) = &para.content[0] else {
+        panic!("Expected Image inline");
+    };
+
+    assert_eq!(image.attr.1, vec!["hero-banner", "img-fluid"]);
+
+    let kvs: Vec<(&str, &str)> = image
+        .attr
+        .2
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    assert!(
+        kvs.contains(&("fig-align", "center")),
+        "expected fig-align=center in {:?}",
+        kvs
+    );
+    assert!(
+        kvs.contains(&("width", "600px")),
+        "expected width=600px in {:?}",
+        kvs
+    );
+
+    assert_eq!(image.attr_source.classes.len(), 2);
+    assert!(image.attr_source.classes[0].is_some());
+    assert!(image.attr_source.classes[1].is_some());
+    let hero_source = image.attr_source.classes[0].as_ref().unwrap();
+    let fluid_source = image.attr_source.classes[1].as_ref().unwrap();
+    assert_source_matches(input, hero_source, ".hero-banner");
+    assert_source_matches(input, fluid_source, ".img-fluid");
+}
+
 // ============================================================================
 // CodeBlock with Attributes Tests
 // ============================================================================

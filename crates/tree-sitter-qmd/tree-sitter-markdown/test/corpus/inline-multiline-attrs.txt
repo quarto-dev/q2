@@ -1,0 +1,129 @@
+================================================================================
+image with multi-line class-only attrs (quarto-web hero-banner case)
+================================================================================
+![](featured.png){
+  .hero-banner
+  .img-fluid
+}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_image
+        (target
+          (url))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)
+            (attribute_class)))))))
+
+================================================================================
+image with multi-line mixed class + key=value attrs
+================================================================================
+![](featured.png){
+  .hero-banner
+  .img-fluid
+  fig-align="center"
+  width="600px"
+}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_image
+        (target
+          (url))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)
+            (attribute_class)
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
+
+================================================================================
+image with single-line class + leading and trailing whitespace inside braces
+================================================================================
+![](featured.png){ .cls }
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_image
+        (target
+          (url))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)))))))
+
+================================================================================
+span with multi-line class attrs
+================================================================================
+[text]{
+  .a
+  .b
+}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)
+            (attribute_class)))))))
+
+================================================================================
+span with multi-line key=value attrs
+================================================================================
+[text]{
+  k="v"
+  k2="v2"
+}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
+
+================================================================================
+heading with leading whitespace inside block attribute_specifier braces
+================================================================================
+# Title { .cls }
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str)
+      (pandoc_space)
+      (attribute_specifier
+        (commonmark_specifier
+          (attribute_class))))))

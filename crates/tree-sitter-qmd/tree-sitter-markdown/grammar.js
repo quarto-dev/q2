@@ -428,15 +428,16 @@ module.exports = grammar({
        
         attribute_specifier: $ => seq(
             '{',
+            optional($._attr_ws),
             optional(choice(
                 $.raw_specifier, // =aslkjfdasd
-                $.language_specifier, // python 
-                $.commonmark_specifier, 
+                $.language_specifier, // python
+                $.commonmark_specifier,
                 // #id
                 // .class
                 // #id .class
                 // key=value
-                // NOT: python .class 
+                // NOT: python .class
                 alias($._commonmark_specifier_start_with_class, $.commonmark_specifier),
                 alias($._commonmark_specifier_start_with_kv, $.commonmark_specifier)
             )),
@@ -445,6 +446,7 @@ module.exports = grammar({
 
         _pandoc_attr_specifier: $ => seq(
             '{',
+            optional($._attr_ws),
             optional(choice(
                 $.unnumbered_specifier,
                 $.commonmark_specifier,
@@ -470,23 +472,24 @@ module.exports = grammar({
             optional($._inline_whitespace),
             alias(/[#][._A-Za-z0-9-]+/, $.attribute_id),
             optional(
-                seq($._inline_whitespace, 
+                seq($._attr_ws,
                     choice(
-                        $._commonmark_specifier_start_with_class, 
+                        $._commonmark_specifier_start_with_class,
                         $._commonmark_specifier_start_with_kv))),
-            optional($._inline_whitespace),
+            optional($._attr_ws),
         )),
 
         _commonmark_specifier_start_with_class: $ => prec.right(seq(
             alias(/[.][A-Za-z][A-Za-z0-9_.-]*/, $.attribute_class),
-            optional(repeat(seq($._inline_whitespace, alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class)))),
-            optional(seq($._inline_whitespace, $._commonmark_specifier_start_with_kv)),
+            optional(repeat(seq($._attr_ws, alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class)))),
+            optional(seq($._attr_ws, $._commonmark_specifier_start_with_kv)),
+            optional($._attr_ws),
         )),
 
         _commonmark_specifier_start_with_kv: $ => prec.right(seq(
             alias($._commonmark_key_value_specifier, $.key_value_specifier),
-            optional(repeat(seq(optional($._inline_whitespace), alias($._commonmark_key_value_specifier, $.key_value_specifier)))),
-            optional($._inline_whitespace)
+            optional(repeat(seq(optional($._attr_ws), alias($._commonmark_key_value_specifier, $.key_value_specifier)))),
+            optional($._attr_ws)
         )),
 
         _commonmark_key_value_specifier: $ => seq(
@@ -895,6 +898,10 @@ module.exports = grammar({
 
 
         _inline_whitespace: $ => prec(-1, choice($._whitespace, $._soft_line_break)),
+        // Like _inline_whitespace, but matches a run of whitespace/soft-line-breaks
+        // so attribute lists can span multiple lines with leading indent on
+        // continuation lines (e.g. ![](x.png){\n  .a\n  .b\n}).
+        _attr_ws: $ => prec(-1, repeat1(choice($._whitespace, $._soft_line_break))),
         _whitespace: $ => /[ \t]+/,
         _linebreak: $ => /[\r\n]+/,
     },
