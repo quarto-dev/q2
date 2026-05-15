@@ -44,6 +44,15 @@ pub struct QmdWriterContext {
     /// When writing nested Emph/Strong nodes, we check this stack to
     /// choose delimiters that won't create *** sequences.
     pub emphasis_stack: Vec<EmphasisStackFrame>,
+
+    /// Whether the byte most recently emitted into the output stream is
+    /// Unicode-alphanumeric. Consumed by `escape_markdown` when deciding
+    /// whether a `Str`-leading `'` needs to be escaped, so the rule can
+    /// look across inline boundaries (e.g. a `Code` span's closing
+    /// backtick) and not just within a single `Str` body. Updated by
+    /// `write_inline` after each inline emits its bytes and reset to
+    /// `false` at the start of every block. See bd-nsb9 / issue #205.
+    pub prev_emitted_alnum: bool,
 }
 
 impl Default for QmdWriterContext {
@@ -57,6 +66,7 @@ impl QmdWriterContext {
         Self {
             errors: Vec::new(),
             emphasis_stack: Vec::new(),
+            prev_emitted_alnum: false,
         }
     }
 
@@ -1377,15 +1387,23 @@ fn reverse_smart_quotes(text: &str) -> String {
 // markdown meaning to ensure proper roundtripping (qmd -> AST -> qmd).
 // We escape characters defensively when they could trigger markdown syntax.
 //
-// The ASCII apostrophe `'` is escaped when the reader would otherwise
-// misclassify it as a smart-quote open/close: whenever the previous char in
-// the Str body is Unicode alphanumeric AND the next char in the Str body is
-// either absent or non-alphanumeric. The reader's smart-quote-apostrophe
-// classification accepts `'` only when it sits between two alphanumeric
-// characters (e.g. `don't`, `it's`, `ab'9`); in any other position the
-// apostrophe is treated as a quotation mark and produces a Q-2-7 or Q-2-10
-// parse error on the regenerated qmd. See bd-8lcm / issue #201.
-fn escape_markdown(text: &str) -> String {
+// The ASCII apostrophe `'` is escaped whenever the reader would otherwise
+// misclassify it as a smart-quote open/close. The reader's smart-quote
+// classifier accepts `'` as an apostrophe only when it sits between two
+// alphanumeric characters (e.g. `don't`, `it's`, `ab'9`); in any other
+// position the apostrophe is treated as a quotation mark and produces a
+// Q-2-7 / Q-2-10 parse error on the regenerated qmd.
+//
+// The lookup uses three sources of context:
+//   * the previous char in the `Str` body when one exists, otherwise
+//     `start_prev_is_alnum` (carried in from `QmdWriterContext` so the
+//     rule can see across inline boundaries — e.g. a closing backtick
+//     from a preceding `Code` span); see bd-nsb9 / issue #205.
+//   * the next char in the `Str` body when one exists.
+// When either side is absent or non-alphanumeric, the apostrophe is
+// escaped. The original intra-`Str` fix from bd-8lcm / issue #201 is a
+// special case of this rule.
+fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
     let mut result = String::new();
     let mut chars = text.chars().peekable();
     let mut prev_char: Option<char> = None;
@@ -1413,12 +1431,15 @@ fn escape_markdown(text: &str) -> String {
             // error in qmd. Always escape.
             '\'' => {
                 let next_in_str = chars.peek().copied();
-                let prev_is_alnum = prev_char.is_some_and(|c| c.is_alphanumeric());
+                let prev_is_alnum = match prev_char {
+                    Some(c) => c.is_alphanumeric(),
+                    None => start_prev_is_alnum,
+                };
                 let next_is_alnum = next_in_str.is_some_and(|c| c.is_alphanumeric());
-                if prev_is_alnum && !next_is_alnum {
-                    result.push_str("\\'");
-                } else {
+                if prev_is_alnum && next_is_alnum {
                     result.push('\'');
+                } else {
+                    result.push_str("\\'");
                 }
             }
 
@@ -1436,10 +1457,10 @@ fn escape_markdown(text: &str) -> String {
 fn write_str(
     s: &Str,
     buf: &mut dyn std::io::Write,
-    _ctx: &mut QmdWriterContext,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     let text = reverse_smart_quotes(&s.text);
-    let escaped = escape_markdown(&text);
+    let escaped = escape_markdown(&text, ctx.prev_emitted_alnum);
     write!(buf, "{}", escaped)
 }
 
@@ -2183,7 +2204,21 @@ fn write_inline(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    match inline {
+    // Before dispatch: most inline kinds open with a non-alphanumeric byte
+    // (delimiter, bracket, backtick, ...), so any inlines nested inside
+    // them begin with a non-alphanumeric byte-stream context. Reset
+    // `prev_emitted_alnum` accordingly. `Str` is excluded because
+    // `write_str` reads `prev_emitted_alnum` as set by the *preceding*
+    // inline, not by an opener. `Custom` is excluded because it emits no
+    // bytes and must preserve the prior state.
+    if !matches!(
+        inline,
+        crate::pandoc::Inline::Str(_) | crate::pandoc::Inline::Custom(_)
+    ) {
+        ctx.prev_emitted_alnum = false;
+    }
+
+    let result = match inline {
         crate::pandoc::Inline::EditComment(node) => write_editcomment(node, buf, ctx),
         crate::pandoc::Inline::Highlight(node) => write_highlight(node, buf, ctx),
         crate::pandoc::Inline::Delete(node) => write_delete(node, buf, ctx),
@@ -2215,7 +2250,23 @@ fn write_inline(
             // Custom inline nodes are not rendered in QMD output
             Ok(())
         }
+    };
+
+    // After dispatch: refresh `prev_emitted_alnum` to reflect the byte
+    // this inline most recently emitted.
+    match inline {
+        crate::pandoc::Inline::Str(s) => {
+            ctx.prev_emitted_alnum = s.text.chars().last().is_some_and(|c| c.is_alphanumeric());
+        }
+        crate::pandoc::Inline::Custom(_) => {
+            // No bytes emitted; preserve prior state.
+        }
+        // Every other inline kind closes with a non-alphanumeric byte
+        // (delimiter, bracket, backtick, newline, space, ...).
+        _ => ctx.prev_emitted_alnum = false,
     }
+
+    result
 }
 
 fn write_block(
@@ -2223,6 +2274,12 @@ fn write_block(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    // Every block starts on its own line, so the reader's byte-stream
+    // context resets here too. Clear any alphanumeric carry-over from
+    // the previous block so a `Str`-leading `'` at the head of this
+    // block is escaped correctly.
+    ctx.prev_emitted_alnum = false;
+
     match block {
         Block::Plain(plain) => {
             write_plain(plain, buf, ctx)?;
