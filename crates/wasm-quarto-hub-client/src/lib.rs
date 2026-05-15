@@ -672,7 +672,8 @@ fn diagnostic_to_json(diag: &DiagnosticMessage, ctx: &SourceContext) -> JsonDiag
             let kind_str = match detail.kind {
                 quarto_error_reporting::DetailKind::Error => "error",
                 quarto_error_reporting::DetailKind::Info => "info",
-                quarto_error_reporting::DetailKind::Note => "note",
+                quarto_error_reporting::DetailKind::Note
+                | quarto_error_reporting::DetailKind::Faded => "note",
             };
 
             JsonDiagnosticDetail {
