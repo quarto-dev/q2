@@ -343,3 +343,103 @@ nested bullets with sibling inner items before and after the multi-line attrs
               (pandoc_str)
               (pandoc_space)
               (pandoc_str))))))))
+
+================================================================================
+blockquote with multi-line image attrs (class + key=value)
+================================================================================
+> ![](img.png){
+>   .cls1
+>   width="200px"
+> }
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_image
+          (target
+            (url))
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)
+              (key_value_specifier
+                (key_value_key)
+                (key_value_value)))))))))
+
+================================================================================
+blockquote with multi-line span attrs
+================================================================================
+> a [text]{
+>   .cls1
+>   .cls2
+> } end
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_span
+          (content
+            (pandoc_str))
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)
+              (attribute_class))))
+        (pandoc_space)
+        (pandoc_str)))))
+
+================================================================================
+nested blockquote with multi-line span attrs
+================================================================================
+> > [t]{
+> >   .a
+> >   .b
+> > } end
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_block_quote
+        (block_quote_marker)
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_class)
+                (attribute_class))))
+          (pandoc_space)
+          (pandoc_str))))))
+
+================================================================================
+blockquote with multi-line attrs and leading indent before `>`
+================================================================================
+   > ![](img.png){
+   >   .cls
+   > }
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_image
+          (target
+            (url))
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class))))))))

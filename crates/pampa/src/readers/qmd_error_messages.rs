@@ -40,84 +40,9 @@ pub fn produce_diagnostic_messages(
         if matches!(diag.code.as_deref(), Some("Q-2-35") | Some("Q-2-36")) {
             widen_diagnostic_to_line(diag, input_bytes);
         }
-        if diag.code.as_deref() == Some("Q-2-2") {
-            upgrade_q22_to_q238_if_in_blockquote(diag, input_bytes);
-        }
     }
 
     diagnostics
-}
-
-/// Upgrade a generic Q-2-2 attribute-specifier diagnostic to Q-2-38 when the
-/// failing `{` sits on a blockquote-prefixed line.
-///
-/// Background: with bd-rfqz the tree-sitter grammar accepts multi-line inline
-/// `{...}` attribute lists everywhere except inside a blockquote. The block /
-/// inline split means the inline parser only ever sees the first physical line
-/// of the attribute list — the scanner short-circuits SOFT_LINE_ENDING when
-/// the next line begins with `>` (`scanner.c:2380-2407`) — so the same
-/// `(state=2587, sym="_close_block")` error fires for both unclosed
-/// top-level `{...}` *and* the in-blockquote multi-line case. We can't
-/// distinguish those at the `(lr_state, sym)` lookup level, but we can
-/// distinguish them by looking at the source line of the opener.
-///
-/// Detection rule: if the line containing the diagnostic's reported position,
-/// after stripping leading whitespace, begins with `>` (a blockquote prefix),
-/// the user almost certainly hit the blockquote limitation rather than an
-/// arbitrary unclosed `{`. Rewrite the diagnostic to point at Q-2-38 with a
-/// blockquote-specific message and hint.
-///
-/// Q-2-38 is defined in `resources/error-corpus/Q-2-38.json` (with empty
-/// `cases:`, so the auto-generated state table does not contain it — this
-/// override is the sole emitter).
-fn upgrade_q22_to_q238_if_in_blockquote(
-    diag: &mut quarto_error_reporting::DiagnosticMessage,
-    input_bytes: &[u8],
-) {
-    use quarto_source_map::SourceInfo;
-
-    let Some(loc) = diag.location.as_ref() else {
-        return;
-    };
-    let SourceInfo::Original { start_offset, .. } = loc else {
-        return;
-    };
-
-    let pivot = (*start_offset).min(input_bytes.len());
-    let line_start = input_bytes[..pivot]
-        .iter()
-        .rposition(|&b| b == b'\n')
-        .map(|p| p + 1)
-        .unwrap_or(0);
-    let line_end = input_bytes[pivot..]
-        .iter()
-        .position(|&b| b == b'\n' || b == b'\r')
-        .map(|p| pivot + p)
-        .unwrap_or(input_bytes.len());
-
-    let first_non_ws = input_bytes[line_start..line_end]
-        .iter()
-        .position(|&b| b != b' ' && b != b'\t')
-        .map(|p| line_start + p)
-        .unwrap_or(line_end);
-
-    if input_bytes.get(first_non_ws).copied() != Some(b'>') {
-        return;
-    }
-
-    diag.code = Some("Q-2-38".to_string());
-    diag.title = "Multi-line inline attribute list inside blockquote".to_string();
-    diag.problem = Some(
-        "Inside a blockquote, an inline `{...}` attribute list cannot span multiple lines.".into(),
-    );
-    // Drop inherited Q-2-2 notes ("The attribute specifier starts here.") —
-    // the new problem text is the explanation, not a generic hand-off to a
-    // secondary marker.
-    diag.details.clear();
-    diag.hints = vec![
-        "Put the attribute list on a single line, or move this construct out of the blockquote."
-            .into(),
-    ];
 }
 
 /// Widen a diagnostic's location to span the entire line containing the

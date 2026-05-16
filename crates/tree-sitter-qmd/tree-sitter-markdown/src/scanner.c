@@ -2483,6 +2483,35 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             DEBUG_EXP("%d", s->matched);
             DEBUG_LOOKAHEAD;
 
+            // BLOCK_QUOTE.match (scanner.c:568) consumes `>` plus at most one
+            // optional space; any additional gutter alignment left on the
+            // continuation line stalls the second SOFT_LINE_ENDING gate below
+            // at its `second_lookahead > ' '` check (whitespace fails the
+            // test) and forces a paragraph-terminating LINE_ENDING. The
+            // inline `_attr_ws` rule cannot consume LINE_ENDING, so a
+            // multi-space `{...}` continuation inside a blockquote becomes a
+            // hard parse error (was Q-2-38). LIST_ITEM*.match consumes the
+            // full continuation indent intrinsically; FENCED_DIV.match does
+            // not advance at all (line 581-584). Only BLOCK_QUOTE.match can
+            // leave gutter whitespace behind, so this fixup is gated on
+            // the matched stack actually containing a BLOCK_QUOTE.
+            // Additional gates:
+            // - `all_will_be_matched`: skip partial nested-blockquote
+            //   matches (lazy continuation of outer only).
+            // - `might_be_soft_break`: skip ATX-inside contexts.
+            bool any_blockquote_matched = false;
+            for (uint8_t i = 0; i < s->matched; i++) {
+                if (s->open_blocks.items[i] == BLOCK_QUOTE) {
+                    any_blockquote_matched = true;
+                    break;
+                }
+            }
+            if (any_blockquote_matched && all_will_be_matched && might_be_soft_break) {
+                while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+                    advance(s, lexer);
+                }
+            }
+
             if (all_will_be_matched) {
                 if (valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                     EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
