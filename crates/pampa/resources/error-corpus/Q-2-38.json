@@ -1,0 +1,118 @@
+{
+  "code": "Q-2-38",
+  "title": "Unclosed Attribute Specifier",
+  "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+  "notes": [
+    {
+      "message": "The attribute specifier starts here.",
+      "label": "attribute-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "eof-after-id",
+      "description": "Open `{` with id content, no closing `}`.",
+      "content": "[text]{#my-id\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 6,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "eof-after-class",
+      "description": "Open `{` with class content, no closing `}`.",
+      "content": "[text]{.cls\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 6,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "eof-after-kv",
+      "description": "Open `{` with key-value content, no closing `}`.",
+      "content": "[text]{key=\"val\"\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 6,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "multi-line-eof",
+      "description": "Multi-line attribute list, never closed.",
+      "content": "[text]{\n  .cls\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 6,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "image-multi-line-eof",
+      "description": "Image with multi-line attribute list, never closed.",
+      "content": "![](img.png){\n  .cls\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 12,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "multi-line-eof-two-classes",
+      "description": "Multi-line attr with two classes, never closed.",
+      "content": "[text]{\n  .cls1\n  .cls2\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 6,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "multi-line-eof-class-and-kv",
+      "description": "Multi-line attr with class + key-value, never closed.",
+      "content": "[text]{\n  .cls\n  width=\"200px\"\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 6,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "multi-line-eof-two-kvs",
+      "description": "Multi-line attr with two key-value pairs, never closed.",
+      "content": "[text]{\n  k1=\"v1\"\n  k2=\"v2\"\n",
+      "captures": [
+        {
+          "label": "attribute-start",
+          "row": 0,
+          "column": 6,
+          "size": 1
+        }
+      ]
+    }
+  ]
+}

@@ -17814,6 +17814,246 @@
     "name": "Q-2-37/before-close-paren"
   },
   {
+    "state": 2818,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 13,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 6,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/eof-after-id"
+  },
+  {
+    "state": 2746,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 6,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/eof-after-class"
+  },
+  {
+    "state": 3069,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 16,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 6,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/eof-after-kv"
+  },
+  {
+    "state": 2746,
+    "sym": "_close_block",
+    "row": 1,
+    "column": 6,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 6,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/multi-line-eof"
+  },
+  {
+    "state": 2746,
+    "sym": "_close_block",
+    "row": 1,
+    "column": 6,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 12,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/image-multi-line-eof"
+  },
+  {
+    "state": 3279,
+    "sym": "_close_block",
+    "row": 2,
+    "column": 7,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 6,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/multi-line-eof-two-classes"
+  },
+  {
+    "state": 3069,
+    "sym": "_close_block",
+    "row": 2,
+    "column": 15,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 6,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/multi-line-eof-class-and-kv"
+  },
+  {
+    "state": 3069,
+    "sym": "_close_block",
+    "row": 2,
+    "column": 9,
+    "errorInfo": {
+      "code": "Q-2-38",
+      "title": "Unclosed Attribute Specifier",
+      "message": "I reached the end of the block before finding a closing '}' for the attribute specifier.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 6,
+          "size": 1,
+          "lrState": 2587,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-38/multi-line-eof-two-kvs"
+  },
+  {
     "state": 1996,
     "sym": "_close_block",
     "row": 0,

@@ -144,7 +144,9 @@ fn toplevel_unclosed_attr_stays_q_2_2() {
         !diagnostics
             .iter()
             .any(|d| d.code.as_deref() == Some("Q-2-38")),
-        "Q-2-38 should be removed entirely; got: {:?}",
+        "Q-2-38 (Unclosed Attribute Specifier) must not fire on the `{{[` \
+         mismatched-delimiter shape — they share an LR state, and Q-2-2 owns it; \
+         got: {:?}",
         diagnostics
             .iter()
             .map(|d| d.code.as_deref())
