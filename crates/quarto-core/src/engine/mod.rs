@@ -53,6 +53,7 @@
 //! let result = engine.execute(&qmd_content, &context)?;
 //! ```
 
+pub mod capture_splice;
 mod context;
 mod detection;
 mod error;

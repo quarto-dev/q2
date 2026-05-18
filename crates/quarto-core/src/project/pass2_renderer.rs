@@ -534,6 +534,12 @@ pub struct RenderToPreviewAstRenderer {
     /// Synthetic VFS root under which every artifact lives in WASM.
     /// Same semantics as [`RenderToHtmlRenderer::new`].
     vfs_root: std::path::PathBuf,
+    /// bd-lucp: optional engine-execution capture used to splice
+    /// recorded engine output into the AST at preview time. Plumbed
+    /// through to [`crate::pipeline::render_qmd_to_preview_ast`] on
+    /// every per-doc `render` call. None by default (no splice; engine
+    /// cells render as raw source — same as the pre-bd-lucp path).
+    capture: Option<quarto_trace::EngineCapture>,
 }
 
 impl RenderToPreviewAstRenderer {
@@ -542,7 +548,23 @@ impl RenderToPreviewAstRenderer {
     pub fn new(vfs_root: impl Into<std::path::PathBuf>) -> Self {
         Self {
             vfs_root: vfs_root.into(),
+            capture: None,
         }
+    }
+
+    /// Attach a recorded [`EngineCapture`](quarto_trace::EngineCapture).
+    /// The renderer threads the capture into every per-doc
+    /// `render_qmd_to_preview_ast` call so the
+    /// [`CaptureSpliceStage`](crate::stage::CaptureSpliceStage)
+    /// can substitute the captured engine output blocks for the
+    /// document's engine code cells. Used by the WASM
+    /// `render_page_for_preview` entry point when the SPA hands in a
+    /// capture binary doc from the IndexDocument sidecar; native test
+    /// callers either pass `None` (no splice) or hand in a synthetic
+    /// capture.
+    pub fn with_capture(mut self, capture: quarto_trace::EngineCapture) -> Self {
+        self.capture = Some(capture);
+        self
     }
 }
 
@@ -589,9 +611,21 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
 
         let source_name = doc_info.input.to_string_lossy().to_string();
 
-        let preview_output =
-            render_qmd_to_preview_ast(&input_bytes, &source_name, &mut ctx, runtime.clone(), None)
-                .await?;
+        let preview_output = render_qmd_to_preview_ast(
+            &input_bytes,
+            &source_name,
+            &mut ctx,
+            runtime.clone(),
+            None,
+            // bd-lucp: forward the renderer-attached capture (if any)
+            // so `CaptureSpliceStage` can splice recorded engine
+            // output blocks into the live AST. Cloned per-doc so
+            // every page in a project pipeline run sees the same
+            // capture; future per-page capture maps would replace
+            // this with an index-lookup.
+            self.capture.clone(),
+        )
+        .await?;
 
         // Drain Project-scoped artifacts. Identical branching to
         // `RenderToHtmlRenderer` — shared lib dir merges into the
