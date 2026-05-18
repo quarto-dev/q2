@@ -272,6 +272,133 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(code!.textContent).toBe('print("hi")');
     });
 
+    // ─── bd-nxslt: code-cell syntax highlighting in q2 preview ──────────
+    //
+    // Mirrors the HTML writer's `write_highlighted_body` in
+    // `crates/pampa/src/writers/html.rs`. CodeHighlightStage (Rust
+    // side) annotates `CodeBlock.attr.kvs` with `data-hl-spans`,
+    // whose value is the JSON triple-array format defined in
+    // `crates/quarto-highlight-encoding`: `[[start_byte, end_byte,
+    // capture_name], ...]`. The React component must read that
+    // attribute and render nested `<span class="hl-CAP">…</span>`
+    // with `.` replaced by `-` in the capture (`function.builtin`
+    // → `hl-function-builtin`). Plain text falls through unchanged
+    // when the attribute is absent or empty.
+
+    it('CodeBlock renders highlight spans when data-hl-spans is present', () => {
+        // `cat("hi")` — 9 bytes. Spans: cat=function (0,3),
+        // "(" and ")" = punctuation.bracket (3,4) (8,9), "hi" inside
+        // the string = string (4,8). Mirrors what the R grammar
+        // would emit.
+        const text = 'cat("hi")';
+        const spans = [
+            [0, 3, 'function'],
+            [3, 4, 'punctuation.bracket'],
+            [4, 8, 'string'],
+            [8, 9, 'punctuation.bracket'],
+        ];
+        const ast = [{
+            t: 'CodeBlock',
+            c: [
+                ['', ['r'], [['data-hl-spans', JSON.stringify(spans)]]],
+                text,
+            ],
+        }];
+        const { container } = mount(ast);
+        const code = container.querySelector('pre > code');
+        expect(code).not.toBeNull();
+
+        // Span structure: cat in hl-function, parens in
+        // hl-punctuation-bracket, inner literal in hl-string.
+        const highlightSpans = code!.querySelectorAll('span[class^="hl-"]');
+        expect(highlightSpans.length).toBe(4);
+        expect(highlightSpans[0].className).toBe('hl-function');
+        expect(highlightSpans[0].textContent).toBe('cat');
+        expect(highlightSpans[1].className).toBe('hl-punctuation-bracket');
+        expect(highlightSpans[1].textContent).toBe('(');
+        expect(highlightSpans[2].className).toBe('hl-string');
+        expect(highlightSpans[2].textContent).toBe('"hi"');
+        expect(highlightSpans[3].className).toBe('hl-punctuation-bracket');
+        expect(highlightSpans[3].textContent).toBe(')');
+
+        // Whole-text round-trip: every character is preserved.
+        expect(code!.textContent).toBe('cat("hi")');
+
+        // Raw `data-hl-spans` attribute must NOT leak through as a
+        // DOM attribute on the rendered `<pre>` — the writer
+        // consumes it. Matches the Rust HTML writer's behavior
+        // (`!output.html().contains("data-hl-spans=")` in
+        // crates/quarto-core/tests/render_to_html_user_grammars.rs).
+        const pre = container.querySelector('pre');
+        expect(pre).not.toBeNull();
+        expect(pre!.hasAttribute('data-hl-spans')).toBe(false);
+        // The `<code>` likewise must not carry it — only the
+        // emitted spans should reflect it. Other `data-*`
+        // attributes are still forwarded (the existing test
+        // covers `data-loc` plumbing); this assertion narrows to
+        // the consumed key.
+        expect(code!.hasAttribute('data-hl-spans')).toBe(false);
+    });
+
+    it('CodeBlock falls back to plain text when data-hl-spans is absent', () => {
+        // Behaviorally identical to the existing "renders <pre><code
+        // class=lang>" test, but explicit about the no-highlight
+        // path so a regression that incorrectly fires the highlighter
+        // (e.g. on an empty array) gets caught here.
+        const ast = [{
+            t: 'CodeBlock',
+            c: [['', ['r'], []], 'cat("hi")'],
+        }];
+        const { container } = mount(ast);
+        const code = container.querySelector('pre > code')!;
+        expect(code.querySelectorAll('span[class^="hl-"]').length).toBe(0);
+        expect(code.textContent).toBe('cat("hi")');
+    });
+
+    it('CodeBlock falls back to plain text when data-hl-spans is empty array', () => {
+        // Defensive: the encoder may emit `[]` for a code cell whose
+        // grammar lookup succeeded but produced no captures (e.g.
+        // a single-character cell with no matchable tokens). Treat
+        // an empty array the same as missing attribute — no spans
+        // emitted, plain text rendered.
+        const ast = [{
+            t: 'CodeBlock',
+            c: [
+                ['', ['r'], [['data-hl-spans', '[]']]],
+                'x',
+            ],
+        }];
+        const { container } = mount(ast);
+        const code = container.querySelector('pre > code')!;
+        expect(code.querySelectorAll('span[class^="hl-"]').length).toBe(0);
+        expect(code.textContent).toBe('x');
+    });
+
+    it('CodeBlock highlight survives non-ASCII source (utf-8 byte offsets)', () => {
+        // `data-hl-spans` byte offsets index into the utf-8
+        // representation, not utf-16 / char counts. A grammar
+        // matching `α` (a 2-byte char) at offset 0 should still
+        // produce a span containing exactly that character.
+        // Mirrors how the Rust writer slices `&text[cursor..end]`
+        // by byte index — `&str` slicing must hit utf-8 boundaries
+        // and we expect the same here.
+        const text = 'α'; // 2 bytes in utf-8, 1 utf-16 unit in JS string
+        const spans = [[0, 2, 'identifier']];
+        const ast = [{
+            t: 'CodeBlock',
+            c: [
+                ['', ['r'], [['data-hl-spans', JSON.stringify(spans)]]],
+                text,
+            ],
+        }];
+        const { container } = mount(ast);
+        const code = container.querySelector('pre > code')!;
+        const span = code.querySelector('span.hl-identifier')!;
+        expect(span).not.toBeNull();
+        expect(span.textContent).toBe('α');
+        expect(code.textContent).toBe('α');
+    });
+
     it('Image — manifest hit returns the blob URL', () => {
         const ast = [PARA({
             t: 'Image',

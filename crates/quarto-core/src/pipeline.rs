@@ -327,16 +327,17 @@ pub fn build_html_pipeline_stages_with_options(
 /// q2-preview render (Plan 1 §"Multi-plan contract: theme CSS
 /// artifact"); Plan 2A's iframe entry reads it.
 ///
+/// bd-nxslt: `CodeHighlightStage` is **included** in q2-preview
+/// (it's AST-level — annotates `data-hl-spans` on the existing
+/// `CodeBlock` / inline `Code` nodes; the React renderer in
+/// `ts-packages/preview-renderer/src/q2-preview/blocks/CodeBlock.tsx`
+/// reads the attribute and emits the highlighted `<span>` markup).
+///
 /// The unknown-name validator
 /// (`q2_preview_stage_excluded_names_exist_in_html_pipeline`)
 /// fails the test suite if any name here is not an actual stage in
 /// the full HTML pipeline (typo / rename guard).
-const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &[
-    "code-highlight",
-    "math-js",
-    "render-html-body",
-    "apply-template",
-];
+const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &["math-js", "render-html-body", "apply-template"];
 
 /// Build the q2-preview pipeline stages (Plan 1).
 ///
@@ -2194,6 +2195,25 @@ mod tests {
                 "{required} must be present in the q2-preview pipeline; got: {names:?}",
             );
         }
+    }
+
+    /// bd-nxslt: the q2-preview pipeline must run `CodeHighlightStage`
+    /// so that code blocks reach the React renderer with `data-hl-spans`
+    /// annotations and render highlighted (matching `q2 render`'s
+    /// `<span class="hl-...">` markup). The stage is AST-level (it only
+    /// adds an attribute to the existing `CodeBlock` node) so its
+    /// inclusion in q2-preview is safe — the React `CodeBlock`
+    /// component reads the attribute and emits the spans on the JS side.
+    /// If this regresses out, `q2 preview` shows plain `<code>` for R /
+    /// Python / etc. cells; `q2 render` keeps highlighting.
+    #[test]
+    fn q2_preview_pipeline_includes_code_highlight() {
+        let stages = build_q2_preview_pipeline_stages(None, None);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert!(
+            names.contains(&"code-highlight"),
+            "code-highlight must be present in the q2-preview pipeline; got: {names:?}",
+        );
     }
 
     /// Verify every name in [`Q2_PREVIEW_STAGE_EXCLUDED`] is an
