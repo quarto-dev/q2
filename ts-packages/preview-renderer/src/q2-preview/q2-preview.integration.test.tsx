@@ -260,15 +260,24 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(ol!.getAttribute('start')).toBe('3');
     });
 
-    it('CodeBlock renders <pre><code class="lang"> with language class', () => {
+    it('CodeBlock puts the language class on <pre>, leaving <code> bare (matches q2 render)', () => {
+        // bd-y1fs3: q2 render's HTML writer (see
+        // `crates/pampa/src/writers/html.rs::Block::CodeBlock`)
+        // writes `<pre class="…"><code>…</code></pre>` — classes on
+        // the outer container, bare <code>. The React renderer must
+        // match so Quarto theme rules (e.g. `pre.sourceCode > code`)
+        // resolve identically across the two pipelines.
         const ast = [{
             t: 'CodeBlock',
             c: [['', ['python'], []], 'print("hi")'],
         }];
         const { container } = mount(ast);
-        const code = container.querySelector('pre > code');
+        const pre = container.querySelector('pre');
+        const code = pre?.querySelector('code');
+        expect(pre).not.toBeNull();
         expect(code).not.toBeNull();
-        expect(code!.className).toBe('python');
+        expect(pre!.className).toBe('python');
+        expect(code!.className).toBe('');
         expect(code!.textContent).toBe('print("hi")');
     });
 
@@ -305,8 +314,24 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
             ],
         }];
         const { container } = mount(ast);
-        const code = container.querySelector('pre > code');
+        const pre = container.querySelector('pre');
+        const code = pre?.querySelector('code');
+        expect(pre).not.toBeNull();
         expect(code).not.toBeNull();
+
+        // bd-y1fs3: the native HTML writer prepends `sourceCode` to
+        // <pre>'s class list whenever highlight spans are emitted
+        // (`write_code_container_attr` in
+        // `crates/pampa/src/writers/html.rs:487-495`). Quarto theme
+        // CSS keys off `pre.sourceCode` and `pre.sourceCode > code`,
+        // so the React side must reproduce the prefix or the styles
+        // drift.
+        expect(pre!.className.split(/\s+/)).toContain('sourceCode');
+        expect(pre!.className.split(/\s+/)).toContain('r');
+        // <code> is bare under the native writer; the React side
+        // must match so Quarto's `pre.sourceCode > code` CSS rules
+        // resolve identically.
+        expect(code!.className).toBe('');
 
         // Span structure: cat in hl-function, parens in
         // hl-punctuation-bracket, inner literal in hl-string.
@@ -325,18 +350,10 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(code!.textContent).toBe('cat("hi")');
 
         // Raw `data-hl-spans` attribute must NOT leak through as a
-        // DOM attribute on the rendered `<pre>` — the writer
-        // consumes it. Matches the Rust HTML writer's behavior
+        // DOM attribute. Matches the Rust HTML writer's behavior
         // (`!output.html().contains("data-hl-spans=")` in
         // crates/quarto-core/tests/render_to_html_user_grammars.rs).
-        const pre = container.querySelector('pre');
-        expect(pre).not.toBeNull();
         expect(pre!.hasAttribute('data-hl-spans')).toBe(false);
-        // The `<code>` likewise must not carry it — only the
-        // emitted spans should reflect it. Other `data-*`
-        // attributes are still forwarded (the existing test
-        // covers `data-loc` plumbing); this assertion narrows to
-        // the consumed key.
         expect(code!.hasAttribute('data-hl-spans')).toBe(false);
     });
 
