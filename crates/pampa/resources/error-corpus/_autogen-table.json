@@ -2281,7 +2281,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2345,7 +2345,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 1996,
+          "lrState": 1995,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2377,7 +2377,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 1840,
+          "lrState": 1839,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2441,7 +2441,7 @@
           "row": 0,
           "column": 3,
           "size": 1,
-          "lrState": 2080,
+          "lrState": 2079,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2473,7 +2473,7 @@
           "row": 0,
           "column": 1,
           "size": 1,
-          "lrState": 1609,
+          "lrState": 1607,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2633,7 +2633,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 1693,
+          "lrState": 1692,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2665,7 +2665,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2684,7 +2684,7 @@
     "name": "Q-2-12/simple-12"
   },
   {
-    "state": 1944,
+    "state": 1943,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -2697,7 +2697,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2716,7 +2716,7 @@
     "name": "Q-2-12/simple-13"
   },
   {
-    "state": 1943,
+    "state": 1942,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -2729,7 +2729,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2748,7 +2748,7 @@
     "name": "Q-2-12/simple-14"
   },
   {
-    "state": 1948,
+    "state": 1947,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -2761,7 +2761,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2780,7 +2780,7 @@
     "name": "Q-2-12/simple-15"
   },
   {
-    "state": 1949,
+    "state": 1948,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -2793,7 +2793,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2812,7 +2812,7 @@
     "name": "Q-2-12/simple-16"
   },
   {
-    "state": 1940,
+    "state": 1939,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -2825,7 +2825,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2844,7 +2844,7 @@
     "name": "Q-2-12/simple-17"
   },
   {
-    "state": 1939,
+    "state": 1938,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -2857,7 +2857,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2889,7 +2889,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2908,7 +2908,7 @@
     "name": "Q-2-12/simple-19"
   },
   {
-    "state": 1935,
+    "state": 1934,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -2921,7 +2921,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2940,7 +2940,7 @@
     "name": "Q-2-12/simple-20"
   },
   {
-    "state": 1936,
+    "state": 1935,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -2953,7 +2953,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -2972,7 +2972,7 @@
     "name": "Q-2-12/simple-21"
   },
   {
-    "state": 1941,
+    "state": 1940,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -2985,7 +2985,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3004,7 +3004,7 @@
     "name": "Q-2-12/simple-22"
   },
   {
-    "state": 2008,
+    "state": 2007,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -3017,7 +3017,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3036,7 +3036,7 @@
     "name": "Q-2-12/simple-23"
   },
   {
-    "state": 2008,
+    "state": 2007,
     "sym": "_close_block",
     "row": 0,
     "column": 9,
@@ -3049,7 +3049,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3068,7 +3068,7 @@
     "name": "Q-2-12/simple-24"
   },
   {
-    "state": 1942,
+    "state": 1941,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -3081,7 +3081,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3113,7 +3113,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3145,7 +3145,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3177,7 +3177,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3209,7 +3209,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3228,7 +3228,7 @@
     "name": "Q-2-12/simple-29"
   },
   {
-    "state": 1923,
+    "state": 1922,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -3241,7 +3241,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 1197,
+          "lrState": 1165,
           "sym": "pandoc_str_token1",
           "label": "emphasis-start"
         }
@@ -3680,7 +3680,7 @@
     "name": "Q-2-13/simple-13"
   },
   {
-    "state": 1787,
+    "state": 1786,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3710,7 +3710,7 @@
     "name": "Q-2-13/simple-14"
   },
   {
-    "state": 1786,
+    "state": 1785,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -3740,7 +3740,7 @@
     "name": "Q-2-13/simple-15"
   },
   {
-    "state": 1791,
+    "state": 1790,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3770,7 +3770,7 @@
     "name": "Q-2-13/simple-16"
   },
   {
-    "state": 1792,
+    "state": 1791,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -3800,7 +3800,7 @@
     "name": "Q-2-13/simple-17"
   },
   {
-    "state": 1783,
+    "state": 1782,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3830,7 +3830,7 @@
     "name": "Q-2-13/simple-18"
   },
   {
-    "state": 1782,
+    "state": 1781,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -3890,7 +3890,7 @@
     "name": "Q-2-13/simple-20"
   },
   {
-    "state": 1778,
+    "state": 1777,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3920,7 +3920,7 @@
     "name": "Q-2-13/simple-21"
   },
   {
-    "state": 1779,
+    "state": 1778,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3950,7 +3950,7 @@
     "name": "Q-2-13/simple-22"
   },
   {
-    "state": 1784,
+    "state": 1783,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -3980,7 +3980,7 @@
     "name": "Q-2-13/simple-23"
   },
   {
-    "state": 1850,
+    "state": 1849,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -4010,7 +4010,7 @@
     "name": "Q-2-13/simple-24"
   },
   {
-    "state": 1850,
+    "state": 1849,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -4040,7 +4040,7 @@
     "name": "Q-2-13/simple-25"
   },
   {
-    "state": 1785,
+    "state": 1784,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -4190,7 +4190,7 @@
     "name": "Q-2-13/simple-30"
   },
   {
-    "state": 1767,
+    "state": 1766,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -4640,7 +4640,7 @@
     "name": "Q-2-15/simple-13"
   },
   {
-    "state": 1872,
+    "state": 1871,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -4670,7 +4670,7 @@
     "name": "Q-2-15/simple-14"
   },
   {
-    "state": 1871,
+    "state": 1870,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -4700,7 +4700,7 @@
     "name": "Q-2-15/simple-15"
   },
   {
-    "state": 1876,
+    "state": 1875,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -4730,7 +4730,7 @@
     "name": "Q-2-15/simple-16"
   },
   {
-    "state": 1877,
+    "state": 1876,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -4760,7 +4760,7 @@
     "name": "Q-2-15/simple-17"
   },
   {
-    "state": 1868,
+    "state": 1867,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -4790,7 +4790,7 @@
     "name": "Q-2-15/simple-18"
   },
   {
-    "state": 1867,
+    "state": 1866,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -4850,7 +4850,7 @@
     "name": "Q-2-15/simple-20"
   },
   {
-    "state": 1863,
+    "state": 1862,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -4880,7 +4880,7 @@
     "name": "Q-2-15/simple-21"
   },
   {
-    "state": 1864,
+    "state": 1863,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -4910,7 +4910,7 @@
     "name": "Q-2-15/simple-22"
   },
   {
-    "state": 1869,
+    "state": 1868,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -4940,7 +4940,7 @@
     "name": "Q-2-15/simple-23"
   },
   {
-    "state": 1929,
+    "state": 1928,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -4970,7 +4970,7 @@
     "name": "Q-2-15/simple-24"
   },
   {
-    "state": 1929,
+    "state": 1928,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -5000,7 +5000,7 @@
     "name": "Q-2-15/simple-25"
   },
   {
-    "state": 1870,
+    "state": 1869,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -5150,7 +5150,7 @@
     "name": "Q-2-15/simple-30"
   },
   {
-    "state": 1840,
+    "state": 1839,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5180,7 +5180,7 @@
     "name": "Q-2-15/simple-31"
   },
   {
-    "state": 793,
+    "state": 795,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -5193,7 +5193,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5210,7 +5210,7 @@
     "name": "Q-2-16/simple"
   },
   {
-    "state": 793,
+    "state": 795,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -5223,7 +5223,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5570,7 +5570,7 @@
     "name": "Q-2-16/simple-12"
   },
   {
-    "state": 793,
+    "state": 795,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -5583,7 +5583,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5600,7 +5600,7 @@
     "name": "Q-2-16/simple-13"
   },
   {
-    "state": 1636,
+    "state": 1635,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -5613,7 +5613,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5630,7 +5630,7 @@
     "name": "Q-2-16/simple-14"
   },
   {
-    "state": 1635,
+    "state": 1634,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -5643,7 +5643,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5660,7 +5660,7 @@
     "name": "Q-2-16/simple-15"
   },
   {
-    "state": 1636,
+    "state": 1635,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -5673,7 +5673,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5690,7 +5690,7 @@
     "name": "Q-2-16/simple-16"
   },
   {
-    "state": 1635,
+    "state": 1634,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -5703,7 +5703,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5720,7 +5720,7 @@
     "name": "Q-2-16/simple-17"
   },
   {
-    "state": 1644,
+    "state": 1643,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -5733,7 +5733,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5750,7 +5750,7 @@
     "name": "Q-2-16/simple-18"
   },
   {
-    "state": 1645,
+    "state": 1644,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -5763,7 +5763,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5780,7 +5780,7 @@
     "name": "Q-2-16/simple-19"
   },
   {
-    "state": 1632,
+    "state": 1631,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -5793,7 +5793,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5810,7 +5810,7 @@
     "name": "Q-2-16/simple-20"
   },
   {
-    "state": 1631,
+    "state": 1630,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -5823,7 +5823,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5853,7 +5853,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5870,7 +5870,7 @@
     "name": "Q-2-16/simple-22"
   },
   {
-    "state": 1627,
+    "state": 1626,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -5883,7 +5883,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5900,7 +5900,7 @@
     "name": "Q-2-16/simple-23"
   },
   {
-    "state": 1628,
+    "state": 1627,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -5913,7 +5913,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5930,7 +5930,7 @@
     "name": "Q-2-16/simple-24"
   },
   {
-    "state": 1702,
+    "state": 1701,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -5943,7 +5943,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5960,7 +5960,7 @@
     "name": "Q-2-16/simple-25"
   },
   {
-    "state": 1609,
+    "state": 1607,
     "sym": "_close_block",
     "row": 0,
     "column": 2,
@@ -5973,7 +5973,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 793,
+          "lrState": 795,
           "sym": "superscript_delimiter",
           "label": "super-start"
         }
@@ -5990,7 +5990,7 @@
     "name": "Q-2-16/simple-26"
   },
   {
-    "state": 791,
+    "state": 792,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -6003,7 +6003,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6020,7 +6020,7 @@
     "name": "Q-2-17/simple"
   },
   {
-    "state": 791,
+    "state": 792,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -6033,7 +6033,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6380,7 +6380,7 @@
     "name": "Q-2-17/simple-12"
   },
   {
-    "state": 791,
+    "state": 792,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -6393,7 +6393,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6410,7 +6410,7 @@
     "name": "Q-2-17/simple-13"
   },
   {
-    "state": 1559,
+    "state": 1557,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -6423,7 +6423,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6440,7 +6440,7 @@
     "name": "Q-2-17/simple-14"
   },
   {
-    "state": 1558,
+    "state": 1556,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -6453,7 +6453,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6470,7 +6470,7 @@
     "name": "Q-2-17/simple-15"
   },
   {
-    "state": 1559,
+    "state": 1557,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -6483,7 +6483,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6500,7 +6500,7 @@
     "name": "Q-2-17/simple-16"
   },
   {
-    "state": 1558,
+    "state": 1556,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -6513,7 +6513,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6530,7 +6530,7 @@
     "name": "Q-2-17/simple-17"
   },
   {
-    "state": 1563,
+    "state": 1561,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -6543,7 +6543,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6560,7 +6560,7 @@
     "name": "Q-2-17/simple-18"
   },
   {
-    "state": 1564,
+    "state": 1562,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -6573,7 +6573,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6603,7 +6603,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6620,7 +6620,7 @@
     "name": "Q-2-17/simple-20"
   },
   {
-    "state": 1550,
+    "state": 1548,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -6633,7 +6633,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6650,7 +6650,7 @@
     "name": "Q-2-17/simple-21"
   },
   {
-    "state": 1551,
+    "state": 1549,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -6663,7 +6663,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6680,7 +6680,7 @@
     "name": "Q-2-17/simple-22"
   },
   {
-    "state": 1556,
+    "state": 1554,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -6693,7 +6693,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6710,7 +6710,7 @@
     "name": "Q-2-17/simple-23"
   },
   {
-    "state": 1616,
+    "state": 1614,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -6723,7 +6723,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6740,7 +6740,7 @@
     "name": "Q-2-17/simple-24"
   },
   {
-    "state": 1616,
+    "state": 1614,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -6753,7 +6753,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6770,7 +6770,7 @@
     "name": "Q-2-17/simple-25"
   },
   {
-    "state": 1557,
+    "state": 1555,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -6783,7 +6783,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6813,7 +6813,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6843,7 +6843,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6873,7 +6873,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6903,7 +6903,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -6933,7 +6933,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 791,
+          "lrState": 792,
           "sym": "subscript_delimiter",
           "label": "sub-start"
         }
@@ -7670,7 +7670,7 @@
     "name": "Q-2-18/simple-23"
   },
   {
-    "state": 1544,
+    "state": 1542,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -7700,7 +7700,7 @@
     "name": "Q-2-18/simple-24"
   },
   {
-    "state": 1544,
+    "state": 1542,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -8930,7 +8930,7 @@
     "name": "Q-2-19/simple-33"
   },
   {
-    "state": 2080,
+    "state": 2079,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -8960,7 +8960,7 @@
     "name": "Q-2-19/simple-34"
   },
   {
-    "state": 2587,
+    "state": 2590,
     "sym": "_close_block",
     "row": 0,
     "column": 18,
@@ -8973,7 +8973,7 @@
           "row": 0,
           "column": 17,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -10010,7 +10010,7 @@
     "name": "Q-2-20/simple-33"
   },
   {
-    "state": 2080,
+    "state": 2079,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -11150,7 +11150,7 @@
     "name": "Q-2-21/simple-36"
   },
   {
-    "state": 2080,
+    "state": 2079,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -12290,7 +12290,7 @@
     "name": "Q-2-22/simple-36"
   },
   {
-    "state": 2080,
+    "state": 2079,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -12320,7 +12320,7 @@
     "name": "Q-2-22/simple-37"
   },
   {
-    "state": 4256,
+    "state": 4193,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -12333,7 +12333,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 4256,
+          "lrState": 4193,
           "sym": "$",
           "label": "math-start"
         }
@@ -12350,7 +12350,7 @@
     "name": "Q-2-23/simple"
   },
   {
-    "state": 4256,
+    "state": 4193,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -12363,7 +12363,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 4256,
+          "lrState": 4193,
           "sym": "$",
           "label": "math-start"
         }
@@ -12860,7 +12860,7 @@
     "name": "Q-2-23/simple-17"
   },
   {
-    "state": 4256,
+    "state": 4193,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -12873,7 +12873,7 @@
           "row": 0,
           "column": 2,
           "size": 1,
-          "lrState": 4256,
+          "lrState": 4193,
           "sym": "$",
           "label": "math-start"
         }
@@ -12890,7 +12890,7 @@
     "name": "Q-2-23/simple-18"
   },
   {
-    "state": 4256,
+    "state": 4193,
     "sym": "_close_block",
     "row": 0,
     "column": 1,
@@ -12903,7 +12903,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 4256,
+          "lrState": 4193,
           "sym": "$",
           "label": "math-start"
         }
@@ -12920,7 +12920,7 @@
     "name": "Q-2-23/simple-19"
   },
   {
-    "state": 3307,
+    "state": 3429,
     "sym": "_close_block",
     "row": 1,
     "column": 0,
@@ -12933,7 +12933,7 @@
           "row": 0,
           "column": 0,
           "size": 1,
-          "lrState": 3400,
+          "lrState": 3402,
           "sym": "code_span_delimiter",
           "label": "code-start"
         }
@@ -14660,7 +14660,7 @@
     "name": "Q-2-26/simple-17"
   },
   {
-    "state": 1718,
+    "state": 1717,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14690,7 +14690,7 @@
     "name": "Q-2-26/simple-18"
   },
   {
-    "state": 1717,
+    "state": 1716,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -14720,7 +14720,7 @@
     "name": "Q-2-26/simple-19"
   },
   {
-    "state": 1718,
+    "state": 1717,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14750,7 +14750,7 @@
     "name": "Q-2-26/simple-20"
   },
   {
-    "state": 1717,
+    "state": 1716,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -14780,7 +14780,7 @@
     "name": "Q-2-26/simple-21"
   },
   {
-    "state": 1722,
+    "state": 1721,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14810,7 +14810,7 @@
     "name": "Q-2-26/simple-22"
   },
   {
-    "state": 1723,
+    "state": 1722,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -14840,7 +14840,7 @@
     "name": "Q-2-26/simple-23"
   },
   {
-    "state": 1714,
+    "state": 1713,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14870,7 +14870,7 @@
     "name": "Q-2-26/simple-24"
   },
   {
-    "state": 1713,
+    "state": 1712,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -14930,7 +14930,7 @@
     "name": "Q-2-26/simple-26"
   },
   {
-    "state": 1709,
+    "state": 1708,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14960,7 +14960,7 @@
     "name": "Q-2-26/simple-27"
   },
   {
-    "state": 1710,
+    "state": 1709,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -14990,7 +14990,7 @@
     "name": "Q-2-26/simple-28"
   },
   {
-    "state": 1715,
+    "state": 1714,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -15020,7 +15020,7 @@
     "name": "Q-2-26/simple-29"
   },
   {
-    "state": 1772,
+    "state": 1771,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -15050,7 +15050,7 @@
     "name": "Q-2-26/simple-30"
   },
   {
-    "state": 1772,
+    "state": 1771,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -15080,7 +15080,7 @@
     "name": "Q-2-26/simple-31"
   },
   {
-    "state": 1716,
+    "state": 1715,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -15230,7 +15230,7 @@
     "name": "Q-2-26/simple-36"
   },
   {
-    "state": 1693,
+    "state": 1692,
     "sym": "_close_block",
     "row": 0,
     "column": 3,
@@ -15260,7 +15260,7 @@
     "name": "Q-2-26/simple-37"
   },
   {
-    "state": 2828,
+    "state": 2804,
     "sym": "_close_block",
     "row": 0,
     "column": 9,
@@ -15290,7 +15290,7 @@
     "name": "Q-2-27/simple"
   },
   {
-    "state": 2836,
+    "state": 2835,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -15303,7 +15303,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 3150,
+          "lrState": 3151,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15320,7 +15320,7 @@
     "name": "Q-2-27/simple-1"
   },
   {
-    "state": 2823,
+    "state": 2822,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -15333,7 +15333,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 3148,
+          "lrState": 3149,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15350,7 +15350,7 @@
     "name": "Q-2-27/simple-2"
   },
   {
-    "state": 2800,
+    "state": 2799,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -15363,7 +15363,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 3144,
+          "lrState": 3145,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15380,7 +15380,7 @@
     "name": "Q-2-27/simple-3"
   },
   {
-    "state": 2836,
+    "state": 2835,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -15393,7 +15393,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 3150,
+          "lrState": 3151,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15410,7 +15410,7 @@
     "name": "Q-2-27/simple-4"
   },
   {
-    "state": 2853,
+    "state": 2797,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -15423,7 +15423,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 3128,
+          "lrState": 3129,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15440,7 +15440,7 @@
     "name": "Q-2-27/simple-5"
   },
   {
-    "state": 2853,
+    "state": 2797,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -15453,7 +15453,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 3128,
+          "lrState": 3129,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15470,7 +15470,7 @@
     "name": "Q-2-27/simple-6"
   },
   {
-    "state": 2853,
+    "state": 2797,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -15483,7 +15483,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 3128,
+          "lrState": 3129,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15500,7 +15500,7 @@
     "name": "Q-2-27/simple-7"
   },
   {
-    "state": 2853,
+    "state": 2797,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -15513,7 +15513,7 @@
           "row": 0,
           "column": 3,
           "size": 3,
-          "lrState": 3128,
+          "lrState": 3129,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15530,7 +15530,7 @@
     "name": "Q-2-27/simple-8"
   },
   {
-    "state": 2768,
+    "state": 2767,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -15543,7 +15543,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 3138,
+          "lrState": 3139,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15560,7 +15560,7 @@
     "name": "Q-2-27/simple-9"
   },
   {
-    "state": 2758,
+    "state": 2757,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -15573,7 +15573,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 3136,
+          "lrState": 3137,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15590,7 +15590,7 @@
     "name": "Q-2-27/simple-10"
   },
   {
-    "state": 2840,
+    "state": 2852,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -15603,7 +15603,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 3134,
+          "lrState": 3135,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15620,7 +15620,7 @@
     "name": "Q-2-27/simple-11"
   },
   {
-    "state": 2831,
+    "state": 2819,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -15633,7 +15633,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 3130,
+          "lrState": 3131,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15650,7 +15650,7 @@
     "name": "Q-2-27/simple-12"
   },
   {
-    "state": 2811,
+    "state": 2810,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -15663,7 +15663,7 @@
           "row": 0,
           "column": 1,
           "size": 3,
-          "lrState": 3146,
+          "lrState": 3147,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15680,7 +15680,7 @@
     "name": "Q-2-27/simple-13"
   },
   {
-    "state": 2789,
+    "state": 2788,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -15693,7 +15693,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 3142,
+          "lrState": 3143,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15710,7 +15710,7 @@
     "name": "Q-2-27/simple-14"
   },
   {
-    "state": 2780,
+    "state": 2779,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -15723,7 +15723,7 @@
           "row": 0,
           "column": 2,
           "size": 3,
-          "lrState": 3140,
+          "lrState": 3141,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -15740,7 +15740,7 @@
     "name": "Q-2-27/simple-15"
   },
   {
-    "state": 2828,
+    "state": 2804,
     "sym": "_close_block",
     "row": 0,
     "column": 9,
@@ -15770,7 +15770,7 @@
     "name": "Q-2-27/simple-16"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 13,
@@ -15860,7 +15860,7 @@
     "name": "Q-2-27/simple-19"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -15890,7 +15890,7 @@
     "name": "Q-2-27/simple-20"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 30,
@@ -15920,7 +15920,7 @@
     "name": "Q-2-27/simple-21"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 19,
@@ -16010,7 +16010,7 @@
     "name": "Q-2-27/simple-24"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 16,
@@ -16040,7 +16040,7 @@
     "name": "Q-2-27/simple-25"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 29,
@@ -16070,7 +16070,7 @@
     "name": "Q-2-27/simple-26"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 26,
@@ -16100,7 +16100,7 @@
     "name": "Q-2-27/simple-27"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 59,
@@ -16130,7 +16130,7 @@
     "name": "Q-2-27/simple-28"
   },
   {
-    "state": 3111,
+    "state": 3104,
     "sym": "_commonmark_single_quote_string_token2",
     "row": 0,
     "column": 22,
@@ -16160,7 +16160,7 @@
     "name": "Q-2-27/simple-29"
   },
   {
-    "state": 2827,
+    "state": 2763,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -16190,7 +16190,7 @@
     "name": "Q-2-28/simple"
   },
   {
-    "state": 2835,
+    "state": 2834,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -16203,7 +16203,7 @@
           "row": 0,
           "column": 1,
           "size": 4,
-          "lrState": 3149,
+          "lrState": 3150,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16220,7 +16220,7 @@
     "name": "Q-2-28/simple-1"
   },
   {
-    "state": 2822,
+    "state": 2821,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -16233,7 +16233,7 @@
           "row": 0,
           "column": 1,
           "size": 4,
-          "lrState": 3147,
+          "lrState": 3148,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16250,7 +16250,7 @@
     "name": "Q-2-28/simple-2"
   },
   {
-    "state": 2799,
+    "state": 2798,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -16263,7 +16263,7 @@
           "row": 0,
           "column": 2,
           "size": 4,
-          "lrState": 3143,
+          "lrState": 3144,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16280,7 +16280,7 @@
     "name": "Q-2-28/simple-3"
   },
   {
-    "state": 2835,
+    "state": 2834,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -16293,7 +16293,7 @@
           "row": 0,
           "column": 2,
           "size": 4,
-          "lrState": 3149,
+          "lrState": 3150,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16310,7 +16310,7 @@
     "name": "Q-2-28/simple-4"
   },
   {
-    "state": 2852,
+    "state": 2796,
     "sym": "_close_block",
     "row": 0,
     "column": 13,
@@ -16323,7 +16323,7 @@
           "row": 0,
           "column": 3,
           "size": 4,
-          "lrState": 3127,
+          "lrState": 3128,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16340,7 +16340,7 @@
     "name": "Q-2-28/simple-5"
   },
   {
-    "state": 2852,
+    "state": 2796,
     "sym": "_close_block",
     "row": 0,
     "column": 13,
@@ -16353,7 +16353,7 @@
           "row": 0,
           "column": 3,
           "size": 4,
-          "lrState": 3127,
+          "lrState": 3128,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16370,7 +16370,7 @@
     "name": "Q-2-28/simple-6"
   },
   {
-    "state": 2852,
+    "state": 2796,
     "sym": "_close_block",
     "row": 0,
     "column": 13,
@@ -16383,7 +16383,7 @@
           "row": 0,
           "column": 3,
           "size": 4,
-          "lrState": 3127,
+          "lrState": 3128,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16400,7 +16400,7 @@
     "name": "Q-2-28/simple-7"
   },
   {
-    "state": 2852,
+    "state": 2796,
     "sym": "_close_block",
     "row": 0,
     "column": 13,
@@ -16413,7 +16413,7 @@
           "row": 0,
           "column": 3,
           "size": 4,
-          "lrState": 3127,
+          "lrState": 3128,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16430,7 +16430,7 @@
     "name": "Q-2-28/simple-8"
   },
   {
-    "state": 2767,
+    "state": 2766,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -16443,7 +16443,7 @@
           "row": 0,
           "column": 1,
           "size": 4,
-          "lrState": 3137,
+          "lrState": 3138,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16460,7 +16460,7 @@
     "name": "Q-2-28/simple-9"
   },
   {
-    "state": 2757,
+    "state": 2756,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -16473,7 +16473,7 @@
           "row": 0,
           "column": 1,
           "size": 4,
-          "lrState": 3135,
+          "lrState": 3136,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16490,7 +16490,7 @@
     "name": "Q-2-28/simple-10"
   },
   {
-    "state": 2833,
+    "state": 2849,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -16503,7 +16503,7 @@
           "row": 0,
           "column": 2,
           "size": 4,
-          "lrState": 3133,
+          "lrState": 3134,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16520,7 +16520,7 @@
     "name": "Q-2-28/simple-11"
   },
   {
-    "state": 2830,
+    "state": 2818,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -16533,7 +16533,7 @@
           "row": 0,
           "column": 1,
           "size": 4,
-          "lrState": 3129,
+          "lrState": 3130,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16550,7 +16550,7 @@
     "name": "Q-2-28/simple-12"
   },
   {
-    "state": 2810,
+    "state": 2809,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -16563,7 +16563,7 @@
           "row": 0,
           "column": 1,
           "size": 4,
-          "lrState": 3145,
+          "lrState": 3146,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16580,7 +16580,7 @@
     "name": "Q-2-28/simple-13"
   },
   {
-    "state": 2788,
+    "state": 2787,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -16593,7 +16593,7 @@
           "row": 0,
           "column": 2,
           "size": 4,
-          "lrState": 3141,
+          "lrState": 3142,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16610,7 +16610,7 @@
     "name": "Q-2-28/simple-14"
   },
   {
-    "state": 2779,
+    "state": 2778,
     "sym": "_close_block",
     "row": 0,
     "column": 12,
@@ -16623,7 +16623,7 @@
           "row": 0,
           "column": 2,
           "size": 4,
-          "lrState": 3139,
+          "lrState": 3140,
           "sym": "shortcode_delimiter",
           "label": "shortcode-open"
         }
@@ -16640,7 +16640,7 @@
     "name": "Q-2-28/simple-15"
   },
   {
-    "state": 2827,
+    "state": 2763,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -16670,7 +16670,7 @@
     "name": "Q-2-28/simple-16"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 14,
@@ -16760,7 +16760,7 @@
     "name": "Q-2-28/simple-19"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 13,
@@ -16790,7 +16790,7 @@
     "name": "Q-2-28/simple-20"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "_close_block",
     "row": 0,
     "column": 31,
@@ -16820,7 +16820,7 @@
     "name": "Q-2-28/simple-21"
   },
   {
-    "state": 2644,
+    "state": 2625,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 15,
@@ -16910,7 +16910,7 @@
     "name": "Q-2-28/simple-24"
   },
   {
-    "state": 2644,
+    "state": 2625,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 15,
@@ -16940,7 +16940,7 @@
     "name": "Q-2-28/simple-25"
   },
   {
-    "state": 2644,
+    "state": 2625,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 26,
@@ -16970,7 +16970,7 @@
     "name": "Q-2-28/simple-26"
   },
   {
-    "state": 2644,
+    "state": 2625,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 22,
@@ -17000,7 +17000,7 @@
     "name": "Q-2-28/simple-27"
   },
   {
-    "state": 2644,
+    "state": 2625,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 56,
@@ -17095,7 +17095,7 @@
     "name": "Q-2-29/simple"
   },
   {
-    "state": 2701,
+    "state": 2656,
     "sym": "attribute_class",
     "row": 0,
     "column": 20,
@@ -17108,7 +17108,7 @@
           "row": 0,
           "column": 10,
           "size": 9,
-          "lrState": 2701,
+          "lrState": 2656,
           "sym": "key_value_specifier",
           "label": "key-value"
         }
@@ -17125,7 +17125,7 @@
     "name": "Q-2-3/simple"
   },
   {
-    "state": 2701,
+    "state": 2656,
     "sym": "attribute_class",
     "row": 0,
     "column": 46,
@@ -17138,7 +17138,7 @@
           "row": 0,
           "column": 24,
           "size": 21,
-          "lrState": 2701,
+          "lrState": 2656,
           "sym": "key_value_specifier",
           "label": "key-value"
         }
@@ -17155,7 +17155,7 @@
     "name": "Q-2-3/simple-2"
   },
   {
-    "state": 2997,
+    "state": 3001,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -17168,7 +17168,7 @@
           "row": 0,
           "column": 4,
           "size": 1,
-          "lrState": 2997,
+          "lrState": 3001,
           "sym": "target_token2",
           "label": "backtick-start"
         }
@@ -17187,7 +17187,7 @@
     "name": "Q-2-31/image-simple"
   },
   {
-    "state": 2997,
+    "state": 3001,
     "sym": "_close_block",
     "row": 0,
     "column": 8,
@@ -17200,7 +17200,7 @@
           "row": 0,
           "column": 7,
           "size": 1,
-          "lrState": 2997,
+          "lrState": 3001,
           "sym": "target_token2",
           "label": "backtick-start"
         }
@@ -17219,7 +17219,7 @@
     "name": "Q-2-31/link-simple"
   },
   {
-    "state": 2997,
+    "state": 3001,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -17232,7 +17232,7 @@
           "row": 0,
           "column": 10,
           "size": 1,
-          "lrState": 2997,
+          "lrState": 3001,
           "sym": "target_token2",
           "label": "backtick-start"
         }
@@ -17251,7 +17251,7 @@
     "name": "Q-2-31/image-mixed"
   },
   {
-    "state": 2997,
+    "state": 3001,
     "sym": "_close_block",
     "row": 0,
     "column": 14,
@@ -17264,7 +17264,7 @@
           "row": 0,
           "column": 13,
           "size": 1,
-          "lrState": 2997,
+          "lrState": 3001,
           "sym": "target_token2",
           "label": "backtick-start"
         }
@@ -17313,7 +17313,7 @@
     "name": "Q-2-32/basic-1"
   },
   {
-    "state": 1197,
+    "state": 1165,
     "sym": "_triple_star_error",
     "row": 0,
     "column": 5,
@@ -17568,7 +17568,7 @@
     "name": "Q-2-32/basic-18"
   },
   {
-    "state": 3520,
+    "state": 3521,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 10,
@@ -17583,7 +17583,7 @@
     "name": "Q-2-33/image-with-space"
   },
   {
-    "state": 3520,
+    "state": 3521,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 14,
@@ -17598,7 +17598,7 @@
     "name": "Q-2-33/link-with-space"
   },
   {
-    "state": 3520,
+    "state": 3521,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 15,
@@ -17613,7 +17613,7 @@
     "name": "Q-2-33/image-with-multiple-spaces"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 9,
@@ -17628,7 +17628,7 @@
     "name": "Q-2-34/basic"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 22,
@@ -17643,7 +17643,7 @@
     "name": "Q-2-34/real-world-example"
   },
   {
-    "state": 3497,
+    "state": 3499,
     "sym": "pandoc_str_token1",
     "row": 0,
     "column": 27,
@@ -17718,7 +17718,7 @@
     "name": "Q-2-35/indented-blockquote"
   },
   {
-    "state": 2623,
+    "state": 2620,
     "sym": "_language_specifier_token",
     "row": 0,
     "column": 5,
@@ -17733,7 +17733,7 @@
     "name": "Q-2-36/bare-label"
   },
   {
-    "state": 2489,
+    "state": 2476,
     "sym": "shortcode_name",
     "row": 0,
     "column": 4,
@@ -17748,7 +17748,7 @@
     "name": "Q-2-36/comma-args"
   },
   {
-    "state": 2489,
+    "state": 2476,
     "sym": "shortcode_name",
     "row": 0,
     "column": 4,
@@ -17763,7 +17763,7 @@
     "name": "Q-2-36/comma-and-kv"
   },
   {
-    "state": 2819,
+    "state": 2840,
     "sym": "shortcode_name",
     "row": 1,
     "column": 0,
@@ -17780,7 +17780,7 @@
     "name": "Q-2-37/after-scheme"
   },
   {
-    "state": 2819,
+    "state": 2840,
     "sym": "shortcode_name",
     "row": 1,
     "column": 0,
@@ -17797,7 +17797,7 @@
     "name": "Q-2-37/mid-destination"
   },
   {
-    "state": 2819,
+    "state": 2840,
     "sym": ")",
     "row": 1,
     "column": 0,
@@ -17814,7 +17814,7 @@
     "name": "Q-2-37/before-close-paren"
   },
   {
-    "state": 2818,
+    "state": 2776,
     "sym": "_close_block",
     "row": 0,
     "column": 13,
@@ -17827,7 +17827,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -17844,7 +17844,7 @@
     "name": "Q-2-38/eof-after-id"
   },
   {
-    "state": 2746,
+    "state": 2741,
     "sym": "_close_block",
     "row": 0,
     "column": 11,
@@ -17857,7 +17857,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -17874,7 +17874,7 @@
     "name": "Q-2-38/eof-after-class"
   },
   {
-    "state": 3069,
+    "state": 3072,
     "sym": "_close_block",
     "row": 0,
     "column": 16,
@@ -17887,7 +17887,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -17904,7 +17904,7 @@
     "name": "Q-2-38/eof-after-kv"
   },
   {
-    "state": 2746,
+    "state": 2741,
     "sym": "_close_block",
     "row": 1,
     "column": 6,
@@ -17917,7 +17917,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -17934,7 +17934,7 @@
     "name": "Q-2-38/multi-line-eof"
   },
   {
-    "state": 2746,
+    "state": 2741,
     "sym": "_close_block",
     "row": 1,
     "column": 6,
@@ -17947,7 +17947,7 @@
           "row": 0,
           "column": 12,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -17964,7 +17964,7 @@
     "name": "Q-2-38/image-multi-line-eof"
   },
   {
-    "state": 3279,
+    "state": 3193,
     "sym": "_close_block",
     "row": 2,
     "column": 7,
@@ -17977,7 +17977,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -17994,7 +17994,7 @@
     "name": "Q-2-38/multi-line-eof-two-classes"
   },
   {
-    "state": 3069,
+    "state": 3072,
     "sym": "_close_block",
     "row": 2,
     "column": 15,
@@ -18007,7 +18007,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -18024,7 +18024,7 @@
     "name": "Q-2-38/multi-line-eof-class-and-kv"
   },
   {
-    "state": 3069,
+    "state": 3072,
     "sym": "_close_block",
     "row": 2,
     "column": 9,
@@ -18037,7 +18037,7 @@
           "row": 0,
           "column": 6,
           "size": 1,
-          "lrState": 2587,
+          "lrState": 2590,
           "sym": "{",
           "label": "attribute-start"
         }
@@ -18054,7 +18054,7 @@
     "name": "Q-2-38/multi-line-eof-two-kvs"
   },
   {
-    "state": 1996,
+    "state": 1995,
     "sym": "_close_block",
     "row": 0,
     "column": 17,
@@ -18084,7 +18084,7 @@
     "name": "Q-2-5/simple"
   },
   {
-    "state": 1996,
+    "state": 1995,
     "sym": "_close_block",
     "row": 0,
     "column": 10,
@@ -18534,7 +18534,7 @@
     "name": "Q-2-5/at-start-13"
   },
   {
-    "state": 2024,
+    "state": 2023,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -18564,7 +18564,7 @@
     "name": "Q-2-5/at-start-14"
   },
   {
-    "state": 2023,
+    "state": 2022,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -18594,7 +18594,7 @@
     "name": "Q-2-5/at-start-15"
   },
   {
-    "state": 2028,
+    "state": 2027,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -18624,7 +18624,7 @@
     "name": "Q-2-5/at-start-16"
   },
   {
-    "state": 2029,
+    "state": 2028,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -18654,7 +18654,7 @@
     "name": "Q-2-5/at-start-17"
   },
   {
-    "state": 2020,
+    "state": 2392,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -18684,7 +18684,7 @@
     "name": "Q-2-5/at-start-18"
   },
   {
-    "state": 2019,
+    "state": 2018,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -18744,7 +18744,7 @@
     "name": "Q-2-5/at-start-20"
   },
   {
-    "state": 2015,
+    "state": 2014,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -18774,7 +18774,7 @@
     "name": "Q-2-5/at-start-21"
   },
   {
-    "state": 2016,
+    "state": 2015,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -18804,7 +18804,7 @@
     "name": "Q-2-5/at-start-22"
   },
   {
-    "state": 2021,
+    "state": 2020,
     "sym": "_close_block",
     "row": 0,
     "column": 4,
@@ -18834,7 +18834,7 @@
     "name": "Q-2-5/at-start-23"
   },
   {
-    "state": 2076,
+    "state": 2075,
     "sym": "_close_block",
     "row": 0,
     "column": 6,
@@ -18864,7 +18864,7 @@
     "name": "Q-2-5/at-start-24"
   },
   {
-    "state": 2076,
+    "state": 2075,
     "sym": "_close_block",
     "row": 0,
     "column": 7,
@@ -18894,7 +18894,7 @@
     "name": "Q-2-5/at-start-25"
   },
   {
-    "state": 2022,
+    "state": 2021,
     "sym": "_close_block",
     "row": 0,
     "column": 5,
@@ -19044,7 +19044,7 @@
     "name": "Q-2-5/at-start-30"
   },
   {
-    "state": 1996,
+    "state": 1995,
     "sym": "_close_block",
     "row": 0,
     "column": 2,

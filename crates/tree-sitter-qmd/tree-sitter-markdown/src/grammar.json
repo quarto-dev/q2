@@ -3570,6 +3570,10 @@
         {
           "type": "STRING",
           "value": "|"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_pandoc_lt_str"
         }
       ]
     },
@@ -5108,6 +5112,10 @@
     {
       "type": "SYMBOL",
       "name": "html_element"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_pandoc_lt_str"
     },
     {
       "type": "SYMBOL",

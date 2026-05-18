@@ -121,6 +121,13 @@ typedef enum {
 
     HTML_ELEMENT, // simply for good error reporting
 
+    // bd-j9cf: emitted when '<' is at the current position but no HTML
+    // construct (autolink, raw_specifier, html_comment, html_element) is
+    // recognized at this site. Consumes only the '<' character so the
+    // parser can treat it as a plain Str literal. See grammar.js
+    // (`_pandoc_lt_str`) and parse_open_angle_brace below.
+    LT_STR_LITERAL,
+
     PIPE_TABLE_DELIMITER, // to allow naked '|' in markdown
 
     PANDOC_LINE_BREAK,
@@ -239,6 +246,8 @@ static char* token_names[] = {
     "INLINE_NOTE_REFERENCE",
 
     "HTML_ELEMENT", // simply for good error reporting
+
+    "LT_STR_LITERAL", // bd-j9cf: bare '<' that is not an HTML construct
 
     "PIPE_TABLE_DELIMITER",
 
@@ -1599,7 +1608,9 @@ static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
 }
 
 static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
-    if (!valid_symbols[AUTOLINK] && !valid_symbols[RAW_SPECIFIER] && !valid_symbols[HTML_COMMENT]) {
+    bool lt_str_valid = valid_symbols[LT_STR_LITERAL];
+    if (!valid_symbols[AUTOLINK] && !valid_symbols[RAW_SPECIFIER] &&
+        !valid_symbols[HTML_COMMENT] && !lt_str_valid) {
         return false;
     }
 
@@ -1609,14 +1620,29 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
     }
     lexer->advance(lexer, false);
 
+    // bd-j9cf: fix the fallback end-of-token at exactly one byte past '<'.
+    // Subsequent advances are lookahead until the next mark_end call. If the
+    // scan loop below walks to EOF without finding a closing delimiter, we
+    // fall back to emitting LT_STR_LITERAL, which consumes only the '<'.
+    lexer->mark_end(lexer);
+
     if (lexer->lookahead == '!') {
-        return parse_html_comment(lexer, valid_symbols);
+        if (valid_symbols[HTML_COMMENT]) {
+            return parse_html_comment(lexer, valid_symbols);
+        }
+        // HTML_COMMENT was not requested here; treat '<' as a Str literal
+        // if the grammar allows it.
+        if (lt_str_valid) {
+            EMIT_TOKEN(LT_STR_LITERAL);
+        }
+        return false;
     }
 
     // consume all characters until one of:
     // - '}': that was a raw specifier
-    // - '>': that was an autolink
-    // - ' ', '\t', EOF: that was a bad lex
+    // - '>': that was an autolink or html_element
+    // - EOF: no HTML construct matched; emit LT_STR_LITERAL (bd-j9cf) so the
+    //   bare '<' becomes a plain Str instead of a parse error.
 
     bool could_be_autolink = lexer->lookahead != '/'; // very first character can't be '/' in autolinks.
     bool had_url_like_character = false;
@@ -1630,13 +1656,22 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
             EMIT_TOKEN(RAW_SPECIFIER);
         } else if (valid_symbols[AUTOLINK] && could_be_autolink && had_url_like_character && lexer->lookahead == '>') {
             lexer->advance(lexer, false); // we want to consume '>' for autolinks
+            lexer->mark_end(lexer);
             EMIT_TOKEN(AUTOLINK);
         } else if (lexer->lookahead == '>') {
             // this token is never valid, but we emit it for error messages
             lexer->advance(lexer, false);
+            lexer->mark_end(lexer);
             EMIT_TOKEN(HTML_ELEMENT);
         }
         lexer->advance(lexer, false);
+    }
+
+    // Reached EOF without finding a closing delimiter. If the grammar
+    // permits a bare '<' as a Str literal here, emit LT_STR_LITERAL —
+    // mark_end is still at '<'+1, so only the '<' character is consumed.
+    if (lt_str_valid) {
+        EMIT_TOKEN(LT_STR_LITERAL);
     }
     return false;
 }
@@ -2180,10 +2215,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 
     switch (lexer->lookahead) {
         case '<':
-            // Handle HTML comments, raw_specifiers (qmd's raw reader extension), autolinks
-            if (valid_symbols[HTML_COMMENT] || 
-                valid_symbols[AUTOLINK] || 
-                valid_symbols[RAW_SPECIFIER]) {
+            // Handle HTML comments, raw_specifiers (qmd's raw reader extension),
+            // autolinks, and (bd-j9cf) bare '<' as Str literal.
+            if (valid_symbols[HTML_COMMENT] ||
+                valid_symbols[AUTOLINK] ||
+                valid_symbols[RAW_SPECIFIER] ||
+                valid_symbols[LT_STR_LITERAL]) {
                 return parse_open_angle_brace(lexer, valid_symbols);
             }
             break;
