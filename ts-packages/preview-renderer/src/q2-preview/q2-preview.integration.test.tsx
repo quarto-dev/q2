@@ -416,6 +416,57 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(code.textContent).toBe('α');
     });
 
+    // ─── bd-coffj: Div with class="section" → <section> tag ──────────────
+    //
+    // The native HTML writer
+    // (`crates/pampa/src/writers/html.rs::Block::Div`, lines 1129-1142)
+    // emits `<section>...</section>` for a Pandoc `Div` whose class
+    // list contains `"section"` — this is the sectionize transform's
+    // output. The React `Div` component must match: Quarto theme CSS
+    // keys off the `<section>` tag (e.g.
+    // `main.content > p:has(+ section) { margin-bottom: 2rem }`),
+    // and `<div class="section">` doesn't trigger those rules. The
+    // visible symptom is a paragraph-before-section bottom-margin of
+    // 17px in preview vs 34px in render against the fixture website.
+
+    it('Div with class="section" renders as <section> (sectionize transform)', () => {
+        const ast = [{
+            t: 'Div',
+            c: [
+                ['a-section', ['section', 'level3'], []],
+                [{ t: 'Header', c: [3, ['', [], []], [STR('A section')]] }],
+            ],
+        }];
+        const { container } = mount(ast);
+        // The container itself must be a <section>, not a <div>.
+        const section = container.querySelector('section.section.level3');
+        expect(section).not.toBeNull();
+        expect(section!.id).toBe('a-section');
+        expect(section!.className).toBe('section level3');
+        // Negative check: there must NOT be a <div> with the section
+        // classes for this Pandoc Div. (Other unrelated <div>s in
+        // the rendered tree are fine.)
+        const divWithSection = container.querySelector('div.section.level3');
+        expect(divWithSection).toBeNull();
+    });
+
+    it('Div without "section" class still renders as <div>', () => {
+        const ast = [{
+            t: 'Div',
+            c: [
+                ['my-callout', ['callout-note'], []],
+                [PARA(STR('callout body'))],
+            ],
+        }];
+        const { container } = mount(ast);
+        // Regression guard: only `section` triggers the elevation;
+        // other Quarto-extension classes (callouts, columns, etc.)
+        // keep <div>.
+        const div = container.querySelector('div.callout-note');
+        expect(div).not.toBeNull();
+        expect(container.querySelector('section.callout-note')).toBeNull();
+    });
+
     it('Image — manifest hit returns the blob URL', () => {
         const ast = [PARA({
             t: 'Image',

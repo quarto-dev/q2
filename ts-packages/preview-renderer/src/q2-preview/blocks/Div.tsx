@@ -1,5 +1,6 @@
 import { renderChildren } from '../../framework';
 import type { DivBlock, NodeArgs } from '../../framework';
+import { SECTION } from '../quartoClasses';
 
 export const Div = (args: NodeArgs<DivBlock>) => {
     const [[id, classes, kvs]] = args.node.c;
@@ -8,6 +9,17 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     if (classes.length) props.className = classes.join(' ');
     for (const [k, v] of kvs) {
         if (k.startsWith('data-') || k === 'role') props[k] = v;
+    }
+    // bd-coffj: mirror the native HTML writer
+    // (`crates/pampa/src/writers/html.rs::Block::Div`) — a Pandoc Div
+    // whose class list contains "section" (output of the sectionize
+    // transform) renders as `<section>`, not `<div>`. Quarto theme
+    // CSS keys off the `<section>` tag (e.g.
+    // `main.content > p:has(+ section) { margin-bottom: 2rem }`), so
+    // emitting `<div>` here causes visible spacing drift between
+    // `q2 render` and `q2 preview`.
+    if (classes.includes(SECTION)) {
+        return <section {...props}>{renderChildren(args)}</section>;
     }
     return <div {...props}>{renderChildren(args)}</div>;
 };
