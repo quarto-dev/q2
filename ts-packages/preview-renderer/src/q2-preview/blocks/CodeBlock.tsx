@@ -163,19 +163,22 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
 
 export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     const [[id, classes, kvs], code] = node.c;
-    const codeProps: Record<string, string> = {};
+    // bd-y1fs3: mirror the native HTML writer
+    // (`crates/pampa/src/writers/html.rs::Block::CodeBlock` +
+    // `write_code_container_attr`): the `<pre>` container carries
+    // the `Attr` (id, classes, and the non-`data-hl-spans` kvs); the
+    // inner `<code>` is bare. Quarto's theme CSS keys off
+    // `pre.sourceCode` / `pre.sourceCode > code`, so any divergence
+    // here visibly drifts the rendered styling between `q2 render`
+    // and `q2 preview`.
     const preProps: Record<string, string> = {};
     if (id) preProps.id = id;
-    if (classes.length) {
-        // Pandoc writer puts language classes on <code>; Bootstrap
-        // and pampa's HTML writer follow the same convention.
-        codeProps.className = classes.join(' ');
-    }
+
     // bd-nxslt: `data-hl-spans` is consumed by the renderer (we emit
     // its content as nested `<span>` markup), so it must NOT be
-    // forwarded to the DOM as a raw `data-*` attribute. Other
-    // `data-*` keys (e.g. `data-loc`) still pass through for
-    // downstream consumers (source-mapping, plugin attribute echo).
+    // forwarded as a raw DOM attribute. Other `data-*` keys (e.g.
+    // `data-loc`) still pass through to the `<pre>` for downstream
+    // consumers (source-mapping, plugin attribute echo).
     let hlSpansRaw: string | undefined;
     for (const [k, v] of kvs) {
         if (k === HL_SPANS_KEY) {
@@ -185,11 +188,24 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
         if (k.startsWith('data-')) preProps[k] = v;
     }
     const spans = decodeHighlightSpans(hlSpansRaw);
+
+    // bd-y1fs3: when highlight spans are present, prepend
+    // `sourceCode` to the class list — matches the native writer
+    // (`write_code_container_attr` at
+    // `crates/pampa/src/writers/html.rs:487-495`). If the author's
+    // own class list already contains `sourceCode`, don't double it.
+    if (classes.length || spans !== null) {
+        const combined: string[] = [];
+        if (spans !== null && !classes.includes('sourceCode')) {
+            combined.push('sourceCode');
+        }
+        for (const c of classes) combined.push(c);
+        if (combined.length) preProps.className = combined.join(' ');
+    }
+
     return (
         <pre {...preProps}>
-            <code {...codeProps}>
-                {spans === null ? code : renderHighlighted(code, spans)}
-            </code>
+            <code>{spans === null ? code : renderHighlighted(code, spans)}</code>
         </pre>
     );
 };
