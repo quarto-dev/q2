@@ -1204,8 +1204,14 @@ pub async fn render_page_for_preview(
         }
     };
 
-    let engine_registry = match build_replay_registry_from(capture_gz_json) {
-        Ok(reg) => reg,
+    // bd-lucp: deserialize the gzipped JSON capture into an
+    // `EngineCapture`. Both render branches (single-doc + project)
+    // thread this into the q2-preview pipeline's
+    // `CaptureSpliceStage` rather than constructing a
+    // `ReplayEngine`-bearing registry; `ReplayEngine` remains the
+    // bd-45yw regression-testing tool and is not on this path.
+    let capture = match parse_capture_from(capture_gz_json) {
+        Ok(cap) => cap,
         Err(e) => {
             return error_response(format!("Failed to parse capture: {}", e));
         }
@@ -1225,7 +1231,7 @@ pub async fn render_page_for_preview(
             &project,
             user_grammars,
             true,
-            engine_registry,
+            capture,
         )
         .await;
     }
@@ -1242,19 +1248,24 @@ pub async fn render_page_for_preview(
         project,
         user_grammars,
         true,
-        engine_registry,
+        capture,
     )
     .await
 }
 
-/// Ungzip + JSON-deserialize a capture payload, then turn it into an
-/// `EngineRegistry::with_replay`. `None` input → `None` output (caller
-/// uses the default registry); an empty `Vec` is treated the same as
-/// `None` for symmetry with WASM/JS callers that may pass an empty
-/// Uint8Array to mean "no capture."
-fn build_replay_registry_from(
+/// Ungzip + JSON-deserialize a capture payload into a typed
+/// [`EngineCapture`](quarto_trace::EngineCapture). `None` input →
+/// `None` output; an empty `Vec` is treated the same as `None` for
+/// symmetry with WASM/JS callers that may pass an empty `Uint8Array`
+/// to mean "no capture."
+///
+/// bd-lucp: this used to construct an
+/// `EngineRegistry::with_replay(capture)`, but the preview path no
+/// longer routes through `ReplayEngine` — see
+/// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
+fn parse_capture_from(
     capture_gz_json: Option<Vec<u8>>,
-) -> Result<Option<quarto_core::engine::EngineRegistry>, String> {
+) -> Result<Option<quarto_trace::EngineCapture>, String> {
     use std::io::Read;
 
     let Some(bytes) = capture_gz_json else {
@@ -1271,9 +1282,7 @@ fn build_replay_registry_from(
         .map_err(|e| format!("ungzip failed: {}", e))?;
     let capture: quarto_trace::EngineCapture =
         serde_json::from_slice(&json).map_err(|e| format!("JSON parse failed: {}", e))?;
-    Ok(Some(quarto_core::engine::EngineRegistry::with_replay(
-        capture,
-    )))
+    Ok(Some(capture))
 }
 
 /// Single-doc render path — used by `render_qmd` directly and by
@@ -1290,7 +1299,12 @@ async fn render_single_doc_to_response(
     project: &ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
-    engine_registry: Option<quarto_core::engine::EngineRegistry>,
+    // bd-lucp: recorded engine capture for the preview-time AST-splice
+    // path. Forwarded to `render_qmd_to_preview_ast` (which threads it
+    // into `CaptureSpliceStage`) on the preview branch. The HTML
+    // branch ignores it (HTML renders don't consume captures in the
+    // WASM today — `q2 render` natively runs engines instead).
+    capture: Option<quarto_trace::EngineCapture>,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
@@ -1342,7 +1356,8 @@ async fn render_single_doc_to_response(
                 &source_name,
                 &mut ctx,
                 runtime_arc,
-                engine_registry,
+                None,
+                capture,
             )
             .await
             {
@@ -1434,12 +1449,12 @@ async fn render_project_active_page_to_response(
     mut project: ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
-    // Phase C.4: capture-replay registry threaded through from the
-    // WASM entry point. Currently consumed only by the single-doc
-    // branch (`render_qmd_to_preview_ast`); the project-pipeline path
-    // (`RenderToPreviewAstRenderer`) does not yet plumb it through
-    // pass-2 renderers — a known gap tracked alongside C.4 polish.
-    _engine_registry: Option<quarto_core::engine::EngineRegistry>,
+    // bd-lucp: recorded engine capture attached to the q2-preview
+    // pass-2 renderer. `RenderToPreviewAstRenderer::with_capture`
+    // threads it into every per-doc `render_qmd_to_preview_ast` call;
+    // [`CaptureSpliceStage`] inside the q2-preview pipeline applies the
+    // splice. The non-preview branch ignores it.
+    capture: Option<quarto_trace::EngineCapture>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use quarto_core::project::pass2_renderer::{
@@ -1495,7 +1510,14 @@ async fn render_project_active_page_to_response(
     let kind = format.pipeline_kind;
     let summary = match kind {
         Some("preview") => {
-            let renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
+            let mut renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
+            // bd-lucp: when a capture is present, attach it to the
+            // renderer so `CaptureSpliceStage` (inserted by
+            // `build_q2_preview_pipeline_stages`) can splice recorded
+            // engine output blocks into each per-doc AST.
+            if let Some(cap) = capture {
+                renderer = renderer.with_capture(cap);
+            }
             let mut pipeline = ProjectPipeline::with_renderer(
                 &mut project,
                 project_type,

@@ -542,8 +542,24 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     docId: string,
   ): Promise<{ content: Uint8Array; mimeType: string } | null> {
     if (!state.repo) return null;
+    // bd-4uvv: samod's TS `repo.find()` requires the `automerge:<id>`
+    // URL scheme; the bare docId we get from the IndexDocument capture
+    // sidecar throws `Invalid AutomergeUrl`. The text-doc loader
+    // (`loadFileDocuments`) normalizes the same way — keep both call
+    // sites consistent.
+    //
+    // `String(docId)` coerces the value before `.startsWith` because
+    // automerge's read proxy can return string-valued fields as
+    // `RawString` (no `.startsWith` method) depending on how the doc
+    // was constructed. `loadFileDocuments` reads from the same shape;
+    // bare-id callers that synthesize an `automerge:` URL must
+    // coerce first.
+    const docIdStr = String(docId);
+    const normalized = docIdStr.startsWith('automerge:')
+      ? docIdStr
+      : `automerge:${docIdStr}`;
     try {
-      const handle = await findDoc<BinaryDocumentContent>(docId as DocumentId);
+      const handle = await findDoc<BinaryDocumentContent>(normalized as DocumentId);
       const doc = handle.doc();
       if (!doc || !isBinaryDocument(doc)) return null;
       return { content: doc.content, mimeType: doc.mimeType };

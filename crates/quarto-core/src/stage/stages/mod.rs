@@ -29,6 +29,11 @@ mod ast_transforms;
 // module's own docs for the full rationale.
 #[cfg(not(target_arch = "wasm32"))]
 mod bootstrap_js;
+// Capture-splice (bd-lucp): preview-time AST-level injection of
+// server-recorded engine output. Built on the same EngineCapture
+// wire format that bd-45yw uses for replay, but consumed via
+// `quarto_core::engine::capture_splice` rather than `ReplayEngine`.
+mod capture_splice;
 mod code_highlight;
 mod compile_theme_css;
 mod document_profile;
@@ -53,6 +58,7 @@ pub use apply_template::{ApplyTemplateConfig, ApplyTemplateStage};
 pub use ast_transforms::AstTransformsStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use bootstrap_js::BootstrapJsStage;
+pub use capture_splice::CaptureSpliceStage;
 pub use code_highlight::CodeHighlightStage;
 pub use compile_theme_css::{CompileThemeCssStage, theme_fingerprint};
 pub use document_profile::DocumentProfileStage;
