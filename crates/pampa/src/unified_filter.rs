@@ -203,23 +203,13 @@ impl std::error::Error for CiteprocFilterError {}
 
 /// Apply a filter to a Pandoc document.
 ///
-/// Returns the filtered document, updated context, diagnostics, and any
-/// HTML dependencies or text includes (from Lua filters only).
+/// Returns the filtered document, updated context, diagnostics, and
+/// any HTML dependencies or text includes (from Lua filters only).
+///
+/// The `attribution` handle is forwarded to Lua filters — see
+/// [`crate::lua::apply_lua_filter`] for the contract. Non-Lua
+/// filters (Citeproc, JSON) ignore the handle.
 pub async fn apply_filter(
-    pandoc: Pandoc,
-    context: ASTContext,
-    filter: &FilterSpec,
-    target_format: &str,
-    runtime: Arc<dyn SystemRuntime>,
-) -> Result<FilterOutput, FilterError> {
-    apply_filter_with_attribution(pandoc, context, filter, target_format, runtime, None).await
-}
-
-/// Variant of [`apply_filter`] that exposes the
-/// `quarto.attribution.*` Lua host binding backed by the supplied
-/// handle. See [`crate::lua::apply_lua_filter_with_attribution`] for
-/// the contract; non-Lua filters ignore the handle.
-pub async fn apply_filter_with_attribution(
     pandoc: Pandoc,
     context: ASTContext,
     filter: &FilterSpec,
@@ -246,7 +236,7 @@ pub async fn apply_filter_with_attribution(
 
         #[cfg(feature = "lua-filter")]
         FilterSpec::Lua(path) => {
-            let lua_output = crate::lua::apply_lua_filters_with_attribution(
+            let lua_output = crate::lua::apply_lua_filters(
                 pandoc,
                 context,
                 &[path.clone()],
@@ -298,26 +288,15 @@ pub async fn apply_filter_with_attribution(
 
 /// Apply multiple filters in sequence.
 ///
-/// Filters are applied in the order provided. The output of each filter
-/// becomes the input to the next. Diagnostics, HTML dependencies, and
-/// text includes are accumulated across all filter passes.
-pub async fn apply_filters(
-    pandoc: Pandoc,
-    context: ASTContext,
-    filters: &[FilterSpec],
-    target_format: &str,
-    runtime: Arc<dyn SystemRuntime>,
-) -> Result<FilterOutput, FilterError> {
-    apply_filters_with_attribution(pandoc, context, filters, target_format, runtime, None).await
-}
-
-/// Variant of [`apply_filters`] that threads an
-/// `Option<Arc<dyn AttributionLookup>>` handle through each Lua
-/// filter pass so the `quarto.attribution.*` host binding is alive.
+/// Filters are applied in the order provided. The output of each
+/// filter becomes the input to the next. Diagnostics, HTML
+/// dependencies, and text includes are accumulated across all filter
+/// passes. The `attribution` handle is threaded through every Lua
+/// pass so the `quarto.attribution.*` host binding is alive;
 /// `quarto-core`'s
 /// [`UserFiltersStage`](../../quarto_core/stage/stages/struct.UserFiltersStage.html)
 /// routes through this function for both pre and post passes.
-pub async fn apply_filters_with_attribution(
+pub async fn apply_filters(
     pandoc: Pandoc,
     context: ASTContext,
     filters: &[FilterSpec],
@@ -336,7 +315,7 @@ pub async fn apply_filters_with_attribution(
     let mut all_resources = Vec::new();
 
     for filter in filters {
-        let output = apply_filter_with_attribution(
+        let output = apply_filter(
             current_pandoc,
             current_context,
             filter,

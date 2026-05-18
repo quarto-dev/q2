@@ -138,10 +138,17 @@ end
 
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
-        let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
-            .await
-            .unwrap()
-            .pandoc;
+        let filtered = apply_lua_filter(
+            &pandoc,
+            &context,
+            &filter_path,
+            "html",
+            native_runtime(),
+            None,
+        )
+        .await
+        .unwrap()
+        .pandoc;
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -176,10 +183,17 @@ end
 
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
-        let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
-            .await
-            .unwrap()
-            .pandoc;
+        let filtered = apply_lua_filter(
+            &pandoc,
+            &context,
+            &filter_path,
+            "html",
+            native_runtime(),
+            None,
+        )
+        .await
+        .unwrap()
+        .pandoc;
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -211,10 +225,17 @@ end
 
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
-        let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
-            .await
-            .unwrap()
-            .pandoc;
+        let filtered = apply_lua_filter(
+            &pandoc,
+            &context,
+            &filter_path,
+            "html",
+            native_runtime(),
+            None,
+        )
+        .await
+        .unwrap()
+        .pandoc;
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -246,10 +267,17 @@ end
 
         let pandoc = empty_pandoc();
         let context = ASTContext::new();
-        let filtered = apply_lua_filter(&pandoc, &context, &filter_path, "html", native_runtime())
-            .await
-            .unwrap()
-            .pandoc;
+        let filtered = apply_lua_filter(
+            &pandoc,
+            &context,
+            &filter_path,
+            "html",
+            native_runtime(),
+            None,
+        )
+        .await
+        .unwrap()
+        .pandoc;
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {

@@ -41,24 +41,77 @@ new wire shape, no memory cost beyond the sidecar.
 
 ## Architectural decisions to pin before coding
 
-### 1. Pipeline ordering — move attribution-generate before user filters
+### 1. Pipeline ordering — top-level `AttributionGenerateStage` before user filters
 
-Today: `AttributionGenerateTransform` runs at end-of-Navigation-Phase,
-*inside* `AstTransformsStage`. `UserFiltersStage::pre` runs *before*
-`AstTransformsStage`; `UserFiltersStage::post` runs *after*. As-is,
-`post`-phase Lua filters (`post-quarto`, `pre-render`, `post-render`,
+Today: `AttributionGenerateTransform` is an `AstTransform` that runs
+at end-of-Navigation-Phase *inside* `AstTransformsStage`.
+`UserFiltersStage::pre` runs *before* `AstTransformsStage`;
+`UserFiltersStage::post` runs *after*. As-is, `post`-phase Lua
+filters (`post-quarto`, `pre-render`, `post-render`,
 `pre-finalize`, `post-finalize`) see attribution; `pre`-phase filters
 (`pre-ast`, `post-ast`, `pre-quarto`) don't.
 
-**Decision:** move `AttributionGenerateTransform` to before
-`UserFiltersStage::pre`. Pre-filters can use attribution too. The
-end-of-Navigation-Phase placement was for tidiness (slot with the
-other `*-generate` stages); attribution-generate doesn't read
-`navigation.*`, so the move is safe. Symmetric and simpler to
-document ("filters always see attribution if a provider is
-installed").
+**Decision:** introduce a new top-level `AttributionGenerateStage`
+(`PipelineStage`) that runs *before* `UserFiltersStage::pre`, and
+remove the inner `AttributionGenerateTransform`. Pre-filters then
+see attribution, and the data is available to any future top-level
+stage without re-running the provider.
 
-### 2. Cross-crate plumbing — trait in pampa, impl in quarto-core
+**Why a new top-level stage rather than relocating the transform:**
+`AttributionGenerateTransform` implements `AstTransform` (takes
+`&mut RenderContext`), which is the interface for transforms inside
+`AstTransformsStage`'s inner pipeline. `UserFiltersStage::pre` is a
+top-level `PipelineStage` (takes `&mut StageContext`). The two
+interfaces aren't interchangeable — a transform can't be moved to
+a slot in the top-level pipeline. The new stage wraps the same
+provider-build + identity-merge logic; `GitBlameProvider` only reads
+`ctx.binaries.git` and `ctx.document.input`, and
+`PreBuiltAttributionProvider` ignores its context argument, so the
+relocation is mechanical (the new stage builds a minimal
+`RenderContext` just to satisfy `provider.build(&render_ctx)`'s
+signature).
+
+The end-of-Navigation-Phase placement was originally chosen for
+tidiness (slot with the other `*-generate` transforms);
+attribution-generate doesn't read `navigation.*`, so the move is
+safe. Symmetric and simpler to document ("filters always see
+attribution if a provider is installed").
+
+### 2. Sidecar location — `attribution_data` on `StageContext`, bridged into `RenderContext`
+
+Today: `attribution_data: Option<Arc<AttributionData>>` lives on the
+inner `RenderContext` only. `AttributionGenerateTransform` populates
+it; `AttributionRenderTransform` consumes it. The sidecar never
+escapes `AstTransformsStage`. The outer `StageContext` carries
+`attribution_provider` (the opt-in producer) but not the populated
+data.
+
+**Decision:** promote the sidecar to `StageContext`:
+
+```rust
+pub attribution_data: Option<Arc<AttributionData>>,
+```
+
+The new top-level `AttributionGenerateStage` (decision 1) writes
+it. `UserFiltersStage::pre`/`post` read it to build the
+`AttributionLookupHandle` for the Lua binding.
+`AstTransformsStage::run` bridges it into the inner `RenderContext`
+(`render_ctx.attribution_data = ctx.attribution_data.clone()`) so
+the existing `AttributionRenderTransform` keeps consuming the
+sidecar unchanged.
+
+The bridge is unidirectional (outer → inner) and the inner copy is
+an `Arc` clone, so dual-population is cheap and effectively
+read-only. This mirrors how `attribution_provider` is already
+promoted to `StageContext`: when a second peer-level consumer
+appears (`UserFiltersStage` alongside `AttributionRenderTransform`),
+the data's home moves to the LCA of the consumers. Putting the
+sidecar on `FilterContext` instead was considered and rejected —
+`FilterContext`'s purpose is scoped to filter diagnostics, and a
+future non-filter top-level stage might consume attribution too
+(sidebars, cross-doc links, document-profile enrichment).
+
+### 3. Cross-crate plumbing — trait in pampa, impl in quarto-core
 
 Lua filters execute in `pampa`
 (`crates/pampa/src/lua/`, `crates/pampa/src/unified_filter.rs`).
@@ -76,7 +129,7 @@ small typed interface that's natural for the Lua boundary;
 Arc<dyn SystemRuntime>` parameter — the attribution handle follows
 the same pattern.
 
-### 3. Node → byte-range from Lua
+### 4. Node → byte-range from Lua
 
 `crates/pampa/src/lua/types.rs` exposes `attr`, `classes`,
 `attributes`, etc. on Block/Inline userdata. Source-info is not
@@ -89,10 +142,14 @@ that's cheap and reusable beyond attribution. Phase 4's
 `lookup_range(el.source_info:byte_range())`. Lua users can also
 call `lookup_range` directly with hand-computed offsets.
 
-## Phase 0 — Tests first (TDD)
+## Phase 0 — Tests
 
-> Per CLAUDE.md: tests written, running, and **red** before any
-> Phase 1 implementation.
+> TDD discipline: each test is written and confirmed **red** before
+> the implementation that turns it green. Tests land in the same
+> commit as the change that motivates them, not front-loaded — many
+> of the tests below reference types (`AttributionLookup`,
+> `LookupHit`, `el.source_info`) that don't exist until their phase,
+> so front-loading would require throwaway stub types.
 
 ### Unit tests (`crates/pampa/src/lua/quarto_api.rs` tests module)
 
@@ -157,15 +214,31 @@ call `lookup_range` directly with hand-computed offsets.
   *must* read and grep the actual rendered file, not infer success
   from absence of errors.
 
-## Phase 1 — Pipeline ordering
+## Phase 1 — Pipeline restructure (top-level generate stage + sidecar promotion)
 
-- [x] Move `AttributionGenerateTransform` registration from
-  end-of-Navigation-Phase to before `UserFiltersStage::pre`.
-  Refresh the comments in `pipeline.rs` that motivated the current
-  placement; cross-reference this plan.
+- [x] Add `pub attribution_data: Option<Arc<AttributionData>>` to
+  `StageContext` (per decision 2). Default to `None` in the
+  constructor and `Default` impl.
+- [x] Create `AttributionGenerateStage` as a top-level
+  `PipelineStage` in
+  `crates/quarto-core/src/stage/stages/attribution_generate.rs`.
+  It builds a minimal `RenderContext` so
+  `provider.build(&render_ctx)` still type-checks, merges
+  identities, and stores the result on `ctx.attribution_data`.
+  Short-circuits to `None` when `ctx.attribution_provider` is unset.
+- [x] Register `AttributionGenerateStage` in the top-level pipeline
+  builder *before* `UserFiltersStage::pre`. Refresh the comments in
+  `pipeline.rs` that motivated the old inner-transform placement;
+  cross-reference this plan.
+- [x] Remove `AttributionGenerateTransform` from the inner
+  `AstTransformsStage` transform pipeline (its logic now lives in
+  `AttributionGenerateStage`).
+- [x] In `AstTransformsStage::run`, bridge
+  `ctx.attribution_data` into `render_ctx.attribution_data` so
+  `AttributionRenderTransform` keeps seeing the sidecar.
 - [x] Verify the Phase 0 pipeline-ordering test now passes.
 - [x] Verify every existing attribution test still passes (the
-  generate stage's outputs are time-independent of pipeline
+  generate logic's outputs are time-independent of pipeline
   position; this is a no-op for downstream consumers).
 
 ## Phase 2 — Extract `resolve_byte_range` helper
@@ -295,121 +368,9 @@ stdlib). The attribution binding should compile and work there too:
   `HashMap<PathBuf, AttributionMap>`, this binding gains a `path`
   parameter on `lookup_range`. Until then: v1 single-doc only;
   non-primary nodes return nil.
-- **Option C** (per-node `Attr` KVs on the AST). See
-  `2026-05-15-attribution-on-wire-design.md` § "Where C wins
-  long-term" for the decision; defer pending an external-Pandoc-
-  filter use case.
-
-## Plan deviations (during implementation)
-
-These are adjustments applied while executing the plan. Each lists the
-plan assumption, the on-the-ground reality, and the decision taken.
-
-### D1 — `attribution_data` lives on `RenderContext`, not `StageContext`
-
-**Plan assumption:** Phase 4a says
-"In `quarto-core::UserFiltersStage::run`, when
-`ctx.attribution_data.is_some()`, construct the handle and pass it through."
-
-**Reality:** `attribution_data: Option<Arc<AttributionData>>` is a field
-on the inner `RenderContext` (inside `AstTransformsStage`), not on the
-outer `StageContext` that `UserFiltersStage` sees. `StageContext` only
-carries `attribution_provider`. Today `AttributionGenerateTransform`
-populates `RenderContext.attribution_data` from inside the transform
-pipeline, and `AttributionRenderTransform` consumes it. The sidecar
-never escapes that scope.
-
-**Decision:**
-1. Add `pub attribution_data: Option<Arc<AttributionData>>` to
-   `StageContext`. The field is populated by the new top-level
-   `AttributionGenerateStage` (see D2) and bridged into the inner
-   `RenderContext` by `AstTransformsStage` (mirroring how
-   `attribution_provider` is already bridged).
-2. `UserFiltersStage::pre`/`post` read `ctx.attribution_data` from
-   `StageContext` to construct the `AttributionLookupHandle`.
-
-### D3 — Tests interleaved per phase, not all front-loaded in Phase 0
-
-**Plan assumption:** Phase 0 says "tests written, running, and **red**
-before any Phase 1 implementation."
-
-**Reality:** Many of the test surface's type references
-(`AttributionLookup`, `LookupHit`, `IdentityEntry`, the
-`quarto.attribution.*` namespace, `el.source_info`) don't compile
-until their underlying types exist. A strict "all tests RED first"
-approach would mean either:
-1. Adding stub types just to make tests compile, then implementing
-   on top — twice the surface area to read.
-2. Writing tests in a non-compiling state, which doesn't run.
-
-**Decision:** Tests are added in the same commit as the code change
-that motivates them, but **before** the green-path behavior. Each
-test first asserts the contract, then I confirm it fails as expected
-in the working tree (e.g. by stubbing the function to return `None`
-and running the test), then I implement and re-run. This preserves
-TDD's "verify the test catches the bug" guarantee while keeping the
-test surface in lockstep with the implementation surface.
-
-### D2 — Generate-transform is an `AstTransform`, not a `PipelineStage`
-
-**Plan assumption:** Phase 1 says "Move `AttributionGenerateTransform`
-registration from end-of-Navigation-Phase to before
-`UserFiltersStage::pre`."
-
-**Reality:** `AttributionGenerateTransform` implements `AstTransform`
-(takes `&mut RenderContext`), which is the interface for transforms
-*inside* the `AstTransformsStage` inner pipeline. `UserFiltersStage::pre`
-is a top-level `PipelineStage` (takes `&mut StageContext`). The two
-interfaces aren't interchangeable — a transform can't be "moved" to a
-position in the top-level pipeline.
-
-**Decision:** Create `AttributionGenerateStage` (top-level
-`PipelineStage` in `crates/quarto-core/src/stage/stages/attribution_generate.rs`)
-that wraps the same provider-build + identity-merge logic and stores
-the result on `ctx.attribution_data` (per D1). The existing
-`AttributionGenerateTransform` is removed from the inner transform
-pipeline. `AstTransformsStage` bridges `ctx.attribution_data` →
-`render_ctx.attribution_data` so `AttributionRenderTransform` still
-sees the sidecar.
-
-`AttributionGenerateStage` builds a minimal `RenderContext` just to
-call `provider.build(&render_ctx)?` — `GitBlameProvider` reads
-`ctx.binaries.git` and `ctx.document.input` from it, and
-`PreBuiltAttributionProvider` ignores the argument entirely.
-
-### D4 — `apply_lua_filter` keeps its old signature; add `_with_attribution` siblings
-
-**Plan assumption:** Phase 4a says "Thread the handle through
-`apply_filters` as a new parameter".
-
-**Reality:** `apply_lua_filter` and `apply_lua_filters` are called
-from 120+ test sites across `pampa::lua::filter_tests` and the
-`crates/pampa/tests/` integration tests. Bumping the signature would
-touch every one of them — pure mechanical churn, with no test-quality
-benefit.
-
-**Decision:** Keep `apply_lua_filter` / `apply_lua_filters` /
-`apply_filter` / `apply_filters` at their original signatures (no
-attribution param). Add sibling functions:
-- `apply_lua_filter_with_attribution`
-- `apply_lua_filters_with_attribution`
-- `apply_filter_with_attribution`
-- `apply_filters_with_attribution`
-
-The no-attribution versions delegate to the `_with_attribution`
-versions passing `None`. `UserFiltersStage` (the only production
-caller that has a handle) uses
-`unified_filter::apply_filters_with_attribution` directly. Test
-suites stay unchanged.
-
-This is the explicit option called out under "Risks and unknowns" as
-a viable alternative when ripple is too wide.
 
 ## Risks and unknowns
 
-- **mlua app_data vs new parameter.** Resolved per D4 above: kept
-  the new-parameter approach but only on `_with_attribution` sibling
-  functions. The original signatures stay unchanged.
 - **`source_info` on every Block/Inline.** Some Pandoc node types
   carry source_info today; some may not (e.g. types synthesized by
   earlier transforms). Phase 3 should pin the behaviour for
@@ -423,7 +384,7 @@ a viable alternative when ripple is too wide.
 
 ## Work items checklist
 
-### Phase 0 — Tests (TDD, must be red)
+### Phase 0 — Tests
 
 - [x] Unit tests for `AttributionLookup` impl correctness.
 - [x] Lua filter integration tests: `lookup`, `lookup_range`,
@@ -432,9 +393,13 @@ a viable alternative when ripple is too wide.
 - [x] End-to-end CLI test (`--attribution=git` + Lua filter,
   inspect rendered HTML).
 
-### Phase 1 — Pipeline ordering
+### Phase 1 — Pipeline restructure
 
-- [x] Move `AttributionGenerateTransform` registration site.
+- [x] Add `attribution_data` field to `StageContext`.
+- [x] Create top-level `AttributionGenerateStage`; remove inner
+  `AttributionGenerateTransform`.
+- [x] Bridge `StageContext.attribution_data` into `RenderContext`
+  from `AstTransformsStage`.
 
 ### Phase 2 — Extract helper
 

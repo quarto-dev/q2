@@ -80,6 +80,7 @@ async fn run_filter(filter_code: &str, doc: Pandoc) -> Pandoc {
         &[filter_file.path().to_path_buf()],
         "html",
         runtime,
+        None,
     )
     .await
     .expect("filter ran");

@@ -108,31 +108,17 @@ pub struct FilterOutput {
     pub resources: Vec<std::path::PathBuf>,
 }
 
-/// Apply a single Lua filter to a document
+/// Apply a single Lua filter to a document.
 ///
-/// Returns the filtered document, context, diagnostics, and any HTML dependencies
-/// or text includes registered via the `quarto.doc` API.
+/// Returns the filtered document, context, diagnostics, and any HTML
+/// dependencies or text includes registered via the `quarto.doc` API.
+///
+/// The `attribution` handle backs the `quarto.attribution.*` Lua host
+/// binding. Passing `None` registers no-op stubs (the binding is
+/// alive but `lookup` / `lookup_range` return nil and `identities`
+/// returns an empty table). Most callers pass `None`; only
+/// `quarto-core::UserFiltersStage` passes `Some(handle)`.
 pub async fn apply_lua_filter(
-    pandoc: &Pandoc,
-    context: &ASTContext,
-    filter_path: &Path,
-    target_format: &str,
-    runtime: Arc<dyn SystemRuntime>,
-) -> FilterResult<FilterOutput> {
-    apply_lua_filter_with_attribution(pandoc, context, filter_path, target_format, runtime, None)
-        .await
-}
-
-/// Variant of [`apply_lua_filter`] that exposes the
-/// `quarto.attribution.*` Lua host binding backed by the supplied
-/// `Option<Arc<dyn AttributionLookup>>`. The `None` case registers
-/// no-op stubs and behaves byte-identically to [`apply_lua_filter`].
-///
-/// Production callers route through this from
-/// `unified_filter::apply_filters_with_attribution`; tests that
-/// don't care about attribution can keep calling the simpler
-/// [`apply_lua_filter`].
-pub async fn apply_lua_filter_with_attribution(
     pandoc: &Pandoc,
     context: &ASTContext,
     filter_path: &Path,
@@ -275,26 +261,13 @@ pub async fn apply_lua_filter_with_attribution(
     })
 }
 
-/// Apply multiple Lua filters in sequence
+/// Apply multiple Lua filters in sequence.
 ///
-/// Returns the filtered document, context, and accumulated diagnostics,
-/// HTML dependencies, and text includes from all filters.
+/// Returns the filtered document, context, and accumulated
+/// diagnostics, HTML dependencies, and text includes from all
+/// filters. The `attribution` handle is threaded to every per-filter
+/// Lua state — see [`apply_lua_filter`] for the contract.
 pub async fn apply_lua_filters(
-    pandoc: Pandoc,
-    context: ASTContext,
-    filter_paths: &[std::path::PathBuf],
-    target_format: &str,
-    runtime: Arc<dyn SystemRuntime>,
-) -> FilterResult<FilterOutput> {
-    apply_lua_filters_with_attribution(pandoc, context, filter_paths, target_format, runtime, None)
-        .await
-}
-
-/// Variant of [`apply_lua_filters`] that threads an
-/// `Option<Arc<dyn AttributionLookup>>` handle to each per-filter
-/// Lua state via [`apply_lua_filter_with_attribution`]. See its
-/// doc-comment for the contract.
-pub async fn apply_lua_filters_with_attribution(
     pandoc: Pandoc,
     context: ASTContext,
     filter_paths: &[std::path::PathBuf],
@@ -310,7 +283,7 @@ pub async fn apply_lua_filters_with_attribution(
     let mut all_resources = Vec::new();
 
     for filter_path in filter_paths {
-        let output = apply_lua_filter_with_attribution(
+        let output = apply_lua_filter(
             &current_pandoc,
             &current_context,
             filter_path,

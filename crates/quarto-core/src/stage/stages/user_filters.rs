@@ -160,7 +160,7 @@ impl PipelineStage for UserFiltersStage {
                     .enable_all()
                     .build()
                     .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
-                rt.block_on(pampa::unified_filter::apply_filters_with_attribution(
+                rt.block_on(pampa::unified_filter::apply_filters(
                     ast,
                     ast_context,
                     filters,
@@ -172,7 +172,7 @@ impl PipelineStage for UserFiltersStage {
             })
         };
         #[cfg(target_arch = "wasm32")]
-        let filter_result = pampa::unified_filter::apply_filters_with_attribution(
+        let filter_result = pampa::unified_filter::apply_filters(
             doc.ast,
             doc.ast_context,
             filters,

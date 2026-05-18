@@ -339,6 +339,7 @@ fn main() {
             &filter_specs,
             &args.to,
             runtime,
+            None,
         )) {
             Ok(output) => {
                 // Output any diagnostics from filters
