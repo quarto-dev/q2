@@ -703,4 +703,131 @@ describe('PreviewApp boot path', () => {
       ).not.toBeNull();
     });
   });
+
+  // ─── bd-iuzmk: browser-tab title reflects the active doc's title ─────
+  //
+  // Today the SPA's <title> is hard-coded to "Quarto Preview" in
+  // q2-preview.html. Once a render lands and the AST carries a
+  // `meta.title`, the SPA should update `document.title` so users with
+  // the published page and the preview open side-by-side can tell tabs
+  // apart. Format: `<title> (Quarto Preview)` when a title is present;
+  // fall back to "Quarto Preview" when it isn't.
+  //
+  // These tests assert the contract directly on `document.title` (not
+  // a DOM node) because that's the value the browser tab reads.
+  //
+  // ⚠️  Earlier tests in this suite (the render-error-overlay cases
+  // around line 415 / 460) call
+  // `(runtime.renderPageForPreview).mockImplementation(...)` with
+  // hardcoded return shapes. `vi.clearAllMocks()` in `beforeEach`
+  // only clears call history, not implementations, so my tests would
+  // inherit a stale stub that ignores `runtimeMockState.renderResult`
+  // and short-circuits the title-extraction path. Each of the three
+  // tests below re-installs the default closure-over-state mock at
+  // the top so they observe their own renderResult mutation.
+
+  async function resetRenderPageForPreviewMockToDefault() {
+    const runtime = await import('@quarto/preview-runtime');
+    (runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_p: string, _g?: unknown, _c?: Uint8Array) => runtimeMockState.renderResult,
+    );
+  }
+
+  it('sets document.title to "<meta.title> (Quarto Preview)" after a render with a title', async () => {
+    await resetRenderPageForPreviewMockToDefault();
+    // The AST shape mirrors what pampa's JSON writer emits — meta is a
+    // plain object at the top level, with each value tagged via
+    // `t/c`. Pampa wraps a YAML `title: "Hello, world"` as MetaInlines
+    // (the YAML scalar is parsed for inline-formatting opportunities),
+    // so we use that shape here. The framework's `extractMetaString`
+    // also accepts MetaString for completeness — covered in the
+    // sibling test below.
+    runtimeMockState.renderResult = {
+      success: true,
+      ast_json: JSON.stringify({
+        blocks: [],
+        meta: {
+          title: {
+            t: 'MetaInlines',
+            c: [{ t: 'Str', c: 'Hello, world' }],
+          },
+        },
+      }),
+    };
+
+    // Baseline before render. q2-preview.html ships with this literal.
+    document.title = 'Quarto Preview';
+    render(<PreviewApp />);
+
+    await waitFor(() => {
+      expect(document.title).toBe('Hello, world (Quarto Preview)');
+    });
+  });
+
+  it('keeps document.title at "Quarto Preview" when meta.title is absent', async () => {
+    await resetRenderPageForPreviewMockToDefault();
+    // A doc with no `title:` in its frontmatter parses to a meta
+    // object without that key (or with an undefined value). The SPA
+    // must NOT clobber the existing title with "undefined (Quarto
+    // Preview)" — it falls back to the bare suffix.
+    runtimeMockState.renderResult = {
+      success: true,
+      ast_json: JSON.stringify({ blocks: [], meta: {} }),
+    };
+
+    document.title = 'Quarto Preview';
+    render(<PreviewApp />);
+
+    // Wait for the iframe to mount so we know the render effect
+    // ran at least once. Title may still be the default, which is the
+    // assertion this test wants to lock in.
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+
+    expect(document.title).toBe('Quarto Preview');
+  });
+
+  it('updates document.title when subsequent renders carry a different title (live edit)', async () => {
+    await resetRenderPageForPreviewMockToDefault();
+    // Live-edit case: user retitles the doc in the QMD. The next
+    // render's AST has the new meta.title, and the tab should
+    // update — same render effect, same dependency.
+    runtimeMockState.renderResult = {
+      success: true,
+      ast_json: JSON.stringify({
+        blocks: [],
+        meta: {
+          title: { t: 'MetaString', c: 'Original' },
+        },
+      }),
+    };
+    document.title = 'Quarto Preview';
+    render(<PreviewApp />);
+
+    await waitFor(() => {
+      expect(document.title).toBe('Original (Quarto Preview)');
+    });
+
+    // Simulate an edit: re-mock the next render with a different
+    // title and trigger a re-render via the force-refresh button
+    // (which bumps `contentTick`, the render effect's dep). Using
+    // the existing affordance avoids reaching into PreviewApp's
+    // internals to fire a fresh render manually.
+    runtimeMockState.renderResult = {
+      success: true,
+      ast_json: JSON.stringify({
+        blocks: [],
+        meta: {
+          title: { t: 'MetaString', c: 'Renamed' },
+        },
+      }),
+    };
+    const refreshBtn = screen.getByRole('button', { name: /refresh|reload|re-?render/i });
+    fireEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(document.title).toBe('Renamed (Quarto Preview)');
+    });
+  });
 });

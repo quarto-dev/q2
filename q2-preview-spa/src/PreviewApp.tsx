@@ -47,10 +47,45 @@ import {
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
+import { extractMetaString } from '@quarto/preview-renderer/framework';
 import type { CaptureRef, FileEntry } from '@quarto/quarto-automerge-schema';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
 import { StaleCaptureOverlay } from './components/StaleCaptureOverlay';
 import { pickInitialPage } from './pickInitialPage';
+
+/**
+ * Suffix appended to the document's title in the browser tab so a
+ * `q2 preview` tab is distinguishable from the live / published page
+ * the same author may have open in a sibling tab. Used both with a
+ * doc title (`<title> (Quarto Preview)`) and as the standalone
+ * fallback when no `meta.title` is set (`Quarto Preview`).
+ */
+const PREVIEW_TITLE_SUFFIX = 'Quarto Preview';
+
+/**
+ * Build the browser-tab title from the active doc's Pandoc-AST
+ * `meta.title`. Returns `"<title> (Quarto Preview)"` when a title is
+ * extractable, otherwise the bare `"Quarto Preview"` suffix. The
+ * input is the parsed AST (`{ blocks, meta, ... }`) — callers pass
+ * `JSON.parse(state.astJson)` and `null`/parse-error degrades to the
+ * fallback.
+ *
+ * `extractMetaString` (from the framework) handles `MetaString`,
+ * `MetaInlines`, and `MetaBlocks` — the three shapes pampa's JSON
+ * writer emits for a YAML `title: …` scalar. Other Meta variants
+ * (MetaBool, MetaList, MetaMap) coerce to `undefined` and we fall
+ * back. Exported for the integration tests; not part of the SPA's
+ * runtime public surface.
+ */
+export function buildPreviewTabTitle(ast: unknown): string {
+  if (!ast || typeof ast !== 'object') return PREVIEW_TITLE_SUFFIX;
+  const meta = (ast as { meta?: unknown }).meta;
+  if (!meta || typeof meta !== 'object') return PREVIEW_TITLE_SUFFIX;
+  const titleNode = (meta as Record<string, unknown>).title;
+  const title = extractMetaString(titleNode);
+  if (!title) return PREVIEW_TITLE_SUFFIX;
+  return `${title} (${PREVIEW_TITLE_SUFFIX})`;
+}
 
 type BootState = 'loading' | 'ready' | 'error';
 
@@ -538,6 +573,24 @@ export default function PreviewApp() {
       cancelled = true;
     };
   }, [state.activeFile, state.contentTick, state.captures]);
+
+  // bd-iuzmk: set the browser-tab title from the active AST's
+  // `meta.title`. Runs after every successful render so a live-edited
+  // title surfaces in the tab without a separate channel. Failure
+  // modes (parse error, missing meta) fall back to the bare "Quarto
+  // Preview" suffix — same as today's hard-coded title. No cleanup:
+  // the next document switch / edit re-fires this effect; on unmount,
+  // the tab is closed anyway.
+  useEffect(() => {
+    if (state.astJson === null) return;
+    let ast: unknown = null;
+    try {
+      ast = JSON.parse(state.astJson);
+    } catch {
+      ast = null;
+    }
+    document.title = buildPreviewTabTitle(ast);
+  }, [state.astJson]);
 
   // ── Render ────────────────────────────────────────────────────────────
 
