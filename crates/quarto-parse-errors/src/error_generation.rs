@@ -99,6 +99,30 @@ pub fn diagnostic_score(diag: &DiagnosticMessage) -> usize {
     diag.hints.len() + diag.details.len() + diag.code.as_ref().map_or(0, |_| 1)
 }
 
+/// Substitute the `{anchor}` placeholder in a corpus diagnostic message with
+/// the phrase appropriate to where this diagnostic's primary indicator
+/// landed. The "Unclosed X" corpus messages (Q-2-5/9/11/12/13/15) carry
+/// `{anchor}` so the same template covers both contexts:
+///
+/// - When the diagnostic is anchored at the closing delimiter of an outer
+///   inline scope (e.g. the closing `"` of `The "_blank" word.`), the
+///   parser actually gave up at the end of that inline scope, so the message
+///   reads "Reached the end of the inline scope before...".
+/// - When the diagnostic falls back to the parser-failure position (no
+///   enclosing scope, or no candidate closer exists), it gave up at the end
+///   of the block, so the message reads "Reached the end of the block
+///   before...".
+///
+/// Messages without the placeholder are returned unchanged.
+fn format_anchor(message: &'static str, anchored_at_outer_close: bool) -> String {
+    let replacement = if anchored_at_outer_close {
+        "the inline scope"
+    } else {
+        "the block"
+    };
+    message.replace("{anchor}", replacement)
+}
+
 /// Convert a parse state error into a structured DiagnosticMessage
 fn error_diagnostic_from_parse_state(
     input_bytes: &[u8],
@@ -171,8 +195,12 @@ fn error_diagnostic_from_parse_state(
     // exists. For inputs like `*a _b c* trailing\n` this points the indicator
     // at the closing `*` rather than floating one past the end of the line.
     // When no outer scope is open or no candidate closer exists, fall back to
-    // the parser-failure position.
-    let (anchor_row, anchor_column, anchor_size) = if outer_scope != OuterScope::None {
+    // the parser-failure position. The `anchored_at_outer_close` flag is also
+    // used below to substitute the `{anchor}` placeholder in the corpus
+    // message (see `format_anchor`): "the inline scope" when this diagnostic
+    // lands on an outer close, "the block" when it falls back to the
+    // parser-failure position.
+    let outer_close = if outer_scope != OuterScope::None {
         find_outermost_close(
             all_tokens,
             consumed_tokens,
@@ -180,11 +208,13 @@ fn error_diagnostic_from_parse_state(
             parse_state.column,
             input_bytes,
         )
-        .map(|span| (span.row, span.column, span.size))
-        .unwrap_or((parse_state.row, parse_state.column, parse_state.size))
     } else {
-        (parse_state.row, parse_state.column, parse_state.size)
+        None
     };
+    let anchored_at_outer_close = outer_close.is_some();
+    let (anchor_row, anchor_column, anchor_size) = outer_close
+        .map(|span| (span.row, span.column, span.size))
+        .unwrap_or((parse_state.row, parse_state.column, parse_state.size));
 
     // Calculate byte offset and create proper locations using quarto-source-map utilities
     let byte_offset = calculate_byte_offset(&input_str, anchor_row, anchor_column);
@@ -237,7 +267,10 @@ fn error_diagnostic_from_parse_state(
             // Build diagnostic from error table entry
             let mut builder = DiagnosticMessageBuilder::error(entry.error_info.title)
                 .with_location(source_info.clone())
-                .problem(entry.error_info.message);
+                .problem(format_anchor(
+                    entry.error_info.message,
+                    anchored_at_outer_close,
+                ));
 
             // Add error code if present
             if let Some(code) = entry.error_info.code {
@@ -404,7 +437,10 @@ fn error_diagnostic_from_parse_state(
 
             let mut builder = DiagnosticMessageBuilder::error(template.error_info.title)
                 .with_location(source_info.clone())
-                .problem(template.error_info.message);
+                .problem(format_anchor(
+                    template.error_info.message,
+                    anchored_at_outer_close,
+                ));
             if let Some(code) = template.error_info.code {
                 builder = builder.with_code(code);
             }

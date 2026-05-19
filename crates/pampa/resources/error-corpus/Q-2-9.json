@@ -2,7 +2,7 @@
   "code": "Q-2-9",
   "title": "Unclosed Single Quote",
   "unclosedScope": "single_quote",
-  "message": "Reached the end of the outer inline scope before finding a closing single quote.",
+  "message": "Reached the end of {anchor} before finding a closing single quote.",
   "notes": [
     {
       "message": "This is the opening single quote.",

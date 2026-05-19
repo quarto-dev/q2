@@ -2,7 +2,7 @@
   "code": "Q-2-5",
   "title": "Unclosed Underscore Emphasis",
   "unclosedScope": "emph_underscore",
-  "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
+  "message": "Reached the end of {anchor} before finding a closing '_' for the emphasis.",
   "notes": [
     {
       "message": "This is the opening '_' mark.",

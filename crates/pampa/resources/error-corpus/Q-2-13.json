@@ -2,7 +2,7 @@
   "code": "Q-2-13",
   "title": "Unclosed Strong Star Emphasis",
   "unclosedScope": "strong_star",
-  "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
+  "message": "Reached the end of {anchor} before finding a closing '**' for the strong emphasis.",
   "notes": [
     {
       "message": "This is the opening '**' mark.",

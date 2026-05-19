@@ -747,3 +747,45 @@ fn strong_underscore_with_unclosed_single_quote_emits_q_2_9() {
         "Expected Q-2-9 for unclosed `'` inside `__..__`. Got:\n{output}"
     );
 }
+
+// --- Anchor-wording disambiguation ---
+//
+// The `{anchor}` placeholder in the corpus message is substituted at emit
+// time by `format_anchor` in `quarto-parse-errors`:
+//   - "the block"        when the diagnostic falls back to the parser-failure
+//                        position (no enclosing scope or no candidate closer)
+//   - "the inline scope" when the diagnostic is anchored at the closing
+//                        delimiter of an enclosing inline scope
+//
+// These two tests pin the wording for both branches on otherwise-identical
+// shapes — a space-flanked `*` at block level vs. inside paired single
+// quotes — so a future change to anchor selection or `format_anchor` can't
+// silently flip the message.
+
+#[test]
+fn block_level_unclosed_star_says_block() {
+    let input = "a * b\n";
+    let output = render_diagnostics(input, "block-level-unclosed-star.qmd");
+    assert!(
+        output.contains("Q-2-12"),
+        "Expected Q-2-12 for unclosed `*` at block level. Got:\n{output}"
+    );
+    assert!(
+        output.contains("Reached the end of the block"),
+        "Expected `the block` wording when no inline scope encloses the unclosed `*`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn single_quoted_unclosed_star_says_inline_scope() {
+    let input = "'a * b'\n";
+    let output = render_diagnostics(input, "single-quoted-unclosed-star.qmd");
+    assert!(
+        output.contains("Q-2-12"),
+        "Expected Q-2-12 for unclosed `*` inside paired single quotes. Got:\n{output}"
+    );
+    assert!(
+        output.contains("Reached the end of the inline scope"),
+        "Expected `the inline scope` wording when the closing `'` anchors the indicator. Got:\n{output}"
+    );
+}
