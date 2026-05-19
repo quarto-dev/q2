@@ -9,6 +9,7 @@ use clap::Parser;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use std::io::{self, Read, Write};
 
+mod attribution;
 mod citeproc_filter;
 mod errors;
 mod filter_context;
@@ -338,6 +339,7 @@ fn main() {
             &filter_specs,
             &args.to,
             runtime,
+            None,
         )) {
             Ok(output) => {
                 // Output any diagnostics from filters
@@ -479,6 +481,7 @@ fn main() {
                         .json_source_location
                         .as_ref()
                         .is_some_and(|s| s == "full"),
+                    ..writers::json::JsonConfig::default()
                 };
                 writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
             }

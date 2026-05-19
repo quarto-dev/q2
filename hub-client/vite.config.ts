@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import wasm from 'vite-plugin-wasm'
 import compression from 'compression'
 import path from 'path'
+import { readFileSync } from 'fs'
 import { execSync } from 'child_process'
 
 function getGitInfo() {
@@ -17,6 +19,36 @@ function getGitInfo() {
 
 const gitInfo = getGitInfo()
 
+/**
+ * Expose `virtual:quarto-attribution-viewer-css` as a module whose
+ * default export is the contents of `resources/attribution/viewer.css`.
+ *
+ * `resources/attribution/viewer.css` is the single source of truth
+ * shared with the CLI's `AttributionViewerTransform` (via
+ * `include_str!`). Vite / Vitest silently return empty for `?raw`
+ * imports of files outside the project root even with
+ * `server.fs.allow: ['..']`, so the virtual-module indirection is the
+ * supported way to embed an out-of-tree asset's contents at
+ * build/test time.
+ */
+function attributionViewerCssPlugin(): Plugin {
+  const VIRTUAL_ID = 'virtual:quarto-attribution-viewer-css';
+  const RESOLVED_ID = '\0' + VIRTUAL_ID;
+  const sourcePath = path.resolve(__dirname, '../resources/attribution/viewer.css');
+  return {
+    name: 'quarto-attribution-viewer-css',
+    resolveId(id) {
+      if (id === VIRTUAL_ID) return RESOLVED_ID;
+    },
+    load(id) {
+      if (id === RESOLVED_ID) {
+        const css = readFileSync(sourcePath, 'utf-8');
+        return `export default ${JSON.stringify(css)};`;
+      }
+    },
+  };
+}
+
 /** Hub server URL. Override with VITE_HUB_SERVER env var. */
 const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000';
 
@@ -26,6 +58,7 @@ export default defineConfig({
   plugins: [
     react(),
     wasm(),
+    attributionViewerCssPlugin(),
     {
       // vite preview's static-file middleware does not gzip by default,
       // so a cold Playwright context downloads the ~32 MB WASM uncompressed.

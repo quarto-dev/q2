@@ -1,0 +1,20 @@
+---
+source: crates/quarto-core/tests/attribution_baseline_snapshot.rs
+assertion_line: 71
+expression: body
+---
+<body class="fullcontent">
+
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+
+<section id="hello-world" class="section level1">
+<h1>Hello, world</h1>
+<p>This is a paragraph.</p>
+</section>
+
+</main>
+</div>
+</body>

@@ -59,6 +59,15 @@ quarto-highlight.workspace = true
 # follow-up bd-754f review may replace it with a Q2-native scheme.
 base64.workspace = true
 
+# Optional clap dep so types exposed to the CLI (e.g. `AttributionMode`)
+# can carry `ValueEnum` derives without forcing clap into the WASM tree
+# or other non-CLI consumers. The `quarto` crate enables this via
+# `quarto-core/clap`; no other consumer needs it.
+clap = { workspace = true, optional = true, features = ["derive"] }
+
+[features]
+clap = ["dep:clap"]
+
 # Native-only dependencies (for execution engines and resource extraction)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"

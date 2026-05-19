@@ -6,6 +6,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use quarto_core::attribution::AttributionMode;
+
 mod commands;
 
 #[derive(Parser)]
@@ -145,6 +147,12 @@ enum Commands {
         /// `quarto render index.qmd -- --metadata foo=bar`.
         #[arg(last = true, allow_hyphen_values = true)]
         pandoc_args: Vec<String>,
+
+        /// Annotate output with per-author attribution.
+        /// `--attribution=git` shells out to `git blame`; `--attribution=off`
+        /// disables attribution even when the YAML opts in.
+        #[arg(long, value_enum)]
+        attribution: Option<AttributionMode>,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -550,6 +558,7 @@ fn main() -> Result<()> {
             quiet,
             replay,
             debug,
+            attribution,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             inputs,
@@ -560,6 +569,7 @@ fn main() -> Result<()> {
             quiet,
             replay,
             debug,
+            attribution,
         }),
         Commands::Preview {
             path,

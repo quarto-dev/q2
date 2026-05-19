@@ -2,6 +2,8 @@
 
 ## Quarto-Hub Changelog
 
+Do not include refactors in this list. It's meant as a summary of user-facing changes.
+
 Changelog entry format:
 
 ### YYYY-MM-DD
@@ -13,14 +15,27 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-05-15
+
+- [`e9399093`](https://github.com/quarto-dev/q2/commits/e9399093): Authorship pill in the replay bar now animates with a rotating rainbow border while attribution data is being generated, so large documents give visible feedback that work is happening before the colours appear in the preview.
+- [`52281655`](https://github.com/quarto-dev/q2/commits/52281655): Authorship toggle moved from Settings → Preview to a pill in the replay bar (flush-right, visible in both collapsed and expanded states), and is no longer persisted — it resets on reload. Activation drops from three clicks to one; semantic grouping matches the rest of the per-actor UI in the replay drawer.
+- [`70016298`](https://github.com/quarto-dev/q2/commits/70016298): `--attribution=git` HTML renders now derive author colours from Paul Tol's "Muted" 10-colour qualitative palette (colour-blind safe across red-green and blue-yellow deficiencies, perceptually uniform brightness on white) instead of an unconstrained HSL hue. CLI HTML output only — hub-client previews continue to colour authors from Automerge profile metadata.
+
+### 2026-05-14
+
+- [`8b8349c8`](https://github.com/quarto-dev/q2/commits/8b8349c8): `--attribution=git` renders now auto-inject a viewer CSS/JS pair (dotted underline, body text painted in the author's colour, hover badge) so static HTML matches the hub-client preview. The shared stylesheet lives at `resources/attribution/viewer.css` (single source of truth with the CLI), loaded into the hub-client via a virtual-module Vite plugin.
+
 ### 2026-05-13
 
-- [`ea1bb889`](https://github.com/quarto-dev/q2/commits/ea1bb889): Internal — lift the WASM JS bridge (sass, cache, fetch, template loaders called by the Rust WASM module via `wasm-bindgen raw_module`) out of `hub-client/src/wasm-js-bridge/` into a new `@quarto/wasm-js-bridge` workspace package (bd-0xmt, q2-preview Phase A.0). Hub-client + the q2-preview SPA alias the same Vite-root path (`/src/wasm-js-bridge`) at each consumer; one copy in the workspace. No user-visible change.
-- [`9e80360f`](https://github.com/quarto-dev/q2/commits/9e80360f): Internal — scaffold the new `q2-preview-spa` workspace package as the future host of the `quarto preview` CLI command, and extend `cargo xtask verify` to also build/test the new `@quarto/preview-renderer` + `@quarto/preview-runtime` packages and the SPA. Closes the bd-hfjj sub-epic. No user-visible change.
-- [`6510577c`](https://github.com/quarto-dev/q2/commits/6510577c): Internal — move the q2-preview format components (around 50 files), iframe wrappers, and overlay views from `hub-client/src/components/render/` into `@quarto/preview-renderer` (bd-hfjj Phase 4, the largest single move in the decomposition). The error-overlay was DI-refactored so it no longer reads `localStorage` directly; hub-client wraps with `usePreference` at the two call sites, preserving the existing UX. No user-visible change.
-- [`9c508c91`](https://github.com/quarto-dev/q2/commits/9c508c91): Internal — move the WASM-renderer + automerge-sync + user-grammar services from `hub-client/src/services/` into the new `@quarto/preview-runtime` package, and move `iframePostProcessor` into `@quarto/preview-renderer` (bd-hfjj Phase 5; executed before Phase 4). Hub-client now imports these surfaces via `@quarto/preview-runtime` and `@quarto/preview-renderer/utils/iframePostProcessor`. No user-visible change.
-- [`7e45d2bf`](https://github.com/quarto-dev/q2/commits/7e45d2bf): Internal — move the rendering framework (Ast, dispatch, RegistryContext, plainText, meta, customNode) from `hub-client/src/components/render/framework/` into `@quarto/preview-renderer` (bd-hfjj Phase 3). Hub-client now imports the framework barrel through `@quarto/preview-renderer/framework`. No user-visible change.
-- [`5d8bd2b3`](https://github.com/quarto-dev/q2/commits/5d8bd2b3): Internal — start carving the preview pane into shared workspace packages (bd-hfjj Phase 2). Five type modules and seven utilities move from `hub-client/src/` into the new `@quarto/preview-renderer` package; hub-client now imports them via sub-paths. No user-visible change; this prepares for the `q2 preview` SPA reusing the exact same rendering code.
+- [`38273485`](https://github.com/quarto-dev/q2/commits/38273485): Authorship colouring and the hover badge now appear on q2-preview documents, matching q2-debug. The shared badge/stylesheet moved to `framework/`; q2-preview's dispatchers wrap nodes on hit and `PreviewDocument` mounts the hover handlers.
+- [`5194cc59`](https://github.com/quarto-dev/q2/commits/5194cc59): Thread the Authorship payload through the q2-preview WASM entry point so attribution data reaches the AST iframe. Off-path the call is byte-identical to before via the new `render_page_in_project_with_attribution` wrapper.
+
+### 2026-05-12
+
+- [`7ceb42c0`](https://github.com/quarto-dev/q2/commits/7ceb42c0): Fix a race where Authorship colouring failed to appear on first render in q2-debug for files using `render-components`. The iframe now serializes AST updates through the in-flight component-load promise, so two updates queued during load run in arrival order.
+- [`8cf443c1`](https://github.com/quarto-dev/q2/commits/8cf443c1): Add a Settings → Preview → Authorship toggle. When on, the q2-debug renderer colours each node by its last-touch Automerge actor (or git author for `--attribution=git` renders) and shows a hover badge with the author's name and a relative timestamp. Off by default; the wire path stays cold.
+- [`10dd3cfc`](https://github.com/quarto-dev/q2/commits/10dd3cfc): Port the Authorship renderer-side colouring to the new framework/ + q2-debug/ split (Plan 2pre). Attribution data flows through the framework's `AttributionLookupContext`; q2-debug's Block/Inline dispatchers do the wrap and the format's `AstRenderer` handles the hover badge.
+- [`91cfe944`](https://github.com/quarto-dev/q2/commits/91cfe944): `usePreference` is now cross-instance reactive — toggling a preference in Settings updates sibling consumers like the preview without a manual page refresh.
 
 ### 2026-05-10
 

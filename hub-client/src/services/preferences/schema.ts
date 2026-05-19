@@ -5,6 +5,11 @@ export const ColorSchemeSchema = z.enum(['auto', 'dark', 'light']);
 export type ColorScheme = z.infer<typeof ColorSchemeSchema>;
 
 // Schema definition - single source of truth
+//
+// The Authorship overlay is intentionally NOT persisted. It lives as
+// session-only React state in Editor.tsx and is toggled via the pill
+// in the replay bar — treating it as an inspection mode rather than a
+// setting avoids leaking a previously-curious view across reloads.
 export const UserPreferencesSchema = z.object({
   version: z.literal(1),
   scrollSyncEnabled: z.boolean(),

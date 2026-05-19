@@ -1,0 +1,49 @@
+/* Render-time author colour, cascaded from the per-actor rule the
+   transform / framework emits. Applies to both surfaces — the CLI
+   wraps prose with bare `<span data-attr-actor=…>`, the hub-client
+   wraps React children with `<div class="q2-attr-wrap" data-attr-actor=…>`. */
+[data-attr-actor] {
+    color: var(--attr-color, currentColor);
+    text-decoration-color: var(--attr-color, currentColor);
+}
+
+/* CLI-only affordances. The hub-client's q2-attr-wrap intentionally
+   omits these so the editing preview stays uncluttered — the user
+   already opted in via the Authorship toggle, no discoverability
+   cue needed. */
+[data-attr-actor]:not(.q2-attr-wrap) {
+    text-decoration: underline dotted;
+    text-underline-offset: 4px;
+    cursor: help;
+}
+
+.q2-attr-wrap { position: relative; }
+
+.q2-attr-badge {
+    display: inline-block;
+    z-index: 10;
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #fff;
+    border: 1px solid var(--attr-color);
+    color: var(--attr-color);
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.q2-attr-badge-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+
+.q2-attr-badge-time {
+    font-weight: 400;
+    opacity: 0.7;
+}

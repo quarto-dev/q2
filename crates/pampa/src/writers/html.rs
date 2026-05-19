@@ -10,16 +10,41 @@ use quarto_pandoc_types::ConfigValue;
 use std::collections::HashMap;
 use std::io::Write;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 // =============================================================================
 // Configuration and Context
 // =============================================================================
+
+/// Per-node attribution record consumed by the HTML writer's
+/// `write_block_source_attrs` / `write_inline_source_attrs`.
+///
+/// Identity (display name, colour) is **not** carried here. The
+/// `AttributionViewerTransform` emits one CSS rule per distinct
+/// actor into `<head>` (publishing `--attr-color` / `--attr-name`
+/// custom properties), and the browser paints via the cascade. JS
+/// reads identity from computed style for the hover badge.
+#[derive(Debug, Clone)]
+pub struct HtmlAttributionRecord {
+    pub actor: Arc<str>,
+    pub time: i64,
+}
 
 /// Configuration for HTML output
 #[derive(Debug, Clone, Default)]
 pub struct HtmlConfig {
     /// Include source location tracking (data-loc, data-sid attributes)
     pub include_source_locations: bool,
+
+    /// Pointer-keyed lookup populated by
+    /// `quarto_core::transforms::AttributionRenderTransform`. Keys
+    /// are `&Block` / `&Inline` cast through `*const ()` to
+    /// `usize`. The writer's source-attr helpers do a single
+    /// `HashMap::get` per node to decide whether to emit
+    /// `data-attr-actor` / `data-attr-time`. `None` means attribution
+    /// is off for this render — same code path as the unflagged HTML
+    /// default.
+    pub attribution_by_node: Option<Arc<HashMap<usize, HtmlAttributionRecord>>>,
 }
 
 /// Extract HTML configuration from document metadata.
@@ -40,6 +65,7 @@ pub fn extract_config_from_metadata(meta: &ConfigValue) -> HtmlConfig {
 
     HtmlConfig {
         include_source_locations,
+        ..HtmlConfig::default()
     }
 }
 
@@ -138,6 +164,28 @@ impl<'ast, W: Write> HtmlWriterContext<'ast, W> {
     /// Check if source locations are enabled
     pub fn include_source_locations(&self) -> bool {
         self.config.include_source_locations
+    }
+
+    /// Look up attribution record for a block by `SourceInfo`
+    /// pointer identity. Returns `None` if attribution is off, or this
+    /// block has no resolved attribution (e.g. node from a different
+    /// file or a byte range with no run coverage).
+    ///
+    /// The map's key is the address of the block's `source_info` field
+    /// (set by `AttributionRenderTransform`), which is stable across
+    /// the writer's read-only walk.
+    pub fn get_block_attribution(&self, block: &Block) -> Option<&HtmlAttributionRecord> {
+        let map = self.config.attribution_by_node.as_ref()?;
+        let key = block.source_info() as *const quarto_source_map::SourceInfo as usize;
+        map.get(&key)
+    }
+
+    /// Look up attribution record for an inline by `SourceInfo`
+    /// pointer identity.
+    pub fn get_inline_attribution(&self, inline: &Inline) -> Option<&HtmlAttributionRecord> {
+        let map = self.config.attribution_by_node.as_ref()?;
+        let key = inline.source_info() as *const quarto_source_map::SourceInfo as usize;
+        map.get(&key)
     }
 }
 
@@ -594,64 +642,115 @@ fn capture_to_class(capture: &str) -> String {
     capture.replace('.', "-")
 }
 
-/// Write source location attributes for a block element.
+/// Write source-tracking and attribution attributes for a block.
 ///
-/// Outputs `data-sid` (pool ID) and `data-loc` (resolved location) if
-/// source tracking is enabled and we have source info for this block.
+/// The two attribute families gate independently:
+///
+/// - `data-sid` / `data-loc` (source locations) emit only when
+///   `include_source_locations` is on and the writer has source info
+///   for this block.
+/// - `data-attr-actor` / `data-attr-time` (attribution) emit whenever
+///   `attribution_by_node` has a record for this block's pointer,
+///   regardless of `include_source_locations`. Identity (display
+///   name, colour) is resolved by per-actor CSS rules emitted in
+///   `<head>` by `AttributionViewerTransform`; the writer never sees
+///   identity.
+///
+/// Pinned by Phase 0 test #7c (`attribution_on + source_locations_off
+/// compose_orthogonally`).
 fn write_block_source_attrs<W: Write>(
     block: &Block,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    if !ctx.include_source_locations() {
-        return Ok(());
-    }
+    if ctx.include_source_locations() {
+        // Extract values to avoid borrowing ctx through info
+        let source_attrs = ctx.get_block_info(block).map(|info| {
+            (
+                info.pool_id,
+                info.location.as_ref().map(|loc| loc.to_data_loc()),
+            )
+        });
 
-    // Extract values to avoid borrowing ctx through info
-    let source_attrs = ctx.get_block_info(block).map(|info| {
-        (
-            info.pool_id,
-            info.location.as_ref().map(|loc| loc.to_data_loc()),
-        )
-    });
-
-    if let Some((pool_id, loc_str)) = source_attrs {
-        write!(ctx, " data-sid=\"{}\"", pool_id)?;
-        if let Some(loc) = loc_str {
-            write!(ctx, " data-loc=\"{}\"", loc)?;
+        if let Some((pool_id, loc_str)) = source_attrs {
+            write!(ctx, " data-sid=\"{}\"", pool_id)?;
+            if let Some(loc) = loc_str {
+                write!(ctx, " data-loc=\"{}\"", loc)?;
+            }
         }
     }
+
+    write_block_attribution_attrs(block, ctx)?;
 
     Ok(())
 }
 
-/// Write source location attributes for an inline element.
-///
-/// Outputs `data-sid` (pool ID) and `data-loc` (resolved location) if
-/// source tracking is enabled and we have source info for this inline.
+/// Write source-tracking and attribution attributes for an inline.
+/// See [`write_block_source_attrs`] for the per-family gating.
 fn write_inline_source_attrs<W: Write>(
     inline: &Inline,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    if !ctx.include_source_locations() {
-        return Ok(());
-    }
+    if ctx.include_source_locations() {
+        // Extract values to avoid borrowing ctx through info
+        let source_attrs = ctx.get_inline_info(inline).map(|info| {
+            (
+                info.pool_id,
+                info.location.as_ref().map(|loc| loc.to_data_loc()),
+            )
+        });
 
-    // Extract values to avoid borrowing ctx through info
-    let source_attrs = ctx.get_inline_info(inline).map(|info| {
-        (
-            info.pool_id,
-            info.location.as_ref().map(|loc| loc.to_data_loc()),
-        )
-    });
-
-    if let Some((pool_id, loc_str)) = source_attrs {
-        write!(ctx, " data-sid=\"{}\"", pool_id)?;
-        if let Some(loc) = loc_str {
-            write!(ctx, " data-loc=\"{}\"", loc)?;
+        if let Some((pool_id, loc_str)) = source_attrs {
+            write!(ctx, " data-sid=\"{}\"", pool_id)?;
+            if let Some(loc) = loc_str {
+                write!(ctx, " data-loc=\"{}\"", loc)?;
+            }
         }
     }
 
+    write_inline_attribution_attrs(inline, ctx)?;
+
     Ok(())
+}
+
+/// Emit the per-node attribution attrs (`data-attr-actor`,
+/// `data-attr-time`) for a block when `attribution_by_node` has a
+/// record for it. Identity (display name, colour) is emitted once
+/// per actor as a CSS rule by `AttributionViewerTransform`; the
+/// writer is identity-free.
+fn write_block_attribution_attrs<W: Write>(
+    block: &Block,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    let Some(record) = ctx.get_block_attribution(block) else {
+        return Ok(());
+    };
+    let (actor, time) = (record.actor.clone(), record.time);
+    write_attribution_attrs(ctx, &actor, time)
+}
+
+/// Inline counterpart to [`write_block_attribution_attrs`].
+fn write_inline_attribution_attrs<W: Write>(
+    inline: &Inline,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    let Some(record) = ctx.get_inline_attribution(inline) else {
+        return Ok(());
+    };
+    let (actor, time) = (record.actor.clone(), record.time);
+    write_attribution_attrs(ctx, &actor, time)
+}
+
+fn write_attribution_attrs<W: Write>(
+    ctx: &mut HtmlWriterContext<'_, W>,
+    actor: &str,
+    time: i64,
+) -> std::io::Result<()> {
+    write!(
+        ctx,
+        " data-attr-actor=\"{}\" data-attr-time=\"{}\"",
+        escape_html(actor),
+        time,
+    )
 }
 
 /// Write inline elements
@@ -661,8 +760,13 @@ fn write_inline<W: Write>(
 ) -> std::io::Result<()> {
     match inline {
         Inline::Str(s) => {
-            if ctx.include_source_locations() {
-                // Wrap in span for source tracking
+            // Wrap in a span when *either* source-tracking or
+            // attribution wants to attach attrs to this text. Either
+            // family on its own is sufficient; both compose
+            // orthogonally (Phase 0 test #7c pins this composition).
+            let needs_wrapper =
+                ctx.include_source_locations() || ctx.get_inline_attribution(inline).is_some();
+            if needs_wrapper {
                 write!(ctx, "<span")?;
                 write_inline_source_attrs(inline, ctx)?;
                 write!(ctx, ">{}</span>", escape_html(&s.text))?;
@@ -901,8 +1005,141 @@ fn write_inlines<W: Write>(
     inlines: &Inlines,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    for inline in inlines {
-        write_inline(inline, ctx)?;
+    // Prose coalescing (Phase 4b): when contiguous prose inlines
+    // (`Str` / `Space` / `SoftBreak` / `LineBreak`) share the same
+    // `(actor, time)` attribution lookup, emit one outer
+    // `<span data-attr-*>` wrapper around the whole run rather than
+    // a per-inline wrapper. Structured inlines (Code, Emph, …) break
+    // the run; they carry their own attribution attrs on their
+    // element tag (via `write_inline_source_attrs`).
+    let mut i = 0;
+    while i < inlines.len() {
+        let run_end = find_attribution_run_end(inlines, i, ctx);
+        if run_end > i {
+            emit_attribution_run(&inlines[i..run_end], ctx)?;
+            i = run_end;
+        } else {
+            write_inline(&inlines[i], ctx)?;
+            i += 1;
+        }
+    }
+    Ok(())
+}
+
+/// Returns the exclusive end of the maximal contiguous prose run
+/// starting at `start` whose `Str` members all share the same
+/// `(actor, time)` attribution lookup. Returns `start` (an empty
+/// run) when `inlines[start]` is not a `Str` with attribution.
+///
+/// Whitespace inlines (`Space` / `SoftBreak` / `LineBreak`) inside
+/// the run join the wrapper transparently; trailing whitespace at
+/// the end of the run is trimmed so it isn't pulled into a wrapper
+/// that wouldn't otherwise extend that far.
+fn find_attribution_run_end<W: Write>(
+    inlines: &Inlines,
+    start: usize,
+    ctx: &HtmlWriterContext<'_, W>,
+) -> usize {
+    let anchor = match &inlines[start] {
+        Inline::Str(_) => ctx
+            .get_inline_attribution(&inlines[start])
+            .map(|r| (Arc::clone(&r.actor), r.time)),
+        _ => None,
+    };
+    let Some(anchor) = anchor else {
+        return start;
+    };
+
+    let mut end = start + 1;
+    let mut last_str_end = end;
+    while end < inlines.len() {
+        match &inlines[end] {
+            Inline::Str(_) => {
+                let attr = ctx
+                    .get_inline_attribution(&inlines[end])
+                    .map(|r| (Arc::clone(&r.actor), r.time));
+                if attr.as_ref() == Some(&anchor) {
+                    end += 1;
+                    last_str_end = end;
+                } else {
+                    break;
+                }
+            }
+            Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => {
+                end += 1;
+            }
+            _ => break,
+        }
+    }
+    last_str_end
+}
+
+/// Emit a coalesced attribution run. The run's anchor (`run[0]`) is
+/// a `Str` with attribution; all other `Str` inlines in the run
+/// share that anchor's `(actor, time)`. Whitespace inlines are
+/// emitted transparently. When `include_source_locations` is on,
+/// each `Str` inside the wrapper gets its own
+/// `<span data-sid=…>` carrying only the source-location attrs —
+/// the outer wrapper provides the attribution attrs.
+fn emit_attribution_run<W: Write>(
+    run: &[Inline],
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    let (actor, time) = {
+        let record = ctx
+            .get_inline_attribution(&run[0])
+            .expect("emit_attribution_run anchor has attribution");
+        (Arc::clone(&record.actor), record.time)
+    };
+
+    write!(ctx, "<span")?;
+    write_attribution_attrs(ctx, &actor, time)?;
+    write!(ctx, ">")?;
+
+    for x in run {
+        match x {
+            Inline::Str(s) => {
+                if ctx.include_source_locations() {
+                    write!(ctx, "<span")?;
+                    write_inline_locations_only_attrs(x, ctx)?;
+                    write!(ctx, ">{}</span>", escape_html(&s.text))?;
+                } else {
+                    write!(ctx, "{}", escape_html(&s.text))?;
+                }
+            }
+            Inline::Space(_) => write!(ctx, " ")?,
+            Inline::SoftBreak(_) => writeln!(ctx)?,
+            Inline::LineBreak(_) => write!(ctx, "<br />")?,
+            _ => unreachable!("emit_attribution_run only receives prose inlines"),
+        }
+    }
+
+    write!(ctx, "</span>")?;
+    Ok(())
+}
+
+/// Emit `data-sid` / `data-loc` for an inline, without the
+/// `data-attr-*` attribution attrs. Used by [`emit_attribution_run`]
+/// for per-`Str` inner spans inside an outer attribution wrapper:
+/// the outer wrapper already carries the attribution, so the inner
+/// span only needs the source-location attrs.
+fn write_inline_locations_only_attrs<W: Write>(
+    inline: &Inline,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    if ctx.include_source_locations() {
+        let source_attrs = ctx.get_inline_info(inline).map(|info| {
+            (
+                info.pool_id,
+                info.location.as_ref().map(|loc| loc.to_data_loc()),
+            )
+        });
+        if let Some((pool_id, loc_str)) = source_attrs {
+            write!(ctx, " data-sid=\"{}\"", pool_id)?;
+            if let Some(loc) = loc_str {
+                write!(ctx, " data-loc=\"{}\"", loc)?;
+            }
+        }
     }
     Ok(())
 }
@@ -1278,12 +1515,14 @@ pub fn write_with_source_tracking<W: Write>(
 ) -> std::io::Result<()> {
     let config = HtmlConfig {
         include_source_locations: true,
+        ..HtmlConfig::default()
     };
     let mut ctx = HtmlWriterContext::with_config(writer, config);
 
     // Generate JSON with source locations enabled
     let json_config = JsonConfig {
         include_inline_locations: true,
+        ..JsonConfig::default()
     };
 
     match json::write_pandoc(pandoc, ast_context, &json_config) {
@@ -1332,13 +1571,59 @@ pub fn write<W: Write>(
     ast_context: &ASTContext,
     writer: W,
 ) -> std::io::Result<()> {
-    let config = extract_config_from_metadata(&pandoc.meta);
+    write_with_options(pandoc, ast_context, writer, HtmlConfig::default())
+}
+
+/// Write a Pandoc document to HTML, merging the caller-supplied
+/// [`HtmlConfig`] with any per-document metadata.
+///
+/// This is the entry point that lets the render pipeline pass
+/// pre-baked attribution data (the `attribution_by_node` field
+/// populated by `AttributionRenderTransform`) without losing the
+/// metadata-driven `source-location: full` opt-in.
+pub fn write_with_options<W: Write>(
+    pandoc: &Pandoc,
+    ast_context: &ASTContext,
+    writer: W,
+    mut config: HtmlConfig,
+) -> std::io::Result<()> {
+    // Metadata-derived flag is OR'd onto whatever the caller passed.
+    let meta_config = extract_config_from_metadata(&pandoc.meta);
+    config.include_source_locations |= meta_config.include_source_locations;
 
     if config.include_source_locations {
-        write_with_source_tracking(pandoc, ast_context, writer)
+        write_with_source_tracking_and_config(pandoc, ast_context, writer, config)
     } else {
         write_with_config(pandoc, writer, config)
     }
+}
+
+/// Like [`write_with_source_tracking`] but accepts an [`HtmlConfig`]
+/// so the caller can supply attribution lookups alongside the
+/// source-tracking flag. Internal helper for
+/// [`write_with_options`].
+fn write_with_source_tracking_and_config<W: Write>(
+    pandoc: &Pandoc,
+    ast_context: &ASTContext,
+    writer: W,
+    config: HtmlConfig,
+) -> std::io::Result<()> {
+    let mut ctx = HtmlWriterContext::with_config(writer, config);
+
+    let json_config = JsonConfig {
+        include_inline_locations: true,
+        ..JsonConfig::default()
+    };
+    match json::write_pandoc(pandoc, ast_context, &json_config) {
+        Ok(json_value) => {
+            let source_map = build_source_map(pandoc, &json_value);
+            ctx.set_source_map(source_map);
+        }
+        Err(_errors) => {}
+    }
+
+    write_blocks(&pandoc.blocks, &mut ctx)?;
+    Ok(())
 }
 
 /// Public wrapper to write blocks (for external callers)
@@ -1475,6 +1760,7 @@ mod tests {
     fn test_html_writer_context_include_source_locations() {
         let config = HtmlConfig {
             include_source_locations: true,
+            ..HtmlConfig::default()
         };
         let ctx: HtmlWriterContext<'_, Vec<u8>> =
             HtmlWriterContext::with_config(Vec::new(), config);

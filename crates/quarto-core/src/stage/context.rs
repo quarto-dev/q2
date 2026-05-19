@@ -139,6 +139,38 @@ pub struct StageContext {
     /// page-relative URLs without re-deriving the resolver.
     pub resource_resolver: Option<ResourceResolverContext>,
 
+    /// Optional attribution-data producer, set by the CLI
+    /// `--attribution` flag plumbing or the WASM
+    /// `parse_qmd_to_ast_with_attribution` entry point. Consumed by
+    /// [`crate::stage::stages::AttributionGenerateStage`], which
+    /// runs *before* [`UserFiltersStage::pre`] so user filters can
+    /// query attribution via the `quarto.attribution.*` Lua surface.
+    /// `None` means attribution is off for this render — the
+    /// generate stage short-circuits and `attribution_data` stays
+    /// `None`.
+    pub attribution_provider: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
+
+    /// Per-document attribution sidecar, populated by
+    /// [`crate::stage::stages::AttributionGenerateStage`] before
+    /// user filters run, then bridged into the inner `RenderContext`
+    /// by [`crate::stage::stages::AstTransformsStage`] so
+    /// `AttributionRenderTransform` can bake the writer-side lookup
+    /// table. The Lua host binding registered by
+    /// [`crate::stage::stages::UserFiltersStage`] reads this directly
+    /// to back the `quarto.attribution.*` namespace. `None` when no
+    /// provider was installed.
+    pub attribution_data: Option<Arc<crate::attribution::AttributionData>>,
+
+    /// Per-format writer-side options, populated by Render-phase
+    /// transforms inside [`crate::stage::stages::AstTransformsStage`]
+    /// and bridged back here after the inner pipeline runs. Consumed
+    /// by downstream stages that build the writer config (e.g.
+    /// [`crate::stage::stages::RenderHtmlBodyStage`] passes the
+    /// HTML sub-bag to `pampa::writers::html`). Defaults to all
+    /// `None` fields so existing stages and tests see no behaviour
+    /// change.
+    pub format_options: crate::render::FormatOptions,
+
     /// Optional provider of user-defined tree-sitter grammars, consulted
     /// by `CodeHighlightStage` before falling back to the built-in
     /// registry. Set by the top-level render entry points:
@@ -201,6 +233,9 @@ impl StageContext {
             resource_resolver: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
+            attribution_provider: None,
+            attribution_data: None,
+            format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
         })
     }

@@ -179,6 +179,14 @@ impl LuaInline {
         // the closure-captured value isn't tied to the borrow's lifetime.
         match key {
             "tag" | "t" => return self.tag_name().into_lua(lua),
+            "source_info" => {
+                // The Lua host binding for attribution
+                // (`quarto.attribution.lookup(el)`) reads this. Snapshot
+                // the SourceInfo so the userdata is independent of any
+                // later mutation of the inline.
+                let si = self.0.borrow().source_info().clone();
+                return lua.create_userdata(LuaSourceInfo::new(si))?.into_lua(lua);
+            }
             "clone" => {
                 // Snapshot the inner inline at .clone-access time (matching
                 // pre-refactor behavior). Each invocation of the returned
@@ -709,6 +717,62 @@ impl UserData for LuaInline {
     }
 }
 
+/// Wrapper for [`SourceInfo`] exposed as Lua userdata.
+///
+/// Returned by `el.source_info` on Block and Inline userdata. Carries
+/// `:byte_range()` and `:file_id()` accessors that chain-resolve the
+/// underlying `SourceInfo` to a `(file_id, start, end)` tuple in the
+/// root source file. Both return `nil` when the chain resolves to
+/// `SourceInfo::Concat` or `SourceInfo::FilterProvenance` — the same
+/// rule applied by `AttributionRenderTransform`.
+///
+/// This is the building block of the `quarto.attribution.lookup(el)`
+/// convenience: it reads `el.source_info:byte_range()` then calls
+/// `quarto.attribution.lookup_range` with the resolved offsets.
+#[derive(Debug, Clone)]
+pub struct LuaSourceInfo(pub SourceInfo);
+
+impl LuaSourceInfo {
+    pub fn new(si: SourceInfo) -> Self {
+        Self(si)
+    }
+}
+
+impl UserData for LuaSourceInfo {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        // `:byte_range()` returns a Lua table `{start, end}` (1-indexed
+        // positional, matching Pandoc convention for Range tables) or
+        // `nil` when the SourceInfo chain doesn't resolve to a single
+        // contiguous byte range.
+        methods.add_method("byte_range", |lua, this, ()| {
+            let Some((_fid, start, end)) = this.0.resolve_byte_range() else {
+                return Ok(Value::Nil);
+            };
+            let t = lua.create_table()?;
+            t.set("start", start)?;
+            t.set("end_", end)?;
+            // Positional access for callers that prefer it.
+            t.set(1, start)?;
+            t.set(2, end)?;
+            Ok(Value::Table(t))
+        });
+
+        // `:file_id()` returns the integer file_id, or `nil` when the
+        // chain doesn't resolve. Useful for callers that want to skip
+        // non-primary-file nodes without re-deriving the rule.
+        methods.add_method("file_id", |_, this, ()| {
+            Ok(this.0.resolve_byte_range().map(|(fid, _, _)| fid))
+        });
+
+        methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
+            Ok(match this.0.resolve_byte_range() {
+                Some((fid, start, end)) => format!("SourceInfo({}, {}..{})", fid, start, end),
+                None => "SourceInfo(unresolved)".to_string(),
+            })
+        });
+    }
+}
+
 /// Wrapper for Pandoc Block elements as Lua userdata.
 ///
 /// The inner `Block` lives behind `Rc<RefCell<…>>` so proxy userdata
@@ -842,6 +906,13 @@ impl LuaBlock {
         // closure creation or async boundaries.
         match key {
             "tag" | "t" => return self.tag_name().into_lua(lua),
+            "source_info" => {
+                // See `LuaInline::get_field`'s matching branch for
+                // the contract this powers (the attribution host
+                // binding).
+                let si = self.0.borrow().source_info().clone();
+                return lua.create_userdata(LuaSourceInfo::new(si))?.into_lua(lua);
+            }
             "clone" => {
                 let snapshot = self.0.borrow().clone();
                 return lua

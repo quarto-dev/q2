@@ -31,6 +31,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tracing::info;
 
+use quarto_core::attribution::AttributionMode;
 use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
 use quarto_core::{Format, ProjectContext, QuartoError, RenderToFileOptions};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -64,6 +65,9 @@ pub struct RenderArgs {
     /// Leave intermediate files (not yet implemented).
     #[allow(dead_code)]
     pub debug: bool,
+    /// Resolved attribution mode from the `--attribution=<value>`
+    /// flag. `None` means "absent — defer to YAML." Phase 3c.
+    pub attribution: Option<AttributionMode>,
 }
 
 /// What to render after argument classification.
@@ -496,6 +500,10 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         quiet: args.quiet,
         replay_capture,
         engine_registry_override: None,
+        // Phase 3c: CLI override-only for v1 (YAML reading is deferred
+        // until project YAML schema work; the resolver matrix is still
+        // exercised end-to-end by Phase 0 test #9b).
+        attribution: args.attribution,
     };
 
     match target {

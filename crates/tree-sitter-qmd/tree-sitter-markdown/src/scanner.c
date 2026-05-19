@@ -121,6 +121,13 @@ typedef enum {
 
     HTML_ELEMENT, // simply for good error reporting
 
+    // bd-j9cf: emitted when '<' is at the current position but no HTML
+    // construct (autolink, raw_specifier, html_comment, html_element) is
+    // recognized at this site. Consumes only the '<' character so the
+    // parser can treat it as a plain Str literal. See grammar.js
+    // (`_pandoc_lt_str`) and parse_open_angle_brace below.
+    LT_STR_LITERAL,
+
     PIPE_TABLE_DELIMITER, // to allow naked '|' in markdown
 
     PANDOC_LINE_BREAK,
@@ -136,6 +143,13 @@ typedef enum {
     // position so the parser raises Q-2-35, suggesting fenced code blocks.
     // See grammar.js (`_indented_code_block_error`) and CONTRIBUTING.md.
     INDENTED_CODE_BLOCK_DISALLOWED,
+
+    // Issue #206: emit a ':' caption-start token only when ':' is followed by
+    // inline whitespace (or newline / EOF), NOT another ':'. Replaces the bare
+    // ':' literal in the `caption` grammar rule and kills the ambiguity with
+    // `:::` (fenced div open/close) after a pipe table row. Emission site:
+    // parse_fenced_div_marker (`level == 1` branch).
+    CAPTION_START,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -233,12 +247,15 @@ static char* token_names[] = {
 
     "HTML_ELEMENT", // simply for good error reporting
 
+    "LT_STR_LITERAL", // bd-j9cf: bare '<' that is not an HTML construct
+
     "PIPE_TABLE_DELIMITER",
 
     "PANDOC_LINE_BREAK",
 
     "TRIPLE_STAR", // simply for good error reporting
     "INDENTED_CODE_BLOCK_DISALLOWED", // simply for good error reporting
+    "CAPTION_START",
 };
 
 #endif
@@ -590,6 +607,20 @@ static bool parse_fenced_div_marker(Scanner *s, TSLexer *lexer,
     }
     mark_end(s, lexer);
     if (level < 3) {
+        // Issue #206: a single ':' followed by inline whitespace (or
+        // newline/EOF) is a caption-start. Emit CAPTION_START so the parser
+        // can match the `caption` rule (which used to key off a literal ':'
+        // and collided with `:::`). Note that ':::' (level >= 3) has already
+        // taken the fenced-div path above, so this branch only fires for
+        // level == 1 or level == 2; level == 2 ('::') is not a valid caption
+        // start because the second char is ':' not whitespace, so the
+        // lookahead check below excludes it.
+        if (level == 1 && valid_symbols[CAPTION_START] &&
+            (lexer->eof(lexer) ||
+             lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
+             lexer->lookahead == '\n' || lexer->lookahead == '\r')) {
+            EMIT_TOKEN(CAPTION_START);
+        }
         return false;
     }
 
@@ -1577,7 +1608,9 @@ static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
 }
 
 static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
-    if (!valid_symbols[AUTOLINK] && !valid_symbols[RAW_SPECIFIER] && !valid_symbols[HTML_COMMENT]) {
+    bool lt_str_valid = valid_symbols[LT_STR_LITERAL];
+    if (!valid_symbols[AUTOLINK] && !valid_symbols[RAW_SPECIFIER] &&
+        !valid_symbols[HTML_COMMENT] && !lt_str_valid) {
         return false;
     }
 
@@ -1587,14 +1620,29 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
     }
     lexer->advance(lexer, false);
 
+    // bd-j9cf: fix the fallback end-of-token at exactly one byte past '<'.
+    // Subsequent advances are lookahead until the next mark_end call. If the
+    // scan loop below walks to EOF without finding a closing delimiter, we
+    // fall back to emitting LT_STR_LITERAL, which consumes only the '<'.
+    lexer->mark_end(lexer);
+
     if (lexer->lookahead == '!') {
-        return parse_html_comment(lexer, valid_symbols);
+        if (valid_symbols[HTML_COMMENT]) {
+            return parse_html_comment(lexer, valid_symbols);
+        }
+        // HTML_COMMENT was not requested here; treat '<' as a Str literal
+        // if the grammar allows it.
+        if (lt_str_valid) {
+            EMIT_TOKEN(LT_STR_LITERAL);
+        }
+        return false;
     }
 
     // consume all characters until one of:
     // - '}': that was a raw specifier
-    // - '>': that was an autolink
-    // - ' ', '\t', EOF: that was a bad lex
+    // - '>': that was an autolink or html_element
+    // - EOF: no HTML construct matched; emit LT_STR_LITERAL (bd-j9cf) so the
+    //   bare '<' becomes a plain Str instead of a parse error.
 
     bool could_be_autolink = lexer->lookahead != '/'; // very first character can't be '/' in autolinks.
     bool had_url_like_character = false;
@@ -1608,13 +1656,22 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
             EMIT_TOKEN(RAW_SPECIFIER);
         } else if (valid_symbols[AUTOLINK] && could_be_autolink && had_url_like_character && lexer->lookahead == '>') {
             lexer->advance(lexer, false); // we want to consume '>' for autolinks
+            lexer->mark_end(lexer);
             EMIT_TOKEN(AUTOLINK);
         } else if (lexer->lookahead == '>') {
             // this token is never valid, but we emit it for error messages
             lexer->advance(lexer, false);
+            lexer->mark_end(lexer);
             EMIT_TOKEN(HTML_ELEMENT);
         }
         lexer->advance(lexer, false);
+    }
+
+    // Reached EOF without finding a closing delimiter. If the grammar
+    // permits a bare '<' as a Str literal here, emit LT_STR_LITERAL —
+    // mark_end is still at '<'+1, so only the '<' character is consumed.
+    if (lt_str_valid) {
+        EMIT_TOKEN(LT_STR_LITERAL);
     }
     return false;
 }
@@ -2158,10 +2215,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 
     switch (lexer->lookahead) {
         case '<':
-            // Handle HTML comments, raw_specifiers (qmd's raw reader extension), autolinks
-            if (valid_symbols[HTML_COMMENT] || 
-                valid_symbols[AUTOLINK] || 
-                valid_symbols[RAW_SPECIFIER]) {
+            // Handle HTML comments, raw_specifiers (qmd's raw reader extension),
+            // autolinks, and (bd-j9cf) bare '<' as Str literal.
+            if (valid_symbols[HTML_COMMENT] ||
+                valid_symbols[AUTOLINK] ||
+                valid_symbols[RAW_SPECIFIER] ||
+                valid_symbols[LT_STR_LITERAL]) {
                 return parse_open_angle_brace(lexer, valid_symbols);
             }
             break;
@@ -2325,10 +2384,53 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
 
-            if (lexer->lookahead != '\n' && lexer->lookahead != '\r' && valid_symbols[PIPE_TABLE_LINE_ENDING]) {
+            // Issue #206: a `:::` line that follows a pipe-table row must
+            // terminate the table rather than be absorbed as another row. The
+            // _caption_start scanner gate (in parse_fenced_div_marker, level
+            // == 1 branch) prevents the parser from shifting `:` as caption,
+            // but the pipe_table_row rule's "single cell, no `|`" alternative
+            // will otherwise eat `:::` as cell content (3 × pandoc_str).
+            //
+            // To avoid that, peek (without mark_end) for a `:::` run followed
+            // by inline whitespace / newline / EOF. If we see one, fall
+            // through to the LINE_ENDING path below so the pipe_table
+            // terminates via its `choice(_newline, _eof)` tail. The parser
+            // then proceeds to a state where FENCED_DIV_END is valid and
+            // parse_fenced_div_marker can emit it on the next scan call —
+            // for bare `:::` outside a fenced div, FENCED_DIV_END is not
+            // valid and the line errors out at a sensible place rather than
+            // silently producing a phantom row.
+            bool next_line_is_fenced_div_marker = false;
+            if (lexer->lookahead == ':') {
+                int level = 0;
+                // Match parse_fenced_div_marker's unbounded colon-run count.
+                // pandoc allows arbitrary fence widths for nested divs.
+                while (lexer->lookahead == ':') {
+                    advance(s, lexer);
+                    level++;
+                }
+                if (level >= 3 && (lexer->eof(lexer) ||
+                                   lexer->lookahead == ' ' ||
+                                   lexer->lookahead == '\t' ||
+                                   lexer->lookahead == '\n' ||
+                                   lexer->lookahead == '\r')) {
+                    next_line_is_fenced_div_marker = true;
+                }
+                // No mark_end past the peeked colons: tree-sitter rewinds to
+                // the last mark_end (set at line 2341, post-newline /
+                // pre-indent) between scan calls, so the advance is undone
+                // for the LINE_ENDING fall-through path. Same idiom used by
+                // the backtick / asterisk peeks below.
+            }
+
+            if (lexer->lookahead != '\n' && lexer->lookahead != '\r' &&
+                !next_line_is_fenced_div_marker &&
+                valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                 EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
             }
-            if ((lexer->lookahead == '\n' || lexer->lookahead == '\r') && valid_symbols[PIPE_TABLE_LINE_ENDING]) {
+            if (((lexer->lookahead == '\n' || lexer->lookahead == '\r') ||
+                 next_line_is_fenced_div_marker) &&
+                valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                 EMIT_TOKEN(LINE_ENDING);
             }
 
@@ -2417,6 +2519,35 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             // DEBUG_EXP("%d", (int) all_will_be_matched);
             DEBUG_EXP("%d", s->matched);
             DEBUG_LOOKAHEAD;
+
+            // BLOCK_QUOTE.match (scanner.c:568) consumes `>` plus at most one
+            // optional space; any additional gutter alignment left on the
+            // continuation line stalls the second SOFT_LINE_ENDING gate below
+            // at its `second_lookahead > ' '` check (whitespace fails the
+            // test) and forces a paragraph-terminating LINE_ENDING. The
+            // inline `_attr_ws` rule cannot consume LINE_ENDING, so a
+            // multi-space `{...}` continuation inside a blockquote becomes a
+            // hard parse error (was Q-2-38). LIST_ITEM*.match consumes the
+            // full continuation indent intrinsically; FENCED_DIV.match does
+            // not advance at all (line 581-584). Only BLOCK_QUOTE.match can
+            // leave gutter whitespace behind, so this fixup is gated on
+            // the matched stack actually containing a BLOCK_QUOTE.
+            // Additional gates:
+            // - `all_will_be_matched`: skip partial nested-blockquote
+            //   matches (lazy continuation of outer only).
+            // - `might_be_soft_break`: skip ATX-inside contexts.
+            bool any_blockquote_matched = false;
+            for (uint8_t i = 0; i < s->matched; i++) {
+                if (s->open_blocks.items[i] == BLOCK_QUOTE) {
+                    any_blockquote_matched = true;
+                    break;
+                }
+            }
+            if (any_blockquote_matched && all_will_be_matched && might_be_soft_break) {
+                while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+                    advance(s, lexer);
+                }
+            }
 
             if (all_will_be_matched) {
                 if (valid_symbols[PIPE_TABLE_LINE_ENDING]) {

@@ -6,6 +6,7 @@ import {
     extractMetaStringList,
     getMetaPath,
     RegistryContext,
+    useAttributionHover,
 } from '../framework';
 import type { BlockNode, PandocAST } from '../framework';
 import * as Custom from './custom';
@@ -145,6 +146,18 @@ export const PreviewDocument = ({
         getMetaPath(meta, ['rendered', 'includes', 'header']),
     );
 
+    // Attribution wiring (Phase 3 of
+    // `2026-05-13-q2-preview-attribution.md`): delegated to
+    // `useAttributionHover`, which returns inert wiring when
+    // `AttributionLookupContext` is unpopulated. The q2-preview
+    // render path is currently in that state — `render_page_for_preview`
+    // does not yet install a `PreBuiltAttributionProvider`, so
+    // `astContext.attribution*` arrives empty, the context is empty,
+    // and every interpolation below is a no-op (DOM byte-identical
+    // to pre-attribution). When the producer-side gap is closed the
+    // consumer wiring lights up automatically with no React changes.
+    const attr = useAttributionHover();
+
     const children = renderChildren({
         node: ast as any,
         setLocalAst: setAst as any,
@@ -165,16 +178,34 @@ export const PreviewDocument = ({
                 Array.isArray((b as { c?: unknown[] }).c) &&
                 ((b as { c: unknown[] }).c[0] === 1),
         );
-        return (
+        const minimalInner = (
             <>
                 {title && !hasLevel1Header ? <h1>{title}</h1> : null}
                 {children}
             </>
         );
+        // When attribution is on we need a host element to carry the
+        // mouseover delegation. Off-path stay on the Fragment so the
+        // minimal-mode DOM is byte-identical to today's.
+        if (attr.enabled) {
+            return (
+                <>
+                    {attr.stylesheet}
+                    <div {...attr.hostProps}>{minimalInner}</div>
+                    {attr.overlay}
+                </>
+            );
+        }
+        return minimalInner;
     }
 
     return (
         <>
+            {/* Attribution stylesheet — inert (renders nothing) when
+                attribution context is empty. Lives next to header-
+                includes since both are document-head-adjacent. */}
+            {attr.stylesheet}
+
             {/* Phase F.2: header-includes (favicon, RSS links, user
                 includes) appended imperatively to `document.head`. */}
             <HeaderIncludesEffect items={headerIncludes} />
@@ -185,6 +216,7 @@ export const PreviewDocument = ({
             <div
                 id="quarto-content"
                 className={`quarto-container page-columns page-rows-contents page-layout-${pageLayout}`}
+                {...attr.hostProps}
             >
                 {/* Sidebar — INSIDE quarto-content, before TOC + main
                     (template.rs:186-188). */}
@@ -201,6 +233,7 @@ export const PreviewDocument = ({
                         onNavigateToDocument={onNavigateToDocument}
                     />
                     {children}
+
                     {/* Page-nav (prev/next) — INSIDE main, after body
                         content (template.rs:244-246). */}
                     {pageNavHtml ? <PageNavSlot html={pageNavHtml} /> : null}
@@ -210,6 +243,9 @@ export const PreviewDocument = ({
             {/* Page-footer lives AFTER quarto-content
                 (template.rs:252-254). */}
             {footerHtml ? <FooterSlot html={footerHtml} /> : null}
+
+            {/* Attribution overlay — inert when off-path. */}
+            {attr.overlay}
         </>
     );
 };

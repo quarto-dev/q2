@@ -904,3 +904,113 @@ fn default_project_theme_artifact_lands_in_vfs_under_q2_preview() {
         snippet(css_text),
     );
 }
+
+/// Phase 0 test #2 from `2026-05-13-q2-preview-attribution.md`
+/// (the WASM-boundary contract, exercised natively).
+///
+/// `wasm-quarto-hub-client` is `cdylib`-only — its
+/// `render_page_in_project_with_attribution` entry point can't be
+/// driven from native tests. Both branches of that entry point
+/// converge on `RenderToPreviewAstRenderer::with_attribution(json)`
+/// for the multi-doc case, so a native renderer-level test pins
+/// the same contract: when the renderer is configured with a
+/// transport JSON payload, the orchestrator's q2-preview output
+/// carries `astContext.attribution` and `astContext.attributionActors`.
+#[test]
+fn render_to_preview_ast_renderer_with_attribution_surfaces_keys() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    // Minimal website fixture; a single qmd file is enough to drive
+    // a project-mode render through `RenderMode::ActivePage`.
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHello world!\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+
+    // Single run covering the whole document (10_000 is a generous
+    // upper bound — actual content is < 100 bytes). The `name` field
+    // is `Identity::display_name`'s serde alias (see types.rs).
+    let attribution_json = serde_json::json!({
+        "runs": [
+            { "start": 0, "end": 10_000, "actor": "alice", "time": 42 }
+        ],
+        "identities": {
+            "alice": { "name": "Alice", "color": "#ff0000" }
+        }
+    })
+    .to_string();
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let mut project = ProjectContext::discover(&active, runtime.as_ref()).unwrap();
+    if !project.is_single_file {
+        project = ProjectContext::discover(&project.dir, runtime.as_ref()).unwrap();
+    }
+
+    let project_type = project_type_for(&project);
+    let vfs_root = project.dir.join(".quarto/project-artifacts");
+    let renderer = RenderToPreviewAstRenderer::new(&vfs_root).with_attribution(attribution_json);
+
+    let format =
+        Format::from_format_string("q2-preview").expect("q2-preview is a recognized pseudo-format");
+
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        format,
+        "q2-preview",
+        runtime.clone(),
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active.clone()));
+
+    let summary = pollster::block_on(pipeline.run()).expect("q2-preview pipeline run");
+    assert!(
+        summary.pass1_failures.is_empty(),
+        "unexpected pass-1 failures: {:?}",
+        summary.pass1_failures,
+    );
+    assert!(
+        summary.pass2_failures.is_empty(),
+        "unexpected pass-2 failures: {:?}",
+        summary.pass2_failures,
+    );
+    let output = summary
+        .outputs
+        .into_iter()
+        .next()
+        .expect("ActivePage mode should produce exactly one output");
+
+    let json = ast_json(&output);
+    assert!(
+        json.contains("\"attribution\""),
+        "expected `attribution` key in attributed q2-preview output; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"attributionActors\""),
+        "expected `attributionActors` key in attributed q2-preview output; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"actor\":\"alice\""),
+        "expected a record naming alice; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"name\":\"Alice\""),
+        "expected alice's identity entry with display name; got:\n{}",
+        snippet(json),
+    );
+    assert!(
+        json.contains("\"color\":\"#ff0000\""),
+        "expected alice's identity entry with color; got:\n{}",
+        snippet(json),
+    );
+}

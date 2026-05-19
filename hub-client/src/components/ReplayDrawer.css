@@ -10,6 +10,9 @@
 .replay-drawer--collapsed {
   height: 28px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .replay-drawer--expanded {
@@ -48,11 +51,14 @@
   cursor: default;
 }
 
-/* Collapsed: toggle fills the bar */
+/* Collapsed: toggle grows to fill the bar so most of it is still
+   clickable to enter replay, while leaving room for the Authorship
+   pill on the right. */
 .replay-drawer--collapsed .replay-drawer__toggle {
-  width: 100%;
+  flex: 1;
   height: 100%;
   padding: 0 10px;
+  justify-content: flex-start;
 }
 
 .replay-drawer__chevron {
@@ -290,4 +296,120 @@
   font-size: 11px;
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* Authorship overlay toggle — sits flush-right in both collapsed and
+   expanded states. Off-state matches the dim transport-button look;
+   on-state lights up with the editor accent. */
+.replay-drawer__authorship {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 20px;
+  margin-right: 10px;
+  padding: 0 8px;
+  background: var(--editor-accent-bg);
+  border: 1px solid var(--editor-accent-border);
+  border-radius: 10px;
+  color: var(--editor-text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.replay-drawer__authorship:hover {
+  color: var(--editor-text);
+  border-color: var(--editor-text-dim);
+}
+
+.replay-drawer__authorship--on {
+  color: var(--editor-success);
+  border-color: var(--editor-success);
+  background: var(--editor-success-bg);
+}
+
+.replay-drawer__authorship--on:hover {
+  background: var(--editor-success);
+  color: var(--editor-bg);
+}
+
+.replay-drawer__authorship-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.replay-drawer__authorship--on .replay-drawer__authorship-dot {
+  opacity: 1;
+}
+
+/* Rotating-gradient sweep around the pill while attribution data
+   is being generated. A conic-gradient on a ::before pseudo-element
+   sits one pixel outside the pill's border; the inner mask cuts the
+   centre so only a ~1px ring shows. The `--angle` custom property is
+   registered via @property so the @keyframe interpolation produces
+   smooth motion (without @property the value would jump at 0/360).
+
+   We intentionally keep the static border underneath — the rotating
+   highlight rides on top, so the pill never looks "borderless" mid-
+   animation if a browser ignores the pseudo-element. */
+@property --replay-drawer__authorship-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.replay-drawer__authorship--generating {
+  position: relative;
+}
+
+.replay-drawer__authorship--generating::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  /* Full-circle rainbow that rotates — the band itself is the
+     indicator, no transparent gap. First and last stops match so
+     the seam is invisible across the 0/360 boundary. */
+  background: conic-gradient(
+    from var(--replay-drawer__authorship-angle),
+    #ff3b30 0deg,
+    #ff9500 60deg,
+    #ffcc00 120deg,
+    #34c759 180deg,
+    #5ac8fa 240deg,
+    #5856d6 300deg,
+    #ff3b30 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+          mask-composite: exclude;
+  animation: replay-drawer__authorship-spin 2s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes replay-drawer__authorship-spin {
+  to {
+    --replay-drawer__authorship-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .replay-drawer__authorship--generating::before {
+    animation: none;
+  }
 }

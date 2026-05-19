@@ -57,25 +57,25 @@ use crate::stage::stages::ApplyTemplateConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::BootstrapJsStage;
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
-    EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage, LinkResolutionStage,
-    ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage,
-    Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage,
-    ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
+    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
+    DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
+    LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage,
+    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AppendixStructureTransform, CalloutResolveTransform, CalloutTransform,
-    CategoriesSidebarTransform, CrossrefIndexTransform, CrossrefRenderTransform,
-    CrossrefResolveTransform, EquationLabelTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
-    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
+    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform, CrossrefIndexTransform,
+    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
+    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -292,6 +292,11 @@ pub fn build_html_pipeline_stages_with_options(
     // omits this stage. See bootstrap_js.rs for full rationale.
     #[cfg(not(target_arch = "wasm32"))]
     stages.push(Box::new(BootstrapJsStage::new()));
+    // Attribution-generate runs *before* user filters so the
+    // `quarto.attribution.*` Lua host binding sees a populated
+    // sidecar in both `pre` and `post` filter passes. No-op when
+    // no provider is installed (`ctx.attribution_provider` is None).
+    stages.push(Box::new(AttributionGenerateStage::new()));
     stages.push(Box::new(UserFiltersStage::pre()));
     stages.push(Box::new(AstTransformsStage::new()));
     stages.push(Box::new(UserFiltersStage::post()));
@@ -471,6 +476,8 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(CompileThemeCssStage::new()),
+        // See native pipeline for the placement rationale.
+        Box::new(AttributionGenerateStage::new()),
         Box::new(UserFiltersStage::pre()),
         Box::new(AstTransformsStage::new()),
         Box::new(UserFiltersStage::post()),
@@ -640,6 +647,10 @@ pub async fn run_pipeline(
     // the inner `RenderContext` consumed by AST transforms (notably
     // `LinkRewriteTransform`).
     stage_ctx.resource_resolver = ctx.resource_resolver.clone();
+    // Attribution: forward the opt-in provider from the outer ctx
+    // so `AttributionGenerateTransform` (inside `AstTransformsStage`)
+    // sees it. `None` is the default and means "attribution off".
+    stage_ctx.attribution_provider = ctx.attribution_provider.clone();
     // bd-o8pr Phase 2: transfer the per-doc resource report into
     // the stage context so engine + filter stages can append to it.
     stage_ctx.resource_report = std::mem::take(&mut ctx.resource_report);
@@ -659,6 +670,14 @@ pub async fn run_pipeline(
     // bd-o8pr Phase 2: transfer engine/filter-collected resources
     // back to the caller (`render_document_to_file` reads this).
     ctx.resource_report = stage_ctx.resource_report;
+    // Transfer writer-side `format_options` populated by transforms
+    // running inside the pipeline (e.g. `AttributionRenderTransform`
+    // writes `attribution_by_node` / `attribution_actors` here). The
+    // q2-preview JSON writer runs *outside* `AstTransformsStage`,
+    // so it reads the populated data from the outer ctx after the
+    // pipeline returns. Pre-pipeline callers don't write
+    // `ctx.format_options`, so the overwrite is safe.
+    ctx.format_options = stage_ctx.format_options;
 
     result
         .map_err(|e| match e {
@@ -869,8 +888,18 @@ pub async fn render_qmd_to_preview_ast(
         source_context: source_context.clone(),
         parent_source_info: None,
     };
+    // When `AttributionRenderTransform` ran (i.e. a provider was
+    // installed on `ctx.attribution_provider`), forward
+    // `ctx.format_options.json` into `JsonConfig` so the writer emits
+    // `astContext.attribution` and `astContext.attributionActors`.
+    // Off-path (provider absent), both fields stay `None` and the
+    // JSON output is byte-identical to today's.
+    let (attribution_by_node, attribution_actors) =
+        crate::attribution::json_attribution_fields(&ctx.format_options.json);
     let json_config = pampa::writers::json::JsonConfig {
         include_inline_locations: true,
+        attribution_by_node,
+        attribution_actors,
     };
     let mut buf = Vec::new();
     pampa::writers::json::write_with_config(&ast.ast, &ast_context, &mut buf, &json_config)
@@ -927,6 +956,9 @@ pub async fn render_qmd_to_preview_ast(
 /// 14. `NavbarRenderTransform` - Render navbar to HTML for template insertion
 /// 15. `SidebarRenderTransform` - Render sidebar to HTML (w/ .qmd→.html rewrite)
 /// 16. `FooterRenderTransform` - Render page footer to HTML for template insertion
+/// 16a. `AttributionGenerateTransform` - Tail-of-phase: call the installed
+///     `AttributionSourceProvider` (if any) and merge identities into the
+///     `RenderContext` sidecar for the Render-side transform to read
 ///
 /// ## Finalization Phase
 /// 17. `LinkRewriteTransform` - Rewrite body-content `.qmd` links to relative output URLs (Phase 6)
@@ -1060,6 +1092,26 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
+    // Very last transform: bake the per-node attribution lookup and
+    // the pruned actors table onto `ctx.format_options`. No-op when
+    // `ctx.attribution_data` is None (i.e. no provider was installed,
+    // or generate skipped). Placing this at the very end means any
+    // future finalization stage that mutates `SourceInfo` is
+    // automatically covered without having to remember to insert it
+    // before attribution-render.
+    pipeline.push(Box::new(AttributionRenderTransform::new()));
+
+    // After attribution-render: auto-inject the default viewer
+    // CSS+JS pair into `rendered.includes.{header,after-body}` so
+    // `--attribution=git` produces a visible default rather than
+    // inert `data-attr-*` attributes. Internally gated on
+    // `attribution_by_node.is_some()` AND
+    // `attribution_viewer_enabled`, so the off-path is a no-op.
+    // CLI-only: q2-preview omits this transform via
+    // `Q2_PREVIEW_TRANSFORM_EXCLUDED` (hub-client ignores
+    // `rendered.includes.*` and binds hover via React props).
+    pipeline.push(Box::new(AttributionViewerTransform::new()));
+
     pipeline
 }
 
@@ -1102,6 +1154,14 @@ pub fn build_transform_pipeline(
 /// in the full HTML pipeline (typo / rename guard).
 const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "callout-resolve",
+    // `attribution-viewer` injects raw <style>/<script> tags into
+    // `rendered.includes.{header,after-body}`, which the HTML
+    // template wires into the final HTML. q2-preview's React leaves
+    // ignore those slots entirely — the hub-client's own
+    // `framework/attribution.tsx` carries the visual presentation
+    // (badge classes, hover wiring) and would double-mount if this
+    // transform ran here. CLI-only by design.
+    "attribution-viewer",
     "title-block",
     // Other transforms previously listed here that are now INCLUDED:
     //   - "footnotes" (Plan 2B) — emits Pandoc primitives, rendered
@@ -1488,7 +1548,7 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 20);
+        assert_eq!(stages.len(), 21);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
@@ -1513,25 +1573,29 @@ mod tests {
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
         assert_eq!(stages[11].name(), "bootstrap-js");
-        assert_eq!(stages[12].name(), "user-filters-pre");
-        assert_eq!(stages[13].name(), "ast-transforms");
-        assert_eq!(stages[14].name(), "user-filters-post");
+        // Attribution-generate runs before user filters so the
+        // `quarto.attribution.*` Lua host binding sees a populated
+        // sidecar (bd-0fd0). No-op when no provider is installed.
+        assert_eq!(stages[12].name(), "attribution-generate");
+        assert_eq!(stages[13].name(), "user-filters-pre");
+        assert_eq!(stages[14].name(), "ast-transforms");
+        assert_eq!(stages[15].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[15].name(), "resource-report");
-        assert_eq!(stages[16].name(), "code-highlight");
+        assert_eq!(stages[16].name(), "resource-report");
+        assert_eq!(stages[17].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[17].name(), "math-js");
-        assert_eq!(stages[18].name(), "render-html-body");
-        assert_eq!(stages[19].name(), "apply-template");
+        assert_eq!(stages[18].name(), "math-js");
+        assert_eq!(stages[19].name(), "render-html-body");
+        assert_eq!(stages[20].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 20);
+        assert_eq!(pipeline.len(), 21);
     }
 
     #[test]
@@ -1545,7 +1609,10 @@ mod tests {
         // metadata is auto-filled symmetrically.
         // Includes `math-js` (bd-w5ov) — math display is safe under
         // hub-client iframe reinit and we want live math in preview.
-        assert_eq!(pipeline.len(), 18);
+        // Includes `attribution-generate` (bd-0fd0) so hub-client
+        // preview filters see the same `quarto.attribution.*` host
+        // binding as the CLI.
+        assert_eq!(pipeline.len(), 19);
         let names = pipeline.stage_names();
         // bd-4eyf: hub-client iframe reinit blows away stateful
         // Bootstrap components, so we deliberately omit `bootstrap-js`
@@ -2235,6 +2302,97 @@ mod tests {
             "Q2_PREVIEW_STAGE_EXCLUDED contains names not in build_html_pipeline_stages: \
              {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
              Full HTML stage list: {html_names:?}",
+        );
+    }
+
+    /// Phase 0 test #1 from `2026-05-13-q2-preview-attribution.md`.
+    ///
+    /// With a `PreBuiltAttributionProvider` installed on the
+    /// `RenderContext`, `render_qmd_to_preview_ast` must surface
+    /// `astContext.attribution` and `astContext.attributionActors` in
+    /// the emitted JSON. Without a provider, those keys are absent
+    /// — the byte-identicality regression guard for unflagged
+    /// q2-preview renders.
+    #[test]
+    fn render_qmd_to_preview_ast_surfaces_attribution_when_provider_installed() {
+        let content = b"---\ntitle: Test\nformat: q2-preview\n---\n\nHello world!\n".as_slice();
+
+        // Run #1: no provider — keys must be absent.
+        let baseline = {
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let format = Format::from_format_string("q2-preview").unwrap();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+            let runtime = make_test_runtime();
+            pollster::block_on(render_qmd_to_preview_ast(
+                content, "test.qmd", &mut ctx, runtime, None, None,
+            ))
+            .expect("baseline q2-preview render")
+        };
+        assert!(
+            !baseline.ast_json.contains("\"attribution\""),
+            "no-provider baseline must omit `attribution` key; got:\n{}",
+            baseline.ast_json
+        );
+        assert!(
+            !baseline.ast_json.contains("\"attributionActors\""),
+            "no-provider baseline must omit `attributionActors` key; got:\n{}",
+            baseline.ast_json
+        );
+
+        // Run #2: provider installed — keys must be present, with
+        // the expected actor + identity surfaced.
+        let attribution_json = serde_json::json!({
+            "runs": [
+                { "start": 0, "end": 10_000, "actor": "alice", "time": 42 }
+            ],
+            "identities": {
+                "alice": { "name": "Alice", "color": "#ff0000" }
+            }
+        })
+        .to_string();
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.attribution_provider = Some(Arc::new(
+            crate::attribution::PreBuiltAttributionProvider::new(attribution_json),
+        ));
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime, None, None,
+        ))
+        .expect("attributed q2-preview render");
+
+        assert!(
+            output.ast_json.contains("\"attribution\""),
+            "expected `attribution` key in attributed q2-preview output; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"attributionActors\""),
+            "expected `attributionActors` key in attributed q2-preview output; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"actor\":\"alice\""),
+            "expected at least one record naming alice; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"name\":\"Alice\""),
+            "expected alice's identity entry with display name; got:\n{}",
+            output.ast_json
+        );
+        assert!(
+            output.ast_json.contains("\"color\":\"#ff0000\""),
+            "expected alice's identity entry with color; got:\n{}",
+            output.ast_json
         );
     }
 }

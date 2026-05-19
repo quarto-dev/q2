@@ -1,7 +1,34 @@
 import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
 import path from 'path';
+import { readFileSync } from 'fs';
+
+/**
+ * `virtual:quarto-attribution-viewer-css` virtual module — mirrors
+ * the plugin in `vitest.config.ts` and `hub-client/vite.config.ts`.
+ * See the comment on `attributionViewerCssPlugin` in `vitest.config.ts`
+ * for the contract.
+ */
+function attributionViewerCssPlugin(): Plugin {
+  const VIRTUAL_ID = 'virtual:quarto-attribution-viewer-css';
+  const RESOLVED_ID = '\0' + VIRTUAL_ID;
+  const sourcePath = path.resolve(__dirname, '../../resources/attribution/viewer.css');
+  return {
+    name: 'quarto-attribution-viewer-css',
+    resolveId(id) {
+      if (id === VIRTUAL_ID) return RESOLVED_ID;
+    },
+    load(id) {
+      if (id === RESOLVED_ID) {
+        const css = readFileSync(sourcePath, 'utf-8');
+        return `export default ${JSON.stringify(css)};`;
+      }
+    },
+  };
+}
 
 export default defineConfig({
+  plugins: [attributionViewerCssPlugin()],
   resolve: {
     conditions: ['source', 'import', 'module', 'browser', 'default'],
     alias: {

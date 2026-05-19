@@ -14,3 +14,20 @@ declare module '*?raw' {
     const content: string;
     export default content;
 }
+
+/**
+ * Vite virtual module exposing the attribution viewer CSS as a string.
+ * Resolved at build time by `attributionViewerCssPlugin` in
+ * `hub-client/vite.config.ts`; shared with the CLI's
+ * `AttributionViewerTransform` via `include_str!` so the two surfaces
+ * stay in lockstep. See `resources/attribution/README.md`.
+ *
+ * Declared here (mirror of `hub-client/src/vite-env.d.ts`) so the
+ * preview-renderer package's standalone `tsc --noEmit` typecheck sees
+ * the module — the package is referenced from hub-client via project
+ * references, but its own typecheck runs without Vite.
+ */
+declare module 'virtual:quarto-attribution-viewer-css' {
+    const content: string;
+    export default content;
+}

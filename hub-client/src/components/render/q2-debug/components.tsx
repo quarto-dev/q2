@@ -1,5 +1,5 @@
 import React from 'react';
-import { Node, renderChildren } from '@quarto/preview-renderer/framework';
+import { Node, renderChildren, useAttributionHover } from '@quarto/preview-renderer/framework';
 import type {
     InlineNode,
     NodeArgs,
@@ -199,16 +199,33 @@ export const InlineComponents: Record<string, (props: any) => React.ReactNode> =
     Quoted,
 };
 
+/**
+ * q2-debug document root. Delegates the badge stylesheet / hover
+ * handler / overlay wiring to `useAttributionHover`. Off-path the
+ * hook returns inert `hostProps` / `null` overlay+stylesheet, so the
+ * rendered DOM is byte-identical to pre-attribution.
+ */
 export const AstRenderer = ({ ast, onNavigateToDocument, setAst }: {
     ast: PandocAST;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
-}) => (
-    <div className="pandoc-content-debug" style={{ padding: '20px', fontSize: '16px' }}>
-        {renderChildren({
-            node: ast as any,
-            setLocalAst: setAst as any,
-            onNavigateToDocument
-        })}
-    </div>
-);
+}) => {
+    const attr = useAttributionHover();
+    return (
+        <>
+            {attr.stylesheet}
+            <div
+                className="pandoc-content-debug"
+                style={{ padding: '20px', fontSize: '16px' }}
+                {...attr.hostProps}
+            >
+                {renderChildren({
+                    node: ast as any,
+                    setLocalAst: setAst as any,
+                    onNavigateToDocument,
+                })}
+                {attr.overlay}
+            </div>
+        </>
+    );
+};

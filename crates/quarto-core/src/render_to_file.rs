@@ -108,6 +108,15 @@ pub struct RenderToFileOptions {
     /// than a synthetic context). Production callers should prefer
     /// `replay_capture`.
     pub engine_registry_override: Option<crate::engine::EngineRegistry>,
+
+    /// Resolved attribution mode (CLI override merged with YAML).
+    /// `Some(AttributionMode::Git)` installs a [`GitBlameProvider`]
+    /// on the outer `RenderContext`; `Some(AttributionMode::Off)` or
+    /// `None` leaves the provider slot empty so the unflagged code
+    /// path is taken.
+    ///
+    /// [`GitBlameProvider`]: crate::attribution::GitBlameProvider
+    pub attribution: Option<crate::attribution::AttributionMode>,
 }
 
 /// Result of rendering a document to a file.
@@ -240,10 +249,23 @@ pub fn render_document_to_file(
     // Set up render context
     let doc_info = DocumentInfo::from_path(input_path);
     let render_format = format_from_name(format)?;
-    let binaries = BinaryDependencies::new();
+    // Discover binaries from the runtime so the git path (used by
+    // `GitBlameProvider`) is populated alongside pandoc/typst/etc.
+    let binaries = BinaryDependencies::discover(runtime.as_ref());
     let mut ctx = RenderContext::new(project, &doc_info, &render_format, &binaries);
     if let Some(index) = project_index {
         ctx.project_index = Some(index);
+    }
+    // Install the attribution provider when the CLI/YAML resolved
+    // mode is `Git`. `Off` and `None` leave the slot empty, which is
+    // the unflagged default code path.
+    if matches!(
+        options.attribution,
+        Some(crate::attribution::AttributionMode::Git)
+    ) {
+        ctx.attribution_provider = Some(std::sync::Arc::new(
+            crate::attribution::GitBlameProvider::new(),
+        ));
     }
 
     // Phase 5: build a scope-aware resolver from the doc's

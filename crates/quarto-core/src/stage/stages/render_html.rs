@@ -11,12 +11,27 @@
 //! HTML writer.
 
 use async_trait::async_trait;
+use pampa::writers::html::HtmlConfig;
 
+use crate::attribution::html_attribution_fields;
+use crate::render::HtmlFormatOptions;
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, RenderedOutput,
     StageContext,
 };
 use crate::trace_event;
+
+/// Translate Render-phase attribution data on the format-options bag
+/// into the pampa-facing [`HtmlConfig`]. Off-path (attribution
+/// disabled / no records) the returned config has `attribution_by_node`
+/// `None` — the HTML writer's output is byte-identical to its
+/// existing behaviour.
+fn build_html_config_from_options(opts: &HtmlFormatOptions) -> HtmlConfig {
+    HtmlConfig {
+        include_source_locations: false,
+        attribution_by_node: html_attribution_fields(opts),
+    }
+}
 
 /// Render AST to HTML body.
 ///
@@ -85,9 +100,20 @@ impl PipelineStage for RenderHtmlBodyStage {
             doc.ast.blocks.len()
         );
 
-        // Render AST to HTML body
+        // Render AST to HTML body. Forwards any attribution lookup
+        // baked by `AttributionRenderTransform` into the HTML config
+        // so the writer can emit `data-attr-*` attributes. When
+        // attribution is off, both fields stay `None` and the writer
+        // takes its existing byte-identical path.
+        let html_config = build_html_config_from_options(&ctx.format_options.html);
         let mut body_buf = Vec::new();
-        pampa::writers::html::write(&doc.ast, &doc.ast_context, &mut body_buf).map_err(|e| {
+        pampa::writers::html::write_with_options(
+            &doc.ast,
+            &doc.ast_context,
+            &mut body_buf,
+            html_config,
+        )
+        .map_err(|e| {
             PipelineError::stage_error(self.name(), format!("Failed to write HTML body: {}", e))
         })?;
 

@@ -1,0 +1,295 @@
+---
+title: "Authorship attribution"
+---
+
+Quarto can surface per-node authorship information in rendered output,
+sourcing it from `git blame` on the command line or from the Automerge
+edit history inside the hub-client. The feature is **opt-in**: nothing
+is emitted unless you ask for it.
+
+## Privacy and discoverability
+
+Attribution writes author email addresses (or display names supplied
+by the producer) into the rendered HTML. **Anyone with access to the
+output can read them** — and they survive as `data-attr-*` attributes
+even on static hosts, including those served by GitHub Pages, Netlify,
+or behind a CDN. Treat the rendered output as having the same
+exposure surface as a public commit log.
+
+If that's not the right tradeoff for a given project, leave attribution
+off. The CLI and YAML defaults are both off; there is no implicit
+enablement.
+
+## Enabling attribution on the command line
+
+Pass `--attribution=git` when invoking `quarto render`:
+
+```bash
+quarto render report.qmd --attribution=git
+```
+
+Quarto shells out to `git blame --porcelain` for the input file,
+maps each line to an author email and commit timestamp, and emits the
+result on every wrapped node in the rendered HTML.
+
+To turn attribution off explicitly — for example when overriding a
+YAML default — use `--attribution=off`.
+
+## Enabling attribution via YAML
+
+The same setting is available in document YAML:
+
+```yaml
+---
+title: My report
+attribution: git
+---
+```
+
+The two values supported in v1 are `git` (run the `git blame`
+provider) and `off` (no attribution, identical to the default).
+
+### CLI overrides YAML
+
+When the CLI flag and document YAML disagree, the CLI wins. This
+makes `--attribution=off` a reliable escape hatch even on documents
+that opt in by default:
+
+| `--attribution` | YAML `attribution` | Effective mode |
+|---|---|---|
+| (unset)         | (unset)            | off            |
+| (unset)         | `off`              | off            |
+| (unset)         | `git`              | git            |
+| `off`           | (unset)            | off            |
+| `off`           | `git`              | **off** (CLI wins) |
+| `git`           | (unset)            | git            |
+| `git`           | `off`              | **git** (CLI wins) |
+| `git`           | `git`              | git            |
+
+### Supplying custom display names
+
+The `git` provider derives a display name and colour from each
+author's email automatically. The display name is the mail-local-part
+of the address; the colour is a deterministic entry from Paul Tol's
+[Muted qualitative palette](https://sronpersonalpages.nl/~pault/) —
+a 10-colour, colour-blind-safe scheme designed for categorical
+encoding. If you want different labels — for instance to spell out
+"Alice Cooper" instead of `alice` — override them in YAML:
+
+```yaml
+---
+title: My report
+attribution:
+  source: git
+  identities:
+    alice@example.com:
+      display_name: "Alice Cooper"
+      color: "#c0392b"
+    bob@example.com:
+      display_name: "Bob Roberts"
+---
+```
+
+User identity entries are merged on top of provider-supplied ones:
+a key present in both takes the YAML value. Keys present **only** in
+YAML are dropped — overrides are matched against actors the provider
+actually reports, so a stale entry can't silently inject a phantom
+author.
+
+## What attribution looks like in the output
+
+Each wrapping element carries two data attributes that identify the
+author and edit time for that node:
+
+```html
+<span data-attr-actor="alice@example.com" data-attr-time="1700000000">
+  …
+</span>
+```
+
+- `data-attr-actor` — the raw actor identifier (the author email for
+  `git`, an Automerge actor ID inside the hub).
+- `data-attr-time` — Unix epoch timestamp of the most recent commit
+  (or edit) touching the wrapped range. The `git` provider emits
+  **seconds**; the hub-client (Automerge) emits **milliseconds**.
+  Consumers that handle both should use a threshold like `< 1e12` to
+  tell them apart.
+
+The author's display name and colour are emitted **once per author**
+as a CSS rule in the rendered `<head>`, exposing two custom
+properties that any element matching the actor inherits via the
+cascade:
+
+```html
+<style>
+  [data-attr-actor="alice@example.com"] {
+      --attr-color: #117733;
+      --attr-name: "alice";
+  }
+  …
+</style>
+```
+
+`--attr-color` is consumed by the default viewer's base paint rule
+(see [Default viewer](#viewer-overlay)) so authored prose appears in
+the author's colour without any further wiring. `--attr-name`
+is read by the hover badge from each wrapper's computed style.
+Consuming themes can override either via a higher-specificity rule
+in their own stylesheet without touching the rendered HTML.
+
+Contiguous prose authored by the same actor at the same time
+coalesces into a single outer wrapper, so a paragraph written by one
+person produces one wrapper rather than one per word. Structured
+inlines (links, code, math, etc.) always get their own wrapper.
+
+## Default viewer {#viewer-overlay}
+
+By default, `--attribution=git` (or YAML `attribution: git`) ships a
+small inline `<style>` and `<script>` pair alongside the wrappers, so
+the rendered HTML is visibly attributed out of the box: attributed
+prose appears in the author's colour with a dotted underline, and
+hovering surfaces a small author-coloured badge with the contributor's
+name and a relative timestamp.
+
+The per-author colour comes from the `--attr-color` CSS custom
+property published by the per-actor rule in `<head>` (see [What
+attribution looks like in the output](#what-attribution-looks-like-in-the-output));
+the inherited paint rule lives in the auto-injected viewer
+stylesheet, and the hover badge reads `--attr-name` from the same
+source. To recolour an author site-wide, override the custom property
+in your own stylesheet with a higher-specificity rule — no HTML
+changes required.
+
+### Turning the default viewer off
+
+If you want only the `data-attr-*` attributes (e.g. you have a site
+theme that styles them differently, or you are wiring up a custom
+overlay), suppress the default viewer with the rich-form YAML:
+
+```yaml
+---
+title: My report
+attribution:
+  source: git
+  viewer: false
+---
+```
+
+The per-node `data-attr-actor` / `data-attr-time` wrappers remain
+exactly as before; only the auto-injected CSS rules (including the
+per-actor `--attr-color` / `--attr-name` declarations) and the hover
+`<script>` are dropped. A theme that wants to render its own colours
+should publish its own per-actor rules in the same shape:
+
+```css
+[data-attr-actor="alice@example.com"] {
+    --attr-color: #c0392b;
+    --attr-name: "Alice Cooper";
+}
+```
+
+### Customizing presentation
+
+Whether or not the default viewer is on, the per-node
+`data-attr-actor` / `data-attr-time` attrs are the stable contract.
+A site theme can key off `data-attr-actor` to colour authored
+regions however it likes, and a custom Pandoc filter can transform
+the wrappers without touching this package.
+
+## Hub-client integration
+
+The Quarto hub client ships the same attribution data path,
+sourcing actors from the Automerge edit history of the live document
+rather than from `git blame`. The data wire is in place; the
+in-product toggle and renderer-side colouring are still in
+development — when they land, an "Authorship" control will appear in
+the document settings.
+
+## Using attribution in Lua filters
+
+When a provider is installed (`--attribution=git` on the CLI, or the
+hub-client preview path), user Lua filters can query the same
+attribution sidecar through the `quarto.attribution.*` host binding.
+Both pre-phase (`pre-quarto`) and post-phase filters see it.
+
+### Example: colour spans by author
+
+```lua
+function Span(elem)
+    local hit = quarto.attribution.lookup(elem)
+    if hit then
+        local attr = pandoc.Attr(
+            elem.attr.identifier,
+            elem.attr.classes,
+            { ["data-author"] = hit.name, ["style"] = "color: " .. hit.color }
+        )
+        return pandoc.Span(elem.content, attr)
+    end
+    return elem
+end
+```
+
+`quarto.attribution.lookup(el)` returns either `nil` or a table:
+
+```lua
+{
+    actor = "alice@example.com",  -- the producer's actor id (email for git)
+    time  = 1715000000000,        -- Unix epoch milliseconds
+    name  = "Alice",              -- resolved display name
+    color = "#ff0000",            -- resolved CSS-compatible colour
+}
+```
+
+It returns `nil` when:
+
+- the element has no source-file provenance (synthesised nodes,
+  `RawInline`/`RawBlock` injected by upstream filters);
+- the resolved file ID is non-primary (v1 is single-document — a node
+  spliced in via `{{< include other.qmd >}}` returns `nil`);
+- no run in the sidecar overlaps the element's byte range;
+- no provider is installed (i.e. attribution is off).
+
+### Primitive: arbitrary byte ranges
+
+When you have explicit `(start, end)` offsets — say from a custom
+text-walking transform — bypass element lookup with the raw form:
+
+```lua
+local raw = quarto.attribution.lookup_range(0, 100)
+-- => { actor = "alice@example.com", time = 1715000000000 }
+--    (no `name`/`color` — identity is *not* joined for the raw call)
+```
+
+Use `quarto.attribution.identities()` to look identities up
+separately:
+
+```lua
+local idents = quarto.attribution.identities()
+local alice = idents["alice@example.com"]
+-- alice = { name = "Alice", color = "#ff0000" }
+```
+
+The identity map is read-only and empty when no provider is
+installed.
+
+### Read-only contract
+
+The Lua binding is v1 read-only. There is no
+`quarto.attribution.set(el, actor, time)` — filters can transform the
+AST freely, but the underlying attribution sidecar is derived from
+the source (`git blame` for the CLI; Automerge edit history for the
+hub-client preview) and is not user-mutable. Bake whatever
+presentation you want from the read side instead.
+
+## Current limits
+
+- **Single-document blame only.** Content spliced in via
+  `{{< include other.qmd >}}` is not attributed in v1; the wrappers
+  for included nodes will be absent. A future release will extend
+  blame across the entire include chain.
+- **No caching.** Each render re-runs `git blame`. On a 100 K-line
+  file this completes in roughly 50 ms, so caching is not currently a
+  bottleneck.
+- **No project-wide aggregation.** Each document's attribution is
+  scoped to that document; cross-document summaries ("Alice
+  contributed to N pages") are a future feature.

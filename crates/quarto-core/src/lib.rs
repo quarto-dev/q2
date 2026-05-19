@@ -37,6 +37,7 @@
 //! ```
 
 pub mod artifact;
+pub mod attribution;
 pub mod crossref;
 pub mod dependency;
 pub mod document_profile;

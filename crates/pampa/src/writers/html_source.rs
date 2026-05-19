@@ -459,6 +459,7 @@ mod tests {
     ) -> serde_json::Value {
         let config = crate::writers::json::JsonConfig {
             include_inline_locations: true,
+            ..crate::writers::json::JsonConfig::default()
         };
         crate::writers::json::write_pandoc(pandoc, context, &config)
             .expect("Failed to generate JSON")

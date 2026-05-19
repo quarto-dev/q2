@@ -28,6 +28,10 @@ import {
     q2DebugRegistry,
 } from '.';
 import { buildCustomRegistry, type ComponentExports } from '@quarto/preview-renderer/utils/customRegistry';
+import {
+    makeIframeMessageDispatcher,
+    type IframeMessage,
+} from '../iframeMessageDispatch';
 
 // Set the renderer-surface global at module top so importing this
 // module is sufficient to populate `window.__REACT_AST_DEBUG_RENDERER__`
@@ -48,35 +52,25 @@ import { buildCustomRegistry, type ComponentExports } from '@quarto/preview-rend
 
 let root: ReturnType<typeof createRoot> | null = null;
 let customRegistry: Record<string, React.ComponentType<any>> = {};
-let componentsLoading = false;
 
 interface UpdateAstPayload {
   astJson: string;
   currentFilePath: string;
 }
 
-// Handle messages from parent window
-window.addEventListener('message', async (event) => {
-  // In production, verify event.origin for security
+// Shared dispatcher gates UPDATE_AST on the in-flight
+// LOAD_CUSTOM_COMPONENTS promise so two UPDATE_ASTs queued during
+// component load run in arrival order. See
+// `../iframeMessageDispatch.ts` for the rationale (the previous
+// setInterval-polling pattern was phase-racy).
+const dispatch = makeIframeMessageDispatcher({
+  loadCustomComponents,
+  updateAst: (payload) => updateAst(payload as UpdateAstPayload),
+});
 
-  if (event.data.type === 'LOAD_CUSTOM_COMPONENTS') {
-    componentsLoading = true;
-    await loadCustomComponents(event.data.componentsCode);
-    componentsLoading = false;
-  } else if (event.data.type === 'UPDATE_AST') {
-    // Wait for components to finish loading before rendering
-    if (componentsLoading) {
-      await new Promise(resolve => {
-        const check = setInterval(() => {
-          if (!componentsLoading) {
-            clearInterval(check);
-            resolve(undefined);
-          }
-        }, 50);
-      });
-    }
-    updateAst(event.data.payload);
-  }
+window.addEventListener('message', (event) => {
+  // In production, verify event.origin for security
+  dispatch(event.data as IframeMessage);
 });
 
 /**

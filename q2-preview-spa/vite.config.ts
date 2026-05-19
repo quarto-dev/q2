@@ -1,7 +1,34 @@
 import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import wasm from 'vite-plugin-wasm';
 import path from 'path';
+import { readFileSync } from 'fs';
+
+/**
+ * `virtual:quarto-attribution-viewer-css` — mirrors the plugin in
+ * `hub-client/vite.config.ts` and `ts-packages/preview-renderer/vitest.config.ts`.
+ * Required because `@quarto/preview-renderer` is resolved via the
+ * `source` condition (raw .tsx), so this build pulls in
+ * `framework/attribution.tsx` which imports the virtual module.
+ */
+function attributionViewerCssPlugin(): Plugin {
+  const VIRTUAL_ID = 'virtual:quarto-attribution-viewer-css';
+  const RESOLVED_ID = '\0' + VIRTUAL_ID;
+  const sourcePath = path.resolve(__dirname, '../resources/attribution/viewer.css');
+  return {
+    name: 'quarto-attribution-viewer-css',
+    resolveId(id) {
+      if (id === VIRTUAL_ID) return RESOLVED_ID;
+    },
+    load(id) {
+      if (id === RESOLVED_ID) {
+        const css = readFileSync(sourcePath, 'utf-8');
+        return `export default ${JSON.stringify(css)};`;
+      }
+    },
+  };
+}
 
 // The q2-preview SPA is the future host of `quarto preview` (bd-kw93).
 // Today it's a placeholder that just confirms the @quarto/preview-renderer
@@ -9,7 +36,7 @@ import path from 'path';
 // samod / WASM / preview-pane plumbing.
 export default defineConfig({
   base: './',
-  plugins: [react(), wasm()],
+  plugins: [react(), wasm(), attributionViewerCssPlugin()],
   resolve: {
     // Prefer the `source` exports condition so workspace packages resolve
     // straight to .ts/.tsx without requiring a pre-built dist. Mirrors

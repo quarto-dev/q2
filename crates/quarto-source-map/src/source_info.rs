@@ -205,6 +205,33 @@ impl SourceInfo {
         }
     }
 
+    /// Chain-resolve to `(file_id, start_offset, end_offset)` in the
+    /// root source file.
+    ///
+    /// Returns `None` for `Concat` and `FilterProvenance` — these
+    /// don't map cleanly to a single contiguous byte range. The
+    /// attribution v1 sidecar relies on this contract; project-scoped
+    /// (v2) features that need the full chain resolver should use
+    /// `map_offset` against a `SourceContext` instead.
+    pub fn resolve_byte_range(&self) -> Option<(usize, usize, usize)> {
+        match self {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } => Some((file_id.0, *start_offset, *end_offset)),
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                end_offset,
+            } => {
+                let (fid, parent_start, _) = parent.resolve_byte_range()?;
+                Some((fid, parent_start + start_offset, parent_start + end_offset))
+            }
+            SourceInfo::Concat { .. } | SourceInfo::FilterProvenance { .. } => None,
+        }
+    }
+
     /// Remap every `FileId` referenced by this `SourceInfo` (including those
     /// inside `Substring` parents and `Concat` pieces) using the provided
     /// mapping function.

@@ -21,7 +21,7 @@ serde_json.workspace = true
 pollster.workspace = true
 tokio.workspace = true
 
-quarto-core.workspace = true
+quarto-core = { workspace = true, features = ["clap"] }
 quarto-error-reporting.workspace = true
 quarto-trace.workspace = true
 quarto-trace-server.workspace = true

@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { RegistryContext } from './RegistryContext';
+import {
+    AttributionLookupContext,
+    type NodeAttributionIdentity,
+} from './AttributionLookupContext';
 import { unwrapCustomNodes } from './customNode';
 import type { PandocAST } from './types';
 import type { SourceInfoPool } from '../types/sourceInfo';
@@ -71,8 +75,38 @@ export function Ast(props: AstProps) {
     // descendants of `c` fields; the wrapper's `astContext` field on the
     // root is untouched, but reading pre-unwrap keeps the cost off the
     // descent.
-    const pool = (parsed as unknown as { astContext?: { sourceInfoPool?: SourceInfoPool } })
-        .astContext?.sourceInfoPool;
+    const astContext = (
+        parsed as unknown as {
+            astContext?: {
+                sourceInfoPool?: SourceInfoPool;
+                attribution?: { s: number; actor: string; time: number }[];
+                attributionActors?: Record<string, { name: string; color: string }>;
+            };
+        }
+    ).astContext;
+    const pool = astContext?.sourceInfoPool;
+
+    // Phase 5c — per-node attribution lookup built once per AST. Off
+    // path (`astContext.attribution` absent) leaves the context value
+    // as `null`, so `useNodeAttribution` consumers short-circuit and
+    // the renderer behaviour is byte-identical to pre-attribution.
+    const attributionLookup = useMemo<Map<number, NodeAttributionIdentity> | null>(() => {
+        const records = astContext?.attribution;
+        const actors = astContext?.attributionActors;
+        if (!records || !actors) return null;
+        const map = new Map<number, NodeAttributionIdentity>();
+        for (const rec of records) {
+            const identity = actors[rec.actor];
+            if (!identity) continue;
+            map.set(rec.s, {
+                actor: rec.actor,
+                name: identity.name,
+                color: identity.color,
+                time: rec.time,
+            });
+        }
+        return map.size > 0 ? map : null;
+    }, [astContext]);
 
     // Unconditional unwrap: replaces every wire-format custom-node Div/Span
     // with the JS-native CustomBlockNode/CustomInlineNode shape. Safe for
@@ -85,7 +119,9 @@ export function Ast(props: AstProps) {
 
     return (
         <RegistryContext.Provider value={{ registry, sourceInfoPool: pool }}>
-            <AstComponent ast={ast} onNavigateToDocument={onNavigateToDocument} setAst={setAst} />
+            <AttributionLookupContext.Provider value={attributionLookup}>
+                <AstComponent ast={ast} onNavigateToDocument={onNavigateToDocument} setAst={setAst} />
+            </AttributionLookupContext.Provider>
         </RegistryContext.Provider>
     );
 }
