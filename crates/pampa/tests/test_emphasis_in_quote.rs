@@ -604,6 +604,64 @@ fn three_level_strong_star_double_quote_unclosed_underscore_emits_q_2_5() {
     );
 }
 
+// --- 3-level inputs where the MIDDLE scope is unmatched (inner pairs) ---
+//
+// The input has 3 levels of nesting but the innermost `_c_` pairs, so the
+// scope stack at error time is depth 2: [outer-quote, middle-emphasis]. The
+// fallback dispatches by the innermost-still-open scope (the middle
+// emphasis), emitting the emphasis-class Q-code rather than the inner-class
+// one.
+
+#[test]
+fn three_level_middle_star_unmatched_emits_q_2_12() {
+    // Outer ' can't close because * is on the stack; inner _c_ pairs.
+    let input = "a '*b _c_ jeloasd' asdasd\n";
+    let output = render_diagnostics(input, "three-level-middle-q212.qmd");
+    assert!(
+        output.contains("Q-2-12"),
+        "Expected Q-2-12 (middle * unmatched, inner _c_ pairs). Got:\n{output}"
+    );
+}
+
+#[test]
+fn three_level_middle_strong_star_unmatched_emits_q_2_13() {
+    // Same shape but the middle is ** (strong star).
+    let input = "a \"**b _c_ jeloasd\" asdasd\n";
+    let output = render_diagnostics(input, "three-level-middle-q213.qmd");
+    assert!(
+        output.contains("Q-2-13"),
+        "Expected Q-2-13 (middle ** unmatched, inner _c_ pairs). Got:\n{output}"
+    );
+}
+
+// --- 4-level deep nesting: scope stack depth 4 at error ---
+//
+// All four scopes open and none pair (the would-be closers are blocked by
+// the inner unmatched delimiter). Verifies the walker handles arbitrarily
+// deep stacks.
+
+#[test]
+fn four_level_inner_underscore_unmatched_emits_q_2_5() {
+    // ', *, ", _ all opened; _ never closes.
+    let input = "a '*\"_b c\"*' x\n";
+    let output = render_diagnostics(input, "four-level-q25.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for 4-level nest with innermost _ unmatched. Got:\n{output}"
+    );
+}
+
+#[test]
+fn four_level_inner_double_quote_unmatched_emits_q_2_11() {
+    // ', *, _, " all opened; " never closes.
+    let input = "a '*_b \"c d_*' x\n";
+    let output = render_diagnostics(input, "four-level-q211.qmd");
+    assert!(
+        output.contains("Q-2-11"),
+        "Expected Q-2-11 for 4-level nest with innermost \" unmatched. Got:\n{output}"
+    );
+}
+
 // --- Unclosed quote inside paired emphasis (the gap fix) ---
 //
 // Outer emphasis pairs, an inner whitespace-prefixed `"` or `'` opens but
