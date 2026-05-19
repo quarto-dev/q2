@@ -32,6 +32,7 @@
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use quarto_config::resolve_website_value;
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{CSS_BUILD_ID, SassLayer, ThemeConfig, ThemeContext, compile_default_css};
 use quarto_system_runtime::{
@@ -72,8 +73,8 @@ pub fn derive_doc_scss_layer(meta: &ConfigValue) -> SassLayer {
 
     let mut defaults = String::new();
 
-    if let Some(sidebar_cv) = meta.get_path(&["website", "sidebar"]) {
-        let sidebars = Sidebar::parse_list_from_config(sidebar_cv);
+    if let Some(sidebar_cv) = resolve_website_value(meta, "sidebar") {
+        let sidebars = Sidebar::parse_list_from_config(&sidebar_cv);
         if let Some(first) = sidebars.first() {
             // Q1 parity: explicit `sidebar.border:` wins; absent → default
             // to `(style == Docked)`. See `format-html-scss.ts:631-642`.
@@ -1697,6 +1698,45 @@ mod tests {
         assert!(
             layer.defaults.contains("$sidebar-border: false;"),
             "explicit `border: false` must win over `style: docked`, got defaults: {:?}",
+            layer.defaults
+        );
+    }
+
+    /// bd-jjep / bd-telo — the doc-vars seam also accepts a top-level
+    /// `sidebar:` (not just nested `website.sidebar`), matching the
+    /// resolver path used by `SidebarGenerateTransform` and
+    /// `resolve_sidebar_membership`. Without this, the SCSS variables
+    /// would diverge from the rendered sidebar.
+    #[test]
+    fn doc_scss_layer_top_level_sidebar_picks_up_style() {
+        // Same shape as `meta_with_website_sidebar_style("docked")`,
+        // but stored at the top level instead of under `website:`.
+        let style_value = ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String("docked".to_string())),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        let sidebar_obj = ConfigValue {
+            value: ConfigValueKind::Map(vec![ConfigMapEntry {
+                key: "style".to_string(),
+                key_source: SourceInfo::default(),
+                value: style_value,
+            }]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        let sidebar_array = ConfigValue {
+            value: ConfigValueKind::Array(vec![sidebar_obj]),
+            source_info: SourceInfo::default(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        let mut meta = empty_meta();
+        meta.insert_path(&["sidebar"], sidebar_array);
+
+        let layer = derive_doc_scss_layer(&meta);
+        assert!(
+            layer.defaults.contains("$sidebar-border: true;"),
+            "top-level docked sidebar should emit `$sidebar-border: true;`, got defaults: {:?}",
             layer.defaults
         );
     }

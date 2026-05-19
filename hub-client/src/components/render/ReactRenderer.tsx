@@ -1,14 +1,14 @@
 import { useMemo, Component } from 'react';
 import type { ReactNode } from 'react';
-import type { FileEntry } from '../../types/project';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
-import { Q2PreviewIframe } from './q2-preview/Q2PreviewIframe';
+import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
 import { RevealjsSlideAst } from './RevealjsReactAstSlideRenderer';
 import { transpileTSX } from '../../services/tsxTranspiler';
-import { resolveComponentPath } from '../../utils/componentPath';
-import type { PandocAST } from './framework/types';
-import { extractMetaString } from './framework';
+import { resolveComponentPath } from '@quarto/preview-renderer/utils/componentPath';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
+import { extractMetaString } from '@quarto/preview-renderer/framework';
 
 // Simple error boundary to catch errors in custom components
 class ErrorBoundary extends Component<

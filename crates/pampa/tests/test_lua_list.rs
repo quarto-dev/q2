@@ -44,6 +44,7 @@ async fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
         &[filter_file.path().to_path_buf()],
         "html",
         runtime,
+        None,
     )
     .await;
     let output = result.expect("Filter failed");

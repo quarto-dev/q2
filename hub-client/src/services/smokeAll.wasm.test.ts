@@ -14,8 +14,8 @@ import { fileURLToPath } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { JSDOM } from 'jsdom';
 
-import { discoverUserGrammars } from './userGrammarDiscovery';
-import { loadUserGrammar } from './userGrammarHighlight';
+import { discoverUserGrammars } from '@quarto/preview-runtime/userGrammar/Discovery';
+import { loadUserGrammar } from '@quarto/preview-runtime/userGrammar/Highlight';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -110,7 +110,7 @@ beforeAll(async () => {
 
   // Set up VFS callbacks for the SASS importer so that dart-sass can resolve
   // @use/@import directives against the VFS (Bootstrap SCSS files, etc.)
-  const sassModule = await import('../wasm-js-bridge/sass.js');
+  const sassModule = await import('/src/wasm-js-bridge/sass.js');
   sassModule.setVfsCallbacks(
     (path: string): string | null => {
       try {

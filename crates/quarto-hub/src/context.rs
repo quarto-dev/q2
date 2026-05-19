@@ -24,6 +24,7 @@ use crate::resource::{create_binary_document, detect_mime_type};
 use crate::storage::StorageManager;
 use crate::sync::{SyncAllResult, SyncResult, sync_all_documents, sync_file_by_path};
 use crate::sync_state::SyncState;
+use crate::watch::WatchFilter;
 
 /// Configuration for the hub.
 #[derive(Debug)]
@@ -51,12 +52,28 @@ pub struct HubConfig {
     /// Default: 500ms.
     pub watch_debounce_ms: u64,
 
+    /// Which files surface as watch events. See [`WatchFilter`].
+    /// Default: `WatchFilter::QmdOnly` (legacy hub behaviour).
+    /// `quarto-preview` overrides this to `WatchFilter::PreviewBroad`
+    /// so config + asset edits trigger re-render.
+    pub watch_filter: WatchFilter,
+
     /// OAuth2 auth configuration. None = auth disabled.
     pub auth_config: Option<AuthConfig>,
 
     /// Allow auth without TLS (local dev). When true, the `Secure` flag is
     /// omitted from auth cookies so browsers send them over plain HTTP.
     pub allow_insecure_auth: bool,
+
+    /// Register `GET /` as the samod ws upgrade endpoint.
+    ///
+    /// Default: `true`. The `quarto hub` CLI keeps it true for
+    /// sync.automerge.org compatibility (the convention is that
+    /// `/` is the upgrade path). `quarto preview` sets it false so
+    /// its embedded SPA can own `/` for `index.html`; samod still
+    /// works at `/ws`, which hub-client and the q2-preview SPA both
+    /// already use as their canonical connect path.
+    pub register_root_ws: bool,
 }
 
 impl Default for HubConfig {
@@ -68,8 +85,10 @@ impl Default for HubConfig {
             sync_interval_secs: Some(30),
             watch_enabled: true,
             watch_debounce_ms: 500,
+            watch_filter: WatchFilter::default(),
             auth_config: None,
             allow_insecure_auth: false,
+            register_root_ws: true,
         }
     }
 }
@@ -115,6 +134,11 @@ pub struct HubContext {
     /// Whether insecure (HTTP) auth is allowed. When true, `Secure` flag
     /// is omitted from auth cookies.
     allow_insecure_auth: bool,
+
+    /// See [`HubConfig::register_root_ws`]. Stashed on the context so
+    /// `build_router` can consult it after `HubContext::new` consumes
+    /// the originating `HubConfig`.
+    register_root_ws: bool,
 
     /// Maps peer IDs to authenticated user emails.
     /// Populated by handle_websocket when auth is enabled; read by the
@@ -228,6 +252,7 @@ impl HubContext {
 
         let auth_config = config.auth_config.take();
         let allow_insecure_auth = config.allow_insecure_auth;
+        let register_root_ws = config.register_root_ws;
 
         Ok(Self {
             storage,
@@ -239,6 +264,7 @@ impl HubContext {
             auth_config,
             auth_state: OnceLock::new(),
             allow_insecure_auth,
+            register_root_ws,
             peer_emails,
         })
     }
@@ -339,6 +365,11 @@ impl HubContext {
     /// Whether auth cookies should omit the `Secure` flag (HTTP dev mode).
     pub fn allow_insecure_auth(&self) -> bool {
         self.allow_insecure_auth
+    }
+
+    /// See [`HubConfig::register_root_ws`].
+    pub fn register_root_ws(&self) -> bool {
+        self.register_root_ws
     }
 
     /// Peer→email map for document access audit logging.
@@ -448,7 +479,7 @@ async fn reconcile_files_with_index(
         // Add to index
         index.add_file(&path_str, &doc_id)?;
 
-        info!(path = %path_str, doc_id = %doc_id, content_len = file_content.len(), "Added new text file to index");
+        debug!(path = %path_str, doc_id = %doc_id, content_len = file_content.len(), "Added new text file to index");
         added += 1;
     }
 
@@ -494,7 +525,7 @@ async fn reconcile_files_with_index(
         // Add to index
         index.add_file(&path_str, &doc_id)?;
 
-        info!(
+        debug!(
             path = %path_str,
             doc_id = %doc_id,
             content_len = file_content.len(),

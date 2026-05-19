@@ -555,6 +555,81 @@ fn write_code_container_attr<W: Write>(
     Ok(())
 }
 
+/// Emit a syntax-highlighted code block using Pandoc's nested structure:
+///
+/// ```html
+/// <div class="sourceCode [extras]" id="..."><pre class="sourceCode [lang]"><code class="sourceCode [lang]">…</code></pre></div>
+/// ```
+///
+/// The outer `<div>` carries the id and any non-language classes (e.g.
+/// `cell-code`), so that `div.sourceCode` CSS rules — which paint the
+/// rounded background — match. The first class in the code block's
+/// attribute list is treated as the language; remaining classes move to
+/// the div. Plain (un-highlighted) code blocks are emitted as a bare
+/// `<pre><code>` and never enter this path.
+fn write_highlighted_codeblock<W: Write>(
+    codeblock: &crate::pandoc::block::CodeBlock,
+    block: &Block,
+    spans: Option<&[quarto_highlight_encoding::HighlightSpan]>,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
+    let (id, classes, kvs) = &codeblock.attr;
+
+    // First class (if any) is the language, per Pandoc convention.
+    let (language, extras) = match classes.split_first() {
+        Some((first, rest)) => (Some(first.as_str()), rest),
+        None => (None, &classes[..]),
+    };
+
+    // <div class="sourceCode [extras]" id="..."> ...
+    write!(ctx, "<div class=\"sourceCode")?;
+    for c in extras {
+        write!(ctx, " {}", escape_html(c))?;
+    }
+    write!(ctx, "\"")?;
+    if !id.is_empty() {
+        write!(ctx, " id=\"{}\"", escape_html(id))?;
+    }
+    // Source-tracking / attribution attrs describe the block — they
+    // belong on the outermost element.
+    write_block_source_attrs(block, ctx)?;
+    write!(ctx, ">")?;
+
+    // <pre class="sourceCode [lang]" [kv attrs except hl-spans]>
+    write!(ctx, "<pre class=\"sourceCode")?;
+    if let Some(lang) = language {
+        write!(ctx, " {}", escape_html(lang))?;
+    }
+    write!(ctx, "\"")?;
+    for (k, v) in kvs {
+        if k == quarto_highlight_encoding::SPANS_ATTR_KEY {
+            continue;
+        }
+        if should_prefix_attribute(k) {
+            write!(ctx, " data-{}=\"{}\"", escape_html(k), escape_html(v))?;
+        } else {
+            write!(ctx, " {}=\"{}\"", escape_html(k), escape_html(v))?;
+        }
+    }
+    write!(ctx, ">")?;
+
+    // <code class="sourceCode [lang]">
+    write!(ctx, "<code class=\"sourceCode")?;
+    if let Some(lang) = language {
+        write!(ctx, " {}", escape_html(lang))?;
+    }
+    write!(ctx, "\">")?;
+
+    if let Some(spans) = spans {
+        write_highlighted_body(&codeblock.text, spans, ctx)?;
+    } else {
+        write!(ctx, "{}", escape_html(&codeblock.text))?;
+    }
+
+    writeln!(ctx, "</code></pre></div>")?;
+    Ok(())
+}
+
 /// Parse `data-hl-spans` from a code node's attribute map, if present.
 /// Returns `None` on missing, malformed, or empty JSON — callers fall
 /// back to plain escaped text.
@@ -1200,16 +1275,16 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
         Block::CodeBlock(codeblock) => {
             let spans = read_hl_spans(&codeblock.attr);
             let highlighted = spans.is_some();
-            write!(ctx, "<pre")?;
-            write_code_container_attr(&codeblock.attr, highlighted, ctx)?;
-            write_block_source_attrs(block, ctx)?;
-            write!(ctx, "><code>")?;
-            if let Some(spans) = &spans {
-                write_highlighted_body(&codeblock.text, spans, ctx)?;
+            if highlighted {
+                write_highlighted_codeblock(codeblock, block, spans.as_deref(), ctx)?;
             } else {
+                write!(ctx, "<pre")?;
+                write_code_container_attr(&codeblock.attr, false, ctx)?;
+                write_block_source_attrs(block, ctx)?;
+                write!(ctx, "><code>")?;
                 write!(ctx, "{}", escape_html(&codeblock.text))?;
+                writeln!(ctx, "</code></pre>")?;
             }
-            writeln!(ctx, "</code></pre>")?;
         }
         Block::RawBlock(raw) => {
             // Only output raw HTML if format is "html"
@@ -2185,6 +2260,145 @@ mod tests {
         assert!(
             html.contains("<span class=\"hl-variable-parameter-builtin\">foo</span>"),
             "capture names should flatten `.` to `-` in class names, got:\n{html}",
+        );
+    }
+
+    // =========================================================================
+    // div.sourceCode wrapper for highlighted code blocks (Pandoc-style)
+    // =========================================================================
+
+    fn codeblock_with_id_classes_and_spans(
+        id: &str,
+        classes: Vec<&str>,
+        text: &str,
+        spans_json: &str,
+    ) -> Block {
+        use hashlink::LinkedHashMap;
+        let mut kvs = LinkedHashMap::new();
+        kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
+        Block::CodeBlock(CodeBlock {
+            attr: (
+                id.to_string(),
+                classes.into_iter().map(|s| s.to_string()).collect(),
+                kvs,
+            ),
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    #[test]
+    fn highlighted_codeblock_emits_div_sourcecode_wrapper() {
+        let html = render_block_to_html(codeblock_with_hl_spans(
+            "python",
+            "def foo()",
+            r#"[[0,3,"keyword"]]"#,
+        ));
+        assert!(
+            html.contains("<div class=\"sourceCode\">"),
+            "expected <div class=\"sourceCode\"> wrapper, got:\n{html}",
+        );
+        assert!(
+            html.contains("</div>"),
+            "expected closing </div>, got:\n{html}",
+        );
+    }
+
+    #[test]
+    fn highlighted_codeblock_id_goes_on_div_not_pre() {
+        let html = render_block_to_html(codeblock_with_id_classes_and_spans(
+            "cb1",
+            vec!["python"],
+            "def foo()",
+            r#"[[0,3,"keyword"]]"#,
+        ));
+        assert!(
+            html.contains("<div class=\"sourceCode\" id=\"cb1\">"),
+            "expected id on div wrapper, got:\n{html}",
+        );
+        assert!(
+            !html.contains("<pre class=\"sourceCode python\" id=\"cb1\"")
+                && !html.contains("<pre id=\"cb1\""),
+            "id should not appear on <pre>, got:\n{html}",
+        );
+    }
+
+    #[test]
+    fn highlighted_codeblock_non_language_classes_move_to_div() {
+        let html = render_block_to_html(codeblock_with_id_classes_and_spans(
+            "cb1",
+            vec!["r", "cell-code"],
+            "cat(\"hi\")",
+            r#"[[0,3,"function"]]"#,
+        ));
+        // div gets sourceCode + non-language classes
+        assert!(
+            html.contains("<div class=\"sourceCode cell-code\" id=\"cb1\">"),
+            "expected non-language class on div, got:\n{html}",
+        );
+        // pre gets sourceCode + language only
+        assert!(
+            html.contains("<pre class=\"sourceCode r\">"),
+            "expected pre to have only sourceCode + language, got:\n{html}",
+        );
+    }
+
+    #[test]
+    fn highlighted_codeblock_code_element_gets_sourcecode_class() {
+        let html = render_block_to_html(codeblock_with_hl_spans(
+            "python",
+            "def foo()",
+            r#"[[0,3,"keyword"]]"#,
+        ));
+        assert!(
+            html.contains("<code class=\"sourceCode python\">"),
+            "expected <code> to carry sourceCode + language, got:\n{html}",
+        );
+    }
+
+    #[test]
+    fn highlighted_codeblock_with_empty_language() {
+        // Highlight spans present but no language class — still wrap in
+        // div.sourceCode but with no language qualifier.
+        let html = render_block_to_html(codeblock_with_id_classes_and_spans(
+            "",
+            vec![],
+            "raw text",
+            r#"[[0,3,"keyword"]]"#,
+        ));
+        assert!(
+            html.contains("<div class=\"sourceCode\">"),
+            "expected div.sourceCode wrapper even without language, got:\n{html}",
+        );
+        assert!(
+            html.contains("<pre class=\"sourceCode\">"),
+            "expected pre.sourceCode without language, got:\n{html}",
+        );
+        assert!(
+            html.contains("<code class=\"sourceCode\">"),
+            "expected code.sourceCode without language, got:\n{html}",
+        );
+    }
+
+    #[test]
+    fn unhighlighted_codeblock_has_no_div_wrapper() {
+        // No data-hl-spans => no highlighting => no div.sourceCode wrapper.
+        use hashlink::LinkedHashMap;
+        let block = Block::CodeBlock(CodeBlock {
+            attr: (
+                "cb1".to_string(),
+                vec!["python".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "def foo()".to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let html = render_block_to_html(block);
+        assert!(
+            !html.contains("<div class=\"sourceCode"),
+            "un-highlighted code blocks should not get a div wrapper, got:\n{html}",
         );
     }
 }

@@ -28,8 +28,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import { Ast } from '../framework';
-import type { PandocAST } from '../framework';
+import { Ast } from '@quarto/preview-renderer/framework';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
 import { q2DebugRegistry } from './registry';
 
 function astJson(blocks: any[], meta: Record<string, unknown> = {}): string {

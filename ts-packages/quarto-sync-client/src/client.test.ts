@@ -93,6 +93,7 @@ function noopCallbacks(): SyncClientCallbacks {
     onFileRemoved: vi.fn(),
     onFilesChange: vi.fn(),
     onIdentitiesChange: vi.fn(),
+    onCapturesChange: vi.fn(),
     onConnectionChange: vi.fn(),
     onError: vi.fn(),
   };
@@ -201,5 +202,175 @@ describe('createSyncClient identity', () => {
       name: 'Bob',
       color: '#00FF00',
     });
+  });
+});
+
+describe('createSyncClient captures (Phase C.3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('connect fires onCapturesChange with the empty sidecar when the index doc has no captures', async () => {
+    const indexDoc: IndexDocument = { files: {}, version: 2, identities: {} };
+    const { handle } = createMockHandle(indexDoc);
+
+    installMockRepo(handle, handle);
+
+    const cbs = noopCallbacks();
+    const client = createSyncClient(cbs);
+
+    await client.connect('ws://localhost:9999', 'mock-doc-id', 'actor-1', 'Alice', '#FF0000');
+
+    expect(cbs.onCapturesChange).toHaveBeenCalledWith({});
+  });
+
+  it('connect fires onCapturesChange with the populated sidecar when the index doc carries captures', async () => {
+    const indexDoc: IndexDocument = {
+      files: { 'index.qmd': 'doc1' },
+      version: 2,
+      identities: {},
+      captures: {
+        'index.qmd': { captureDocId: 'cap-1', state: 'idle' },
+      },
+    };
+    const { handle } = createMockHandle(indexDoc);
+
+    installMockRepo(handle, handle);
+
+    const cbs = noopCallbacks();
+    const client = createSyncClient(cbs);
+
+    await client.connect('ws://localhost:9999', 'mock-doc-id', 'actor-1', 'Alice', '#FF0000');
+
+    expect(cbs.onCapturesChange).toHaveBeenCalledWith({
+      'index.qmd': { captureDocId: 'cap-1', state: 'idle' },
+    });
+  });
+});
+
+// ─── bd-4uvv: getBinaryDocById prefix normalization ──────────────────
+//
+// samod's TS `repo.find()` rejects bare docIds with
+// `Error: Invalid AutomergeUrl: <id>`. The IndexDocument's capture
+// sidecar (Phase C.3) stores bare docIds — same as `files` — so the
+// binary-doc-by-id call path must prepend the `automerge:` scheme just
+// like the text-doc loader (`loadFileDocuments`, lines 305-307 in
+// client.ts). Without the prefix, every project-mode q2 preview render
+// falls back to the default registry because the capture binary doc
+// never arrives, and code cells render as inert source even when the
+// server's eager capture driver wrote a perfectly valid capture.
+
+describe('createSyncClient.getBinaryDocById URL normalization (bd-4uvv)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Spy-wrapper around `installMockRepo`. Captures the actual `find()`
+   * arguments so the test can assert the prefix-normalization rule
+   * without invoking samod's real URL parser.
+   */
+  function installSpyRepo<T>(
+    binaryHandle: ReturnType<typeof createMockHandle<T>>['handle'],
+  ): { findCalls: unknown[] } {
+    const findCalls: unknown[] = [];
+    const mockNetworkSubsystem = { on: vi.fn(), off: vi.fn() };
+    vi.mocked(Repo).mockImplementation(function (this: unknown) {
+      Object.assign(this as Record<string, unknown>, {
+        find: vi.fn((id: unknown) => {
+          findCalls.push(id);
+          return Promise.resolve(binaryHandle);
+        }),
+        import: vi.fn().mockReturnValue(binaryHandle),
+        create: vi.fn().mockReturnValue(binaryHandle),
+        networkSubsystem: mockNetworkSubsystem,
+      });
+      return this as Repo;
+    } as unknown as typeof Repo);
+    return { findCalls };
+  }
+
+  it('prepends the automerge: scheme when callers pass a bare docId', async () => {
+    // Index doc handle just so `connect` succeeds. The real assertion
+    // is on the *second* find() call (the one inside getBinaryDocById).
+    const indexDoc: IndexDocument = { files: {}, version: 2, identities: {} };
+    const { handle: indexHandle } = createMockHandle(indexDoc);
+    // Binary doc handle returned for the capture lookup. Shape mirrors
+    // what `quarto_hub::resource::create_binary_document` writes.
+    const binaryContent = new Uint8Array([1, 2, 3]);
+    const { handle: binaryHandle } = createMockHandle({
+      content: binaryContent,
+      mimeType: 'application/x-engine-capture+gzip',
+    });
+
+    // First `find` call resolves the index doc; subsequent calls land
+    // on `binaryHandle`. The single-handle installSpyRepo collapses
+    // both; for this test we only care about the bare-id round trip.
+    const { findCalls } = installSpyRepo(binaryHandle);
+    // Override: the very first find (during `connect`) needs the
+    // index-doc handle, not the binary handle.
+    vi.mocked(Repo).mockImplementationOnce(function (this: unknown) {
+      Object.assign(this as Record<string, unknown>, {
+        find: vi.fn((id: unknown) => {
+          findCalls.push(id);
+          // Return indexHandle for the connect path, binaryHandle for
+          // subsequent calls. Driven by call order, not id-shape.
+          return Promise.resolve(findCalls.length === 1 ? indexHandle : binaryHandle);
+        }),
+        import: vi.fn().mockReturnValue(indexHandle),
+        create: vi.fn().mockReturnValue(indexHandle),
+        networkSubsystem: { on: vi.fn(), off: vi.fn() },
+      });
+      return this as Repo;
+    } as unknown as typeof Repo);
+
+    const cbs = noopCallbacks();
+    const client = createSyncClient(cbs);
+    await client.connect('ws://localhost:9999', 'mock-index-id', 'actor-1', 'Alice', '#FF0000');
+
+    const result = await client.getBinaryDocById('bare-capture-id');
+
+    // Second find() call (after connect's index-doc lookup) is the
+    // bd-4uvv assertion: bare id must be prefixed.
+    expect(findCalls.length).toBeGreaterThanOrEqual(2);
+    expect(findCalls[findCalls.length - 1]).toBe('automerge:bare-capture-id');
+    // And the returned bytes must round-trip back to the caller.
+    // `toStrictEqual` because the mock handle stores a structuredClone,
+    // breaking the original Uint8Array's object identity.
+    expect(result).not.toBeNull();
+    expect(result?.content).toStrictEqual(binaryContent);
+    expect(result?.mimeType).toBe('application/x-engine-capture+gzip');
+  });
+
+  it('does not double-prefix when the docId already has the scheme', async () => {
+    const indexDoc: IndexDocument = { files: {}, version: 2, identities: {} };
+    const { handle: indexHandle } = createMockHandle(indexDoc);
+    const { handle: binaryHandle } = createMockHandle({
+      content: new Uint8Array([0]),
+      mimeType: 'application/x-engine-capture+gzip',
+    });
+
+    const findCalls: unknown[] = [];
+    vi.mocked(Repo).mockImplementation(function (this: unknown) {
+      Object.assign(this as Record<string, unknown>, {
+        find: vi.fn((id: unknown) => {
+          findCalls.push(id);
+          return Promise.resolve(findCalls.length === 1 ? indexHandle : binaryHandle);
+        }),
+        import: vi.fn().mockReturnValue(indexHandle),
+        create: vi.fn().mockReturnValue(indexHandle),
+        networkSubsystem: { on: vi.fn(), off: vi.fn() },
+      });
+      return this as Repo;
+    } as unknown as typeof Repo);
+
+    const cbs = noopCallbacks();
+    const client = createSyncClient(cbs);
+    await client.connect('ws://localhost:9999', 'mock-index-id', 'actor-1', 'Alice', '#FF0000');
+
+    await client.getBinaryDocById('automerge:already-prefixed');
+
+    // Idempotent: no `automerge:automerge:...` double-prefix.
+    expect(findCalls[findCalls.length - 1]).toBe('automerge:already-prefixed');
   });
 });

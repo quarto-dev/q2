@@ -24,6 +24,7 @@
 
 use std::path::PathBuf;
 
+use quarto_config::resolve_website_value;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{Sidebar, SidebarEntry};
 use quarto_pandoc_types::ConfigValue;
@@ -50,8 +51,9 @@ pub struct ResolvedSidebar {
 /// Walk a project's sidebar configuration and return the membership
 /// set per sidebar.
 ///
-/// Reads `meta.website.sidebar` (the same config slice
-/// [`Sidebar::parse_list_from_config`] consumes) and produces a
+/// Reads the merged sidebar config (accepting both top-level
+/// `sidebar:` and `website.sidebar:`; see
+/// [`quarto_config::resolve_website_value`]) and produces a
 /// [`ResolvedSidebar`] for each declared sidebar.
 ///
 /// Diagnostics from `auto:` expansion are appended to
@@ -64,11 +66,11 @@ pub fn resolve_sidebar_membership(
     index: &ProjectIndex,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<ResolvedSidebar> {
-    let Some(sidebar_cv) = meta.get_path(&["website", "sidebar"]) else {
+    let Some(sidebar_cv) = resolve_website_value(meta, "sidebar") else {
         return Vec::new();
     };
 
-    let sidebars = Sidebar::parse_list_from_config(sidebar_cv);
+    let sidebars = Sidebar::parse_list_from_config(&sidebar_cv);
     sidebars
         .into_iter()
         .map(|mut sidebar| {
@@ -272,6 +274,51 @@ mod tests {
         let resolved = resolve_sidebar_membership(&meta, &index, &mut diags);
 
         assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].members,
+            vec![PathBuf::from("a.qmd"), PathBuf::from("b.qmd")]
+        );
+    }
+
+    // ---- bd-jjep / bd-telo: accept top-level `sidebar:` form too ----
+
+    #[test]
+    fn top_level_sidebar_is_picked_up() {
+        // Mirror image of the navbar/footer cliff: previously this
+        // resolver only read `website.sidebar`, so top-level
+        // `sidebar:` was silently ignored.
+        let mut meta = ConfigValue::default();
+        let sidebar = config_map(vec![("contents", arr(vec![s("a.qmd"), s("b.qmd")]))]);
+        meta.insert_path(&["sidebar"], sidebar);
+
+        let index = make_index_with(&["a.qmd", "b.qmd"]);
+        let mut diags = Vec::new();
+        let resolved = resolve_sidebar_membership(&meta, &index, &mut diags);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].members,
+            vec![PathBuf::from("a.qmd"), PathBuf::from("b.qmd")]
+        );
+    }
+
+    #[test]
+    fn top_level_sidebar_concatenates_with_website_sidebar() {
+        // Both locations present: the merged sidebar should pick up
+        // entries from both layers. Arrays default to !concat, so the
+        // resulting `contents` is the concatenation (nested first).
+        let mut meta = ConfigValue::default();
+        let nested = config_map(vec![("contents", arr(vec![s("a.qmd")]))]);
+        let top = config_map(vec![("contents", arr(vec![s("b.qmd")]))]);
+        meta.insert_path(&["website", "sidebar"], nested);
+        meta.insert_path(&["sidebar"], top);
+
+        let index = make_index_with(&["a.qmd", "b.qmd"]);
+        let mut diags = Vec::new();
+        let resolved = resolve_sidebar_membership(&meta, &index, &mut diags);
+
+        assert_eq!(resolved.len(), 1);
+        // Both members appear; concat order is nested-then-top.
         assert_eq!(
             resolved[0].members,
             vec![PathBuf::from("a.qmd"), PathBuf::from("b.qmd")]

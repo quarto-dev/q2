@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { PandocAST } from './framework';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
 import { parseSlides } from './ReactAstSlideRenderer';
 
 describe('ReactAstSlideRenderer slide-title meta coercion', () => {

@@ -23,12 +23,18 @@
 
 mod apply_template;
 mod ast_transforms;
+mod attribution_generate;
 // Bootstrap JS is a native-only stage: hub-client's iframe-per-render
 // preview blows away stateful Bootstrap components, and excluding the
 // stage on WASM keeps the 80KB bundle out of the WASM binary. See the
 // module's own docs for the full rationale.
 #[cfg(not(target_arch = "wasm32"))]
 mod bootstrap_js;
+// Capture-splice (bd-lucp): preview-time AST-level injection of
+// server-recorded engine output. Built on the same EngineCapture
+// wire format that bd-45yw uses for replay, but consumed via
+// `quarto_core::engine::capture_splice` rather than `ReplayEngine`.
+mod capture_splice;
 mod code_highlight;
 mod compile_theme_css;
 mod document_profile;
@@ -51,13 +57,15 @@ mod user_filters;
 
 pub use apply_template::{ApplyTemplateConfig, ApplyTemplateStage};
 pub use ast_transforms::AstTransformsStage;
+pub use attribution_generate::AttributionGenerateStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use bootstrap_js::BootstrapJsStage;
+pub use capture_splice::CaptureSpliceStage;
 pub use code_highlight::CodeHighlightStage;
 pub use compile_theme_css::{CompileThemeCssStage, theme_fingerprint};
 pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
-pub use include_expansion::IncludeExpansionStage;
+pub use include_expansion::{IncludeExpansionStage, extract_include_path};
 pub use include_resolve::IncludeResolveStage;
 pub use link_resolution::LinkResolutionStage;
 pub use listing_item_info::ListingItemInfoStage;

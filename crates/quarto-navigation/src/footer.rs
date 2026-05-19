@@ -14,6 +14,7 @@
 //! list of navigation items. Mixing the two within a single region is not
 //! supported; a string value wins if both shapes are present at parse time.
 
+use quarto_config::resolve_website_value;
 use quarto_pandoc_types::ConfigMapEntry;
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_source_map::SourceInfo;
@@ -215,8 +216,13 @@ impl PageFooter {
 }
 
 /// Resolve the user's `page-footer:` input from `ast.meta`.
+///
+/// Accepts both authoring locations and merges them: top-level
+/// `page-footer:` (feature-scoped) and nested `website.page-footer:`
+/// (Quarto 1 compatible). Top-level wins on overlapping fields.
+/// `!prefer` on either layer escapes the default field-wise merge.
 pub fn resolve_page_footer(meta: &ConfigValue) -> Option<PageFooter> {
-    let cv = meta.get("page-footer")?;
+    let cv = resolve_website_value(meta, "page-footer")?;
     if cv.as_bool() == Some(false) {
         return None;
     }
@@ -225,7 +231,7 @@ pub fn resolve_page_footer(meta: &ConfigValue) -> Option<PageFooter> {
         // treat as absent. Users supply content or set to `false`.
         return None;
     }
-    Some(PageFooter::from_config_value(cv))
+    Some(PageFooter::from_config_value(&cv))
 }
 
 #[cfg(test)]
@@ -397,5 +403,58 @@ mod tests {
         let cv = original.to_config_value();
         let reparsed = PageFooter::from_config_value(&cv);
         assert_eq!(reparsed, original);
+    }
+
+    // ---- bd-jjep / bd-telo: accept `website.page-footer` form too ----
+
+    #[test]
+    fn resolve_picks_up_nested_website_page_footer() {
+        // Q1-style nesting under `website:`.
+        let footer_cv = map(vec![("left", s("Copyright 2026"))]);
+        let meta = map(vec![("website", map(vec![("page-footer", footer_cv)]))]);
+        let footer = resolve_page_footer(&meta).expect("website.page-footer must resolve");
+        match &footer.left {
+            FooterRegion::Text(cv) => {
+                assert_eq!(cv.as_plain_text().as_deref(), Some("Copyright 2026"));
+            }
+            other => panic!("expected Text left, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn resolve_merges_top_level_over_website_page_footer() {
+        // website.page-footer = { left: "© Nested", background: "light" }
+        // page-footer         = { left: "© Top" }
+        // expect: left = "© Top", background = "light"
+        let nested = map(vec![("left", s("© Nested")), ("background", s("light"))]);
+        let top = map(vec![("left", s("© Top"))]);
+        let meta = map(vec![
+            ("website", map(vec![("page-footer", nested)])),
+            ("page-footer", top),
+        ]);
+        let footer = resolve_page_footer(&meta).unwrap();
+        match &footer.left {
+            FooterRegion::Text(cv) => {
+                assert_eq!(cv.as_plain_text().as_deref(), Some("© Top"));
+            }
+            other => panic!("expected Text left, got {:?}", other),
+        }
+        assert_eq!(footer.background.as_deref(), Some("light"));
+    }
+
+    #[test]
+    fn resolve_nested_false_disables() {
+        let meta = map(vec![("website", map(vec![("page-footer", b(false))]))]);
+        assert!(resolve_page_footer(&meta).is_none());
+    }
+
+    #[test]
+    fn resolve_top_level_false_overrides_nested_page_footer() {
+        let nested = map(vec![("left", s("© Nested"))]);
+        let meta = map(vec![
+            ("website", map(vec![("page-footer", nested)])),
+            ("page-footer", b(false)),
+        ]);
+        assert!(resolve_page_footer(&meta).is_none());
     }
 }

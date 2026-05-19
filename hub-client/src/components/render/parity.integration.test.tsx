@@ -53,7 +53,7 @@ describe('framework-primitive parity across iframe globals', () => {
     test.each(FRAMEWORK_PRIMITIVES)(
         '%s is reference-equal across both globals and the framework module',
         async (name) => {
-            const framework = await import('./framework');
+            const framework = await import('@quarto/preview-renderer/framework');
             const debug = (window as any).__REACT_AST_DEBUG_RENDERER__[name];
             const preview = (window as any).__Q2_PREVIEW_RENDERER__[name];
             expect(debug).toBe((framework as any)[name]);

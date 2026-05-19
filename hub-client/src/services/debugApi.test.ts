@@ -13,7 +13,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FileEntry } from '@quarto/quarto-automerge-schema';
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 
 const automergeSyncMocks = vi.hoisted(() => ({
   isFileBinary: vi.fn<(path: string) => boolean>(),
@@ -33,8 +33,12 @@ const wasmRendererMocks = vi.hoisted(() => ({
   vfsReadBinaryFile: vi.fn<(path: string) => { success: boolean; content?: string }>(),
 }));
 
-vi.mock('./automergeSync', () => automergeSyncMocks);
-vi.mock('./wasmRenderer', () => wasmRendererMocks);
+// Both modules now live in @quarto/preview-runtime; the barrel re-exports
+// everything, so a single mock of the barrel covers both surfaces.
+vi.mock('@quarto/preview-runtime', () => ({
+  ...automergeSyncMocks,
+  ...wasmRendererMocks,
+}));
 
 import {
   installDebugApi,

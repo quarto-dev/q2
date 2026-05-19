@@ -5,7 +5,7 @@
  * Provides SHA-256 hashing, MIME type detection, and conflict-aware naming.
  */
 
-import { inferMimeType } from '../types/project';
+import { inferMimeType } from '@quarto/preview-renderer/types/project';
 
 /**
  * Compute SHA-256 hash of binary data using Web Crypto API.

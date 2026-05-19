@@ -6,7 +6,7 @@
  * a collapsible folder hierarchy.
  */
 
-import type { FileEntry } from '../types/project';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
 
 /**
  * A node in the file tree, representing either a folder or a file.

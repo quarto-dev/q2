@@ -731,7 +731,7 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
                         }
                         connected_peer_id = Some(peer_info.peer_id);
 
-                        info!(
+                        debug!(
                             peer_id = peer_id_str,
                             storage_id,
                             email = email.as_deref().unwrap_or("-"),
@@ -747,7 +747,7 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
                             ctx.peer_emails().lock().unwrap().remove(peer_id);
                         }
 
-                        info!(
+                        debug!(
                             email = email.as_deref().unwrap_or("-"),
                             reason = ?reason,
                             "WebSocket client disconnected"
@@ -763,9 +763,23 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, email: Option<S
     }
 }
 
-/// Build the axum router. Auth state (decoder + JWKS refresh handle) is
-/// initialized here and owned by HubContext for the server's lifetime.
-async fn build_router(ctx: SharedContext) -> Result<Router> {
+/// Build the hub server's axum router. Composable: callers (e.g.
+/// `quarto-preview`) can chain `.fallback(...)` to add SPA serving on
+/// top, as long as `HubConfig::register_root_ws` is `false` so `/` is
+/// available.
+///
+/// Auth state (decoder + JWKS refresh handle) is initialized here and
+/// owned by HubContext for the server's lifetime.
+pub async fn build_router(ctx: SharedContext) -> Result<Router> {
+    let router = build_router_with_state(ctx.clone()).await?;
+    Ok(router.with_state(ctx))
+}
+
+/// Same as [`build_router`] but returns the router with its state
+/// type still unbound (`Router<SharedContext>`). Callers can register
+/// additional routes that extract `State<SharedContext>` before
+/// calling `.with_state(ctx)` to finalize.
+pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<SharedContext>> {
     if let Some(config) = ctx.auth_config() {
         let auth_state = auth::build_auth_state(config).await.map_err(|e| {
             crate::error::Error::Server(format!("Failed to initialize OIDC JWKS decoder: {e}"))
@@ -773,6 +787,8 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         ctx.set_auth_state(auth_state)
             .map_err(|e| crate::error::Error::Server(e.to_string()))?;
     }
+
+    let register_root_ws = ctx.register_root_ws();
 
     let mut router = Router::new()
         .route("/health", get(health))
@@ -787,13 +803,18 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/refresh", post(auth_refresh))
-        // WebSocket endpoint for automerge sync
-        // Root path "/" is the standard location used by sync.automerge.org
-        // "/ws" is kept for backward compatibility
-        .route("/", get(ws_handler))
+        // WebSocket endpoint for automerge sync at `/ws` (hub-client +
+        // q2-preview SPA's canonical path).
         .route("/ws", get(ws_handler))
         .fallback(not_found)
         .layer(TraceLayer::new_for_http().make_span_with(RedactedMakeSpan));
+
+    if register_root_ws {
+        // Root path "/" is the additional standard location used by
+        // sync.automerge.org. `quarto preview` opts out (its embedded
+        // SPA owns `/`) by setting `register_root_ws: false`.
+        router = router.route("/", get(ws_handler));
+    }
 
     // Google-specific redirect callback: only registered when the issuer is Google.
     // Non-Google OIDC frontends should use POST /auth/refresh instead.
@@ -812,7 +833,7 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
         ));
     }
 
-    Ok(router.with_state(ctx))
+    Ok(router)
 }
 
 /// Run the hub server.
@@ -824,20 +845,103 @@ async fn build_router(ctx: SharedContext) -> Result<Router> {
 /// If `sync_interval_secs` is configured, a background task will periodically
 /// sync all documents to the filesystem for crash resilience.
 pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()> {
+    run_server_with(storage, config, None::<NoopExtend>, None, None).await
+}
+
+/// Convenience alias so callers can pass `None` without spelling out a
+/// concrete `FnOnce` type for the `extend_router` parameter.
+type NoopExtend = fn(Router<SharedContext>) -> Router<SharedContext>;
+
+/// Callback that fires once `HubContext::new` finishes (samod repo
+/// initialized, index loaded, initial filesystem sync complete) and
+/// *before* the HTTP listener binds. Receives a clone of the Arc so
+/// the caller can stash it elsewhere or spawn background tasks
+/// against it.
+///
+/// Used by `quarto-preview` to drive Phase C engine-capture recording
+/// from the q2 preview server's startup path without coupling
+/// `quarto-hub` to the engine layer.
+pub type OnReadyCallback =
+    Box<dyn FnOnce(std::sync::Arc<crate::context::HubContext>) + Send + 'static>;
+
+/// Callback that fires once for every file change observed by the
+/// in-process file watcher, *after* the file's bytes have synced
+/// into samod (`HubContext::sync_file` succeeded). Receives a clone
+/// of the context and the project-relative path that changed (the
+/// same path keying the IndexDocument's `files` and `captures`
+/// maps).
+///
+/// Used by `quarto-preview` (Phase C.2) to drive staleness
+/// recomputation against the capture sidecar without coupling
+/// `quarto-hub` to the engine layer. `Fn` (not `FnOnce`) because the
+/// callback fires once per change event; `Send + Sync` because the
+/// watcher task may spawn handlers on other threads.
+pub type OnFileChangedCallback = std::sync::Arc<
+    dyn Fn(std::sync::Arc<crate::context::HubContext>, std::path::PathBuf) + Send + Sync + 'static,
+>;
+
+/// Run the hub server, optionally extending its router before serving.
+///
+/// Same lifecycle as [`run_server`] (signal handling, periodic sync,
+/// file watcher, graceful shutdown), with the option for the caller to
+/// transform the built router *after* `build_router` and *before*
+/// `axum::serve`. This is the seam `quarto-preview` uses to layer its
+/// SPA fallback (`router.fallback(spa_handler)`) on top of the hub's
+/// API + ws routes.
+///
+/// `on_ready`, when provided, is invoked once with an `Arc<HubContext>`
+/// after the context is constructed and its initial filesystem sync
+/// has completed, but before the listener binds. The callback runs
+/// synchronously on the calling task; if it needs to do work that
+/// shouldn't block server startup (engine execution, large I/O), it
+/// should `tokio::spawn` an internal task. Errors inside the callback
+/// are the callback's responsibility — `run_server_with` does not
+/// observe its return value.
+///
+/// The caller must set `HubConfig::register_root_ws` to `false` when
+/// the extension claims `/`; otherwise axum will panic on the
+/// duplicate route.
+pub async fn run_server_with<F>(
+    storage: StorageManager,
+    config: HubConfig,
+    extend_router: Option<F>,
+    on_ready: Option<OnReadyCallback>,
+    on_file_changed: Option<OnFileChangedCallback>,
+) -> Result<()>
+where
+    F: FnOnce(Router<SharedContext>) -> Router<SharedContext> + Send,
+{
     let addr = format!("{}:{}", config.host, config.port);
     let sync_interval = config.sync_interval_secs;
     let watch_enabled = config.watch_enabled;
     let watch_debounce_ms = config.watch_debounce_ms;
+    let watch_filter = config.watch_filter;
     let project_root = storage.project_root().map(|p| p.to_path_buf());
     let has_project = project_root.is_some();
 
     // HubContext::new is now async (initializes samod repo and performs initial sync)
     let ctx = Arc::new(HubContext::new(storage, config).await?);
+
+    // Fire the on-ready callback (if any) after initial sync, before
+    // binding the listener. Callback can clone the Arc and spawn
+    // background tasks against it; we don't observe its return.
+    if let Some(callback) = on_ready {
+        callback(ctx.clone());
+    }
+
     let ctx_for_sync = ctx.clone();
     let ctx_for_watch = ctx.clone();
     let ctx_for_shutdown = ctx.clone();
 
-    let router = build_router(ctx).await?;
+    // Build the hub router *before* state binding so extensions can
+    // register routes that consume `State<SharedContext>`. After
+    // extensions land we bind state and the router becomes
+    // `Router<()>`, ready for axum::serve.
+    let mut router = build_router_with_state(ctx.clone()).await?;
+    if let Some(extend) = extend_router {
+        router = extend(router);
+    }
+    let router = router.with_state(ctx);
 
     let listener = TcpListener::bind(&addr).await?;
     if has_project {
@@ -878,12 +982,14 @@ pub async fn run_server(storage: StorageManager, config: HubConfig) -> Result<()
         let shutdown_rx = shutdown_rx.clone();
         let watch_config = WatchConfig {
             debounce_ms: watch_debounce_ms,
+            filter: watch_filter,
         };
         match FileWatcher::new(&project_root, watch_config) {
             Ok(watcher) => {
                 info!("Starting filesystem watcher");
+                let on_change = on_file_changed.clone();
                 Some(tokio::spawn(async move {
-                    run_file_watcher(ctx_for_watch, watcher, shutdown_rx).await;
+                    run_file_watcher(ctx_for_watch, watcher, shutdown_rx, on_change).await;
                 }))
             }
             Err(e) => {
@@ -954,8 +1060,8 @@ async fn run_periodic_sync(
             _ = interval.tick() => {
                 debug!("Running periodic filesystem sync...");
                 let result = ctx.sync_all().await;
-                if result.total_synced() > 0 || result.has_errors() {
-                    info!(
+                if result.has_changes() || result.has_errors() {
+                    debug!(
                         synced = result.total_synced(),
                         no_changes = result.no_changes,
                         automerge_changed = result.automerge_changed,
@@ -986,6 +1092,7 @@ async fn run_file_watcher(
     ctx: Arc<HubContext>,
     mut watcher: FileWatcher,
     mut shutdown_rx: watch::Receiver<bool>,
+    on_file_changed: Option<OnFileChangedCallback>,
 ) {
     loop {
         tokio::select! {
@@ -1000,6 +1107,14 @@ async fn run_file_watcher(
                                     result = ?result,
                                     "File synced successfully"
                                 );
+                                // Phase C.2 hook: fire post-sync callback so
+                                // engine-aware consumers (quarto-preview) can
+                                // recompute capture staleness. The callback
+                                // takes the absolute path on disk; it owns
+                                // the conversion to the project-relative key.
+                                if let Some(callback) = on_file_changed.as_ref() {
+                                    callback(ctx.clone(), path.clone());
+                                }
                             }
                             Ok(None) => {
                                 debug!(path = %path.display(), "File not in index, skipping");

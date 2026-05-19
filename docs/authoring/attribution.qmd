@@ -205,6 +205,82 @@ in-product toggle and renderer-side colouring are still in
 development — when they land, an "Authorship" control will appear in
 the document settings.
 
+## Using attribution in Lua filters
+
+When a provider is installed (`--attribution=git` on the CLI, or the
+hub-client preview path), user Lua filters can query the same
+attribution sidecar through the `quarto.attribution.*` host binding.
+Both pre-phase (`pre-quarto`) and post-phase filters see it.
+
+### Example: colour spans by author
+
+```lua
+function Span(elem)
+    local hit = quarto.attribution.lookup(elem)
+    if hit then
+        local attr = pandoc.Attr(
+            elem.attr.identifier,
+            elem.attr.classes,
+            { ["data-author"] = hit.name, ["style"] = "color: " .. hit.color }
+        )
+        return pandoc.Span(elem.content, attr)
+    end
+    return elem
+end
+```
+
+`quarto.attribution.lookup(el)` returns either `nil` or a table:
+
+```lua
+{
+    actor = "alice@example.com",  -- the producer's actor id (email for git)
+    time  = 1715000000000,        -- Unix epoch milliseconds
+    name  = "Alice",              -- resolved display name
+    color = "#ff0000",            -- resolved CSS-compatible colour
+}
+```
+
+It returns `nil` when:
+
+- the element has no source-file provenance (synthesised nodes,
+  `RawInline`/`RawBlock` injected by upstream filters);
+- the resolved file ID is non-primary (v1 is single-document — a node
+  spliced in via `{{< include other.qmd >}}` returns `nil`);
+- no run in the sidecar overlaps the element's byte range;
+- no provider is installed (i.e. attribution is off).
+
+### Primitive: arbitrary byte ranges
+
+When you have explicit `(start, end)` offsets — say from a custom
+text-walking transform — bypass element lookup with the raw form:
+
+```lua
+local raw = quarto.attribution.lookup_range(0, 100)
+-- => { actor = "alice@example.com", time = 1715000000000 }
+--    (no `name`/`color` — identity is *not* joined for the raw call)
+```
+
+Use `quarto.attribution.identities()` to look identities up
+separately:
+
+```lua
+local idents = quarto.attribution.identities()
+local alice = idents["alice@example.com"]
+-- alice = { name = "Alice", color = "#ff0000" }
+```
+
+The identity map is read-only and empty when no provider is
+installed.
+
+### Read-only contract
+
+The Lua binding is v1 read-only. There is no
+`quarto.attribution.set(el, actor, time)` — filters can transform the
+AST freely, but the underlying attribution sidecar is derived from
+the source (`git blame` for the CLI; Automerge edit history for the
+hub-client preview) and is not user-mutable. Bake whatever
+presentation you want from the read side instead.
+
 ## Current limits
 
 - **Single-document blame only.** Content spliced in via

@@ -6,11 +6,13 @@
 //!
 //! 1. `npm install` at the repo root (npm workspaces)
 //! 2. Build hub-client (includes WASM via `npm run build:all`)
-//! 3. Build the Rust workspace (`cargo build --workspace`)
+//! 3. Build trace-viewer (if present; Phase 4.3+)
+//! 4. Build q2-preview-spa (if present; q2-preview Phase A.4 / bd-501n)
+//! 5. Build the Rust workspace (`cargo build --workspace`)
 //!
-//! Phase 4.3 extends this to also build `trace-viewer/` before the final
-//! Rust build, since the `quarto-trace-server` crate embeds its `dist/` via
-//! `include_dir!`.
+//! Both SPAs (trace-viewer + q2-preview-spa) must build *before* the
+//! Rust workspace because `quarto-trace-server` and `quarto-preview`
+//! embed their respective `dist/` directories via `include_dir!`.
 
 use anyhow::{Context, Result, bail};
 use std::path::Path;
@@ -25,6 +27,9 @@ pub struct BuildAllConfig {
     pub skip_hub_build: bool,
     /// Skip the trace-viewer build step. No-op until Phase 4.3 lands.
     pub skip_trace_viewer_build: bool,
+    /// Skip the q2-preview-spa build step. No-op when the SPA dir is
+    /// absent (e.g. branches before bd-hfjj Phase 6).
+    pub skip_q2_preview_spa_build: bool,
     /// Skip the final `cargo build --workspace` step.
     pub skip_rust_build: bool,
     /// Pass `--release` to `cargo build`.
@@ -37,6 +42,7 @@ impl Default for BuildAllConfig {
             skip_npm_install: false,
             skip_hub_build: false,
             skip_trace_viewer_build: false,
+            skip_q2_preview_spa_build: false,
             skip_rust_build: false,
             release: false,
         }
@@ -53,6 +59,10 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
         (
             "trace-viewer build",
             !config.skip_trace_viewer_build && trace_viewer_exists(&project_root),
+        ),
+        (
+            "q2-preview-spa build",
+            !config.skip_q2_preview_spa_build && q2_preview_spa_exists(&project_root),
         ),
         ("Rust workspace build", !config.skip_rust_build),
     ];
@@ -105,6 +115,21 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
         println!("✓ trace-viewer build complete");
     }
 
+    // Step: q2-preview-spa build (bd-501n / Phase A.4)
+    if !config.skip_q2_preview_spa_build && q2_preview_spa_exists(&project_root) {
+        step_idx += 1;
+        banner(step_idx, total, "Building q2-preview-spa");
+        let spa_dir = project_root.join("q2-preview-spa");
+        run_command(
+            "npm",
+            &["run", "build"],
+            &spa_dir,
+            None,
+            "q2-preview-spa build failed",
+        )?;
+        println!("✓ q2-preview-spa build complete");
+    }
+
     // Step: Rust workspace build
     if !config.skip_rust_build {
         step_idx += 1;
@@ -136,6 +161,13 @@ fn banner(step: u32, total: u32, label: &str) {
 fn trace_viewer_exists(project_root: &Path) -> bool {
     project_root
         .join("trace-viewer")
+        .join("package.json")
+        .is_file()
+}
+
+fn q2_preview_spa_exists(project_root: &Path) -> bool {
+    project_root
+        .join("q2-preview-spa")
         .join("package.json")
         .is_file()
 }

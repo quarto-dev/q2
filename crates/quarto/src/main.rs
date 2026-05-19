@@ -15,6 +15,13 @@ mod commands;
 #[command(version = quarto_util::cli_version())]
 #[command(about = "Quarto CLI", long_about = None)]
 struct Cli {
+    /// Increase log verbosity. Repeat for more detail:
+    /// `-v` adds info, `-vv` adds debug + samod=info,
+    /// `-vvv` adds trace + samod=debug + tower_http=debug.
+    /// `RUST_LOG` overrides this flag entirely when set.
+    #[arg(short = 'v', long = "verbose", global = true, action = clap::ArgAction::Count)]
+    verbose: u8,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -148,66 +155,65 @@ enum Commands {
         attribution: Option<AttributionMode>,
     },
 
-    /// Render and preview a document or website project
+    /// Start a live preview of a Quarto document or project.
+    ///
+    /// Watches the project for changes and re-renders the active
+    /// page incrementally. The preview keeps its JavaScript state
+    /// (open menus, scroll position, math rendering, listings
+    /// filters) across edits — only the parts of the page that
+    /// actually changed are updated.
+    ///
+    /// Engine execution (Jupyter, knitr) is controlled by the
+    /// `preview.engine` key in `_quarto.yml`. Setting it to `manual`
+    /// (the default) makes the server detect when code has changed
+    /// and show a "Re-execute" button; `auto` re-executes on every
+    /// settled code edit; `off` skips engine execution entirely, so
+    /// code cells render as inert source.
+    ///
+    /// Press Ctrl-C to stop the server.
     Preview {
-        /// File or project to preview
-        file: Option<String>,
+        /// File or project root to preview.
+        ///
+        /// If you pass a file path inside a project (one with
+        /// `_quarto.yml` somewhere up the tree), the whole project
+        /// is loaded and the preview opens to that page. If you
+        /// pass a directory, the preview opens to `index.qmd` when
+        /// present, otherwise the first `.qmd` it finds. Defaults
+        /// to the current directory.
+        path: Option<std::path::PathBuf>,
 
-        /// Suggested port to listen on (defaults to random value between 3000 and 8000)
+        /// Port to listen on. Defaults to a random free port. Pass
+        /// `--port 0` to explicitly request an OS-assigned port.
         #[arg(long)]
         port: Option<u16>,
 
-        /// Hostname to bind to (defaults to 127.0.0.1)
+        /// Network interface to bind to. Defaults to `127.0.0.1`
+        /// (loopback-only — the preview is not reachable from
+        /// other machines on your network).
         #[arg(long)]
         host: Option<String>,
 
-        /// Render to the specified format(s) before previewing
-        #[arg(long, default_value = "none")]
-        render: String,
-
-        /// Don't run a local preview web server (just monitor and re-render input files)
-        #[arg(long)]
-        no_serve: bool,
-
-        /// Don't navigate the browser automatically when outputs are updated
-        #[arg(long)]
-        no_navigate: bool,
-
-        /// Don't open a browser to preview the site
+        /// Don't open a browser tab on startup. The URL is still
+        /// printed on stdout for copy-paste.
         #[arg(long)]
         no_browser: bool,
 
-        /// Do not re-render input files when they change
+        /// Override the directory the preview uses for ephemeral
+        /// per-session state. Default: a fresh tempdir that is
+        /// deleted when `q2 preview` exits.
         #[arg(long)]
-        no_watch_inputs: bool,
+        data_dir: Option<std::path::PathBuf>,
 
-        /// Time (in seconds) after which to exit if there are no active clients
+        /// Override the embedded preview UI with a copy on disk —
+        /// useful when you're iterating on the preview UI itself.
+        /// Most users never need this.
         #[arg(long)]
-        timeout: Option<u32>,
+        preview_dir: Option<std::path::PathBuf>,
 
-        /// Path to log file
+        /// Run as a bare sync server with no local project. The
+        /// opposite of the default project-mode boot.
         #[arg(long)]
-        log: Option<String>,
-
-        /// Log level (debug, info, warning, error, critical)
-        #[arg(long)]
-        log_level: Option<String>,
-
-        /// Log format (plain, json-stream)
-        #[arg(long)]
-        log_format: Option<String>,
-
-        /// Suppress console output
-        #[arg(long)]
-        quiet: bool,
-
-        /// Active project profile(s)
-        #[arg(long)]
-        profile: Vec<String>,
-
-        /// Additional arguments to forward to quarto render
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        render_args: Vec<String>,
+        no_project: bool,
     },
 
     /// Serve a Shiny interactive document
@@ -527,16 +533,20 @@ enum TraceCommand {
 }
 
 fn main() -> Result<()> {
-    // Initialize logging
+    let cli = Cli::parse();
+
+    // Initialize logging. The `-v` flag chooses a default filter
+    // directive (see `quarto_util::verbose_to_filter`); `RUST_LOG`,
+    // when set, takes precedence and is parsed directly by
+    // `try_from_default_env`. This matches the long-standing
+    // convention in the workspace.
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "quarto=info".into()),
+                .unwrap_or_else(|_| quarto_util::verbose_to_filter(cli.verbose).into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-
-    let cli = Cli::parse();
 
     match cli.command {
         Commands::Render {
@@ -561,7 +571,23 @@ fn main() -> Result<()> {
             debug,
             attribution,
         }),
-        Commands::Preview { .. } => commands::preview::execute(),
+        Commands::Preview {
+            path,
+            port,
+            host,
+            no_browser,
+            data_dir,
+            preview_dir,
+            no_project,
+        } => commands::preview::execute(commands::preview::PreviewArgs {
+            path,
+            port,
+            host,
+            no_browser,
+            data_dir,
+            preview_dir,
+            no_project,
+        }),
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create { .. } => commands::create::execute(),
         Commands::Use { .. } => commands::use_cmd::execute(),

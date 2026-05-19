@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
-import { Ast } from '../framework';
+import { Ast } from '@quarto/preview-renderer/framework';
 import { q2DebugRegistry } from './registry';
 
 afterEach(() => {

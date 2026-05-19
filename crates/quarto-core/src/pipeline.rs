@@ -57,26 +57,26 @@ use crate::stage::stages::ApplyTemplateConfig;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::BootstrapJsStage;
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, CompileThemeCssStage, DocumentProfileStage,
-    EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage, LinkResolutionStage,
-    ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage,
-    Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage,
-    ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
+    ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
+    DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
+    LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage, MetadataMergeStage,
+    ParseDocumentStage, Pipeline, PipelineData, PipelineStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, ResourceReportStage, StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    AppendixStructureTransform, AttributionGenerateTransform, AttributionRenderTransform,
-    AttributionViewerTransform, CalloutResolveTransform, CalloutTransform,
-    CategoriesSidebarTransform, CrossrefIndexTransform, CrossrefRenderTransform,
-    CrossrefResolveTransform, EquationLabelTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TheoremSugarTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
-    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
-    WebsiteTitlePrefixTransform,
+    AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
+    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
+    CodeBlockGenerateTransform, CodeBlockRenderTransform, CrossrefIndexTransform,
+    CrossrefRenderTransform, CrossrefResolveTransform, EquationLabelTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TheoremSugarTransform, TitleBlockTransform,
+    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -293,6 +293,11 @@ pub fn build_html_pipeline_stages_with_options(
     // omits this stage. See bootstrap_js.rs for full rationale.
     #[cfg(not(target_arch = "wasm32"))]
     stages.push(Box::new(BootstrapJsStage::new()));
+    // Attribution-generate runs *before* user filters so the
+    // `quarto.attribution.*` Lua host binding sees a populated
+    // sidecar in both `pre` and `post` filter passes. No-op when
+    // no provider is installed (`ctx.attribution_provider` is None).
+    stages.push(Box::new(AttributionGenerateStage::new()));
     stages.push(Box::new(UserFiltersStage::pre()));
     stages.push(Box::new(AstTransformsStage::new()));
     stages.push(Box::new(UserFiltersStage::post()));
@@ -328,16 +333,17 @@ pub fn build_html_pipeline_stages_with_options(
 /// q2-preview render (Plan 1 §"Multi-plan contract: theme CSS
 /// artifact"); Plan 2A's iframe entry reads it.
 ///
+/// bd-nxslt: `CodeHighlightStage` is **included** in q2-preview
+/// (it's AST-level — annotates `data-hl-spans` on the existing
+/// `CodeBlock` / inline `Code` nodes; the React renderer in
+/// `ts-packages/preview-renderer/src/q2-preview/blocks/CodeBlock.tsx`
+/// reads the attribute and emits the highlighted `<span>` markup).
+///
 /// The unknown-name validator
 /// (`q2_preview_stage_excluded_names_exist_in_html_pipeline`)
 /// fails the test suite if any name here is not an actual stage in
 /// the full HTML pipeline (typo / rename guard).
-const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &[
-    "code-highlight",
-    "math-js",
-    "render-html-body",
-    "apply-template",
-];
+const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &["math-js", "render-html-body", "apply-template"];
 
 /// Build the q2-preview pipeline stages (Plan 1).
 ///
@@ -349,11 +355,41 @@ const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &[
 /// run-time on `ctx.format.pipeline_kind` between
 /// `build_transform_pipeline` (HTML) and
 /// `build_q2_preview_transform_pipeline` (q2-preview).
+///
+/// **bd-lucp:** an optional `capture` slot inserts a
+/// [`CaptureSpliceStage`](crate::stage::CaptureSpliceStage) between
+/// `PreEngineSugaringStage` and `EngineExecutionStage`. When a
+/// capture is supplied, the splice replaces engine code cells in
+/// the AST with the server-recorded post-engine output blocks (keyed
+/// by `(structural_hash, occurrence_index)`); `EngineExecutionStage`
+/// then sees an AST with no engine cells left and the WASM
+/// fallback-to-markdown path is a clean no-op. When `capture` is
+/// `None`, the stage is still inserted but runs as a pass-through.
+/// See `crates/quarto-core/src/engine/capture_splice.rs` and
+/// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
 pub fn build_q2_preview_pipeline_stages(
     engine_registry: Option<crate::engine::EngineRegistry>,
+    capture: Option<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None, engine_registry);
     stages.retain(|s| !Q2_PREVIEW_STAGE_EXCLUDED.contains(&s.name()));
+
+    // Insert the splice stage immediately *before* EngineExecutionStage.
+    // bd-lucp: this is the q2-preview-specific consumer of recorded
+    // captures. The HTML pipeline doesn't include it — `q2 render`
+    // either runs the real engine natively or uses `--replay` (which
+    // goes through `EngineRegistry::with_replay`, an entirely
+    // different code path).
+    let splice_stage: Box<dyn PipelineStage> = match capture {
+        Some(c) => Box::new(crate::stage::CaptureSpliceStage::new().with_capture(c)),
+        None => Box::new(crate::stage::CaptureSpliceStage::new()),
+    };
+    let engine_idx = stages
+        .iter()
+        .position(|s| s.name() == "engine-execution")
+        .expect("engine-execution stage must exist in the q2-preview pipeline");
+    stages.insert(engine_idx, splice_stage);
+
     stages
 }
 
@@ -441,6 +477,8 @@ pub fn build_wasm_html_pipeline() -> Pipeline {
         Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(CompileThemeCssStage::new()),
+        // See native pipeline for the placement rationale.
+        Box::new(AttributionGenerateStage::new()),
         Box::new(UserFiltersStage::pre()),
         Box::new(AstTransformsStage::new()),
         Box::new(UserFiltersStage::post()),
@@ -806,14 +844,24 @@ pub async fn render_qmd_to_preview_ast(
     source_name: &str,
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    engine_registry: Option<crate::engine::EngineRegistry>,
+    capture: Option<quarto_trace::EngineCapture>,
 ) -> Result<PreviewAstOutput> {
     // The q2-preview stage list excludes `CodeHighlightStage` /
     // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
     // pipeline returns `DocumentAst`, not `RenderedOutput`.
-    // `EngineExecutionStage` uses the default registry; an
-    // override is not currently exposed (no consumer needs it
-    // for v1).
-    let stages = build_q2_preview_pipeline_stages(None);
+    //
+    // Phase C.4 (bd-kw93.3): `engine_registry` is threaded through so
+    // callers can substitute a `ReplayEngine` for regression-testing
+    // contexts (bd-45yw); production preview consumers leave it `None`.
+    //
+    // bd-lucp: `capture` is the new preview-time consumer. When
+    // present, [`CaptureSpliceStage`] inside the pipeline splices the
+    // recorded engine output into the live AST before
+    // `EngineExecutionStage` runs (which then no-ops via the WASM
+    // markdown fallback). See
+    // `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
+    let stages = build_q2_preview_pipeline_stages(engine_registry, capture);
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     let ast = output.into_document_ast().ok_or_else(|| {
@@ -936,6 +984,13 @@ pub fn build_transform_pipeline(
         target_format,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
+    // bd-1tl09 Phase 0: code-block decoration Generate runs after
+    // metadata-normalize so document-level defaults (e.g.
+    // `code-copy: true`) are visible when computing per-block
+    // decorations. The matching Render half lives in the
+    // Finalization Phase below. Phase 0 implementation is a no-op
+    // walker; Phases 1–3 fill in filename / copy / fold.
+    pipeline.push(Box::new(CodeBlockGenerateTransform::new()));
     // Website per-page metadata transforms (Phase 7 of the
     // website-projects epic). Each is a no-op outside a website
     // project. Order: title-prefix runs before favicon/canonical
@@ -1032,21 +1087,6 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     pipeline.push(Box::new(FooterRenderTransform::new()));
 
-    // Tail of Navigation Phase: attribution data generation. Reads the
-    // opt-in provider from `ctx.attribution_provider` (installed by the
-    // CLI `--attribution=git` flag plumbing or the WASM
-    // `parse_qmd_to_ast_with_attribution` entry point), calls
-    // `build()`, merges identities with any user-authored
-    // `meta.attribution.identities`, and stores
-    // `ctx.attribution_data`. No-op when no provider is installed —
-    // the unflagged HTML path stays byte-identical. The entire
-    // Finalization Phase runs between this stage and
-    // `AttributionRenderTransform`; no transform there reads or
-    // writes the sidecar. See
-    // `claude-notes/plans/2026-05-06-attribution-pipeline.md` for the
-    // sidecar / placement design notes.
-    pipeline.push(Box::new(AttributionGenerateTransform::new()));
-
     // === FINALIZATION PHASE ===
     // LinkRewriteTransform runs first in the Finalization Phase
     // (Phase 6 of the website-projects epic). It walks every
@@ -1058,6 +1098,15 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
+    // bd-1tl09 Phase 0: code-block decoration Render. Consumes the
+    // typed payload produced by `code-block-generate` in the
+    // Normalization Phase and emits the outer wrapping markup
+    // (filename header, copy scaffold, <details> fold) around the
+    // existing `CodeBlock`. Phase 0 is a no-op; Phases 1–3 fill it in.
+    // Must run after any transform that creates or mutates code
+    // blocks (shortcode expansion is upstream; resource-collector
+    // does not touch code blocks).
+    pipeline.push(Box::new(CodeBlockRenderTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
     // Very last transform: bake the per-node attribution lookup and
@@ -1084,21 +1133,30 @@ pub fn build_transform_pipeline(
 }
 
 /// Names of transforms in [`build_transform_pipeline`] that the
-/// q2-preview pipeline drops. Three categories:
+/// q2-preview pipeline drops. The remaining excludes are:
 ///
 /// 1. **Preserve CustomNodes for React** — `callout-resolve`,
 ///    `crossref-render`. Wrappers stay so React's type-specific
 ///    components (Plan 2) can render Callout / Theorem / Proof /
 ///    FloatRefTarget / Equation / CrossrefResolvedRef.
-/// 2. **Synthesize-with-no-preimage** — `title-block`, `footnotes`,
-///    `appendix-structure`. These construct containers with no
-///    source backing; deferred to a future plan with
-///    wrapper-CustomNode round-trip support.
-/// 3. **HTML-pipeline-specific outputs** — `toc-render`,
-///    `navbar-render`, `sidebar-render`, `page-nav-render`,
-///    `footer-render`, `link-rewrite`, `website-favicon`. These
-///    produce HTML strings or `.qmd → .html` rewrites that React
-///    consumes from structured metadata directly.
+/// 2. **Synthesize-with-no-preimage** — `title-block`. Constructs
+///    a container with no source backing; deferred to a future plan
+///    with wrapper-CustomNode round-trip support. (`footnotes` and
+///    `appendix-structure` are included — see Plan 2B notes below.)
+///
+/// Phase F.1 (bd-kw93.14) included `link-rewrite` so cross-page
+/// body links emit `.html` hrefs the iframe link-handler can
+/// intercept.
+///
+/// Phase F.2 (bd-kw93.15) included the chrome-render transforms
+/// (`navbar-render`, `sidebar-render`, `page-nav-render`,
+/// `toc-render`, `footer-render`, `website-favicon`). These
+/// populate `meta.rendered.navigation.*` and
+/// `meta.rendered.includes.header` with HTML strings that React's
+/// `PreviewDocument` injects via `dangerouslySetInnerHTML` slots.
+/// Tracked: bd-d8fo replaces the HTML-injection approach with
+/// proper React components when chrome state-preservation becomes
+/// a real complaint.
 ///
 /// New transforms added to [`build_transform_pipeline`] are
 /// **included by default** — q2-preview opts a transform out
@@ -1113,7 +1171,6 @@ pub fn build_transform_pipeline(
 /// in the full HTML pipeline (typo / rename guard).
 const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "callout-resolve",
-    "website-favicon",
     // `attribution-viewer` injects raw <style>/<script> tags into
     // `rendered.includes.{header,after-body}`, which the HTML
     // template wires into the final HTML. q2-preview's React leaves
@@ -1123,24 +1180,21 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // transform ran here. CLI-only by design.
     "attribution-viewer",
     "title-block",
-    // "footnotes" — included in q2-preview's pipeline (Plan 2B):
-    // produces Pandoc primitives (Span/Sup/Link/Div/OrderedList) that
-    // q2-preview's leaves render natively. Note marker numbering and
-    // the document-end footnote section both come from this transform.
-    // bd-1kly tracks the upstream gap for `reference-location: block`
-    // and `section`; until that lands, q2-preview's `Note.tsx`
-    // tooltip-body fallback handles those configs.
-    "toc-render",
-    "navbar-render",
-    "sidebar-render",
-    "page-nav-render",
-    "footer-render",
-    "link-rewrite",
-    // "appendix-structure" — included in q2-preview's pipeline (Plan 2B):
-    // pure Pandoc primitives, structurally identical to the HTML
-    // pipeline. Folds footnotes section, license/copyright/citation
-    // metadata into <div id="quarto-appendix">. Bibliography branch
-    // is inert until Citeproc lands.
+    // Other transforms previously listed here that are now INCLUDED:
+    //   - "footnotes" (Plan 2B) — emits Pandoc primitives, rendered
+    //     natively by q2-preview's leaves.
+    //   - "appendix-structure" (Plan 2B) — pure Pandoc primitives.
+    //   - "link-rewrite" (Phase F.1, bd-kw93.14) — body link
+    //     rewriting; the SPA's iframe link-handler intercepts the
+    //     resulting artifact-rooted `.html` hrefs.
+    //   - "navbar-render", "sidebar-render", "page-nav-render",
+    //     "toc-render", "footer-render", "website-favicon"
+    //     (Phase F.2, bd-kw93.15) — populate
+    //     `meta.rendered.navigation.*` and
+    //     `meta.rendered.includes.header`; PreviewDocument injects
+    //     each via `dangerouslySetInnerHTML`. bd-d8fo tracks
+    //     replacing the HTML-injection approach with React
+    //     components.
     "crossref-render",
 ];
 
@@ -1511,7 +1565,7 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 20);
+        assert_eq!(stages.len(), 21);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
         // Include expansion runs before the profile checkpoint (bd-xfwx)
@@ -1536,25 +1590,29 @@ mod tests {
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
         assert_eq!(stages[11].name(), "bootstrap-js");
-        assert_eq!(stages[12].name(), "user-filters-pre");
-        assert_eq!(stages[13].name(), "ast-transforms");
-        assert_eq!(stages[14].name(), "user-filters-post");
+        // Attribution-generate runs before user filters so the
+        // `quarto.attribution.*` Lua host binding sees a populated
+        // sidecar (bd-0fd0). No-op when no provider is installed.
+        assert_eq!(stages[12].name(), "attribution-generate");
+        assert_eq!(stages[13].name(), "user-filters-pre");
+        assert_eq!(stages[14].name(), "ast-transforms");
+        assert_eq!(stages[15].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[15].name(), "resource-report");
-        assert_eq!(stages[16].name(), "code-highlight");
+        assert_eq!(stages[16].name(), "resource-report");
+        assert_eq!(stages[17].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[17].name(), "math-js");
-        assert_eq!(stages[18].name(), "render-html-body");
-        assert_eq!(stages[19].name(), "apply-template");
+        assert_eq!(stages[18].name(), "math-js");
+        assert_eq!(stages[19].name(), "render-html-body");
+        assert_eq!(stages[20].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 20);
+        assert_eq!(pipeline.len(), 21);
     }
 
     #[test]
@@ -1568,7 +1626,10 @@ mod tests {
         // metadata is auto-filled symmetrically.
         // Includes `math-js` (bd-w5ov) — math display is safe under
         // hub-client iframe reinit and we want live math in preview.
-        assert_eq!(pipeline.len(), 18);
+        // Includes `attribution-generate` (bd-0fd0) so hub-client
+        // preview filters see the same `quarto.attribution.*` host
+        // binding as the CLI.
+        assert_eq!(pipeline.len(), 19);
         let names = pipeline.stage_names();
         // bd-4eyf: hub-client iframe reinit blows away stateful
         // Bootstrap components, so we deliberately omit `bootstrap-js`
@@ -2102,7 +2163,7 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime,
+            content, "test.qmd", &mut ctx, runtime, None, None,
         ))
         .expect("q2-preview render");
 
@@ -2156,7 +2217,7 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime,
+            content, "test.qmd", &mut ctx, runtime, None, None,
         ))
         .expect("q2-preview render");
 
@@ -2173,6 +2234,166 @@ mod tests {
             "expected footnotes class on section Div; full output:\n{}",
             output.ast_json
         );
+    }
+
+    /// PR #214 follow-up probe: verify the q2-preview pipeline
+    /// emits the `quarto-appendix` wrapper Div around the footnotes
+    /// section. The smoke-all `q2-preview/multi-element-doc.qmd`
+    /// fixture expects `div#quarto-appendix > div#footnotes` in the
+    /// rendered iframe DOM; this regression test pins the Rust-side
+    /// contract so we catch the wrapper drop before E2E does.
+    #[test]
+    fn render_qmd_to_preview_ast_emits_appendix_wrapper_for_footnotes() {
+        let content =
+            b"---\ntitle: Test\nformat: q2-preview\n---\n\nA paragraph^[the footnote body].\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime, None, None,
+        ))
+        .expect("q2-preview render");
+
+        // The appendix-structure transform must produce a Div with
+        // id="quarto-appendix" wrapping the inner footnotes Div.
+        assert!(
+            output.ast_json.contains("quarto-appendix"),
+            "expected `quarto-appendix` wrapper in q2-preview output; full output:\n{}",
+            output.ast_json
+        );
+    }
+
+    /// Phase F.1 (bd-kw93.14): `LinkRewriteTransform` runs in the
+    /// q2-preview pipeline so cross-page body links emit `.html`
+    /// hrefs that the iframe link-handler can intercept and route
+    /// through `onNavigateToDocument`. If this regresses, the SPA's
+    /// cross-page navigation breaks (clicks fall through to the
+    /// browser's default `.qmd` request, which 404s the iframe).
+    #[test]
+    fn q2_preview_pipeline_includes_link_rewrite() {
+        let runtime = make_test_runtime();
+        let pipeline =
+            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        assert!(
+            names.contains(&"link-rewrite"),
+            "link-rewrite must be present in the q2-preview pipeline; got: {names:?}",
+        );
+    }
+
+    /// Phase F.2 (bd-kw93.15): the chrome-rendering transforms run
+    /// in the q2-preview pipeline so React's `PreviewDocument` can
+    /// inject the produced HTML into the iframe via
+    /// `dangerouslySetInnerHTML` slots. If any of these regress out,
+    /// the SPA loses navbar/sidebar/page-nav/TOC/footer/favicon —
+    /// the user-visible "looks like q2 render" promise of Phase F.
+    #[test]
+    fn q2_preview_pipeline_includes_chrome_transforms() {
+        let runtime = make_test_runtime();
+        let pipeline =
+            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        for required in [
+            "navbar-render",
+            "sidebar-render",
+            "page-nav-render",
+            "toc-render",
+            "footer-render",
+            "website-favicon",
+        ] {
+            assert!(
+                names.contains(&required),
+                "{required} must be present in the q2-preview pipeline; got: {names:?}",
+            );
+        }
+    }
+
+    /// bd-nxslt: the q2-preview pipeline must run `CodeHighlightStage`
+    /// so that code blocks reach the React renderer with `data-hl-spans`
+    /// annotations and render highlighted (matching `q2 render`'s
+    /// `<span class="hl-...">` markup). The stage is AST-level (it only
+    /// adds an attribute to the existing `CodeBlock` node) so its
+    /// inclusion in q2-preview is safe — the React `CodeBlock`
+    /// component reads the attribute and emits the spans on the JS side.
+    /// If this regresses out, `q2 preview` shows plain `<code>` for R /
+    /// Python / etc. cells; `q2 render` keeps highlighting.
+    #[test]
+    fn q2_preview_pipeline_includes_code_highlight() {
+        let stages = build_q2_preview_pipeline_stages(None, None);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert!(
+            names.contains(&"code-highlight"),
+            "code-highlight must be present in the q2-preview pipeline; got: {names:?}",
+        );
+    }
+
+    /// Phase 0 of bd-1tl09 (code-block decorations epic). The
+    /// `code-block-generate` / `code-block-render` pair is the
+    /// architectural scaffolding for filename / copy / fold / etc.
+    /// (Phases 1-3) and must be present in both the HTML pipeline and
+    /// the q2-preview pipeline so the two render paths stay in sync.
+    /// Phase 0 implementations are empty walkers; the assertions here
+    /// only check presence and ordering relative to anchors.
+    #[test]
+    fn html_pipeline_includes_code_block_decoration_transforms() {
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(vec![], vec![], runtime, "html".to_string());
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+
+        let gen_pos = names.iter().position(|&n| n == "code-block-generate");
+        let render_pos = names.iter().position(|&n| n == "code-block-render");
+        assert!(
+            gen_pos.is_some(),
+            "code-block-generate must be in build_transform_pipeline; got: {names:?}",
+        );
+        assert!(
+            render_pos.is_some(),
+            "code-block-render must be in build_transform_pipeline; got: {names:?}",
+        );
+
+        // Generate must come before Render — sideband data flows in
+        // that direction.
+        assert!(
+            gen_pos.unwrap() < render_pos.unwrap(),
+            "code-block-generate must precede code-block-render; got positions \
+             gen={:?}, render={:?} in {names:?}",
+            gen_pos,
+            render_pos,
+        );
+
+        // Generate runs in the Normalization Phase, after metadata is
+        // resolved (so doc-level defaults like `code-copy: true` are
+        // visible).
+        let metadata_pos = names
+            .iter()
+            .position(|&n| n == "metadata-normalize")
+            .expect("metadata-normalize anchor missing");
+        assert!(
+            gen_pos.unwrap() > metadata_pos,
+            "code-block-generate must run after metadata-normalize; got positions \
+             metadata={metadata_pos}, gen={:?} in {names:?}",
+            gen_pos,
+        );
+    }
+
+    #[test]
+    fn q2_preview_pipeline_includes_code_block_decoration_transforms() {
+        let runtime = make_test_runtime();
+        let pipeline =
+            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        for required in ["code-block-generate", "code-block-render"] {
+            assert!(
+                names.contains(&required),
+                "{required} must be present in the q2-preview pipeline so preview's React \
+                 renderer sees the same decorated code blocks as `q2 render`; got: {names:?}",
+            );
+        }
     }
 
     /// Verify every name in [`Q2_PREVIEW_STAGE_EXCLUDED`] is an
@@ -2219,7 +2440,7 @@ mod tests {
 
             let runtime = make_test_runtime();
             pollster::block_on(render_qmd_to_preview_ast(
-                content, "test.qmd", &mut ctx, runtime,
+                content, "test.qmd", &mut ctx, runtime, None, None,
             ))
             .expect("baseline q2-preview render")
         };
@@ -2257,7 +2478,7 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime,
+            content, "test.qmd", &mut ctx, runtime, None, None,
         ))
         .expect("attributed q2-preview render");
 

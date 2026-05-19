@@ -6,8 +6,12 @@
     "ts-packages/*",
     "hub-client",
     "trace-viewer",
+    "q2-preview-spa",
     "q2-demos/*"
   ],
+  "engines": {
+    "node": "^24.0.0"
+  },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"

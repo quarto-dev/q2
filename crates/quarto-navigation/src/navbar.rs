@@ -14,6 +14,7 @@
 //! `search`, `pinned`, `collapse`, `collapse-below`, `toggle-position`,
 //! `tools-collapse`, `left`, `right`.
 
+use quarto_config::resolve_website_value;
 use quarto_pandoc_types::ConfigMapEntry;
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_source_map::SourceInfo;
@@ -260,10 +261,23 @@ impl Navbar {
 
 /// Resolve the user's `navbar:` input from `ast.meta`.
 ///
-/// Returns `None` when the navbar is absent (no `navbar` key) or explicitly
-/// disabled (`navbar: false`). Returns `Some(Navbar)` for the object form.
+/// Accepts both authoring locations and merges them:
+///
+/// - **Top-level** `navbar:` (feature-scoped — works for single-doc
+///   renders, and absorbs document-frontmatter contributions).
+/// - **Nested** `website.navbar:` (Quarto 1 compatible).
+///
+/// When both are present the top-level form wins on overlapping
+/// fields, matching the precedence baked into
+/// `quarto_core::transforms::config::resolve_website_bool` for
+/// boolean website flags. `!prefer` on either layer escapes the
+/// default field-wise merge.
+///
+/// Returns `None` when the merged value is absent (no `navbar` key in
+/// either location) or explicitly disabled (`navbar: false`). Returns
+/// `Some(Navbar)` for the object form.
 pub fn resolve_navbar(meta: &ConfigValue) -> Option<Navbar> {
-    let cv = meta.get("navbar")?;
+    let cv = resolve_website_value(meta, "navbar")?;
     if cv.as_bool() == Some(false) {
         return None;
     }
@@ -272,7 +286,7 @@ pub fn resolve_navbar(meta: &ConfigValue) -> Option<Navbar> {
         // this shorthand. Treat as absent.
         return None;
     }
-    Some(Navbar::from_config_value(cv))
+    Some(Navbar::from_config_value(&cv))
 }
 
 fn parse_item_list(cv: Option<&ConfigValue>) -> Vec<NavigationItem> {
@@ -440,6 +454,77 @@ mod tests {
         assert_eq!(nav.toggle_position, TogglePosition::Left);
         assert!(!nav.search);
         assert!(!nav.pinned);
+    }
+
+    // ---- bd-jjep / bd-telo: accept `website.navbar` form as well ----
+
+    #[test]
+    fn resolve_picks_up_nested_website_navbar() {
+        // Quarto 1 compatible form: navbar under `website:`.
+        // Before the fix this returned None; the navbar silently never
+        // rendered when authors used this (more common) layout.
+        let navbar_cv = map(vec![
+            ("logo", s("quarto.png")),
+            (
+                "left",
+                arr(vec![map(vec![
+                    ("text", s("Overview")),
+                    ("href", s("index.qmd")),
+                ])]),
+            ),
+        ]);
+        let meta = map(vec![("website", map(vec![("navbar", navbar_cv)]))]);
+        let nav = resolve_navbar(&meta).expect("website.navbar must resolve");
+        assert_eq!(nav.logo.as_deref(), Some("quarto.png"));
+        assert_eq!(nav.left.len(), 1);
+        assert_eq!(nav.left[0].href.as_deref(), Some("index.qmd"));
+    }
+
+    #[test]
+    fn resolve_merges_top_level_over_website_navbar() {
+        // website.navbar.logo = nested.png, navbar.logo = top.png
+        // top-level wins on overlap; non-overlapping fields from
+        // website.navbar are preserved.
+        let nested = map(vec![
+            ("logo", s("nested.png")),
+            ("background", s("primary")),
+        ]);
+        let top = map(vec![("logo", s("top.png"))]);
+        let meta = map(vec![
+            ("website", map(vec![("navbar", nested)])),
+            ("navbar", top),
+        ]);
+        let nav = resolve_navbar(&meta).unwrap();
+        assert_eq!(
+            nav.logo.as_deref(),
+            Some("top.png"),
+            "top-level logo must win"
+        );
+        assert_eq!(
+            nav.background.as_deref(),
+            Some("primary"),
+            "non-overlapping nested field must survive"
+        );
+    }
+
+    #[test]
+    fn resolve_returns_none_for_nested_false() {
+        // `website.navbar: false` should also disable, matching the
+        // top-level affirmative-disable semantics.
+        let meta = map(vec![("website", map(vec![("navbar", b(false))]))]);
+        assert!(resolve_navbar(&meta).is_none());
+    }
+
+    #[test]
+    fn resolve_top_level_false_overrides_nested_navbar() {
+        // Top-level wins, so `navbar: false` disables even when
+        // `website.navbar: { ... }` is configured.
+        let nested = map(vec![("logo", s("nested.png"))]);
+        let meta = map(vec![
+            ("website", map(vec![("navbar", nested)])),
+            ("navbar", b(false)),
+        ]);
+        assert!(resolve_navbar(&meta).is_none());
     }
 
     #[test]

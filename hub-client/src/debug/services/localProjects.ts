@@ -14,7 +14,7 @@
 
 import { openDB, type IDBPDatabase } from 'idb'
 import { DB_NAME, STORES, type ProjectSetPointer } from '../../services/storage/types'
-import type { ProjectEntry } from '../../types/project'
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project'
 
 let dbPromise: Promise<IDBPDatabase> | null = null
 

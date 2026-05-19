@@ -1,0 +1,6 @@
+dist/
+node_modules/
+*.tsbuildinfo
+# Playwright artifacts (failed-test traces / videos / screenshots).
+test-results/
+playwright-report/

@@ -20,6 +20,7 @@ use quarto_error_reporting::DiagnosticMessage;
 
 use quarto_system_runtime::SystemRuntime;
 
+use crate::attribution::AttributionLookup;
 use crate::pandoc::Pandoc;
 use crate::pandoc::ast_context::ASTContext;
 
@@ -202,14 +203,19 @@ impl std::error::Error for CiteprocFilterError {}
 
 /// Apply a filter to a Pandoc document.
 ///
-/// Returns the filtered document, updated context, diagnostics, and any
-/// HTML dependencies or text includes (from Lua filters only).
+/// Returns the filtered document, updated context, diagnostics, and
+/// any HTML dependencies or text includes (from Lua filters only).
+///
+/// The `attribution` handle is forwarded to Lua filters — see
+/// [`crate::lua::apply_lua_filter`] for the contract. Non-Lua
+/// filters (Citeproc, JSON) ignore the handle.
 pub async fn apply_filter(
     pandoc: Pandoc,
     context: ASTContext,
     filter: &FilterSpec,
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn AttributionLookup>>,
 ) -> Result<FilterOutput, FilterError> {
     match filter {
         FilterSpec::Citeproc => {
@@ -236,6 +242,7 @@ pub async fn apply_filter(
                 &[path.clone()],
                 target_format,
                 runtime,
+                attribution,
             )
             .await?;
             Ok(FilterOutput {
@@ -281,15 +288,21 @@ pub async fn apply_filter(
 
 /// Apply multiple filters in sequence.
 ///
-/// Filters are applied in the order provided. The output of each filter
-/// becomes the input to the next. Diagnostics, HTML dependencies, and
-/// text includes are accumulated across all filter passes.
+/// Filters are applied in the order provided. The output of each
+/// filter becomes the input to the next. Diagnostics, HTML
+/// dependencies, and text includes are accumulated across all filter
+/// passes. The `attribution` handle is threaded through every Lua
+/// pass so the `quarto.attribution.*` host binding is alive;
+/// `quarto-core`'s
+/// [`UserFiltersStage`](../../quarto_core/stage/stages/struct.UserFiltersStage.html)
+/// routes through this function for both pre and post passes.
 pub async fn apply_filters(
     pandoc: Pandoc,
     context: ASTContext,
     filters: &[FilterSpec],
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
+    attribution: Option<Arc<dyn AttributionLookup>>,
 ) -> Result<FilterOutput, FilterError> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
@@ -308,6 +321,7 @@ pub async fn apply_filters(
             filter,
             target_format,
             runtime.clone(),
+            attribution.clone(),
         )
         .await?;
         current_pandoc = output.pandoc;

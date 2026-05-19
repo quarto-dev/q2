@@ -100,6 +100,13 @@ export default defineConfig({
     conditions: ['source', 'import', 'module', 'browser', 'default'],
     alias: {
       'wasm-quarto-hub-client': path.resolve(__dirname, 'wasm-quarto-hub-client/wasm_quarto_hub_client.js'),
+      // The Rust WASM module references the JS bridge via
+      // `wasm-bindgen raw_module = "/src/wasm-js-bridge/sass.js"`.
+      // Vite resolves the leading `/` from the project root, but the
+      // bridge files live in `@quarto/wasm-js-bridge` (one copy in
+      // the workspace, shared by hub-client + the q2-preview SPA).
+      // Alias intercepts the path before the project-root fallback.
+      '/src/wasm-js-bridge': path.resolve(__dirname, '../ts-packages/wasm-js-bridge/src'),
     },
   },
   optimizeDeps: {

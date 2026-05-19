@@ -426,6 +426,285 @@ fn test_image_with_classes_has_attr_source() {
     assert_source_matches(input, center_source, ".center");
 }
 
+#[test]
+fn test_image_with_multiline_attrs_parses_and_preserves_attrs() {
+    let input = "\
+![](featured.png){
+  .hero-banner
+  .img-fluid
+  fig-align=\"center\"
+  width=\"600px\"
+}
+";
+    let pandoc = parse_qmd(input);
+
+    let Block::Paragraph(para) = &pandoc.blocks[0] else {
+        panic!("Expected Paragraph block, got {:?}", pandoc.blocks[0]);
+    };
+
+    let Inline::Image(image) = &para.content[0] else {
+        panic!("Expected Image inline");
+    };
+
+    assert_eq!(image.attr.1, vec!["hero-banner", "img-fluid"]);
+
+    let kvs: Vec<(&str, &str)> = image
+        .attr
+        .2
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    assert!(
+        kvs.contains(&("fig-align", "center")),
+        "expected fig-align=center in {:?}",
+        kvs
+    );
+    assert!(
+        kvs.contains(&("width", "600px")),
+        "expected width=600px in {:?}",
+        kvs
+    );
+
+    assert_eq!(image.attr_source.classes.len(), 2);
+    assert!(image.attr_source.classes[0].is_some());
+    assert!(image.attr_source.classes[1].is_some());
+    let hero_source = image.attr_source.classes[0].as_ref().unwrap();
+    let fluid_source = image.attr_source.classes[1].as_ref().unwrap();
+    assert_source_matches(input, hero_source, ".hero-banner");
+    assert_source_matches(input, fluid_source, ".img-fluid");
+}
+
+#[test]
+fn test_multiline_attrs_inside_bulleted_list_item() {
+    use pampa::pandoc::Block;
+
+    let input = "- a span [text]{\n    .cls1\n    .cls2\n  } end\n";
+    let pandoc = parse_qmd(input);
+
+    let Block::BulletList(list) = &pandoc.blocks[0] else {
+        panic!("Expected BulletList, got {:?}", pandoc.blocks[0]);
+    };
+
+    let item_blocks = &list.content[0];
+    let Block::Plain(plain) = &item_blocks[0] else {
+        panic!("Expected Plain inside list item, got {:?}", item_blocks[0]);
+    };
+
+    let span = plain
+        .content
+        .iter()
+        .find_map(|i| match i {
+            Inline::Span(s) => Some(s),
+            _ => None,
+        })
+        .expect("expected a Span in the list item");
+
+    assert_eq!(span.attr.1, vec!["cls1", "cls2"]);
+    assert_eq!(span.attr_source.classes.len(), 2);
+    assert_source_matches(
+        input,
+        span.attr_source.classes[0].as_ref().unwrap(),
+        ".cls1",
+    );
+    assert_source_matches(
+        input,
+        span.attr_source.classes[1].as_ref().unwrap(),
+        ".cls2",
+    );
+}
+
+#[test]
+fn test_multiline_attrs_inside_ordered_list_item() {
+    use pampa::pandoc::Block;
+
+    let input = "1. ordered [text]{\n     .cls1\n     .cls2\n   } end\n";
+    let pandoc = parse_qmd(input);
+
+    let Block::OrderedList(list) = &pandoc.blocks[0] else {
+        panic!("Expected OrderedList, got {:?}", pandoc.blocks[0]);
+    };
+
+    let item_blocks = &list.content[0];
+    let Block::Plain(plain) = &item_blocks[0] else {
+        panic!("Expected Plain inside list item");
+    };
+
+    let span = plain
+        .content
+        .iter()
+        .find_map(|i| match i {
+            Inline::Span(s) => Some(s),
+            _ => None,
+        })
+        .expect("expected a Span in the list item");
+
+    assert_eq!(span.attr.1, vec!["cls1", "cls2"]);
+}
+
+#[test]
+fn test_multiline_image_attrs_inside_nested_list() {
+    use pampa::pandoc::Block;
+
+    let input = "- outer\n  - pic ![](img.png){\n      .cls1\n      width=\"200px\"\n    }\n";
+    let pandoc = parse_qmd(input);
+
+    let Block::BulletList(outer) = &pandoc.blocks[0] else {
+        panic!("Expected outer BulletList");
+    };
+
+    let outer_item = &outer.content[0];
+    let inner_list = outer_item
+        .iter()
+        .find_map(|b| match b {
+            Block::BulletList(l) => Some(l),
+            _ => None,
+        })
+        .expect("expected a nested BulletList");
+
+    let inner_item = &inner_list.content[0];
+    let plain = inner_item
+        .iter()
+        .find_map(|b| match b {
+            Block::Plain(p) => Some(p),
+            _ => None,
+        })
+        .expect("expected Plain inside inner item");
+
+    let image = plain
+        .content
+        .iter()
+        .find_map(|i| match i {
+            Inline::Image(img) => Some(img),
+            _ => None,
+        })
+        .expect("expected an Image in the inner item");
+
+    assert_eq!(image.attr.1, vec!["cls1"]);
+    let kvs: Vec<(&str, &str)> = image
+        .attr
+        .2
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    assert!(kvs.contains(&("width", "200px")), "kvs: {:?}", kvs);
+}
+
+#[test]
+fn test_multiline_attrs_with_sibling_top_level_bullets() {
+    use pampa::pandoc::Block;
+
+    let input = "\
+- first bullet
+- middle [text]{
+    .cls1
+    .cls2
+  } end
+- last bullet
+";
+    let pandoc = parse_qmd(input);
+
+    let Block::BulletList(list) = &pandoc.blocks[0] else {
+        panic!("Expected BulletList, got {:?}", pandoc.blocks[0]);
+    };
+
+    assert_eq!(
+        list.content.len(),
+        3,
+        "expected 3 sibling bullets at the top level"
+    );
+
+    let Block::Plain(middle) = &list.content[1][0] else {
+        panic!("Expected Plain inside middle bullet");
+    };
+
+    let span = middle
+        .content
+        .iter()
+        .find_map(|i| match i {
+            Inline::Span(s) => Some(s),
+            _ => None,
+        })
+        .expect("expected a Span in the middle bullet");
+
+    assert_eq!(span.attr.1, vec!["cls1", "cls2"]);
+
+    let Block::Plain(first) = &list.content[0][0] else {
+        panic!("Expected Plain inside first bullet");
+    };
+    assert!(
+        first.content.iter().all(|i| !matches!(i, Inline::Span(_))),
+        "first sibling bullet should contain no Span"
+    );
+    let Block::Plain(last) = &list.content[2][0] else {
+        panic!("Expected Plain inside last bullet");
+    };
+    assert!(
+        last.content.iter().all(|i| !matches!(i, Inline::Span(_))),
+        "last sibling bullet should contain no Span"
+    );
+}
+
+#[test]
+fn test_multiline_attrs_with_sibling_inner_bullets() {
+    use pampa::pandoc::Block;
+
+    let input = "\
+- outer
+  - inner first
+  - inner middle [s]{
+      .a
+      .b
+    } end
+  - inner last
+";
+    let pandoc = parse_qmd(input);
+
+    let Block::BulletList(outer) = &pandoc.blocks[0] else {
+        panic!("Expected outer BulletList");
+    };
+
+    let outer_item = &outer.content[0];
+    let inner_list = outer_item
+        .iter()
+        .find_map(|b| match b {
+            Block::BulletList(l) => Some(l),
+            _ => None,
+        })
+        .expect("expected a nested BulletList");
+
+    assert_eq!(
+        inner_list.content.len(),
+        3,
+        "expected 3 inner sibling bullets"
+    );
+
+    let Block::Plain(middle) = &inner_list.content[1][0] else {
+        panic!("Expected Plain inside inner middle bullet");
+    };
+
+    let span = middle
+        .content
+        .iter()
+        .find_map(|i| match i {
+            Inline::Span(s) => Some(s),
+            _ => None,
+        })
+        .expect("expected a Span in the inner middle bullet");
+
+    assert_eq!(span.attr.1, vec!["a", "b"]);
+
+    for (i, label) in [(0, "inner first"), (2, "inner last")] {
+        let Block::Plain(plain) = &inner_list.content[i][0] else {
+            panic!("Expected Plain inside inner bullet {}", label);
+        };
+        assert!(
+            plain.content.iter().all(|x| !matches!(x, Inline::Span(_))),
+            "{} should contain no Span",
+            label
+        );
+    }
+}
+
 // ============================================================================
 // CodeBlock with Attributes Tests
 // ============================================================================

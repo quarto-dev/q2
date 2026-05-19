@@ -49,10 +49,10 @@ fn assert_grid_table_diagnostic(
 ) {
     let grid = diagnostics
         .iter()
-        .find(|d| d.code.as_deref() == Some("Q-2-38"))
+        .find(|d| d.code.as_deref() == Some("Q-2-39"))
         .unwrap_or_else(|| {
             panic!(
-                "no Q-2-38 diagnostic found. all diagnostics: {:?}",
+                "no Q-2-39 diagnostic found. all diagnostics: {:?}",
                 diagnostics
                     .iter()
                     .map(|d| (d.code.clone(), d.title.clone(), d.kind))
@@ -76,20 +76,20 @@ fn assert_grid_table_diagnostic(
 }
 
 #[test]
-fn plain_grid_table_emits_q_2_38_with_full_text() {
+fn plain_grid_table_emits_q_2_39_with_full_text() {
     let input = "+----+\n| oh |\n+----+\n";
     let diagnostics = parse_and_get_diagnostics(input);
     assert_grid_table_diagnostic(&diagnostics, "+----+\n| oh |\n+----+", input);
 }
 
 #[test]
-fn grid_table_inside_block_quote_emits_q_2_38() {
+fn grid_table_inside_block_quote_emits_q_2_39() {
     let input = "> +----+\n> | oh |\n> +----+\n";
     let diagnostics = parse_and_get_diagnostics(input);
     let grid = diagnostics
         .iter()
-        .find(|d| d.code.as_deref() == Some("Q-2-38"))
-        .expect("expected Q-2-38 diagnostic for grid table inside block quote");
+        .find(|d| d.code.as_deref() == Some("Q-2-39"))
+        .expect("expected Q-2-39 diagnostic for grid table inside block quote");
     assert_eq!(grid.kind, DiagnosticKind::Error);
 
     let captured = captured_text(grid, input);
@@ -100,17 +100,17 @@ fn grid_table_inside_block_quote_emits_q_2_38() {
 }
 
 #[test]
-fn nested_block_quotes_with_two_grid_tables_emit_two_q_2_38() {
+fn nested_block_quotes_with_two_grid_tables_emit_two_q_2_39() {
     let input = "> > +----+\n> > | oh |\n> > +----+\n> | pipe-table-now |\n> |-|\n> | no |\n> > +----+\n> > | no |\n> > +----+\n";
     let diagnostics = parse_and_get_diagnostics(input);
     let grid_diagnostics: Vec<_> = diagnostics
         .iter()
-        .filter(|d| d.code.as_deref() == Some("Q-2-38"))
+        .filter(|d| d.code.as_deref() == Some("Q-2-39"))
         .collect();
     assert_eq!(
         grid_diagnostics.len(),
         2,
-        "expected exactly two Q-2-38 diagnostics (one per nested grid table), got {}",
+        "expected exactly two Q-2-39 diagnostics (one per nested grid table), got {}",
         grid_diagnostics.len()
     );
 
@@ -133,13 +133,13 @@ fn lone_border_line_does_not_emit_grid_table_diagnostic() {
     assert!(
         !diagnostics
             .iter()
-            .any(|d| d.code.as_deref() == Some("Q-2-38")),
+            .any(|d| d.code.as_deref() == Some("Q-2-39")),
         "lone border line should not be flagged as a grid table"
     );
 }
 
 #[test]
-fn grid_table_with_equals_separator_emits_q_2_38() {
+fn grid_table_with_equals_separator_emits_q_2_39() {
     let input = "+====+\n| oh |\n+----+\n";
     let diagnostics = parse_and_get_diagnostics(input);
     assert_grid_table_diagnostic(&diagnostics, "+====+\n| oh |\n+----+", input);

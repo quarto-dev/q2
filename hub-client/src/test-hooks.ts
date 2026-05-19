@@ -13,7 +13,7 @@
  * out of the production bundle entirely.
  */
 import * as projectStorage from './services/projectStorage';
-import * as wasmRenderer from './services/wasmRenderer';
+import * as wasmRenderer from '@quarto/preview-runtime';
 
 declare global {
   interface Window {

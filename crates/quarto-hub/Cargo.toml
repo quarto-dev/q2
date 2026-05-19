@@ -70,6 +70,7 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 
 # Utilities
+quarto-util = { workspace = true }
 walkdir = "2"
 dirs = "6"
 

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-vi.mock('../services/automergeSync', () => ({
+vi.mock('@quarto/preview-runtime', () => ({
   getFileHandle: vi.fn(),
   updateFileContent: vi.fn(),
 }));
@@ -20,7 +20,7 @@ import { useReplayMode } from './useReplayMode';
 import {
   getFileHandle,
   updateFileContent,
-} from '../services/automergeSync';
+} from '@quarto/preview-runtime';
 import { createReplaySession } from '@quarto/quarto-sync-client';
 
 const mockGetFileHandle = vi.mocked(getFileHandle);

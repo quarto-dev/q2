@@ -24,6 +24,7 @@
 //! - `navigation.sidebar` already populated — treat as user override.
 //! - `website.sidebar` absent — nothing to resolve.
 
+use quarto_config::resolve_website_value;
 use quarto_navigation::{Sidebar, SidebarTitle, resolve_active_state, sidebar_for_page};
 use quarto_pandoc_types::pandoc::Pandoc;
 
@@ -64,11 +65,11 @@ impl AstTransform for SidebarGenerateTransform {
             return Ok(());
         }
 
-        let Some(sidebar_cv) = ast.meta.get_path(&["website", "sidebar"]) else {
+        let Some(sidebar_cv) = resolve_website_value(&ast.meta, "sidebar") else {
             return Ok(());
         };
 
-        let sidebars = Sidebar::parse_list_from_config(sidebar_cv);
+        let sidebars = Sidebar::parse_list_from_config(&sidebar_cv);
         if sidebars.is_empty() {
             return Ok(());
         }
@@ -354,6 +355,29 @@ mod tests {
             diags.iter().any(|d| d.title.contains("no project index")),
             "should warn about the dropped auto entry; got: {:?}",
             diags
+        );
+    }
+
+    /// bd-jjep / bd-telo — top-level `sidebar:` works the same as
+    /// `website.sidebar:` (both forms accepted, top-level wins on
+    /// conflicts).
+    #[tokio::test]
+    async fn sidebar_generate_accepts_top_level_sidebar() {
+        let sidebar_cv = config_map(vec![("contents", arr(vec![s("about.qmd")]))]);
+        let meta = config_map(vec![("sidebar", sidebar_cv)]);
+        let index = Arc::new(ProjectIndex::new(vec![make_profile("about.qmd", "About")]));
+        let (out, _diags) = run_transform_with(meta, Some(index), "about.qmd").await;
+        let stored = out
+            .get_path(&["navigation", "sidebar"])
+            .expect("top-level sidebar must produce navigation.sidebar");
+        let contents = stored.get("contents").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(contents.len(), 1);
+        assert_eq!(
+            contents[0]
+                .get("href")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("about.qmd")
         );
     }
 

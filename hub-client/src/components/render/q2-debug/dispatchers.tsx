@@ -1,7 +1,6 @@
 import { useContext } from 'react';
-import { RegistryContext } from '../framework/RegistryContext';
-import { AttributionWrap } from '../framework';
-import type { BlockNode, InlineNode, NodeArgs } from '../framework/types';
+import { RegistryContext, AttributionWrap } from '@quarto/preview-renderer/framework';
+import type { BlockNode, InlineNode, NodeArgs } from '@quarto/preview-renderer/framework';
 import { blockStyle, inlineStyle } from './styles';
 
 /**

@@ -3,7 +3,10 @@
  */
 
 import type { Patch } from '@automerge/automerge-repo';
-import type { FileEntry, ActorIdentity } from '@quarto/quarto-automerge-schema';
+import type { FileEntry, ActorIdentity, CaptureRef } from '@quarto/quarto-automerge-schema';
+
+// Re-export so consumers don't need a second import for the capture sidecar shape
+export type { CaptureRef };
 
 // Re-export Patch for consumers
 export type { Patch };
@@ -97,6 +100,17 @@ export interface SyncClientCallbacks {
    * Provides the full actorId -> ActorIdentity mapping.
    */
   onIdentitiesChange?: (identities: Record<string, ActorIdentity>) => void;
+
+  /**
+   * Called when the capture sidecar map changes (optional).
+   * Provides the full path -> CaptureRef mapping from the IndexDocument.
+   * Fires on initial sync and on every index doc change where the
+   * sidecar differs (by JSON-equality) from the last-fired snapshot.
+   *
+   * Wired in Phase C.3; consumed by Phase C.4 (browser-side replay) to
+   * pick up captures the server has eagerly recorded.
+   */
+  onCapturesChange?: (captures: Record<string, CaptureRef>) => void;
 
   /**
    * Called when connection state changes (optional).

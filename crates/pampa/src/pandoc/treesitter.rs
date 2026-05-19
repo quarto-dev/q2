@@ -610,13 +610,83 @@ fn native_visitor<T: Write>(
             }))
         }
         "pandoc_str" => {
-            let text = node.utf8_text(input_bytes).unwrap().to_string();
-            // Process backslash escapes first, then apply smart quotes
-            let text = process_backslash_escapes(text);
-            PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
-                text: apply_smart_quotes(text),
-                source_info: node_source_info_with_context(node, context),
-            }))
+            // Tree-sitter may include leading ASCII whitespace in the
+            // pandoc_str node when it wraps the external `_pandoc_lt_str`
+            // token (bd-j9cf): the block-level scanner consumes preceding
+            // indentation before dispatching into `parse_open_angle_brace`,
+            // so the chomped whitespace ends up inside the reported token
+            // range. Split it back out into a leading Space inline so
+            // siblings round-trip cleanly. Regular pandoc_str text never
+            // has leading ASCII whitespace (PANDOC_REGEX_STR does not match
+            // space at the start), so this split is a no-op for the common
+            // case.
+            //
+            // Note: we deliberately do NOT trim *trailing* ASCII whitespace
+            // here. Backslash-space escapes (`\<space>`) match the regex
+            // `\\.` and produce a two-character pandoc_str whose trailing
+            // byte is a real space — `process_backslash_escapes` then turns
+            // the escape into a non-breaking space (U+00A0). Stripping the
+            // trailing space would lose the escape's payload. See
+            // crates/pampa/tests/test_treesitter_refactoring.rs
+            // (`test_backslash_space_becomes_nbsp` and friends, bd-1aip).
+            //
+            // ASCII-only by intent: per Pandoc-compat policy in
+            // claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
+            // (bd-rmx3, bd-8oe4), non-ASCII whitespace is content, not
+            // whitespace, so it must not be peeled off into a Space node here.
+            let raw_text = node.utf8_text(input_bytes).unwrap();
+            let leading_ws = raw_text.len()
+                - raw_text
+                    .trim_start_matches(|c: char| c.is_ascii_whitespace())
+                    .len();
+
+            if leading_ws == 0 {
+                let text = process_backslash_escapes(raw_text.to_string());
+                PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
+                    text: apply_smart_quotes(text),
+                    source_info: node_source_info_with_context(node, context),
+                }))
+            } else {
+                let node_range = node_location(node);
+                let mut result = Vec::new();
+
+                let space_range = quarto_source_map::Range {
+                    start: node_range.start.clone(),
+                    end: quarto_source_map::Location {
+                        offset: node_range.start.offset + leading_ws,
+                        row: node_range.start.row,
+                        column: node_range.start.column + leading_ws,
+                    },
+                };
+                result.push(Inline::Space(Space {
+                    source_info: quarto_source_map::SourceInfo::from_range(
+                        context.current_file_id(),
+                        space_range,
+                    ),
+                }));
+
+                let inner = &raw_text[leading_ws..];
+                if !inner.is_empty() {
+                    let text = process_backslash_escapes(inner.to_string());
+                    let str_range = quarto_source_map::Range {
+                        start: quarto_source_map::Location {
+                            offset: node_range.start.offset + leading_ws,
+                            row: node_range.start.row,
+                            column: node_range.start.column + leading_ws,
+                        },
+                        end: node_range.end.clone(),
+                    };
+                    result.push(Inline::Str(Str {
+                        text: apply_smart_quotes(text),
+                        source_info: quarto_source_map::SourceInfo::from_range(
+                            context.current_file_id(),
+                            str_range,
+                        ),
+                    }));
+                }
+
+                PandocNativeIntermediate::IntermediateInlines(result)
+            }
         }
         "numeric_character_reference" => {
             process_numeric_character_reference(node, input_bytes, context)
@@ -1274,9 +1344,9 @@ fn native_visitor<T: Write>(
                 node_source_info_with_options(node, context, &SourceInfoOptions::trim_all());
 
             let mut builder = DiagnosticMessageBuilder::error("Grid tables are not supported")
-                .with_code("Q-2-38")
+                .with_code("Q-2-39")
                 .with_location(main_loc)
-                .problem("Grid tables aren't supported. Use a pipe table instead.");
+                .problem("Grid tables aren't supported. Use a list table instead.");
             for prefix_loc in &faded_prefixes {
                 builder = builder.add_faded_at("", prefix_loc.clone());
             }

@@ -49,7 +49,7 @@ vi.mock('../services/presenceService', () => ({
 let localDoc: Doc<{ text: string }> = A.from({ text: '' });
 let handleThrows = false;
 
-vi.mock('../services/automergeSync', () => ({
+vi.mock('@quarto/preview-runtime', () => ({
   getFileHandle: vi.fn(() => ({
     doc: () => {
       if (handleThrows) throw new Error('handle unavailable');

@@ -16,8 +16,8 @@
  * `claude-notes/plans/2026-05-01-hub-client-website-render-ux.md`.
  */
 
-import type { ProjectEntry, FileEntry } from '../types/project';
-import { inferMimeType } from '../types/project';
+import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
+import { inferMimeType } from '@quarto/preview-renderer/types/project';
 import {
   getFileContent,
   getBinaryFileContent,
@@ -26,7 +26,7 @@ import {
   createFile,
   createBinaryFile,
   deleteFile,
-} from './automergeSync';
+} from '@quarto/preview-runtime';
 import {
   renderToHtml,
   setRenderListener,
@@ -34,7 +34,7 @@ import {
   vfsReadBinaryFile,
   type RenderResult,
   type RenderToHtmlOptions,
-} from './wasmRenderer';
+} from '@quarto/preview-runtime';
 
 export interface QuartoDebugProjectInfo {
   id: string;

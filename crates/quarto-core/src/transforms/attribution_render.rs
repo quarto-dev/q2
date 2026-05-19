@@ -67,7 +67,7 @@ use quarto_source_map::SourceInfo;
 use crate::Result;
 use crate::attribution::{
     AttributionMap, AttributionRecord, AttributionSource, Identity, IdentityMap,
-    attribution_viewer_enabled_from_meta,
+    attribution_viewer_enabled_from_meta, resolve_byte_range,
 };
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
@@ -174,33 +174,6 @@ fn query_attribution(si: &SourceInfo, runs: &AttributionMap) -> Option<Attributi
         return None;
     }
     runs.query_byte_range(start, end)
-}
-
-/// Chain-resolve a [`SourceInfo`] to `(file_id, start_offset,
-/// end_offset)` in the root file without requiring a
-/// [`SourceContext`](quarto_source_map::SourceContext).
-///
-/// Returns `None` for `Concat` and `FilterProvenance` — these don't
-/// map cleanly to a single contiguous byte range in v1, and any node
-/// originating from a Lua filter has no source-file provenance to
-/// attribute against.
-fn resolve_byte_range(si: &SourceInfo) -> Option<(usize, usize, usize)> {
-    match si {
-        SourceInfo::Original {
-            file_id,
-            start_offset,
-            end_offset,
-        } => Some((file_id.0, *start_offset, *end_offset)),
-        SourceInfo::Substring {
-            parent,
-            start_offset,
-            end_offset,
-        } => {
-            let (fid, parent_start, _) = resolve_byte_range(parent)?;
-            Some((fid, parent_start + start_offset, parent_start + end_offset))
-        }
-        SourceInfo::Concat { .. } | SourceInfo::FilterProvenance { .. } => None,
-    }
 }
 
 fn visit_block(

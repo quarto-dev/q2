@@ -1,0 +1,42 @@
+[package]
+name = "quarto-preview"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Local HTTP server hosting the q2-preview SPA. Wraps quarto-hub for collaborative sync; serves the embedded SPA bundle on top."
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+include_dir.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
+axum = "0.8"
+flate2.workspace = true
+pollster.workspace = true
+pampa.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json.workspace = true
+sha2 = "0.11"
+thiserror.workspace = true
+# Match quarto-hub's versions so `capture_driver::read_capture_from_doc`
+# can talk to samod directly (it reads back the binary doc Phase C.1
+# writes; Phase C.4 reuses the same wire format in the WASM/SPA layer).
+automerge = { version = "0.8.0", features = ["utf16-indexing"] }
+samod = { version = "0.9.0", git = "https://github.com/quarto-dev/samod.git", branch = "q2", features = ["tokio"] }
+
+quarto-core.workspace = true
+quarto-hub.workspace = true
+quarto-pandoc-types.workspace = true
+quarto-system-runtime.workspace = true
+quarto-trace.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tower = "0.5"
+http-body-util = "0.1"
+http = "1"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+[lints]
+workspace = true

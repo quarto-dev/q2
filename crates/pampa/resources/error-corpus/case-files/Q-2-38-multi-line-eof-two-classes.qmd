@@ -1,0 +1,3 @@
+[text]{
+  .cls1
+  .cls2

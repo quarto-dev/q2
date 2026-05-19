@@ -15,8 +15,8 @@ import 'reveal.js/theme/white.css';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
-import { Ast, Node, renderChildren, renderNode } from '../framework';
-import type { FormatRegistry } from '../framework';
+import { Ast, Node, renderChildren, renderNode } from '@quarto/preview-renderer/framework';
+import type { FormatRegistry } from '@quarto/preview-renderer/framework';
 import {
     Block,
     Inline,
@@ -27,7 +27,7 @@ import {
     blockStyle, inlineStyle,
     q2DebugRegistry,
 } from '.';
-import { buildCustomRegistry, type ComponentExports } from '../../../utils/customRegistry';
+import { buildCustomRegistry, type ComponentExports } from '@quarto/preview-renderer/utils/customRegistry';
 import {
     makeIframeMessageDispatcher,
     type IframeMessage,
