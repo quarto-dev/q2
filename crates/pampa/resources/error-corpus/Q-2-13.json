@@ -9,6 +9,9 @@
       "noteType": "simple"
     }
   ],
+  "hints": [
+    "If you want a literal asterisk, escape it with `\\*`."
+  ],
   "cases": [
     {
       "name": "simple",
@@ -147,6 +150,19 @@
           "",
           "a"
         ]
+      ]
+    },
+    {
+      "name": "in-double-quote",
+      "description": "Unclosed strong star emphasis between matching double quotes",
+      "content": "The \"**blank\" word.",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 5,
+          "size": 2
+        }
       ]
     }
   ]

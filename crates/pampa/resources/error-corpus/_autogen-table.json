@@ -2263,7 +2263,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/stray-ending-star"
   },
@@ -2295,7 +2297,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple"
   },
@@ -2327,7 +2331,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-1"
   },
@@ -2359,7 +2365,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-2"
   },
@@ -2391,7 +2399,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-3"
   },
@@ -2423,7 +2433,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-4"
   },
@@ -2455,7 +2467,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-5"
   },
@@ -2487,7 +2501,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-6"
   },
@@ -2519,7 +2535,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-7"
   },
@@ -2551,7 +2569,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-8"
   },
@@ -2583,7 +2603,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-9"
   },
@@ -2615,7 +2637,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-10"
   },
@@ -2647,7 +2671,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-11"
   },
@@ -2679,7 +2705,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-12"
   },
@@ -2711,7 +2739,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-13"
   },
@@ -2743,7 +2773,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-14"
   },
@@ -2775,7 +2807,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-15"
   },
@@ -2807,7 +2841,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-16"
   },
@@ -2839,7 +2875,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-17"
   },
@@ -2871,7 +2909,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-18"
   },
@@ -2903,7 +2943,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-19"
   },
@@ -2935,7 +2977,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-20"
   },
@@ -2967,7 +3011,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-21"
   },
@@ -2999,7 +3045,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-22"
   },
@@ -3031,7 +3079,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-23"
   },
@@ -3063,7 +3113,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-24"
   },
@@ -3095,7 +3147,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-25"
   },
@@ -3127,7 +3181,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-26"
   },
@@ -3159,7 +3215,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-27"
   },
@@ -3191,7 +3249,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-28"
   },
@@ -3223,7 +3283,9 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-29"
   },
@@ -3255,9 +3317,45 @@
           "trimLeadingSpace": true
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-12/simple-30"
+  },
+  {
+    "state": 691,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 12,
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 5,
+          "size": 1,
+          "lrState": 834,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/in-double-quote"
   },
   {
     "state": 800,
@@ -3285,7 +3383,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple"
   },
@@ -3315,7 +3415,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-1"
   },
@@ -3345,7 +3447,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-2"
   },
@@ -3375,7 +3479,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-3"
   },
@@ -3405,7 +3511,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-4"
   },
@@ -3435,7 +3543,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-5"
   },
@@ -3465,7 +3575,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-6"
   },
@@ -3495,7 +3607,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-7"
   },
@@ -3525,7 +3639,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-8"
   },
@@ -3555,7 +3671,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-9"
   },
@@ -3585,7 +3703,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-10"
   },
@@ -3615,7 +3735,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-11"
   },
@@ -3645,7 +3767,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-12"
   },
@@ -3675,7 +3799,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-13"
   },
@@ -3705,7 +3831,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-14"
   },
@@ -3735,7 +3863,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-15"
   },
@@ -3765,7 +3895,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-16"
   },
@@ -3795,7 +3927,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-17"
   },
@@ -3825,7 +3959,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-18"
   },
@@ -3855,7 +3991,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-19"
   },
@@ -3885,7 +4023,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-20"
   },
@@ -3915,7 +4055,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-21"
   },
@@ -3945,7 +4087,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-22"
   },
@@ -3975,7 +4119,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-23"
   },
@@ -4005,7 +4151,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-24"
   },
@@ -4035,7 +4183,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-25"
   },
@@ -4065,7 +4215,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-26"
   },
@@ -4095,7 +4247,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-27"
   },
@@ -4125,7 +4279,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-28"
   },
@@ -4155,7 +4311,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-29"
   },
@@ -4185,7 +4343,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-30"
   },
@@ -4215,9 +4375,43 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
     },
     "name": "Q-2-13/simple-31"
+  },
+  {
+    "state": 714,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 13,
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 5,
+          "size": 2,
+          "lrState": 832,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/in-double-quote"
   },
   {
     "state": 801,
@@ -4245,7 +4439,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple"
   },
@@ -4275,7 +4471,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-1"
   },
@@ -4305,7 +4503,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-2"
   },
@@ -4335,7 +4535,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-3"
   },
@@ -4365,7 +4567,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-4"
   },
@@ -4395,7 +4599,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-5"
   },
@@ -4425,7 +4631,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-6"
   },
@@ -4455,7 +4663,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-7"
   },
@@ -4485,7 +4695,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-8"
   },
@@ -4515,7 +4727,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-9"
   },
@@ -4545,7 +4759,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-10"
   },
@@ -4575,7 +4791,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-11"
   },
@@ -4605,7 +4823,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-12"
   },
@@ -4635,7 +4855,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-13"
   },
@@ -4665,7 +4887,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-14"
   },
@@ -4695,7 +4919,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-15"
   },
@@ -4725,7 +4951,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-16"
   },
@@ -4755,7 +4983,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-17"
   },
@@ -4785,7 +5015,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-18"
   },
@@ -4815,7 +5047,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-19"
   },
@@ -4845,7 +5079,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-20"
   },
@@ -4875,7 +5111,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-21"
   },
@@ -4905,7 +5143,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-22"
   },
@@ -4935,7 +5175,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-23"
   },
@@ -4965,7 +5207,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-24"
   },
@@ -4995,7 +5239,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-25"
   },
@@ -5025,7 +5271,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-26"
   },
@@ -5055,7 +5303,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-27"
   },
@@ -5085,7 +5335,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-28"
   },
@@ -5115,7 +5367,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-29"
   },
@@ -5145,7 +5399,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-30"
   },
@@ -5175,9 +5431,43 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-15/simple-31"
+  },
+  {
+    "state": 760,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 13,
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 5,
+          "size": 2,
+          "lrState": 833,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/in-double-quote"
   },
   {
     "state": 793,
@@ -18079,7 +18369,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/simple"
   },
@@ -18109,7 +18401,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/in-link"
   },
@@ -18139,7 +18433,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start"
   },
@@ -18169,7 +18465,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-1"
   },
@@ -18199,7 +18497,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-2"
   },
@@ -18229,7 +18529,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-3"
   },
@@ -18259,7 +18561,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-4"
   },
@@ -18289,7 +18593,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-5"
   },
@@ -18319,7 +18625,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-6"
   },
@@ -18349,7 +18657,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-7"
   },
@@ -18379,7 +18689,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-8"
   },
@@ -18409,7 +18721,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-9"
   },
@@ -18439,7 +18753,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-10"
   },
@@ -18469,7 +18785,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-11"
   },
@@ -18499,7 +18817,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-12"
   },
@@ -18529,7 +18849,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-13"
   },
@@ -18559,7 +18881,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-14"
   },
@@ -18589,7 +18913,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-15"
   },
@@ -18619,7 +18945,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-16"
   },
@@ -18649,7 +18977,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-17"
   },
@@ -18679,7 +19009,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-18"
   },
@@ -18709,7 +19041,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-19"
   },
@@ -18739,7 +19073,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-20"
   },
@@ -18769,7 +19105,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-21"
   },
@@ -18799,7 +19137,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-22"
   },
@@ -18829,7 +19169,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-23"
   },
@@ -18859,7 +19201,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-24"
   },
@@ -18889,7 +19233,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-25"
   },
@@ -18919,7 +19265,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-26"
   },
@@ -18949,7 +19297,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-27"
   },
@@ -18979,7 +19329,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-28"
   },
@@ -19009,7 +19361,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-29"
   },
@@ -19039,7 +19393,9 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-30"
   },
@@ -19069,9 +19425,43 @@
           "noteType": "simple"
         }
       ],
-      "hints": []
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
     },
     "name": "Q-2-5/at-start-31"
+  },
+  {
+    "state": 705,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 12,
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 5,
+          "size": 1,
+          "lrState": 835,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/in-double-quote"
   },
   {
     "state": 748,

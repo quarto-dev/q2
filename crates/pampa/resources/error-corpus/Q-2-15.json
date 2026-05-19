@@ -9,6 +9,9 @@
       "noteType": "simple"
     }
   ],
+  "hints": [
+    "If you want a literal underscore, escape it with `\\_`."
+  ],
   "cases": [
     {
       "name": "simple",
@@ -147,6 +150,19 @@
           "",
           "a"
         ]
+      ]
+    },
+    {
+      "name": "in-double-quote",
+      "description": "Unclosed strong underscore emphasis between matching double quotes",
+      "content": "The \"__blank\" word.",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 5,
+          "size": 2
+        }
       ]
     }
   ]

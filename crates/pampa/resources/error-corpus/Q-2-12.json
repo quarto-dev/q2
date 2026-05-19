@@ -11,6 +11,9 @@
       "trimLeadingSpace": true
     }
   ],
+  "hints": [
+    "If you want a literal asterisk, escape it with `\\*`."
+  ],
   "cases": [
     {
       "name": "stray-ending-star",
@@ -158,6 +161,19 @@
           "",
           "a"
         ]
+      ]
+    },
+    {
+      "name": "in-double-quote",
+      "description": "Unclosed star emphasis between matching double quotes",
+      "content": "The \"*blank\" word.",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 5,
+          "size": 1
+        }
       ]
     }
   ]
