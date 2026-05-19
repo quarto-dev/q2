@@ -1,6 +1,7 @@
 {
   "code": "Q-2-15",
   "title": "Unclosed Strong Underscore Emphasis",
+  "unclosedScope": "strong_underscore",
   "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
   "notes": [
     {
@@ -152,45 +153,6 @@
           "",
           "a"
         ]
-      ]
-    },
-    {
-      "name": "in-double-quote",
-      "description": "Unclosed strong underscore emphasis between matching double quotes",
-      "content": "The \"__blank\" word.",
-      "captures": [
-        {
-          "label": "strong-start",
-          "row": 0,
-          "column": 5,
-          "size": 2
-        }
-      ]
-    },
-    {
-      "name": "in-single-quote",
-      "description": "Unclosed strong underscore emphasis between matching single quotes",
-      "content": "The '__blank' word.",
-      "captures": [
-        {
-          "label": "strong-start",
-          "row": 0,
-          "column": 5,
-          "size": 2
-        }
-      ]
-    },
-    {
-      "name": "in-single-quoted-emphasis",
-      "description": "Unclosed strong underscore inside emphasis-star inside single quotes",
-      "content": "The ' *__blank*' word.",
-      "captures": [
-        {
-          "label": "strong-start",
-          "row": 0,
-          "column": 7,
-          "size": 2
-        }
       ]
     }
   ]

@@ -1,6 +1,7 @@
 {
   "code": "Q-2-5",
   "title": "Unclosed Underscore Emphasis",
+  "unclosedScope": "emph_underscore",
   "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
   "notes": [
     {
@@ -178,32 +179,6 @@
           "",
           "a"
         ]
-      ]
-    },
-    {
-      "name": "in-double-quote",
-      "description": "Unclosed underscore emphasis between matching double quotes",
-      "content": "The \"_blank\" word.",
-      "captures": [
-        {
-          "label": "emphasis-start",
-          "row": 0,
-          "column": 5,
-          "size": 1
-        }
-      ]
-    },
-    {
-      "name": "in-single-quote",
-      "description": "Unclosed underscore emphasis between matching single quotes",
-      "content": "The '_blank' word.",
-      "captures": [
-        {
-          "label": "emphasis-start",
-          "row": 0,
-          "column": 5,
-          "size": 1
-        }
       ]
     }
   ]

@@ -16,7 +16,7 @@ pub use quarto_parse_errors::{get_outer_error_nodes, prune_diagnostics_by_error_
 // Import types we need
 use quarto_parse_errors::TreeSitterLogObserver;
 
-use crate::readers::qmd_error_message_table::get_error_table;
+use crate::readers::qmd_error_message_table::{get_error_table, get_scope_owner_table};
 
 /// Produce structured DiagnosticMessage objects from parse errors.
 ///
@@ -32,6 +32,7 @@ pub fn produce_diagnostic_messages(
         input_bytes,
         tree_sitter_log,
         get_error_table(),
+        get_scope_owner_table(),
         filename,
         source_context,
     );
@@ -95,13 +96,8 @@ fn widen_diagnostic_to_line(
 /// Produce error message JSON for corpus building.
 ///
 /// This is used during the error table generation process to capture
-/// parser states from error examples. Each emitted error state carries the
-/// outer inline scope at its position so the build script can write it
-/// directly into the autogen table.
-pub fn produce_error_message_json(
-    input_bytes: &[u8],
-    tree_sitter_log: &TreeSitterLogObserver,
-) -> Vec<String> {
+/// parser states from error examples.
+pub fn produce_error_message_json(tree_sitter_log: &TreeSitterLogObserver) -> Vec<String> {
     let mut seen_errors: HashSet<(String, usize)> = HashSet::new();
 
     for parse in &tree_sitter_log.parses {
@@ -138,19 +134,11 @@ pub fn produce_error_message_json(
             if state.sym != "ERROR" {
                 seen_errors.insert(parser_state);
             }
-            let outer_scope = quarto_parse_errors::compute_outer_scope(
-                &parse.all_tokens,
-                &parse.consumed_tokens,
-                state.row,
-                state.column,
-                input_bytes,
-            );
             error_states.push(serde_json::json!({
                 "state": state.state,
                 "sym": state.sym,
                 "row": state.row,
                 "column": state.column,
-                "outerScope": outer_scope.as_str(),
             }));
         }
 

@@ -12,7 +12,8 @@ use std::collections::HashSet;
 
 use crate::error_table::{ErrorCapture, ErrorTableEntry, lookup_error_entry};
 use crate::outer_scope::{
-    OuterScope, compute_outer_scope, find_innermost_open_position, find_outermost_close,
+    OuterScope, ScopeOwnerEntry, compute_outer_scope, find_innermost_open_position,
+    find_outermost_close,
 };
 use crate::tree_sitter_log::{ConsumedToken, TreeSitterLogObserver};
 use quarto_error_reporting::DiagnosticMessage;
@@ -34,6 +35,7 @@ pub fn produce_diagnostic_messages(
     input_bytes: &[u8],
     tree_sitter_log: &TreeSitterLogObserver,
     error_table: &[ErrorTableEntry],
+    scope_owners: &[ScopeOwnerEntry],
     filename: &str,
     source_context: &quarto_source_map::SourceContext,
 ) -> Vec<quarto_error_reporting::DiagnosticMessage> {
@@ -57,6 +59,7 @@ pub fn produce_diagnostic_messages(
                     &parse.consumed_tokens,
                     &parse.all_tokens,
                     error_table,
+                    scope_owners,
                     filename,
                     source_context,
                 );
@@ -103,13 +106,13 @@ fn error_diagnostic_from_parse_state(
     consumed_tokens: &[ConsumedToken],
     all_tokens: &[ConsumedToken],
     error_table: &[ErrorTableEntry],
+    scope_owners: &[ScopeOwnerEntry],
     _filename: &str,
     _source_context: &quarto_source_map::SourceContext,
 ) -> quarto_error_reporting::DiagnosticMessage {
     use quarto_error_reporting::DiagnosticMessageBuilder;
 
-    // Compute the outer inline scope at the error position and look up the
-    // entry with the full (state, sym, outer_scope) key.
+    // Compute the outer inline scope at the error position.
     let outer_scope = compute_outer_scope(
         all_tokens,
         consumed_tokens,
@@ -117,18 +120,58 @@ fn error_diagnostic_from_parse_state(
         parse_state.column,
         input_bytes,
     );
-    let error_entry = lookup_error_entry(error_table, parse_state, outer_scope.as_str());
+
+    // Outer-scope dispatch: for innermost scopes whose walker view matches the
+    // parser's interpretation, build the diagnostic from the scope's owning
+    // Q-code template directly and skip the Merr lookup. Inputs like
+    // `The "_blank" word.` (emph_underscore inside double-quote) and
+    // `*a "b.*` (double-quote inside emph_star) take this path.
+    //
+    // SingleQuote needs special handling: the parser's apostrophe-as-close
+    // heuristic means a `'` after a letter is treated as a stray closing
+    // apostrophe (Q-2-10 "Closed Quote Without Matching Open") or as the
+    // canonical `'` close (Q-2-7 "Unclosed Single Quote") rather than as an
+    // opener pushed onto the walker's stack. The Merr table holds those
+    // parser-interpretation overrides for the specific LR states the
+    // apostrophe-heuristic shapes reach; lookup at runtime can also collide
+    // with unrelated entries (e.g. `'a *` registers a Q-2-12 row at
+    // (state=826, _close_block), and `*a 'b c*` reaches the same state). So
+    // when the innermost scope is SingleQuote, prefer the Merr entry only
+    // if it carries one of the apostrophe-heuristic codes; otherwise the
+    // matched entry is a state-collision false-positive and the walker's
+    // view (Q-2-9 "Unclosed Single Quote") is the correct dispatch.
+    let outer_dispatch_eligible =
+        matches!(parse_state.sym.as_str(), "_close_block" | "_whitespace");
+    let merr_entries = lookup_error_entry(error_table, parse_state);
+
+    let route_via_outer_scope = outer_dispatch_eligible
+        && match outer_scope {
+            OuterScope::EmphStar
+            | OuterScope::EmphUnderscore
+            | OuterScope::StrongStar
+            | OuterScope::StrongUnderscore
+            | OuterScope::DoubleQuote => true,
+            OuterScope::SingleQuote => !merr_entries
+                .iter()
+                .any(|e| matches!(e.error_info.code, Some("Q-2-7") | Some("Q-2-10"))),
+            OuterScope::None => false,
+        };
+
+    let error_entry = if route_via_outer_scope {
+        Vec::new()
+    } else {
+        merr_entries
+    };
 
     // Convert input to string for offset calculation
     let input_str = String::from_utf8_lossy(input_bytes);
 
     // Anchor the primary diagnostic location (header + problem-note indicator)
     // at the closing delimiter of the outermost open inline scope when one
-    // exists. For inputs like `*a _b c* trailing\n` this points the
-    // "I reached the end of the block..." indicator at the closing `*` rather
-    // than floating one past the end of the line. When no outer scope is open
-    // or no candidate closer exists, fall back to the parser-failure
-    // position.
+    // exists. For inputs like `*a _b c* trailing\n` this points the indicator
+    // at the closing `*` rather than floating one past the end of the line.
+    // When no outer scope is open or no candidate closer exists, fall back to
+    // the parser-failure position.
     let (anchor_row, anchor_column, anchor_size) = if outer_scope != OuterScope::None {
         find_outermost_close(
             all_tokens,
@@ -354,7 +397,7 @@ fn error_diagnostic_from_parse_state(
             if !matches!(parse_state.sym.as_str(), "_close_block" | "_whitespace") {
                 return None;
             }
-            let qcode = outer_scope.to_qcode()?;
+            let qcode = outer_scope.to_qcode(scope_owners)?;
             let template = error_table
                 .iter()
                 .find(|e| e.error_info.code == Some(qcode))?;

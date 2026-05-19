@@ -1,6 +1,7 @@
 {
   "code": "Q-2-13",
   "title": "Unclosed Strong Star Emphasis",
+  "unclosedScope": "strong_star",
   "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
   "notes": [
     {
@@ -152,32 +153,6 @@
           "",
           "a"
         ]
-      ]
-    },
-    {
-      "name": "in-double-quote",
-      "description": "Unclosed strong star emphasis between matching double quotes",
-      "content": "The \"**blank\" word.",
-      "captures": [
-        {
-          "label": "strong-start",
-          "row": 0,
-          "column": 5,
-          "size": 2
-        }
-      ]
-    },
-    {
-      "name": "in-single-quote",
-      "description": "Unclosed strong star emphasis between matching single quotes",
-      "content": "The '**blank' word.",
-      "captures": [
-        {
-          "label": "strong-start",
-          "row": 0,
-          "column": 5,
-          "size": 2
-        }
       ]
     }
   ]

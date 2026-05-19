@@ -64,36 +64,61 @@ impl OuterScope {
     }
 
     /// Default Q-code for an "unclosed inline scope" diagnostic at this scope.
-    /// Used by the generic-fallback dispatch in `error_generation.rs` when no
-    /// Merr table entry matches the precise `(state, sym, outer_scope)` triple.
-    pub fn to_qcode(self) -> Option<&'static str> {
-        match self {
-            OuterScope::SingleQuote => Some("Q-2-9"),
-            OuterScope::DoubleQuote => Some("Q-2-11"),
-            OuterScope::EmphStar => Some("Q-2-12"),
-            OuterScope::EmphUnderscore => Some("Q-2-5"),
-            OuterScope::StrongStar => Some("Q-2-13"),
-            OuterScope::StrongUnderscore => Some("Q-2-15"),
-            OuterScope::None => None,
+    /// Used by the fallback dispatch in `error_generation.rs`. The mapping is
+    /// derived from the `unclosedScope` annotation on each `Q-*.json` corpus
+    /// file (see `crates/pampa/scripts/build_error_table.ts`), so renaming a
+    /// Q-code in the corpus propagates here automatically rather than needing
+    /// a parallel hand-edit. Callers supply the compile-time-generated table
+    /// via `include_scope_owner_table!`.
+    pub fn to_qcode(self, scope_owners: &[ScopeOwnerEntry]) -> Option<&'static str> {
+        if self == OuterScope::None {
+            return None;
         }
+        let key = self.as_str();
+        scope_owners.iter().find(|e| e.scope == key).map(|e| e.code)
     }
 }
 
-/// Compute the outermost open inline scope at the given error position by
-/// walking the combined `all_tokens` + `consumed_tokens` log in source-position
-/// order. Both lists must be from the same parse.
-pub fn compute_outer_scope(
-    all_tokens: &[ConsumedToken],
-    consumed_tokens: &[ConsumedToken],
+/// Entry in the scope-owner table. Maps an [`OuterScope`] to the Q-code that
+/// owns its "unclosed inline scope" diagnostic. Populated at compile time from
+/// `_autogen-scope-owners.json` via `include_scope_owner_table!`.
+#[derive(Debug)]
+pub struct ScopeOwnerEntry {
+    pub scope: &'static str,
+    pub code: &'static str,
+}
+
+/// Position of a token in the source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenSpan {
+    pub row: usize,
+    pub column: usize,
+    pub size: usize,
+}
+
+/// One open inline scope, with the position of its opening delimiter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ScopeFrame {
+    scope: OuterScope,
+    opener: TokenSpan,
+}
+
+/// Walk the combined `all_tokens` + `consumed_tokens` log in source-position
+/// order, applying the scanner's push / pop-if-top / block-boundary-clear
+/// rules, and return both the sorted token list and the final scope stack at
+/// the given error position. The stack is outermost-first / innermost-last.
+fn scope_walk<'a>(
+    all_tokens: &'a [ConsumedToken],
+    consumed_tokens: &'a [ConsumedToken],
     error_row: usize,
     error_column: usize,
     input: &[u8],
-) -> OuterScope {
+) -> (Vec<&'a ConsumedToken>, Vec<ScopeFrame>) {
     let mut tokens: Vec<&ConsumedToken> = all_tokens.iter().chain(consumed_tokens.iter()).collect();
     tokens.sort_by_key(|t| (t.row, t.column));
 
-    let mut stack: Vec<OuterScope> = Vec::new();
-    for tok in tokens {
+    let mut stack: Vec<ScopeFrame> = Vec::new();
+    for tok in &tokens {
         if !appears_before(tok, error_row, error_column) {
             break;
         }
@@ -102,48 +127,44 @@ pub fn compute_outer_scope(
             continue;
         }
         if let Some(scope) = scope_for_token(tok, input) {
-            if stack.contains(&scope) {
-                // Already open: this token is a close attempt. Pop only if the
-                // matching scope is on top (mirroring the scanner's
-                // pop_if_top semantics).
-                if stack.last() == Some(&scope) {
+            if stack.iter().any(|f| f.scope == scope) {
+                // Already open: close attempt. Pop only if matching scope is
+                // on top (mirrors the scanner's pop_if_top semantics).
+                if stack.last().map(|f| f.scope) == Some(scope) {
                     stack.pop();
                 }
                 // else: orphaning close; leave the stack alone.
             } else {
-                stack.push(scope);
+                stack.push(ScopeFrame {
+                    scope,
+                    opener: TokenSpan {
+                        row: tok.row,
+                        column: tok.column,
+                        size: tok.size,
+                    },
+                });
             }
         }
     }
 
-    // The INNERMOST open scope is at the top of the stack. This is the scope
-    // that immediately contains the failing token, which is what the
-    // diagnostic should base its message on. For example, in
-    // `The ' *__blank*' word.` the stack at error time is
-    // [single_quote, emph_star, strong_underscore]; the relevant scope is
-    // `strong_underscore` (the `__` that never closes), not the outer
-    // `single_quote`.
-    stack.last().copied().unwrap_or(OuterScope::None)
+    (tokens, stack)
 }
 
-fn appears_before(tok: &ConsumedToken, error_row: usize, error_column: usize) -> bool {
-    tok.row < error_row || (tok.row == error_row && tok.column < error_column)
-}
-
-fn appears_strictly_after_position(
-    tok: &ConsumedToken,
-    other_row: usize,
-    other_column: usize,
-) -> bool {
-    tok.row > other_row || (tok.row == other_row && tok.column > other_column)
-}
-
-/// Position of a token in the source, returned by [`find_outermost_close`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TokenSpan {
-    pub row: usize,
-    pub column: usize,
-    pub size: usize,
+/// Compute the innermost open inline scope at the given error position.
+///
+/// For example, in `The ' *__blank*' word.` the stack at error time is
+/// `[single_quote, emph_star, strong_underscore]`; the innermost scope —
+/// `strong_underscore` (the `__` that never closes) — is what the diagnostic
+/// should base its message on, not the outer `single_quote`.
+pub fn compute_outer_scope(
+    all_tokens: &[ConsumedToken],
+    consumed_tokens: &[ConsumedToken],
+    error_row: usize,
+    error_column: usize,
+    input: &[u8],
+) -> OuterScope {
+    let (_, stack) = scope_walk(all_tokens, consumed_tokens, error_row, error_column, input);
+    stack.last().map(|f| f.scope).unwrap_or(OuterScope::None)
 }
 
 /// Find the would-be closing delimiter of the OUTERMOST open inline scope at
@@ -162,40 +183,18 @@ pub fn find_outermost_close(
     error_column: usize,
     input: &[u8],
 ) -> Option<TokenSpan> {
-    let mut tokens: Vec<&ConsumedToken> = all_tokens.iter().chain(consumed_tokens.iter()).collect();
-    tokens.sort_by_key(|t| (t.row, t.column));
-
-    let mut stack: Vec<(OuterScope, usize, usize)> = Vec::new();
-    for tok in &tokens {
-        if !appears_before(tok, error_row, error_column) {
-            break;
-        }
-        if is_block_boundary(&tok.sym) {
-            stack.clear();
-            continue;
-        }
-        if let Some(scope) = scope_for_token(tok, input) {
-            if stack.iter().any(|(s, _, _)| *s == scope) {
-                if stack.last().map(|(s, _, _)| *s) == Some(scope) {
-                    stack.pop();
-                }
-            } else {
-                stack.push((scope, tok.row, tok.column));
-            }
-        }
-    }
-
-    let (outermost_scope, outermost_row, outermost_col) = *stack.first()?;
+    let (tokens, stack) = scope_walk(all_tokens, consumed_tokens, error_row, error_column, input);
+    let bottom = stack.first().copied()?;
 
     let mut last_match: Option<TokenSpan> = None;
     for tok in &tokens {
         if !appears_before(tok, error_row, error_column) {
             break;
         }
-        if !appears_strictly_after_position(tok, outermost_row, outermost_col) {
+        if !appears_strictly_after_position(tok, bottom.opener.row, bottom.opener.column) {
             continue;
         }
-        if scope_for_token(tok, input) == Some(outermost_scope) {
+        if scope_for_token(tok, input) == Some(bottom.scope) {
             last_match = Some(TokenSpan {
                 row: tok.row,
                 column: tok.column,
@@ -204,12 +203,12 @@ pub fn find_outermost_close(
         }
     }
 
-    last_match.map(|span| trim_to_delimiter_run(span, outermost_scope, input))
+    last_match.map(|span| trim_to_delimiter_run(span, bottom.scope, input))
 }
 
 /// Find the position of the innermost open inline scope's opening delimiter at
-/// the given error position. Used by the generic-fallback dispatch to anchor
-/// the "this is the opening '_' mark." indicator on the token that actually
+/// the given error position. Used by the fallback dispatch to anchor the
+/// "this is the opening '_' mark." indicator on the token that actually
 /// opened the unclosed scope, regardless of nesting depth.
 ///
 /// Returns the trimmed span of the opener (so e.g. a `_` token emitted with
@@ -221,41 +220,24 @@ pub fn find_innermost_open_position(
     error_column: usize,
     input: &[u8],
 ) -> Option<(OuterScope, TokenSpan)> {
-    let mut tokens: Vec<&ConsumedToken> = all_tokens.iter().chain(consumed_tokens.iter()).collect();
-    tokens.sort_by_key(|t| (t.row, t.column));
-
-    let mut stack: Vec<(OuterScope, TokenSpan)> = Vec::new();
-    for tok in &tokens {
-        if !appears_before(tok, error_row, error_column) {
-            break;
-        }
-        if is_block_boundary(&tok.sym) {
-            stack.clear();
-            continue;
-        }
-        if let Some(scope) = scope_for_token(tok, input) {
-            if stack.iter().any(|(s, _)| *s == scope) {
-                if stack.last().map(|(s, _)| *s) == Some(scope) {
-                    stack.pop();
-                }
-            } else {
-                stack.push((
-                    scope,
-                    TokenSpan {
-                        row: tok.row,
-                        column: tok.column,
-                        size: tok.size,
-                    },
-                ));
-            }
-        }
-    }
-
-    let (innermost_scope, span) = stack.last().copied()?;
+    let (_, stack) = scope_walk(all_tokens, consumed_tokens, error_row, error_column, input);
+    let frame = stack.last().copied()?;
     Some((
-        innermost_scope,
-        trim_to_delimiter_run(span, innermost_scope, input),
+        frame.scope,
+        trim_to_delimiter_run(frame.opener, frame.scope, input),
     ))
+}
+
+fn appears_before(tok: &ConsumedToken, error_row: usize, error_column: usize) -> bool {
+    tok.row < error_row || (tok.row == error_row && tok.column < error_column)
+}
+
+fn appears_strictly_after_position(
+    tok: &ConsumedToken,
+    other_row: usize,
+    other_column: usize,
+) -> bool {
+    tok.row > other_row || (tok.row == other_row && tok.column > other_column)
 }
 
 /// Trim a token span to the run of consecutive delimiter bytes inside it,

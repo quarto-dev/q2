@@ -44,7 +44,7 @@ pub fn read_bad_qmd_for_error_message(input_bytes: &[u8]) -> Vec<String> {
     let _tree = parser
         .parse(input_bytes, None)
         .expect("Failed to parse input");
-    produce_error_message_json(input_bytes, &log_observer)
+    produce_error_message_json(&log_observer)
 }
 
 pub fn read<T: Write>(

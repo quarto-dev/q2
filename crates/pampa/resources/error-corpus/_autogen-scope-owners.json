@@ -1,0 +1,26 @@
+[
+  {
+    "scope": "double_quote",
+    "code": "Q-2-11"
+  },
+  {
+    "scope": "emph_star",
+    "code": "Q-2-12"
+  },
+  {
+    "scope": "emph_underscore",
+    "code": "Q-2-5"
+  },
+  {
+    "scope": "single_quote",
+    "code": "Q-2-9"
+  },
+  {
+    "scope": "strong_star",
+    "code": "Q-2-13"
+  },
+  {
+    "scope": "strong_underscore",
+    "code": "Q-2-15"
+  }
+]

@@ -101,11 +101,8 @@ try {
         assert(match);
         return {...match[0], ...match[1]};
       });
-      const firstErrorState = errorStates[0];
-      const outerScope = firstErrorState.outerScope ?? "none";
       result.push({
-        ...firstErrorState,
-        outerScope,
+        ...errorStates[0],
         errorInfo,
         name: `${base}`,
       });
@@ -209,11 +206,8 @@ try {
         }
 
         // Create autogen table entry
-        const firstErrorState = errorStates[0];
-        const outerScope = firstErrorState.outerScope ?? "none";
         result.push({
-          ...firstErrorState,
-          outerScope,
+          ...errorStates[0],
           errorInfo: {
             code,
             title,
@@ -285,6 +279,40 @@ try {
 }
 
 Deno.writeTextFileSync("resources/error-corpus/_autogen-table.json", JSON.stringify(result, null, 2) + "\n");
+
+// Collect scope-owner annotations from Q-*.json files. Each "Unclosed X"
+// corpus file may carry `"unclosedScope": "<scope-name>"` at the top level;
+// this declares the OuterScope variant whose fallback dispatch should emit
+// that code. The runtime reads this generated table via
+// `include_scope_owner_table!` and consults it from
+// `OuterScope::to_qcode` when the dispatcher in
+// quarto-parse-errors/src/error_generation.rs routes a parse error by
+// outer-inline-scope rather than by the Merr (state, sym) table.
+{
+  const scopeOwners: { scope: string; code: string }[] = [];
+  const seenScopes = new Set<string>();
+  for (
+    const jsonFile of Array.from(fs.globSync("resources/error-corpus/Q-*.json"))
+      .toSorted((a, b) => a.localeCompare(b))
+  ) {
+    const spec = JSON.parse(Deno.readTextFileSync(jsonFile));
+    if (typeof spec.unclosedScope !== "string") continue;
+    if (seenScopes.has(spec.unclosedScope)) {
+      throw new Error(
+        `Duplicate unclosedScope "${spec.unclosedScope}" in ${jsonFile}; ` +
+          `each scope must be owned by exactly one Q-code.`,
+      );
+    }
+    seenScopes.add(spec.unclosedScope);
+    scopeOwners.push({ scope: spec.unclosedScope, code: spec.code });
+  }
+  scopeOwners.sort((a, b) => a.scope.localeCompare(b.scope));
+  Deno.writeTextFileSync(
+    "resources/error-corpus/_autogen-scope-owners.json",
+    JSON.stringify(scopeOwners, null, 2) + "\n",
+  );
+  console.log(`Wrote ${scopeOwners.length} scope-owner entries`);
+}
 
 const now = new Date();
 // Touch the source file so that cargo build rebuilds it.

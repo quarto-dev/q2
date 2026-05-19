@@ -46,18 +46,12 @@ struct ErrorInfo {
     hints: Vec<String>,
 }
 
-fn default_outer_scope() -> String {
-    "none".to_string()
-}
-
 #[derive(Deserialize)]
 struct ErrorEntry {
     column: usize,
     row: usize,
     state: usize,
     sym: String,
-    #[serde(rename = "outerScope", default = "default_outer_scope")]
-    outer_scope: String,
     #[serde(rename = "errorInfo")]
     error_info: ErrorInfo,
     name: String,
@@ -102,7 +96,6 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
     let table_entries = entries.iter().map(|entry| {
         let state = entry.state;
         let sym = &entry.sym;
-        let outer_scope = &entry.outer_scope;
         let row = entry.row;
         let column = entry.column;
         let code = match &entry.error_info.code {
@@ -178,7 +171,6 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
             #module_tokens::ErrorTableEntry {
                 state: #state,
                 sym: #sym,
-                outer_scope: #outer_scope,
                 row: #row,
                 column: #column,
                 error_info: #module_tokens::ErrorInfo {
@@ -190,6 +182,50 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                     hints: &[#(#hints),*],
                 },
                 name: #name,
+            }
+        }
+    });
+
+    let expanded = quote! {
+        &[
+            #(#table_entries),*
+        ]
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[derive(Deserialize)]
+struct ScopeOwnerEntry {
+    scope: String,
+    code: String,
+}
+
+#[proc_macro]
+pub fn include_scope_owner_table(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as IncludeErrorTableInput);
+    let path_str = input.path.value();
+    let module_prefix = input.module_prefix.value();
+
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let full_path = Path::new(&manifest_dir).join(&path_str);
+
+    let json_content = fs::read_to_string(&full_path)
+        .unwrap_or_else(|_| panic!("Failed to read scope-owner JSON at {:?}", full_path));
+
+    let entries: Vec<ScopeOwnerEntry> =
+        serde_json::from_str(&json_content).expect("Failed to parse scope-owner JSON");
+
+    let module_tokens: proc_macro2::TokenStream =
+        module_prefix.parse().expect("Invalid module prefix");
+
+    let table_entries = entries.iter().map(|entry| {
+        let scope = &entry.scope;
+        let code = &entry.code;
+        quote! {
+            #module_tokens::ScopeOwnerEntry {
+                scope: #scope,
+                code: #code,
             }
         }
     });

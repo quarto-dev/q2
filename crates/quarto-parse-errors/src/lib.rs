@@ -133,5 +133,6 @@ pub use error_generation::{
 };
 
 pub use outer_scope::{
-    OuterScope, TokenSpan, compute_outer_scope, find_innermost_open_position, find_outermost_close,
+    OuterScope, ScopeOwnerEntry, TokenSpan, compute_outer_scope, find_innermost_open_position,
+    find_outermost_close,
 };

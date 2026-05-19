@@ -1,6 +1,7 @@
 {
   "code": "Q-2-11",
   "title": "Unclosed Double Quote",
+  "unclosedScope": "double_quote",
   "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
   "notes": [
     {

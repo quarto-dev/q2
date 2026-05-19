@@ -11,9 +11,9 @@
 //! 3. Providing convenience lookup functions
 
 // Re-export types from quarto-parse-errors
-pub use quarto_parse_errors::{ErrorTableEntry, ProcessMessage};
+pub use quarto_parse_errors::{ErrorTableEntry, ProcessMessage, ScopeOwnerEntry};
 
-use quarto_error_message_macros::include_error_table;
+use quarto_error_message_macros::{include_error_table, include_scope_owner_table};
 
 /// Get the error table for the QMD parser.
 ///
@@ -25,20 +25,27 @@ pub fn get_error_table() -> &'static [ErrorTableEntry] {
     )
 }
 
-/// Look up an error message by parser state, symbol, and outer scope.
-pub fn lookup_error_message(
-    process_message: &ProcessMessage,
-    outer_scope: &str,
-) -> Option<&'static str> {
-    quarto_parse_errors::lookup_error_message(get_error_table(), process_message, outer_scope)
+/// Get the scope-owner table for the QMD parser.
+///
+/// Maps each [`quarto_parse_errors::OuterScope`] to the Q-code its
+/// "unclosed inline scope" diagnostic is owned by. Generated at compile time
+/// from `_autogen-scope-owners.json`, which is itself derived from the
+/// `unclosedScope` annotations on the corpus's `Q-*.json` files.
+pub fn get_scope_owner_table() -> &'static [ScopeOwnerEntry] {
+    include_scope_owner_table!(
+        "./resources/error-corpus/_autogen-scope-owners.json",
+        "quarto_parse_errors"
+    )
 }
 
-/// Look up error table entries by parser state, symbol, and outer scope.
-pub fn lookup_error_entry(
-    process_message: &ProcessMessage,
-    outer_scope: &str,
-) -> Vec<&'static ErrorTableEntry> {
-    quarto_parse_errors::lookup_error_entry(get_error_table(), process_message, outer_scope)
+/// Look up an error message by parser state and symbol.
+pub fn lookup_error_message(process_message: &ProcessMessage) -> Option<&'static str> {
+    quarto_parse_errors::lookup_error_message(get_error_table(), process_message)
+}
+
+/// Look up error table entries by parser state and symbol.
+pub fn lookup_error_entry(process_message: &ProcessMessage) -> Vec<&'static ErrorTableEntry> {
+    quarto_parse_errors::lookup_error_entry(get_error_table(), process_message)
 }
 
 #[cfg(test)]

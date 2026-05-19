@@ -50,55 +50,49 @@ pub struct ErrorInfo {
 
 /// Entry in the error table mapping a parser state to diagnostic information.
 ///
-/// The combination of `(state, sym, outer_scope)` uniquely identifies the
-/// parser configuration that triggered this error. `outer_scope` distinguishes
-/// otherwise-colliding states that differ only in their enclosing inline scope
-/// (e.g. `*a' b.*` vs. `The '*blank' word.`). See [`crate::outer_scope`].
+/// The combination of `(state, sym)` identifies the parser configuration that
+/// triggered this error. When that pair would otherwise collide between shapes
+/// wanting different diagnostics (e.g. unclosed emphasis inside a paired
+/// quote vs. a stray apostrophe inside paired emphasis), the dispatcher in
+/// [`crate::error_generation`] consults the [`crate::outer_scope`] walker and
+/// routes the emphasis-flavored and double-quote outer cases through a
+/// synthetic builder ahead of this lookup; single-quote and block-level cases
+/// fall through here.
 #[derive(Debug)]
 pub struct ErrorTableEntry {
-    pub state: usize,              // LR parser state
-    pub sym: &'static str,         // Lookahead symbol
-    pub outer_scope: &'static str, // Outermost open inline scope at error position
-    pub row: usize,                // Row in test case (for debugging)
-    pub column: usize,             // Column in test case (for debugging)
+    pub state: usize,      // LR parser state
+    pub sym: &'static str, // Lookahead symbol
+    pub row: usize,        // Row in test case (for debugging)
+    pub column: usize,     // Column in test case (for debugging)
     pub error_info: ErrorInfo,
     pub name: &'static str, // Test case name (for debugging)
 }
 
-/// Look up an error message by parser state, symbol, and outer scope.
+/// Look up an error message by parser state and symbol.
 pub fn lookup_error_message(
     table: &[ErrorTableEntry],
     process_message: &ProcessMessage,
-    outer_scope: &str,
 ) -> Option<&'static str> {
     for entry in table {
-        if entry.state == process_message.state
-            && entry.sym == process_message.sym
-            && entry.outer_scope == outer_scope
-        {
+        if entry.state == process_message.state && entry.sym == process_message.sym {
             return Some(entry.error_info.message);
         }
     }
     None
 }
 
-/// Look up error table entries by parser state, symbol, and outer scope.
+/// Look up error table entries by parser state and symbol.
 ///
-/// Returns all matching entries. Multiple entries for the same triple can
-/// exist when the same parser configuration should produce different error
-/// messages in different contexts (resolved by `diagnostic_score`).
+/// Returns all matching entries. Multiple entries for the same `(state, sym)`
+/// can exist when the same parser configuration should produce different
+/// error messages in different contexts (resolved by `diagnostic_score`).
 pub fn lookup_error_entry<'a>(
     table: &'a [ErrorTableEntry],
     process_message: &ProcessMessage,
-    outer_scope: &str,
 ) -> Vec<&'a ErrorTableEntry> {
     table
         .iter()
-        .filter(|entry| {
-            entry.state == process_message.state
-                && entry.sym == process_message.sym
-                && entry.outer_scope == outer_scope
-        })
+        .filter(|entry| entry.state == process_message.state && entry.sym == process_message.sym)
         .collect()
 }
 
@@ -110,7 +104,6 @@ mod tests {
         ErrorTableEntry {
             state,
             sym,
-            outer_scope: "none",
             row: 0,
             column: 0,
             error_info: ErrorInfo {
@@ -251,7 +244,7 @@ mod tests {
         ];
 
         let msg = make_process_message(2, "EOF");
-        let result = lookup_error_message(&table, &msg, "none");
+        let result = lookup_error_message(&table, &msg);
 
         assert_eq!(result, Some("Unexpected end of file"));
     }
@@ -264,7 +257,7 @@ mod tests {
         ];
 
         let msg = make_process_message(99, "UNKNOWN");
-        let result = lookup_error_message(&table, &msg, "none");
+        let result = lookup_error_message(&table, &msg);
 
         assert_eq!(result, None);
     }
@@ -273,7 +266,7 @@ mod tests {
     fn test_lookup_error_message_empty_table() {
         let table: [ErrorTableEntry; 0] = [];
         let msg = make_process_message(1, "EOF");
-        let result = lookup_error_message(&table, &msg, "none");
+        let result = lookup_error_message(&table, &msg);
 
         assert_eq!(result, None);
     }
@@ -284,7 +277,7 @@ mod tests {
 
         // Same symbol, different state
         let msg = make_process_message(2, "EOF");
-        let result = lookup_error_message(&table, &msg, "none");
+        let result = lookup_error_message(&table, &msg);
 
         assert_eq!(result, None);
     }
@@ -295,7 +288,7 @@ mod tests {
 
         // Same state, different symbol
         let msg = make_process_message(1, "NEWLINE");
-        let result = lookup_error_message(&table, &msg, "none");
+        let result = lookup_error_message(&table, &msg);
 
         assert_eq!(result, None);
     }
@@ -310,7 +303,7 @@ mod tests {
         ];
 
         let msg = make_process_message(1, "NEWLINE");
-        let result = lookup_error_entry(&table, &msg, "none");
+        let result = lookup_error_entry(&table, &msg);
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].error_info.message, "Error 1");
@@ -325,7 +318,7 @@ mod tests {
         ];
 
         let msg = make_process_message(1, "EOF");
-        let result = lookup_error_entry(&table, &msg, "none");
+        let result = lookup_error_entry(&table, &msg);
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].error_info.message, "First EOF error");
@@ -337,7 +330,7 @@ mod tests {
         let table = [make_test_entry(1, "EOF", "Error 1")];
 
         let msg = make_process_message(99, "UNKNOWN");
-        let result = lookup_error_entry(&table, &msg, "none");
+        let result = lookup_error_entry(&table, &msg);
 
         assert!(result.is_empty());
     }
@@ -346,7 +339,7 @@ mod tests {
     fn test_lookup_error_entry_empty_table() {
         let table: [ErrorTableEntry; 0] = [];
         let msg = make_process_message(1, "EOF");
-        let result = lookup_error_entry(&table, &msg, "none");
+        let result = lookup_error_entry(&table, &msg);
 
         assert!(result.is_empty());
     }
