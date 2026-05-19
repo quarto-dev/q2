@@ -3,8 +3,8 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
-import { Ast } from '../framework';
-import { previewRegistry } from './registry';
+import { Ast } from '@quarto/preview-renderer/framework';
+import { previewRegistry } from '@quarto/preview-renderer/q2-preview';
 
 afterEach(() => {
   cleanup();
