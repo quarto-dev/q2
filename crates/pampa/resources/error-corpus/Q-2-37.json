@@ -1,0 +1,29 @@
+{
+  "code": "Q-2-37",
+  "title": "Line break in link destination",
+  "message": "An inline link destination cannot contain a line break.",
+  "notes": [],
+  "hints": [
+    "Remove the line break inside the link's `(...)` destination and keep the URL on a single line."
+  ],
+  "cases": [
+    {
+      "name": "after-scheme",
+      "description": "Newline immediately after the scheme `://` of an inline link destination.",
+      "content": "[text](https://\nexample.com/path)\n",
+      "captures": []
+    },
+    {
+      "name": "mid-destination",
+      "description": "Newline within the host portion of an inline link destination.",
+      "content": "[text](https://example.\ncom/path)\n",
+      "captures": []
+    },
+    {
+      "name": "before-close-paren",
+      "description": "Newline immediately before the closing `)` of an inline link destination.",
+      "content": "[text](https://example.com/path\n)\n",
+      "captures": []
+    }
+  ]
+}

@@ -1274,7 +1274,7 @@ fn native_visitor<T: Write>(
                 node_source_info_with_options(node, context, &SourceInfoOptions::trim_all());
 
             let mut builder = DiagnosticMessageBuilder::error("Grid tables are not supported")
-                .with_code("Q-2-36")
+                .with_code("Q-2-38")
                 .with_location(main_loc)
                 .problem("Grid tables aren't supported. Use a pipe table instead.");
             for prefix_loc in &faded_prefixes {

@@ -17658,7 +17658,7 @@
     "name": "Q-2-34/multiple-params"
   },
   {
-    "state": 342,
+    "state": 271,
     "sym": "_indented_code_block_error",
     "row": 2,
     "column": 4,
@@ -17673,7 +17673,7 @@
     "name": "Q-2-35/basic"
   },
   {
-    "state": 342,
+    "state": 271,
     "sym": "_indented_code_block_error",
     "row": 2,
     "column": 1,
@@ -17688,7 +17688,7 @@
     "name": "Q-2-35/tab-indent"
   },
   {
-    "state": 342,
+    "state": 271,
     "sym": "_indented_code_block_error",
     "row": 2,
     "column": 6,
@@ -17703,7 +17703,7 @@
     "name": "Q-2-35/more-than-four"
   },
   {
-    "state": 357,
+    "state": 204,
     "sym": "_indented_code_block_error",
     "row": 2,
     "column": 0,
@@ -17761,6 +17761,57 @@
       "hints": []
     },
     "name": "Q-2-36/comma-and-kv"
+  },
+  {
+    "state": 2619,
+    "sym": "shortcode_name",
+    "row": 1,
+    "column": 0,
+    "errorInfo": {
+      "code": "Q-2-37",
+      "title": "Line break in link destination",
+      "message": "An inline link destination cannot contain a line break.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Remove the line break inside the link's `(...)` destination and keep the URL on a single line."
+      ]
+    },
+    "name": "Q-2-37/after-scheme"
+  },
+  {
+    "state": 2619,
+    "sym": "shortcode_name",
+    "row": 1,
+    "column": 0,
+    "errorInfo": {
+      "code": "Q-2-37",
+      "title": "Line break in link destination",
+      "message": "An inline link destination cannot contain a line break.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Remove the line break inside the link's `(...)` destination and keep the URL on a single line."
+      ]
+    },
+    "name": "Q-2-37/mid-destination"
+  },
+  {
+    "state": 2619,
+    "sym": "_close_block",
+    "row": 1,
+    "column": 0,
+    "errorInfo": {
+      "code": "Q-2-37",
+      "title": "Line break in link destination",
+      "message": "An inline link destination cannot contain a line break.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Remove the line break inside the link's `(...)` destination and keep the URL on a single line."
+      ]
+    },
+    "name": "Q-2-37/before-close-paren"
   },
   {
     "state": 1671,
