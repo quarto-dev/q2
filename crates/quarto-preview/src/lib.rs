@@ -52,6 +52,15 @@ pub struct PreviewConfig {
     pub port: u16,
     /// Project root to watch + serve. Files in the VFS come from here.
     pub project_root: Option<PathBuf>,
+    /// bd-tnm3k: single-file mode. When `Some(rel)`, the hub indexes
+    /// only `project_root.join(rel)` and watches just that one file,
+    /// instead of walking `project_root`. Set by the CLI when the
+    /// user passes a `.qmd` path with no `_quarto.yml` ancestor; the
+    /// parent directory becomes `project_root`, and this field
+    /// records the file's basename so discovery + watcher stay
+    /// narrow (a project_root of `~/Downloads` must not pull in
+    /// sibling files).
+    pub single_file: Option<PathBuf>,
     /// Directory the hub's samod store + lockfile live in. Typically a
     /// `tempfile::TempDir` so each `q2 preview` is ephemeral. The
     /// caller owns the `TempDir` so it survives until `run()` returns.
@@ -235,6 +244,9 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         // .tsx edits to trigger re-render, not just .qmd. Hub keeps the
         // default narrow filter for backwards compatibility.
         watch_filter: WatchFilter::PreviewBroad,
+        // bd-tnm3k: forward single-file mode to the hub so discovery
+        // and the watcher stay scoped to the one file the user named.
+        single_file: config.single_file.clone(),
         // Light periodic sync — the user can Ctrl-C any time, and
         // shutdown does a final sync anyway. 5 seconds is a reasonable
         // crash-resilience window for a *preview* invocation.

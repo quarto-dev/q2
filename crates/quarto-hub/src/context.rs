@@ -3,7 +3,7 @@
 //! Contains the automerge repo and storage manager.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 
 use automerge::{Automerge, ObjType, ROOT, transaction::Transactable};
@@ -58,6 +58,17 @@ pub struct HubConfig {
     /// so config + asset edits trigger re-render.
     pub watch_filter: WatchFilter,
 
+    /// Single-file mode for `q2 preview` (bd-tnm3k): when `Some`,
+    /// discovery skips the project walk and indexes only this one
+    /// file (relative to `project_root`), and the watcher subscribes
+    /// to just that file instead of the project root.
+    ///
+    /// The absolute target path used by the watcher is reconstructed
+    /// inside `run_server_with` as `project_root.join(single_file)`,
+    /// so the caller must supply a non-empty relative path that
+    /// resolves to an existing `.qmd` file under `project_root`.
+    pub single_file: Option<PathBuf>,
+
     /// OAuth2 auth configuration. None = auth disabled.
     pub auth_config: Option<AuthConfig>,
 
@@ -86,6 +97,7 @@ impl Default for HubConfig {
             watch_enabled: true,
             watch_debounce_ms: 500,
             watch_filter: WatchFilter::default(),
+            single_file: None,
             auth_config: None,
             allow_insecure_auth: false,
             register_root_ws: true,
@@ -163,9 +175,15 @@ impl HubContext {
     pub async fn new(mut storage: StorageManager, mut config: HubConfig) -> Result<Self> {
         let project_root = storage.project_root().map(|p| p.to_path_buf());
 
-        // Discover project files (only in project mode)
+        // Discover project files (only in project mode). bd-tnm3k:
+        // single-file mode skips the WalkDir entirely — the relative
+        // path is already known, and walking the parent directory
+        // would index sibling files the user didn't ask for.
         let project_files = if let Some(ref project_root) = project_root {
-            let files = ProjectFiles::discover(project_root);
+            let files = match config.single_file.as_ref() {
+                Some(rel) => ProjectFiles::single_file(rel.clone()),
+                None => ProjectFiles::discover(project_root),
+            };
             info!(
                 qmd_count = files.qmd_files.len(),
                 config_count = files.config_files.len(),

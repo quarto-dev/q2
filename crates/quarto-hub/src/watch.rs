@@ -66,6 +66,13 @@ pub struct WatchConfig {
     pub debounce_ms: u64,
     /// Which files trigger events. See [`WatchFilter`].
     pub filter: WatchFilter,
+    /// Single-file mode (bd-tnm3k): when `Some(path)`, the watcher
+    /// subscribes only to that one file (`RecursiveMode::NonRecursive`)
+    /// and additionally rejects any event whose path is not exactly
+    /// that file. This guards `q2 preview ~/Downloads/draft.qmd` from
+    /// observing or surfacing sibling-file edits. The path must be
+    /// absolute / canonicalized to match the events `notify` produces.
+    pub single_file: Option<PathBuf>,
 }
 
 impl Default for WatchConfig {
@@ -73,6 +80,7 @@ impl Default for WatchConfig {
         Self {
             debounce_ms: DEFAULT_DEBOUNCE_MS,
             filter: WatchFilter::default(),
+            single_file: None,
         }
     }
 }
@@ -83,6 +91,7 @@ impl WatchConfig {
         Self {
             debounce_ms: DEFAULT_DEBOUNCE_MS,
             filter,
+            single_file: None,
         }
     }
 }
@@ -107,6 +116,12 @@ impl FileWatcher {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let project_root = project_root.to_path_buf();
         let filter = config.filter;
+        let single_file = config.single_file.clone();
+
+        // Pre-compute the closure's matcher so we don't capture
+        // `single_file` twice (once for the subscribe call below and
+        // once in the event-acceptance test).
+        let event_single_file = single_file.clone();
 
         // Create a debounced watcher
         let mut debouncer = new_debouncer(
@@ -115,6 +130,16 @@ impl FileWatcher {
                 match res {
                     Ok(events) => {
                         for event in events {
+                            // bd-tnm3k: in single-file mode, drop any
+                            // event whose path isn't the target file.
+                            // `notify` may report directory-level
+                            // events on some platforms even when only
+                            // a single file is watched.
+                            if let Some(ref target) = event_single_file
+                                && event.path != *target
+                            {
+                                continue;
+                            }
                             if filter.accepts(&event.path) {
                                 debug!(path = %event.path.display(), "File change detected");
                                 if event_tx.send(WatchEvent::Modified(event.path)).is_err() {
@@ -133,16 +158,23 @@ impl FileWatcher {
         )
         .map_err(|e| Error::Sync(format!("failed to create filesystem watcher: {}", e)))?;
 
-        // Start watching the project root recursively
+        // bd-tnm3k: single-file mode subscribes to the file itself in
+        // NonRecursive mode. Project mode keeps the recursive walk of
+        // `project_root`.
+        let (subscribe_path, mode) = match single_file.as_deref() {
+            Some(file) => (file, RecursiveMode::NonRecursive),
+            None => (project_root.as_path(), RecursiveMode::Recursive),
+        };
         debouncer
             .watcher()
-            .watch(&project_root, RecursiveMode::Recursive)
+            .watch(subscribe_path, mode)
             .map_err(|e| Error::Sync(format!("failed to watch project root: {}", e)))?;
 
         info!(
             path = %project_root.display(),
             debounce_ms = config.debounce_ms,
             filter = ?filter,
+            single_file = ?single_file,
             "Started filesystem watcher"
         );
 
@@ -320,6 +352,7 @@ mod tests {
             WatchConfig {
                 debounce_ms: 100,
                 filter: WatchFilter::QmdOnly,
+                single_file: None,
             },
         )
         .unwrap();
@@ -358,6 +391,7 @@ mod tests {
             WatchConfig {
                 debounce_ms: 100,
                 filter: WatchFilter::QmdOnly,
+                single_file: None,
             },
         )
         .unwrap();
@@ -399,6 +433,7 @@ mod tests {
             WatchConfig {
                 debounce_ms: 100,
                 filter: WatchFilter::PreviewBroad,
+                single_file: None,
             },
         )
         .unwrap();
@@ -432,6 +467,7 @@ mod tests {
             WatchConfig {
                 debounce_ms: 100,
                 filter: WatchFilter::QmdOnly,
+                single_file: None,
             },
         )
         .unwrap();
@@ -446,6 +482,45 @@ mod tests {
             Ok(Some(WatchEvent::Modified(path))) => assert_eq!(path, qmd_path),
             Ok(None) => panic!("Watcher stopped unexpectedly"),
             Err(_) => panic!("Timeout waiting for doc.qmd change event"),
+        }
+    }
+
+    /// bd-tnm3k: in single-file mode (no `_quarto.yml` ancestor), the
+    /// watcher must isolate to the one file `q2 preview` was invoked
+    /// on — sibling `.qmd`s in the same parent directory must not
+    /// surface. Otherwise `q2 preview ~/Downloads/draft.qmd` would
+    /// watch the whole of `~/Downloads`.
+    #[tokio::test]
+    async fn test_watcher_single_file_ignores_sibling_qmd() {
+        let temp = TempDir::new().unwrap();
+        let temp_path = temp.path().canonicalize().unwrap();
+        let target = temp_path.join("target.qmd");
+        let sibling = temp_path.join("sibling.qmd");
+
+        std::fs::write(&target, "initial").unwrap();
+        std::fs::write(&sibling, "initial").unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let mut watcher = FileWatcher::new(
+            &temp_path,
+            WatchConfig {
+                debounce_ms: 100,
+                filter: WatchFilter::PreviewBroad,
+                single_file: Some(target.clone()),
+            },
+        )
+        .unwrap();
+
+        // Touch the sibling first (must be filtered out).
+        std::fs::write(&sibling, "edited sibling").unwrap();
+        // Then touch the target (must surface).
+        std::fs::write(&target, "edited target").unwrap();
+
+        let event = tokio::time::timeout(Duration::from_secs(2), watcher.recv()).await;
+        match event {
+            Ok(Some(WatchEvent::Modified(path))) => assert_eq!(path, target),
+            Ok(None) => panic!("Watcher stopped unexpectedly"),
+            Err(_) => panic!("Timeout waiting for target.qmd change event"),
         }
     }
 }

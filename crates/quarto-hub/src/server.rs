@@ -916,6 +916,7 @@ where
     let watch_enabled = config.watch_enabled;
     let watch_debounce_ms = config.watch_debounce_ms;
     let watch_filter = config.watch_filter;
+    let watch_single_file = config.single_file.clone();
     let project_root = storage.project_root().map(|p| p.to_path_buf());
     let has_project = project_root.is_some();
 
@@ -980,9 +981,14 @@ where
     let watcher_handle = if has_project && watch_enabled {
         let project_root = project_root.expect("has_project is true");
         let shutdown_rx = shutdown_rx.clone();
+        // bd-tnm3k: when single-file mode is set, the watcher needs
+        // an absolute target path. The project_root is the file's
+        // parent directory, so `project_root.join(rel)` is the file.
+        let single_file_abs = watch_single_file.as_ref().map(|rel| project_root.join(rel));
         let watch_config = WatchConfig {
             debounce_ms: watch_debounce_ms,
             filter: watch_filter,
+            single_file: single_file_abs,
         };
         match FileWatcher::new(&project_root, watch_config) {
             Ok(watcher) => {

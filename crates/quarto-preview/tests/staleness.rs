@@ -104,6 +104,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
         host: "127.0.0.1".to_string(),
         port: pick_free_port(),
         project_root: Some(project_root.clone()),
+        single_file: None,
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
         engine_registry: Some(registry),

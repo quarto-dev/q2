@@ -124,6 +124,25 @@ impl ProjectFiles {
         files
     }
 
+    /// Build a `ProjectFiles` whose only entry is the supplied
+    /// relative path, treated as a `.qmd` file. Used by `q2 preview`
+    /// when invoked on a single file with no `_quarto.yml` ancestor
+    /// (bd-tnm3k): the parent directory becomes `project_root`, but
+    /// discovery must not walk it — that would pull in arbitrary
+    /// sibling files (think `~/Downloads/`).
+    ///
+    /// The caller is responsible for supplying a *non-empty* relative
+    /// path. We do not validate, but downstream
+    /// `reconcile_files_with_index` produces a `project_root + '/'`
+    /// path that trips ENOTDIR when `read_to_string` is called on it
+    /// if the relative path is empty.
+    pub fn single_file(relative: PathBuf) -> Self {
+        Self {
+            qmd_files: vec![relative],
+            ..Self::default()
+        }
+    }
+
     /// Returns the total number of discovered files.
     pub fn total_count(&self) -> usize {
         self.qmd_files.len()
@@ -424,6 +443,34 @@ mod tests {
 
         // .ts is silently dropped (only .tsx is included)
         assert!(!files.source_files.contains(&PathBuf::from("util.ts")));
+    }
+
+    /// bd-tnm3k: `q2 preview` on a single `.qmd` file with no
+    /// `_quarto.yml` ancestor needs a `ProjectFiles` that contains
+    /// exactly that one file with a *non-empty* relative path. The
+    /// pre-fix walk-based discovery produced an empty relative path
+    /// (because `path.strip_prefix(self)` returns `""`), which made
+    /// `project_root.join(rel)` append a trailing slash and trip
+    /// ENOTDIR downstream. The explicit single-file constructor
+    /// short-circuits the walk and guarantees a sane relative path.
+    #[test]
+    fn single_file_constructor_yields_one_qmd_with_nonempty_path() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+        // Sibling file that must NOT be included.
+        fs::write(project_root.join("sibling.qmd"), "# sibling").unwrap();
+        let rel = PathBuf::from("doc.qmd");
+        fs::write(project_root.join(&rel), "# doc").unwrap();
+
+        let files = ProjectFiles::single_file(rel.clone());
+
+        assert_eq!(files.qmd_files, vec![rel.clone()]);
+        assert!(files.config_files.is_empty());
+        assert!(files.binary_files.is_empty());
+        assert!(files.extension_files.is_empty());
+        assert!(files.source_files.is_empty());
+        // Critically: the relative path is non-empty.
+        assert!(!files.qmd_files[0].as_os_str().is_empty());
     }
 
     #[test]

@@ -134,6 +134,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         watch_enabled: !args.no_watch,
         watch_debounce_ms: args.watch_debounce,
         watch_filter: Default::default(),
+        single_file: None,
         auth_config,
         allow_insecure_auth: args.allow_insecure_auth,
         // `quarto hub` keeps the sync.automerge.org-style `/` ws path

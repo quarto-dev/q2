@@ -57,11 +57,11 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // unless we can confidently identify a specific page to seed in
     // the SPA — typically: user gave a file inside a _quarto.yml
     // project, OR the project root has an `index.qmd`.
-    let (project_root, initial_page) = if args.no_project {
+    let (project_root, initial_page, single_file) = if args.no_project {
         if args.path.is_some() {
             anyhow::bail!("--no-project and a positional path are mutually exclusive");
         }
-        (None, None)
+        (None, None, None)
     } else {
         let raw = args
             .path
@@ -69,8 +69,12 @@ async fn run(args: PreviewArgs) -> Result<()> {
         let canonical = raw
             .canonicalize()
             .with_context(|| format!("resolving project root {}", raw.display()))?;
-        let (root, page) = resolve_project_and_initial_page(&canonical)?;
-        (Some(root), page)
+        let resolved = resolve_project_and_initial_page(&canonical)?;
+        (
+            Some(resolved.root),
+            resolved.initial_page,
+            resolved.single_file,
+        )
     };
 
     // Each invocation gets a fresh `TempDir` by default — when this
@@ -147,6 +151,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         host,
         port,
         project_root,
+        single_file,
         data_dir,
         spa_dir_override: args.preview_dir,
         // CLI uses the default engine registry; tests substitute a
@@ -206,12 +211,24 @@ fn open_browser_or_log(url: &str, suppress: bool) {
     }
 }
 
-/// Phase D.2 (bd-kw93.13): resolve `args.path` to a `(project_root,
-/// initial_page)` pair. The initial page (if any) is appended to the
-/// boot URL as `?page=<rel>` so the SPA can seed `activeFile` to the
-/// user's choice instead of always picking `firstQmd`.
-///
-/// Three cases:
+/// Resolution of `args.path` into the inputs the hub needs:
+/// the project root, an optional initial page hint for the SPA, and
+/// an optional single-file constraint (bd-tnm3k) used to keep
+/// discovery + the watcher narrow when there's no `_quarto.yml`.
+#[derive(Debug)]
+pub(crate) struct ResolvedProject {
+    pub root: PathBuf,
+    /// Page slug appended to the boot URL as `?page=<rel>` so the
+    /// SPA's `pickInitialPage` helper can seed `activeFile`.
+    pub initial_page: Option<String>,
+    /// When `Some(rel)`, `project_root.join(rel)` is the one file
+    /// `q2 preview` was invoked on, and the hub must skip the
+    /// directory walk + watch only that file (bd-tnm3k).
+    pub single_file: Option<PathBuf>,
+}
+
+/// Phase D.2 (bd-kw93.13) + bd-tnm3k: resolve `args.path` to a
+/// [`ResolvedProject`]. Three cases:
 ///
 /// 1. **`canonical` is a directory.** Project mode. The directory is
 ///    the project root. If `index.qmd` exists at the root, prefer
@@ -224,14 +241,12 @@ fn open_browser_or_log(url: &str, suppress: bool) {
 ///    `q2 preview posts/intro.qmd` is supposed to do something
 ///    useful with.
 /// 3. **`canonical` is a file with no `_quarto.yml` ancestor.**
-///    Preserve Phase A single-file mode: `project_root` becomes the
-///    file path itself (the hub indexes only that file). The
-///    `initial_page` is the file name so the SPA's pre-D.2 fallback
-///    keeps working; if the SPA's parsing rejects it, the same
-///    `firstQmd` path that worked pre-D.2 still applies.
-pub(crate) fn resolve_project_and_initial_page(
-    canonical: &Path,
-) -> Result<(PathBuf, Option<String>)> {
+///    Single-file mode (bd-tnm3k): `project_root` is the file's
+///    *parent directory* (the file path itself made
+///    `project_root.join("")` produce an ENOTDIR path), and
+///    `single_file` carries the file's basename so the hub
+///    constrains discovery + the watcher to just that one file.
+pub(crate) fn resolve_project_and_initial_page(canonical: &Path) -> Result<ResolvedProject> {
     let metadata = std::fs::metadata(canonical)
         .with_context(|| format!("reading metadata of {}", canonical.display()))?;
 
@@ -242,7 +257,11 @@ pub(crate) fn resolve_project_and_initial_page(
         } else {
             None
         };
-        return Ok((canonical.to_path_buf(), initial));
+        return Ok(ResolvedProject {
+            root: canonical.to_path_buf(),
+            initial_page: initial,
+            single_file: None,
+        });
     }
 
     if metadata.is_file() {
@@ -265,15 +284,25 @@ pub(crate) fn resolve_project_and_initial_page(
                 })?
                 .to_string_lossy()
                 .replace('\\', "/");
-            return Ok((project_dir, Some(rel)));
+            return Ok(ResolvedProject {
+                root: project_dir,
+                initial_page: Some(rel),
+                single_file: None,
+            });
         }
-        // No `_quarto.yml` ancestor → single-file mode (Phase A
-        // semantics). project_root is the file path itself.
+        // bd-tnm3k: no `_quarto.yml` ancestor → single-file mode.
+        // The parent directory is the project root; the file's
+        // basename is both the initial page hint and the single-file
+        // constraint that keeps discovery + watcher narrow.
         let filename = canonical
             .file_name()
             .and_then(|s| s.to_str())
-            .map(|s| s.to_string());
-        return Ok((canonical.to_path_buf(), filename));
+            .ok_or_else(|| anyhow::anyhow!("file path has no filename: {}", canonical.display()))?;
+        return Ok(ResolvedProject {
+            root: parent.to_path_buf(),
+            initial_page: Some(filename.to_string()),
+            single_file: Some(PathBuf::from(filename)),
+        });
     }
 
     anyhow::bail!(
@@ -386,10 +415,11 @@ mod tests {
         std::fs::write(tmp.path().join("about.qmd"), "# about").unwrap();
         let canonical = canonical_dir(&tmp);
 
-        let (root, page) =
+        let resolved =
             resolve_project_and_initial_page(&canonical).expect("dir-with-index resolves");
-        assert_eq!(root, canonical);
-        assert_eq!(page.as_deref(), Some("index.qmd"));
+        assert_eq!(resolved.root, canonical);
+        assert_eq!(resolved.initial_page.as_deref(), Some("index.qmd"));
+        assert!(resolved.single_file.is_none());
     }
 
     #[test]
@@ -399,13 +429,15 @@ mod tests {
         std::fs::write(tmp.path().join("b.qmd"), "# b").unwrap();
         let canonical = canonical_dir(&tmp);
 
-        let (root, page) =
+        let resolved =
             resolve_project_and_initial_page(&canonical).expect("dir-without-index resolves");
-        assert_eq!(root, canonical);
+        assert_eq!(resolved.root, canonical);
         assert!(
-            page.is_none(),
-            "no index.qmd → no initial_page hint; got: {page:?}"
+            resolved.initial_page.is_none(),
+            "no index.qmd → no initial_page hint; got: {:?}",
+            resolved.initial_page,
         );
+        assert!(resolved.single_file.is_none());
     }
 
     #[test]
@@ -421,10 +453,13 @@ mod tests {
         let file = proj.join("posts").join("intro.qmd");
         std::fs::write(&file, "# intro").unwrap();
 
-        let (root, page) =
-            resolve_project_and_initial_page(&file).expect("file-in-project resolves");
-        assert_eq!(root, proj);
-        assert_eq!(page.as_deref(), Some("posts/intro.qmd"));
+        let resolved = resolve_project_and_initial_page(&file).expect("file-in-project resolves");
+        assert_eq!(resolved.root, proj);
+        assert_eq!(resolved.initial_page.as_deref(), Some("posts/intro.qmd"));
+        assert!(
+            resolved.single_file.is_none(),
+            "multi-file _quarto.yml project must not flip single-file mode",
+        );
     }
 
     #[test]
@@ -435,31 +470,40 @@ mod tests {
         let file = proj.join("index.qmd");
         std::fs::write(&file, "# index").unwrap();
 
-        let (root, page) = resolve_project_and_initial_page(&file).expect("resolves");
-        assert_eq!(root, proj);
+        let resolved = resolve_project_and_initial_page(&file).expect("resolves");
+        assert_eq!(resolved.root, proj);
         assert_eq!(
-            page.as_deref(),
+            resolved.initial_page.as_deref(),
             Some("index.qmd"),
             "file at project root should resolve to its own filename"
         );
+        assert!(resolved.single_file.is_none());
     }
 
+    /// bd-tnm3k: when there is no `_quarto.yml` ancestor, single-file
+    /// mode resolves `project_root` to the file's *parent directory*
+    /// (not the file path itself, which made downstream
+    /// `project_root.join(rel)` produce a trailing-slash path that
+    /// tripped ENOTDIR in `reconcile_files_with_index`). The
+    /// single-file constraint is carried separately so the hub does
+    /// not start indexing or watching sibling files in the parent dir.
     #[test]
-    fn resolve_file_without_quarto_yml_keeps_single_file_mode() {
+    fn resolve_file_without_quarto_yml_resolves_parent_as_root() {
         let tmp = TempDir::with_prefix("d2-file-no-yml-").unwrap();
         let dir = canonical_dir(&tmp);
         let file = dir.join("doc.qmd");
         std::fs::write(&file, "# doc").unwrap();
         // Deliberately NO _quarto.yml.
 
-        let (root, page) =
-            resolve_project_and_initial_page(&file).expect("single-file mode resolves");
-        // Preserve pre-D.2 semantics: project_root IS the file path
-        // (the hub indexes only this file). `initial_page` is set so
-        // the SPA's pickInitialPage seeds activeFile to the same
-        // file `firstQmd` would have picked anyway.
-        assert_eq!(root, file);
-        assert_eq!(page.as_deref(), Some("doc.qmd"));
+        let resolved = resolve_project_and_initial_page(&file).expect("single-file mode resolves");
+        assert_eq!(resolved.root, dir);
+        assert_eq!(resolved.initial_page.as_deref(), Some("doc.qmd"));
+        assert_eq!(
+            resolved.single_file.as_deref(),
+            Some(std::path::Path::new("doc.qmd")),
+            "single-file mode must carry the relative path so the hub \
+             constrains discovery and the watcher to that one file",
+        );
     }
 
     #[test]

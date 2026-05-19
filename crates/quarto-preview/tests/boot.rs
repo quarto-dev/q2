@@ -72,6 +72,7 @@ async fn boots_serves_spa_plus_hub_health() {
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
+        single_file: None,
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
         engine_registry: None,
