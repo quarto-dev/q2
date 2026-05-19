@@ -2219,6 +2219,38 @@ mod tests {
         );
     }
 
+    /// PR #214 follow-up probe: verify the q2-preview pipeline
+    /// emits the `quarto-appendix` wrapper Div around the footnotes
+    /// section. The smoke-all `q2-preview/multi-element-doc.qmd`
+    /// fixture expects `div#quarto-appendix > div#footnotes` in the
+    /// rendered iframe DOM; this regression test pins the Rust-side
+    /// contract so we catch the wrapper drop before E2E does.
+    #[test]
+    fn render_qmd_to_preview_ast_emits_appendix_wrapper_for_footnotes() {
+        let content =
+            b"---\ntitle: Test\nformat: q2-preview\n---\n\nA paragraph^[the footnote body].\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content, "test.qmd", &mut ctx, runtime, None, None,
+        ))
+        .expect("q2-preview render");
+
+        // The appendix-structure transform must produce a Div with
+        // id="quarto-appendix" wrapping the inner footnotes Div.
+        assert!(
+            output.ast_json.contains("quarto-appendix"),
+            "expected `quarto-appendix` wrapper in q2-preview output; full output:\n{}",
+            output.ast_json
+        );
+    }
+
     /// Phase F.1 (bd-kw93.14): `LinkRewriteTransform` runs in the
     /// q2-preview pipeline so cross-page body links emit `.html`
     /// hrefs that the iframe link-handler can intercept and route

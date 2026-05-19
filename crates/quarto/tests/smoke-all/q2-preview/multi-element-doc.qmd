@@ -15,7 +15,11 @@ _quarto:
           - 'a.quarto-xref'
           - 'span#eq-einstein'
           - 'a.footnote-ref'
-          - 'div#quarto-appendix > div#footnotes'
+          # The native HTML writer emits `<section id="footnotes" class="footnotes section">`
+          # for the footnotes container; bd-coffj closed q2-preview's parity gap so
+          # `Div` blocks carrying the `section` class also render as `<section>`,
+          # not `<div>`. The selector must match the native output.
+          - 'div#quarto-appendix > section#footnotes'
         # must-not-match — absent from the rendered iframe DOM
         -
           - 'div.q2-preview-placeholder'
