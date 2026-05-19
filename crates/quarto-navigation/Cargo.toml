@@ -7,6 +7,7 @@ license.workspace = true
 description = "Document-model types for Quarto navigation (navbar, page footer, navigation items) plus YAML resolution and HTML rendering."
 
 [dependencies]
+quarto-config.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
 yaml-rust2.workspace = true

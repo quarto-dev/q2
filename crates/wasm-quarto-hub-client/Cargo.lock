@@ -2730,6 +2730,7 @@ dependencies = [
 name = "quarto-navigation"
 version = "0.1.0"
 dependencies = [
+ "quarto-config",
  "quarto-pandoc-types",
  "quarto-source-map",
  "yaml-rust2",
