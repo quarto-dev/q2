@@ -554,6 +554,56 @@ fn long_form_strong_star_with_unclosed_single_quote_emits_q_2_9() {
     );
 }
 
+// --- Arbitrary-depth nesting via the generic-fallback dispatch ---
+//
+// The corpus no longer contains explicit entries for each (state, sym,
+// outer_scope) triple produced by N-level nesting. Instead, the
+// error-generation path dispatches by `outer_scope` alone when no Merr
+// entry matches and the parser is inside an inline scope. These tests
+// verify the fallback handles 3-level and deeper nesting uniformly.
+
+#[test]
+fn three_level_single_quote_star_emph_underscore_emits_q_2_5() {
+    // Outer ', middle *, inner _ unclosed.
+    let input = "a '*b _c* jeloasd' asdasd\n";
+    let output = render_diagnostics(input, "three-level-q25.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for 3-level nest `'*b _c*'`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn three_level_double_quote_strong_star_emph_underscore_emits_q_2_5() {
+    let input = "\"**b _c**\"\n";
+    let output = render_diagnostics(input, "three-level-q25-double-strong.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for `\"**b _c**\"`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn three_level_emph_star_single_quote_unclosed_double_emits_q_2_11() {
+    // Outer *, middle ', inner " unclosed.
+    let input = "*a 'b \"c'*\n";
+    let output = render_diagnostics(input, "three-level-q211.qmd");
+    assert!(
+        output.contains("Q-2-11"),
+        "Expected Q-2-11 for `*a 'b \"c'*`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn three_level_strong_star_double_quote_unclosed_underscore_emits_q_2_5() {
+    let input = "**a \"b _c\"**\n";
+    let output = render_diagnostics(input, "three-level-q25-strong-double.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for `**a \"b _c\"**`. Got:\n{output}"
+    );
+}
+
 // --- Unclosed quote inside paired emphasis (the gap fix) ---
 //
 // Outer emphasis pairs, an inner whitespace-prefixed `"` or `'` opens but

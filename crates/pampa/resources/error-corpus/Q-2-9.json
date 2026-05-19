@@ -16,8 +16,8 @@
   ],
   "cases": [
     {
-      "name": "inside-paired-outer",
-      "description": "Unclosed single quote (whitespace-prefixed opener) inside various paired outer scopes",
+      "name": "simple",
+      "description": "Bare whitespace-prefixed single quote opener with no closer. This corpus entry exists primarily to provide diagnostic content (title, message, hints) for the generic-fallback dispatch in error_generation.rs; the runtime resolves capture positions via the scope-stack walker rather than from this case.",
       "content": " 'b c",
       "captures": [
         {
@@ -26,18 +26,6 @@
           "column": 0,
           "size": 2
         }
-      ],
-      "prefixesAndSuffixes": [
-        ["*a", "*\n"],
-        ["*a", "* x\n"],
-        ["**a", "**\n"],
-        ["**a", "** x\n"],
-        ["_a", "_\n"],
-        ["_a", "_ x\n"],
-        ["__a", "__\n"],
-        ["__a", "__ x\n"],
-        ["\"a", "\"\n"],
-        ["\"a", "\" x\n"]
       ]
     }
   ]

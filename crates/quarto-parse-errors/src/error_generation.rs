@@ -11,7 +11,9 @@
 use std::collections::HashSet;
 
 use crate::error_table::{ErrorCapture, ErrorTableEntry, lookup_error_entry};
-use crate::outer_scope::{OuterScope, compute_outer_scope, find_outermost_close};
+use crate::outer_scope::{
+    OuterScope, compute_outer_scope, find_innermost_open_position, find_outermost_close,
+};
 use crate::tree_sitter_log::{ConsumedToken, TreeSitterLogObserver};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::Location;
@@ -341,6 +343,84 @@ fn error_diagnostic_from_parse_state(
             builder.build()
         })
         .max_by(|diag1, diag2| diagnostic_score(diag1).cmp(&diagnostic_score(diag2)))
+        .or_else(|| {
+            // Generic fallback: when no Merr entry matches but we know we're
+            // inside an unclosed inline scope at an inline-end-like terminator,
+            // dispatch by `outer_scope` alone. This handles arbitrary nesting
+            // depth uniformly without needing a corpus entry per depth.
+            if outer_scope == OuterScope::None {
+                return None;
+            }
+            if !matches!(parse_state.sym.as_str(), "_close_block" | "_whitespace") {
+                return None;
+            }
+            let qcode = outer_scope.to_qcode()?;
+            let template = error_table
+                .iter()
+                .find(|e| e.error_info.code == Some(qcode))?;
+
+            let mut builder = DiagnosticMessageBuilder::error(template.error_info.title)
+                .with_location(source_info.clone())
+                .problem(template.error_info.message);
+            if let Some(code) = template.error_info.code {
+                builder = builder.with_code(code);
+            }
+
+            if let Some((_, opener_span)) = find_innermost_open_position(
+                all_tokens,
+                consumed_tokens,
+                parse_state.row,
+                parse_state.column,
+                input_bytes,
+            ) {
+                let opener_byte_offset =
+                    calculate_byte_offset(&input_str, opener_span.row, opener_span.column);
+                let opener_byte_end = {
+                    let size = opener_span.size.max(1);
+                    let substring = &input_str[opener_byte_offset..];
+                    let mut byte_count = 0;
+                    for (char_count, ch) in substring.chars().enumerate() {
+                        if char_count >= size {
+                            break;
+                        }
+                        byte_count += ch.len_utf8();
+                    }
+                    (opener_byte_offset + byte_count).min(input_str.len())
+                };
+                let opener_start =
+                    quarto_source_map::utils::offset_to_location(&input_str, opener_byte_offset)
+                        .unwrap_or(quarto_source_map::Location {
+                            offset: opener_byte_offset,
+                            row: opener_span.row,
+                            column: opener_span.column,
+                        });
+                let opener_end =
+                    quarto_source_map::utils::offset_to_location(&input_str, opener_byte_end)
+                        .unwrap_or(quarto_source_map::Location {
+                            offset: opener_byte_end,
+                            row: opener_span.row,
+                            column: opener_span.column + opener_span.size.max(1),
+                        });
+                let opener_source_info = quarto_source_map::SourceInfo::from_range(
+                    quarto_source_map::FileId(0),
+                    quarto_source_map::Range {
+                        start: opener_start,
+                        end: opener_end,
+                    },
+                );
+                for note in template.error_info.notes {
+                    if note.note_type == "simple" {
+                        builder = builder.add_info_at(note.message, opener_source_info.clone());
+                    }
+                }
+            }
+
+            for hint in template.error_info.hints {
+                builder = builder.add_hint(*hint);
+            }
+
+            Some(builder.build())
+        })
         .unwrap_or(
             // Fallback for errors not in the table
             DiagnosticMessageBuilder::error("Parse error")

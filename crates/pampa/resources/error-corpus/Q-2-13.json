@@ -179,46 +179,6 @@
           "size": 2
         }
       ]
-    },
-    {
-      "name": "inside-paired-outer",
-      "description": "Unclosed strong-star emphasis inside various paired outer scopes",
-      "content": " **b c",
-      "captures": [
-        {
-          "label": "strong-start",
-          "row": 0,
-          "column": 0,
-          "size": 3
-        }
-      ],
-      "prefixesAndSuffixes": [
-        ["*a", "*\n"],
-        ["*a", "* x\n"],
-        ["**a", "**\n"],
-        ["**a", "** x\n"],
-        ["_a", "_\n"],
-        ["_a", "_ x\n"],
-        ["__a", "__\n"],
-        ["__a", "__ x\n"],
-        ["\"a", "\"\n"],
-        ["\"a", "\" x\n"],
-        ["'a", "'\n"],
-        ["'a", "' x\n"]
-      ]
-    },
-    {
-      "name": "same-marker",
-      "description": "Three double-stars: first pair closes, third opens an unclosed inner strong emphasis",
-      "content": "**a **b c**",
-      "captures": [
-        {
-          "label": "strong-start",
-          "row": 0,
-          "column": 9,
-          "size": 2
-        }
-      ]
     }
   ]
 }

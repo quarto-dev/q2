@@ -62,6 +62,21 @@ impl OuterScope {
             _ => None,
         }
     }
+
+    /// Default Q-code for an "unclosed inline scope" diagnostic at this scope.
+    /// Used by the generic-fallback dispatch in `error_generation.rs` when no
+    /// Merr table entry matches the precise `(state, sym, outer_scope)` triple.
+    pub fn to_qcode(self) -> Option<&'static str> {
+        match self {
+            OuterScope::SingleQuote => Some("Q-2-9"),
+            OuterScope::DoubleQuote => Some("Q-2-11"),
+            OuterScope::EmphStar => Some("Q-2-12"),
+            OuterScope::EmphUnderscore => Some("Q-2-5"),
+            OuterScope::StrongStar => Some("Q-2-13"),
+            OuterScope::StrongUnderscore => Some("Q-2-15"),
+            OuterScope::None => None,
+        }
+    }
 }
 
 /// Compute the outermost open inline scope at the given error position by
@@ -190,6 +205,57 @@ pub fn find_outermost_close(
     }
 
     last_match.map(|span| trim_to_delimiter_run(span, outermost_scope, input))
+}
+
+/// Find the position of the innermost open inline scope's opening delimiter at
+/// the given error position. Used by the generic-fallback dispatch to anchor
+/// the "this is the opening '_' mark." indicator on the token that actually
+/// opened the unclosed scope, regardless of nesting depth.
+///
+/// Returns the trimmed span of the opener (so e.g. a `_` token emitted with
+/// leading whitespace as `(col=2, size=2)` is reported as `(col=3, size=1)`).
+pub fn find_innermost_open_position(
+    all_tokens: &[ConsumedToken],
+    consumed_tokens: &[ConsumedToken],
+    error_row: usize,
+    error_column: usize,
+    input: &[u8],
+) -> Option<(OuterScope, TokenSpan)> {
+    let mut tokens: Vec<&ConsumedToken> = all_tokens.iter().chain(consumed_tokens.iter()).collect();
+    tokens.sort_by_key(|t| (t.row, t.column));
+
+    let mut stack: Vec<(OuterScope, TokenSpan)> = Vec::new();
+    for tok in &tokens {
+        if !appears_before(tok, error_row, error_column) {
+            break;
+        }
+        if is_block_boundary(&tok.sym) {
+            stack.clear();
+            continue;
+        }
+        if let Some(scope) = scope_for_token(tok, input) {
+            if stack.iter().any(|(s, _)| *s == scope) {
+                if stack.last().map(|(s, _)| *s) == Some(scope) {
+                    stack.pop();
+                }
+            } else {
+                stack.push((
+                    scope,
+                    TokenSpan {
+                        row: tok.row,
+                        column: tok.column,
+                        size: tok.size,
+                    },
+                ));
+            }
+        }
+    }
+
+    let (innermost_scope, span) = stack.last().copied()?;
+    Some((
+        innermost_scope,
+        trim_to_delimiter_run(span, innermost_scope, input),
+    ))
 }
 
 /// Trim a token span to the run of consecutive delimiter bytes inside it,

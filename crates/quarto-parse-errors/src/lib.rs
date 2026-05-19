@@ -132,4 +132,6 @@ pub use error_generation::{
     produce_diagnostic_messages, prune_diagnostics_by_error_nodes,
 };
 
-pub use outer_scope::{OuterScope, TokenSpan, compute_outer_scope, find_outermost_close};
+pub use outer_scope::{
+    OuterScope, TokenSpan, compute_outer_scope, find_innermost_open_position, find_outermost_close,
+};
