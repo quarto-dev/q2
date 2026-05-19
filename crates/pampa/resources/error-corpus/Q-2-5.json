@@ -1,7 +1,7 @@
 {
   "code": "Q-2-5",
   "title": "Unclosed Underscore Emphasis",
-  "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+  "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
   "notes": [
     {
       "message": "This is the opening '_' mark.",

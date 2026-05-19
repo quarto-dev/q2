@@ -566,7 +566,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -599,7 +599,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -632,7 +632,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -665,7 +665,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -698,7 +698,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -731,7 +731,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -764,7 +764,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -797,7 +797,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -830,7 +830,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -863,7 +863,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -896,7 +896,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -929,7 +929,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -962,7 +962,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -995,7 +995,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1028,7 +1028,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1061,7 +1061,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1094,7 +1094,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1127,7 +1127,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1160,7 +1160,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1193,7 +1193,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1226,7 +1226,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1259,7 +1259,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1292,7 +1292,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1325,7 +1325,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1358,7 +1358,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1391,7 +1391,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1424,7 +1424,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1457,7 +1457,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1490,7 +1490,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1523,7 +1523,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1556,7 +1556,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1589,7 +1589,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1622,7 +1622,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1655,7 +1655,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1688,7 +1688,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1721,7 +1721,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1754,7 +1754,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1787,7 +1787,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1820,7 +1820,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1853,7 +1853,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1886,7 +1886,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1919,7 +1919,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1952,7 +1952,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -1985,7 +1985,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2018,7 +2018,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2051,7 +2051,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2084,7 +2084,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2117,7 +2117,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2150,7 +2150,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2183,7 +2183,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2216,7 +2216,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2249,7 +2249,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2282,7 +2282,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2315,7 +2315,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2348,7 +2348,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2381,7 +2381,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2414,7 +2414,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2447,7 +2447,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2480,7 +2480,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2513,7 +2513,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2546,7 +2546,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2579,7 +2579,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2612,7 +2612,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2645,7 +2645,7 @@
     "errorInfo": {
       "code": "Q-2-11",
       "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing '\"' for the quote.",
       "captures": [
         {
           "row": 0,
@@ -2678,7 +2678,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2713,7 +2713,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2748,7 +2748,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2783,7 +2783,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2818,7 +2818,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2853,7 +2853,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2888,7 +2888,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2923,7 +2923,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2958,7 +2958,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -2993,7 +2993,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3028,7 +3028,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3063,7 +3063,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3098,7 +3098,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3133,7 +3133,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3168,7 +3168,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3203,7 +3203,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3238,7 +3238,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3273,7 +3273,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3308,7 +3308,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3343,7 +3343,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3378,7 +3378,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3413,7 +3413,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3448,7 +3448,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3483,7 +3483,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3518,7 +3518,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3553,7 +3553,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3588,7 +3588,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3623,7 +3623,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3658,7 +3658,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3693,7 +3693,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3728,7 +3728,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3763,7 +3763,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3798,7 +3798,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3833,7 +3833,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3868,7 +3868,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3903,7 +3903,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3938,7 +3938,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -3973,7 +3973,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4008,7 +4008,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4043,7 +4043,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4078,7 +4078,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4113,7 +4113,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4148,7 +4148,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4183,7 +4183,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4218,7 +4218,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4253,7 +4253,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4288,7 +4288,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4323,7 +4323,7 @@
     "errorInfo": {
       "code": "Q-2-12",
       "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '*' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4358,7 +4358,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4393,7 +4393,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4428,7 +4428,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4463,7 +4463,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4498,7 +4498,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4533,7 +4533,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4568,7 +4568,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4603,7 +4603,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4638,7 +4638,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4673,7 +4673,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4708,7 +4708,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4743,7 +4743,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4778,7 +4778,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4813,7 +4813,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4848,7 +4848,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4883,7 +4883,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4918,7 +4918,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4953,7 +4953,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -4988,7 +4988,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5023,7 +5023,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5058,7 +5058,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5093,7 +5093,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5128,7 +5128,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5163,7 +5163,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5198,7 +5198,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5233,7 +5233,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5268,7 +5268,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5303,7 +5303,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5338,7 +5338,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5373,7 +5373,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5408,7 +5408,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5443,7 +5443,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5478,7 +5478,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5513,7 +5513,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5548,7 +5548,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5583,7 +5583,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5618,7 +5618,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5653,7 +5653,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5688,7 +5688,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5723,7 +5723,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5758,7 +5758,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5793,7 +5793,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5828,7 +5828,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5863,7 +5863,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5898,7 +5898,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5933,7 +5933,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -5968,7 +5968,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6003,7 +6003,7 @@
     "errorInfo": {
       "code": "Q-2-13",
       "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '**' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6038,7 +6038,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6073,7 +6073,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6108,7 +6108,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6143,7 +6143,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6178,7 +6178,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6213,7 +6213,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6248,7 +6248,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6283,7 +6283,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6318,7 +6318,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6353,7 +6353,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6388,7 +6388,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6423,7 +6423,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6458,7 +6458,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6493,7 +6493,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6528,7 +6528,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6563,7 +6563,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6598,7 +6598,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6633,7 +6633,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6668,7 +6668,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6703,7 +6703,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6738,7 +6738,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6773,7 +6773,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6808,7 +6808,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6843,7 +6843,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6878,7 +6878,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6913,7 +6913,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6948,7 +6948,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -6983,7 +6983,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7018,7 +7018,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7053,7 +7053,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7088,7 +7088,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7123,7 +7123,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7158,7 +7158,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7193,7 +7193,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7228,7 +7228,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7263,7 +7263,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7298,7 +7298,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7333,7 +7333,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7368,7 +7368,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7403,7 +7403,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7438,7 +7438,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7473,7 +7473,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7508,7 +7508,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7543,7 +7543,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7578,7 +7578,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7613,7 +7613,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7648,7 +7648,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7683,7 +7683,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -7718,7 +7718,7 @@
     "errorInfo": {
       "code": "Q-2-15",
       "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '__' for the strong emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21073,7 +21073,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21108,7 +21108,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21143,7 +21143,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21178,7 +21178,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21213,7 +21213,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21248,7 +21248,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21283,7 +21283,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21318,7 +21318,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21353,7 +21353,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21388,7 +21388,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21423,7 +21423,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21458,7 +21458,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21493,7 +21493,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21528,7 +21528,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21563,7 +21563,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21598,7 +21598,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21633,7 +21633,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21668,7 +21668,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21703,7 +21703,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21738,7 +21738,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21773,7 +21773,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21808,7 +21808,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21843,7 +21843,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21878,7 +21878,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21913,7 +21913,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21948,7 +21948,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -21983,7 +21983,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22018,7 +22018,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22053,7 +22053,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22088,7 +22088,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22123,7 +22123,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22158,7 +22158,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22193,7 +22193,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22228,7 +22228,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22263,7 +22263,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22298,7 +22298,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22333,7 +22333,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22368,7 +22368,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22403,7 +22403,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22438,7 +22438,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22473,7 +22473,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22508,7 +22508,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22543,7 +22543,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22578,7 +22578,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22613,7 +22613,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22648,7 +22648,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22683,7 +22683,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22718,7 +22718,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22753,7 +22753,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -22788,7 +22788,7 @@
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "message": "Reached the end of the outer inline scope before finding a closing '_' for the emphasis.",
       "captures": [
         {
           "row": 0,
@@ -23911,7 +23911,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -23946,7 +23946,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -23981,7 +23981,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24016,7 +24016,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24051,7 +24051,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24086,7 +24086,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24121,7 +24121,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24156,7 +24156,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24191,7 +24191,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24226,7 +24226,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,
@@ -24261,7 +24261,7 @@
     "errorInfo": {
       "code": "Q-2-9",
       "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing single quote.",
+      "message": "Reached the end of the outer inline scope before finding a closing single quote.",
       "captures": [
         {
           "row": 0,

@@ -1,7 +1,7 @@
 {
   "code": "Q-2-9",
   "title": "Unclosed Single Quote",
-  "message": "I reached the end of the block before finding a closing single quote.",
+  "message": "Reached the end of the outer inline scope before finding a closing single quote.",
   "notes": [
     {
       "message": "This is the opening single quote.",

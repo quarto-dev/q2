@@ -11,7 +11,7 @@
 use std::collections::HashSet;
 
 use crate::error_table::{ErrorCapture, ErrorTableEntry, lookup_error_entry};
-use crate::outer_scope::compute_outer_scope;
+use crate::outer_scope::{OuterScope, compute_outer_scope, find_outermost_close};
 use crate::tree_sitter_log::{ConsumedToken, TreeSitterLogObserver};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::Location;
@@ -120,13 +120,34 @@ fn error_diagnostic_from_parse_state(
     // Convert input to string for offset calculation
     let input_str = String::from_utf8_lossy(input_bytes);
 
-    // Calculate byte offset and create proper locations using quarto-source-map utilities
-    let byte_offset = calculate_byte_offset(&input_str, parse_state.row, parse_state.column);
+    // Anchor the primary diagnostic location (header + problem-note indicator)
+    // at the closing delimiter of the outermost open inline scope when one
+    // exists. For inputs like `*a _b c* trailing\n` this points the
+    // "I reached the end of the block..." indicator at the closing `*` rather
+    // than floating one past the end of the line. When no outer scope is open
+    // or no candidate closer exists, fall back to the parser-failure
+    // position.
+    let (anchor_row, anchor_column, anchor_size) = if outer_scope != OuterScope::None {
+        find_outermost_close(
+            all_tokens,
+            consumed_tokens,
+            parse_state.row,
+            parse_state.column,
+            input_bytes,
+        )
+        .map(|span| (span.row, span.column, span.size))
+        .unwrap_or((parse_state.row, parse_state.column, parse_state.size))
+    } else {
+        (parse_state.row, parse_state.column, parse_state.size)
+    };
 
-    // Calculate span_end by advancing parse_state.size characters (not bytes!) from byte_offset
+    // Calculate byte offset and create proper locations using quarto-source-map utilities
+    let byte_offset = calculate_byte_offset(&input_str, anchor_row, anchor_column);
+
+    // Calculate span_end by advancing anchor_size characters (not bytes!) from byte_offset
     // This is critical for handling multi-byte UTF-8 characters correctly
     let span_end = {
-        let size = parse_state.size.max(1);
+        let size = anchor_size.max(1);
         let substring = &input_str[byte_offset..];
         let mut byte_count = 0;
 
@@ -144,14 +165,14 @@ fn error_diagnostic_from_parse_state(
     let start_location = quarto_source_map::utils::offset_to_location(&input_str, byte_offset)
         .unwrap_or(quarto_source_map::Location {
             offset: byte_offset,
-            row: parse_state.row,
-            column: parse_state.column,
+            row: anchor_row,
+            column: anchor_column,
         });
     let end_location = quarto_source_map::utils::offset_to_location(&input_str, span_end)
         .unwrap_or(quarto_source_map::Location {
             offset: span_end,
-            row: parse_state.row,
-            column: parse_state.column + parse_state.size.max(1),
+            row: anchor_row,
+            column: anchor_column + anchor_size.max(1),
         });
 
     // Create SourceInfo for the error location

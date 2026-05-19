@@ -115,6 +115,117 @@ fn appears_before(tok: &ConsumedToken, error_row: usize, error_column: usize) ->
     tok.row < error_row || (tok.row == error_row && tok.column < error_column)
 }
 
+fn appears_strictly_after_position(
+    tok: &ConsumedToken,
+    other_row: usize,
+    other_column: usize,
+) -> bool {
+    tok.row > other_row || (tok.row == other_row && tok.column > other_column)
+}
+
+/// Position of a token in the source, returned by [`find_outermost_close`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenSpan {
+    pub row: usize,
+    pub column: usize,
+    pub size: usize,
+}
+
+/// Find the would-be closing delimiter of the OUTERMOST open inline scope at
+/// the given error position. For inputs like `*a _b c* trailing\n` the parser
+/// opened `emph_star` at col 2 and `emph_underscore` at col 5; the `*` at
+/// col 7 is the would-be closer of the outermost (`emph_star`) scope and is
+/// the natural anchor for the "I reached the end of the block..." indicator.
+///
+/// Returns `None` if no candidate closer exists (e.g. truly unclosed at end of
+/// input with no later same-kind token), in which case the caller should fall
+/// back to the parser-failure position.
+pub fn find_outermost_close(
+    all_tokens: &[ConsumedToken],
+    consumed_tokens: &[ConsumedToken],
+    error_row: usize,
+    error_column: usize,
+    input: &[u8],
+) -> Option<TokenSpan> {
+    let mut tokens: Vec<&ConsumedToken> = all_tokens.iter().chain(consumed_tokens.iter()).collect();
+    tokens.sort_by_key(|t| (t.row, t.column));
+
+    let mut stack: Vec<(OuterScope, usize, usize)> = Vec::new();
+    for tok in &tokens {
+        if !appears_before(tok, error_row, error_column) {
+            break;
+        }
+        if is_block_boundary(&tok.sym) {
+            stack.clear();
+            continue;
+        }
+        if let Some(scope) = scope_for_token(tok, input) {
+            if stack.iter().any(|(s, _, _)| *s == scope) {
+                if stack.last().map(|(s, _, _)| *s) == Some(scope) {
+                    stack.pop();
+                }
+            } else {
+                stack.push((scope, tok.row, tok.column));
+            }
+        }
+    }
+
+    let (outermost_scope, outermost_row, outermost_col) = *stack.first()?;
+
+    let mut last_match: Option<TokenSpan> = None;
+    for tok in &tokens {
+        if !appears_before(tok, error_row, error_column) {
+            break;
+        }
+        if !appears_strictly_after_position(tok, outermost_row, outermost_col) {
+            continue;
+        }
+        if scope_for_token(tok, input) == Some(outermost_scope) {
+            last_match = Some(TokenSpan {
+                row: tok.row,
+                column: tok.column,
+                size: tok.size,
+            });
+        }
+    }
+
+    last_match.map(|span| trim_to_delimiter_run(span, outermost_scope, input))
+}
+
+/// Trim a token span to the run of consecutive delimiter bytes inside it,
+/// discarding any leading or trailing whitespace the parser included in the
+/// token. For example a closing `*` token at (col=7, size=2) covering `*` + ` `
+/// becomes (col=7, size=1) covering just the `*`.
+fn trim_to_delimiter_run(span: TokenSpan, scope: OuterScope, input: &[u8]) -> TokenSpan {
+    let delimiter_byte = match scope {
+        OuterScope::EmphStar | OuterScope::StrongStar => b'*',
+        OuterScope::EmphUnderscore | OuterScope::StrongUnderscore => b'_',
+        OuterScope::SingleQuote => b'\'',
+        OuterScope::DoubleQuote => b'"',
+        OuterScope::None => return span,
+    };
+    let Some(line_start) = line_start_offset(input, span.row) else {
+        return span;
+    };
+    let span_start = line_start + span.column;
+    let span_end = (span_start + span.size).min(input.len());
+    let bytes = &input[span_start..span_end];
+
+    let Some(first) = bytes.iter().position(|&b| b == delimiter_byte) else {
+        return span;
+    };
+    let mut last = first;
+    while last + 1 < bytes.len() && bytes[last + 1] == delimiter_byte {
+        last += 1;
+    }
+
+    TokenSpan {
+        row: span.row,
+        column: span.column + first,
+        size: last - first + 1,
+    }
+}
+
 fn is_block_boundary(sym: &str) -> bool {
     matches!(
         sym,
@@ -423,5 +534,159 @@ mod tests {
             assert_eq!(OuterScope::from_str(s.as_str()), Some(s));
         }
         assert_eq!(OuterScope::from_str("unknown"), None);
+    }
+
+    // === find_outermost_close ===
+
+    #[test]
+    fn outermost_close_emph_with_unclosed_underscore() {
+        // *a _b c* — outer * pairs at col 0/7, inner _ at col 2-3 (with leading
+        // whitespace) is unclosed. Outermost is emph_star at col 0; its
+        // would-be closer is the * at col 7.
+        let input = b"*a _b c*\n";
+        let tokens = vec![
+            tok("emphasis_delimiter", 0, 0, 1),
+            tok("emphasis_delimiter", 0, 2, 2),
+            tok("emphasis_delimiter", 0, 7, 1),
+        ];
+        assert_eq!(
+            find_outermost_close(&[], &tokens, 0, 8, input),
+            Some(TokenSpan {
+                row: 0,
+                column: 7,
+                size: 1
+            })
+        );
+    }
+
+    #[test]
+    fn outermost_close_with_trailing_text() {
+        // *a _b c* jeloasd — closer at col 7 even with trailing text in the
+        // block.
+        let input = b"*a _b c* jeloasd\n";
+        let tokens = vec![
+            tok("emphasis_delimiter", 0, 0, 1),
+            tok("emphasis_delimiter", 0, 2, 2),
+            tok("emphasis_delimiter", 0, 7, 1),
+        ];
+        assert_eq!(
+            find_outermost_close(&[], &tokens, 0, 16, input),
+            Some(TokenSpan {
+                row: 0,
+                column: 7,
+                size: 1
+            })
+        );
+    }
+
+    #[test]
+    fn outermost_close_strong_with_unclosed_strong() {
+        // **a __b c** — outer **, inner __ unclosed. Closer at col 9 size 2.
+        let input = b"**a __b c**\n";
+        let tokens = vec![
+            tok("strong_emphasis_delimiter", 0, 0, 2),
+            tok("strong_emphasis_delimiter", 0, 3, 3),
+            tok("strong_emphasis_delimiter", 0, 9, 2),
+        ];
+        assert_eq!(
+            find_outermost_close(&[], &tokens, 0, 11, input),
+            Some(TokenSpan {
+                row: 0,
+                column: 9,
+                size: 2
+            })
+        );
+    }
+
+    #[test]
+    fn outermost_close_mixed_emph_strong() {
+        // **a *b c** — outer ** at col 0/8, inner * at col 3 unclosed.
+        let input = b"**a *b c**\n";
+        let tokens = vec![
+            tok("strong_emphasis_delimiter", 0, 0, 2),
+            tok("emphasis_delimiter", 0, 3, 2),
+            tok("strong_emphasis_delimiter", 0, 8, 2),
+        ];
+        assert_eq!(
+            find_outermost_close(&[], &tokens, 0, 10, input),
+            Some(TokenSpan {
+                row: 0,
+                column: 8,
+                size: 2
+            })
+        );
+    }
+
+    #[test]
+    fn outermost_close_truly_unclosed_returns_none() {
+        // *hello — no closing * exists; should return None so caller falls
+        // back to the parser-failure position.
+        let input = b"*hello\n";
+        let tokens = vec![tok("emphasis_delimiter", 0, 0, 1)];
+        assert_eq!(find_outermost_close(&[], &tokens, 0, 6, input), None);
+    }
+
+    #[test]
+    fn outermost_close_same_marker_returns_none() {
+        // *a *b c* — middle * pops the first scope, third * opens a new one
+        // with no closer. Outermost open is emph_star at col 7, no later
+        // matching token exists.
+        let input = b"*a *b c*\n";
+        let tokens = vec![
+            tok("emphasis_delimiter", 0, 0, 1),
+            tok("emphasis_delimiter", 0, 2, 2),
+            tok("emphasis_delimiter", 0, 7, 1),
+        ];
+        assert_eq!(find_outermost_close(&[], &tokens, 0, 8, input), None);
+    }
+
+    #[test]
+    fn outermost_close_no_open_scope_returns_none() {
+        // Plain text — nothing on the scope stack.
+        let input = b"plain text\n";
+        let tokens: Vec<ConsumedToken> = vec![];
+        assert_eq!(find_outermost_close(&[], &tokens, 0, 10, input), None);
+    }
+
+    #[test]
+    fn outermost_close_quote_with_unclosed_inner_quote() {
+        // 'a "b c' — outer ' pairs, inner " unclosed. The closing ' token is
+        // emitted at (col=6, size=2) including the leading whitespace; the
+        // returned span is trimmed to the delimiter alone (col=7, size=1).
+        let input = b"'a \"b c'\n";
+        let tokens = vec![
+            tok("single_quote", 0, 0, 1),
+            tok("double_quote", 0, 2, 2),
+            tok("single_quote", 0, 6, 2),
+        ];
+        assert_eq!(
+            find_outermost_close(&[], &tokens, 0, 8, input),
+            Some(TokenSpan {
+                row: 0,
+                column: 7,
+                size: 1
+            })
+        );
+    }
+
+    #[test]
+    fn outermost_close_trims_trailing_whitespace() {
+        // The parser emits the closing `*` at (col=7, size=2) when followed by
+        // a space (so the token covers `* `). The returned span must trim to
+        // just the `*` (col=7, size=1).
+        let input = b"a *b _c* trailing\n";
+        let tokens = vec![
+            tok("emphasis_delimiter", 0, 1, 2),
+            tok("emphasis_delimiter", 0, 4, 2),
+            tok("emphasis_delimiter", 0, 7, 2),
+        ];
+        assert_eq!(
+            find_outermost_close(&[], &tokens, 0, 17, input),
+            Some(TokenSpan {
+                row: 0,
+                column: 7,
+                size: 1
+            })
+        );
     }
 }
