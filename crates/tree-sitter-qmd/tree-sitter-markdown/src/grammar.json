@@ -96,6 +96,10 @@
           },
           {
             "type": "SYMBOL",
+            "name": "grid_table"
+          },
+          {
+            "type": "SYMBOL",
             "name": "caption"
           },
           {
@@ -3570,6 +3574,10 @@
         {
           "type": "STRING",
           "value": "|"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_pandoc_lt_str"
         }
       ]
     },
@@ -5111,6 +5119,10 @@
     },
     {
       "type": "SYMBOL",
+      "name": "_pandoc_lt_str"
+    },
+    {
+      "type": "SYMBOL",
       "name": "_pipe_table_delimiter"
     },
     {
@@ -5120,6 +5132,10 @@
     {
       "type": "SYMBOL",
       "name": "_triple_star_error"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "grid_table"
     },
     {
       "type": "SYMBOL",

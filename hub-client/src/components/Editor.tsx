@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
-import type { ProjectEntry, FileEntry } from '../types/project';
-import { isBinaryExtension, isTextExtension } from '../types/project';
+import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension, isTextExtension } from '@quarto/preview-renderer/types/project';
 import type { Route } from '../utils/routing';
 import { buildFullUrl, buildShareableUrl } from '../utils/routing';
 import {
@@ -12,9 +12,9 @@ import {
   renameFile,
   exportProjectAsZip,
   type EditorContentChange,
-} from '../services/automergeSync';
-import { vfsAddFile, isWasmReady } from '../services/wasmRenderer';
-import type { Diagnostic } from '../types/diagnostic';
+} from '@quarto/preview-runtime';
+import { vfsAddFile, isWasmReady } from '@quarto/preview-runtime';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
 import { processFileForUpload } from '../services/resourceService';
 import { usePresence } from '../hooks/usePresence';
@@ -55,7 +55,7 @@ interface Props {
   /** Callback to update URL when file changes */
   onNavigateToFile: (filePath: string, options?: { anchor?: string; replace?: boolean }) => void;
   /** Actor ID -> identity mapping from the IndexDocument */
-  identities?: Record<string, import('../services/automergeSync').ActorIdentity>;
+  identities?: Record<string, import('@quarto/preview-runtime').ActorIdentity>;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
 }

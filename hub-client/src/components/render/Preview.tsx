@@ -1,14 +1,15 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../../types/project';
-import type { Diagnostic } from '../../types/diagnostic';
-import { renderToHtml, isWasmReady, setScrollSyncEnabled, type Pass1Failure } from '../../services/wasmRenderer';
-import { getFileContent, getBinaryFileContent } from '../../services/automergeSync';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
+import { renderToHtml, isWasmReady, setScrollSyncEnabled, type Pass1Failure } from '@quarto/preview-runtime';
+import { getFileContent, getBinaryFileContent } from '@quarto/preview-runtime';
 import { useScrollSync } from '../../hooks/useScrollSync';
 import { useSelectionSync } from '../../hooks/useSelectionSync';
-import { PreviewErrorOverlay } from './PreviewErrorOverlay';
-import MorphIframe, { type MorphIframeHandle } from './MorphIframe';
-import { ErrorView } from './PreviewStaticInfoViews';
+import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
+import { usePreference } from '../../hooks/usePreference';
+import MorphIframe, { type MorphIframeHandle } from '@quarto/preview-renderer/iframe/MorphIframe';
+import { ErrorView } from '@quarto/preview-renderer/overlays/PreviewStaticInfoViews';
 
 // Preview pane state machine:
 // START: Initial blank page
@@ -170,6 +171,10 @@ export default function Preview({
   // Preview state machine for error handling
   const [previewState, setPreviewState] = useState<PreviewState>('START');
   const [currentError, setCurrentError] = useState<CurrentError | null>(null);
+  // Persist the error-overlay collapsed state in localStorage. The
+  // overlay itself is package-internal in @quarto/preview-renderer and
+  // takes the value via props (controlled component).
+  const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
   // Track previewState in a ref for use in callbacks
   const previewStateRef = useRef<PreviewState>('START');
   useEffect(() => {
@@ -382,6 +387,8 @@ export default function Preview({
               previewState === 'ERROR_FROM_GOOD' ||
               (previewState === 'GOOD' && currentError !== null)
             }
+            collapsed={errorOverlayCollapsed}
+            onToggleCollapsed={setErrorOverlayCollapsed}
           />
           {/* Hard-failure overlay isn't reachable in this branch —
               ERROR_AT_START gets the full ErrorView above — but if

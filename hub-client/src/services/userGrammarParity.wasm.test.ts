@@ -55,7 +55,7 @@ import { readFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
-import { loadUserGrammar, type UserGrammarHighlighter } from './userGrammarHighlight';
+import { loadUserGrammar, type UserGrammarHighlighter } from '@quarto/preview-runtime/userGrammar/Highlight';
 
 type SpanTriple = [number, number, string];
 

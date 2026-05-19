@@ -65,5 +65,48 @@
 # the SCSS pipeline. A new file `doc_files/bootstrap.bundle.min.js`
 # is also written; we deliberately do not list it here because the
 # baseline only tracks files that previously existed.
-doc.html 2d1ecdc599b9717cc4e57e60185fec6d0bb346d9350b3712950021bcdc51433e
-doc_files/styles.css 21263bc958169528a85545d23c07b2f0d12de92344b026b08546c766e84b759e
+#
+# Re-captured 2026-05-19 (bd-j73yw): doc_files/styles.css hash updated
+# because Phase 1 of bd-1tl09 (code-block decorations) ported the
+# filename-header SCSS from Q1's `_quarto-rules-code-filename.scss`
+# into `_bootstrap-rules.scss` (`.code-with-filename`,
+# `.code-with-filename-file`, `.quarto-dark` overrides). doc.html hash
+# unchanged: the new selectors don't match anything in the
+# single-doc fixture's body (no code block with a `filename`
+# attribute), but they appear in the compiled CSS so the
+# `styles.css` hash shifts.
+#
+# Re-captured 2026-05-19 (bd-j1trh): doc.html hash updated because
+# Phase 2 of bd-1tl09 added ClipboardJsStage, which ships
+# `js:clipboard` (the vendored clipboard.js library) as a
+# Project-scoped artifact whenever `code-copy` isn't explicitly false.
+# The new `<script src="doc_files/clipboard.min.js"></script>` lands
+# in `<head>` next to the existing Bootstrap-bundle script tag. The
+# fixture has no code blocks so the body is unchanged; only the
+# `<head>` script list shifts. doc_files/styles.css hash is
+# unchanged (Commit 2 doesn't touch SCSS — that's Commit 3). A new
+# file `doc_files/clipboard.min.js` is also written; we deliberately
+# do not list it here because the baseline only tracks files that
+# previously existed (same convention as bootstrap.bundle.min.js).
+#
+# Re-captured 2026-05-19 (bd-j1trh, Commit 3): both hashes updated.
+# doc.html shifts because ClipboardJsStage now also ships
+# `js:code-copy-init` (a small init handler), adding a third
+# `<script src="doc_files/code-copy-init.js"></script>` tag in
+# `<head>` after the alphabetic-sort step.
+# doc_files/styles.css shifts because the copy-button SCSS rules
+# were ported from Q1's `_quarto-rules-copy-code.scss` +
+# `_quarto-variables-copy-code.scss` into `_bootstrap-rules.scss`
+# (`$code-copy-selector`, `$btn-code-copy-color`, `.code-copy-button`,
+# the SVG-icon background-image rules, hover and checked states),
+# plus the `div.code-copy-outer-scaffold { position: relative }`
+# rule from Q1's `_quarto-rules.scss:285` that makes the absolutely-
+# positioned button anchor to the scaffold instead of the viewport
+# (caught during browser e2e). The new selectors don't match
+# anything in the single-doc fixture's body (no code blocks), but
+# they appear in the compiled CSS so the hash shifts. A new file
+# `doc_files/code-copy-init.js` is also written; not listed here
+# per the same convention as `bootstrap.bundle.min.js` /
+# `clipboard.min.js`.
+doc.html bbbe3e0498a2fc555f13ab2b8b0ed60aa890523b0c09d456ad1bb5ce2832ce7c
+doc_files/styles.css cffeac275ea4dd0d0a9c5cc8fde678b033f2e2fdcce835455102d46e439df062

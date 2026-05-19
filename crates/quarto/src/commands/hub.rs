@@ -133,8 +133,14 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         sync_interval_secs,
         watch_enabled: !args.no_watch,
         watch_debounce_ms: args.watch_debounce,
+        watch_filter: Default::default(),
+        single_file: None,
         auth_config,
         allow_insecure_auth: args.allow_insecure_auth,
+        // `quarto hub` keeps the sync.automerge.org-style `/` ws path
+        // for upstream compatibility. `quarto preview` will set this
+        // false so its SPA can own `/`.
+        register_root_ws: true,
     };
 
     server::run_server(storage, config).await?;

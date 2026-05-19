@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from './ThemeContext';
-import type { ProjectEntry } from '../types/project';
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
 import type { ProjectSetStatus } from '../hooks/useProjectSet';
 import type { UserSettings } from '../services/storage/types';
@@ -11,7 +11,7 @@ import {
   createProject as wasmCreateProject,
   type ProjectChoice,
   type ProjectFile,
-} from '../services/wasmRenderer';
+} from '@quarto/preview-runtime';
 import { DEFAULT_SYNC_SERVER, buildProjectSetLinkUrl } from '../utils/routing';
 import ShareDialog from './ShareDialog';
 import './ProjectSelector.css';

@@ -15,10 +15,12 @@
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
 
 mod build_all;
+mod build_q2_preview_spa;
 mod build_trace_viewer;
 mod create_worktree;
 mod dev_setup;
 mod lint;
+mod switch_task;
 mod test;
 mod treesitter_crlf;
 mod util;
@@ -69,6 +71,35 @@ enum Command {
     CreateWorktree {
         #[command(flatten)]
         args: create_worktree::Args,
+    },
+
+    /// Switch the current worktree to a new sub-task branch (no new worktree).
+    ///
+    /// For *sequential* sub-task work in an epic: reuses the worktree's
+    /// warm node_modules/ + target/ caches instead of paying the
+    /// fresh-clone cost. Companion to `create-worktree`, which is the
+    /// right answer for *parallel* / *investigation* work.
+    ///
+    /// With `--from <branch>`, switches to that branch and fast-forward-
+    /// pulls before creating the topic branch. Without `--from`,
+    /// branches off the current HEAD. Updates CLAUDE.local.md and marks
+    /// the beads issue `in_progress`.
+    SwitchTask {
+        /// Beads issue ID to switch to (e.g. `bd-yxqt`).
+        beads_id: String,
+
+        /// Integration / epic branch to switch+pull before branching.
+        /// Omit to branch off the current HEAD.
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Optional slug override (kebab-case).
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Don't mark the issue `in_progress` in beads.
+        #[arg(long)]
+        no_claim: bool,
     },
 
     /// Run workspace tests with platform-appropriate crate exclusions.
@@ -132,6 +163,14 @@ enum Command {
         #[arg(long)]
         skip_treesitter_crlf_tests: bool,
 
+        /// Skip the shared preview-renderer + preview-runtime tests.
+        #[arg(long)]
+        skip_shared_package_tests: bool,
+
+        /// Skip the q2-preview-spa placeholder build.
+        #[arg(long)]
+        skip_q2_preview_spa_build: bool,
+
         /// Include hub-client e2e tests (slower, requires browser).
         #[arg(long)]
         e2e: bool,
@@ -148,6 +187,13 @@ enum Command {
     /// build -p quarto-trace-server` (via `include_dir!`).
     BuildTraceViewer {},
 
+    /// Build just the q2-preview SPA.
+    ///
+    /// Faster than `build-all` when only the SPA source has changed. The
+    /// resulting `q2-preview-spa/dist/` is picked up on the next `cargo
+    /// build -p quarto-preview` (via `include_dir!`).
+    BuildQ2PreviewSpa {},
+
     /// Fresh-clone build orchestration.
     ///
     /// Runs the full build sequence in dependency order, serving as the source
@@ -156,7 +202,8 @@ enum Command {
     /// 1. npm install at the repo root (npm workspaces)
     /// 2. hub-client build (includes WASM)
     /// 3. trace-viewer build (if present; Phase 4.3+)
-    /// 4. cargo build --workspace
+    /// 4. q2-preview-spa build (if present; q2-preview Phase A.4)
+    /// 5. cargo build --workspace
     BuildAll {
         /// Skip `npm install`.
         #[arg(long)]
@@ -169,6 +216,10 @@ enum Command {
         /// Skip the trace-viewer build.
         #[arg(long)]
         skip_trace_viewer_build: bool,
+
+        /// Skip the q2-preview-spa build.
+        #[arg(long)]
+        skip_q2_preview_spa_build: bool,
 
         /// Skip the Rust workspace build.
         #[arg(long)]
@@ -190,6 +241,17 @@ fn main() -> Result<()> {
             lint::run(&config)
         }
         Command::CreateWorktree { args } => create_worktree::run(args),
+        Command::SwitchTask {
+            beads_id,
+            from,
+            slug,
+            no_claim,
+        } => switch_task::run(switch_task::Args {
+            beads_id,
+            from,
+            slug,
+            no_claim,
+        }),
         Command::Test {
             deny_warnings,
             args,
@@ -210,6 +272,8 @@ fn main() -> Result<()> {
             skip_trace_viewer_tests,
             skip_treesitter_tests,
             skip_treesitter_crlf_tests,
+            skip_shared_package_tests,
+            skip_q2_preview_spa_build,
             e2e,
             no_deny_warnings,
         } => {
@@ -222,16 +286,20 @@ fn main() -> Result<()> {
                 skip_trace_viewer_tests,
                 skip_treesitter_tests,
                 skip_treesitter_crlf_tests,
+                skip_shared_package_tests,
+                skip_q2_preview_spa_build,
                 include_e2e: e2e,
                 no_deny_warnings,
             };
             verify::run(&config)
         }
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
+        Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
         Command::BuildAll {
             skip_npm_install,
             skip_hub_build,
             skip_trace_viewer_build,
+            skip_q2_preview_spa_build,
             skip_rust_build,
             release,
         } => {
@@ -239,6 +307,7 @@ fn main() -> Result<()> {
                 skip_npm_install,
                 skip_hub_build,
                 skip_trace_viewer_build,
+                skip_q2_preview_spa_build,
                 skip_rust_build,
                 release,
             };

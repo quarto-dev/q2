@@ -18,8 +18,10 @@ import type {
   BinaryDocumentContent,
   FileEntry,
   ActorIdentity,
+  CaptureRef,
 } from '@quarto/quarto-automerge-schema';
 import {
+  CURRENT_SCHEMA_VERSION,
   isTextDocument,
   isBinaryDocument,
   getDocumentType,
@@ -128,8 +130,16 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     return doc.identities ? { ...doc.identities } : {};
   }
 
+  // Helper: get captures sidecar from index document (V2+; absent on V1)
+  function getCapturesFromIndex(doc: IndexDocument): Record<string, CaptureRef> {
+    return doc.captures ? { ...doc.captures } : {};
+  }
+
   // Track last-seen identities for diffing
   let lastIdentities: Record<string, ActorIdentity> = {};
+
+  // Track last-seen captures for diffing
+  let lastCaptures: Record<string, CaptureRef> = {};
 
   // Helper: fire onIdentitiesChange if identities differ from last seen
   function notifyIdentitiesIfChanged(doc: IndexDocument): void {
@@ -137,6 +147,15 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     if (JSON.stringify(current) !== JSON.stringify(lastIdentities)) {
       lastIdentities = current;
       callbacks.onIdentitiesChange?.(current);
+    }
+  }
+
+  // Helper: fire onCapturesChange if the sidecar differs from last seen
+  function notifyCapturesIfChanged(doc: IndexDocument): void {
+    const current = getCapturesFromIndex(doc);
+    if (JSON.stringify(current) !== JSON.stringify(lastCaptures)) {
+      lastCaptures = current;
+      callbacks.onCapturesChange?.(current);
     }
   }
 
@@ -327,8 +346,17 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    *
    * Supports offline mode: if the peer connection fails or times out,
    * the function will continue and load documents from local IndexedDB.
+   *
+   * `peerTimeoutMs` controls how long to wait for the samod handshake's
+   * `peer` event before falling through to offline mode. The default of
+   * 1 ms preserves hub-client's "probe-then-use-cached-IndexedDB"
+   * behavior. Callers without an IndexedDB cache (e.g. the q2-preview
+   * SPA, which runs against ephemeral hubs) should pass a longer
+   * value so `findDoc()` runs after at least one peer is known —
+   * otherwise automerge-repo's synchronizer marks the doc unavailable
+   * because `#peers` is empty when `handle.request()` fires.
    */
-  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string): Promise<FileEntry[]> {
+  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMs: number = 1): Promise<FileEntry[]> {
     // Disconnect from any existing connection
     await disconnect();
 
@@ -344,7 +372,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       let isOnline = false;
       try {
         console.log('Waiting for peer connection...');
-        await waitForPeer(state.repo, 1); // Quick check - auto-reconnects in background
+        await waitForPeer(state.repo, peerTimeoutMs);
         console.log('Peer connected - online mode');
         isOnline = true;
       } catch (peerError) {
@@ -381,6 +409,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       lastIdentities = getIdentitiesFromIndex(currentDoc);
       callbacks.onIdentitiesChange?.(lastIdentities);
 
+      // Fire initial captures (may be empty on V1 docs or freshly-created projects)
+      lastCaptures = getCapturesFromIndex(currentDoc);
+      callbacks.onCapturesChange?.(lastCaptures);
+
       // Subscribe to index changes
       const indexChangeHandler = () => {
         const changedDoc = indexHandle.doc();
@@ -389,6 +421,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           syncWithFiles(newFiles);
           callbacks.onFilesChange?.(newFiles);
           notifyIdentitiesIfChanged(changedDoc);
+          notifyCapturesIfChanged(changedDoc);
         }
       };
       indexHandle.on('change', indexChangeHandler);
@@ -457,6 +490,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     state.indexHandle = null;
     state.actorId = null;
     lastIdentities = {};
+    lastCaptures = {};
 
     callbacks.onConnectionChange?.(false);
   }
@@ -492,6 +526,46 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     const doc = handle.doc();
     if (!doc || !isBinaryDocument(doc)) return null;
     return { content: doc.content, mimeType: doc.mimeType };
+  }
+
+  /**
+   * Fetch a binary document by its samod document ID, regardless of
+   * whether it's tracked in the project's `files` index.
+   *
+   * Phase C.4 (bd-kw93.3) uses this to resolve capture binary docs
+   * referenced from the IndexDocument's V2 capture sidecar: those
+   * docs aren't files (no path), so the path-keyed APIs above don't
+   * see them. Returns `null` if the document doesn't exist or isn't a
+   * binary document.
+   */
+  async function getBinaryDocById(
+    docId: string,
+  ): Promise<{ content: Uint8Array; mimeType: string } | null> {
+    if (!state.repo) return null;
+    // bd-4uvv: samod's TS `repo.find()` requires the `automerge:<id>`
+    // URL scheme; the bare docId we get from the IndexDocument capture
+    // sidecar throws `Invalid AutomergeUrl`. The text-doc loader
+    // (`loadFileDocuments`) normalizes the same way — keep both call
+    // sites consistent.
+    //
+    // `String(docId)` coerces the value before `.startsWith` because
+    // automerge's read proxy can return string-valued fields as
+    // `RawString` (no `.startsWith` method) depending on how the doc
+    // was constructed. `loadFileDocuments` reads from the same shape;
+    // bare-id callers that synthesize an `automerge:` URL must
+    // coerce first.
+    const docIdStr = String(docId);
+    const normalized = docIdStr.startsWith('automerge:')
+      ? docIdStr
+      : `automerge:${docIdStr}`;
+    try {
+      const handle = await findDoc<BinaryDocumentContent>(normalized as DocumentId);
+      const doc = handle.doc();
+      if (!doc || !isBinaryDocument(doc)) return null;
+      return { content: doc.content, mimeType: doc.mimeType };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -752,7 +826,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // pre-generated ID so the first change uses the correct actor.
       console.log(`[createNewProject] Creating index document with ID ${indexDocId}`);
       const indexHandle = createDoc<IndexDocument>(
-        { files: {}, version: 1, identities: {} },
+        { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {} },
         indexDocId,
       );
       state.indexHandle = indexHandle;
@@ -768,6 +842,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // Fire initial identities
       lastIdentities = getIdentitiesFromIndex(indexHandle.doc()!);
       callbacks.onIdentitiesChange?.(lastIdentities);
+
+      // Fire initial captures (always empty for a fresh project)
+      lastCaptures = getCapturesFromIndex(indexHandle.doc()!);
+      callbacks.onCapturesChange?.(lastCaptures);
 
       // Phase 3: Create file documents (now using the correct actor).
       const createdFiles: FileEntry[] = [];
@@ -907,6 +985,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     isFileBinary,
     getFileContent,
     getBinaryFileContent,
+    getBinaryDocById,
     updateFileContent,
     applyEditorOperations,
     updateFileAst,

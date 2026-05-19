@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import type * as Monaco from 'monaco-editor';
-import type { FileEntry } from '../../types/project';
-import { isQmdFile } from '../../types/project';
-import type { Diagnostic } from '../../types/diagnostic';
-import type { ActorIdentity } from '../../services/automergeSync';
-import { parseQmdToAst, isWasmReady, initWasm } from '../../services/wasmRenderer';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import { isQmdFile } from '@quarto/preview-renderer/types/project';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
+import type { ActorIdentity } from '@quarto/preview-runtime';
+import { parseQmdToAst, isWasmReady, initWasm } from '@quarto/preview-runtime';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
-import { FallbackView, NonQmdPlaceholderView } from './PreviewStaticInfoViews';
+import { FallbackView, NonQmdPlaceholderView } from '@quarto/preview-renderer/overlays/PreviewStaticInfoViews';
 import { getQ2Format } from './getQ2Format';
 
 interface PreviewRouterProps {

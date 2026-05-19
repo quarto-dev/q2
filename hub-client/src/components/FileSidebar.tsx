@@ -9,8 +9,8 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { FileEntry } from '../types/project';
-import { isBinaryExtension } from '../types/project';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension } from '@quarto/preview-renderer/types/project';
 import {
   buildFileTree,
   computeExpandedFolders,

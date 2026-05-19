@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { renderContentToHtml, isWasmReady } from '../../services/wasmRenderer';
+import { renderContentToHtml, isWasmReady } from '@quarto/preview-runtime';
 import changelogMd from '../../../changelog.md?raw';
 import moreInfoMd from '../../../resources/more-info.md?raw';
 import './AboutTab.css';

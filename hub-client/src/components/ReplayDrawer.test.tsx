@@ -9,9 +9,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import ReplayDrawer from './ReplayDrawer';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
-// Mock getActorId from automergeSync
+// Mock getActorId from automergeSync (now in @quarto/preview-runtime)
 let mockActorId: string | null = null;
-vi.mock('../services/automergeSync', () => ({
+vi.mock('@quarto/preview-runtime', () => ({
   getActorId: () => mockActorId,
 }));
 

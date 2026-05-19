@@ -34,8 +34,8 @@ import type {
   AttributionRun,
   RunListAttribution,
 } from '../services/attribution-runs';
-import { getFileHandle } from '../services/automergeSync';
-import type { ActorIdentity } from '../services/automergeSync';
+import { getFileHandle } from '@quarto/preview-runtime';
+import type { ActorIdentity } from '@quarto/preview-runtime';
 import { actorColor, fnv1aHex8 } from '../utils/palette';
 
 interface TransportRun {

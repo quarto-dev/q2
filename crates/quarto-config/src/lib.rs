@@ -43,6 +43,7 @@ mod materialize;
 mod merged;
 mod tag;
 mod types;
+mod website;
 
 pub use types::{
     ConfigError, ConfigMapEntry, ConfigValue, ConfigValueKind, Interpretation,
@@ -60,6 +61,8 @@ pub use merged::{
 pub use materialize::{MaterializeOptions, merge_with_diagnostics};
 
 pub use format::resolve_format_config;
+
+pub use website::resolve_website_value;
 
 // Re-export for convenience
 pub use quarto_source_map::SourceInfo;

@@ -122,6 +122,7 @@ module.exports = grammar({
             $.pandoc_div,
             $.pandoc_horizontal_rule,
             $.pipe_table,
+            $.grid_table,
             $.caption,
 
             prec(-1, alias($.minus_metadata, $.metadata)),
@@ -671,8 +672,11 @@ module.exports = grammar({
             alias($._strong_emphasis_close_underscore, $.strong_emphasis_delimiter),
         )),
 
-        // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|'),
+        // Things that are parsed directly as a pandoc str. `$._pandoc_lt_str`
+        // (bd-j9cf) is emitted by the external scanner when a bare '<' has no
+        // HTML construct interpretation; it becomes part of a pandoc_str node
+        // so downstream consumers see it as a normal Str.
+        pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|', $._pandoc_lt_str),
 
         // CONTAINER BLOCKS
 
@@ -1045,6 +1049,14 @@ module.exports = grammar({
 
         $.html_element, // best-effort lexing of HTML elements simply for error reporting.
 
+        // bd-j9cf: a single '<' character that is not the start of an HTML
+        // construct (element, autolink, comment, raw-specifier). Emitted by
+        // parse_open_angle_brace in scanner.c when the scan loop reaches EOF
+        // without finding a closing delimiter, or when '<' is followed by '!'
+        // in a context where HTML_COMMENT is not requested. Consumed as a
+        // choice inside `pandoc_str` so the AST shape stays uniform.
+        $._pandoc_lt_str,
+
         $._pipe_table_delimiter, // so we can distinguish between pipe table | and pandoc_str |
 
         $._pandoc_line_break, // we need to do this in the external lexer to avoid eating the actual newline.
@@ -1057,6 +1069,14 @@ module.exports = grammar({
         // workaround `**_foo_**`. Emission site: scanner.c, EMIT_TOKEN(TRIPLE_STAR).
         // See CONTRIBUTING.md "Known limitations" for the full list.
         $._triple_star_error,
+
+        // KNOWN LIMITATION: QMD does not support Pandoc-style grid tables.
+        // The scanner emits a single multi-line GRID_TABLE token that spans
+        // the entire grid table (block-quote prefixes stripped) so pampa
+        // can surface a structured diagnostic carrying the captured text.
+        // Emission site: scanner.c, EMIT_TOKEN(GRID_TABLE) via
+        // parse_grid_table_after_first_plus().
+        $.grid_table,
 
         // KNOWN LIMITATION: QMD does not support CommonMark 4-space indented
         // code blocks. The scanner emits this token when leftover indentation

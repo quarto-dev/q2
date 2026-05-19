@@ -2,6 +2,8 @@
 
 ## Quarto-Hub Changelog
 
+Do not include refactors in this list. It's meant as a summary of user-facing changes.
+
 Changelog entry format:
 
 ### YYYY-MM-DD
@@ -17,7 +19,6 @@ be in reverse chronological order (latest first).
 
 - [`e9399093`](https://github.com/quarto-dev/q2/commits/e9399093): Authorship pill in the replay bar now animates with a rotating rainbow border while attribution data is being generated, so large documents give visible feedback that work is happening before the colours appear in the preview.
 - [`52281655`](https://github.com/quarto-dev/q2/commits/52281655): Authorship toggle moved from Settings → Preview to a pill in the replay bar (flush-right, visible in both collapsed and expanded states), and is no longer persisted — it resets on reload. Activation drops from three clicks to one; semantic grouping matches the rest of the per-actor UI in the replay drawer.
-- [`64404459`](https://github.com/quarto-dev/q2/commits/64404459): Internal refactor — Authorship-wrap colouring now flows via a per-actor CSS rule and the cascade rather than an inline `style="color: …"` on every wrap. The wrap publishes `data-attr-actor` so themes and user stylesheets can override an author's colour with a single rule. No user-visible change to rendered output.
 - [`70016298`](https://github.com/quarto-dev/q2/commits/70016298): `--attribution=git` HTML renders now derive author colours from Paul Tol's "Muted" 10-colour qualitative palette (colour-blind safe across red-green and blue-yellow deficiencies, perceptually uniform brightness on white) instead of an unconstrained HSL hue. CLI HTML output only — hub-client previews continue to colour authors from Automerge profile metadata.
 
 ### 2026-05-14
@@ -26,8 +27,6 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-13
 
-- [`26862035`](https://github.com/quarto-dev/q2/commits/26862035): Internal refactor — `actorColor` / `fnv1aHex8` moved from `hooks/useReplayMode.ts` to `utils/palette.ts` so the replay drawer and the Authorship producer import from a single non-React module. No user-visible change.
-- [`b6b03dde`](https://github.com/quarto-dev/q2/commits/b6b03dde): Internal refactor — Authorship-wrap and hover-badge wiring now share a single `<AttributionWrap>` component and `useAttributionHover()` hook in `framework/`, replacing six near-identical dispatcher blocks and two duplicated state machines. No user-visible change.
 - [`38273485`](https://github.com/quarto-dev/q2/commits/38273485): Authorship colouring and the hover badge now appear on q2-preview documents, matching q2-debug. The shared badge/stylesheet moved to `framework/`; q2-preview's dispatchers wrap nodes on hit and `PreviewDocument` mounts the hover handlers.
 - [`5194cc59`](https://github.com/quarto-dev/q2/commits/5194cc59): Thread the Authorship payload through the q2-preview WASM entry point so attribution data reaches the AST iframe. Off-path the call is byte-identical to before via the new `render_page_in_project_with_attribution` wrapper.
 

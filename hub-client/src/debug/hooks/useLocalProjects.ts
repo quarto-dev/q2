@@ -3,7 +3,7 @@ import {
   listLocalProjects,
   getLocalProjectSetPointer,
 } from '../services/localProjects'
-import type { ProjectEntry } from '../../types/project'
+import type { ProjectEntry } from '@quarto/preview-renderer/types/project'
 import type { ProjectSetPointer } from '../../services/storage/types'
 
 export interface LocalProjectsState {

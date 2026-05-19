@@ -25,7 +25,7 @@ import {
   getLocalPeerId,
   type PresenceState,
 } from '../services/presenceService';
-import { getFileHandle } from '../services/automergeSync';
+import { getFileHandle } from '@quarto/preview-runtime';
 
 /**
  * Options for the usePresence hook.

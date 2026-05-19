@@ -5,7 +5,7 @@
  * Templates are .qmd files with optional template-name metadata for display names.
  */
 
-import { vfsReadFile, vfsListFiles } from './wasmRenderer';
+import { vfsReadFile, vfsListFiles } from '@quarto/preview-runtime';
 
 // Use dynamic import to avoid requiring WASM at module load time
 let prepareTemplateFunc: ((content: string) => string) | null = null;

@@ -1,0 +1,37 @@
+{
+  "name": "q2-preview-spa",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Standalone SPA host for Quarto's q2-preview format. Mirrors hub-client's preview pane by importing from @quarto/preview-renderer.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@quarto/preview-renderer": "*",
+    "@quarto/preview-runtime": "*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "@quarto/quarto-automerge-schema": "*",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^26.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vite-plugin-wasm": "^3.5.0",
+    "vitest": "^4.0.17"
+  }
+}

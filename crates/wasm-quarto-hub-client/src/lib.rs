@@ -675,7 +675,8 @@ fn diagnostic_to_json(diag: &DiagnosticMessage, ctx: &SourceContext) -> JsonDiag
             let kind_str = match detail.kind {
                 quarto_error_reporting::DetailKind::Error => "error",
                 quarto_error_reporting::DetailKind::Info => "info",
-                quarto_error_reporting::DetailKind::Note => "note",
+                quarto_error_reporting::DetailKind::Note
+                | quarto_error_reporting::DetailKind::Faded => "note",
             };
 
             JsonDiagnosticDetail {
@@ -816,6 +817,25 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(path)],
         output_dir: dir,
+    }
+}
+
+/// Map a format string for `q2 preview`'s default-format substitution.
+///
+/// `quarto preview` treats `html` — which is also the default when no
+/// `format:` key is present in the YAML — as a request for the
+/// `q2-preview` pipeline (AST-iframe rendering), so a bare markdown
+/// file with no frontmatter previews live. Explicit non-html formats
+/// (`q2-slides`, `q2-debug`, `acm-html`, …) pass through unchanged.
+///
+/// The substitution lives here rather than in the CLI shim so the
+/// dispatch in `render_*_to_response` sees a stable format string and
+/// doesn't need a parallel preview-mode branch.
+fn map_format_for_preview(format_str: &str) -> &str {
+    if format_str == "html" {
+        "q2-preview"
+    } else {
+        format_str
     }
 }
 
@@ -1138,7 +1158,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
     };
 
-    render_single_doc_to_response(path, &content, &project, user_grammars, None).await
+    render_single_doc_to_response(path, &content, &project, user_grammars, false, None, None).await
 }
 
 /// Render QMD content directly (without reading from VFS).
@@ -1161,7 +1181,16 @@ pub async fn render_qmd_content(
     // surface as `/input.qmd` to the JS layer.
     let path = Path::new("/input.qmd");
     let project = create_wasm_project_context(path);
-    render_single_doc_to_response(path, content.as_bytes(), &project, user_grammars, None).await
+    render_single_doc_to_response(
+        path,
+        content.as_bytes(),
+        &project,
+        user_grammars,
+        false,
+        None,
+        None,
+    )
+    .await
 }
 
 /// Render a single page **in the context of its surrounding project**.
@@ -1265,6 +1294,8 @@ pub async fn render_page_in_project_with_attribution(
             &content,
             &project,
             user_grammars,
+            false,
+            None,
             attribution_json,
         )
         .await;
@@ -1287,14 +1318,138 @@ pub async fn render_page_in_project_with_attribution(
         &content,
         project,
         user_grammars,
+        false,
+        None,
         attribution_json,
     )
     .await
 }
 
+/// Like [`render_page_in_project`], but applies the `q2 preview`
+/// format-default substitution: a document with no explicit
+/// `format:` key (which `detect_format_from_content` reports as
+/// `html`) renders through the q2-preview pipeline and returns
+/// `ast_json`. Explicit non-html formats are honoured as-is.
+///
+/// The `q2 preview` CLI calls this entry point; hub-client keeps
+/// using [`render_page_in_project`] so its existing format dispatch
+/// is unchanged.
+///
+/// Phase C.4 (bd-kw93.3): if `capture_gz_json` is provided — gzipped
+/// JSON bytes of a [`EngineCapture`], the same wire format Phase C.1
+/// writes to the capture binary doc — the WASM constructs an
+/// [`EngineRegistry::with_replay`] from it. `EngineExecutionStage` then
+/// routes calls to [`quarto_core::engine::ReplayEngine`] for the
+/// captured engine name; everything else (markdown, future engines)
+/// stays on the default registry. The SPA reads the capture binary
+/// doc out of the IndexDocument's capture sidecar (V2 schema, C.3)
+/// and threads it through this argument.
+#[wasm_bindgen]
+pub async fn render_page_for_preview(
+    path: &str,
+    user_grammars: Option<JsUserGrammars>,
+    capture_gz_json: Option<Vec<u8>>,
+) -> String {
+    let runtime = get_runtime();
+    let path_buf = std::path::PathBuf::from(path);
+    let path = path_buf.as_path();
+
+    let content = match runtime.file_read(path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return error_response(format!("Failed to read file: {}", e));
+        }
+    };
+
+    // bd-lucp: deserialize the gzipped JSON capture into an
+    // `EngineCapture`. Both render branches (single-doc + project)
+    // thread this into the q2-preview pipeline's
+    // `CaptureSpliceStage` rather than constructing a
+    // `ReplayEngine`-bearing registry; `ReplayEngine` remains the
+    // bd-45yw regression-testing tool and is not on this path.
+    let capture = match parse_capture_from(capture_gz_json) {
+        Ok(cap) => cap,
+        Err(e) => {
+            return error_response(format!("Failed to parse capture: {}", e));
+        }
+    };
+
+    let project = match ProjectContext::discover(path, runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            return error_response(format!("Failed to discover project context: {}", e));
+        }
+    };
+
+    if project.is_single_file {
+        return render_single_doc_to_response(
+            path,
+            &content,
+            &project,
+            user_grammars,
+            true,
+            capture,
+            None,
+        )
+        .await;
+    }
+
+    let project = match ProjectContext::discover(&project.dir, runtime) {
+        Ok(p) => p,
+        Err(e) => {
+            return error_response(format!("Failed to enumerate project files: {}", e));
+        }
+    };
+    render_project_active_page_to_response(
+        &path_buf,
+        &content,
+        project,
+        user_grammars,
+        true,
+        capture,
+        None,
+    )
+    .await
+}
+
+/// Ungzip + JSON-deserialize a capture payload into a typed
+/// [`EngineCapture`](quarto_trace::EngineCapture). `None` input →
+/// `None` output; an empty `Vec` is treated the same as `None` for
+/// symmetry with WASM/JS callers that may pass an empty `Uint8Array`
+/// to mean "no capture."
+///
+/// bd-lucp: this used to construct an
+/// `EngineRegistry::with_replay(capture)`, but the preview path no
+/// longer routes through `ReplayEngine` — see
+/// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
+fn parse_capture_from(
+    capture_gz_json: Option<Vec<u8>>,
+) -> Result<Option<quarto_trace::EngineCapture>, String> {
+    use std::io::Read;
+
+    let Some(bytes) = capture_gz_json else {
+        return Ok(None);
+    };
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    let mut decoder = flate2::read::GzDecoder::new(&bytes[..]);
+    let mut json = Vec::new();
+    decoder
+        .read_to_end(&mut json)
+        .map_err(|e| format!("ungzip failed: {}", e))?;
+    let capture: quarto_trace::EngineCapture =
+        serde_json::from_slice(&json).map_err(|e| format!("JSON parse failed: {}", e))?;
+    Ok(Some(capture))
+}
+
 /// Single-doc render path — used by `render_qmd` directly and by
 /// `render_page_in_project` when no `_quarto.yml` ancestor exists.
 ///
+/// `prefer_preview_format` is `true` only when the call originates
+/// from `render_page_for_preview`; in that mode `html` (including the
+/// no-frontmatter default) maps to `q2-preview`.
 /// `attribution_json`, when `Some`, is a serialized
 /// [`quarto_core::attribution::types::TransportAttributionData`]
 /// shipped by the hub-client. Installed on `ctx.attribution_provider`
@@ -1310,13 +1465,25 @@ async fn render_single_doc_to_response(
     content: &[u8],
     project: &ProjectContext,
     user_grammars: Option<JsUserGrammars>,
+    prefer_preview_format: bool,
+    // bd-lucp: recorded engine capture for the preview-time AST-splice
+    // path. Forwarded to `render_qmd_to_preview_ast` (which threads it
+    // into `CaptureSpliceStage`) on the preview branch. The HTML
+    // branch ignores it (HTML renders don't consume captures in the
+    // WASM today — `q2 render` natively runs engines instead).
+    capture: Option<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
     let content_str = std::str::from_utf8(content).unwrap_or("");
-    let format_str = detect_format_from_content(content_str);
+    let detected = detect_format_from_content(content_str);
+    let format_str = if prefer_preview_format {
+        map_format_for_preview(&detected).to_string()
+    } else {
+        detected
+    };
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,
         Err(e) => return error_response(e),
@@ -1357,7 +1524,16 @@ async fn render_single_doc_to_response(
     // on the unused payload field).
     let (html, ast_json, diagnostics, source_context) = match format.pipeline_kind {
         Some("preview") => {
-            match render_qmd_to_preview_ast(content, &source_name, &mut ctx, runtime_arc).await {
+            match render_qmd_to_preview_ast(
+                content,
+                &source_name,
+                &mut ctx,
+                runtime_arc,
+                None,
+                capture,
+            )
+            .await
+            {
                 Ok(out) => (
                     None,
                     Some(out.ast_json),
@@ -1454,6 +1630,13 @@ async fn render_project_active_page_to_response(
     _content: &[u8],
     mut project: ProjectContext,
     user_grammars: Option<JsUserGrammars>,
+    prefer_preview_format: bool,
+    // bd-lucp: recorded engine capture attached to the q2-preview
+    // pass-2 renderer. `RenderToPreviewAstRenderer::with_capture`
+    // threads it into every per-doc `render_qmd_to_preview_ast` call;
+    // [`CaptureSpliceStage`] inside the q2-preview pipeline applies the
+    // splice. The non-preview branch ignores it.
+    capture: Option<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
@@ -1469,7 +1652,12 @@ async fn render_project_active_page_to_response(
         Err(e) => return error_response(format!("Failed to read active file: {}", e)),
     };
     let content_str = std::str::from_utf8(&active_bytes).unwrap_or("");
-    let format_str = detect_format_from_content(content_str);
+    let detected = detect_format_from_content(content_str);
+    let format_str = if prefer_preview_format {
+        map_format_for_preview(&detected).to_string()
+    } else {
+        detected
+    };
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,
         Err(e) => return error_response(e),
@@ -1506,6 +1694,13 @@ async fn render_project_active_page_to_response(
     let summary = match kind {
         Some("preview") => {
             let mut renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
+            // bd-lucp: when a capture is present, attach it to the
+            // renderer so `CaptureSpliceStage` (inserted by
+            // `build_q2_preview_pipeline_stages`) can splice recorded
+            // engine output blocks into each per-doc AST.
+            if let Some(cap) = capture {
+                renderer = renderer.with_capture(cap);
+            }
             if let Some(json) = attribution_json {
                 renderer = renderer.with_attribution(json);
             }

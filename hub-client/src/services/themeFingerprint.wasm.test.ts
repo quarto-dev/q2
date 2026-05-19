@@ -19,7 +19,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { setVfsCallbacks } from '../wasm-js-bridge/sass.js';
+import { setVfsCallbacks } from '/src/wasm-js-bridge/sass.js';
 
 interface WasmModule {
     default: (input?: BufferSource) => Promise<void>;

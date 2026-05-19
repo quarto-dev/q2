@@ -916,6 +916,10 @@
           "named": true
         },
         {
+          "type": "grid_table",
+          "named": true
+        },
+        {
           "type": "inline_ref_def",
           "named": true
         },
@@ -1037,6 +1041,10 @@
           "named": true
         },
         {
+          "type": "grid_table",
+          "named": true
+        },
+        {
           "type": "inline_ref_def",
           "named": true
         },
@@ -1101,6 +1109,10 @@
         },
         {
           "type": "caption",
+          "named": true
+        },
+        {
+          "type": "grid_table",
           "named": true
         },
         {
@@ -1227,6 +1239,10 @@
         },
         {
           "type": "caption",
+          "named": true
+        },
+        {
+          "type": "grid_table",
           "named": true
         },
         {
@@ -2508,6 +2524,10 @@
           "named": true
         },
         {
+          "type": "grid_table",
+          "named": true
+        },
+        {
           "type": "inline_ref_def",
           "named": true
         },
@@ -2836,6 +2856,10 @@
   },
   {
     "type": "fenced_div_note_id",
+    "named": true
+  },
+  {
+    "type": "grid_table",
     "named": true
   },
   {

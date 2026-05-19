@@ -1,19 +1,13 @@
 /**
- * Test utilities for hub-client
+ * Test utilities for hub-client.
  *
- * This module provides shared test utilities, mocks, and helpers
- * for both unit and integration tests.
+ * The `mockSyncClient` and `mockWasm` helpers moved with the services
+ * they exercise in bd-hfjj Phase 5; consume them from
+ * `@quarto/preview-runtime/test-utils/mockSyncClient` /
+ * `@quarto/preview-runtime/test-utils/mockWasm` instead. This file
+ * keeps only the hub-client-specific helpers.
  */
 
-// Re-export testing library utilities for convenience
 export { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-// Export mock utilities
-export { createMockSyncClient } from './mockSyncClient';
-export type { MockSyncClient, MockSyncClientOptions } from './mockSyncClient';
-
-export { createMockWasmRenderer } from './mockWasm';
-export type { MockWasmRenderer, MockWasmOptions, VfsResponse, RenderResult } from './mockWasm';
-
-// Export test fixtures (will be added as needed)
-// export * from './testFixtures';
+export { setVisibility, resetVisibility, fireWindowFocus } from './visibility';

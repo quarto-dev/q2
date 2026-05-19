@@ -1,0 +1,31 @@
+# Nextest configuration.
+#
+# Why this file exists (2026-05-14, bd-u3ze): on macOS, running multiple
+# `cargo nextest` processes that each construct a `notify-rs` FSEvents
+# watcher under default I/O capture causes filesystem events to silently
+# fail to reach our `on_file_changed` callback. The symptom is the
+# staleness test timing out at 15 s waiting for a write event that
+# never propagates, while standalone runs and `--no-capture` runs both
+# pass in ~1.1 s. The root cause appears to live in the interaction
+# between notify-rs's CFRunLoop-based FSEvents backend and nextest's
+# per-process stdout/stderr pipe setup; we couldn't fix it from the
+# Rust side.
+#
+# Workaround: serialize the quarto-preview integration tests that boot
+# the full server (and therefore arm a real FSEvents watcher). Each
+# still runs in its own process; nextest just ensures only one of them
+# is in flight at a time. Adds ~3-4 seconds to the workspace test suite
+# at most, in exchange for deterministic results.
+#
+# If you're adding a new integration test under `crates/quarto-preview/
+# tests/` that calls `run_with_on_ready` or otherwise instantiates the
+# file watcher, add its binary name to the override filter below.
+
+[test-groups]
+# Quarto-preview integration tests that arm a `notify-rs` FSEvents
+# watcher. Limited to one in-flight process at a time.
+quarto-preview-fs-watcher = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "binary(staleness) | binary(eager_capture) | binary(boot)"
+test-group = "quarto-preview-fs-watcher"

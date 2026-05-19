@@ -9,8 +9,8 @@
 
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { RefObject } from 'react';
-import { postProcessIframe } from '../utils/iframePostProcessor';
-import type { PostProcessOptions } from '../utils/iframePostProcessor';
+import { postProcessIframe } from '@quarto/preview-renderer/utils/iframePostProcessor';
+import type { PostProcessOptions } from '@quarto/preview-renderer/utils/iframePostProcessor';
 
 /**
  * Hook for post-processing iframe content after render.

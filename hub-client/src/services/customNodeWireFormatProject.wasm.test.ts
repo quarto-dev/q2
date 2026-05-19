@@ -19,7 +19,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { initWasm, vfsAddFile, vfsClear } from './wasmRenderer';
+import { initWasm, vfsAddFile, vfsClear } from '@quarto/preview-runtime';
 
 interface RenderResponse {
     success: boolean;

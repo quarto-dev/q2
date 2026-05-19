@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import FileSidebar from './FileSidebar';
-import type { FileEntry } from '../types/project';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
 
 function file(path: string): FileEntry {
   return { path, docId: 'doc-' + path };

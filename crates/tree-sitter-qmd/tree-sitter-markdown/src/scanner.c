@@ -121,6 +121,13 @@ typedef enum {
 
     HTML_ELEMENT, // simply for good error reporting
 
+    // bd-j9cf: emitted when '<' is at the current position but no HTML
+    // construct (autolink, raw_specifier, html_comment, html_element) is
+    // recognized at this site. Consumes only the '<' character so the
+    // parser can treat it as a plain Str literal. See grammar.js
+    // (`_pandoc_lt_str`) and parse_open_angle_brace below.
+    LT_STR_LITERAL,
+
     PIPE_TABLE_DELIMITER, // to allow naked '|' in markdown
 
     PANDOC_LINE_BREAK,
@@ -130,6 +137,13 @@ typedef enum {
     // so the parser raises Q-2-32 with the `**_foo_**` workaround.
     // See grammar.js (`_triple_star_error`) and CONTRIBUTING.md.
     TRIPLE_STAR,
+
+    // KNOWN LIMITATION: QMD does not support Pandoc-style grid tables.
+    // The scanner detects them opaquely (border line `+----+` followed by
+    // one or more `+`/`|` body lines) and emits a single multi-line
+    // GRID_TABLE token so pampa can surface a structured diagnostic
+    // including the captured table text. See grammar.js (`grid_table`).
+    GRID_TABLE,
 
     // KNOWN LIMITATION: QMD does not support 4-space indented code blocks.
     // Emitted when leftover line-leading indentation is >= 4 at a block-start
@@ -240,11 +254,16 @@ static char* token_names[] = {
 
     "HTML_ELEMENT", // simply for good error reporting
 
+    "LT_STR_LITERAL", // bd-j9cf: bare '<' that is not an HTML construct
+
     "PIPE_TABLE_DELIMITER",
 
     "PANDOC_LINE_BREAK",
 
     "TRIPLE_STAR", // simply for good error reporting
+
+    "GRID_TABLE", // simply for good error reporting
+
     "INDENTED_CODE_BLOCK_DISALLOWED", // simply for good error reporting
     "CAPTION_START",
 };
@@ -913,11 +932,134 @@ static bool parse_atx_heading(Scanner *s, TSLexer *lexer,
     return false;
 }
 
-static bool parse_plus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
-    if (s->indentation <= 3 &&
-        (valid_symbols[LIST_MARKER_PLUS] ||
-         valid_symbols[LIST_MARKER_PLUS_DONT_INTERRUPT])) {
+// parse_grid_table_after_first_plus consumes the rest of a Pandoc-style
+// grid table after the leading '+' has already been advanced. It greedily
+// consumes border lines (`+----+`) and body lines (`| ... |`) across
+// nested block-quote prefixes. On success it emits a single multi-line
+// GRID_TABLE token spanning from the original '+' through the last
+// matching body line. On failure it returns false (lexer state is
+// abandoned, tree-sitter handles rewinding when scan() returns false).
+//
+// QMD does not actually support grid tables; the GRID_TABLE node exists
+// purely so pampa can capture its full text and emit a structured
+// diagnostic naming the construct.
+static bool parse_grid_table_after_first_plus(Scanner *s, TSLexer *lexer) {
+    bool saw_dash_or_eq = false;
+    while (lexer->lookahead == '-' || lexer->lookahead == '=' ||
+           lexer->lookahead == '+') {
+        if (lexer->lookahead == '-' || lexer->lookahead == '=') {
+            saw_dash_or_eq = true;
+        }
         advance(s, lexer);
+    }
+    if (!saw_dash_or_eq) {
+        return false;
+    }
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+        advance(s, lexer);
+    }
+    if (lexer->lookahead != '\n' && lexer->lookahead != '\r' &&
+        !lexer->eof(lexer)) {
+        return false;
+    }
+
+    // First line is a valid '+----+' border. We require at least one
+    // following body line ('+' border or '|' data row) to commit to a
+    // grid table; a lone border line should fall back to paragraph parsing.
+    bool committed = false;
+
+    for (;;) {
+        if (lexer->eof(lexer)) {
+            break;
+        }
+        // Consume the trailing newline of the previous line.
+        if (lexer->lookahead == '\r') {
+            advance(s, lexer);
+            if (lexer->lookahead == '\n') {
+                advance(s, lexer);
+            }
+        } else if (lexer->lookahead == '\n') {
+            advance(s, lexer);
+        } else {
+            break;
+        }
+
+        // Strip block-quote prefixes for every currently-open BLOCK_QUOTE
+        // so nested grid tables (`> > +----+`) are captured correctly.
+        s->indentation = 0;
+        s->column = 0;
+        bool prefixes_ok = true;
+        for (size_t i = 0; i < s->open_blocks.size; i++) {
+            Block b = s->open_blocks.items[i];
+            if (b == BLOCK_QUOTE) {
+                while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+                    advance(s, lexer);
+                }
+                if (lexer->lookahead != '>') {
+                    prefixes_ok = false;
+                    break;
+                }
+                advance(s, lexer);
+                if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+                    advance(s, lexer);
+                }
+            } else {
+                while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+                    advance(s, lexer);
+                }
+            }
+        }
+        if (!prefixes_ok) {
+            break;
+        }
+
+        while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+            advance(s, lexer);
+        }
+
+        if (lexer->lookahead != '+' && lexer->lookahead != '|') {
+            break;
+        }
+
+        // Consume the rest of this body line.
+        while (lexer->lookahead != '\n' && lexer->lookahead != '\r' &&
+               !lexer->eof(lexer)) {
+            advance(s, lexer);
+        }
+
+        committed = true;
+        mark_end(s, lexer);
+    }
+
+    if (!committed) {
+        return false;
+    }
+
+    s->indentation = 0;
+    s->column = 0;
+    EMIT_TOKEN(GRID_TABLE);
+}
+
+static bool parse_plus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    bool can_grid = valid_symbols[GRID_TABLE];
+    bool can_list = s->indentation <= 3 &&
+        (valid_symbols[LIST_MARKER_PLUS] ||
+         valid_symbols[LIST_MARKER_PLUS_DONT_INTERRUPT]);
+    if (!can_grid && !can_list) {
+        return false;
+    }
+
+    advance(s, lexer);
+
+    // Disambiguate based on the character following the leading '+':
+    //   '-', '=', '+'  → grid-table border line  (must be valid)
+    //   ' ', '\t', EOL → list marker             (must be valid)
+    if (can_grid && (lexer->lookahead == '-' || lexer->lookahead == '=' ||
+                     lexer->lookahead == '+')) {
+        return parse_grid_table_after_first_plus(s, lexer);
+    }
+
+    if (can_list) {
         uint8_t extra_indentation = 0;
         while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
             extra_indentation += advance(s, lexer);
@@ -1599,7 +1741,9 @@ static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
 }
 
 static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
-    if (!valid_symbols[AUTOLINK] && !valid_symbols[RAW_SPECIFIER] && !valid_symbols[HTML_COMMENT]) {
+    bool lt_str_valid = valid_symbols[LT_STR_LITERAL];
+    if (!valid_symbols[AUTOLINK] && !valid_symbols[RAW_SPECIFIER] &&
+        !valid_symbols[HTML_COMMENT] && !lt_str_valid) {
         return false;
     }
 
@@ -1609,14 +1753,29 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
     }
     lexer->advance(lexer, false);
 
+    // bd-j9cf: fix the fallback end-of-token at exactly one byte past '<'.
+    // Subsequent advances are lookahead until the next mark_end call. If the
+    // scan loop below walks to EOF without finding a closing delimiter, we
+    // fall back to emitting LT_STR_LITERAL, which consumes only the '<'.
+    lexer->mark_end(lexer);
+
     if (lexer->lookahead == '!') {
-        return parse_html_comment(lexer, valid_symbols);
+        if (valid_symbols[HTML_COMMENT]) {
+            return parse_html_comment(lexer, valid_symbols);
+        }
+        // HTML_COMMENT was not requested here; treat '<' as a Str literal
+        // if the grammar allows it.
+        if (lt_str_valid) {
+            EMIT_TOKEN(LT_STR_LITERAL);
+        }
+        return false;
     }
 
     // consume all characters until one of:
     // - '}': that was a raw specifier
-    // - '>': that was an autolink
-    // - ' ', '\t', EOF: that was a bad lex
+    // - '>': that was an autolink or html_element
+    // - EOF: no HTML construct matched; emit LT_STR_LITERAL (bd-j9cf) so the
+    //   bare '<' becomes a plain Str instead of a parse error.
 
     bool could_be_autolink = lexer->lookahead != '/'; // very first character can't be '/' in autolinks.
     bool had_url_like_character = false;
@@ -1630,13 +1789,22 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
             EMIT_TOKEN(RAW_SPECIFIER);
         } else if (valid_symbols[AUTOLINK] && could_be_autolink && had_url_like_character && lexer->lookahead == '>') {
             lexer->advance(lexer, false); // we want to consume '>' for autolinks
+            lexer->mark_end(lexer);
             EMIT_TOKEN(AUTOLINK);
         } else if (lexer->lookahead == '>') {
             // this token is never valid, but we emit it for error messages
             lexer->advance(lexer, false);
+            lexer->mark_end(lexer);
             EMIT_TOKEN(HTML_ELEMENT);
         }
         lexer->advance(lexer, false);
+    }
+
+    // Reached EOF without finding a closing delimiter. If the grammar
+    // permits a bare '<' as a Str literal here, emit LT_STR_LITERAL —
+    // mark_end is still at '<'+1, so only the '<' character is consumed.
+    if (lt_str_valid) {
+        EMIT_TOKEN(LT_STR_LITERAL);
     }
     return false;
 }
@@ -2180,10 +2348,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 
     switch (lexer->lookahead) {
         case '<':
-            // Handle HTML comments, raw_specifiers (qmd's raw reader extension), autolinks
-            if (valid_symbols[HTML_COMMENT] || 
-                valid_symbols[AUTOLINK] || 
-                valid_symbols[RAW_SPECIFIER]) {
+            // Handle HTML comments, raw_specifiers (qmd's raw reader extension),
+            // autolinks, and (bd-j9cf) bare '<' as Str literal.
+            if (valid_symbols[HTML_COMMENT] ||
+                valid_symbols[AUTOLINK] ||
+                valid_symbols[RAW_SPECIFIER] ||
+                valid_symbols[LT_STR_LITERAL]) {
                 return parse_open_angle_brace(lexer, valid_symbols);
             }
             break;

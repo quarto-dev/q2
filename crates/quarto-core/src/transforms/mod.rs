@@ -35,6 +35,8 @@ mod attribution_viewer;
 mod callout;
 mod callout_resolve;
 mod categories_sidebar;
+mod code_block_generate;
+mod code_block_render;
 mod config;
 mod crossref_index;
 mod crossref_render;
@@ -78,6 +80,11 @@ pub use attribution_viewer::AttributionViewerTransform;
 pub use callout::CalloutTransform;
 pub use callout_resolve::CalloutResolveTransform;
 pub use categories_sidebar::CategoriesSidebarTransform;
+pub use code_block_generate::{
+    CodeBlockDecoration, CodeBlockDecorationKey, CodeBlockGenerateTransform, CopyMode,
+    resolve_default_copy_mode,
+};
+pub use code_block_render::CodeBlockRenderTransform;
 pub use config::{AppendixStyle, ReferenceLocation, is_feature_disabled, resolve_website_bool};
 pub use crossref_index::CrossrefIndexTransform;
 pub use crossref_render::CrossrefRenderTransform;

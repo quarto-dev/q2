@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import {
   getFileHandle,
   updateFileContent,
-} from '../services/automergeSync';
+} from '@quarto/preview-runtime';
 import {
   createReplaySession,
   type ReplaySession,

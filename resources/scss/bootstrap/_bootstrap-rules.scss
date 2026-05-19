@@ -1140,6 +1140,126 @@ div.sourceCode {
   margin-left: initial;
 }
 
+// bd-j73yw: filename header above code blocks. Ported from Q1's
+// `_quarto-rules-code-filename.scss`. Q2's `CodeBlockRenderTransform`
+// wraps the matching code block in
+// `<div class="code-with-filename"><div class="code-with-filename-file"><pre><strong>NAME</strong></pre></div>…</div>`.
+// Selectors below mirror Q1 byte-for-byte; the value sources differ
+// (Q1 went through `var(--quarto-border-*)` indirection, Q2's
+// bootstrap-rules consume the SCSS variables directly — matching the
+// convention used elsewhere in this file).
+.code-with-filename .code-with-filename-file {
+  margin-bottom: 0;
+  padding-bottom: 2px;
+  padding-top: 2px;
+  padding-left: 0.7em;
+  border: $border-width solid $table-border-color;
+  border-radius: $border-radius;
+  border-bottom: 0;
+  border-bottom-left-radius: 0%;
+  border-bottom-right-radius: 0%;
+}
+
+.code-with-filename div.sourceCode {
+  margin-top: 0;
+  border-top-left-radius: 0%;
+  border-top-right-radius: 0%;
+}
+
+.code-with-filename .code-with-filename-file pre {
+  margin-bottom: 0;
+}
+
+.code-with-filename .code-with-filename-file {
+  background-color: rgba(219, 219, 219, 0.8);
+}
+
+.quarto-dark .code-with-filename .code-with-filename-file {
+  background-color: #555;
+}
+
+.code-with-filename .code-with-filename-file strong {
+  font-weight: 400;
+}
+
+// bd-j1trh: copy-button styling. Ported from Q1's
+// `_quarto-rules-copy-code.scss` + `_quarto-variables-copy-code.scss`.
+// Q2's `CodeBlockRenderTransform` wraps the matching code block in
+// `<div class="code-copy-outer-scaffold">…<button class="code-copy-button"><i class="bi"></i></button></div>`.
+// `ClipboardJsStage` ships the JS handler (`code-copy-init.js`) that
+// wires the click → clipboard + "Copied!" tooltip.
+//
+// `$code-copy-selector` controls button visibility — `'div.code-copy-outer-scaffold:hover > '`
+// for hover-only (Q1's default and Q2's), `''` for always-visible.
+// Q2 hardcodes hover here; users wanting always-visible can override
+// the variable in a custom theme (`!default` lets that happen).
+//
+// `$btn-code-copy-color` / `$btn-code-copy-color-active`: SVG `fill=`
+// colors for the clipboard icon, idle and hover. Q1 falls back through
+// `$text-muted` → `$body-color` → `$gray-900` for idle and
+// `$link-color` → `#0d6efd` for active; Q2 mirrors with `if` fallbacks
+// because Q2 doesn't always emit `$text-muted`.
+
+$code-copy-selector:
+  "div.code-copy-outer-scaffold:hover > " !default;
+
+$btn-code-copy-color: if(
+    variable-exists(text-muted),
+    $text-muted,
+    if(variable-exists(body-color), $body-color, $gray-900)
+  ) !default;
+
+$btn-code-copy-color-active: if(
+    variable-exists(link-color),
+    $link-color,
+    #0d6efd
+  ) !default;
+
+// Scaffold must be a positioning context for the absolutely-positioned
+// button. Q1 keeps this in `_quarto-rules.scss` (not the copy-code
+// file); we colocate it with the rest of the copy rules.
+div.code-copy-outer-scaffold {
+  position: relative;
+}
+
+.code-copy-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border: 0;
+  margin-top: 5px;
+  margin-right: 5px;
+  background-color: transparent;
+  z-index: 3;
+}
+
+.code-copy-button-tooltip {
+  font-size: 0.75em;
+}
+
+#{$code-copy-selector} .code-copy-button > .bi::before {
+  display: inline-block;
+  height: 1rem;
+  width: 1rem;
+  content: "";
+  vertical-align: -0.125em;
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#{colorToRGB($btn-code-copy-color)}" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>');
+  background-repeat: no-repeat;
+  background-size: 1rem 1rem;
+}
+
+#{$code-copy-selector} .code-copy-button-checked > .bi::before {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#{colorToRGB($btn-code-copy-color)}" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>');
+}
+
+#{$code-copy-selector} .code-copy-button:hover > .bi::before {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#{colorToRGB($btn-code-copy-color-active)}" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>');
+}
+
+#{$code-copy-selector} .code-copy-button-checked:hover > .bi::before {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#{colorToRGB($btn-code-copy-color-active)}" viewBox="0 0 16 16"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>');
+}
+
 // improve treatment of blockquotes
 .blockquote {
   font-size: inherit;

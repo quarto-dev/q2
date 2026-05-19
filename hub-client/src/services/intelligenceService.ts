@@ -18,12 +18,12 @@ import type {
   LspSymbolsResponse,
   LspFoldingRangesResponse,
   LspDiagnosticsResponse,
-} from '../types/intelligence';
-import { initWasm } from './wasmRenderer';
-import { isQmdFile } from '../types/project';
+} from '@quarto/preview-renderer/types/intelligence';
+import { initWasm } from '@quarto/preview-runtime';
+import { isQmdFile } from '@quarto/preview-renderer/types/project';
 
 // Re-export types for convenience
-export type { Symbol, Diagnostic, FoldingRange, DocumentAnalysis } from '../types/intelligence';
+export type { Symbol, Diagnostic, FoldingRange, DocumentAnalysis } from '@quarto/preview-renderer/types/intelligence';
 
 // ============================================================================
 // Internal Helpers

@@ -1,0 +1,82 @@
+{
+  "name": "@quarto/preview-renderer",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Pure-React components that render Quarto's q2-preview format. Shared by hub-client and the q2-preview SPA.",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./framework": {
+      "types": "./src/framework/index.ts",
+      "source": "./src/framework/index.ts",
+      "import": "./dist/framework/index.js"
+    },
+    "./q2-preview": {
+      "types": "./src/q2-preview/index.ts",
+      "source": "./src/q2-preview/index.ts",
+      "import": "./dist/q2-preview/index.js"
+    },
+    "./q2-preview/entry": {
+      "types": "./src/q2-preview/entry.tsx",
+      "source": "./src/q2-preview/entry.tsx",
+      "import": "./dist/q2-preview/entry.js"
+    },
+    "./iframe/*": {
+      "types": "./src/iframe/*.tsx",
+      "source": "./src/iframe/*.tsx",
+      "import": "./dist/iframe/*.js"
+    },
+    "./overlays/*": {
+      "types": "./src/overlays/*.tsx",
+      "source": "./src/overlays/*.tsx",
+      "import": "./dist/overlays/*.js"
+    },
+    "./types/*": {
+      "types": "./src/types/*.ts",
+      "source": "./src/types/*.ts",
+      "import": "./dist/types/*.js"
+    },
+    "./utils/*": {
+      "types": "./src/utils/*.ts",
+      "source": "./src/utils/*.ts",
+      "import": "./dist/utils/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@quarto/preview-runtime": "*",
+    "@quarto/quarto-automerge-schema": "*",
+    "morphdom": "^2.7.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "jsdom": "^26.0.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

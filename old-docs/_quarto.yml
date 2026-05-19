@@ -1,0 +1,49 @@
+project:
+  type: website
+
+website:
+  title: "Quarto-markdown"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - about.qmd
+      - href: syntax/index.qmd
+        text: Syntax
+      - href: authoring/attribution.qmd
+        text: Attribution
+      - href: writers/index.qmd
+        text: Writers
+      - href: projects/resources.qmd
+        text: Resources
+      - href: navigation.qmd
+        text: Navigation
+      - href: quarto-hub/index.qmd
+        text: Quarto Hub
+      - href: q2-preview.qmd
+        text: Live preview
+      - href: bug-reports.qmd
+        text: Bug reports
+      - text: "Library Docs"
+        menu:
+          - href: ../library-docs/index.qmd
+            text: Overview
+          - text: "---"
+          - text: "Rust Libraries"
+          - href: ../library-docs/rust/source-info/index.qmd
+            text: Source Tracking
+          - text: "---"
+          - text: "TypeScript Libraries"
+          - href: ../library-docs/typescript/annotated-qmd/index.qmd
+            text: "@quarto/annotated-qmd"
+
+format:
+  html:
+    theme:
+      - cosmo
+      - brand
+    css: styles.css
+    toc: true
+
+
+

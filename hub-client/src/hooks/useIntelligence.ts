@@ -14,7 +14,7 @@ import {
   type FoldingRange,
   type DocumentAnalysis,
 } from '../services/intelligenceService';
-import { isQmdFile } from '../types/project';
+import { isQmdFile } from '@quarto/preview-renderer/types/project';
 
 /**
  * Options for the useIntelligence hook.

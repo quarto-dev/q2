@@ -283,6 +283,31 @@ pub struct RenderContext<'a> {
     /// stays unchanged.
     pub resolved_listings: Vec<crate::project::listing::ResolvedListing>,
 
+    /// Code-block decorations produced by
+    /// [`CodeBlockGenerateTransform`](crate::transforms::CodeBlockGenerateTransform)
+    /// and consumed by
+    /// [`CodeBlockRenderTransform`](crate::transforms::CodeBlockRenderTransform).
+    /// Populated only for `CodeBlock`s that carry at least one
+    /// decoration-triggering attribute (filename, code-copy, code-fold,
+    /// …) or that are affected by a document-level default. Both
+    /// transforms run inside `AstTransformsStage` and share this
+    /// context directly, so no `StageContext` bridge is needed.
+    ///
+    /// Keyed by [`CodeBlockDecorationKey`](crate::transforms::CodeBlockDecorationKey)
+    /// — a `(file_id, start_offset, end_offset)` triple derived from
+    /// the block's `SourceInfo::Original`. See the key type's docs
+    /// for the non-`Original` skip rule and the user-filter timing
+    /// argument that makes the key stable in practice.
+    ///
+    /// Decision pinned in
+    /// `claude-notes/plans/2026-05-19-code-block-features.md`
+    /// (sideband map preferred over a `DecoratedCodeBlock` CustomNode
+    /// to avoid the nested-CustomNode complexity Q1 ran into).
+    pub code_block_decorations: std::collections::HashMap<
+        crate::transforms::CodeBlockDecorationKey,
+        crate::transforms::CodeBlockDecoration,
+    >,
+
     /// Opt-in signal: when `Some`, the
     /// [`AttributionGenerateTransform`](crate::transforms::AttributionGenerateTransform)
     /// will call the provider's `build()` and merge the result with
@@ -352,6 +377,7 @@ impl<'a> RenderContext<'a> {
             user_grammar_provider: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),
             resolved_listings: Vec::new(),
+            code_block_decorations: std::collections::HashMap::new(),
             attribution_provider: None,
             attribution_data: None,
             format_options: FormatOptions::default(),

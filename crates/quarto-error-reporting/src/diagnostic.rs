@@ -27,6 +27,13 @@ pub enum DetailKind {
     Info,
     /// Note detail (plain bullet)
     Note,
+    /// Faded detail — rendered in Ariadne with the same dim grey colour
+    /// Ariadne uses for source characters outside any label. Use it to
+    /// attach a high-priority label to a column range you want to
+    /// *exclude* from a wider label's highlighting (e.g. a block-quote
+    /// prefix inside a multi-line span). Treated the same as `Note` in
+    /// tidyverse-style text output.
+    Faded,
 }
 
 /// Options for rendering diagnostic messages to text.
@@ -427,7 +434,7 @@ impl DiagnosticMessage {
                 let bullet = match detail.kind {
                     DetailKind::Error => "✖",
                     DetailKind::Info => "ℹ",
-                    DetailKind::Note => "•",
+                    DetailKind::Note | DetailKind::Faded => "•",
                 };
                 writeln!(result, "{} {}", bullet, detail.content.as_str()).unwrap();
             }
@@ -446,7 +453,7 @@ impl DiagnosticMessage {
                     let bullet = match detail.kind {
                         DetailKind::Error => "✖",
                         DetailKind::Info => "ℹ",
-                        DetailKind::Note => "•",
+                        DetailKind::Note | DetailKind::Faded => "•",
                     };
                     writeln!(result, "{} {}", bullet, detail.content.as_str()).unwrap();
                 }
@@ -518,6 +525,7 @@ impl DiagnosticMessage {
                         DetailKind::Error => "error",
                         DetailKind::Info => "info",
                         DetailKind::Note => "note",
+                        DetailKind::Faded => "faded",
                     };
                     let mut detail_obj = json!({
                         "kind": detail_kind,
@@ -655,6 +663,13 @@ impl DiagnosticMessage {
     ) -> Option<String> {
         use ariadne::{Color, Config, IndexType, Label, Report, ReportKind, Source};
 
+        // Mirror of ariadne's private `Config::unimportant_color()` from
+        // ariadne 0.6.0 (`src/lib.rs:543`). We use this for `DetailKind::Faded`
+        // labels so they blend visually with characters that fall outside any
+        // label. Bump this constant if the ariadne dependency upgrades and
+        // changes the colour.
+        const ARIADNE_UNIMPORTANT_COLOR: Color = Color::Fixed(249);
+
         // Extract file_id from the source mapping by traversing the chain
         let file_id = Self::extract_file_id(main_location)?;
 
@@ -736,10 +751,19 @@ impl DiagnosticMessage {
             &self.title
         };
 
+        // Set `with_order` on every label using its end offset. Ariadne
+        // groups labels by source and starts a new group whenever a label's
+        // end line is *before* the previous label's end line. Without an
+        // explicit order, multi-line main labels and per-line "padding"
+        // detail labels (used to defeat Ariadne's middle-line elision) end
+        // up in separate groups, producing a duplicated snippet block.
+        // Sorting by end offset puts the smaller-line labels first so the
+        // grouping algorithm extends rather than splits.
         report = report.with_label(
-            Label::new((display_path.clone(), main_span))
+            Label::new((display_path.clone(), main_span.clone()))
                 .with_message(main_message)
-                .with_color(main_color),
+                .with_color(main_color)
+                .with_order(main_span.end as i32),
         );
 
         // Add detail locations as additional labels (only those with locations)
@@ -763,13 +787,25 @@ impl DiagnosticMessage {
                             DetailKind::Error => Color::Red,
                             DetailKind::Info => Color::Cyan,
                             DetailKind::Note => Color::Blue,
+                            // Match Ariadne's unimportant colour so faded
+                            // labels visually disappear into the surrounding
+                            // unlabelled text.
+                            DetailKind::Faded => ARIADNE_UNIMPORTANT_COLOR,
                         };
 
-                        report = report.with_label(
-                            Label::new((display_path.clone(), detail_span))
-                                .with_message(detail.content.as_str())
-                                .with_color(detail_color),
-                        );
+                        // Empty-content details exist purely to force Ariadne
+                        // to display a line that would otherwise be elided
+                        // inside a multi-line span. Leaving the label's
+                        // message at None makes Ariadne skip drawing the
+                        // `╰── ...` arrow row underneath, so the source line
+                        // appears clean.
+                        let mut label = Label::new((display_path.clone(), detail_span.clone()))
+                            .with_color(detail_color)
+                            .with_order(detail_span.end as i32);
+                        if !detail.content.as_str().is_empty() {
+                            label = label.with_message(detail.content.as_str());
+                        }
+                        report = report.with_label(label);
                     }
                 }
             }
