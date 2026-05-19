@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 
 use crate::error_table::{ErrorCapture, ErrorTableEntry, lookup_error_entry};
+use crate::outer_scope::compute_outer_scope;
 use crate::tree_sitter_log::{ConsumedToken, TreeSitterLogObserver};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::Location;
@@ -105,8 +106,16 @@ fn error_diagnostic_from_parse_state(
 ) -> quarto_error_reporting::DiagnosticMessage {
     use quarto_error_reporting::DiagnosticMessageBuilder;
 
-    // Look up the error entry from the table
-    let error_entry = lookup_error_entry(error_table, parse_state);
+    // Compute the outer inline scope at the error position and look up the
+    // entry with the full (state, sym, outer_scope) key.
+    let outer_scope = compute_outer_scope(
+        all_tokens,
+        consumed_tokens,
+        parse_state.row,
+        parse_state.column,
+        input_bytes,
+    );
+    let error_entry = lookup_error_entry(error_table, parse_state, outer_scope.as_str());
 
     // Convert input to string for offset calculation
     let input_str = String::from_utf8_lossy(input_bytes);

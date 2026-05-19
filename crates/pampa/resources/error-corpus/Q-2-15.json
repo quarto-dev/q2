@@ -164,6 +164,32 @@
           "size": 2
         }
       ]
+    },
+    {
+      "name": "in-single-quote",
+      "description": "Unclosed strong underscore emphasis between matching single quotes",
+      "content": "The '__blank' word.",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 5,
+          "size": 2
+        }
+      ]
+    },
+    {
+      "name": "in-single-quoted-emphasis",
+      "description": "Unclosed strong underscore inside emphasis-star inside single quotes",
+      "content": "The ' *__blank*' word.",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 7,
+          "size": 2
+        }
+      ]
     }
   ]
 }

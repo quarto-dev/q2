@@ -46,12 +46,18 @@ struct ErrorInfo {
     hints: Vec<String>,
 }
 
+fn default_outer_scope() -> String {
+    "none".to_string()
+}
+
 #[derive(Deserialize)]
 struct ErrorEntry {
     column: usize,
     row: usize,
     state: usize,
     sym: String,
+    #[serde(rename = "outerScope", default = "default_outer_scope")]
+    outer_scope: String,
     #[serde(rename = "errorInfo")]
     error_info: ErrorInfo,
     name: String,
@@ -96,6 +102,7 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
     let table_entries = entries.iter().map(|entry| {
         let state = entry.state;
         let sym = &entry.sym;
+        let outer_scope = &entry.outer_scope;
         let row = entry.row;
         let column = entry.column;
         let code = match &entry.error_info.code {
@@ -171,6 +178,7 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
             #module_tokens::ErrorTableEntry {
                 state: #state,
                 sym: #sym,
+                outer_scope: #outer_scope,
                 row: #row,
                 column: #column,
                 error_info: #module_tokens::ErrorInfo {

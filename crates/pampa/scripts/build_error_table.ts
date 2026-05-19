@@ -101,8 +101,11 @@ try {
         assert(match);
         return {...match[0], ...match[1]};
       });
+      const firstErrorState = errorStates[0];
+      const outerScope = firstErrorState.outerScope ?? "none";
       result.push({
-        ...errorStates[0],
+        ...firstErrorState,
+        outerScope,
         errorInfo,
         name: `${base}`,
       });
@@ -206,8 +209,11 @@ try {
         }
 
         // Create autogen table entry
+        const firstErrorState = errorStates[0];
+        const outerScope = firstErrorState.outerScope ?? "none";
         result.push({
-          ...errorStates[0],
+          ...firstErrorState,
+          outerScope,
           errorInfo: {
             code,
             title,

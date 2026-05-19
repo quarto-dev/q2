@@ -114,6 +114,7 @@
 
 pub mod error_generation;
 pub mod error_table;
+pub mod outer_scope;
 pub mod tree_sitter_log;
 
 // Re-export commonly used types
@@ -130,3 +131,5 @@ pub use error_generation::{
     collect_error_node_ranges, diagnostic_score, get_outer_error_nodes,
     produce_diagnostic_messages, prune_diagnostics_by_error_nodes,
 };
+
+pub use outer_scope::{OuterScope, compute_outer_scope};

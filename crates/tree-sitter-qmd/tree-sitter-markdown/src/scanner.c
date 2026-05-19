@@ -2363,8 +2363,25 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             // for bare `:::` outside a fenced div, FENCED_DIV_END is not
             // valid and the line errors out at a sensible place rather than
             // silently producing a phantom row.
+            //
+            // Regression-from-#208 (this gate): the peek must only run when
+            // PIPE_TABLE_LINE_ENDING is actually in valid_symbols. The peek
+            // calls `advance(s, lexer)` for each `:`, moving the internal
+            // lexer position past the colons; the only consumer is the
+            // dispatch immediately below (also gated on
+            // valid_symbols[PIPE_TABLE_LINE_ENDING]). Without the gate, in
+            // any non-pipe-table context where lookahead is `:`, the peek
+            // still advances the lexer, which lets `first_lookahead` (sampled
+            // post-peek further down) capture e.g. `{` from `:::{attrs}` on
+            // the next line and slip past the `first_lookahead != ':'` guard
+            // on the SOFT_LINE_ENDING predicate. The `:::` peek does not set
+            // `first_peeked = true` (only the backtick/star peeks do), so the
+            // SOFT_LINE_ENDING emission then `mark_end`s at the post-`:::`
+            // position and absorbs `\n:::` into a single soft-break token,
+            // breaking any fenced div whose body contains an inline-bearing
+            // block followed by `:::{attrs}` on the next line.
             bool next_line_is_fenced_div_marker = false;
-            if (lexer->lookahead == ':') {
+            if (valid_symbols[PIPE_TABLE_LINE_ENDING] && lexer->lookahead == ':') {
                 int level = 0;
                 // Match parse_fenced_div_marker's unbounded colon-run count.
                 // pandoc allows arbitrary fence widths for nested divs.

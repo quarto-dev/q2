@@ -164,6 +164,19 @@
           "size": 2
         }
       ]
+    },
+    {
+      "name": "in-single-quote",
+      "description": "Unclosed strong star emphasis between matching single quotes",
+      "content": "The '**blank' word.",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 5,
+          "size": 2
+        }
+      ]
     }
   ]
 }

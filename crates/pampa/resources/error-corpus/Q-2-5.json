@@ -190,6 +190,19 @@
           "size": 1
         }
       ]
+    },
+    {
+      "name": "in-single-quote",
+      "description": "Unclosed underscore emphasis between matching single quotes",
+      "content": "The '_blank' word.",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 5,
+          "size": 1
+        }
+      ]
     }
   ]
 }

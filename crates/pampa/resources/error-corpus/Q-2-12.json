@@ -175,6 +175,19 @@
           "size": 1
         }
       ]
+    },
+    {
+      "name": "in-single-quote",
+      "description": "Unclosed star emphasis between matching single quotes",
+      "content": "The '*blank' word.",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 5,
+          "size": 1
+        }
+      ]
     }
   ]
 }
