@@ -345,7 +345,7 @@ mod tests {
         );
     }
 
-    // === Three-level nesting (input 2 from inline_issue.md) ===
+    // === Three-level nesting ===
 
     #[test]
     fn single_quote_with_star_with_strong_underscore() {

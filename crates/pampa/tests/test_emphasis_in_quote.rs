@@ -110,7 +110,7 @@ fn quoted_strong_star_word_emits_q_2_13() {
     );
 }
 
-// --- Single-quoted variants (currently fail; see inline_issue.md) ---
+// --- Single-quoted variants ---
 
 #[test]
 fn single_quoted_underscore_word_emits_q_2_5() {
@@ -153,9 +153,9 @@ fn single_quoted_strong_star_word_emits_q_2_13() {
 }
 
 // --- Symmetric: unclosed double quote inside emphasis must emit Q-2-11 ---
-// Currently fail because state 705/691/714/760 collide between outer-quote and
-// outer-emphasis contexts; the corpus fix from commit 6e3ad158 redirected
-// those to the emphasis codes. See inline_issue.md.
+// State 705/691/714/760 collide between outer-quote and outer-emphasis contexts;
+// the corpus fix from commit 6e3ad158 redirected those to the emphasis codes,
+// so the outer_scope discriminator is required to keep Q-2-11 firing here.
 
 #[test]
 fn unclosed_double_quote_in_star_emits_q_2_11() {
