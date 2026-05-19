@@ -6,7 +6,9 @@
     {
       "message": "This is the opening '__' mark.",
       "label": "strong-start",
-      "noteType": "simple"
+      "noteType": "simple",
+      "trimLeadingSpace": true,
+      "trimTrailingSpace": true
     }
   ],
   "hints": [
@@ -187,6 +189,46 @@
           "label": "strong-start",
           "row": 0,
           "column": 7,
+          "size": 2
+        }
+      ]
+    },
+    {
+      "name": "inside-paired-outer",
+      "description": "Unclosed strong-underscore emphasis inside various paired outer scopes",
+      "content": " __b c",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 0,
+          "size": 3
+        }
+      ],
+      "prefixesAndSuffixes": [
+        ["*a", "*\n"],
+        ["*a", "* x\n"],
+        ["**a", "**\n"],
+        ["**a", "** x\n"],
+        ["_a", "_\n"],
+        ["_a", "_ x\n"],
+        ["__a", "__\n"],
+        ["__a", "__ x\n"],
+        ["\"a", "\"\n"],
+        ["\"a", "\" x\n"],
+        ["'a", "'\n"],
+        ["'a", "' x\n"]
+      ]
+    },
+    {
+      "name": "same-marker",
+      "description": "Three double-underscores: first pair closes, third opens an unclosed inner strong emphasis",
+      "content": "__a __b c__",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 9,
           "size": 2
         }
       ]

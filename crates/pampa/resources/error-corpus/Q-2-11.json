@@ -58,6 +58,31 @@
       ]
     },
     {
+      "name": "inside-paired-outer",
+      "description": "Unclosed double quote inside various paired outer scopes (emphasis flavours, single quote)",
+      "content": " \"b c",
+      "captures": [
+        {
+          "label": "quote-start",
+          "row": 0,
+          "column": 0,
+          "size": 2
+        }
+      ],
+      "prefixesAndSuffixes": [
+        ["*a", "*\n"],
+        ["*a", "* x\n"],
+        ["**a", "**\n"],
+        ["**a", "** x\n"],
+        ["_a", "_\n"],
+        ["_a", "_ x\n"],
+        ["__a", "__\n"],
+        ["__a", "__ x\n"],
+        ["'a", "'\n"],
+        ["'a", "' x\n"]
+      ]
+    },
+    {
       "name": "simple",
       "description": "Simple case",
       "content": "\"",

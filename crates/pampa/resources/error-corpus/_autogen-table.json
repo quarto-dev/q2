@@ -1185,6 +1185,369 @@
     "name": "Q-2-11/stray-ending-quote"
   },
   {
+    "state": 2248,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 0,
+          "size": 2,
+          "lrState": 728,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer"
+  },
+  {
+    "state": 834,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 691,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-1"
+  },
+  {
+    "state": 1923,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 691,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-2"
+  },
+  {
+    "state": 832,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 714,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-3"
+  },
+  {
+    "state": 1767,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 714,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-4"
+  },
+  {
+    "state": 835,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 705,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-5"
+  },
+  {
+    "state": 1996,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 705,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-6"
+  },
+  {
+    "state": 833,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 760,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-7"
+  },
+  {
+    "state": 1840,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 760,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-8"
+  },
+  {
+    "state": 743,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 769,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-9"
+  },
+  {
+    "state": 743,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 8,
+    "outerScope": "double_quote",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 769,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/inside-paired-outer-10"
+  },
+  {
     "state": 728,
     "sym": "_close_block",
     "row": 0,
@@ -3497,6 +3860,496 @@
     "name": "Q-2-12/in-single-quote"
   },
   {
+    "state": 1923,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 0,
+          "size": 2,
+          "lrState": 803,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer"
+  },
+  {
+    "state": 803,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 1115,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-1"
+  },
+  {
+    "state": 1923,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 1115,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-2"
+  },
+  {
+    "state": 888,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 874,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-3"
+  },
+  {
+    "state": 1767,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 874,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-4"
+  },
+  {
+    "state": 891,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 898,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-5"
+  },
+  {
+    "state": 1996,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 898,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-6"
+  },
+  {
+    "state": 889,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 882,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-7"
+  },
+  {
+    "state": 1840,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 882,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-8"
+  },
+  {
+    "state": 691,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 834,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-9"
+  },
+  {
+    "state": 691,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 834,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-10"
+  },
+  {
+    "state": 690,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 826,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-11"
+  },
+  {
+    "state": 690,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 826,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/inside-paired-outer-12"
+  },
+  {
+    "state": 803,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_star",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 7,
+          "size": 1,
+          "lrState": 803,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-12/same-marker"
+  },
+  {
     "state": 800,
     "sym": "_close_block",
     "row": 0,
@@ -3520,7 +4373,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3553,7 +4408,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3586,7 +4443,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3619,7 +4478,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3652,7 +4513,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3685,7 +4548,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3718,7 +4583,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3751,7 +4618,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3784,7 +4653,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3817,7 +4688,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3850,7 +4723,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3883,7 +4758,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3916,7 +4793,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3949,7 +4828,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -3982,7 +4863,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4015,7 +4898,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4048,7 +4933,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4081,7 +4968,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4114,7 +5003,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4147,7 +5038,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4180,7 +5073,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4213,7 +5108,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4246,7 +5143,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4279,7 +5178,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4312,7 +5213,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4345,7 +5248,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4378,7 +5283,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4411,7 +5318,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4444,7 +5353,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4477,7 +5388,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4510,7 +5423,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4543,7 +5458,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4576,7 +5493,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4609,7 +5528,9 @@
         {
           "message": "This is the opening '**' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4617,6 +5538,496 @@
       ]
     },
     "name": "Q-2-13/in-single-quote"
+  },
+  {
+    "state": 1767,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 6,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 0,
+          "size": 3,
+          "lrState": 800,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer"
+  },
+  {
+    "state": 874,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 888,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-1"
+  },
+  {
+    "state": 1923,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 888,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-2"
+  },
+  {
+    "state": 800,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 1113,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-3"
+  },
+  {
+    "state": 1767,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 13,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 1113,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-4"
+  },
+  {
+    "state": 875,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 896,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-5"
+  },
+  {
+    "state": 1996,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 896,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-6"
+  },
+  {
+    "state": 873,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 880,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-7"
+  },
+  {
+    "state": 1840,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 13,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 880,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-8"
+  },
+  {
+    "state": 714,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 832,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-9"
+  },
+  {
+    "state": 714,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 832,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-10"
+  },
+  {
+    "state": 712,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 824,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-11"
+  },
+  {
+    "state": 712,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 824,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/inside-paired-outer-12"
+  },
+  {
+    "state": 800,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_star",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 9,
+          "size": 2,
+          "lrState": 800,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal asterisk, escape it with `\\*`."
+      ]
+    },
+    "name": "Q-2-13/same-marker"
   },
   {
     "state": 801,
@@ -4642,7 +6053,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4675,7 +6088,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4708,7 +6123,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4741,7 +6158,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4774,7 +6193,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4807,7 +6228,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4840,7 +6263,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4873,7 +6298,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4906,7 +6333,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4939,7 +6368,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -4972,7 +6403,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5005,7 +6438,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5038,7 +6473,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5071,7 +6508,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5104,7 +6543,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5137,7 +6578,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5170,7 +6613,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5203,7 +6648,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5236,7 +6683,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5269,7 +6718,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5302,7 +6753,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5335,7 +6788,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5368,7 +6823,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5401,7 +6858,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5434,7 +6893,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5467,7 +6928,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5500,7 +6963,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5533,7 +6998,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5566,7 +7033,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5599,7 +7068,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5632,7 +7103,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5665,7 +7138,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5698,7 +7173,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5731,7 +7208,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5764,7 +7243,9 @@
         {
           "message": "This is the opening '__' mark.",
           "label": "strong-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -5772,6 +7253,496 @@
       ]
     },
     "name": "Q-2-15/in-single-quoted-emphasis"
+  },
+  {
+    "state": 1840,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 6,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 0,
+          "size": 3,
+          "lrState": 801,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer"
+  },
+  {
+    "state": 882,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 889,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-1"
+  },
+  {
+    "state": 1923,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 889,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-2"
+  },
+  {
+    "state": 880,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 873,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-3"
+  },
+  {
+    "state": 1767,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 13,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 873,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-4"
+  },
+  {
+    "state": 883,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 897,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-5"
+  },
+  {
+    "state": 1996,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 897,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-6"
+  },
+  {
+    "state": 801,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 1113,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-7"
+  },
+  {
+    "state": 1840,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 13,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 3,
+          "lrState": 1113,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-8"
+  },
+  {
+    "state": 760,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 833,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-9"
+  },
+  {
+    "state": 760,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 833,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-10"
+  },
+  {
+    "state": 759,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 825,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-11"
+  },
+  {
+    "state": 759,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 9,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 3,
+          "lrState": 825,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/inside-paired-outer-12"
+  },
+  {
+    "state": 801,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 11,
+    "outerScope": "strong_underscore",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 9,
+          "size": 2,
+          "lrState": 801,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark.",
+          "label": "strong-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-15/same-marker"
   },
   {
     "state": 793,
@@ -19117,7 +21088,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19150,7 +21123,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19183,7 +21158,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19216,7 +21193,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19249,7 +21228,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19282,7 +21263,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19315,7 +21298,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19348,7 +21333,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19381,7 +21368,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19414,7 +21403,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19447,7 +21438,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19480,7 +21473,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19513,7 +21508,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19546,7 +21543,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19579,7 +21578,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19612,7 +21613,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19645,7 +21648,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19678,7 +21683,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19711,7 +21718,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19744,7 +21753,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19777,7 +21788,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19810,7 +21823,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19843,7 +21858,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19876,7 +21893,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19909,7 +21928,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19942,7 +21963,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -19975,7 +21998,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20008,7 +22033,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20041,7 +22068,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20074,7 +22103,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20107,7 +22138,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20140,7 +22173,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20173,7 +22208,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20206,7 +22243,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20239,7 +22278,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20272,7 +22313,9 @@
         {
           "message": "This is the opening '_' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": [
@@ -20280,6 +22323,496 @@
       ]
     },
     "name": "Q-2-5/in-single-quote"
+  },
+  {
+    "state": 1996,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 0,
+          "size": 2,
+          "lrState": 804,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer"
+  },
+  {
+    "state": 898,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 891,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-1"
+  },
+  {
+    "state": 1923,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 891,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-2"
+  },
+  {
+    "state": 896,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 875,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-3"
+  },
+  {
+    "state": 1767,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 875,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-4"
+  },
+  {
+    "state": 804,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 1115,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-5"
+  },
+  {
+    "state": 1996,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 1115,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-6"
+  },
+  {
+    "state": 897,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 883,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-7"
+  },
+  {
+    "state": 1840,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 883,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-8"
+  },
+  {
+    "state": 705,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 835,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-9"
+  },
+  {
+    "state": 705,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 835,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-10"
+  },
+  {
+    "state": 704,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 827,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-11"
+  },
+  {
+    "state": 704,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 827,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/inside-paired-outer-12"
+  },
+  {
+    "state": 804,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "emph_underscore",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 7,
+          "size": 1,
+          "lrState": 804,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you want a literal underscore, escape it with `\\_`."
+      ]
+    },
+    "name": "Q-2-5/same-marker"
   },
   {
     "state": 748,
@@ -21368,5 +23901,390 @@
       "hints": []
     },
     "name": "Q-2-7/simple-33"
+  },
+  {
+    "state": 2177,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 5,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 0,
+          "size": 2,
+          "lrState": 748,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer"
+  },
+  {
+    "state": 826,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 690,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-1"
+  },
+  {
+    "state": 1923,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 690,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-2"
+  },
+  {
+    "state": 824,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 712,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-3"
+  },
+  {
+    "state": 1767,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 712,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-4"
+  },
+  {
+    "state": 827,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 704,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-5"
+  },
+  {
+    "state": 1996,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 704,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-6"
+  },
+  {
+    "state": 825,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 10,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 759,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-7"
+  },
+  {
+    "state": 1840,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 12,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 3,
+          "size": 2,
+          "lrState": 759,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-8"
+  },
+  {
+    "state": 769,
+    "sym": "_close_block",
+    "row": 0,
+    "column": 8,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 743,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-9"
+  },
+  {
+    "state": 769,
+    "sym": "_whitespace",
+    "row": 0,
+    "column": 8,
+    "outerScope": "single_quote",
+    "errorInfo": {
+      "code": "Q-2-9",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing single quote.",
+      "captures": [
+        {
+          "row": 0,
+          "column": 2,
+          "size": 2,
+          "lrState": 743,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening single quote.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": [
+        "If you meant a literal apostrophe, escape it with `\\'`."
+      ]
+    },
+    "name": "Q-2-9/inside-paired-outer-10"
   }
 ]

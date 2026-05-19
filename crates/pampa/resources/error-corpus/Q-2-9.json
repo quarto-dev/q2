@@ -1,0 +1,44 @@
+{
+  "code": "Q-2-9",
+  "title": "Unclosed Single Quote",
+  "message": "I reached the end of the block before finding a closing single quote.",
+  "notes": [
+    {
+      "message": "This is the opening single quote.",
+      "label": "quote-start",
+      "noteType": "simple",
+      "trimLeadingSpace": true,
+      "trimTrailingSpace": true
+    }
+  ],
+  "hints": [
+    "If you meant a literal apostrophe, escape it with `\\'`."
+  ],
+  "cases": [
+    {
+      "name": "inside-paired-outer",
+      "description": "Unclosed single quote (whitespace-prefixed opener) inside various paired outer scopes",
+      "content": " 'b c",
+      "captures": [
+        {
+          "label": "quote-start",
+          "row": 0,
+          "column": 0,
+          "size": 2
+        }
+      ],
+      "prefixesAndSuffixes": [
+        ["*a", "*\n"],
+        ["*a", "* x\n"],
+        ["**a", "**\n"],
+        ["**a", "** x\n"],
+        ["_a", "_\n"],
+        ["_a", "_ x\n"],
+        ["__a", "__\n"],
+        ["__a", "__ x\n"],
+        ["\"a", "\"\n"],
+        ["\"a", "\" x\n"]
+      ]
+    }
+  ]
+}

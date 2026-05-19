@@ -318,3 +318,324 @@ fn quarto_web_blank_link_target_emits_q_2_5() {
         "Expected Q-2-5 for `\"_blank\"` inside a pipe-table cell. Got:\n{output}"
     );
 }
+
+// --- Different-marker emphasis-in-emphasis ---
+//
+// Outer emphasis pairs, inner emphasis of a different flavour is unclosed.
+// Cross-product: 4 outer markers × 3 different inner markers = 12 cases.
+
+#[test]
+fn emph_star_with_unclosed_strong_star_emits_q_2_13() {
+    let input = "*a **b c*\n";
+    let output = render_diagnostics(input, "emph-star-with-strong-star.qmd");
+    assert!(
+        output.contains("Q-2-13"),
+        "Expected Q-2-13 for unclosed `**` inside `*..*`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_star_with_unclosed_underscore_emits_q_2_5() {
+    let input = "*a _b c*\n";
+    let output = render_diagnostics(input, "emph-star-with-underscore.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for unclosed `_` inside `*..*`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_star_with_unclosed_strong_underscore_emits_q_2_15() {
+    let input = "*a __b c*\n";
+    let output = render_diagnostics(input, "emph-star-with-strong-underscore.qmd");
+    assert!(
+        output.contains("Q-2-15"),
+        "Expected Q-2-15 for unclosed `__` inside `*..*`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_underscore_with_unclosed_star_emits_q_2_12() {
+    let input = "_a *b c_\n";
+    let output = render_diagnostics(input, "emph-underscore-with-star.qmd");
+    assert!(
+        output.contains("Q-2-12"),
+        "Expected Q-2-12 for unclosed `*` inside `_.._`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_underscore_with_unclosed_strong_star_emits_q_2_13() {
+    let input = "_a **b c_\n";
+    let output = render_diagnostics(input, "emph-underscore-with-strong-star.qmd");
+    assert!(
+        output.contains("Q-2-13"),
+        "Expected Q-2-13 for unclosed `**` inside `_.._`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_underscore_with_unclosed_strong_underscore_emits_q_2_15() {
+    let input = "_a __b c_\n";
+    let output = render_diagnostics(input, "emph-underscore-with-strong-underscore.qmd");
+    assert!(
+        output.contains("Q-2-15"),
+        "Expected Q-2-15 for unclosed `__` inside `_.._`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_star_with_unclosed_star_emits_q_2_12() {
+    let input = "**a *b c**\n";
+    let output = render_diagnostics(input, "strong-star-with-star.qmd");
+    assert!(
+        output.contains("Q-2-12"),
+        "Expected Q-2-12 for unclosed `*` inside `**..**`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_star_with_unclosed_underscore_emits_q_2_5() {
+    let input = "**a _b c**\n";
+    let output = render_diagnostics(input, "strong-star-with-underscore.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for unclosed `_` inside `**..**`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_star_with_unclosed_strong_underscore_emits_q_2_15() {
+    let input = "**a __b c**\n";
+    let output = render_diagnostics(input, "strong-star-with-strong-underscore.qmd");
+    assert!(
+        output.contains("Q-2-15"),
+        "Expected Q-2-15 for unclosed `__` inside `**..**`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_underscore_with_unclosed_star_emits_q_2_12() {
+    let input = "__a *b c__\n";
+    let output = render_diagnostics(input, "strong-underscore-with-star.qmd");
+    assert!(
+        output.contains("Q-2-12"),
+        "Expected Q-2-12 for unclosed `*` inside `__..__`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_underscore_with_unclosed_strong_star_emits_q_2_13() {
+    let input = "__a **b c__\n";
+    let output = render_diagnostics(input, "strong-underscore-with-strong-star.qmd");
+    assert!(
+        output.contains("Q-2-13"),
+        "Expected Q-2-13 for unclosed `**` inside `__..__`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_underscore_with_unclosed_underscore_emits_q_2_5() {
+    let input = "__a _b c__\n";
+    let output = render_diagnostics(input, "strong-underscore-with-underscore.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for unclosed `_` inside `__..__`. Got:\n{output}"
+    );
+}
+
+// --- Same-marker emphasis nesting ---
+//
+// Two openers of the same marker, one closer. Per user observation the error
+// code is correct but the source location may be wrong (points to text instead
+// of the unclosed delimiter). These tests assert the code; location is captured
+// in the failure message so a regression on location can be inspected manually.
+
+#[test]
+fn double_star_with_unclosed_inner_star_emits_q_2_12() {
+    let input = "*a *b c*\n";
+    let output = render_diagnostics(input, "double-star-nesting.qmd");
+    assert!(
+        output.contains("Q-2-12"),
+        "Expected Q-2-12 for `*a *b c*` (one star left unclosed). Got:\n{output}"
+    );
+}
+
+#[test]
+fn double_underscore_with_unclosed_inner_underscore_emits_q_2_5() {
+    let input = "_a _b c_\n";
+    let output = render_diagnostics(input, "double-underscore-nesting.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for `_a _b c_` (one underscore left unclosed). Got:\n{output}"
+    );
+}
+
+#[test]
+fn double_strong_star_with_unclosed_inner_strong_star_emits_q_2_13() {
+    let input = "**a **b c**\n";
+    let output = render_diagnostics(input, "double-strong-star-nesting.qmd");
+    assert!(
+        output.contains("Q-2-13"),
+        "Expected Q-2-13 for `**a **b c**` (one strong-star left unclosed). Got:\n{output}"
+    );
+}
+
+#[test]
+fn double_strong_underscore_with_unclosed_inner_strong_underscore_emits_q_2_15() {
+    let input = "__a __b c__\n";
+    let output = render_diagnostics(input, "double-strong-underscore-nesting.qmd");
+    assert!(
+        output.contains("Q-2-15"),
+        "Expected Q-2-15 for `__a __b c__` (one strong-underscore left unclosed). Got:\n{output}"
+    );
+}
+
+// --- Quote-in-quote ---
+//
+// Outer quote pairs, inner quote of the other flavour is unclosed.
+
+#[test]
+fn double_quote_with_unclosed_single_quote_emits_q_2_9() {
+    // Whitespace-prefixed `'` is tokenized as an opener, not an apostrophe-
+    // close, so this is an Unclosed Single Quote (Q-2-9), not Q-2-10.
+    let input = "The \"a 'b c\" word.\n";
+    let output = render_diagnostics(input, "double-quote-with-single-quote.qmd");
+    assert!(
+        output.contains("Q-2-9"),
+        "Expected Q-2-9 for unclosed `'` inside `\"..\"`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn single_quote_with_unclosed_double_quote_emits_q_2_11() {
+    let input = "The 'a \"b c' word.\n";
+    let output = render_diagnostics(input, "single-quote-with-double-quote.qmd");
+    assert!(
+        output.contains("Q-2-11"),
+        "Expected Q-2-11 for unclosed `\"` inside `'..'`. Got:\n{output}"
+    );
+}
+
+// --- Long-form (realistic) inputs with trailing text after the closing outer ---
+//
+// Inputs with trailing text after the closing outer delimiter land at a
+// different (state, sym) than the bare form. The unified corpus cases include
+// trailing-text variants so these realistic shapes still emit the correct
+// Q-code instead of a generic Parse error.
+
+#[test]
+fn long_form_emph_star_with_underscore_emits_q_2_5() {
+    let input = "*a _b c* word.\n";
+    let output = render_diagnostics(input, "long-form-emph-star-underscore.qmd");
+    assert!(
+        output.contains("Q-2-5"),
+        "Expected Q-2-5 for `*a _b c* word.`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn long_form_strong_underscore_with_strong_star_emits_q_2_13() {
+    let input = "__a **b c__ word.\n";
+    let output = render_diagnostics(input, "long-form-strong-underscore-strong-star.qmd");
+    assert!(
+        output.contains("Q-2-13"),
+        "Expected Q-2-13 for `__a **b c__ word.`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn long_form_strong_star_with_unclosed_single_quote_emits_q_2_9() {
+    let input = "**a 'b c** word.\n";
+    let output = render_diagnostics(input, "long-form-strong-star-single-quote.qmd");
+    assert!(
+        output.contains("Q-2-9"),
+        "Expected Q-2-9 for `**a 'b c** word.`. Got:\n{output}"
+    );
+}
+
+// --- Unclosed quote inside paired emphasis (the gap fix) ---
+//
+// Outer emphasis pairs, an inner whitespace-prefixed `"` or `'` opens but
+// never closes. The `"` cases map to Q-2-11 (Unclosed Double Quote); the `'`
+// cases map to Q-2-9 (Unclosed Single Quote).
+
+#[test]
+fn emph_star_with_unclosed_double_quote_emits_q_2_11() {
+    let input = "*a \"b c*\n";
+    let output = render_diagnostics(input, "emph-star-with-unclosed-double-quote.qmd");
+    assert!(
+        output.contains("Q-2-11"),
+        "Expected Q-2-11 for unclosed `\"` inside `*..*`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_underscore_with_unclosed_double_quote_emits_q_2_11() {
+    let input = "_a \"b c_\n";
+    let output = render_diagnostics(input, "emph-underscore-with-unclosed-double-quote.qmd");
+    assert!(
+        output.contains("Q-2-11"),
+        "Expected Q-2-11 for unclosed `\"` inside `_.._`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_star_with_unclosed_double_quote_emits_q_2_11() {
+    let input = "**a \"b c**\n";
+    let output = render_diagnostics(input, "strong-star-with-unclosed-double-quote.qmd");
+    assert!(
+        output.contains("Q-2-11"),
+        "Expected Q-2-11 for unclosed `\"` inside `**..**`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_underscore_with_unclosed_double_quote_emits_q_2_11() {
+    let input = "__a \"b c__\n";
+    let output = render_diagnostics(input, "strong-underscore-with-unclosed-double-quote.qmd");
+    assert!(
+        output.contains("Q-2-11"),
+        "Expected Q-2-11 for unclosed `\"` inside `__..__`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_star_with_unclosed_single_quote_emits_q_2_9() {
+    let input = "*a 'b c*\n";
+    let output = render_diagnostics(input, "emph-star-with-unclosed-single-quote.qmd");
+    assert!(
+        output.contains("Q-2-9"),
+        "Expected Q-2-9 for unclosed `'` inside `*..*`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn emph_underscore_with_unclosed_single_quote_emits_q_2_9() {
+    let input = "_a 'b c_\n";
+    let output = render_diagnostics(input, "emph-underscore-with-unclosed-single-quote.qmd");
+    assert!(
+        output.contains("Q-2-9"),
+        "Expected Q-2-9 for unclosed `'` inside `_.._`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_star_with_unclosed_single_quote_emits_q_2_9() {
+    let input = "**a 'b c**\n";
+    let output = render_diagnostics(input, "strong-star-with-unclosed-single-quote.qmd");
+    assert!(
+        output.contains("Q-2-9"),
+        "Expected Q-2-9 for unclosed `'` inside `**..**`. Got:\n{output}"
+    );
+}
+
+#[test]
+fn strong_underscore_with_unclosed_single_quote_emits_q_2_9() {
+    let input = "__a 'b c__\n";
+    let output = render_diagnostics(input, "strong-underscore-with-unclosed-single-quote.qmd");
+    assert!(
+        output.contains("Q-2-9"),
+        "Expected Q-2-9 for unclosed `'` inside `__..__`. Got:\n{output}"
+    );
+}

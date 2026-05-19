@@ -6,7 +6,9 @@
     {
       "message": "This is the opening '_' mark.",
       "label": "emphasis-start",
-      "noteType": "simple"
+      "noteType": "simple",
+      "trimLeadingSpace": true,
+      "trimTrailingSpace": true
     }
   ],
   "hints": [
@@ -200,6 +202,46 @@
           "label": "emphasis-start",
           "row": 0,
           "column": 5,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "inside-paired-outer",
+      "description": "Unclosed underscore emphasis inside various paired outer scopes",
+      "content": " _b c",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 0,
+          "size": 2
+        }
+      ],
+      "prefixesAndSuffixes": [
+        ["*a", "*\n"],
+        ["*a", "* x\n"],
+        ["**a", "**\n"],
+        ["**a", "** x\n"],
+        ["_a", "_\n"],
+        ["_a", "_ x\n"],
+        ["__a", "__\n"],
+        ["__a", "__ x\n"],
+        ["\"a", "\"\n"],
+        ["\"a", "\" x\n"],
+        ["'a", "'\n"],
+        ["'a", "' x\n"]
+      ]
+    },
+    {
+      "name": "same-marker",
+      "description": "Three underscores: first pair closes, third opens an unclosed inner emphasis",
+      "content": "_a _b c_",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 7,
           "size": 1
         }
       ]
