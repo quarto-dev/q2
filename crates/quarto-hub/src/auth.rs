@@ -30,6 +30,14 @@ const DEFAULT_IMAGE_DOMAIN: &str = "lh3.googleusercontent.com";
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
     pub client_id: String,
+    /// Additional audiences accepted in the JWT `aud` claim, alongside
+    /// `client_id`. Used to share one hub instance between the SPA
+    /// (whose tokens carry `aud = client_id`) and `quarto-hub-mcp`
+    /// (whose Google device-flow tokens carry `aud = <mcp-client-id>`).
+    ///
+    /// Wildcards are NOT supported. Each entry must be an exact match.
+    /// Plan §Phase 1 — Design lock-in.
+    pub additional_audiences: Vec<String>,
     /// OIDC issuer URL, guaranteed to be a valid HTTPS URL.
     pub issuer: String,
     pub image_domains: Vec<String>,
@@ -45,6 +53,7 @@ impl AuthConfig {
     /// - If `image_domains` is empty, defaults to Google's profile picture CDN.
     pub fn new(
         client_id: String,
+        additional_audiences: Vec<String>,
         issuer: String,
         image_domains: Vec<String>,
         allowed_emails: Option<Vec<String>>,
@@ -72,11 +81,18 @@ impl AuthConfig {
 
         Ok(Self {
             client_id,
+            additional_audiences,
             issuer,
             image_domains,
             allowed_emails,
             allowed_domains,
         })
+    }
+
+    /// Iterator over the full audience allowlist: primary `client_id`
+    /// first, then `additional_audiences` in order.
+    pub fn audiences(&self) -> impl Iterator<Item = &String> {
+        std::iter::once(&self.client_id).chain(self.additional_audiences.iter())
     }
 
     /// Whether the configured issuer is Google (`https://accounts.google.com`).
@@ -105,6 +121,12 @@ impl AuthConfig {
 /// [OIDC Core spec](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims).
 /// `email_verified` defaults to `false` via `#[serde(default)]` so providers
 /// that omit the claim (e.g. Azure AD) deserialize safely rather than failing.
+///
+/// `aud` is always normalized to `Vec<String>`: per RFC 7519 §4.1.3 it may
+/// appear in a JWT as either a string or an array of strings. `azp` and
+/// `iat` are required for the OIDC §3.1.3.7 azp rule and the future-iat
+/// rejection check enforced after the library-level signature/exp checks
+/// (see [`validate_azp_and_iat`]).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OidcClaims {
     pub sub: String,
@@ -113,6 +135,97 @@ pub struct OidcClaims {
     pub email_verified: bool,
     pub name: Option<String>,
     pub picture: Option<String>,
+
+    /// Audiences. Deserialized via [`deserialize_aud`] which accepts
+    /// either a JSON string or array of strings.
+    #[serde(default, deserialize_with = "deserialize_aud")]
+    pub aud: Vec<String>,
+
+    /// Authorized party (OIDC §2). When `aud` is multi-valued, OIDC
+    /// requires `azp` to be present and to identify the intended client.
+    /// We additionally require `azp` to lie inside the allowed-audience
+    /// list whenever it is present (see [`validate_azp_and_iat`]).
+    #[serde(default)]
+    pub azp: Option<String>,
+
+    /// Issued-at. Optional in the JWT spec; we reject tokens whose
+    /// `iat` is more than `leeway` seconds in the future (see
+    /// [`validate_azp_and_iat`]).
+    #[serde(default)]
+    pub iat: Option<i64>,
+}
+
+/// Accept either a single-string `aud` or a `["a", "b"]` array.
+///
+/// Per RFC 7519 §4.1.3 both shapes are valid. The `jsonwebtoken` library
+/// already accepts both in its own validation pipeline; we normalize to
+/// `Vec<String>` here so callers downstream (e.g. [`validate_azp_and_iat`])
+/// can branch uniformly on `aud.len()`.
+fn deserialize_aud<'de, D>(d: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum AudClaim {
+        Single(String),
+        Multi(Vec<String>),
+    }
+    match AudClaim::deserialize(d)? {
+        AudClaim::Single(s) => Ok(vec![s]),
+        AudClaim::Multi(v) => Ok(v),
+    }
+}
+
+/// Apply the OIDC §3.1.3.7 `azp` rule and reject future-dated `iat`.
+///
+/// `jsonwebtoken@10` already validates `exp`, `nbf`, `iss`, and `aud`
+/// (membership in the allowlist) before we get here. The remaining
+/// confused-deputy gaps it does NOT close:
+///
+/// * **`azp` rule.** When the token's `aud` is multi-valued, OIDC
+///   requires the `azp` claim to be present. Whenever `azp` is present
+///   (regardless of `aud` shape), it must identify the intended client
+///   — for our purposes, an entry in the same allowed-audience list we
+///   built `Validation` from.
+/// * **Future `iat`.** `jsonwebtoken` does not validate `iat` against a
+///   `now + leeway` upper bound. A skewed clock (or a malicious
+///   issuer) could otherwise mint a token with `iat` far in the future
+///   and `exp` further in the future; we reject the first.
+///
+/// `now` and `leeway` are passed in (rather than read inline) so the
+/// caller can match the validator's `leeway` exactly and tests can pin
+/// a deterministic clock.
+pub fn validate_azp_and_iat<'a, I>(
+    claims: &OidcClaims,
+    allowed_audiences: I,
+    now: i64,
+    leeway: i64,
+) -> std::result::Result<(), StatusCode>
+where
+    I: IntoIterator<Item = &'a String>,
+{
+    if let Some(iat) = claims.iat {
+        if iat > now.saturating_add(leeway) {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
+
+    let aud_is_multi = claims.aud.len() > 1;
+    match (claims.azp.as_deref(), aud_is_multi) {
+        // Multi-valued aud REQUIRES azp (OIDC §3.1.3.7).
+        (None, true) => Err(StatusCode::UNAUTHORIZED),
+        // azp present — must be inside the allowed-audience list.
+        (Some(azp), _) => {
+            if allowed_audiences.into_iter().any(|a| a == azp) {
+                Ok(())
+            } else {
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        }
+        // Single-valued aud, no azp — common case, nothing to add.
+        (None, false) => Ok(()),
+    }
 }
 
 /// Check email/domain allowlists. Returns 401 for unverified emails,
@@ -167,12 +280,27 @@ pub fn check_allowlists(claims: &OidcClaims, config: &AuthConfig) -> Result<(), 
 /// Active auth state: decoder for JWT validation + background refresh task.
 pub struct AuthState {
     pub decoder: RemoteJwksDecoder,
+    /// Full audience allowlist (primary `client_id` + `additional_audiences`),
+    /// reused for the post-decode `azp` check. Keeping it on the
+    /// `AuthState` keeps [`crate::context::HubContext::authenticate_claims`]
+    /// decoupled from the [`AuthConfig`] shape — the decoder and the
+    /// audience list ship together.
+    audiences: Vec<String>,
     /// Background task that periodically refreshes JWKS keys.
     /// Aborting this handle stops automatic key rotation.
     /// Must live as long as the server.
     _refresh_handle: JoinHandle<()>,
     /// Cancellation token to stop the JWKS refresh task.
     _cancellation_token: CancellationToken,
+}
+
+impl AuthState {
+    /// View of the full audience allowlist used by this state's
+    /// validator. Callers post-decoding need it to apply the OIDC
+    /// §3.1.3.7 `azp` rule via [`validate_azp_and_iat`].
+    pub fn audiences(&self) -> &[String] {
+        &self.audiences
+    }
 }
 
 impl std::fmt::Debug for AuthState {
@@ -339,8 +467,8 @@ fn extract_algorithms_from_jwks(
 /// background JWKS refresh task handle.
 ///
 /// Discovers the JWKS URL and signing algorithms from the provider's
-/// OIDC discovery endpoint, then initializes the decoder with provider-specific
-/// validation settings.
+/// OIDC discovery endpoint, then delegates to [`build_auth_state_from_parts`]
+/// for the actual decoder construction.
 pub async fn build_auth_state(
     config: &AuthConfig,
 ) -> std::result::Result<AuthState, Box<dyn std::error::Error>> {
@@ -356,12 +484,47 @@ pub async fn build_auth_state(
     // Discover algorithms from the JWKS endpoint.
     let algorithms = discover_algorithms(&client, &jwks_url).await?;
 
+    let audiences: Vec<String> = config.audiences().cloned().collect();
+    build_auth_state_from_parts(jwks_url, algorithms, audiences, config.issuer.clone()).await
+}
+
+/// Build [`AuthState`] from already-resolved JWKS URL + algorithms +
+/// audiences + issuer. Skips OIDC discovery.
+///
+/// [`build_auth_state`] is the production entry point; this variant
+/// exists for tests (whose mock OIDC providers use `http://localhost`
+/// URLs that fail the HTTPS check in [`validate_discovery_document`])
+/// and for any caller that already knows the JWKS URL out-of-band.
+///
+/// The audience list is applied via `Validation::set_audience`, which
+/// in `jsonwebtoken@10` rejects single-aud tokens whose `aud` is not in
+/// the list, and rejects multi-aud tokens whose `aud` does not
+/// intersect the list. `set_required_spec_claims(&["exp", "aud"])`
+/// makes `aud` non-optional — otherwise a token with no `aud` claim
+/// at all would silently pass.
+///
+/// The OIDC §3.1.3.7 `azp` rule and the future-`iat` check are
+/// post-decode steps applied at the call site (see
+/// [`validate_azp_and_iat`]); they are not configurable on
+/// `Validation`.
+pub async fn build_auth_state_from_parts(
+    jwks_url: String,
+    algorithms: Vec<Algorithm>,
+    audiences: Vec<String>,
+    issuer: String,
+) -> std::result::Result<AuthState, Box<dyn std::error::Error>> {
     let mut validation = Validation::default();
     validation.algorithms = algorithms;
-    validation.set_audience(&[&config.client_id]);
-    validation.set_issuer(&[&config.issuer]);
+
+    let audience_refs: Vec<&String> = audiences.iter().collect();
+    validation.set_audience(&audience_refs);
+    validation.set_issuer(&[&issuer]);
     validation.validate_nbf = true;
-    // leeway defaults to 60 seconds in jsonwebtoken, which is fine
+    // Without `aud` in required_spec_claims, `jsonwebtoken@10`'s
+    // validate_aud=true silently passes when the token has no aud at
+    // all — see `validation.rs:325-350`. Adding it here is the only
+    // way to make no-aud tokens reject.
+    validation.set_required_spec_claims(&["exp", "aud"]);
 
     let decoder = RemoteJwksDecoder::builder()
         .jwks_url(jwks_url)
@@ -383,6 +546,7 @@ pub async fn build_auth_state(
 
     Ok(AuthState {
         decoder,
+        audiences,
         _refresh_handle: refresh_handle,
         _cancellation_token: cancellation_token,
     })
@@ -472,12 +636,16 @@ mod tests {
             email_verified: verified,
             name: Some("Test User".to_string()),
             picture: None,
+            aud: vec!["test-client-id".to_string()],
+            azp: None,
+            iat: None,
         }
     }
 
     fn make_config(emails: Option<Vec<&str>>, domains: Option<Vec<&str>>) -> AuthConfig {
         AuthConfig::new(
             "test-client-id".to_string(),
+            Vec::new(),
             "https://accounts.google.com".to_string(),
             vec!["lh3.googleusercontent.com".to_string()],
             emails.map(|v| v.into_iter().map(String::from).collect()),
@@ -649,6 +817,161 @@ mod tests {
     }
 
     #[test]
+    fn oidc_claims_aud_single_string_normalizes_to_one_element_vec() {
+        let json = r#"{
+            "sub": "u1",
+            "email": "user@example.com",
+            "email_verified": true,
+            "aud": "client-a",
+            "iat": 1779177814
+        }"#;
+        let claims: OidcClaims = serde_json::from_str(json).unwrap();
+        assert_eq!(claims.aud, vec!["client-a".to_string()]);
+        assert_eq!(claims.iat, Some(1779177814));
+        assert!(claims.azp.is_none());
+    }
+
+    #[test]
+    fn oidc_claims_aud_array_normalizes_to_vec() {
+        let json = r#"{
+            "sub": "u1",
+            "email": "user@example.com",
+            "email_verified": true,
+            "aud": ["client-a", "client-b"],
+            "azp": "client-a"
+        }"#;
+        let claims: OidcClaims = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            claims.aud,
+            vec!["client-a".to_string(), "client-b".to_string()]
+        );
+        assert_eq!(claims.azp.as_deref(), Some("client-a"));
+    }
+
+    #[test]
+    fn oidc_claims_missing_aud_defaults_to_empty() {
+        // The library-level Validation::set_required_spec_claims(&["exp", "aud"])
+        // is what enforces aud presence at decode time; this just confirms our
+        // post-decode struct deserializes safely when aud is absent.
+        let json = r#"{
+            "sub": "u1",
+            "email": "user@example.com",
+            "email_verified": true
+        }"#;
+        let claims: OidcClaims = serde_json::from_str(json).unwrap();
+        assert!(claims.aud.is_empty());
+    }
+
+    fn allowed_list() -> Vec<String> {
+        vec!["spa-client".to_string(), "mcp-client".to_string()]
+    }
+
+    #[test]
+    fn validate_azp_and_iat_accepts_single_aud_no_azp() {
+        let claims = OidcClaims {
+            sub: "s".into(),
+            email: "u@e.com".into(),
+            email_verified: true,
+            name: None,
+            picture: None,
+            aud: vec!["spa-client".into()],
+            azp: None,
+            iat: None,
+        };
+        let allowed = allowed_list();
+        assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());
+    }
+
+    #[test]
+    fn validate_azp_and_iat_rejects_multi_aud_without_azp() {
+        let claims = OidcClaims {
+            sub: "s".into(),
+            email: "u@e.com".into(),
+            email_verified: true,
+            name: None,
+            picture: None,
+            aud: vec!["spa-client".into(), "mcp-client".into()],
+            azp: None,
+            iat: None,
+        };
+        let allowed = allowed_list();
+        assert_eq!(
+            validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60),
+            Err(StatusCode::UNAUTHORIZED)
+        );
+    }
+
+    #[test]
+    fn validate_azp_and_iat_rejects_azp_outside_allowlist() {
+        let claims = OidcClaims {
+            sub: "s".into(),
+            email: "u@e.com".into(),
+            email_verified: true,
+            name: None,
+            picture: None,
+            aud: vec!["spa-client".into()],
+            azp: Some("attacker-client".into()),
+            iat: None,
+        };
+        let allowed = allowed_list();
+        assert_eq!(
+            validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60),
+            Err(StatusCode::UNAUTHORIZED)
+        );
+    }
+
+    #[test]
+    fn validate_azp_and_iat_accepts_azp_inside_allowlist() {
+        let claims = OidcClaims {
+            sub: "s".into(),
+            email: "u@e.com".into(),
+            email_verified: true,
+            name: None,
+            picture: None,
+            aud: vec!["spa-client".into(), "mcp-client".into()],
+            azp: Some("spa-client".into()),
+            iat: None,
+        };
+        let allowed = allowed_list();
+        assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());
+    }
+
+    #[test]
+    fn validate_azp_and_iat_rejects_future_iat_beyond_leeway() {
+        let claims = OidcClaims {
+            sub: "s".into(),
+            email: "u@e.com".into(),
+            email_verified: true,
+            name: None,
+            picture: None,
+            aud: vec!["spa-client".into()],
+            azp: None,
+            iat: Some(1_000_000 + 3600),
+        };
+        let allowed = allowed_list();
+        assert_eq!(
+            validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60),
+            Err(StatusCode::UNAUTHORIZED)
+        );
+    }
+
+    #[test]
+    fn validate_azp_and_iat_accepts_future_iat_within_leeway() {
+        let claims = OidcClaims {
+            sub: "s".into(),
+            email: "u@e.com".into(),
+            email_verified: true,
+            name: None,
+            picture: None,
+            aud: vec!["spa-client".into()],
+            azp: None,
+            iat: Some(1_000_000 + 30),
+        };
+        let allowed = allowed_list();
+        assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());
+    }
+
+    #[test]
     fn oidc_claims_missing_email_verified_defaults_false_and_rejected() {
         let json = r#"{
             "sub": "xyz",
@@ -701,6 +1024,7 @@ mod tests {
     fn auth_config_rejects_http_issuer() {
         let result = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "http://accounts.google.com".to_string(),
             vec![],
             None,
@@ -714,6 +1038,7 @@ mod tests {
     fn auth_config_rejects_malformed_issuer() {
         let result = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "not a url at all".to_string(),
             vec![],
             None,
@@ -727,6 +1052,7 @@ mod tests {
     fn auth_config_defaults_image_domain_when_empty() {
         let config = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "https://accounts.google.com".to_string(),
             vec![],
             None,
@@ -740,6 +1066,7 @@ mod tests {
     fn auth_config_rejects_invalid_image_domain() {
         let result = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "https://accounts.google.com".to_string(),
             vec!["evil.com; script-src 'unsafe-inline'".to_string()],
             None,
@@ -752,6 +1079,7 @@ mod tests {
     fn auth_config_issuer_origin() {
         let config = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "https://login.microsoftonline.com/tenant/v2.0".to_string(),
             vec![],
             None,
@@ -765,6 +1093,7 @@ mod tests {
     fn auth_config_issuer_origin_with_port() {
         let config = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "https://auth.example.com:8443/realm".to_string(),
             vec![],
             None,
@@ -772,6 +1101,24 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.issuer_origin(), "https://auth.example.com:8443");
+    }
+
+    #[test]
+    fn auth_config_audiences_yields_primary_then_additional_in_order() {
+        let config = AuthConfig::new(
+            "spa-client-id".to_string(),
+            vec!["mcp-client-id".to_string(), "another".to_string()],
+            "https://accounts.google.com".to_string(),
+            vec![],
+            None,
+            None,
+        )
+        .unwrap();
+        let audiences: Vec<&String> = config.audiences().collect();
+        assert_eq!(audiences.len(), 3);
+        assert_eq!(audiences[0], "spa-client-id");
+        assert_eq!(audiences[1], "mcp-client-id");
+        assert_eq!(audiences[2], "another");
     }
 
     // ── is_google_issuer ──────────────────────────────────────────
@@ -786,6 +1133,7 @@ mod tests {
     fn is_google_issuer_with_trailing_slash() {
         let config = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "https://accounts.google.com/".to_string(),
             vec![],
             None,
@@ -799,6 +1147,7 @@ mod tests {
     fn is_google_issuer_false_for_azure() {
         let config = AuthConfig::new(
             "client-id".to_string(),
+            Vec::new(),
             "https://login.microsoftonline.com/tenant/v2.0".to_string(),
             vec![],
             None,

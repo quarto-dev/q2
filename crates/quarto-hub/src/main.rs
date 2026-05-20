@@ -107,6 +107,16 @@ struct Args {
     /// Ensure your provider verifies email ownership before trusting domain-based access.
     #[arg(long, env = "QUARTO_HUB_ALLOWED_DOMAINS", value_delimiter = ',')]
     allowed_domains: Option<Vec<String>>,
+
+    /// Additional OAuth client IDs accepted as JWT audiences alongside
+    /// `--oidc-client-id`. The primary use is sharing a hub between the
+    /// SPA (whose Google ID token's `aud = --oidc-client-id`) and
+    /// quarto-hub-mcp (whose Google device-flow ID token's `aud` is the
+    /// hub-mcp client_id registered separately as "TV and Limited Input
+    /// devices"). Comma-separated; exact matches only — no wildcards.
+    /// Plan §Phase 2 — `claude-notes/plans/2026-05-05-hub-mcp-device-flow-implementation.md`.
+    #[arg(long, env = "QUARTO_HUB_ADDITIONAL_AUDIENCES", value_delimiter = ',')]
+    additional_audiences: Vec<String>,
 }
 
 #[tokio::main]
@@ -182,6 +192,7 @@ async fn main() -> anyhow::Result<()> {
         .map(|client_id| {
             auth::AuthConfig::new(
                 client_id,
+                args.additional_audiences,
                 args.oidc_issuer,
                 args.oidc_image_domains,
                 args.allowed_emails,

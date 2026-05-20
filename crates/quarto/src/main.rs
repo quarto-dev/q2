@@ -480,6 +480,14 @@ enum Commands {
         /// Ensure your provider verifies email ownership before trusting domain-based access.
         #[arg(long, env = "QUARTO_HUB_ALLOWED_DOMAINS", value_delimiter = ',')]
         allowed_domains: Option<Vec<String>>,
+
+        /// Additional OAuth client IDs accepted as JWT audiences alongside
+        /// `--oidc-client-id`. Used to share a hub between the SPA and
+        /// quarto-hub-mcp (whose Google device-flow tokens carry a
+        /// different `aud`). Exact matches only; no wildcards.
+        /// Plan §Phase 2 — claude-notes/plans/2026-05-05-hub-mcp-device-flow-implementation.md.
+        #[arg(long, env = "QUARTO_HUB_ADDITIONAL_AUDIENCES", value_delimiter = ',')]
+        additional_audiences: Vec<String>,
     },
 }
 
@@ -641,6 +649,7 @@ fn main() -> Result<()> {
             allow_insecure_auth,
             allowed_emails,
             allowed_domains,
+            additional_audiences,
         } => commands::hub::execute(commands::hub::HubArgs {
             project,
             no_project,
@@ -658,6 +667,7 @@ fn main() -> Result<()> {
             allow_insecure_auth,
             allowed_emails,
             allowed_domains,
+            additional_audiences,
         }),
         Commands::Trace { command } => match command {
             TraceCommand::List { trace_dir } => {

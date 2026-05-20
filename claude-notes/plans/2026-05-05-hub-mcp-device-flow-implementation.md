@@ -228,60 +228,60 @@ Touch points: `crates/quarto-hub/src/auth.rs:361` (audience config),
 Tests in `crates/quarto-hub/tests/auth_bearer.rs`. Axum test server
 with new audience allowlist; test JWKS via a `MockOidcProvider` helper.
 
-- [ ] `bearer_with_spa_audience_authenticates`
-- [ ] `bearer_with_mcp_audience_authenticates`
-- [ ] `bearer_with_unknown_audience_returns_401`
-- [ ] `bearer_with_no_audience_returns_401` — via
+- [x] `bearer_with_spa_audience_authenticates`
+- [x] `bearer_with_mcp_audience_authenticates`
+- [x] `bearer_with_unknown_audience_returns_401`
+- [x] `bearer_with_no_audience_returns_401` — via
   `validation.set_required_spec_claims(&["exp", "aud"])`. Without
   that, `jsonwebtoken@10`'s default `validate_aud=true` is silently
   skipped for no-aud tokens (`validation.rs:325-350`).
-- [ ] `bearer_with_aud_array_and_matching_azp_authenticates`
-- [ ] `bearer_with_aud_array_and_missing_azp_returns_401` — OIDC
+- [x] `bearer_with_aud_array_and_matching_azp_authenticates`
+- [x] `bearer_with_aud_array_and_missing_azp_returns_401` — OIDC
   §3.1.3.7 conformance.
-- [ ] `bearer_with_aud_array_and_mismatched_azp_returns_401` —
+- [x] `bearer_with_aud_array_and_mismatched_azp_returns_401` —
   confused-deputy prevention.
-- [ ] `bearer_with_single_aud_and_present_azp_validates_azp` — `azp`
+- [x] `bearer_with_single_aud_and_present_azp_validates_azp` — `azp`
   validated whenever present, not only when `aud` is array.
-- [ ] `bearer_with_single_aud_and_absent_azp_authenticates` —
+- [x] `bearer_with_single_aud_and_absent_azp_authenticates` —
   regression on common Google case.
-- [ ] `bearer_with_wrong_issuer_returns_401`
-- [ ] `bearer_with_expired_token_returns_401`
-- [ ] `bearer_with_future_iat_returns_401` — `iat > now + leeway`,
+- [x] `bearer_with_wrong_issuer_returns_401`
+- [x] `bearer_with_expired_token_returns_401`
+- [x] `bearer_with_future_iat_returns_401` — `iat > now + leeway`,
   `nbf` absent (so rejection is unambiguously the `iat` check).
-- [ ] `bearer_with_future_iat_within_skew_authenticates` — `iat =
+- [x] `bearer_with_future_iat_within_skew_authenticates` — `iat =
   now + 30 s` with default 60 s leeway → 200.
-- [ ] `bearer_with_invalid_signature_returns_401`
-- [ ] `bearer_with_unverified_email_returns_401` — Bearer path runs
+- [x] `bearer_with_invalid_signature_returns_401`
+- [x] `bearer_with_unverified_email_returns_401` — Bearer path runs
   the existing `email_verified` gate.
-- [ ] `bearer_with_unallowlisted_email_returns_403` — allowlist
+- [x] `bearer_with_unallowlisted_email_returns_403` — allowlist
   parity; 403-vs-401 distinction load-bearing.
-- [ ] `bearer_with_allowed_domain_authenticates`
-- [ ] `bearer_with_mcp_audience_but_unverified_email_returns_401` —
+- [x] `bearer_with_allowed_domain_authenticates`
+- [x] `bearer_with_mcp_audience_but_unverified_email_returns_401` —
   confused-deputy test on user-identity check.
-- [ ] `ws_upgrade_with_bearer_outside_allowlist_returns_403`
-- [ ] `cookie_still_authenticates` — regression.
-- [ ] `cookie_and_bearer_returns_400` — body
+- [x] `ws_upgrade_with_bearer_outside_allowlist_returns_403`
+- [x] `cookie_still_authenticates` — regression.
+- [x] `cookie_and_bearer_returns_400` — body
   `{"error":"conflicting_credentials"}`. **CVE-prevention test.**
-- [ ] `bearer_wrong_scheme_returns_401` — `Basic` / `Token` → 401,
+- [x] `bearer_wrong_scheme_returns_401` — `Basic` / `Token` → 401,
   never 400.
-- [ ] `audit_event_on_auth_ok` — `action="auth_ok"`,
+- [x] `audit_event_on_auth_ok` — `action="auth_ok"`,
   `credential_kind="bearer"`, `outcome="allow"`, `sub=<expected>`.
-- [ ] `audit_event_on_auth_fail` — three failure shapes, each with
+- [x] `audit_event_on_auth_fail` — three failure shapes, each with
   distinct status code:
   - bad credentials → 401, `detail` carries JWT validation error;
   - good creds, not allowlisted → 403,
     `detail = "user_not_allowlisted"`;
   - dual credentials → 400, `detail = "conflicting_credentials"`.
-- [ ] `tracing_redacts_authorization_header`
-- [ ] `ws_upgrade_with_bearer_works`
-- [ ] `ws_upgrade_rejects_dual_credentials`
-- [ ] `ws_upgrade_with_bearer_skips_origin_check` — Bearer + no
+- [x] `tracing_redacts_authorization_header`
+- [x] `ws_upgrade_with_bearer_works`
+- [x] `ws_upgrade_rejects_dual_credentials`
+- [x] `ws_upgrade_with_bearer_skips_origin_check` — Bearer + no
   `Origin` (or cross-origin) → 101. **CVE-prevention test.**
-- [ ] `ws_upgrade_with_cookie_still_requires_origin` — regression.
-- [ ] `mutating_endpoint_with_bearer_skips_csrf_check`
-- [ ] `mutating_endpoint_with_cookie_still_requires_csrf` — regression.
-- [ ] `dual_credential_400_wins_over_csrf_and_origin`
-- [ ] `unauthenticated_endpoint_unaffected` — regression.
+- [x] `ws_upgrade_with_cookie_still_requires_origin` — regression.
+- [x] `mutating_endpoint_with_bearer_skips_csrf_check`
+- [x] `mutating_endpoint_with_cookie_still_requires_csrf` — regression.
+- [x] `dual_credential_400_wins_over_csrf_and_origin`
+- [x] `unauthenticated_endpoint_unaffected` — regression.
 
 ### Implementation
 
@@ -381,6 +381,55 @@ with new audience allowlist; test JWKS via a `MockOidcProvider` helper.
 - Audit emission via inline `tracing::event!` on success and failure.
 - `tower-http` `TraceLayer.on_request(...)` redacts `Authorization`
   and `Cookie` from spans.
+
+### Phase 2 — completion notes (2026-05-20)
+
+Landed on `feature/hub-mcp-device-flow`:
+
+- `AuthConfig` now carries `additional_audiences: Vec<String>` with
+  an `audiences()` iterator that lists primary `client_id` first,
+  then additional. `set_audience` + `set_required_spec_claims(&["exp",
+  "aud"])` plumbed in [`build_auth_state_from_parts`] —
+  `build_auth_state` retains its discovery wrapper and now delegates
+  to it. The test-only `build_auth_state_from_parts` skips OIDC
+  discovery so integration tests can drive a mock OIDC provider on
+  `http://localhost`; `build_router_with_state` honours an
+  externally-injected `AuthState` via the new
+  `HubContext::auth_state_initialized()` check.
+- `OidcClaims` gained `aud: Vec<String>` (with `deserialize_aud`
+  accepting either a JSON string or array), `azp: Option<String>`,
+  and `iat: Option<i64>`. `validate_azp_and_iat` implements the OIDC
+  §3.1.3.7 azp rule plus the future-`iat` rejection at the call site
+  inside `HubContext::authenticate_claims`.
+- `CredentialKind`, `Credential`, `extract_credential`, and the
+  conflicting-credentials 400 body are public in `server.rs`. The
+  `Authenticated` extractor now carries the `credential_kind` so
+  CSRF / WS-Origin checks gate on it. Mutating handlers
+  (`update_document`, `auth_logout`, `auth_refresh`) skip CSRF for
+  Bearer; the WS handler skips Origin for Bearer; the dual-credential
+  400 wins over both. The status code from `authenticate_claims_for_kind`
+  is preserved through `Authenticated` so 403 (user not allowlisted)
+  is no longer collapsed to 401 — the regression that drove the
+  allowlist-parity tests.
+- `HubContext::authenticate_claims_for_kind` emits inline
+  `tracing::event!` audit lines (`target = "quarto_hub::audit"`,
+  `action`, `outcome`, `credential_kind`, `sub`, optional `detail`)
+  on every allow/deny decision. The existing `RedactedMakeSpan` keeps
+  `Authorization` / `Cookie` out of span fields — `tracing_redacts_authorization_header`
+  scans every captured event field for the raw token and `Bearer ` to
+  enforce that.
+- `--additional-audiences` / `QUARTO_HUB_ADDITIONAL_AUDIENCES` plumbed
+  through both `crates/quarto-hub/src/main.rs` (standalone `hub` bin)
+  and `crates/quarto/src/main.rs` → `commands/hub.rs` (the
+  `quarto hub` subcommand).
+
+Verification: 33 new tests in
+`crates/quarto-hub/tests/auth_bearer.rs` (Bearer aud/azp/iat,
+allowlist parity, dual-credential 400, CSRF / WS-Origin gating,
+audit-event capture, redaction); 7 new lib tests under
+`crates/quarto-hub/src/auth.rs` (claims deserialization, audience
+iteration, azp/iat helper). Full workspace `cargo nextest run`
+(9248 tests) and `cargo xtask verify --skip-hub-build` clean.
 
 ## Phase 3 — Audit logging (minimal v1)
 

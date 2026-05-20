@@ -30,6 +30,9 @@ pub struct HubArgs {
     pub allow_insecure_auth: bool,
     pub allowed_emails: Option<Vec<String>>,
     pub allowed_domains: Option<Vec<String>>,
+    /// Additional OAuth client IDs accepted as JWT audiences alongside
+    /// `oidc_client_id` (Plan §Phase 2 — hub-mcp device flow).
+    pub additional_audiences: Vec<String>,
 }
 
 /// Execute the hub command.
@@ -110,6 +113,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         .map(|client_id| {
             auth::AuthConfig::new(
                 client_id,
+                args.additional_audiences,
                 args.oidc_issuer,
                 args.oidc_image_domains,
                 args.allowed_emails,

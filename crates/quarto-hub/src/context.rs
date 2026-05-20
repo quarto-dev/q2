@@ -380,6 +380,15 @@ impl HubContext {
             .map_err(|_| "auth_state already initialized")
     }
 
+    /// Whether [`set_auth_state`](Self::set_auth_state) has already
+    /// installed an [`AuthState`]. Used by [`crate::server::build_router_with_state`]
+    /// to skip the OIDC-discovery initialization path when a caller
+    /// (notably integration tests built against a mock OIDC provider
+    /// on `http://`) has supplied the decoder out-of-band.
+    pub fn auth_state_initialized(&self) -> bool {
+        self.auth_state.get().is_some()
+    }
+
     /// Whether auth cookies should omit the `Secure` flag (HTTP dev mode).
     pub fn allow_insecure_auth(&self) -> bool {
         self.allow_insecure_auth
@@ -408,13 +417,51 @@ impl HubContext {
     /// Authenticate a request and return the decoded claims.
     /// Unlike `authenticate()`, this returns `Err` when auth is disabled
     /// (because there are no claims to return). Used by `/auth/me`.
+    ///
+    /// The audit-log fields plumbed through `tracing::event!` are
+    /// shared between the cookie and Bearer paths — both invoke this
+    /// method. `credential_kind` distinguishes the two and is required
+    /// by Phase 2 of the device-flow plan.
     pub async fn authenticate_claims(
         &self,
         token: Option<&str>,
     ) -> std::result::Result<OidcClaims, StatusCode> {
-        let auth_config = self.auth_config().ok_or(StatusCode::UNAUTHORIZED)?;
+        self.authenticate_claims_for_kind(token, "unknown").await
+    }
 
-        let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
+    /// Internal variant of [`authenticate_claims`] that records the
+    /// `credential_kind` (`"cookie"` / `"bearer"`) on every audit event.
+    /// The public [`authenticate_claims`] tags events with `"unknown"`
+    /// so callers that have not yet been migrated still emit audit
+    /// entries, just without distinguishing the credential source.
+    pub async fn authenticate_claims_for_kind(
+        &self,
+        token: Option<&str>,
+        credential_kind: &'static str,
+    ) -> std::result::Result<OidcClaims, StatusCode> {
+        let auth_config = self.auth_config().ok_or_else(|| {
+            tracing::event!(
+                target: "quarto_hub::audit",
+                tracing::Level::WARN,
+                action = "auth_fail",
+                outcome = "deny",
+                credential_kind = credential_kind,
+                detail = "auth_disabled",
+            );
+            StatusCode::UNAUTHORIZED
+        })?;
+
+        let token = token.ok_or_else(|| {
+            tracing::event!(
+                target: "quarto_hub::audit",
+                tracing::Level::INFO,
+                action = "auth_fail",
+                outcome = "deny",
+                credential_kind = credential_kind,
+                detail = "missing_credential",
+            );
+            StatusCode::UNAUTHORIZED
+        })?;
         let auth_state = self
             .auth_state
             .get()
@@ -425,12 +472,74 @@ impl HubContext {
         // to select OidcClaims.
         let token_data: jsonwebtoken::TokenData<OidcClaims> =
             auth_state.decoder.decode(token).await.map_err(|err| {
-                tracing::warn!(%err, "Auth failed");
+                // Bearer/JWT failures never reach OidcClaims, so we
+                // identify the event by `detail` rather than `sub`.
+                let detail = format!("jwt_decode:{err}");
+                tracing::event!(
+                    target: "quarto_hub::audit",
+                    tracing::Level::INFO,
+                    action = "auth_fail",
+                    outcome = "deny",
+                    credential_kind = credential_kind,
+                    detail = %detail,
+                );
                 StatusCode::UNAUTHORIZED
             })?;
 
-        auth::check_allowlists(&token_data.claims, auth_config)?;
-        tracing::debug!(email = %token_data.claims.email, "Authenticated");
+        // OIDC §3.1.3.7 azp rule + future-iat rejection — gaps the
+        // jsonwebtoken validator does not cover. The audience list
+        // matches the one used when building the validator, so any
+        // azp ∈ allowed_audiences is by construction one we already
+        // accept.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        if let Err(status) =
+            auth::validate_azp_and_iat(&token_data.claims, auth_state.audiences().iter(), now, 60)
+        {
+            tracing::event!(
+                target: "quarto_hub::audit",
+                tracing::Level::INFO,
+                action = "auth_fail",
+                outcome = "deny",
+                credential_kind = credential_kind,
+                sub = %token_data.claims.sub,
+                detail = "azp_or_iat_rejected",
+            );
+            return Err(status);
+        }
+
+        if let Err(status) = auth::check_allowlists(&token_data.claims, auth_config) {
+            // 401 = unverified email; 403 = good creds, not in allowlist.
+            // The plan's audit test expects detail=user_not_allowlisted
+            // for the 403 case so a downstream log-aggregator can
+            // distinguish identity policy from credential policy.
+            let detail = if status == StatusCode::FORBIDDEN {
+                "user_not_allowlisted"
+            } else {
+                "email_not_verified"
+            };
+            tracing::event!(
+                target: "quarto_hub::audit",
+                tracing::Level::INFO,
+                action = "auth_fail",
+                outcome = "deny",
+                credential_kind = credential_kind,
+                sub = %token_data.claims.sub,
+                detail = detail,
+            );
+            return Err(status);
+        }
+
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::INFO,
+            action = "auth_ok",
+            outcome = "allow",
+            credential_kind = credential_kind,
+            sub = %token_data.claims.sub,
+        );
         Ok(token_data.claims)
     }
 }
