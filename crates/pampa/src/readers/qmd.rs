@@ -120,28 +120,33 @@ pub fn read<T: Write>(
             writeln!(output_stream, "---").unwrap();
         });
         if log_observer.had_errors() {
-            // Produce structured DiagnosticMessage objects with proper source locations
-            let mut diagnostics = produce_diagnostic_messages(
-                input_bytes,
-                &log_observer,
-                filename,
-                &context.source_context,
-            );
+            use crate::readers::qmd_error_messages::{
+                collect_error_node_ranges, get_outer_error_nodes, prune_diagnostics_by_error_nodes,
+            };
 
-            // Prune diagnostics based on ERROR nodes if enabled
-            if prune_errors {
-                use crate::readers::qmd_error_messages::{
-                    collect_error_node_ranges, get_outer_error_nodes,
-                    prune_diagnostics_by_error_nodes,
-                };
+            // GLR speculative parsing can hit detect_error in dead branches
+            // while another branch reaches accept cleanly. When that happens,
+            // the final tree has no ERROR nodes and the parse is genuinely
+            // successful — we should not report speculative errors from dead
+            // branches. Use the presence of ERROR nodes in the tree as the
+            // ground truth for whether the parse actually failed.
+            let error_nodes = collect_error_node_ranges(&tree);
+            if !error_nodes.is_empty() {
+                let mut diagnostics = produce_diagnostic_messages(
+                    input_bytes,
+                    &log_observer,
+                    filename,
+                    &context.source_context,
+                );
 
-                let error_nodes = collect_error_node_ranges(&tree);
-                let outer_nodes = get_outer_error_nodes(&error_nodes);
-                diagnostics =
-                    prune_diagnostics_by_error_nodes(diagnostics, &error_nodes, &outer_nodes);
+                if prune_errors {
+                    let outer_nodes = get_outer_error_nodes(&error_nodes);
+                    diagnostics =
+                        prune_diagnostics_by_error_nodes(diagnostics, &error_nodes, &outer_nodes);
+                }
+
+                return Err(diagnostics);
             }
-
-            return Err(diagnostics);
         }
     }
 
