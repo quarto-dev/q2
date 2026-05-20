@@ -1,0 +1,1128 @@
+# 2026-05-05 — Hub MCP auth: Design C′ (Google device flow) implementation
+
+## Overview
+
+Implements **Design C′ (Google as device-flow AS)** to let
+`ts-packages/quarto-hub-mcp` authenticate to `crates/quarto-hub` over
+WebSocket. Uses Google's OAuth 2.0 device-authorization endpoint
+(RFC 8628); hub-mcp persists Google ID + refresh tokens locally. The
+hub keeps its existing JWKS validator — no new credential type, no new
+persistence, no issuance UI.
+
+Design context: `claude-notes/plans/2026-04-27-hub-mcp-auth-design.md`.
+
+Work spans:
+
+- `crates/quarto-hub` — accept a Bearer Google ID token; allow a list
+  of audiences (SPA's client_id + hub-mcp's client_id); dual-credential
+  400 rule; audit log distinguishes credential identity from user identity.
+- `ts-packages/quarto-hub-mcp` — device-flow primitives, MCP-tool
+  exposure (`authenticate_start` / `authenticate_finish`),
+  refresh-on-401, OS-keyring credential store, redact-everywhere logging.
+- `ts-packages/quarto-sync-client` — header pass-through on the WS
+  upgrade via a Node-only adapter.
+- Per-operator admin step: register a second Google OAuth client of
+  type "TV and Limited Input devices"; publish client_id +
+  client_secret to end users (consumed by hub-mcp via
+  `QUARTO_HUB_MCP_CLIENT_ID` / `QUARTO_HUB_MCP_CLIENT_SECRET`).
+
+### Out of scope / deferred
+
+- Hub-side `tokens` table, credential-issuance API, SPA token-mgmt UI.
+- Browser subprotocol-auth fallback (hub-mcp is Node-only; SPA uses cookie).
+- Per-request transport-gate middleware, per-IP rate limiter,
+  schema-locked audit module + `jwt_jti_or_hash` field — deferred to
+  a follow-up plan covering both Bearer and cookie surfaces symmetrically.
+- Hub-side `sub_denylist` (the only mechanism that closes the ≤1 h
+  ID-token residual-validity window) — deferred; requires the hub to
+  gain persistent storage it doesn't have today.
+- Hub `/auth/info` auto-discovery for hub-mcp credentials — deferred;
+  v1 requires manual paste of operator-supplied env vars.
+
+## Threat model
+
+In priority order:
+
+1. **Refresh-token theft from local disk.** Mitigated by OS-native
+   keyring storage (`@napi-rs/keyring`): DPAPI on Windows, Keychain on
+   macOS, Secret Service on Linux. Bound to current user account on
+   each platform. No plaintext file on disk.
+2. **MCP-config commit / screenshot leak.** No long secret in
+   `.mcp.json`; credentials live in OS keyring.
+3. **Auth-confusion via cookie + Authorization.** Reject with 400.
+4. **Audience confusion / stolen Google ID token from another client.**
+   Strict audience allowlist; no wildcards.
+5. **Verification-URI phishing.** Hard-coded canonical URL
+   (`https://www.google.com/device`) in tool response alongside
+   Google's `verification_uri`; user told to compare. Canonical URL
+   is a constant, not a value from Google's response.
+6. **Refresh-token replay after revocation.** Empirically confirmed
+   2026-05-19: Google does **not** rotate refresh tokens for
+   Limited-Input-Devices clients. Stolen ID tokens authenticate for
+   up to ≤1 h regardless of revocation (JWTs are self-contained).
+   v1 mitigation: at-rest protection + audit visibility + documented
+   revocation runbook. Closing the ≤1 h window requires hub-side
+   `sub_denylist` — deferred.
+7. **PII in credential** (Google ID token carries `email`, `name`,
+   `picture`). Unavoidable with Google as AS; documented.
+8. **Polling-endpoint DoS** — N/A; polling targets Google, not hub.
+9. **Lateral movement after compromise.** Per-scope enforcement
+   deferred.
+10. **OAuth `client_secret` leakage from an operator deployment.**
+    Empirically (2026-05-19) Google requires `client_secret` for this
+    client type. Mitigated by env-var-only sourcing (no plaintext file,
+    no `.mcp.json` value, no baked-in default); operator handles via
+    normal secret-management. Structural defence in depth: the
+    `device_code` is the per-flow authentication binding — a leaked
+    `client_secret` alone cannot redeem any user's approval.
+
+### Revocation
+
+User revokes at myaccount.google.com → "Third-party apps with account
+access". Hub does not surface a "your sessions" list.
+
+## Cross-cutting security requirements
+
+These apply to every phase:
+
+- **Strict cookie-vs-Authorization precedence.** Both presented → 400
+  Bad Request, body `{"error":"conflicting_credentials"}`.
+- **Strict audience allowlist.** Configured list (SPA client_id +
+  hub-mcp client_id). No wildcards. No issuer-only mode.
+- **Email/domain allowlist parity across credential kinds.** Bearer
+  and cookie paths both gated by the shared `check_allowlists()` call
+  from `authenticate_claims()` (`auth.rs:131-165`, `context.rs:362-386`).
+  401-vs-403 distinction preserved on Bearer path. Hub-mcp client_id
+  being an allowlisted audience does NOT bypass user-identity allowlist.
+- **TLS at the application layer.**
+  - Hub: existing startup-time `validate_tls_config` (`auth.rs:396-409`).
+  - hub-mcp: refuses to send Bearer over plain HTTP/WS to non-loopback
+    without `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1`. Loopback always
+    permitted. Loud warning on every insecure connect when the env var
+    is set.
+- **Audit log distinguishes credential identity from user identity.**
+  Every authenticated event records `(sub, credential_kind, action,
+  outcome)` where `credential_kind ∈ {cookie, bearer}`. v1 emits via
+  inline `tracing::event!`; schema-lock + dedicated module deferred.
+- **Token never logged.** `Authorization` header redacted in
+  `tower-http` `TraceLayer`; hub-mcp redacts via centralised utility
+  on every log call site.
+- **Bearer is the only non-cookie auth path.** `Basic`, custom schemes,
+  query-param tokens rejected with 401.
+- **Refresh tokens never appear in logs/errors.** hub-mcp installs
+  `uncaughtException` / `unhandledRejection` handlers that scrub
+  Google-token-shaped substrings (`ya29.*`, `1//*`, JWT-shaped)
+  before logging.
+- **hub-mcp follows the hub's auth policy, not its own.** Try-without-
+  creds-first against unknown hubs; only trigger device flow when the
+  hub returns 401. Lets hub-mcp work against `auth_config: None` hubs
+  without forcing device flow.
+
+## Phase 1 — Design lock-in
+
+Empirical verification (2026-05-19, see Verification log) answered
+discovery questions. The following are **immutable** for v1:
+
+- **hub-mcp client-authentication wire:** `oauth.ClientSecretPost(secret)`
+  (Option B). Google requires `client_secret` for the
+  Limited-Input-Devices client type at `/token`.
+- **Credential sourcing for hub-mcp:** operator-supplied via env vars,
+  symmetric with hub-client.
+  - `QUARTO_HUB_MCP_CLIENT_ID` — operator's Google OAuth client_id.
+  - `QUARTO_HUB_MCP_CLIENT_SECRET` — operator's matching secret.
+  - Read **only from `process.env`**, never from `.mcp.json`,
+    keyring, or source literals.
+  - **Both mandatory** when the device flow may run. Fail loud with
+    typed `MissingCredentialsConfigError` naming both vars literally.
+  - Rationale: symmetry with SPA's existing `VITE_GOOGLE_CLIENT_ID` /
+    `OIDC_CLIENT_ID` model; operator sovereignty (consent screen,
+    quota, audit, revocation key off operator's project); no
+    Quarto-team-owned default.
+  - Each end-user pastes both values into the env block of their
+    `.mcp.json` alongside `--server <URL>`.
+- **Hub validator audience policy:** allowlist of N strings; token
+  accepted iff `aud` ∈ allowlist. Built at startup as
+  `iter::once(&config.client_id).chain(config.additional_audiences.iter())`.
+  Per OIDC Core §3.1.3.7:
+  - if `aud.len() > 1`: require `azp` present and in allowlist;
+  - if `azp` present (any `aud` shape): require `azp` in allowlist
+    — this is the live rule for every real Google token today;
+  - if `aud` single-valued and `azp` absent: accept on `aud` alone.
+
+  `jsonwebtoken`'s `set_audience` only enforces `aud`; `azp` is a
+  custom post-decode check.
+- **Hub validator issuer/algorithm policy:** unchanged. Single issuer
+  (`https://accounts.google.com`); algorithms from JWKS.
+- **Bearer extraction:** the value is a Google ID token (a JWT);
+  shares the cookie's JWT validator branch.
+- **Middleware order:** extract credential **before** CSRF / WS-Origin.
+  Bearer-authenticated requests skip both checks; cookie-authenticated
+  requests still enforce them. Dual-credential 400 wins.
+- **Audit log fields (v1):** `sub`, `credential_kind`, `action`,
+  `outcome`, plus `detail` on failure. Inline `tracing::event!`; no
+  dedicated module, no locked schema. Schema-lock + `jwt_jti_or_hash`
+  + OpenTelemetry naming + `audit-log.md` doc deferred.
+- **hub-mcp credential storage:** OS-native keyring on every platform
+  via `@napi-rs/keyring`. No plaintext file on disk on any platform.
+- **hub-mcp credential blob shape** (single opaque JSON in keyring):
+  ```json
+  {
+    "schema_version": 1,
+    "issuer": "https://accounts.google.com",
+    "client_id": "<hub-mcp-client-id>",
+    "id_token": "<jwt>",
+    "refresh_token": "<opaque>",
+    "id_token_expires_at": "<iso8601>",
+    "scopes": ["openid", "email", "profile"]
+  }
+  ```
+- **In-memory bundle shape:**
+  ```ts
+  type CredentialBundle = {
+    idToken: string;
+    refreshToken: string;
+    idTokenExpiresAt: Date;
+    scopes: readonly string[];
+  };
+  ```
+- **Per-platform service / account identifiers** (uniform
+  `Entry(service, account)`):
+  - macOS: service `dev.quarto.hub-mcp`, account `<issuer>:<client_id>`.
+  - Linux: schema `dev.quarto.hub-mcp`, account attribute
+    `<issuer>:<client_id>` in default collection.
+  - Windows: target name `dev.quarto.hub-mcp:<issuer>:<client_id>`.
+- **Headless-Linux:** Secret Service unreachable → typed
+  `KeyringUnavailableError` on `write`. No silent plaintext fallback.
+- **Re-auth trigger:** second consecutive 401 with a freshly-refreshed
+  ID token, OR `invalid_grant` from Google's `/token`. Re-auth = full
+  device-flow restart via `authenticate_start`.
+- **MCP auth tool surface:**
+  - `authenticate_start({}) -> { verification_uri, canonical_url,
+    user_code, expires_in_seconds }` — initiates device flow. Short
+    circuits to text when (a) valid creds already cached, or
+    (b) connection-manager observed `lastObservedAuthMode === 'no-auth'`.
+  - `authenticate_finish({}) -> string` — **one** poll against
+    Google's `/token`. Returns `pending`/`slow_down` text on those
+    responses; persists bundle + returns "Authenticated as <email>"
+    on success; typed error on terminal failure.
+
+  Single-poll-per-call is deliberate: MCP tool calls have client
+  timeouts; blocking on a user-driven flow is fragile.
+- **`device_code` is process-local**, never persisted. Cached state
+  carries `nextPollAllowedAt` for RFC 8628 §3.5 rate-limiting,
+  initialised to `start_time + interval`, bumped by 5 s per `slow_down`.
+  Second `authenticate_start` within ~5 s returns the cached
+  device_code; outside that window overwrites.
+- **First-run trigger.** When connect attempt with no creds hits the
+  hub's 401, the typed error names `authenticate_start`.
+
+## Phase 2 — Hub middleware integration (TDD)
+
+Touch points: `crates/quarto-hub/src/auth.rs:361` (audience config),
+`crates/quarto-hub/src/server.rs:144-160` (cookie extraction),
+`:262-285` (`Authenticated` extractor), `:399,:617,:644` (CSRF), `:691`
+(WS-Origin).
+
+### Tests first
+
+Tests in `crates/quarto-hub/tests/auth_bearer.rs`. Axum test server
+with new audience allowlist; test JWKS via a `MockOidcProvider` helper.
+
+- [ ] `bearer_with_spa_audience_authenticates`
+- [ ] `bearer_with_mcp_audience_authenticates`
+- [ ] `bearer_with_unknown_audience_returns_401`
+- [ ] `bearer_with_no_audience_returns_401` — via
+  `validation.set_required_spec_claims(&["exp", "aud"])`. Without
+  that, `jsonwebtoken@10`'s default `validate_aud=true` is silently
+  skipped for no-aud tokens (`validation.rs:325-350`).
+- [ ] `bearer_with_aud_array_and_matching_azp_authenticates`
+- [ ] `bearer_with_aud_array_and_missing_azp_returns_401` — OIDC
+  §3.1.3.7 conformance.
+- [ ] `bearer_with_aud_array_and_mismatched_azp_returns_401` —
+  confused-deputy prevention.
+- [ ] `bearer_with_single_aud_and_present_azp_validates_azp` — `azp`
+  validated whenever present, not only when `aud` is array.
+- [ ] `bearer_with_single_aud_and_absent_azp_authenticates` —
+  regression on common Google case.
+- [ ] `bearer_with_wrong_issuer_returns_401`
+- [ ] `bearer_with_expired_token_returns_401`
+- [ ] `bearer_with_future_iat_returns_401` — `iat > now + leeway`,
+  `nbf` absent (so rejection is unambiguously the `iat` check).
+- [ ] `bearer_with_future_iat_within_skew_authenticates` — `iat =
+  now + 30 s` with default 60 s leeway → 200.
+- [ ] `bearer_with_invalid_signature_returns_401`
+- [ ] `bearer_with_unverified_email_returns_401` — Bearer path runs
+  the existing `email_verified` gate.
+- [ ] `bearer_with_unallowlisted_email_returns_403` — allowlist
+  parity; 403-vs-401 distinction load-bearing.
+- [ ] `bearer_with_allowed_domain_authenticates`
+- [ ] `bearer_with_mcp_audience_but_unverified_email_returns_401` —
+  confused-deputy test on user-identity check.
+- [ ] `ws_upgrade_with_bearer_outside_allowlist_returns_403`
+- [ ] `cookie_still_authenticates` — regression.
+- [ ] `cookie_and_bearer_returns_400` — body
+  `{"error":"conflicting_credentials"}`. **CVE-prevention test.**
+- [ ] `bearer_wrong_scheme_returns_401` — `Basic` / `Token` → 401,
+  never 400.
+- [ ] `audit_event_on_auth_ok` — `action="auth_ok"`,
+  `credential_kind="bearer"`, `outcome="allow"`, `sub=<expected>`.
+- [ ] `audit_event_on_auth_fail` — three failure shapes, each with
+  distinct status code:
+  - bad credentials → 401, `detail` carries JWT validation error;
+  - good creds, not allowlisted → 403,
+    `detail = "user_not_allowlisted"`;
+  - dual credentials → 400, `detail = "conflicting_credentials"`.
+- [ ] `tracing_redacts_authorization_header`
+- [ ] `ws_upgrade_with_bearer_works`
+- [ ] `ws_upgrade_rejects_dual_credentials`
+- [ ] `ws_upgrade_with_bearer_skips_origin_check` — Bearer + no
+  `Origin` (or cross-origin) → 101. **CVE-prevention test.**
+- [ ] `ws_upgrade_with_cookie_still_requires_origin` — regression.
+- [ ] `mutating_endpoint_with_bearer_skips_csrf_check`
+- [ ] `mutating_endpoint_with_cookie_still_requires_csrf` — regression.
+- [ ] `dual_credential_400_wins_over_csrf_and_origin`
+- [ ] `unauthenticated_endpoint_unaffected` — regression.
+
+### Implementation
+
+- Extend `AuthConfig` with `additional_audiences: Vec<String>`
+  (defaults empty). `client_id` stays primary; hub-mcp client_id lands
+  in `additional_audiences`.
+- **Validation pipeline** — library checks then custom post-decode.
+
+  Step 1 — `jsonwebtoken@10` (at `auth.rs:366-369`):
+  ```rust
+  let mut validation = Validation::default();
+  validation.algorithms = algorithms;
+  validation.set_issuer(&[&config.issuer]);
+  validation.validate_nbf = true;
+
+  let allowed: Vec<&String> = std::iter::once(&config.client_id)
+      .chain(config.additional_audiences.iter())
+      .collect();
+  validation.set_audience(&allowed);
+
+  // Without this, no-aud tokens silently bypass the audience check.
+  validation.set_required_spec_claims(&["exp", "aud"]);
+  ```
+
+  Step 2 — post-decode helper (called from the same path as
+  `check_allowlists` at `auth.rs:131-153`):
+  ```rust
+  // jsonwebtoken does not validate iat against a future bound.
+  let leeway = i64::try_from(validation.leeway).unwrap_or(60);
+  let now = chrono::Utc::now().timestamp();
+  if let Some(iat) = claims.iat {
+      if iat > now + leeway {
+          return Err(StatusCode::UNAUTHORIZED);
+      }
+  }
+
+  // OIDC §3.1.3.7 azp rule.
+  let aud_is_multi = claims.aud.len() > 1;
+  match (claims.azp.as_deref(), aud_is_multi) {
+      (None, true) => return Err(StatusCode::UNAUTHORIZED),
+      (Some(azp), _) if !allowed.iter().any(|a| a.as_str() == azp)
+          => return Err(StatusCode::UNAUTHORIZED),
+      _ => {}
+  }
+  ```
+
+- **`OidcClaims` struct migration** (`auth.rs:109-116`). Add three fields:
+  ```rust
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  pub struct OidcClaims {
+      pub sub: String,
+      pub email: String,
+      #[serde(default)]
+      pub email_verified: bool,
+      pub name: Option<String>,
+      pub picture: Option<String>,
+
+      #[serde(deserialize_with = "deserialize_aud", default)]
+      pub aud: Vec<String>,
+      #[serde(default)]
+      pub azp: Option<String>,
+      #[serde(default)]
+      pub iat: Option<i64>,
+  }
+
+  fn deserialize_aud<'de, D>(d: D) -> Result<Vec<String>, D::Error>
+  where D: serde::Deserializer<'de>,
+  {
+      #[derive(serde::Deserialize)]
+      #[serde(untagged)]
+      enum AudClaim { Single(String), Multi(Vec<String>) }
+      match AudClaim::deserialize(d)? {
+          AudClaim::Single(s) => Ok(vec![s]),
+          AudClaim::Multi(v)  => Ok(v),
+      }
+  }
+  ```
+  Migrate fixtures `make_claims` (`auth.rs:468-471`) and the three
+  `serde_json::from_str` tests (`:616-658`) with defaults.
+
+- **New extractor** `extract_credential(headers) -> Result<Credential,
+  StatusCode>` returning `Cookie(jwt)`, `Bearer(jwt)`, or
+  `Err(BadRequest)` for dual.
+- **Routing invariant:** both branches feed
+  `HubContext::authenticate_claims()` (the only decode site,
+  unconditionally calls `check_allowlists`). No per-credential-kind
+  bypass.
+- `Authenticated` struct gains `credential_kind: CredentialKind`.
+- **CSRF / WS-Origin gating respects `credential_kind`.** Rework
+  state-mutating handlers (`server.rs:399,:617,:644`) and the WS
+  handler (`:691`):
+  ```rust
+  if matches!(auth.credential_kind, CredentialKind::Cookie) {
+      check_csrf(&headers)?;   // or check_ws_origin
+  }
+  ```
+- Audit emission via inline `tracing::event!` on success and failure.
+- `tower-http` `TraceLayer.on_request(...)` redacts `Authorization`
+  and `Cookie` from spans.
+
+## Phase 3 — Audit logging (minimal v1)
+
+Gate is Phase 2's test set (`audit_event_on_auth_ok`,
+`audit_event_on_auth_fail`, `tracing_redacts_authorization_header`).
+Implementation emits inline `tracing::event!` with `sub`,
+`credential_kind`, `action`, `outcome`, plus `detail` on failure.
+
+Deferred to a follow-up plan that wires log aggregation: dedicated
+`audit.rs` module, schema-lock tests, SHA-256 `jti`-or-hash
+correlation field, `target: "quarto_hub::audit"` stable name,
+OpenTelemetry semantic-conventions naming,
+`claude-notes/instructions/audit-log.md` doc.
+
+## Phase 4 — hub-mcp device-flow primitives (TDD)
+
+New module: `ts-packages/quarto-hub-mcp/src/auth/device-flow.ts`.
+Sits on `oauth4webapi` + `jose`. Two primitives — `initiateDeviceFlow`
+and `pollDeviceFlowOnce` — not a single blocking flow.
+
+### Tests first
+
+Tests in `ts-packages/quarto-hub-mcp/test/auth/device-flow.test.ts`.
+Fixture HTTP server via msw or undici `MockAgent`; never live Google.
+
+- [ ] `initiate_request_has_correct_params` — POST to device-auth
+  endpoint includes `client_id`, `scope=openid email profile`.
+- [ ] `client_id_and_secret_sourced_from_env` — values come from
+  `process.env.QUARTO_HUB_MCP_CLIENT_ID` / `_CLIENT_SECRET`, not from
+  literals / files / keyring.
+- [ ] `startup_fails_loud_when_env_missing` — typed
+  `MissingCredentialsConfigError` naming both vars literally.
+- [ ] `no_baked_default_client_id_or_secret` — grep over `src/`
+  asserts no `*.apps.googleusercontent.com` or `GOCSPX-…` literal.
+- [ ] `client_secret_sent_on_token_endpoint_only` — device-auth body
+  has no `client_secret`; token-endpoint body does.
+- [ ] `initiate_returns_full_device_response` — pass-through of
+  `verification_uri`, `user_code`, `device_code`, `interval`,
+  `expires_in`.
+- [ ] `poll_once_returns_pending_on_authorization_pending` —
+  `{ kind: 'pending' }`, never throws.
+- [ ] `poll_once_returns_slow_down_on_slow_down`.
+- [ ] `poll_once_resolves_with_tokens_on_success`.
+- [ ] `poll_once_surfaces_access_denied_as_typed_error` →
+  `DeviceFlowDeniedError`.
+- [ ] `poll_once_surfaces_expired_token_as_typed_error` →
+  `DeviceFlowExpiredError`.
+- [ ] `poll_once_honours_abort_signal`.
+- [ ] `does_not_log_user_code_in_debug_lines`.
+- [ ] `does_not_log_id_token_or_refresh_token_anywhere`.
+- [ ] `redact_util_handles_known_token_shapes` — `ya29.*`, `1//*`,
+  JWT `xxx.yyy.zzz`.
+
+### Implementation
+
+- Cache `AuthorizationServer` via
+  `oauth4webapi.discoveryRequest(new URL(issuer))` +
+  `processDiscoveryResponse(...)`.
+- Client + auth:
+  ```ts
+  import * as oauth from 'oauth4webapi';
+
+  function requireEnv(name: string): string {
+    const v = process.env[name];
+    if (!v || v.trim() === '') {
+      throw new MissingCredentialsConfigError(
+        `${name} is not set. Hub-mcp requires QUARTO_HUB_MCP_CLIENT_ID ` +
+        `and QUARTO_HUB_MCP_CLIENT_SECRET in the MCP-client env. ` +
+        `Ask your hub operator for the Google OAuth client credentials ` +
+        `they registered for hub-mcp.`,
+      );
+    }
+    return v;
+  }
+
+  const clientId     = requireEnv('QUARTO_HUB_MCP_CLIENT_ID');
+  const clientSecret = requireEnv('QUARTO_HUB_MCP_CLIENT_SECRET');
+
+  const client: oauth.Client = { client_id: clientId };
+  const clientAuth: oauth.ClientAuth = oauth.ClientSecretPost(clientSecret);
+  ```
+- `initiateDeviceFlow`:
+  ```ts
+  const params = new URLSearchParams({ scope: 'openid email profile' });
+  const resp = await oauth.deviceAuthorizationRequest(as, client, clientAuth, params);
+  return await oauth.processDeviceAuthorizationResponse(as, client, resp);
+  ```
+- `pollDeviceFlowOnce`:
+  ```ts
+  type PollResult =
+    | { kind: 'pending' }
+    | { kind: 'slow_down' }
+    | { kind: 'tokens'; bundle: oauth.TokenEndpointResponse };
+
+  try {
+    const resp = await oauth.deviceCodeGrantRequest(
+      as, client, clientAuth, deviceCode, { signal }
+    );
+    const tokens = await oauth.processDeviceCodeResponse(as, client, resp);
+    return { kind: 'tokens', bundle: tokens };
+  } catch (err) {
+    if (err instanceof oauth.ResponseBodyError) {
+      switch (err.error) {
+        case 'authorization_pending': return { kind: 'pending' };
+        case 'slow_down':             return { kind: 'slow_down' };
+        case 'access_denied':         throw new DeviceFlowDeniedError(err);
+        case 'expired_token':         throw new DeviceFlowExpiredError(err);
+        default:                      throw new DeviceFlowError(err);
+      }
+    }
+    throw err;
+  }
+  ```
+- Centralised `redact(s: string): string` installed at every log
+  call site.
+- `process.on('uncaughtException')` / `unhandledRejection` scrub
+  `ya29.*`, `1//.*`, JWT-shaped substrings before logging.
+
+## Phase 5 — hub-mcp credential storage (OS-native keyring; TDD)
+
+New module: `ts-packages/quarto-hub-mcp/src/auth/credential-store.ts`.
+Single opaque JSON blob per `@napi-rs/keyring`:
+
+| Platform | Backend | Binding |
+|---|---|---|
+| Windows | Credential Manager (DPAPI) | Current user account |
+| macOS | login Keychain, `kSecAttrAccessibleWhenUnlocked` | Current user account |
+| Linux | Secret Service / libsecret (default collection) | Current user session |
+
+No plaintext file on disk; no silent degradation.
+
+### Tests first
+
+Tests in `ts-packages/quarto-hub-mcp/test/auth/credential-store.test.ts`.
+Mock backend for unit tests; real keyring gated on
+`KEYRING_INTEGRATION=1` for per-platform CI lanes.
+
+**Cross-platform:**
+
+- [ ] `read_returns_null_when_keyring_entry_absent`
+- [ ] `write_then_read_round_trips` — deep equality on every field.
+- [ ] `write_uses_locked_service_and_account_names` — `service =
+  'dev.quarto.hub-mcp'`, `account = '<issuer>:<client_id>'`.
+- [ ] `entries_scoped_by_client_id_do_not_collide` — write under
+  client_id_a, read under client_id_b → `null`.
+- [ ] `clear_removes_the_entry`
+- [ ] `concurrent_writes_serialise_via_mutex` — last-wins, never torn.
+- [ ] `corrupt_blob_yields_null_not_throw`
+- [ ] `schema_version_mismatch_yields_null_not_throw` — schema_version
+  999 → re-auth, not crash.
+- [ ] `read_does_not_log_credential_values`
+- [ ] `write_does_not_log_credential_values`
+- [ ] `keyring_round_trip_completes_under_50ms_on_warm_path`
+
+**Headless / no-keyring:**
+
+- [ ] `write_throws_typed_error_when_secret_service_unavailable` —
+  `KeyringUnavailableError` naming Secret Service / libsecret.
+- [ ] `read_returns_null_when_secret_service_unavailable` — read is
+  not fatal so try-without-creds-first still works.
+- [ ] `keyring_error_does_not_leak_blob_in_message`
+
+**Platform-conditional** (gated on `process.platform`):
+
+- [ ] `[darwin]` `macos_uses_keychain_service_dev_quarto_hub_mcp` —
+  `security find-generic-password -s dev.quarto.hub-mcp -a
+  <issuer>:<client_id>` returns the blob.
+- [ ] `[darwin]` `macos_keychain_entry_is_user_scoped` — no
+  `kSecAttrAccessibleAlways` / `…ThisDeviceOnly` flag.
+- [ ] `[linux]` `linux_uses_secret_service_with_default_collection` —
+  `secret-tool lookup service dev.quarto.hub-mcp account
+  <issuer>:<client_id>` returns the blob.
+- [ ] `[win32]` `windows_uses_credential_manager_target_name` —
+  `cmdkey /list:dev.quarto.hub-mcp:<issuer>:<client_id>` shows entry.
+- [ ] `[win32]` `windows_entry_is_dpapi_protected_under_user_account`
+  — read from another user account on same machine fails / garbage.
+
+### Implementation
+
+- `class CredentialStore` with `read(): Promise<CredentialBundle | null>`,
+  `write(bundle): Promise<void>`, `clear(): Promise<void>`.
+- Single `@napi-rs/keyring` `Entry`:
+  ```ts
+  const SERVICE_NAME = 'dev.quarto.hub-mcp';
+  const accountName = `${cfg.issuer}:${cfg.clientId}`;
+  const entry = new keyring.Entry(SERVICE_NAME, accountName);
+  ```
+- In-process mutex via single `Promise` chain.
+- `JSON.stringify`/`parse`; read path validates `schema_version`.
+- **Error mapping** (asymmetric on purpose):
+  - `read`: not-found / Secret-Service-unavailable / D-Bus errors
+    → `null` with redaction-aware warning.
+  - `write` / `clear`: Secret-Service-unavailable → throw typed
+    `KeyringUnavailableError`. Connection-manager (Phase 8) maps this
+    to a tool-surface error directing user toward Secret Service
+    install or SPA cookie path.
+- All log sites go through `redact()`. Keyring errors re-wrapped via
+  `redact(err.message)`.
+- **No silent fallback.** Keyring or nothing.
+
+## Phase 6 — hub-mcp refresh-on-401 (TDD)
+
+New module: `ts-packages/quarto-hub-mcp/src/auth/refresh-manager.ts`.
+
+### Tests first
+
+- [ ] `refresh_called_on_401` — hub returns 401 once; refresh; retry;
+  succeeds.
+- [ ] `refresh_failure_triggers_reauth` — Google returns
+  `invalid_grant`; `CredentialStore.clear()`; caller receives
+  `ReauthRequired`.
+- [ ] `concurrent_401s_share_single_refresh` — three in-flight requests
+  → one POST to `/token`; all three retries see same new ID token.
+- [ ] `expired_id_token_proactively_refreshes` — within 60 s skew of
+  expiry → refresh before sending.
+- [ ] `refresh_persists_new_id_token_and_expiry`
+- [ ] `refresh_keeps_original_refresh_token_when_google_omits_field`
+  — **live Google behaviour** (empirically confirmed 2026-05-19,
+  3/3 refreshes omitted the field).
+- [ ] `refresh_keeps_original_refresh_token_when_google_returns_same_value`
+- [ ] `refresh_persists_rotated_refresh_token_when_google_returns_new_value`
+  — defensive in case Google or future IdP changes behaviour.
+- [ ] `refresh_does_not_log_tokens`
+- [ ] `refresh_does_not_persist_partial_state_on_failure`
+
+### Implementation
+
+- `class RefreshManager` wraps store + `oauth4webapi` server/client/auth:
+  ```ts
+  const resp = await oauth.refreshTokenGrantRequest(
+    as, client, clientAuth, refreshToken
+  );
+  const tokens = await oauth.processRefreshTokenResponse(as, client, resp);
+  ```
+- **Refresh-token persistence rule:** if response has `refresh_token`,
+  persist it; else keep the prior value. Discarding on missing field
+  would force re-auth on every refresh.
+- Public API:
+  - `getValidIdToken(): Promise<string>` — refreshes within skew window.
+  - `forceRefresh(): Promise<string>` — used by 401 retry path.
+  - Both share in-flight-promise mutex; concurrent callers coalesce.
+- On `ResponseBodyError` with `err.error === 'invalid_grant'`: call
+  `CredentialStore.clear()`, throw typed `ReauthRequired`. User-visible
+  message: "Your Quarto Hub credentials have expired or were revoked.
+  Ask me to authenticate again."
+
+## Phase 7 — hub-mcp MCP-tool exposure for auth (TDD)
+
+New module: `ts-packages/quarto-hub-mcp/src/auth/auth-tools.ts`.
+
+stdio-transport MCP clients (Claude Code, Claude Desktop, Cursor,
+Continue, etc.) capture stderr to log files — banners never reach the
+user. The MCP tool response is the only agent-visible channel.
+Uses only standard `CallToolResult.content` text — no
+client-specific rendering hints.
+
+### Tool surface
+
+Registered alongside existing read/write tools in `tools.ts`. Agent
+flow: call `authenticate_start` on `AuthRequired` (Phase 8) → show
+URL+code → user completes browser flow → call `authenticate_finish` →
+re-prompt on `pending`/`slow_down`.
+
+```
+authenticate_start({}) -> { verification_uri, canonical_url,
+                            user_code, expires_in_seconds }
+                         | "already authenticated as <email>"
+                         | "the configured hub does not require
+                            authentication; no action needed"
+authenticate_finish({}) -> "authenticated as <email>"
+                         | "still pending — complete the flow then
+                            ask me to retry"
+                         | <typed error>
+```
+
+### Tests first
+
+Tests in `ts-packages/quarto-hub-mcp/test/auth/auth-tools.test.ts`.
+
+- [ ] `start_returns_verification_uri_user_code_and_canonical_url`
+- [ ] `start_response_includes_expires_in_seconds`
+- [ ] `start_canonical_url_is_a_constant_not_from_google_response` —
+  even with malicious mock AS response, canonical URL unchanged.
+- [ ] `start_caches_device_code_in_process_memory_only` — no
+  `CredentialStore.write` call.
+- [ ] `start_short_circuits_when_already_authenticated`
+- [ ] `start_short_circuits_when_hub_known_no_auth` — spy on HTTP
+  client; no request issued.
+- [ ] `start_initiates_device_flow_when_hub_known_auth_required`
+- [ ] `start_initiates_device_flow_when_auth_mode_unknown` — only
+  positive `'no-auth'` triggers short-circuit.
+- [ ] `start_overwrites_prior_unconsumed_device_code` — outside the
+  ~5 s coalescing window.
+- [ ] `finish_without_prior_start_returns_typed_error`
+- [ ] `finish_pending_returns_user_actionable_text`
+- [ ] `finish_slow_down_returns_user_actionable_text_with_wait`
+- [ ] `finish_success_persists_bundle_via_credential_store`
+- [ ] `finish_success_clears_cached_device_code`
+- [ ] `finish_terminal_error_clears_cached_device_code` —
+  `DeviceFlowDeniedError` / `DeviceFlowExpiredError`.
+- [ ] `finish_returns_authenticated_as_email_from_id_token` — only
+  `email` claim, nothing else.
+- [ ] `tool_responses_never_contain_id_token_or_refresh_token`
+- [ ] `expired_cached_device_code_is_cleared_on_next_start`
+- [ ] `concurrent_finish_calls_serialise_safely`
+- [ ] `finish_called_too_soon_returns_slow_down_advice_without_polling_google`
+  — `nextPollAllowedAt > now`: return "still pending" text, **do not**
+  call `oauth4webapi.deviceCodeGrantRequest`.
+- [ ] `finish_after_interval_elapsed_polls_google`
+- [ ] `start_called_repeatedly_within_window_short_circuits` — two
+  calls within ~5 s return same `device_code` without calling Google.
+- [ ] `slow_down_response_increases_subsequent_interval` — bumps
+  `nextPollAllowedAt` by 5 s per RFC 8628 §3.5.
+
+### Implementation
+
+- Module exposes:
+  ```ts
+  registerAuthTools(server, deps: {
+    credentialStore: CredentialStore;
+    refreshManager: RefreshManager;
+    connectionManager: ConnectionManager;
+    flowConfig: { clientId: string; issuer: string };
+  }): void
+  ```
+  Tool annotations: `readOnlyHint: false`, `destructiveHint: false`,
+  `idempotentHint: false`.
+- Cached state (closure-local, never persisted):
+  `{ deviceCode, interval, expiresAt: Date, nextPollAllowedAt: Date }`.
+  Accessor clears when `expiresAt < now`.
+- **Rate limiting** (RFC 8628 §3.5):
+  - `authenticate_start`: if non-expired `device_code` exists and was
+    created within ~5 s, return cached values without re-initiating.
+  - `authenticate_finish`: gate on `nextPollAllowedAt`; bump by 5 s on
+    `slow_down`; if too soon, return "still pending" text without
+    calling Google.
+  - Clear cached state on success and on terminal errors.
+- `authenticate_start`:
+  1. `RefreshManager.getValidIdToken()` succeeds → decode email,
+     return "Already authenticated as <email>".
+  2. `connectionManager.lastObservedAuthMode() === 'no-auth'` → return
+     "The configured hub does not require authentication; no action
+     needed." (no Google call). Only positive observation triggers
+     short-circuit; `'requires-auth'` and `'unknown'` fall through.
+  3. Otherwise call `initiateDeviceFlow`, cache state, return:
+     ```
+     To authenticate Quarto Hub MCP:
+
+     1. Open https://www.google.com/device in your browser
+        (also valid: <verification_uri Google returned>)
+     2. Enter this code: ABCD-EFGH
+     3. Sign in and approve the consent screen.
+
+     The code expires in <expires_in_seconds> seconds. Once
+     you've completed those steps, ask me to finish
+     authentication.
+     ```
+- `authenticate_finish`:
+  1. No cached device_code or expired → tool error directing to
+     `authenticate_start`.
+  2. `pollDeviceFlowOnce(config, deviceCode)`.
+  3. Dispatch:
+     - `pending` → "Still waiting for browser approval…"
+     - `slow_down` → similar with recommended brief wait.
+     - `tokens` → `CredentialStore.write(bundle)`, decode email,
+       clear cached device_code, return "Authenticated as <email>".
+     - `DeviceFlowDeniedError` / `DeviceFlowExpiredError` → clear,
+       return typed tool error.
+- Canonical URL `https://www.google.com/device` is a hard-coded
+  constant in this module — never from Google's response.
+
+### Cross-tool wiring
+
+`registerAuthTools` runs **before** `registerTools` so read/write tools
+can detect "no credentials" and instruct the agent to call
+`authenticate_start` in their own error text.
+
+## Phase 8 — quarto-sync-client + connection-manager integration (TDD)
+
+`@automerge/automerge-repo-network-websocket@2.5.1`'s
+`BrowserWebSocketClientAdapter` does **not** accept custom headers
+(constructor `(url, retryInterval = 5000)` → `new WebSocket(this.url)`,
+`WebSocketClientAdapter.ts:53-59,82`). Ship a local
+`NodeWebSocketClientAdapter` inside `quarto-sync-client` that constructs
+`new WebSocket(url, [], { headers })` on Node. Selected when consumer
+passes `auth.getBearer`; browser default unchanged.
+
+Follow-up beads issue: submit upstream PR to thread `headers` through
+`BrowserWebSocketClientAdapter`.
+
+### Tests first
+
+- [ ] `client_passes_authorization_header_to_adapter` — mock `ws`,
+  assert constructor receives header.
+- [ ] `client_does_not_log_authorization`
+- [ ] `client_redacts_token_in_error_messages` — `[redacted]`, not token.
+- [ ] `connection_manager_threads_token_through_when_creds_exist`
+- [ ] `connection_manager_omits_authorization_when_no_creds`
+- [ ] `connection_manager_succeeds_against_no_auth_hub_without_creds` —
+  hub `auth_config: None` (`context.rs:71`) returns 101; connect
+  succeeds with no device-flow trigger.
+- [ ] `connection_manager_succeeds_against_no_auth_hub_with_stale_creds`
+- [ ] `connection_manager_handles_401_via_refresh_then_retry`
+- [ ] `connection_manager_surfaces_reauth_required` — typed error
+  named `authenticate_start`.
+- [ ] `connection_manager_surfaces_auth_required_when_hub_demands_auth_and_no_creds`
+  — trigger is the hub's 401, not absence of creds.
+- [ ] `connection_manager_surfaces_reauth_after_post_refresh_401` —
+  second consecutive 401 trigger.
+- [ ] `last_observed_auth_mode_starts_unknown`
+- [ ] `last_observed_auth_mode_becomes_no_auth_on_101_without_creds`
+- [ ] `last_observed_auth_mode_becomes_requires_auth_on_101_with_creds`
+- [ ] `last_observed_auth_mode_becomes_requires_auth_on_401`
+- [ ] `last_observed_auth_mode_unchanged_on_network_error`
+- [ ] `last_observed_auth_mode_not_persisted_across_restart`
+- [ ] `browser_path_unchanged_when_no_auth` — additive change.
+- [ ] `insecure_bearer_to_loopback_succeeds_without_env_flag` —
+  `localhost` / `127.0.0.1` / `::1` / `*.localhost`.
+- [ ] `insecure_bearer_to_non_loopback_throws_without_env_flag` —
+  `InsecureTransportError` naming the env var. No HTTP issued.
+  **CVE-prevention test.**
+- [ ] `insecure_bearer_to_non_loopback_succeeds_with_env_flag` — loud
+  warning on every connect (not just first).
+- [ ] `no_bearer_over_http_to_non_loopback_succeeds_without_env_flag`
+  — no Bearer to leak, gate doesn't fire.
+- [ ] `wss_bearer_to_non_loopback_succeeds_without_env_flag` — baseline.
+
+### Implementation
+
+- Add `auth?: { getBearer: () => Promise<string> }` to `connect()`
+  options. A getter so retry loop sees the refreshed token.
+- New `quarto-sync-client/src/NodeWebSocketClientAdapter.ts`
+  implementing the upstream `NetworkAdapter` contract but with
+  `new WebSocket(url, [], { headers: { Authorization: \`Bearer ${token}\` } })`.
+- `client.ts` selects adapter at `:336` and `:722` based on
+  `auth.getBearer` presence.
+- **`connection-manager.ts` try-then-fallback policy:**
+  1. Read bundle from `CredentialStore` (may be absent).
+  2. Attempt WS upgrade with `Authorization: Bearer <bundle.idToken>`
+     if bundle exists; without header otherwise.
+  3. Dispatch:
+     - **101** → success.
+     - **401 + creds attached** → `forceRefresh()`, retry once. Still
+       401 → `ReauthRequired` naming `authenticate_start`.
+     - **401 + no creds attached** → `AuthRequired` naming
+       `authenticate_start`. Trigger is the hub's 401, not creds absence.
+     - Other / network error → typed connection error; auth state
+       unchanged.
+- **`lastObservedAuthMode: 'no-auth' | 'requires-auth' | 'unknown'`**
+  (process-local, initialised `'unknown'`):
+  - 101 + no Authorization attached → `'no-auth'`.
+  - 101 + Authorization attached → `'requires-auth'` (conservative).
+  - Any 401 → `'requires-auth'`.
+  - Other / network error → unchanged.
+
+  Exposed via `lastObservedAuthMode()` for Phase 7's short-circuit.
+- **Insecure-transport gate.** Before constructing socket:
+  1. No Bearer being attached → no gate fires.
+  2. `wss://` / `https://` → fine.
+  3. `ws://` / `http://` + loopback host → fine.
+  4. `ws://` / `http://` + non-loopback → require
+     `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1`. Unset → throw
+     `InsecureTransportError` naming the env var. Set → loud warning
+     on every connect, proceed.
+- Centralised redaction shared with Phase 4.
+
+## Phase 9 — End-to-end verification (CRITICAL — per CLAUDE.md)
+
+Tests passing is necessary but not sufficient. Before declaring done:
+
+1. `cargo xtask verify` clean.
+2. Bring up real hub locally with audience allowlist (SPA client_id +
+   hub-mcp client_id).
+3. Sign in to SPA in real browser via Google OIDC; confirm cookie path
+   unchanged (regression).
+4. **Auth flow E2E.** Clean machine state (no keyring entry under
+   `dev.quarto.hub-mcp:<issuer>:<client_id>`). Connect Claude Code as
+   MCP client; ask agent to `connect_project`.
+   - Agent receives typed `AuthRequired` naming `authenticate_start`.
+   - Agent calls `authenticate_start`; tool response carries Google's
+     `verification_uri`, the `user_code`, and canonical URL
+     `https://www.google.com/device`.
+   - Open canonical URL; type code; approve consent screen.
+   - Agent calls `authenticate_finish` → "Authenticated as <email>".
+   - Re-issue action; succeeds.
+   - **Inspect credential store:**
+     - macOS: `security find-generic-password -s dev.quarto.hub-mcp
+       -a <issuer>:<client_id> -w` returns blob; parses to valid
+       bundle. No plaintext file under `~/Library/Application Support/quarto/`.
+     - Linux: `secret-tool lookup service dev.quarto.hub-mcp account
+       <issuer>:<client_id>` returns blob. No plaintext under
+       `~/.config/quarto/`.
+     - Windows: `cmdkey /list:dev.quarto.hub-mcp:<issuer>:<client_id>`
+       shows entry; round-trip via small Node REPL with
+       `@napi-rs/keyring`. No plaintext under `%APPDATA%\quarto\`.
+   - **No plaintext credential leaks:** `grep -r` token bytes against
+     `$HOME` (or `%APPDATA%\..`) excluding OS keyring storage paths.
+   - **Agent transcript:** no token value anywhere in tool responses
+     or error messages.
+
+4a. **No-auth hub regression.** Second hub instance with
+    `auth_config: None`. Clean machine state, no keyring entry.
+    - Agent action succeeds with no `AuthRequired`, no device flow.
+    - No `authenticate_start` in MCP-client transcript.
+    - No keyring entry created.
+    - **Explicit-authenticate short-circuit.** After a hub call (flips
+      `lastObservedAuthMode → 'no-auth'`), ask agent to authenticate.
+      `authenticate_start` returns "The configured hub does not require
+      authentication; no action needed.". No request to
+      `oauth2.googleapis.com` (check hub-mcp logs).
+    - **Short-circuit requires observation.** Restart hub-mcp (clears
+      state). Before any hub call, ask agent to authenticate.
+      Device flow *does* initiate (state is `'unknown'`). Complete or
+      abort, then a hub call against the no-auth hub flips state, then
+      the explicit-authenticate request short-circuits.
+
+4b. **Allowlist parity E2E.** Restart authenticated hub with
+    `--allowed-domains posit.co` (no `--allowed-emails`).
+    - **SPA cookie path:** `@posit.co` Google account → 200. `@gmail.com`
+      → 403 on `/auth/callback`; audit shows `credential_kind="cookie"`,
+      `outcome="deny"`, `detail="user_not_allowlisted"`.
+    - **MCP Bearer path:** clean keyring, hub-mcp through Claude Code
+      with `@gmail.com` → device flow succeeds, WS upgrade returns 403.
+      Audit shows `credential_kind="bearer"`, `outcome="deny"`,
+      `detail="user_not_allowlisted"`. Agent surface reports 403 as
+      typed error.
+    - **MCP happy path:** `@posit.co` device flow → 200; `connect_project`
+      succeeds.
+    - Record both audit lines (cookie 403, bearer 403) in Verification
+      log; `detail` byte-identical between them.
+
+4c. **Insecure-Bearer dev-mode interaction.** Authenticated hub with
+    `--allow-insecure-auth` (plain HTTP).
+    - hub-mcp → `ws://localhost:3000/ws` without env var: connects,
+      Bearer attached, auth succeeds (loopback exception).
+    - Same on non-loopback bind (`ws://hub.local:3000/ws`) without env
+      var: `InsecureTransportError`, no socket opened. With
+      `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1`: connects, loud warning
+      in stderr/log.
+
+5. **Force refresh.** Write modified bundle into keyring entry with
+   `id_token_expires_at` in past (via `@napi-rs/keyring` or platform
+   CLI). Re-run tool call; confirm single `/token` call to Google;
+   keyring entry updated with fresh expiry.
+6. **Force re-auth.** Revoke hub-mcp grant at myaccount.google.com.
+   Re-run tool call; confirm typed `ReauthRequired` with documented
+   message.
+7. **Dual-credential CVE.** `curl -H "Authorization: Bearer <jwt>"
+   --cookie "quarto_hub_token=…"` against protected endpoint → 400.
+   Also: hub-mcp WS upgrade succeeds with **no** `Origin` header and
+   **no** `X-Requested-With` (Node `ws` defaults). Regression here is
+   the failure mode that drove this audit.
+8. **Audit-log output.** Confirm `tracing` events for `auth_ok`
+   (kind=cookie, kind=bearer) and `auth_fail` (conflicting_credentials)
+   with correct `sub`, `credential_kind`, `action`, `outcome`.
+9. **Record exact invocations + observed output** in Verification log
+   below. Test-pass-only completion is **not acceptable**.
+
+## Phase 10 — Operational hardening + documentation
+
+- [ ] **Operator runbook: hub-mcp Google OAuth registration.**
+  One-time setup in Google Cloud Console, symmetric with existing SPA
+  OAuth registration (covered in
+  `claude-notes/plans/2026-02-24-oauth2-middleware-design.md`):
+  - Create second OAuth client of type "TV and Limited Input devices"
+    in same Google project as SPA client.
+  - Copy client_id and client_secret.
+  - Configure hub with `--additional-audiences <hub-mcp-client-id>`.
+  - Publish both values in operator's deployment docs.
+  - Secret handled in operator's normal secret-management (Kubernetes
+    Secret, 1Password Connect, AWS Secrets Manager, etc.). Rotate on
+    leak via Google Cloud Console.
+- [ ] **End-user `.mcp.json` example:**
+  ```json
+  {
+    "mcpServers": {
+      "quarto-hub": {
+        "command": "npx",
+        "args": ["@quarto/quarto-hub-mcp", "--server", "wss://hub.example.com/ws"],
+        "env": {
+          "QUARTO_HUB_MCP_CLIENT_ID":     "<operator-supplied>.apps.googleusercontent.com",
+          "QUARTO_HUB_MCP_CLIENT_SECRET": "<operator-supplied>"
+        }
+      }
+    }
+  }
+  ```
+  Document: both vars mandatory; values from operator's docs;
+  per-developer `~/.config/claude/mcp.json` is the intended home (not
+  repo-checked-in MCP configs).
+- [ ] **README: credential-sourcing rationale** — cross-reference
+  Phase 1 lock-in and threat-model #10. Cover symmetry with hub-client,
+  operator sovereignty, no Quarto-team default, `device_code`
+  defence-in-depth, rotation procedure.
+- [ ] **Credential storage docs.** Per-platform clear commands:
+  - Windows: `cmdkey /delete:dev.quarto.hub-mcp:…`
+  - macOS: `security delete-generic-password -s dev.quarto.hub-mcp`
+  - Linux: `secret-tool clear service dev.quarto.hub-mcp …`
+
+  Bundle is bound to current user account. Stolen ID tokens
+  authenticate ≤1 h regardless of grant revocation. Headless Linux
+  without Secret Service / libsecret cannot run hub-mcp → SPA cookie
+  path or install `gnome-keyring-daemon` / `kwallet5`.
+- [ ] Document the revocation path (myaccount.google.com → Third-party
+  apps).
+- [ ] Audit error-reporting and tracing config for token-leak paths.
+  Add regression test scanning tracing output for `Bearer ` and
+  Google-token-shaped substrings.
+- [ ] `hub-client/changelog.md` not updated by this work — SPA does
+  not change.
+- [ ] **Future work, not in v1:**
+  - `authenticate_status` and `authenticate_clear` MCP tools.
+  - `--login` CLI flag for direct interactive runs.
+  - Hub-side `sub_denylist` — closes the ≤1 h residual-validity window.
+    v1 accepts the risk; promote if leakage-detection telemetry shows
+    exploitation.
+  - Per-project / per-scope authorization with hub-issued wrapper JWT.
+  - GitHub OIDC as second IdP.
+  - Refresh-token expiry monitoring + proactive re-auth nudge.
+  - PKCE on device-authorization grant (RFC 9700 §4.13) — Google
+    doesn't support it on this endpoint today; revisit if/when it does.
+
+## Residual risks accepted for v1
+
+- Stolen ID tokens authenticate for up to ≤1 h regardless of grant
+  revocation at Google (closed only by deferred `sub_denylist`).
+- Leaked refresh tokens are an indefinite foothold until manual
+  user-driven revocation (Google does not rotate refresh tokens for
+  this client type — no rotation-based theft-detection signal).
+- Headless Linux without Secret Service / libsecret cannot run hub-mcp
+  — fall back to SPA cookie path.
+
+## Beads issue plan
+
+After review:
+
+- One epic: "hub-mcp Google device-flow auth (Design C′)".
+- One issue per phase (1–10), `parent-child`-linked to epic.
+- Phase 2 dual-credential test gets its own `bug`-p0 issue: highest-
+  impact CVE-shaped item.
+- Phase 5 `keyring_error_does_not_leak_blob_in_message` gets `bug`-p1.
+- Phase 7 `start_canonical_url_is_a_constant_not_from_google_response`
+  gets `bug`-p1.
+
+## References
+
+- `claude-notes/plans/2026-04-27-hub-mcp-auth-design.md` — design doc.
+- `claude-notes/plans/2026-03-13-hub-mcp-server-design.md` — hub-mcp design.
+- `claude-notes/plans/2026-02-24-oauth2-middleware-design.md` — hub
+  OAuth middleware.
+- `claude-notes/plans/2026-02-26-httponly-cookie-auth.md` — HttpOnly
+  cookie design.
+- RFC 8628 — OAuth 2.0 Device Authorization Grant.
+- Google "OAuth 2.0 for Limited-Input Devices":
+  `https://developers.google.com/identity/protocols/oauth2/limited-input-device`
+- `crates/quarto-hub/src/auth.rs` — OIDC/JWT validation; Phase 2 lands here.
+- `crates/quarto-hub/src/server.rs:144-160,262-285` — cookie extraction
+  + `Authenticated` extractor; Bearer extraction lands here.
+- `ts-packages/quarto-sync-client/src/client.ts:336,722` — adapter
+  call sites for Phase 8 swap.
+- `ts-packages/quarto-hub-mcp/src/index.ts` — entry point;
+  device-flow bootstrap lands here.
+- `ts-packages/quarto-hub-mcp/src/connection-manager.ts` — Bearer
+  plumbs into `client.connect()` here.
+- Posit Assistant `MCPOAuthProvider.ts` — refresh-mutex pattern
+  (Phase 6); skip the callback server (device flow doesn't need it)
+  and `SingleFileStore` (we use OS keyring).
+- `@napi-rs/keyring`: `https://github.com/Brooooooklyn/keyring-node`.
+
+## Verification log
+
+### Empirical verification — 2026-05-19
+
+Scripts: `claude-notes/scripts/phase0-google-init.sh` and
+`phase0-google-finish.sh`. Credentials from `~/.Renviron`.
+
+**Option A vs Option B at `oauth2.googleapis.com/token`.** Two
+independent runs polled `/token` pre-approval without `client_secret`.
+Both returned:
+```json
+{ "error": "invalid_request",
+  "error_description": "Missing required parameter: client_secret" }
+```
+→ **Option B locked in.**
+
+**Device-authorization response** (Google's `/device/code`):
+```json
+{ "device_code": "AH-1Ng…<98 chars>",
+  "user_code":   "FJZL-WTDR",
+  "expires_in":  1800,
+  "interval":    5,
+  "verification_url": "https://www.google.com/device" }
+```
+Google uses `verification_url`; RFC 8628 says `verification_uri`.
+`oauth4webapi` normalises. `verification_uri_complete` not returned.
+
+**Token-endpoint response on successful grant** (redacted):
+```json
+{ "access_token": "<redacted>",
+  "expires_in":   3599,
+  "refresh_token":"<redacted>",
+  "scope": "https://www.googleapis.com/auth/userinfo.email openid https://www.googleapis.com/auth/userinfo.profile",
+  "token_type":   "Bearer",
+  "id_token":     "<redacted>" }
+```
+
+**ID-token claim shape** (one fresh token, hub-mcp client):
+```json
+{ "iss": "https://accounts.google.com",
+  "azp": "<hub-mcp client_id>",
+  "aud": "<hub-mcp client_id>",
+  "sub": "<redacted>",
+  "hd":  "posit.co",
+  "email": "<redacted>",
+  "email_verified": true,
+  "at_hash": "Av7uZsJPrzEgJVMPTK8YFA",
+  "name": "<redacted>",
+  "picture": "https://lh3.googleusercontent.com/...",
+  "given_name": "<redacted>",
+  "family_name": "<redacted>",
+  "iat": 1779177814,
+  "exp": 1779181414 }
+```
+- `aud` single string, not array
+- `azp` present, equals `aud`
+- `jti` absent
+- `nbf` absent
+
+**Refresh-token rotation** (three sequential
+`grant_type=refresh_token` calls, then fourth using original):
+
+| Call | `refresh_token` in response | `id_token` | Original still works? |
+|---|---|---|---|
+| 1 | **absent** | present | (n/a) |
+| 2 | **absent** | present | (n/a) |
+| 3 | **absent** | present | (n/a) |
+| 4 (original) | — | present | **YES** |
+
+→ **Google does NOT rotate refresh tokens for this client type.**
+
+### Phase 9 end-to-end verification (to be filled at completion)
+
+> Reserved. Populate at completion with exact commands run, output
+> snippets confirming each end-to-end step, and explicit attestation
+> that each was visually inspected.
