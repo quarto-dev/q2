@@ -1,10 +1,19 @@
 # Plan 7a — Runtime user-filter idempotence check + opt-out
 
-**Date:** 2026-05-05
+**Date:** 2026-05-05 (revised 2026-05-20)
 **Branch:** feature/q2-preview
 **Status:** Implementation plan (open questions named)
 **Milestone:** none directly — extends M3 with an opt-in safety check;
   doesn't block the milestone
+
+## Epic context
+
+Part of the **provenance epic** (Plans 3–8). Plan 7a is the reliability
+follow-up to Plan 7: once the writer round-trips correctly for
+idempotent filters, this plan adds runtime detection for the
+non-idempotent case, with attribution to the offending filter and a
+declarative opt-out. The file name keeps its q2-preview-plan-N form for
+continuity with the earlier discussion notes.
 
 ## Goal
 
@@ -41,8 +50,10 @@ specifically:
   current test does not catch it**.
 
 Plan 7a's runtime check targets **round-trip non-idempotence** —
-parse, pipeline, write, parse, pipeline, hash-compare. See §"Plan 3
-strengthening" below.
+parse, pipeline, write, parse, pipeline, hash-compare. Plan 3 covers
+flavor (1) at CI time for built-ins; Plan 7a covers flavor (2) at
+runtime for user filters. Built-in filter round-trip is not covered
+by any current plan — see §"Notes" for the rationale.
 
 ## Scope
 
@@ -89,7 +100,9 @@ strengthening" below.
   2. Serialize AST_1 via the qmd writer → qmd_1.
   3. Run pipeline on qmd_1 → AST_2.
   4. Compare `compute_blocks_hash_fresh(&AST_1.blocks)` vs
-     `compute_blocks_hash_fresh(&AST_2.blocks)`.
+     `compute_blocks_hash_fresh(&AST_2.blocks)`, and the parallel
+     `compute_meta_hash_fresh(&AST_1.meta)` vs `(&AST_2.meta)` (new
+     helper landing in Plan 3).
 - **Per-filter attribution**: when the whole-pipeline check fails, run
   the same round-trip with each filter active in isolation (others
   stubbed). Filters whose isolated round-trip fails are named in the
@@ -113,11 +126,12 @@ strengthening" below.
 
 ### Out of scope
 
-- **Strengthening Plan 3's CI test to round-trip flavor**. Plan 3
-  currently catches non-determinism (`pipeline(x)` twice); the
-  round-trip flavor (`pipeline(write(pipeline(x)))`) catches a
-  different class of bug. See §"Plan 3 strengthening" below — flagged
-  as a Plan 3 amendment, not Plan 7a.
+- **Extending the runtime round-trip check to built-in filters**.
+  Plan 7a's check fires only for filters in `Vec<FilterMetadata>` with
+  `source = UserConfig` or `Extension`; ship-with-Quarto Lua filters
+  (today: just `video-filter.lua`) are not on that list. Built-in
+  filter round-trip is unverified anywhere — see §"Notes" for the
+  reasoning behind not closing this gap in v1.
 - **File watchers for filter sources**. Demand-driven invalidation via
   `filter_sources_hash` on next render is sufficient. The user edits
   a filter, opens the document, hash mismatches, check re-runs.
@@ -130,8 +144,9 @@ strengthening" below.
   filter would block the first save by O(filter_count) pipeline
   passes. Acceptable for v1; revisit if reports come in.
 - **Idempotence checks on built-in filters at runtime**. Plan 3's CI
-  test (after the strengthening noted above) is the right place for
-  built-ins. Runtime check is for user-supplied filters specifically.
+  test is the right place for the pipeline-determinism property on
+  built-ins. The round-trip property on built-ins is unverified — see
+  the bullet above and §"Notes."
 
 ## Design decisions
 
@@ -139,7 +154,8 @@ strengthening" below.
   check serializes the first pass's AST through the qmd writer and
   re-parses, mirroring the actual round-trip the writer performs.
   Pipeline determinism is a weaker property; we get that for free
-  from Plan 3's CI test (after strengthening).
+  from Plan 3's CI test (which covers pipeline non-determinism for
+  built-in transforms and the one built-in Lua filter).
 - **Cache verdict per session, persisted in IndexedDB**. The cache
   key includes `filter_sources_hash` (filter file bytes + opt-out
   flags). Surviving session boundaries is correct: if filter sources
@@ -236,38 +252,6 @@ Total cost when an issue is detected: 2 + 2N pipeline runs (one
 whole-set check, two per filter for attribution). For 5 filters,
 ~12 runs. Bounded; acceptable on first edit per session, cached after.
 
-## Plan 3 strengthening (out of scope here, flagged for the team)
-
-Plan 3's idempotence test (currently `run_pipeline(fixture)` twice on
-the same source) catches **pipeline non-determinism** — filters that
-use time, RNG, or mutable state. It does **not** catch
-**round-trip non-idempotence** — the `f(f(x)) ≠ f(x)` case where the
-filter is deterministic but produces different output when re-applied
-to its own output through the qmd writer.
-
-Plan 7a's runtime check targets round-trip non-idempotence, which is
-the property that actually matters for q2-preview's writer. The Plan 3
-CI test should be strengthened to also run this flavor, so that
-built-in filters are CI-verified for both:
-
-```rust
-// Existing Plan 3 test: pipeline non-determinism
-let ast_1 = run_pipeline(fixture, ...);
-let ast_2 = run_pipeline(fixture, ...);
-assert_eq!(blocks_hash(&ast_1), blocks_hash(&ast_2));
-
-// New: round-trip idempotence (the property that breaks q2-preview)
-let ast_a = run_pipeline(fixture, ...);
-let qmd_a = qmd_write_to_string(&ast_a);
-let ast_b = run_pipeline(&qmd_a, ...);
-assert_eq!(blocks_hash(&ast_a), blocks_hash(&ast_b));
-```
-
-This change is small (~30 lines) and lands in Plan 3's test file.
-**Recommend adding to Plan 3's scope as an amendment** rather than to
-Plan 7a, since it concerns built-in filter coverage at CI time, not
-runtime behavior.
-
 ## Open questions for implementation
 
 - **Cross-session cache validity**: the profile cache persists. Should
@@ -304,6 +288,16 @@ runtime behavior.
   flow through the same path. Confirm they reach the diagnostic panel
   and are visually distinguishable from pipeline warnings (or
   acceptably co-mingled — TBD by hub-client UX, same as Q-3-42/Q-3-43).
+- **Per-Lua-line attribution (future)**: Q-3-44 today references the
+  filter file path via `<path>`. When the Lua-file-registration
+  follow-up lands (see Plan 4 / Plan 6's "Dispatch follow-up"),
+  filter-constructed nodes will carry a `Dispatch` anchor pointing at
+  a typed `Original{lua_file_id, line_start, line_end}`. The Q-3-44
+  diagnostic could then sharpen "filter `<path>` is not idempotent" to
+  "filter `<path>` line `<N>` is not idempotent" — pointing at the
+  specific Lua-side construction site that produced the non-idempotent
+  output. Deferred until the registration work lands; the current
+  `<path>`-only diagnostic is actionable.
 
 ## References
 
@@ -324,10 +318,18 @@ runtime behavior.
 - Plan 7 — the q2-preview pipeline + qmd writer this check supports.
   The check uses Plan 7's `pipeline_kind: Some("preview")` machinery
   for both passes.
-- Plan 3 — CI-time idempotence verification for built-in filters.
-  Plan 3 strengthening (above) extends the test to round-trip flavor.
-- Plan 4 — `By` types; `is_atomic_synthesizer()` is unrelated to this
-  plan but the runtime check shares the source-info-blind hash.
+- Plan 3 — CI-time pipeline-determinism verification for built-in
+  transforms and the one built-in Lua filter. Plan 3 ships
+  `compute_meta_hash_fresh` which this plan reuses for the meta
+  comparison in the round-trip check. The transform/filter-author
+  contract Plan 3 enforces is documented at
+  `claude-notes/instructions/idempotence-contract.md`; new transforms
+  on both the built-in and user-filter sides must meet it.
+- Plan 4 — `By` types; `is_atomic_kind()` is unrelated to this plan
+  but the runtime check shares the source-info-blind hash. Plan 4's
+  "Dispatch follow-up" (Lua-file registration in `SourceContext`) is
+  the prerequisite for the per-Lua-line attribution refinement noted
+  under "Open questions" above.
 
 ## Test plan
 
@@ -374,9 +376,11 @@ runtime behavior.
   `Synthetic`/`Derived` content for realism).
 - **Blocks**: nothing structurally; this is a reliability improvement,
   not a milestone deliverable.
-- **Related**: Plan 3 (CI-time test for built-in filters) — would
-  benefit from the strengthening proposed in §"Plan 3 strengthening"
-  above.
+- **Related**: Plan 3 (CI-time pipeline-determinism test for built-in
+  transforms and the one built-in Lua filter). Plan 3 ships
+  `compute_meta_hash_fresh` / `compute_meta_hash_fresh_excluding_rendered`
+  in `quarto-ast-reconcile`; this plan reuses both for the meta
+  comparison in the round-trip check.
 
 ## Risk areas
 
@@ -430,10 +434,26 @@ it out keeps Plan 7 focused on the writer's coarsen + soft-drop logic
 gate the milestone.
 
 The check is targeted at user-supplied Lua filters. Built-in filters
-that ship with Quarto are covered by Plan 3 (CI-time, with the
-strengthening proposed above). User filters can't be statically
-analyzed for idempotence (uncomputable for arbitrary Lua), so the
-runtime check via double-pass-and-hash is the available mechanism.
+that ship with Quarto are covered by Plan 3 for the
+pipeline-determinism property only (`pipeline(x)` twice, same source,
+hash-compare). The round-trip property
+(`pipeline(write(pipeline(x))) == pipeline(x)`) is **not** verified
+for built-ins anywhere in the epic. This gap is accepted in v1
+because:
+
+1. The built-in Lua filter universe is one filter today
+   (`video-filter.lua`); its idempotence is easy to read from source.
+2. Round-trip is exercised in production by Plan 7's incremental
+   writer; a non-idempotent built-in would surface as user-visible
+   text drift, which we'd find via dogfooding before Plan 7 ships.
+3. Extending Plan 7a's runtime check to also fire for built-in
+   filters is a small change to `FilterMetadata` filtering (a
+   `Vec::iter()` predicate), tracked as a follow-up if the gap
+   bites.
+
+User filters can't be statically analyzed for idempotence
+(uncomputable for arbitrary Lua), so the runtime check via
+double-pass-and-hash is the available mechanism.
 
 The opt-out (`idempotent: false`) gives users intentional escape — a
 timestamp-emitting filter can declare itself non-idempotent and silence
