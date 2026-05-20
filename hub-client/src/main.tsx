@@ -5,6 +5,8 @@ import './theme.css'
 import './index.css'
 import App from './App.tsx'
 import { savePreAuthHash, restorePreAuthHash } from './utils/routing'
+import { AuthProviderRoot, noopAuthProvider } from './auth/AuthProvider'
+import { googleAuthProvider } from './auth/GoogleAuthProvider'
 
 // Pre-auth hash preservation for the Google OAuth redirect flow.
 // On first visit: save the hash (e.g., #/share/...) before React clears it.
@@ -25,6 +27,8 @@ if (import.meta.env.VITE_E2E === '1') {
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
+const authProvider = GOOGLE_CLIENT_ID ? googleAuthProvider : noopAuthProvider;
+
 const root = (
   <StrictMode>
     <App />
@@ -33,6 +37,8 @@ const root = (
 
 createRoot(document.getElementById('root')!).render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || 'disabled'}>
-    {root}
+    <AuthProviderRoot provider={authProvider}>
+      {root}
+    </AuthProviderRoot>
   </GoogleOAuthProvider>,
 )

@@ -6,19 +6,20 @@
  * On mount, calls GET /auth/me to check if the user has a valid cookie.
  * If 200, stores the display info in React state. If 401, shows login.
  *
- * Token refresh: ~15 minutes before the cookie expires, the hook enables
- * Google One Tap with `auto_select` to silently obtain a fresh credential.
- * The new credential is sent to POST /auth/refresh which validates it and
+ * Token refresh: ~15 minutes before the cookie expires, the hook asks
+ * the active `AuthProvider` to silently obtain a fresh credential. The
+ * new credential is sent to POST /auth/refresh which validates it and
  * sets a fresh cookie. If silent refresh fails, auth is cleared at expiry.
  * The 15-minute buffer absorbs Chrome's intensive timer throttling for
  * backgrounded tabs (timers may skew by 1+ minutes after 5 min hidden).
  *
  * Visibility-aware refresh: if a background tab's timers were throttled
- * and the cookie expired, attempts a One Tap refresh before logging out.
+ * and the cookie expired, attempts silent renewal before logging out.
  *
  * 401-triggered refresh: callers that observe a mid-session 401 on an
- * authenticated REST request can call `triggerRefresh()` to enable One Tap
- * without logging the user out. Concurrent calls are coalesced.
+ * authenticated REST request can call `triggerRefresh()` to enable
+ * silent renewal without logging the user out. Concurrent calls are
+ * coalesced.
  *
  * During refresh, a 401 from /auth/me is handled gracefully: the hook
  * shows a loading state (not the login screen) while the refresh is
@@ -26,7 +27,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useGoogleOneTapLogin } from '@react-oauth/google';
+import { useAuthProvider } from '../auth/AuthProvider';
 import type { AuthState } from '../services/authService';
 import { fetchAuthMe, logout as serverLogout, refreshToken } from '../services/authService';
 
@@ -37,6 +38,7 @@ export const REFRESH_BUFFER_MS = 15 * 60 * 1000;
 const COOKIE_MAX_AGE_MS = 3600 * 1000;
 
 export function useAuth() {
+  const provider = useAuthProvider();
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshEnabled, setRefreshEnabled] = useState(false);
@@ -76,31 +78,27 @@ export function useAuth() {
     setRefreshEnabled(true);
   }, []);
 
-  // One Tap: disabled until refreshEnabled is set. When enabled with
-  // auto_select, it silently returns a credential if the user has an
-  // active Google session — no UI shown.
-  useGoogleOneTapLogin({
-    onSuccess: (response) => {
-      if (response.credential) {
-        refreshToken(response.credential)
-          .then((me) => {
-            if (me) {
-              setAuth(me);
-              cookieSetAt.current = Date.now();
-            } else if (cookieExpired()) {
-              setAuth(null);
-            }
-          })
-          .catch(() => {
-            if (cookieExpired()) setAuth(null);
-          })
-          .finally(() => {
-            isRefreshing.current = false;
-          });
-      } else {
-        isRefreshing.current = false;
-        if (cookieExpired()) setAuth(null);
-      }
+  // Silent renewal via the active AuthProvider. The provider collapses
+  // "renewal returned no usable credential" into onError, so the consumer
+  // only needs the two-branch (success / failure) shape here.
+  provider.useSilentRenewal({
+    enabled: refreshEnabled,
+    onCredential: (jwt) => {
+      refreshToken(jwt)
+        .then((me) => {
+          if (me) {
+            setAuth(me);
+            cookieSetAt.current = Date.now();
+          } else if (cookieExpired()) {
+            setAuth(null);
+          }
+        })
+        .catch(() => {
+          if (cookieExpired()) setAuth(null);
+        })
+        .finally(() => {
+          isRefreshing.current = false;
+        });
       setRefreshEnabled(false);
     },
     onError: () => {
@@ -108,8 +106,6 @@ export function useAuth() {
       setRefreshEnabled(false);
       if (cookieExpired()) setAuth(null);
     },
-    auto_select: true,
-    disabled: !refreshEnabled,
   });
 
   // On visibility change, verify the cookie. If expired, try One Tap
@@ -189,8 +185,9 @@ export function useAuth() {
     serverLogout().catch(() => {
       // Best-effort server logout; clear client state regardless.
     });
+    provider.signOut();
     setAuth(null);
-  }, []);
+  }, [provider]);
 
   return { auth, loading, logout, triggerRefresh };
 }

@@ -1,22 +1,15 @@
 /**
  * Unit Tests for authService
  *
- * Tests auth API helpers: fetchAuthMe, logout, refreshToken.
- * Uses mocked fetch and Google OAuth.
+ * Tests auth API helpers: fetchAuthMe, logout, refreshToken, fetchActorId.
+ * Uses mocked fetch. IdP-side signout is no longer authService's
+ * concern (moved to the AuthProvider boundary); see Phase 6 of
+ * `claude-notes/plans/2026-05-20-auth-provider-interface.md`.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock @react-oauth/google before importing the module under test.
-// vi.mock factories are hoisted above imports, so we cannot reference
-// top-level variables. Instead, use vi.mocked() after import.
-vi.mock('@react-oauth/google', () => ({
-  googleLogout: vi.fn(),
-}));
-
 import { fetchAuthMe, fetchActorId, logout, refreshToken } from './authService';
-import { googleLogout } from '@react-oauth/google';
-const mockGoogleLogout = vi.mocked(googleLogout);
 
 describe('authService', () => {
   beforeEach(() => {
@@ -68,7 +61,7 @@ describe('authService', () => {
   // ── logout ──────────────────────────────────────────────────
 
   describe('logout', () => {
-    it('posts to /auth/logout with CSRF header and calls googleLogout', async () => {
+    it('posts to /auth/logout with CSRF header', async () => {
       vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
 
       await logout();
@@ -78,7 +71,6 @@ describe('authService', () => {
         credentials: 'same-origin',
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
       });
-      expect(mockGoogleLogout).toHaveBeenCalled();
     });
   });
 

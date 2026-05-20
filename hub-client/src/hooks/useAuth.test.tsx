@@ -2,26 +2,17 @@
  * Unit Tests for useAuth hook
  *
  * Tests mount behavior, refresh scheduling, logout, and expiry logic.
- * Uses fake timers and mocked authService / Google OAuth.
+ * Uses fake timers and a MockAuthProvider in place of `@react-oauth/google`.
  *
  * @vitest-environment jsdom
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
+import type { ReactNode } from 'react';
 
-// Track the One Tap callback so tests can invoke it manually.
-let oneTapCallbacks: {
-  onSuccess?: (response: { credential?: string }) => void;
-  onError?: () => void;
-  disabled?: boolean;
-};
-
-vi.mock('@react-oauth/google', () => ({
-  useGoogleOneTapLogin: (opts: typeof oneTapCallbacks) => {
-    oneTapCallbacks = opts;
-  },
-}));
+import { AuthProviderRoot } from '../auth/AuthProvider';
+import { createMockAuthProvider, type MockAuthProvider } from '../auth/MockAuthProvider';
 
 vi.mock('../services/authService', () => ({
   fetchAuthMe: vi.fn(),
@@ -42,10 +33,16 @@ const mockFetchAuthMe = vi.mocked(fetchAuthMe);
 const mockServerLogout = vi.mocked(serverLogout);
 const mockRefreshToken = vi.mocked(refreshToken);
 
+let mockProvider: MockAuthProvider;
+
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <AuthProviderRoot provider={mockProvider.provider}>{children}</AuthProviderRoot>
+);
+
 describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    oneTapCallbacks = {};
+    mockProvider = createMockAuthProvider();
     mockServerLogout.mockResolvedValue();
   });
 
@@ -54,7 +51,7 @@ describe('useAuth', () => {
   describe('mount', () => {
     it('starts in loading state', () => {
       mockFetchAuthMe.mockReturnValue(new Promise(() => {})); // never resolves
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
 
       expect(result.current.loading).toBe(true);
       expect(result.current.auth).toBeNull();
@@ -64,7 +61,7 @@ describe('useAuth', () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.auth).toEqual(user);
@@ -73,7 +70,7 @@ describe('useAuth', () => {
     it('sets auth to null on 401 (not authenticated)', async () => {
       mockFetchAuthMe.mockResolvedValue(null);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.auth).toBeNull();
@@ -82,7 +79,7 @@ describe('useAuth', () => {
     it('sets auth to null on fetch error', async () => {
       mockFetchAuthMe.mockRejectedValue(new Error('network'));
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.auth).toBeNull();
@@ -96,7 +93,7 @@ describe('useAuth', () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await waitFor(() => expect(result.current.auth).toEqual(user));
 
       act(() => {
@@ -107,12 +104,26 @@ describe('useAuth', () => {
       expect(mockServerLogout).toHaveBeenCalled();
     });
 
+    it('calls provider.signOut() during logout', async () => {
+      const user = { email: 'a@b.com', name: 'A', picture: null };
+      mockFetchAuthMe.mockResolvedValue(user);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.auth).toEqual(user));
+
+      act(() => {
+        result.current.logout();
+      });
+
+      expect(mockProvider.signOutCalls).toBe(1);
+    });
+
     it('clears auth even if server logout fails', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValue(user);
       mockServerLogout.mockRejectedValue(new Error('offline'));
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await waitFor(() => expect(result.current.auth).toEqual(user));
 
       act(() => {
@@ -134,18 +145,18 @@ describe('useAuth', () => {
       vi.useRealTimers();
     });
 
-    it('starts with Google One Tap disabled', async () => {
+    it('starts with silent renewal disabled', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      renderHook(() => useAuth());
+      renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(mockFetchAuthMe).toHaveBeenCalled());
 
-      // Before any time has passed, One Tap should be disabled
-      expect(oneTapCallbacks.disabled).toBe(true);
+      // Before any time has passed, silent renewal should be disabled.
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(false);
     });
 
-    it('updates auth on successful One Tap refresh', async () => {
+    it('updates auth on successful silent renewal', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       const refreshedUser = {
         email: 'a@b.com',
@@ -154,15 +165,15 @@ describe('useAuth', () => {
       };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() =>
         expect(result.current.auth).toEqual(user),
       );
 
-      // Simulate One Tap returning a credential
+      // Simulate the provider delivering a fresh credential.
       mockRefreshToken.mockResolvedValue(refreshedUser);
       await act(async () => {
-        oneTapCallbacks.onSuccess?.({ credential: 'fresh.jwt.token' });
+        mockProvider.lastSilentRenewalOpts?.onCredential('fresh.jwt.token');
       });
 
       await vi.waitFor(() =>
@@ -186,12 +197,12 @@ describe('useAuth', () => {
       vi.useRealTimers();
     });
 
-    it('attempts One Tap refresh when tab becomes visible with expired cookie', async () => {
+    it('attempts silent renewal when tab becomes visible with expired cookie', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       const refreshedUser = { email: 'a@b.com', name: 'Refreshed', picture: null };
       mockFetchAuthMe.mockResolvedValueOnce(user); // mount
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(result.current.auth).toEqual(user));
 
       // Next /auth/me returns null (cookie expired)
@@ -204,22 +215,22 @@ describe('useAuth', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
 
-      // One Tap should be enabled for refresh
-      expect(oneTapCallbacks.disabled).toBe(false);
+      // Silent renewal should be enabled for refresh.
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(true);
 
-      // Simulate One Tap returning a fresh credential
+      // Simulate the provider delivering a fresh credential.
       await act(async () => {
-        oneTapCallbacks.onSuccess?.({ credential: 'fresh.jwt' });
+        mockProvider.lastSilentRenewalOpts?.onCredential('fresh.jwt');
       });
 
       await vi.waitFor(() => expect(result.current.auth).toEqual(refreshedUser));
     });
 
-    it('clears auth when One Tap fails after visibility-triggered refresh', async () => {
+    it('clears auth when silent renewal fails after visibility-triggered refresh', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValueOnce(user); // mount
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(result.current.auth).toEqual(user));
 
       // Jump Date.now() past cookie lifetime (simulates long idle)
@@ -233,9 +244,9 @@ describe('useAuth', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
 
-      // Simulate One Tap failing (no active Google session)
+      // Simulate silent renewal failing (no active IdP session).
       await act(async () => {
-        oneTapCallbacks.onError?.();
+        mockProvider.lastSilentRenewalOpts?.onError();
       });
 
       await vi.waitFor(() => expect(result.current.auth).toBeNull());
@@ -245,7 +256,7 @@ describe('useAuth', () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValueOnce(user); // mount
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(result.current.auth).toEqual(user));
 
       // Jump Date.now() past cookie lifetime (simulates long idle)
@@ -259,10 +270,10 @@ describe('useAuth', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
 
-      // One Tap returns a credential, but server rejects it
+      // Silent renewal returns a credential, but server rejects it.
       mockRefreshToken.mockResolvedValue(null);
       await act(async () => {
-        oneTapCallbacks.onSuccess?.({ credential: 'rejected.jwt' });
+        mockProvider.lastSilentRenewalOpts?.onCredential('rejected.jwt');
       });
 
       await vi.waitFor(() => expect(result.current.auth).toBeNull());
@@ -286,19 +297,19 @@ describe('useAuth', () => {
         .mockResolvedValueOnce(user) // mount check
         .mockResolvedValueOnce(null); // expiry re-check
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() =>
         expect(result.current.auth).toEqual(user),
       );
 
       // Advance past the refresh point. The refresh timer sets
-      // isRefreshing=true and enables One Tap. Simulate One Tap failing
-      // (no active Google session), which resets isRefreshing=false.
+      // isRefreshing=true and enables silent renewal. Simulate the IdP
+      // session being gone (onError fires), resetting isRefreshing=false.
       await act(async () => {
         vi.advanceTimersByTime(COOKIE_MAX_AGE_MS - REFRESH_BUFFER_MS + 100);
       });
       await act(async () => {
-        oneTapCallbacks.onError?.();
+        mockProvider.lastSilentRenewalOpts?.onError();
       });
 
       // Advance past cookie max-age (remaining buffer).
@@ -322,7 +333,7 @@ describe('useAuth', () => {
         .mockResolvedValueOnce(user) // mount check
         .mockResolvedValueOnce(freshUser); // expiry re-check (refresh succeeded)
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() =>
         expect(result.current.auth).toEqual(user),
       );
@@ -350,28 +361,28 @@ describe('useAuth', () => {
       vi.useRealTimers();
     });
 
-    it('enables One Tap when called while auth is still considered valid', async () => {
+    it('enables silent renewal when called while auth is still considered valid', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(result.current.auth).toEqual(user));
 
-      // Cookie freshly set on mount — One Tap initially disabled.
-      expect(oneTapCallbacks.disabled).toBe(true);
+      // Cookie freshly set on mount — renewal initially disabled.
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(false);
 
       act(() => {
         result.current.triggerRefresh();
       });
 
-      expect(oneTapCallbacks.disabled).toBe(false);
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(true);
     });
 
-    it('coalesces concurrent triggerRefresh() calls into a single One Tap attempt', async () => {
+    it('coalesces concurrent triggerRefresh() calls into a single renewal attempt', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(result.current.auth).toEqual(user));
 
       // Multiple concurrent calls (e.g. parallel fetchActorId 401s).
@@ -381,24 +392,26 @@ describe('useAuth', () => {
         result.current.triggerRefresh();
       });
 
-      // One Tap is enabled exactly once; refreshEnabled stayed true.
-      expect(oneTapCallbacks.disabled).toBe(false);
+      // Renewal enabled exactly once; refreshEnabled stayed true.
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(true);
 
-      // Resolve the One Tap success path; isRefreshing resets, One Tap disables.
+      // Resolve the credential path; isRefreshing resets, renewal disables.
       mockRefreshToken.mockResolvedValue(user);
       await act(async () => {
-        oneTapCallbacks.onSuccess?.({ credential: 'fresh.jwt' });
+        mockProvider.lastSilentRenewalOpts?.onCredential('fresh.jwt');
       });
-      await vi.waitFor(() => expect(oneTapCallbacks.disabled).toBe(true));
+      await vi.waitFor(() =>
+        expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(false),
+      );
 
       // A subsequent triggerRefresh re-enables (proving the gate cleared).
       act(() => {
         result.current.triggerRefresh();
       });
-      expect(oneTapCallbacks.disabled).toBe(false);
+      expect(mockProvider.lastSilentRenewalOpts?.enabled).toBe(true);
     });
 
-    it('updates auth and refreshes cookieSetAt on successful One Tap', async () => {
+    it('updates auth and refreshes cookieSetAt on successful silent renewal', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       const refreshedUser = {
         email: 'a@b.com',
@@ -407,7 +420,7 @@ describe('useAuth', () => {
       };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(result.current.auth).toEqual(user));
 
       // Pretend cookie has aged most of the way to expiry. After successful
@@ -423,7 +436,7 @@ describe('useAuth', () => {
 
       mockRefreshToken.mockResolvedValue(refreshedUser);
       await act(async () => {
-        oneTapCallbacks.onSuccess?.({ credential: 'fresh.jwt' });
+        mockProvider.lastSilentRenewalOpts?.onCredential('fresh.jwt');
       });
 
       await vi.waitFor(() =>
@@ -439,11 +452,11 @@ describe('useAuth', () => {
       expect(result.current.auth).toEqual(refreshedUser);
     });
 
-    it('does not clear auth on One Tap onError when the cookie is still valid', async () => {
+    it('does not clear auth on renewal onError when the cookie is still valid', async () => {
       const user = { email: 'a@b.com', name: 'A', picture: null };
       mockFetchAuthMe.mockResolvedValue(user);
 
-      const { result } = renderHook(() => useAuth());
+      const { result } = renderHook(() => useAuth(), { wrapper });
       await vi.waitFor(() => expect(result.current.auth).toEqual(user));
 
       // Cookie was just set on mount, so cookieExpired() is false.
@@ -452,10 +465,10 @@ describe('useAuth', () => {
       });
 
       await act(async () => {
-        oneTapCallbacks.onError?.();
+        mockProvider.lastSilentRenewalOpts?.onError();
       });
 
-      // Auth should be preserved — Google session may be gone but our cookie is still good.
+      // Auth should be preserved — IdP session may be gone but our cookie is still good.
       expect(result.current.auth).toEqual(user);
     });
   });
