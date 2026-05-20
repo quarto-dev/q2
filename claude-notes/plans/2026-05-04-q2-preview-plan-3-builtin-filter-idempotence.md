@@ -1,10 +1,18 @@
-# Plan 3 — Filter idempotence verification
+# Plan 3 — Built-in filter idempotence verification (CI-time)
 
-**Date:** 2026-05-04
+**Date:** 2026-05-04 (revised 2026-05-20)
 **Branch:** feature/q2-preview
 **Status:** Implementation plan (open questions named)
 **Milestone:** M2 verification gate (no new milestone — locks in property
 on what's already shipped)
+
+## Epic context
+
+Part of the **provenance epic** (Plans 3–8). Plan 3 is the
+verification-gate piece: it locks in the idempotence + structural-hash-
+stability contract the rest of the epic (typed provenance, incremental
+writer, soft-drop) rests on. The file name keeps its q2-preview-plan-N
+form for continuity with the earlier discussion notes.
 
 ## Goal
 
@@ -87,8 +95,8 @@ round-trip story (Plans 4-8) rests on a stable foundation.
   ordering."
 - **Filter mutation provenance stays Original** (settled during conversation).
   Lua filter mutations don't change source_info. Constructions are tagged
-  `Synthetic { by: By::filter(...) }` (post-Plan 5). Idempotence test sees
-  consistent shape across runs.
+  `Generated { by: By::filter(...), anchors: [] }` (post-Plan 4 unified
+  variant). Idempotence test sees consistent shape across runs.
 - **Built-in filters in scope; user filters out**. Built-in filters ship with
   Quarto and the contract applies to them at CI time. User filters are
   enforced at edit-time (a non-idempotent user filter breaks q2-preview's
@@ -156,7 +164,7 @@ content as new source bytes; on the next pipeline run, the filter
 re-applies to those bytes, and `f(f(x)) ≠ f(x)` shows up as text
 drift on edited blocks.
 
-**Plan 7a's runtime check** (`claude-notes/plans/2026-05-04-q2-preview-plan-7a-filter-idempotence.md`)
+**Plan 7a's runtime check** (`claude-notes/plans/2026-05-04-q2-preview-plan-7a-user-filter-idempotence.md`)
 targets round-trip non-idempotence explicitly, with a check that runs
 the round-trip flavor: pipeline → write → pipeline, and hash-compares.
 That plan is for **user filters at runtime**.

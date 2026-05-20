@@ -1,10 +1,19 @@
 # Plan 7a — Runtime user-filter idempotence check + opt-out
 
-**Date:** 2026-05-05
+**Date:** 2026-05-05 (revised 2026-05-20)
 **Branch:** feature/q2-preview
 **Status:** Implementation plan (open questions named)
 **Milestone:** none directly — extends M3 with an opt-in safety check;
   doesn't block the milestone
+
+## Epic context
+
+Part of the **provenance epic** (Plans 3–8). Plan 7a is the reliability
+follow-up to Plan 7: once the writer round-trips correctly for
+idempotent filters, this plan adds runtime detection for the
+non-idempotent case, with attribution to the offending filter and a
+declarative opt-out. The file name keeps its q2-preview-plan-N form for
+continuity with the earlier discussion notes.
 
 ## Goal
 
@@ -304,6 +313,16 @@ runtime behavior.
   flow through the same path. Confirm they reach the diagnostic panel
   and are visually distinguishable from pipeline warnings (or
   acceptably co-mingled — TBD by hub-client UX, same as Q-3-42/Q-3-43).
+- **Per-Lua-line attribution (future)**: Q-3-44 today references the
+  filter file path via `<path>`. When the Lua-file-registration
+  follow-up lands (see Plan 4 / Plan 6's "Dispatch follow-up"),
+  filter-constructed nodes will carry a `Dispatch` anchor pointing at
+  a typed `Original{lua_file_id, line_start, line_end}`. The Q-3-44
+  diagnostic could then sharpen "filter `<path>` is not idempotent" to
+  "filter `<path>` line `<N>` is not idempotent" — pointing at the
+  specific Lua-side construction site that produced the non-idempotent
+  output. Deferred until the registration work lands; the current
+  `<path>`-only diagnostic is actionable.
 
 ## References
 
@@ -326,8 +345,11 @@ runtime behavior.
   for both passes.
 - Plan 3 — CI-time idempotence verification for built-in filters.
   Plan 3 strengthening (above) extends the test to round-trip flavor.
-- Plan 4 — `By` types; `is_atomic_synthesizer()` is unrelated to this
-  plan but the runtime check shares the source-info-blind hash.
+- Plan 4 — `By` types; `is_atomic_kind()` is unrelated to this plan
+  but the runtime check shares the source-info-blind hash. Plan 4's
+  "Dispatch follow-up" (Lua-file registration in `SourceContext`) is
+  the prerequisite for the per-Lua-line attribution refinement noted
+  under "Open questions" above.
 
 ## Test plan
 
