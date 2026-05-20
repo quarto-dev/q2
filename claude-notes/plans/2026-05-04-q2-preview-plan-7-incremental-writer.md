@@ -604,9 +604,31 @@ shortcode token from source.
   the baseline-pipeline selection.
 - Plans 4 (Generated + Anchor + By + is_atomic_kind), 5 (wire format),
   6 (audit) — provide the AST shape this plan walks.
+- Plan 3 — ships `compute_meta_hash_fresh` /
+  `compute_meta_hash_fresh_excluding_rendered` in `quarto-ast-reconcile`;
+  the writer-lossless baseline test below uses both. Plan 3's fixture
+  set under `crates/quarto-core/tests/fixtures/q2-preview-idempotence/`
+  is the starting point for the baseline test's fixture inputs.
 
 ## Test plan
 
+- **Writer-lossless baseline test** (prerequisite for the reconciler
+  tests below; lands in Plan 7's first commit alongside the foundation
+  test). For each AST shape the writer needs to emit
+  (Generated-with-Invocation shortcode resolutions, IncludeExpansion
+  CustomNode wrappers, FloatRefTarget / Theorem / Proof / Callout
+  CustomNodes, synthesized Sectionize / Footnotes / Appendix
+  containers, user-edited variants of each), assert that
+  `parse(write(ast))` produces an AST whose
+  `compute_blocks_hash_fresh` + `compute_meta_hash_fresh_excluding_rendered`
+  (from `quarto-ast-reconcile`, landed by Plan 3) equal the input's.
+  This isolates writer bugs from reconciler bugs: a reconciler test
+  failing on one of these shapes can be diagnosed as a writer-lossless
+  baseline regression vs. a reconciliation regression.
+  Fixtures reuse Plan 3's set (in
+  `crates/quarto-core/tests/fixtures/q2-preview-idempotence/`) plus
+  any Plan 7-specific shapes (e.g., a doc with an
+  IncludeExpansion CustomNode that has been user-edited).
 - **Reconciler source-info-blindness foundation test** (new, lands in
   Plan 7's first commit): asserts that `structural_eq_blocks` and
   `structural_eq_inlines` (in `quarto-ast-reconcile`) return `true` for
@@ -695,6 +717,11 @@ shortcode token from source.
 - Depends on: Plans 4 (Generated + Anchor + By + is_atomic_kind), 5
   (wire format), 6 (audit + Invocation anchors on shortcode
   resolutions).
+- Soft-depends on Plan 3 for `compute_meta_hash_fresh` (used by the
+  writer-lossless baseline test). If Plan 3 hasn't landed when this
+  plan starts, the helper can be inlined into Plan 7's test crate and
+  promoted to `quarto-ast-reconcile` when Plan 3 catches up — but
+  landing Plan 3 first avoids the duplication.
 - Blocks: nothing structurally; Plan 8 builds on the atomic
   infrastructure but is independent (uses `is_atomic_custom_node` for
   IncludeExpansion).

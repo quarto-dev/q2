@@ -439,6 +439,19 @@ non-breaking enum extension); `by.data` for `filter` / Lua-dispatched
   to literal text; its source_info stays Original (not Generated).
 - **Idempotence still holds**: re-run Plan 3's idempotence test after
   the audit — the changes shouldn't introduce non-determinism.
+- **`source_info` determinism (Plan 6-specific gap)**: Plan 3's hashes
+  exclude `source_info` by design (`compute_blocks_hash_fresh` and
+  `compute_meta_hash_fresh` both skip it). So Plan 3 does **not**
+  catch a transform whose synthesized `Generated { by, anchors }`
+  output is non-deterministic *in the source_info layer* — e.g., an
+  `Anchor::invocation` that hashes a different `SourceInfo` on
+  repeated runs because the shortcode-token's range was recomputed
+  rather than cloned. Plan 6 must add its own per-fixture
+  source_info-determinism check: render twice, walk the AST in
+  lockstep, assert every `Generated.by`, every `Generated.anchors[]`,
+  and every Original `SourceInfo` is `==`-equal across runs. Place
+  this alongside Plan 3's idempotence test (same fixtures, parallel
+  assertion) so the test crate covers both contracts.
 
 ## Dependencies
 
