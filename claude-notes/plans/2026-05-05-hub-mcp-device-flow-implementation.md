@@ -444,6 +444,19 @@ correlation field, `target: "quarto_hub::audit"` stable name,
 OpenTelemetry semantic-conventions naming,
 `claude-notes/instructions/audit-log.md` doc.
 
+### Phase 3 — completion notes (2026-05-20)
+
+Subsumed by Phase 2. The Phase 2 implementation already routes every
+allow/deny decision through `HubContext::authenticate_claims_for_kind`
+(`crates/quarto-hub/src/context.rs:440-545`) and the Bearer-credential
+400 path (`crates/quarto-hub/src/server.rs:253-260`), each emitting
+`tracing::event!(target: "quarto_hub::audit", action, outcome,
+credential_kind, sub, detail?)`. The three gate tests
+(`audit_event_on_auth_ok`, `audit_event_on_auth_fail`,
+`tracing_redacts_authorization_header`) pass under
+`cargo nextest run -p quarto-hub`. No additional Phase 3 changes
+landed — the module/schema-lock work remains deferred.
+
 ## Phase 4 — hub-mcp device-flow primitives (TDD)
 
 New module: `ts-packages/quarto-hub-mcp/src/auth/device-flow.ts`.
@@ -455,33 +468,82 @@ and `pollDeviceFlowOnce` — not a single blocking flow.
 Tests in `ts-packages/quarto-hub-mcp/test/auth/device-flow.test.ts`.
 Fixture HTTP server via msw or undici `MockAgent`; never live Google.
 
-- [ ] `initiate_request_has_correct_params` — POST to device-auth
+- [x] `initiate_request_has_correct_params` — POST to device-auth
   endpoint includes `client_id`, `scope=openid email profile`.
-- [ ] `client_id_and_secret_sourced_from_env` — values come from
+- [x] `client_id_and_secret_sourced_from_env` — values come from
   `process.env.QUARTO_HUB_MCP_CLIENT_ID` / `_CLIENT_SECRET`, not from
   literals / files / keyring.
-- [ ] `startup_fails_loud_when_env_missing` — typed
+- [x] `startup_fails_loud_when_env_missing` — typed
   `MissingCredentialsConfigError` naming both vars literally.
-- [ ] `no_baked_default_client_id_or_secret` — grep over `src/`
+- [x] `no_baked_default_client_id_or_secret` — grep over `src/`
   asserts no `*.apps.googleusercontent.com` or `GOCSPX-…` literal.
-- [ ] `client_secret_sent_on_token_endpoint_only` — device-auth body
+- [x] `client_secret_sent_on_token_endpoint_only` — device-auth body
   has no `client_secret`; token-endpoint body does.
-- [ ] `initiate_returns_full_device_response` — pass-through of
+- [x] `initiate_returns_full_device_response` — pass-through of
   `verification_uri`, `user_code`, `device_code`, `interval`,
   `expires_in`.
-- [ ] `poll_once_returns_pending_on_authorization_pending` —
+- [x] `poll_once_returns_pending_on_authorization_pending` —
   `{ kind: 'pending' }`, never throws.
-- [ ] `poll_once_returns_slow_down_on_slow_down`.
-- [ ] `poll_once_resolves_with_tokens_on_success`.
-- [ ] `poll_once_surfaces_access_denied_as_typed_error` →
+- [x] `poll_once_returns_slow_down_on_slow_down`.
+- [x] `poll_once_resolves_with_tokens_on_success`.
+- [x] `poll_once_surfaces_access_denied_as_typed_error` →
   `DeviceFlowDeniedError`.
-- [ ] `poll_once_surfaces_expired_token_as_typed_error` →
+- [x] `poll_once_surfaces_expired_token_as_typed_error` →
   `DeviceFlowExpiredError`.
-- [ ] `poll_once_honours_abort_signal`.
-- [ ] `does_not_log_user_code_in_debug_lines`.
-- [ ] `does_not_log_id_token_or_refresh_token_anywhere`.
-- [ ] `redact_util_handles_known_token_shapes` — `ya29.*`, `1//*`,
+- [x] `poll_once_honours_abort_signal`.
+- [x] `does_not_log_user_code_in_debug_lines`.
+- [x] `does_not_log_id_token_or_refresh_token_anywhere`.
+- [x] `redact_util_handles_known_token_shapes` — `ya29.*`, `1//*`,
   JWT `xxx.yyy.zzz`.
+
+### Phase 4 — completion notes (2026-05-20)
+
+Landed on `feature/hub-mcp-device-flow`:
+
+- New module `ts-packages/quarto-hub-mcp/src/auth/device-flow.ts`
+  exposes: `initiateDeviceFlow`, `pollDeviceFlowOnce`,
+  `loadDeviceFlowConfigFromEnv`, `discoverAuthorizationServer`,
+  `buildAuthorizationServer`, plus typed errors
+  (`MissingCredentialsConfigError`, `DeviceFlowError`,
+  `DeviceFlowDeniedError`, `DeviceFlowExpiredError`) and the
+  `redactTokens` utility.
+- `initiateDeviceFlow` uses `oauth4webapi.None()` (not
+  `ClientSecretPost`) for the device-authorization request — the
+  device-auth endpoint doesn't require client authentication and
+  withholding the secret here minimises its exposure surface. The
+  token-endpoint poll uses `ClientSecretPost` per the Phase-1
+  lock-in. The test `pollDeviceFlowOnce > resolves with tokens on
+  success` asserts both halves of this contract.
+- Single-poll-per-call: `pollDeviceFlowOnce` performs **one** request
+  and returns a discriminated `PollResult` (`pending` / `slow_down` /
+  `tokens`) without retrying. Higher-level cadence + RFC 8628 §3.5
+  rate-limiting belongs in Phase 7.
+- `redactTokens` strips `ya29.*`, `1//*`, and JWT-shaped substrings —
+  every log call site in this module funnels through it. The
+  `does_not_log_*` tests spy on every `console.*` sink to enforce it.
+- `loadDeviceFlowConfigFromEnv` reads only `process.env`, never
+  `.mcp.json` / files / keyring / source literals. The
+  `no_baked_default_client_id_or_secret` test walks `src/` and rejects
+  any `*.apps.googleusercontent.com` or `GOCSPX-` literal.
+- Discovery cache is process-local (`cachedAS`), keyed on issuer; a
+  `_resetDiscoveryCache()` hook is exported for Phase-5+ tests.
+
+Tests live at `src/auth/device-flow.test.ts` (not `test/auth/…` as
+the plan path suggested) to match the existing co-located
+`src/hub-mcp.test.ts` convention and so a single `tsconfig.json` /
+`vitest` config covers both. Behaviour is unchanged.
+
+Verification: 23 new Vitest specs pass under `npm test` from
+`ts-packages/quarto-hub-mcp/`; `npm run typecheck` clean. Pre-
+existing `live:` tests in `src/hub-mcp.test.ts` continue to fail
+identically before and after this change (they require an
+`indexedDB` polyfill the test env doesn't carry) — confirmed by
+stash + re-run.
+
+Dependencies added to `ts-packages/quarto-hub-mcp/package.json`:
+`oauth4webapi ^3.5.5`, `jose ^6.0.11`, and dev-dep `undici ^7.16.0`
+(reserved for Phase-6+ refresh tests). `npm install` from repo root
+hoisted them; root `package-lock.json` is the change record.
 
 ### Implementation
 

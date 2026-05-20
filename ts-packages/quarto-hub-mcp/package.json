@@ -33,11 +33,14 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@quarto/quarto-sync-client": "*",
-    "@quarto/quarto-automerge-schema": "*"
+    "@quarto/quarto-automerge-schema": "*",
+    "jose": "^6.0.11",
+    "oauth4webapi": "^3.5.5"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "typescript": "~5.9.3",
+    "undici": "^7.16.0",
     "vitest": "^4.0.17"
   }
 }
