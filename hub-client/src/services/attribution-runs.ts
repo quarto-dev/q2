@@ -21,8 +21,14 @@
  * correct in their own coordinate space.
  */
 
-import { diff } from '@automerge/automerge';
-import type { Heads } from '@automerge/automerge';
+import {
+  applyChanges,
+  decodeChange,
+  getAllChanges,
+  getChanges,
+  init,
+} from '@automerge/automerge';
+import type { Change, Doc, Patch } from '@automerge/automerge';
 import { decodeHeads } from '@automerge/automerge-repo';
 import type { DocHandle } from '@automerge/automerge-repo';
 
@@ -48,6 +54,15 @@ export interface RunListAttribution {
   runs: AttributionRun[];
   processedHeads: unknown[];
   processedHistoryIndex: number;
+  /**
+   * Internal: forward-replay doc held at `processedHeads`, fed to
+   * `A.applyChanges` so each incremental update only pays for new
+   * changes (not a full doc-state load per step like `A.diff` did).
+   * Absent when state is hand-constructed (tests), in which case
+   * `updateRunListAttribution` throws `HistoryCompactedError` and
+   * the caller (`useAttribution`) falls back to a full rebuild.
+   */
+  _workDoc?: Doc<unknown>;
 }
 
 interface SplicePatch {
@@ -98,11 +113,10 @@ export function extractChangeHash(heads: unknown): string | null {
  * History entries processed between idle-callback yields. Larger
  * values cut yield overhead at the cost of bigger per-slice CPU.
  *
- * Per-entry CPU is super-linear (≈30 / 90 / 420 µs at N=500 / 2000 /
- * 10000 — `A.diff` scales with doc state). 500 sits near the
- * wallclock knee; raising it saves <20 % even in worst-case yield
- * scenarios and pushes slices past one frame (16.67 ms) at typical N.
- * The dominant cost is `A.diff` itself, not this constant.
+ * Per-entry CPU is ~15 µs (applyChanges forward-replay, roughly
+ * constant in N), so a 500-entry slice is ≈7-8 ms — comfortably
+ * under one frame (16.67 ms). Slices above ~1000 risk overrunning a
+ * frame in busier browsers.
  */
 export const CHUNK_SIZE = 500;
 
@@ -231,6 +245,45 @@ function applyPatchToRuns(
 }
 
 // ---------------------------------------------------------------------------
+// Internal: shared replay loop
+// ---------------------------------------------------------------------------
+
+/**
+ * The new change introduced at this history step is whichever hash is in
+ * `currHeads` but not in `prevHeads`. For the first step, take the first
+ * head. Returns null if no new change can be identified (defensive).
+ */
+function newChangeHashAt(prevHeads: string[] | null, currHeads: string[]): string | null {
+  if (currHeads.length === 0) return null;
+  if (prevHeads === null) return currHeads[0];
+  const prevSet = new Set(prevHeads);
+  return currHeads.find(h => !prevSet.has(h)) ?? null;
+}
+
+/**
+ * Apply one change to `workDoc`, collect any patches via patchCallback,
+ * and fold them into the running runs list using the change's own
+ * actor/time. Returns the advanced workDoc.
+ */
+function replayChange(
+  workDoc: Doc<unknown>,
+  change: Change,
+  textFieldName: string,
+  runs: AttributionRun[],
+): Doc<unknown> {
+  const decoded = decodeChange(change);
+  const attribution: CharAttribution = { actor: decoded.actor, time: decoded.time };
+  let collected: Patch[] = [];
+  const [next] = applyChanges(workDoc, [change], {
+    patchCallback: (patches: Patch[]) => { collected = patches; },
+  });
+  for (const patch of collected) {
+    if (isTextPatch(patch, textFieldName)) applyPatchToRuns(runs, patch, attribution);
+  }
+  return next;
+}
+
+// ---------------------------------------------------------------------------
 // buildRunListAttribution — full history processing
 // ---------------------------------------------------------------------------
 
@@ -244,12 +297,21 @@ export async function buildRunListAttribution(
   if (!history) return null;
 
   if (history.length === 0) {
-    return { runs: [], processedHeads: [], processedHistoryIndex: 0 };
+    return { runs: [], processedHeads: [], processedHistoryIndex: 0, _workDoc: init() };
+  }
+
+  // Pre-index every change in the doc by hash so each history step can
+  // look up its corresponding change in O(1).
+  const doc = viewable.doc() as Doc<unknown>;
+  const changeByHash = new Map<string, Change>();
+  for (const c of getAllChanges(doc)) {
+    changeByHash.set(decodeChange(c).hash, c);
   }
 
   const runs: AttributionRun[] = [];
-  let prevHeads: unknown = null;
+  let prevHeads: string[] | null = null;
   let lastHeads: unknown[] = [];
+  let workDoc: Doc<unknown> = init();
 
   for (let chunkStart = 0; chunkStart < history.length; chunkStart += CHUNK_SIZE) {
     if (signal?.aborted) return null;
@@ -257,37 +319,13 @@ export async function buildRunListAttribution(
     const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, history.length);
     for (let i = chunkStart; i < chunkEnd; i++) {
       const currHeads = history[i];
-      const changeHash = extractChangeHash(currHeads);
-      const meta = changeHash ? viewable.metadata(changeHash) : undefined;
-      const attribution: CharAttribution = {
-        actor: meta?.actor ?? 'unknown',
-        time: meta?.time ?? 0,
-      };
-
       const decodedCurr = decodeHeads(currHeads as Parameters<typeof decodeHeads>[0]);
-      let patches: unknown[];
-      if (prevHeads === null) {
-        patches = diff(
-          viewable.doc() as Parameters<typeof diff>[0],
-          [] as unknown as Heads,
-          decodedCurr as unknown as Heads,
-        );
-      } else {
-        const decodedPrev = decodeHeads(prevHeads as Parameters<typeof decodeHeads>[0]);
-        patches = diff(
-          viewable.doc() as Parameters<typeof diff>[0],
-          decodedPrev as unknown as Heads,
-          decodedCurr as unknown as Heads,
-        );
+      const newHash = newChangeHashAt(prevHeads, decodedCurr);
+      const change = newHash ? changeByHash.get(newHash) : undefined;
+      if (change) {
+        workDoc = replayChange(workDoc, change, textFieldName, runs);
       }
-
-      for (const patch of patches) {
-        if (isTextPatch(patch, textFieldName)) {
-          applyPatchToRuns(runs, patch, attribution);
-        }
-      }
-
-      prevHeads = currHeads;
+      prevHeads = decodedCurr;
       lastHeads = Array.isArray(currHeads) ? currHeads : [currHeads];
     }
 
@@ -298,6 +336,7 @@ export async function buildRunListAttribution(
     runs,
     processedHeads: lastHeads as unknown[],
     processedHistoryIndex: history.length,
+    _workDoc: workDoc,
   };
 }
 
@@ -314,35 +353,34 @@ export function updateRunListAttribution(
   const history = viewable.history();
   if (!history) throw new HistoryCompactedError();
   if (state.processedHistoryIndex > history.length) throw new HistoryCompactedError();
+  if (!state._workDoc) throw new HistoryCompactedError();
+
+  if (state.processedHistoryIndex === history.length) {
+    return state;
+  }
+
+  // Pull just the new changes (since workDoc's heads), index by hash.
+  const doc = viewable.doc() as Doc<unknown>;
+  const newChanges = getChanges(state._workDoc, doc);
+  const changeByHash = new Map<string, Change>();
+  for (const c of newChanges) {
+    changeByHash.set(decodeChange(c).hash, c);
+  }
 
   const runs = state.runs.map(r => ({ ...r }));
-  let prevHeads = state.processedHeads;
-  let lastHeads = state.processedHeads;
+  let prevHeads = decodeHeads(state.processedHeads as Parameters<typeof decodeHeads>[0]);
+  let lastHeads: unknown[] = state.processedHeads;
+  let workDoc: Doc<unknown> = state._workDoc;
 
   for (let i = state.processedHistoryIndex; i < history.length; i++) {
     const currHeads = history[i];
-    const changeHash = extractChangeHash(currHeads);
-    const meta = changeHash ? viewable.metadata(changeHash) : undefined;
-    const attribution: CharAttribution = {
-      actor: meta?.actor ?? 'unknown',
-      time: meta?.time ?? 0,
-    };
-
-    const decodedPrev = decodeHeads(prevHeads as Parameters<typeof decodeHeads>[0]);
     const decodedCurr = decodeHeads(currHeads as Parameters<typeof decodeHeads>[0]);
-    const patches = diff(
-      viewable.doc() as Parameters<typeof diff>[0],
-      decodedPrev as unknown as Heads,
-      decodedCurr as unknown as Heads,
-    );
-
-    for (const patch of patches) {
-      if (isTextPatch(patch, textFieldName)) {
-        applyPatchToRuns(runs, patch, attribution);
-      }
+    const newHash = newChangeHashAt(prevHeads, decodedCurr);
+    const change = newHash ? changeByHash.get(newHash) : undefined;
+    if (change) {
+      workDoc = replayChange(workDoc, change, textFieldName, runs);
     }
-
-    prevHeads = currHeads as unknown[];
+    prevHeads = decodedCurr;
     lastHeads = Array.isArray(currHeads) ? currHeads : [currHeads];
   }
 
@@ -350,6 +388,7 @@ export function updateRunListAttribution(
     runs,
     processedHeads: lastHeads as unknown[],
     processedHistoryIndex: history.length,
+    _workDoc: workDoc,
   };
 }
 
