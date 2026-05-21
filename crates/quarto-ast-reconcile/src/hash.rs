@@ -11,7 +11,7 @@
  */
 
 use quarto_pandoc_types::custom::{CustomNode, Slot};
-use quarto_pandoc_types::{Attr, Block, Inline};
+use quarto_pandoc_types::{Attr, Block, ConfigMapEntry, ConfigValue, ConfigValueKind, Inline};
 use rustc_hash::FxHashMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -486,6 +486,318 @@ fn hash_slot(slot: &Slot, cache: &mut HashCache<'_>, hasher: &mut impl Hasher) {
             hash_inlines(is, cache, hasher);
         }
     }
+}
+
+// =============================================================================
+// Meta (ConfigValue) Hashing
+// =============================================================================
+//
+// Idempotence checks (Plan 3) need a structural hash of the document
+// `meta` field that:
+//
+// - excludes `source_info` and `key_source` so Plan-4 source-info
+//   churn doesn't affect the contract;
+// - hashes `Map` entries in *insertion order* with no sort, so a
+//   transform that stuffs a `HashMap` into meta is *detectable* (a
+//   sort would silently mask that class of non-determinism — exactly
+//   the bug an idempotence test is meant to catch);
+// - includes `merge_op` so a transform that flips merge semantics
+//   non-deterministically shows up;
+// - recurses into `PandocInlines` / `PandocBlocks` via the existing
+//   inline/block hashers (which already exclude source_info).
+
+/// Compute a structural hash of a `ConfigValue` tree.
+///
+/// Source-info-agnostic: skips `ConfigValue::source_info` and
+/// `ConfigMapEntry::key_source`. See module-level note above for the
+/// design rationale (insertion-order maps, `merge_op` participates).
+pub fn compute_meta_hash_fresh(meta: &ConfigValue) -> u64 {
+    let mut cache = HashCache::new();
+    let mut hasher = rustc_hash::FxHasher::default();
+    hash_config_value(meta, &mut cache, &mut hasher);
+    hasher.finish()
+}
+
+/// Compute a structural hash of a `ConfigValue` tree, excluding the
+/// top-level `rendered` map entry.
+///
+/// Used by the q2-preview idempotence gate: chrome transforms
+/// (navbar / sidebar / footer / page-nav), `IncludeResolveStage`, the
+/// favicon transform, and the Bootstrap/clipboard injection stages
+/// populate `meta.rendered.*` with HTML-string side outputs. Two
+/// runs may produce HTML strings whose *bytes* differ but whose
+/// rendered shape is equivalent (attribute order, whitespace); that
+/// case belongs to an HTML-canonicalization concern, not to the
+/// pipeline-determinism contract this hash defends.
+///
+/// The exclusion only applies at the document root. A `rendered`
+/// key nested deeper in the tree is hashed normally — meta is
+/// structured as a single top-level Map in practice, so a nested
+/// `rendered` would be intentional content.
+pub fn compute_meta_hash_fresh_excluding_rendered(meta: &ConfigValue) -> u64 {
+    let mut cache = HashCache::new();
+    let mut hasher = rustc_hash::FxHasher::default();
+    hash_config_value_excluding(meta, &["rendered"], &mut cache, &mut hasher);
+    hasher.finish()
+}
+
+fn hash_config_value(value: &ConfigValue, cache: &mut HashCache<'_>, hasher: &mut impl Hasher) {
+    hash_config_value_excluding(value, &[], cache, hasher);
+}
+
+/// Hash a `ConfigValue`, optionally skipping certain top-level map
+/// keys. `top_skip` is only consulted for the `Map` variant at this
+/// call's root and is not propagated into recursion: nested values
+/// see an empty skip list.
+fn hash_config_value_excluding(
+    value: &ConfigValue,
+    top_skip: &[&str],
+    cache: &mut HashCache<'_>,
+    hasher: &mut impl Hasher,
+) {
+    // `merge_op` participates. The enum doesn't derive Hash, so
+    // route through its discriminant + the byte tag.
+    std::mem::discriminant(&value.merge_op).hash(hasher);
+
+    hash_config_value_kind(&value.value, top_skip, cache, hasher);
+}
+
+fn hash_config_value_kind(
+    kind: &ConfigValueKind,
+    top_skip: &[&str],
+    cache: &mut HashCache<'_>,
+    hasher: &mut impl Hasher,
+) {
+    std::mem::discriminant(kind).hash(hasher);
+
+    match kind {
+        ConfigValueKind::Scalar(yaml) => {
+            yaml.hash(hasher);
+        }
+        ConfigValueKind::PandocInlines(inlines) => {
+            hash_inlines(inlines, cache, hasher);
+        }
+        ConfigValueKind::PandocBlocks(blocks) => {
+            hash_blocks(blocks, cache, hasher);
+        }
+        ConfigValueKind::Path(s) | ConfigValueKind::Glob(s) | ConfigValueKind::Expr(s) => {
+            s.hash(hasher);
+        }
+        ConfigValueKind::Array(items) => {
+            items.len().hash(hasher);
+            for item in items {
+                hash_config_value(item, cache, hasher);
+            }
+        }
+        ConfigValueKind::Map(entries) => {
+            // Insertion-order, filtered by `top_skip`. Skip set is
+            // intentionally NOT propagated into recursion.
+            let kept_len = entries
+                .iter()
+                .filter(|e| !top_skip.contains(&e.key.as_str()))
+                .count();
+            kept_len.hash(hasher);
+            for entry in entries {
+                if top_skip.contains(&entry.key.as_str()) {
+                    continue;
+                }
+                hash_config_map_entry(entry, cache, hasher);
+            }
+        }
+    }
+}
+
+fn hash_config_map_entry(
+    entry: &ConfigMapEntry,
+    cache: &mut HashCache<'_>,
+    hasher: &mut impl Hasher,
+) {
+    entry.key.hash(hasher);
+    // `key_source` deliberately not hashed.
+    hash_config_value(&entry.value, cache, hasher);
+}
+
+// =============================================================================
+// Divergence Localization
+// =============================================================================
+
+/// First place two documents' structural hashes diverge.
+///
+/// Returned by [`find_first_divergence`] to make idempotence failures
+/// debuggable: the test driver embeds this in its panic message so
+/// the sub-agent investigation prompt arrives with "block index 7"
+/// or "meta.listings.foo" instead of just "hash mismatch."
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DivergencePoint {
+    /// Blocks at the same index hash differently. `path` is intentionally
+    /// flat: we don't dig into block subtrees because the per-block hash
+    /// already provides enough localization for triage.
+    Block {
+        index: usize,
+        hash_a: u64,
+        hash_b: u64,
+    },
+    /// A meta key path hashes differently. The path walks insertion
+    /// order through nested Maps; the last element is the leaf key
+    /// whose recursive hash diverges.
+    MetaKey {
+        path: Vec<String>,
+        hash_a: u64,
+        hash_b: u64,
+    },
+    /// The two documents' top-level hashes agree on both blocks and
+    /// meta. The caller should never see this if it was reached via
+    /// "hashes differ, find me a divergence" — it would indicate a
+    /// hasher bug. Returned for completeness.
+    None,
+}
+
+/// Find the first structural divergence between two documents.
+///
+/// `blocks` are compared in order by per-block fresh hash; the first
+/// index whose hashes disagree yields a `Block` variant. If the
+/// blocks all match, `meta` is walked in insertion order with the
+/// same `rendered.*` exclusion the
+/// [`compute_meta_hash_fresh_excluding_rendered`] hash uses; the
+/// first map key whose recursive hash diverges yields a `MetaKey`
+/// variant.
+///
+/// This lives in `quarto-ast-reconcile` next to the hashers so the
+/// localization logic shares the source-info-exclusion contract by
+/// construction. The caller (Plan 3's `idempotence.rs` test driver)
+/// supplies `&[Block]` + `&ConfigValue` rather than passing the
+/// crate's `DocumentAst` type, which is owned by `quarto-core`.
+pub fn find_first_divergence(
+    blocks_a: &[Block],
+    meta_a: &ConfigValue,
+    blocks_b: &[Block],
+    meta_b: &ConfigValue,
+) -> DivergencePoint {
+    // Block walk: linear scan with the existing per-block hasher.
+    // If block counts differ we still report the first mismatching
+    // index (or the boundary index for the longer side).
+    let common = blocks_a.len().min(blocks_b.len());
+    for index in 0..common {
+        let hash_a = compute_block_hash_fresh(&blocks_a[index]);
+        let hash_b = compute_block_hash_fresh(&blocks_b[index]);
+        if hash_a != hash_b {
+            return DivergencePoint::Block {
+                index,
+                hash_a,
+                hash_b,
+            };
+        }
+    }
+    if blocks_a.len() != blocks_b.len() {
+        // Report the first "missing" position as a divergence at
+        // index `common`. We synthesize a hash for the empty side as
+        // 0 — it just needs to be observably different from the
+        // present side's hash.
+        let (hash_a, hash_b) = if blocks_a.len() > blocks_b.len() {
+            (compute_block_hash_fresh(&blocks_a[common]), 0)
+        } else {
+            (0, compute_block_hash_fresh(&blocks_b[common]))
+        };
+        return DivergencePoint::Block {
+            index: common,
+            hash_a,
+            hash_b,
+        };
+    }
+
+    // Meta walk: recursive insertion-order traversal that excludes
+    // top-level `rendered`. Matches the excluding-variant hash so a
+    // failure reported here is reproducible from the hash itself.
+    if let Some(point) = find_meta_divergence(meta_a, meta_b, &["rendered"], &mut Vec::new()) {
+        return point;
+    }
+
+    DivergencePoint::None
+}
+
+fn find_meta_divergence(
+    a: &ConfigValue,
+    b: &ConfigValue,
+    top_skip: &[&str],
+    path: &mut Vec<String>,
+) -> Option<DivergencePoint> {
+    // Fast path: equal recursive hashes -> no divergence in this
+    // subtree.
+    let hash_a = meta_subtree_hash(a, top_skip);
+    let hash_b = meta_subtree_hash(b, top_skip);
+    if hash_a == hash_b {
+        return None;
+    }
+
+    // Different. Drill down through Maps in insertion order; report
+    // the deepest meaningful path.
+    match (&a.value, &b.value) {
+        (ConfigValueKind::Map(entries_a), ConfigValueKind::Map(entries_b)) => {
+            for entry_a in entries_a {
+                if top_skip.contains(&entry_a.key.as_str()) {
+                    continue;
+                }
+                match entries_b.iter().find(|e| e.key == entry_a.key) {
+                    Some(entry_b) => {
+                        path.push(entry_a.key.clone());
+                        if let Some(point) =
+                            find_meta_divergence(&entry_a.value, &entry_b.value, &[], path)
+                        {
+                            return Some(point);
+                        }
+                        path.pop();
+                    }
+                    None => {
+                        // Key present in `a`, missing in `b`. Report
+                        // as a leaf divergence at this path.
+                        let mut full = path.clone();
+                        full.push(entry_a.key.clone());
+                        return Some(DivergencePoint::MetaKey {
+                            path: full,
+                            hash_a: meta_subtree_hash(&entry_a.value, &[]),
+                            hash_b: 0,
+                        });
+                    }
+                }
+            }
+            // Any keys in `b` not in `a`?
+            for entry_b in entries_b {
+                if top_skip.contains(&entry_b.key.as_str()) {
+                    continue;
+                }
+                if !entries_a.iter().any(|e| e.key == entry_b.key) {
+                    let mut full = path.clone();
+                    full.push(entry_b.key.clone());
+                    return Some(DivergencePoint::MetaKey {
+                        path: full,
+                        hash_a: 0,
+                        hash_b: meta_subtree_hash(&entry_b.value, &[]),
+                    });
+                }
+            }
+            // Hashes differed but no key-level divergence found
+            // (e.g. value of a present key changed but the recursion
+            // bottomed out without finding a Map to descend into):
+            // report at the current path.
+            Some(DivergencePoint::MetaKey {
+                path: path.clone(),
+                hash_a,
+                hash_b,
+            })
+        }
+        _ => Some(DivergencePoint::MetaKey {
+            path: path.clone(),
+            hash_a,
+            hash_b,
+        }),
+    }
+}
+
+fn meta_subtree_hash(value: &ConfigValue, top_skip: &[&str]) -> u64 {
+    let mut cache = HashCache::new();
+    let mut hasher = rustc_hash::FxHasher::default();
+    hash_config_value_excluding(value, top_skip, &mut cache, &mut hasher);
+    hasher.finish()
 }
 
 // =============================================================================
@@ -2012,5 +2324,225 @@ mod tests {
         let ptr2 = NodePtr::from_ref(&block);
 
         assert_eq!(ptr1, ptr2);
+    }
+
+    // ==================== Meta Hash Tests ====================
+
+    use quarto_pandoc_types::MergeOp;
+    use yaml_rust2::Yaml;
+
+    fn scalar_str(s: &str) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            source_info: dummy_source(),
+            merge_op: MergeOp::default(),
+        }
+    }
+
+    fn scalar_int(i: i64) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::Integer(i)),
+            source_info: dummy_source(),
+            merge_op: MergeOp::default(),
+        }
+    }
+
+    fn map_of(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        map_of_with_source(entries, dummy_source())
+    }
+
+    fn map_of_with_source(entries: Vec<(&str, ConfigValue)>, src: SourceInfo) -> ConfigValue {
+        let entries = entries
+            .into_iter()
+            .map(|(k, v)| ConfigMapEntry {
+                key: k.to_string(),
+                key_source: src.clone(),
+                value: v,
+            })
+            .collect();
+        ConfigValue {
+            value: ConfigValueKind::Map(entries),
+            source_info: src,
+            merge_op: MergeOp::default(),
+        }
+    }
+
+    #[test]
+    fn meta_hash_same_content_same_hash() {
+        let a = map_of(vec![("title", scalar_str("hello")), ("toc", scalar_int(3))]);
+        let b = map_of(vec![("title", scalar_str("hello")), ("toc", scalar_int(3))]);
+        assert_eq!(compute_meta_hash_fresh(&a), compute_meta_hash_fresh(&b));
+    }
+
+    #[test]
+    fn meta_hash_different_content_different_hash() {
+        let a = map_of(vec![("title", scalar_str("hello"))]);
+        let b = map_of(vec![("title", scalar_str("world"))]);
+        assert_ne!(compute_meta_hash_fresh(&a), compute_meta_hash_fresh(&b));
+    }
+
+    #[test]
+    fn meta_hash_excludes_source_info_and_key_source() {
+        // Same content, different SourceInfo on values and on keys.
+        let a = map_of_with_source(vec![("title", scalar_str("hello"))], dummy_source());
+        let b = map_of_with_source(vec![("title", scalar_str("hello"))], other_source());
+        // Also flip the inner scalar's source_info.
+        let mut b = b;
+        if let ConfigValueKind::Map(entries) = &mut b.value {
+            entries[0].value.source_info = other_source();
+        }
+        assert_eq!(compute_meta_hash_fresh(&a), compute_meta_hash_fresh(&b));
+    }
+
+    #[test]
+    fn meta_hash_excluding_rendered_ignores_top_level_rendered() {
+        let a = map_of(vec![
+            ("title", scalar_str("hello")),
+            (
+                "rendered",
+                map_of(vec![("navbar", scalar_str("<nav>a</nav>"))]),
+            ),
+        ]);
+        let b = map_of(vec![
+            ("title", scalar_str("hello")),
+            (
+                "rendered",
+                map_of(vec![("navbar", scalar_str("<nav>b</nav>"))]),
+            ),
+        ]);
+        assert_ne!(
+            compute_meta_hash_fresh(&a),
+            compute_meta_hash_fresh(&b),
+            "the non-excluding hash must observe the difference",
+        );
+        assert_eq!(
+            compute_meta_hash_fresh_excluding_rendered(&a),
+            compute_meta_hash_fresh_excluding_rendered(&b),
+            "the excluding-rendered hash must ignore top-level rendered.* divergence",
+        );
+    }
+
+    #[test]
+    fn meta_hash_excluding_rendered_does_not_propagate_to_nested_rendered() {
+        // A nested `rendered` key is part of the content and must
+        // still participate in the hash.
+        let a = map_of(vec![(
+            "listings",
+            map_of(vec![("rendered", scalar_str("a"))]),
+        )]);
+        let b = map_of(vec![(
+            "listings",
+            map_of(vec![("rendered", scalar_str("b"))]),
+        )]);
+        assert_ne!(
+            compute_meta_hash_fresh_excluding_rendered(&a),
+            compute_meta_hash_fresh_excluding_rendered(&b),
+        );
+    }
+
+    #[test]
+    fn meta_hash_map_insertion_order_matters() {
+        // Regression guard for the no-sort choice: a transform that
+        // stuffs a HashMap into meta would produce different
+        // insertion orders across runs; the hash must catch that.
+        let a = map_of(vec![("a", scalar_int(1)), ("b", scalar_int(2))]);
+        let b = map_of(vec![("b", scalar_int(2)), ("a", scalar_int(1))]);
+        assert_ne!(
+            compute_meta_hash_fresh(&a),
+            compute_meta_hash_fresh(&b),
+            "different Map insertion order must produce different hashes",
+        );
+    }
+
+    #[test]
+    fn meta_hash_merge_op_participates() {
+        let a = ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String("x".into())),
+            source_info: dummy_source(),
+            merge_op: MergeOp::Concat,
+        };
+        let b = ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String("x".into())),
+            source_info: dummy_source(),
+            merge_op: MergeOp::Prefer,
+        };
+        assert_ne!(compute_meta_hash_fresh(&a), compute_meta_hash_fresh(&b));
+    }
+
+    // ==================== Divergence Localization Tests ====================
+
+    fn para(text: &str) -> Block {
+        Block::Paragraph(Paragraph {
+            content: vec![make_str(text)],
+            source_info: dummy_source(),
+        })
+    }
+
+    #[test]
+    fn divergence_identical_docs_returns_none() {
+        let blocks = vec![para("alpha"), para("beta")];
+        let meta = map_of(vec![("title", scalar_str("t"))]);
+        let point = find_first_divergence(&blocks, &meta, &blocks, &meta);
+        assert_eq!(point, DivergencePoint::None);
+    }
+
+    #[test]
+    fn divergence_reports_first_block_mismatch() {
+        let a = vec![para("alpha"), para("beta"), para("gamma")];
+        let b = vec![para("alpha"), para("DIFFERENT"), para("gamma")];
+        let meta = map_of(vec![]);
+        let point = find_first_divergence(&a, &meta, &b, &meta);
+        match point {
+            DivergencePoint::Block {
+                index,
+                hash_a,
+                hash_b,
+            } => {
+                assert_eq!(index, 1);
+                assert_ne!(hash_a, hash_b);
+            }
+            other => panic!("expected Block divergence, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn divergence_reports_meta_key_path() {
+        let meta_a = map_of(vec![(
+            "listings",
+            map_of(vec![("foo", map_of(vec![("title", scalar_str("a"))]))]),
+        )]);
+        let meta_b = map_of(vec![(
+            "listings",
+            map_of(vec![("foo", map_of(vec![("title", scalar_str("b"))]))]),
+        )]);
+        let blocks: Vec<Block> = vec![];
+        let point = find_first_divergence(&blocks, &meta_a, &blocks, &meta_b);
+        match point {
+            DivergencePoint::MetaKey {
+                path,
+                hash_a,
+                hash_b,
+            } => {
+                assert_eq!(path, vec!["listings", "foo", "title"]);
+                assert_ne!(hash_a, hash_b);
+            }
+            other => panic!("expected MetaKey divergence, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn divergence_skips_rendered_top_level() {
+        // Only `rendered.*` differs at the top level -> no divergence.
+        let meta_a = map_of(vec![
+            ("title", scalar_str("hello")),
+            ("rendered", map_of(vec![("navbar", scalar_str("a"))])),
+        ]);
+        let meta_b = map_of(vec![
+            ("title", scalar_str("hello")),
+            ("rendered", map_of(vec![("navbar", scalar_str("b"))])),
+        ]);
+        let blocks: Vec<Block> = vec![];
+        let point = find_first_divergence(&blocks, &meta_a, &blocks, &meta_b);
+        assert_eq!(point, DivergencePoint::None);
     }
 }

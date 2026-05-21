@@ -3877,6 +3877,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "yaml-rust2",
 ]
 
 [[package]]

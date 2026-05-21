@@ -893,7 +893,7 @@ convenience for navigating, not a contract.
 
 ### Phase 1 — Hashing infrastructure
 
-- [ ] Add `compute_meta_hash_fresh` in
+- [x] Add `compute_meta_hash_fresh` in
   `crates/quarto-ast-reconcile/src/hash.rs`, parallel to
   `compute_blocks_hash_fresh`. Walks `ConfigValue` tree
   source-info-agnostically. Hashes scalars by `Yaml` payload, recurses
@@ -902,11 +902,11 @@ convenience for navigating, not a contract.
   `(key_string, recurse(value))` **in insertion order** (no sort),
   **includes `merge_op`**, skips `source_info` and `key_source`. (See
   §"In scope" for the full spec.)
-- [ ] Add `compute_meta_hash_fresh_excluding_rendered` variant that
+- [x] Add `compute_meta_hash_fresh_excluding_rendered` variant that
   skips the `rendered` top-level key (HTML-string side outputs from
   chrome transforms + `IncludeResolveStage` + Bootstrap/clipboard
   injection).
-- [ ] Add unit tests for both:
+- [x] Add unit tests for both:
   - same content → same hash;
   - different content → different hash;
   - different `source_info` / `key_source` → same hash;
@@ -916,12 +916,16 @@ convenience for navigating, not a contract.
     different hash** (regression guard for the no-sort choice);
   - different `merge_op` → different hash (regression guard for the
     `merge_op`-participates choice).
-- [ ] Add `find_first_divergence(&DocumentAst, &DocumentAst) ->
-  DivergencePoint` alongside the hashers (see §"In scope" for the
-  shape). Reuses `compute_block_hash_fresh` for the block walk and a
-  recursive insertion-order traversal for the meta walk; both walks
-  short-circuit on the first divergence.
-- [ ] Unit tests for `find_first_divergence`:
+- [x] Add `find_first_divergence(blocks_a, meta_a, blocks_b, meta_b)
+  -> DivergencePoint` alongside the hashers. The plan-sketch signature
+  took `&DocumentAst`, but `DocumentAst` lives in `quarto-core` and
+  `quarto-ast-reconcile` cannot depend on it; the helper takes the
+  underlying `&[Block]` + `&ConfigValue` instead, and the test driver
+  in `quarto-core/tests/idempotence.rs` will project from its
+  `DocumentAst`. Reuses `compute_block_hash_fresh` for the block walk
+  and a recursive insertion-order traversal for the meta walk; both
+  walks short-circuit on the first divergence.
+- [x] Unit tests for `find_first_divergence`:
   - identical docs → `DivergencePoint::None`;
   - one block differs at index N → `Block { index: N, ... }`;
   - one meta key path differs → `MetaKey { path: [...], ... }`;
