@@ -260,7 +260,7 @@ for now it's a no-cost read-only compat shim.
     let by_data = by_obj.get("data").cloned().unwrap_or(Value::Null);
     let by = By { kind, data: by_data };
 
-    let mut from = SmallVec::<[Anchor; 1]>::new();
+    let mut from = SmallVec::<[Anchor; 2]>::new();
     if let Some(from_arr) = obj.get("from").and_then(|v| v.as_array()) {
         for entry in from_arr {
             let role_str = entry.get("role").and_then(|v| v.as_str())

@@ -24,7 +24,7 @@ Extend `SourceInfo` with a single new variant, `Generated`, that
 captures every transform-synthesized node in a uniform shape:
 
 ```rust
-Generated { by: By, from: SmallVec<[Anchor; 1]> }
+Generated { by: By, from: SmallVec<[Anchor; 2]> }
 ```
 
 `by` answers "which transform produced me." `from` is a list of
@@ -42,7 +42,7 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
 
 ### In scope
 
-- Add `Generated { by: By, from: SmallVec<[Anchor; 1]> }` variant to `SourceInfo`.
+- Add `Generated { by: By, from: SmallVec<[Anchor; 2]> }` variant to `SourceInfo`. Inline capacity 2 covers the steady-state shape after the deferred follow-ups land (Invocation + ValueSource on `meta`/`var` shortcodes; Invocation + Dispatch on Lua-handler shortcodes); see §Risk areas for the trade-off.
 - Define `By` struct: `{ kind: String, data: serde_json::Value }`.
 - Define `Anchor` struct: `{ role: AnchorRole, source_info: Arc<SourceInfo> }`.
 - Define `AnchorRole` enum: `Invocation`, `ValueSource`, `Other(String)`.
@@ -75,7 +75,14 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
     carry `FileId`s inside its anchors.
   - `extract_file_id` (in `quarto-error-reporting/src/diagnostic.rs`) —
     delegate to `invocation_anchor()` and recurse (parallel to
-    `resolve_byte_range`).
+    `resolve_byte_range`). Empty-`from` Generated returns `None`, which
+    matches today's `FilterProvenance` arm; the two call sites in
+    `to_ariadne_report` (`diagnostic.rs:674`, `:773`) both tolerate
+    `None` gracefully (the main-location path falls through via `?`;
+    the detail loop `continue`s), so no caller change is required.
+    `extract_file_id` stays a private `fn` on `DiagnosticMessage` — no
+    promotion to a `SourceInfo` method, since no duplicate
+    file-id-extraction logic exists elsewhere in the workspace.
 - Update Lua serde (`pampa/src/lua/diagnostics.rs`) for `Generated`.
   Use `t = "Generated"` as the discriminant; the table carries `by` and
   `from` sub-tables. Keep `"FilterProvenance"` recognized as a legacy
@@ -135,13 +142,17 @@ later in the plan — this list is the actionable extract.
 
 ### Phase 1 — Type definitions in `quarto-source-map`
 
-- [ ] Add `smallvec` workspace dependency with the `serde` feature
-      (or verify present).
+- [ ] Add `smallvec` to the workspace `Cargo.toml` (`[workspace.dependencies]`)
+      with the `serde` feature, and depend on it from
+      `crates/quarto-source-map/Cargo.toml`. Verified absent in both files
+      at the start of Plan 4.
 - [ ] Add `By` struct (`kind: String`, `data: serde_json::Value` with
-      `#[serde(default, skip_serializing_if = "Value::is_null")]`).
+      `#[serde(default, skip_serializing_if = "serde_json::Value::is_null")]`
+      — the attribute path needs to be fully qualified, not the short
+      `Value::is_null` form).
 - [ ] Add `AnchorRole` enum (`Invocation`, `ValueSource`, `Other(String)`).
 - [ ] Add `Anchor` struct (`role: AnchorRole`, `source_info: Arc<SourceInfo>`).
-- [ ] Add `Generated { by: By, from: SmallVec<[Anchor; 1]> }` variant
+- [ ] Add `Generated { by: By, from: SmallVec<[Anchor; 2]> }` variant
       to `SourceInfo`. Keep `FilterProvenance` for now — it's removed
       at the end of Phase 5.
 - [ ] Verify the new enum still implements `Debug`, `Clone`,
@@ -181,7 +192,13 @@ later in the plan — this list is the actionable extract.
 - [ ] Add `Generated` arm to `source_info_from_lua_table`.
 - [ ] Keep `"FilterProvenance"` legacy reader: maps to
       `Generated { by: By::filter(path, line), from: smallvec![] }`.
-      Indefinitely accepted; writes never emit it.
+      Indefinitely accepted; writes never emit it. The Concat arm
+      already recurses through `source_info_from_lua_table`, so a
+      legacy `"FilterProvenance"` table nested inside a `Concat` piece
+      is handled automatically — no Concat-specific code path needed.
+      (Verified: no `.snap` or `.json` file in `crates/` or `tests/`
+      contains the `"FilterProvenance"` string today, so no fixture
+      migration is required either.)
 
 ### Phase 5 — Migration
 
@@ -259,7 +276,7 @@ Structural:
 
 - **Single `Generated` variant, not two.** Earlier drafts proposed
   `Synthetic` + `Derived` to separate "no preimage" from "has preimage
-  but is atomic." The unified `Generated { by, from: SmallVec<[Anchor; 1]> }`
+  but is atomic." The unified `Generated { by, from: SmallVec<[Anchor; 2]> }`
   expresses both with one variant: anchor-list empty for pure
   synthesis, anchor-list with `Invocation` for shortcode-style
   resolutions. The "has preimage" property is `gen.invocation_anchor().is_some()`,
@@ -303,7 +320,21 @@ Structural:
   plans add roles without modifying the type.
 - **Kind-string convention**: kebab-case, namespaced for third-party
   (`ext/<extension>/foo`). Same for `AnchorRole::Other` values.
+- **Anchor list ordering is append order**. `from` is a `SmallVec`;
+  iteration is insertion order. `append_anchor` pushes to the end.
+  Accessors that find by role (`invocation_anchor`, `value_source_anchor`)
+  return the first match — at most one anchor per known role by
+  convention. Serde round-trips preserve order. No producer sorts;
+  no consumer reorders.
 - **Builder methods for known kinds, plus `raw` escape hatch**.
+  `By::raw(kind, data)` accepts any `kind` string — including built-in
+  names like `"shortcode"` or `"filter"`. Forgery (an extension calling
+  `By::raw("shortcode", …)` without the required Invocation anchor)
+  is caught downstream by Plan 6's audit-completion test and Plan 7's
+  `debug_assert!`, so no constructor-level rejection is needed. The
+  convention is still `ext/<extension>/<kind>` for third-party kinds —
+  collisions with built-ins are a misuse caught at audit time, not a
+  type error.
 
 ## The proposed shape
 
@@ -322,7 +353,7 @@ pub enum SourceInfo {
     Original { file_id: FileId, start_offset: usize, end_offset: usize },
     Substring { parent: Arc<SourceInfo>, start_offset: usize, end_offset: usize },
     Concat { pieces: Vec<SourcePiece> },
-    Generated { by: By, from: SmallVec<[Anchor; 1]> },
+    Generated { by: By, from: SmallVec<[Anchor; 2]> },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -826,31 +857,54 @@ semantics" for the full implementation including Concat contiguity.
   `Generated` arm returns what `FilterProvenance` did today (usually
   `0`, `0`, or `None`) for offset/length accessors, or delegates to
   `invocation_anchor()` for `resolve_byte_range` / `extract_file_id`.
-- **Anchor-list allocation**: `from` is typed `SmallVec<[Anchor; 1]>`
-  from day 1 (with the `serde` feature enabled). Inline capacity of 1
-  covers the two common cases — empty (sectionize / footnotes / filter
-  constructions, the bulk of synthesized nodes) and single-Invocation
-  (every shortcode resolution) — with zero heap allocation. Multi-anchor
-  Generateds (Invocation + ValueSource, or Invocation + Dispatch once
-  Lua-file-registration lands) spill to the heap, but those are the
-  minority and the cost is the same as `Vec<Anchor>` would have been.
-  Adds a `smallvec` workspace dependency if one isn't already present.
+- **Anchor-list allocation**: `from` is typed `SmallVec<[Anchor; 2]>`
+  from day 1 (with the `serde` feature enabled). Inline capacity of 2
+  covers all expected shapes through the deferred follow-ups with zero
+  heap allocation:
+    - empty (sectionize / footnotes / appendix / title-block /
+      tree-sitter-postprocess / filter constructions today) — the bulk
+      of synthesized nodes;
+    - one Invocation (Rust-handler shortcode resolutions, today);
+    - two anchors (Invocation + ValueSource for `meta`/`var` once
+      bd-129m3 lands; Invocation + Dispatch for Lua-handler shortcodes
+      once bd-36fr9 lands).
+  Cap=2 costs +16 bytes per `Generated` over cap=1 even when `from` is
+  empty, but eliminates the heap spill cap=1 would incur on every
+  multi-anchor shortcode in the steady state. Three-or-more-anchor
+  Generateds (Invocation + ValueSource + Dispatch on a Lua-handler
+  `meta` shortcode) still spill — same cost as `Vec<Anchor>` would have
+  been. Adds a `smallvec` workspace dependency (verified absent today).
 - **`serde_json::Value` in PartialEq derives**: `Value` implements
   `PartialEq` but with potentially weird semantics for floats. For our
   use, kinds carry string + small structured data; should be fine.
-  Test the cases.
+  Test the cases. (Verified: no production call site relies on
+  `SourceInfo == SourceInfo` today — the `PartialEq` derive is required
+  by the wider `Block`/`Inline` derives but isn't itself load-bearing.
+  Plan 7's coarsen may compare structurally once it lands; the
+  `Value::PartialEq` semantics on small kebab-case objects are
+  well-behaved.)
 - **Removing `FilterProvenance` is a breaking change for downstream
   consumers**. Within the q2 workspace this is bounded; if any external
   code imports the variant by name, they'd break. Search for
   non-workspace usages before removing (probably none).
+- **`Default` on containers of `SourceInfo`**: verified no struct in
+  `quarto-pandoc-types/src/{block,inline}.rs` derives `Default` (each
+  `SourceInfo`-bearing struct is constructed explicitly), so changing
+  `SourceInfo`'s arm set can't cascade into a broken
+  `#[derive(Default)]`. The hand-written `Default for SourceInfo` impl
+  (the `Original { FileId(0), 0, 0 }` zero-value) stays unchanged.
 - **`combine()` with a `Generated` operand**: structurally valid (it
   produces a `Concat` with a zero-length `Generated` piece, since
   `Generated::length()` returns `0`), but semantically dead — the
   Generated side carries no preimage bytes for adjacent-text coalescing,
-  and `map_offset` will skip over the zero-length piece. No production
-  code path combines Generated source_info today; transforms that
-  synthesize `Generated` nodes attach anchors directly rather than
-  reaching for `combine()`. No type-level prevention in v1.
+  and `map_offset` will skip over the zero-length piece. Verified: all
+  17 `.combine(` call sites in the workspace (`attr.rs`,
+  `postprocess.rs`, `location.rs`, `yaml/parser.rs`, etc.) combine
+  Original/Substring shapes; nothing combines FilterProvenance today, so
+  Generated won't be combined either unless a future transform reaches
+  for it. The Phase 6 `combine() × Generated` test documents the
+  intended fall-through behavior for any future caller, not a current
+  regression. No type-level prevention in v1.
 
 ## Estimated scope
 
