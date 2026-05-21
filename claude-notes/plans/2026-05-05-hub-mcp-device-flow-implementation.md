@@ -887,40 +887,126 @@ authenticate_finish({}) -> "authenticated as <email>"
 
 Tests in `ts-packages/quarto-hub-mcp/test/auth/auth-tools.test.ts`.
 
-- [ ] `start_returns_verification_uri_user_code_and_canonical_url`
-- [ ] `start_response_includes_expires_in_seconds`
-- [ ] `start_canonical_url_is_a_constant_not_from_google_response` —
+- [x] `start_returns_verification_uri_user_code_and_canonical_url`
+- [x] `start_response_includes_expires_in_seconds`
+- [x] `start_canonical_url_is_a_constant_not_from_google_response` —
   even with malicious mock AS response, canonical URL unchanged.
-- [ ] `start_caches_device_code_in_process_memory_only` — no
+- [x] `start_caches_device_code_in_process_memory_only` — no
   `CredentialStore.write` call.
-- [ ] `start_short_circuits_when_already_authenticated`
-- [ ] `start_short_circuits_when_hub_known_no_auth` — spy on HTTP
+- [x] `start_short_circuits_when_already_authenticated`
+- [x] `start_short_circuits_when_hub_known_no_auth` — spy on HTTP
   client; no request issued.
-- [ ] `start_initiates_device_flow_when_hub_known_auth_required`
-- [ ] `start_initiates_device_flow_when_auth_mode_unknown` — only
+- [x] `start_initiates_device_flow_when_hub_known_auth_required`
+- [x] `start_initiates_device_flow_when_auth_mode_unknown` — only
   positive `'no-auth'` triggers short-circuit.
-- [ ] `start_overwrites_prior_unconsumed_device_code` — outside the
+- [x] `start_overwrites_prior_unconsumed_device_code` — outside the
   ~5 s coalescing window.
-- [ ] `finish_without_prior_start_returns_typed_error`
-- [ ] `finish_pending_returns_user_actionable_text`
-- [ ] `finish_slow_down_returns_user_actionable_text_with_wait`
-- [ ] `finish_success_persists_bundle_via_credential_store`
-- [ ] `finish_success_clears_cached_device_code`
-- [ ] `finish_terminal_error_clears_cached_device_code` —
-  `DeviceFlowDeniedError` / `DeviceFlowExpiredError`.
-- [ ] `finish_returns_authenticated_as_email_from_id_token` — only
+- [x] `finish_without_prior_start_returns_typed_error`
+- [x] `finish_pending_returns_user_actionable_text`
+- [x] `finish_slow_down_returns_user_actionable_text_with_wait`
+- [x] `finish_success_persists_bundle_via_credential_store`
+- [x] `finish_success_clears_cached_device_code`
+- [x] `finish_terminal_error_clears_cached_device_code` —
+  `DeviceFlowDeniedError` / `DeviceFlowExpiredError` (split into one
+  spec each).
+- [x] `finish_returns_authenticated_as_email_from_id_token` — only
   `email` claim, nothing else.
-- [ ] `tool_responses_never_contain_id_token_or_refresh_token`
-- [ ] `expired_cached_device_code_is_cleared_on_next_start`
-- [ ] `concurrent_finish_calls_serialise_safely`
-- [ ] `finish_called_too_soon_returns_slow_down_advice_without_polling_google`
+- [x] `tool_responses_never_contain_id_token_or_refresh_token`
+- [x] `expired_cached_device_code_is_cleared_on_next_start`
+- [x] `concurrent_finish_calls_serialise_safely`
+- [x] `finish_called_too_soon_returns_slow_down_advice_without_polling_google`
   — `nextPollAllowedAt > now`: return "still pending" text, **do not**
   call `oauth4webapi.deviceCodeGrantRequest`.
-- [ ] `finish_after_interval_elapsed_polls_google`
-- [ ] `start_called_repeatedly_within_window_short_circuits` — two
+- [x] `finish_after_interval_elapsed_polls_google`
+- [x] `start_called_repeatedly_within_window_short_circuits` — two
   calls within ~5 s return same `device_code` without calling Google.
-- [ ] `slow_down_response_increases_subsequent_interval` — bumps
+- [x] `slow_down_response_increases_subsequent_interval` — bumps
   `nextPollAllowedAt` by 5 s per RFC 8628 §3.5.
+
+### Phase 7 — completion notes (2026-05-21)
+
+Landed on `feature/hub-mcp-device-flow`:
+
+- New module `ts-packages/quarto-hub-mcp/src/auth/auth-tools.ts`
+  exposes `AuthToolsState` (handler class), `AUTH_TOOL_DEFINITIONS`
+  (the two `Tool` records), `CANONICAL_VERIFICATION_URL` constant,
+  `registerAuthTools`, and the `AuthToolsDeps` /
+  `LastObservedAuthModeSource` / `AuthFlowConfig` types.
+- `AuthToolsState.handleStart` walks the documented 3-step short-
+  circuit chain: (1) `RefreshManager.getValidIdToken()` succeeds →
+  "Already authenticated as <email>." with no Google call; (2)
+  `connectionManager.lastObservedAuthMode() === 'no-auth'` → "The
+  configured hub does not require authentication; no action needed."
+  with no Google call; (3) otherwise initiates the device flow and
+  caches the result. `ReauthRequired` is the *only* error from
+  `getValidIdToken` that falls through to the device-flow path —
+  other failures propagate so an unexpected network blip doesn't
+  silently start a new flow.
+- `CANONICAL_VERIFICATION_URL` is a `const`-bound literal
+  (`'https://www.google.com/device'`); the response text quotes it
+  unconditionally and reproduces Google's `verification_uri` as a
+  secondary "also valid" hint. The phishing test injects a malicious
+  `verification_uri` and asserts the canonical URL is unchanged in
+  the response.
+- Cached device-flow state lives on a closure-scoped private field
+  `{ deviceCode, userCode, verificationUri, expiresAt, startTime,
+  interval, nextPollAllowedAt }` — never persisted. A repeat
+  `authenticate_start` within `coalesceWindowMs` (default 5 s)
+  returns the same cached values without a fresh Google call; outside
+  that window the cache is overwritten. `clearCacheIfExpired` runs
+  before every read so expired codes are GC'd implicitly.
+- `handleFinish` rate-limits via `nextPollAllowedAt` per RFC 8628
+  §3.5: if `now < nextPollAllowedAt`, return "still pending — wait
+  N seconds" text *without* calling Google. On `pending` it bumps
+  `nextPollAllowedAt` by the cached `interval`; on `slow_down` it
+  bumps both `interval` and `nextPollAllowedAt` by an additional 5 s
+  (the SLOW_DOWN_BUMP constant). On success it decodes the `email`
+  claim from the id_token (and nothing else from the JWT body),
+  writes a fresh `CredentialBundle` to the store, clears the cached
+  device_code, and returns "Authenticated as <email>." Terminal
+  errors (`DeviceFlowDeniedError` / `DeviceFlowExpiredError` /
+  generic `DeviceFlowError`) clear the cache and surface a
+  redacted error message — `redactTokens` runs on every error
+  message before it reaches the tool response.
+- Concurrent `handleFinish` calls serialise via a tail-promise mutex
+  mirroring `CredentialStore`/`RefreshManager`. The second caller
+  observes the first's cache mutation: on success that's a cleared
+  cache → second call returns the "no flow in progress" tool error,
+  which the `concurrent_finish_calls_serialise_safely` spec asserts
+  (exactly one success, exactly one error).
+- `ConnectionManager` gained a minimal `lastObservedAuthMode()`
+  accessor that returns `'unknown'` for now (with the `ObservedAuthMode`
+  type exported). Phase 8 will be the one to flip this to `'no-auth'`
+  / `'requires-auth'` based on actual WS-upgrade outcomes; today's
+  default means Phase 7's short-circuit-on-`'no-auth'` path is
+  inert until Phase 8 lands.
+- `registerAuthTools(server, deps)` returns the `AuthToolsState` so
+  the caller (index.ts in Phase 8) can compose it with `registerTools`
+  into a single `CallToolRequestSchema` dispatcher. Today it
+  installs handlers that respond to only the auth tools — that's the
+  correct behaviour when called in isolation, and is overridden by
+  the combined-dispatch wiring Phase 8 will land.
+
+Tests live at `src/auth/auth-tools.test.ts` (co-located, same
+convention Phases 4–6 established). They drive `AuthToolsState`
+directly with injected `now`/`fetch` — no MCP `Server` instance is
+spun up. The `CredentialStore` is wired to an in-memory keyring
+backend so writes are observable; the `RefreshManager` is the real
+class with its `fetch` stubbed. The `LastObservedAuthModeSource`
+type is a single-method interface so the stub fits in one line.
+
+Verification: 26 new Vitest specs pass under `npm test` from
+`ts-packages/quarto-hub-mcp/` (103 of the 111 specs in this package
+now pass; 6 failures remain in `src/hub-mcp.test.ts` from the
+documented pre-existing `indexedDB is not defined` issue and 2 are
+the opt-in `[integration]` lane). Confirmed via stash + re-run that
+the failure count is unchanged from the pre-Phase-7 baseline. `npm
+run typecheck` and `npm run build` both clean; `dist/auth/auth-tools.{js,d.ts}`
+emitted.
+
+No new dependencies — the module re-uses `oauth4webapi`, `jose`, and
+the `@modelcontextprotocol/sdk` already on the workspace
+`package-lock.json`.
 
 ### Implementation
 

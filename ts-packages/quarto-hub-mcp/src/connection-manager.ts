@@ -15,6 +15,14 @@ import {
 } from '@quarto/quarto-sync-client';
 
 /**
+ * Observed hub auth-mode (process-local). Phase 7 consults this to
+ * decide whether `authenticate_start` should short-circuit. Phase 8
+ * is responsible for flipping this in response to actual connect
+ * outcomes (101 / 401); until then the value stays `'unknown'`.
+ */
+export type ObservedAuthMode = 'no-auth' | 'requires-auth' | 'unknown';
+
+/**
  * Tracked state for a connected project.
  */
 interface ProjectState {
@@ -29,9 +37,20 @@ interface ProjectState {
 export class ConnectionManager {
   private readonly serverUrl: string;
   private readonly projects = new Map<string, ProjectState>();
+  private observedAuthMode: ObservedAuthMode = 'unknown';
 
   constructor(serverUrl: string) {
     this.serverUrl = serverUrl;
+  }
+
+  /**
+   * Most recent observation of the hub's auth requirement. Phase 8
+   * will flip this based on actual WS-upgrade outcomes; Phase 7's
+   * auth-tools call this to decide whether to short-circuit
+   * `authenticate_start` against a no-auth hub.
+   */
+  lastObservedAuthMode(): ObservedAuthMode {
+    return this.observedAuthMode;
   }
 
   /**
