@@ -367,9 +367,13 @@ export function updateRunListAttribution(
  * ASCII-only docs: map is the identity. Non-ASCII docs require this
  * translation for correctness — a missing translation would silently
  * misattribute any range past the first multi-byte character.
+ *
+ * Returned as `Uint32Array` so the per-codeunit storage is a single
+ * contiguous buffer of 32-bit ints rather than boxed `number` slots —
+ * matters because this is rebuilt on every debounced payload update.
  */
-export function buildCharToByteMap(text: string): number[] {
-  const map = new Array<number>(text.length + 1);
+export function buildCharToByteMap(text: string): Uint32Array {
+  const map = new Uint32Array(text.length + 1);
   let byteOff = 0;
   for (let i = 0; i < text.length; i++) {
     map[i] = byteOff;
@@ -399,7 +403,7 @@ export function buildCharToByteMap(text: string): number[] {
  */
 export function runsCharToByteOffsets(
   runs: AttributionRun[],
-  charToByte: number[],
+  charToByte: Uint32Array,
 ): AttributionRun[] {
   return runs.map(r => ({
     start: charToByte[r.start] ?? r.start,

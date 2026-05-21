@@ -29,13 +29,13 @@ describe('buildCharToByteMap', () => {
     // "é" is U+00E9, 2 bytes in UTF-8 (0xc3 0xa9).
     const map = buildCharToByteMap('aéb');
     // 'a' at char 0 → byte 0; 'é' at char 1 → byte 1; 'b' at char 2 → byte 3.
-    expect(map).toEqual([0, 1, 3, 4]);
+    expect(Array.from(map)).toEqual([0, 1, 3, 4]);
   });
 
   it('counts 3-byte UTF-8 sequences correctly (CJK)', () => {
     // "中" is U+4E2D, 3 bytes in UTF-8 (0xe4 0xb8 0xad).
     const map = buildCharToByteMap('a中b');
-    expect(map).toEqual([0, 1, 4, 5]);
+    expect(Array.from(map)).toEqual([0, 1, 4, 5]);
   });
 
   it('handles surrogate-pair (4-byte) codepoints', () => {
