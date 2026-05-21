@@ -52,7 +52,7 @@
 }
 
 /* Collapsed: toggle grows to fill the bar so most of it is still
-   clickable to enter replay, while leaving room for the Authorship
+   clickable to enter replay, while leaving room for the Attribution
    pill on the right. */
 .replay-drawer--collapsed .replay-drawer__toggle {
   flex: 1;
@@ -298,10 +298,10 @@
   pointer-events: none;
 }
 
-/* Authorship overlay toggle — sits flush-right in both collapsed and
+/* Attribution overlay toggle — sits flush-right in both collapsed and
    expanded states. Off-state matches the dim transport-button look;
    on-state lights up with the editor accent. */
-.replay-drawer__authorship {
+.replay-drawer__attribution {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -321,23 +321,23 @@
   user-select: none;
 }
 
-.replay-drawer__authorship:hover {
+.replay-drawer__attribution:hover {
   color: var(--editor-text);
   border-color: var(--editor-text-dim);
 }
 
-.replay-drawer__authorship--on {
+.replay-drawer__attribution--on {
   color: var(--editor-success);
   border-color: var(--editor-success);
   background: var(--editor-success-bg);
 }
 
-.replay-drawer__authorship--on:hover {
+.replay-drawer__attribution--on:hover {
   background: var(--editor-success);
   color: var(--editor-bg);
 }
 
-.replay-drawer__authorship-dot {
+.replay-drawer__attribution-dot {
   display: inline-block;
   width: 7px;
   height: 7px;
@@ -347,7 +347,7 @@
   transition: opacity 0.15s;
 }
 
-.replay-drawer__authorship--on .replay-drawer__authorship-dot {
+.replay-drawer__attribution--on .replay-drawer__attribution-dot {
   opacity: 1;
 }
 
@@ -361,17 +361,17 @@
    We intentionally keep the static border underneath — the rotating
    highlight rides on top, so the pill never looks "borderless" mid-
    animation if a browser ignores the pseudo-element. */
-@property --replay-drawer__authorship-angle {
+@property --replay-drawer__attribution-angle {
   syntax: '<angle>';
   inherits: false;
   initial-value: 0deg;
 }
 
-.replay-drawer__authorship--generating {
+.replay-drawer__attribution--generating {
   position: relative;
 }
 
-.replay-drawer__authorship--generating::before {
+.replay-drawer__attribution--generating::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -381,7 +381,7 @@
      indicator, no transparent gap. First and last stops match so
      the seam is invisible across the 0/360 boundary. */
   background: conic-gradient(
-    from var(--replay-drawer__authorship-angle),
+    from var(--replay-drawer__attribution-angle),
     #ff3b30 0deg,
     #ff9500 60deg,
     #ffcc00 120deg,
@@ -398,18 +398,18 @@
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
           mask-composite: exclude;
-  animation: replay-drawer__authorship-spin 2s linear infinite;
+  animation: replay-drawer__attribution-spin 2s linear infinite;
   pointer-events: none;
 }
 
-@keyframes replay-drawer__authorship-spin {
+@keyframes replay-drawer__attribution-spin {
   to {
-    --replay-drawer__authorship-angle: 360deg;
+    --replay-drawer__attribution-angle: 360deg;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .replay-drawer__authorship--generating::before {
+  .replay-drawer__attribution--generating::before {
     animation: none;
   }
 }

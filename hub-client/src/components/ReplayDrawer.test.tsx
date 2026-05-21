@@ -269,14 +269,14 @@ describe('ReplayDrawer', () => {
     });
   });
 
-  describe('Authorship toggle', () => {
-    it('renders in collapsed state when authorshipOn + onAuthorshipChange are passed', () => {
+  describe('Attribution toggle', () => {
+    it('renders in collapsed state when attributionOn + onAttributionChange are passed', () => {
       render(
         <ReplayDrawer
           state={makeState()}
           controls={controls}
-          authorshipOn={false}
-          onAuthorshipChange={vi.fn()}
+          attributionOn={false}
+          onAttributionChange={vi.fn()}
         />,
       );
       expect(screen.getByLabelText(/Authors/)).toBeDefined();
@@ -296,20 +296,20 @@ describe('ReplayDrawer', () => {
         <ReplayDrawer
           state={activeState}
           controls={controls}
-          authorshipOn={false}
-          onAuthorshipChange={vi.fn()}
+          attributionOn={false}
+          onAttributionChange={vi.fn()}
         />,
       );
       expect(screen.getByLabelText(/Authors/)).toBeDefined();
     });
 
-    it('reflects authorshipOn state via aria-pressed', () => {
+    it('reflects attributionOn state via aria-pressed', () => {
       const { rerender } = render(
         <ReplayDrawer
           state={makeState()}
           controls={controls}
-          authorshipOn={false}
-          onAuthorshipChange={vi.fn()}
+          attributionOn={false}
+          onAttributionChange={vi.fn()}
         />,
       );
       expect(screen.getByLabelText(/Authors/).getAttribute('aria-pressed')).toBe('false');
@@ -318,21 +318,21 @@ describe('ReplayDrawer', () => {
         <ReplayDrawer
           state={makeState()}
           controls={controls}
-          authorshipOn={true}
-          onAuthorshipChange={vi.fn()}
+          attributionOn={true}
+          onAttributionChange={vi.fn()}
         />,
       );
       expect(screen.getByLabelText(/Authors/).getAttribute('aria-pressed')).toBe('true');
     });
 
-    it('clicking toggles via onAuthorshipChange', () => {
+    it('clicking toggles via onAttributionChange', () => {
       const onChange = vi.fn();
       render(
         <ReplayDrawer
           state={makeState()}
           controls={controls}
-          authorshipOn={false}
-          onAuthorshipChange={onChange}
+          attributionOn={false}
+          onAttributionChange={onChange}
         />,
       );
       fireEvent.click(screen.getByLabelText(/Authors/));
@@ -344,43 +344,43 @@ describe('ReplayDrawer', () => {
         <ReplayDrawer
           state={makeState()}
           controls={controls}
-          authorshipOn={false}
-          onAuthorshipChange={vi.fn()}
+          attributionOn={false}
+          onAttributionChange={vi.fn()}
         />,
       );
       fireEvent.click(screen.getByLabelText(/Authors/));
       expect(controls.enter).not.toHaveBeenCalled();
     });
 
-    it('is omitted when onAuthorshipChange is not provided', () => {
+    it('is omitted when onAttributionChange is not provided', () => {
       render(<ReplayDrawer state={makeState()} controls={controls} />);
       expect(screen.queryByLabelText(/Authors/)).toBeNull();
     });
 
-    it('applies the generating modifier class and aria-busy when authorshipGenerating is true', () => {
+    it('applies the generating modifier class and aria-busy when attributionGenerating is true', () => {
       const { rerender } = render(
         <ReplayDrawer
           state={makeState()}
           controls={controls}
-          authorshipOn={true}
-          onAuthorshipChange={vi.fn()}
-          authorshipGenerating={false}
+          attributionOn={true}
+          onAttributionChange={vi.fn()}
+          attributionGenerating={false}
         />,
       );
       const pill = screen.getByLabelText(/Authors/);
-      expect(pill.className).not.toContain('replay-drawer__authorship--generating');
+      expect(pill.className).not.toContain('replay-drawer__attribution--generating');
       expect(pill.getAttribute('aria-busy')).toBeNull();
 
       rerender(
         <ReplayDrawer
           state={makeState()}
           controls={controls}
-          authorshipOn={true}
-          onAuthorshipChange={vi.fn()}
-          authorshipGenerating={true}
+          attributionOn={true}
+          onAttributionChange={vi.fn()}
+          attributionGenerating={true}
         />,
       );
-      expect(pill.className).toContain('replay-drawer__authorship--generating');
+      expect(pill.className).toContain('replay-drawer__attribution--generating');
       expect(pill.getAttribute('aria-busy')).toBe('true');
     });
   });

@@ -6,7 +6,7 @@ import { actorColor, fnv1aHex8 } from './palette';
 // `crates/quarto-core/src/attribution/palette.rs`. A divergence here
 // is a producer/consumer drift bug; the rendered colour for a given
 // actor would no longer match between the replay drawer and the
-// Authorship overlay.
+// Attribution overlay.
 
 describe('actorColor', () => {
   it('matches the Rust `actor_color` formula for known inputs', () => {

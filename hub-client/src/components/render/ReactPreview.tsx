@@ -55,14 +55,14 @@ interface PreviewProps {
    */
   identities?: Record<string, ActorIdentity>;
   /**
-   * Authorship overlay on/off. Session-only, owned by `Editor.tsx`
+   * Attribution overlay on/off. Session-only, owned by `Editor.tsx`
    * and driven by the toggle in the replay bar. When false,
    * `useAttribution` short-circuits and the WASM call falls through
    * to the byte-identical no-attribution path.
    */
-  authorshipOn: boolean;
+  attributionOn: boolean;
   /**
-   * Reports whether `useAttribution` is mid-build. The Authorship
+   * Reports whether `useAttribution` is mid-build. The Attribution
    * pill animates its border while true so a long run-list build on
    * a large document gives visible feedback that work is happening.
    * Called once on mount with the current value and once on unmount
@@ -248,7 +248,7 @@ export default function ReactPreview({
   onContentRewrite,
   format,
   identities,
-  authorshipOn,
+  attributionOn,
   onAttributionGeneratingChange,
 }: PreviewProps) {
   // Preview state machine for error handling
@@ -284,25 +284,25 @@ export default function ReactPreview({
   //
   // `useAttribution` returns the JSON payload (`{ runs, identities }`)
   // for `parseQmdToAstWithAttribution`. The hook short-circuits when
-  // `enabled` is false (Authorship toggle off), in which case the
+  // `enabled` is false (Attribution toggle off), in which case the
   // payload stays `null` and the WASM call falls through to the
   // byte-identical no-attribution path.
   //
-  // `enabled` is driven by the session-only `authorshipOn` prop owned
-  // by `Editor.tsx`, surfaced as the Authorship toggle in the replay
+  // `enabled` is driven by the session-only `attributionOn` prop owned
+  // by `Editor.tsx`, surfaced as the Attribution toggle in the replay
   // bar. `identities` is the Automerge actor → display-name/colour
   // table threaded down from `Editor.tsx`; missing entries fall back
   // to the hook's `(actor.slice(0, 8), actorColor(fnv1aHex8(actor)))`
   // so the Phase 6 producer invariant always holds.
   const { payload: attributionPayload, generating: attributionGenerating } =
     useAttribution({
-      enabled: authorshipOn,
+      enabled: attributionOn,
       filePath: currentFile?.path ?? null,
       sourceText: content,
       identities: identities ?? {},
     });
 
-  // Surface the hook's generating flag to the Authorship pill in the
+  // Surface the hook's generating flag to the Attribution pill in the
   // replay bar. Cleanup emits `false` on unmount so switching to a
   // non-q2 file (where ReactPreview tears down) clears the indicator.
   useEffect(() => {

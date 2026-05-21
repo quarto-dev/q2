@@ -15,7 +15,7 @@
  * `astContext.attribution` + `astContext.attributionActors` for the
  * q2-debug renderer to consume.
  *
- * **Disabled path:** when `enabled` is false (Authorship toggle off),
+ * **Disabled path:** when `enabled` is false (Attribution toggle off),
  * the hook short-circuits and returns `null`. Callers then route through
  * `parseQmdToAst(content)` (or `parseQmdToAstWithAttribution(content, null)`),
  * which is byte-identical to today's q2-debug output (Phase 0 test #10).
@@ -136,7 +136,7 @@ export interface UseAttributionResult {
   /**
    * True while the hook is doing work the user is waiting on: the
    * cold-start build, the debounced incremental update window, and
-   * the synchronous update step itself. Drives the Authorship pill's
+   * the synchronous update step itself. Drives the Attribution pill's
    * "work in progress" border animation upstream.
    *
    * Distinct from `payload === null` because incremental updates

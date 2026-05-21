@@ -219,16 +219,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Scroll sync state (persisted in localStorage)
   const [scrollSyncEnabled, setScrollSyncEnabled] = usePreference('scrollSyncEnabled');
 
-  // Authorship overlay — session-only useState (not persisted).
+  // Attribution overlay — session-only useState (not persisted).
   // Owned here, surfaced via the toggle in the replay bar, and
   // threaded into ReactPreview where `useAttribution` consumes it
   // as the `enabled` flag. Treated as an inspection mode rather
   // than a setting: resets on reload so a previously-curious view
   // doesn't bleed into the next session.
-  const [authorshipOn, setAuthorshipOn] = useState(false);
+  const [attributionOn, setAttributionOn] = useState(false);
   // `useAttribution` (inside ReactPreview) reports whether it's
   // mid-build via `onAttributionGeneratingChange`; the flag drives
-  // the rotating-gradient border on the Authorship pill so a slow
+  // the rotating-gradient border on the Attribution pill so a slow
   // run-list build on a large document is visible to the user.
   const [attributionGenerating, setAttributionGenerating] = useState(false);
   // Track if editor has focus (to prevent scroll feedback loop)
@@ -1066,7 +1066,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onFormatChange={handleFormatChange}
             onContentRewrite={handleContentRewrite}
             identities={identities}
-            authorshipOn={authorshipOn}
+            attributionOn={attributionOn}
             onAttributionGeneratingChange={setAttributionGenerating}
           />
         </div>
@@ -1079,9 +1079,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           controls={replayControls}
           disabled={!!currentFile && isBinaryExtension(currentFile.path)}
           identities={identities}
-          authorshipOn={authorshipOn}
-          onAuthorshipChange={setAuthorshipOn}
-          authorshipGenerating={attributionGenerating}
+          attributionOn={attributionOn}
+          onAttributionChange={setAttributionOn}
+          attributionGenerating={attributionGenerating}
         />
       )}
 

@@ -3,7 +3,7 @@
  * (`useReplayMode` / `ReplayDrawer`) and the attribution producer
  * (`useAttribution`). Both must produce identical visual output for the
  * same actor — colours seen during replay must match colours seen on
- * Authorship overlays.
+ * Attribution overlays.
  *
  * **Drift discipline.** Both functions MUST stay bit-for-bit identical
  * with their Rust siblings in

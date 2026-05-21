@@ -11,39 +11,39 @@ interface Props {
   disabled?: boolean;
   identities?: Record<string, ActorIdentity>;
   /**
-   * Authorship overlay state. Lives alongside replay because both
+   * Attribution overlay state. Lives alongside replay because both
    * surfaces share the same per-actor colour palette and the
-   * authorship inspection is a peer of replay. Both props must be
+   * attribution inspection is a peer of replay. Both props must be
    * supplied to render the toggle; if either is omitted (e.g. in
    * a non-editor surface) the toggle is hidden.
    *
    * Session-only — kept as React state in the parent, never
    * persisted, so the overlay resets on reload.
    */
-  authorshipOn?: boolean;
-  onAuthorshipChange?: (next: boolean) => void;
+  attributionOn?: boolean;
+  onAttributionChange?: (next: boolean) => void;
   /**
    * Whether the attribution producer (`useAttribution` in
    * ReactPreview) is currently building or updating the payload.
    * When true the pill border animates with a rotating gradient so
    * the user knows work is happening on a large document. Default
-   * `false`; effectively gated by `authorshipOn` upstream because
+   * `false`; effectively gated by `attributionOn` upstream because
    * the hook only generates when the toggle is on.
    */
-  authorshipGenerating?: boolean;
+  attributionGenerating?: boolean;
 }
 
-interface AuthorshipToggleProps {
-  authorshipOn: boolean;
-  onAuthorshipChange: (next: boolean) => void;
+interface AttributionToggleProps {
+  attributionOn: boolean;
+  onAttributionChange: (next: boolean) => void;
   generating: boolean;
 }
 
-function AuthorshipToggle({ authorshipOn, onAuthorshipChange, generating }: AuthorshipToggleProps) {
+function AttributionToggle({ attributionOn, onAttributionChange, generating }: AttributionToggleProps) {
   const classes = [
-    'replay-drawer__authorship',
-    authorshipOn && 'replay-drawer__authorship--on',
-    generating && 'replay-drawer__authorship--generating',
+    'replay-drawer__attribution',
+    attributionOn && 'replay-drawer__attribution--on',
+    generating && 'replay-drawer__attribution--generating',
   ]
     .filter(Boolean)
     .join(' ');
@@ -53,15 +53,15 @@ function AuthorshipToggle({ authorshipOn, onAuthorshipChange, generating }: Auth
       className={classes}
       onClick={(e) => {
         e.stopPropagation();
-        onAuthorshipChange(!authorshipOn);
+        onAttributionChange(!attributionOn);
       }}
-      aria-pressed={authorshipOn}
-      aria-label={`Authors overlay ${authorshipOn ? 'on' : 'off'}`}
+      aria-pressed={attributionOn}
+      aria-label={`Authors overlay ${attributionOn ? 'on' : 'off'}`}
       aria-busy={generating || undefined}
       title="Highlight authors"
     >
-      <span className="replay-drawer__authorship-dot" />
-      <span className="replay-drawer__authorship-label">Authors</span>
+      <span className="replay-drawer__attribution-dot" />
+      <span className="replay-drawer__attribution-label">Authors</span>
     </button>
   );
 }
@@ -98,12 +98,12 @@ export default function ReplayDrawer({
   controls,
   disabled,
   identities,
-  authorshipOn,
-  onAuthorshipChange,
-  authorshipGenerating,
+  attributionOn,
+  onAttributionChange,
+  attributionGenerating,
 }: Props) {
-  const showAuthorshipToggle =
-    authorshipOn !== undefined && onAuthorshipChange !== undefined;
+  const showAttributionToggle =
+    attributionOn !== undefined && onAttributionChange !== undefined;
   const currentActorId = getActorId();
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -207,11 +207,11 @@ export default function ReplayDrawer({
           <span className="replay-drawer__chevron">&#x25B6;</span>
           <span>Replay</span>
         </button>
-        {showAuthorshipToggle && (
-          <AuthorshipToggle
-            authorshipOn={authorshipOn!}
-            onAuthorshipChange={onAuthorshipChange!}
-            generating={!!authorshipGenerating}
+        {showAttributionToggle && (
+          <AttributionToggle
+            attributionOn={attributionOn!}
+            onAttributionChange={onAttributionChange!}
+            generating={!!attributionGenerating}
           />
         )}
       </div>
@@ -269,11 +269,11 @@ export default function ReplayDrawer({
           </span>
         </div>
 
-        {showAuthorshipToggle && (
-          <AuthorshipToggle
-            authorshipOn={authorshipOn!}
-            onAuthorshipChange={onAuthorshipChange!}
-            generating={!!authorshipGenerating}
+        {showAttributionToggle && (
+          <AttributionToggle
+            attributionOn={attributionOn!}
+            onAttributionChange={onAttributionChange!}
+            generating={!!attributionGenerating}
           />
         )}
       </div>

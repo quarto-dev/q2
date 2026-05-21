@@ -23,7 +23,7 @@
  * to align such that the *second-arrived* message fired first and
  * the *first-arrived* message overwrote it. In the attribution
  * pipeline this manifested as the no-attribution AST clobbering the
- * with-attribution AST, so the Authorship colouring never appeared
+ * with-attribution AST, so the Attribution colouring never appeared
  * on first render for large files with `render-components: -
  * html.tsx`. See `iframeMessageDispatch.test.ts` for the
  * deterministic reproduction.
