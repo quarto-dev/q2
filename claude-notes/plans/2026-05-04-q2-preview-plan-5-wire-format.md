@@ -35,6 +35,48 @@ priority than the original "prepares wire for downstream plans"
 framing suggested — it fixes a bug that's no longer latent in design,
 only in reach.
 
+## Inherited failure that must close on Plan 5's first reader change (bd-3odjm)
+
+Plan 3's idempotence gate already ships a live reproduction of this
+bug as a failing test on the integration branch. Plan 5 *inherits*
+it as the canonical first-iteration target.
+
+- Test: `cargo nextest run -p quarto-core --test idempotence lua_shortcode_lipsum_fixed`
+  (orchestrator mode only; `SingleFile` passes — the pipeline itself
+  is idempotent).
+- Beads issue: **bd-3odjm**.
+- Symptom: `MalformedSourceInfoPool` from
+  `pampa::readers::json::read` re-parsing the orchestrator's AST JSON
+  for a lipsum-shortcode-bearing document.
+- Pre-Plan-5 cause: code-3 collision (writer emits FilterProvenance
+  `[filter_path, line]`; reader decodes as legacy Transformed
+  `[parent_id, ...]`).
+
+**The contract:** the very first time Plan 5 runs the idempotence
+suite after a reader change lands, `lua_shortcode_lipsum_fixed` must
+go green. The full chain is:
+
+  1. Plan 5 lands the legacy code-3 reader change (per §"Code 3 —
+     Legacy reader only" below) — recognize FilterProvenance's
+     string-array payload, produce
+     `Generated { by: filter, from: vec![] }`, fall through to
+     legacy Transformed for the numeric-array payload.
+  2. `cargo nextest run -p quarto-core --test idempotence
+     lua_shortcode_lipsum_fixed` passes.
+  3. The full Plan-3 idempotence suite is green (27/27).
+
+**If step 2 fails after the reader change**, the Plan-5 author has a
+real signal: either the reader's discrimination between the two
+code-3 shapes is wrong, or the lipsum path produces a code-3 shape
+that neither arm handles. In that case, do not move on to other
+Plan-5 work — the failing test on the integration branch is the
+canonical reproduction and must be the focus until green.
+
+This is also a positive: bd-3odjm is the most realistic Plan-5
+regression test available — a real fixture, a real pipeline, a real
+round-trip — so it doubles as the smoke check before any of the
+hand-constructed tests in §"Test plan" run.
+
 ## Scope
 
 ### In scope
@@ -360,9 +402,17 @@ the shortcode token's `Original` entry.
 - **AnchorRole round-trip test**: round-trip a Generated with each role
   (Invocation, ValueSource, Other(String)) through JSON; assert the
   role survives.
-- **End-to-end production reachability test** (regression guard for
-  the bug Plan 5 fixes — current main would fail this test as soon as
-  the JSON round-trip is exercised on a Lua-shortcode-bearing
+- **Live regression test already on the integration branch:**
+  `cargo nextest run -p quarto-core --test idempotence lua_shortcode_lipsum_fixed`
+  (filed as **bd-3odjm**; see §"Inherited failure that must close on
+  Plan 5's first reader change (bd-3odjm)" above). This is the
+  fastest first-iteration smoke check: it drives a real pipeline + a
+  real shortcode + a real JSON round-trip + the existing Plan-3
+  hashing harness, and goes red until Plan 5 fixes the code-3
+  collision. Run it before the hand-constructed tests below.
+- **End-to-end production reachability test** (additional regression
+  guard for the bug Plan 5 fixes — current main would fail this test
+  as soon as the JSON round-trip is exercised on a Lua-shortcode-bearing
   document):
   1. Build a fixture using `{{< kbd Ctrl+C >}}` (the kbd extension's
      `kbd.lua` calls `pandoc.Span(...)`, which the Lua machinery's

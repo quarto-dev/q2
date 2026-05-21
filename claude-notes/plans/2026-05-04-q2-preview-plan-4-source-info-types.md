@@ -101,6 +101,32 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
 - Registering Lua filter files in `SourceContext` to enable typed
   `Dispatch` anchors. See "Deferred anchor role" below.
 
+## Inherited pre-existing failure (bd-3odjm)
+
+**One test in the workspace is expected to be red throughout Plan 4
+and only goes green when Plan 5 ships its first reader change.** Do
+not try to fix it inside Plan 4.
+
+- Test: `cargo nextest run -p quarto-core --test idempotence lua_shortcode_lipsum_fixed`
+  (orchestrator mode only; `SingleFile` passes).
+- Symptom: panic with `MalformedSourceInfoPool` when
+  `pampa::readers::json::read` re-parses the orchestrator's AST JSON.
+- Root cause (already established): wire-format type-code-3
+  collision — writer emits the new `FilterProvenance` payload
+  `[filter_path, line]` under code 3, reader still decodes code 3
+  as the legacy `Transformed` `[parent_id, ...]`.
+- Owner: [Plan 5 — wire format](2026-05-04-q2-preview-plan-5-wire-format.md).
+
+Plan 4's verification gate (Phase 7) and `cargo xtask verify`
+therefore expect **exactly one** failing test in
+`quarto-core::idempotence` (the test above) until Plan 5's first
+reader fix lands. Any other failure is a Plan-4 regression and must
+be triaged before continuing.
+
+This is the integration branch's intended long-lived-red state per
+Plan 3's §"Long-lived branch policy" — Plan 4 ships on top of that
+queue, not in spite of it.
+
 ## Work items
 
 Phase-ordered. Each phase compiles cleanly before the next begins.
@@ -213,9 +239,14 @@ Structural:
 ### Phase 7 — Verification gate
 
 - [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace` clean.
-- [ ] `cargo xtask verify` clean (full — `quarto-source-map` is
-      consumed by the WASM client, so the hub-build leg matters).
+- [ ] `cargo nextest run --workspace`: **exactly one** failure —
+      `quarto-core::idempotence::lua_shortcode_lipsum_fixed`
+      (bd-3odjm, owned by Plan 5). Any other failure is a Plan-4
+      regression and must be triaged. See §"Inherited pre-existing
+      failure (bd-3odjm)" above.
+- [ ] `cargo xtask verify`: Step 5 trips on the same single
+      bd-3odjm failure; every other step green (full — `quarto-source-map`
+      is consumed by the WASM client, so the hub-build leg matters).
 - [ ] `git grep "SourceInfo::FilterProvenance"` returns zero hits
       across `crates/` (variant gone).
 - [ ] `git grep "SourceInfo::filter_provenance"` returns zero hits
