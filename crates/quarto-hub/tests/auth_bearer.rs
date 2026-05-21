@@ -1170,6 +1170,65 @@ async fn tracing_redacts_authorization_header() {
     }
 }
 
+/// Phase 10 regression: a request bearing Google-token-shaped substrings
+/// (`ya29.*` access token, `1//*` refresh token) must not produce any
+/// tracing event containing those substrings. The hub only ever sees
+/// the ID token in real traffic, but a misconfigured client could send
+/// any of these shapes — and a regression in either the request span
+/// builder or the JWT-decode error formatter could surface them.
+#[tokio::test]
+async fn tracing_redacts_google_token_shapes() {
+    let (_provider, hub) = shared_setup().await;
+
+    // Synthetic strings shaped exactly like Google's access / refresh
+    // tokens. Neither parses as a JWT, so the decoder will reject —
+    // the point is to confirm no error path embeds the raw bytes.
+    let access_shape = "ya29.fake-access-token-must-not-appear-in-logs";
+    let refresh_shape = "1//0gfake-refresh-token-must-not-appear-in-logs";
+
+    let r1 = hub
+        .get_health()
+        .bearer_auth(access_shape)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r1.status(), 401);
+
+    let r2 = hub
+        .get_health()
+        .header("cookie", format!("quarto_hub_token={refresh_shape}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r2.status(), 401);
+
+    let events = snapshot_events();
+    for ev in &events {
+        for (k, v) in &ev.fields {
+            assert!(
+                !v.contains("ya29."),
+                "Google access-token shape leaked in field {k}={v}"
+            );
+            assert!(
+                !v.contains("1//"),
+                "Google refresh-token shape leaked in field {k}={v}"
+            );
+            assert!(
+                !v.contains(access_shape),
+                "synthetic access token leaked in field {k}={v}"
+            );
+            assert!(
+                !v.contains(refresh_shape),
+                "synthetic refresh token leaked in field {k}={v}"
+            );
+            assert!(
+                !v.contains("Bearer "),
+                "raw `Bearer …` value present in field {k}={v}"
+            );
+        }
+    }
+}
+
 // ── CSRF + Origin gating by credential kind ──────────────────────
 
 #[tokio::test]

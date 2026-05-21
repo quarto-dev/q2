@@ -1342,7 +1342,7 @@ Tests passing is necessary but not sufficient. Before declaring done:
 
 ## Phase 10 — Operational hardening + documentation
 
-- [ ] **Operator runbook: hub-mcp Google OAuth registration.**
+- [x] **Operator runbook: hub-mcp Google OAuth registration.**
   One-time setup in Google Cloud Console, symmetric with existing SPA
   OAuth registration (covered in
   `claude-notes/plans/2026-02-24-oauth2-middleware-design.md`):
@@ -1354,7 +1354,7 @@ Tests passing is necessary but not sufficient. Before declaring done:
   - Secret handled in operator's normal secret-management (Kubernetes
     Secret, 1Password Connect, AWS Secrets Manager, etc.). Rotate on
     leak via Google Cloud Console.
-- [ ] **End-user `.mcp.json` example:**
+- [x] **End-user `.mcp.json` example:**
   ```json
   {
     "mcpServers": {
@@ -1372,11 +1372,11 @@ Tests passing is necessary but not sufficient. Before declaring done:
   Document: both vars mandatory; values from operator's docs;
   per-developer `~/.config/claude/mcp.json` is the intended home (not
   repo-checked-in MCP configs).
-- [ ] **README: credential-sourcing rationale** — cross-reference
+- [x] **README: credential-sourcing rationale** — cross-reference
   Phase 1 lock-in and threat-model #10. Cover symmetry with hub-client,
   operator sovereignty, no Quarto-team default, `device_code`
   defence-in-depth, rotation procedure.
-- [ ] **Credential storage docs.** Per-platform clear commands:
+- [x] **Credential storage docs.** Per-platform clear commands:
   - Windows: `cmdkey /delete:dev.quarto.hub-mcp:…`
   - macOS: `security delete-generic-password -s dev.quarto.hub-mcp`
   - Linux: `secret-tool clear service dev.quarto.hub-mcp …`
@@ -1385,12 +1385,12 @@ Tests passing is necessary but not sufficient. Before declaring done:
   authenticate ≤1 h regardless of grant revocation. Headless Linux
   without Secret Service / libsecret cannot run hub-mcp → SPA cookie
   path or install `gnome-keyring-daemon` / `kwallet5`.
-- [ ] Document the revocation path (myaccount.google.com → Third-party
+- [x] Document the revocation path (myaccount.google.com → Third-party
   apps).
-- [ ] Audit error-reporting and tracing config for token-leak paths.
+- [x] Audit error-reporting and tracing config for token-leak paths.
   Add regression test scanning tracing output for `Bearer ` and
   Google-token-shaped substrings.
-- [ ] `hub-client/changelog.md` not updated by this work — SPA does
+- [x] `hub-client/changelog.md` not updated by this work — SPA does
   not change.
 - [ ] **Future work, not in v1:**
   - `authenticate_status` and `authenticate_clear` MCP tools.
@@ -1403,6 +1403,70 @@ Tests passing is necessary but not sufficient. Before declaring done:
   - Refresh-token expiry monitoring + proactive re-auth nudge.
   - PKCE on device-authorization grant (RFC 9700 §4.13) — Google
     doesn't support it on this endpoint today; revisit if/when it does.
+
+### Phase 10 — completion notes (2026-05-21)
+
+Landed on `feature/hub-mcp-device-flow`:
+
+- New `claude-notes/instructions/hub-mcp-operator-runbook.md` — the
+  operator-facing setup doc. Covers the four phases of operator
+  responsibility: (1) registering the second "TV and Limited Input
+  devices" Google OAuth client in the same Google Cloud project as
+  the SPA client, (2) configuring the hub with
+  `--oidc-client-id` (SPA primary) plus `--additional-audiences`
+  (hub-mcp client_id), (3) publishing both `QUARTO_HUB_MCP_CLIENT_ID`
+  / `QUARTO_HUB_MCP_CLIENT_SECRET` to end users via the operator's
+  normal secret-management channel (1Password / K8s Secret / etc.),
+  (4) verifying the first end-user flow against the hub. Includes
+  auditing pointers (`RUST_LOG=quarto_hub::audit=info`), the secret
+  rotation procedure (rotate in console → push to secret manager;
+  existing user keyring entries remain valid because Google
+  authenticates the per-flow `device_code`, not the secret), and the
+  three residual risks operators should communicate to users.
+- New `ts-packages/quarto-hub-mcp/README.md` — the end-user setup
+  doc. Carries a copy-pasteable `.mcp.json` example with both env
+  vars; the credential-storage table (service/account naming per
+  platform); inspect / clear commands (`security
+  find-generic-password`, `secret-tool lookup`/`clear`, `cmdkey
+  /list`/`/delete`); the revocation procedure at
+  myaccount.google.com; the headless-Linux caveat (Secret Service /
+  libsecret required, no silent plaintext fallback); the
+  credential-sourcing rationale (symmetry with hub-client, operator
+  sovereignty, no Quarto-team default, `device_code` defence in
+  depth from threat-model #10); and the
+  `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1` dev-mode escape hatch.
+- New regression test `tracing_redacts_google_token_shapes` in
+  `crates/quarto-hub/tests/auth_bearer.rs`. Drives a request bearing
+  a synthetic `ya29.*` access-token shape in the `Authorization`
+  header and a synthetic `1//*` refresh-token shape in the
+  `quarto_hub_token` cookie (both shapes the centralised hub-mcp
+  redact utility scrubs from logs); asserts that no field of any
+  captured tracing event contains those substrings, the synthetic
+  literals, or `Bearer `. Complements the existing
+  `tracing_redacts_authorization_header` — that one proves the
+  hub's accepted-Bearer path doesn't leak a valid JWT; the new one
+  proves the rejected-token path doesn't leak the raw bytes through
+  the `jwt_decode:{err}` audit-event `detail` field. Both pass
+  under `cargo nextest run -p quarto-hub --test auth_bearer
+  tracing_redacts` (run independently to avoid global-state
+  cross-talk; the second run-mode that the existing dual-credential
+  test exercises is unchanged).
+
+Items intentionally **not** done in this phase:
+
+- "Future work, not in v1" remains an unchecked notes list — those
+  items (e.g. `authenticate_status` / `authenticate_clear` tools,
+  hub-side `sub_denylist`, GitHub OIDC as second IdP, refresh-token
+  expiry monitoring) are the v2 backlog and live there by design.
+- `hub-client/changelog.md` — Phase 10 ships no SPA changes; the
+  changelog convention only applies to commits that touch
+  `hub-client/`.
+
+Verification: `cargo nextest run -p quarto-hub --test auth_bearer
+tracing_redacts` runs both redaction tests green
+(`tracing_redacts_authorization_header`,
+`tracing_redacts_google_token_shapes`). No code changes outside the
+new test + two markdown docs; no TS surface touched.
 
 ## Residual risks accepted for v1
 
