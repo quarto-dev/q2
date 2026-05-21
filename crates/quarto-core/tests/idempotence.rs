@@ -614,3 +614,163 @@ fn resource_image() {
     };
     fixture.run_in_each_mode();
 }
+
+// =====================================================================
+// Phase 4c — website-project fixtures (orchestrator-only)
+// =====================================================================
+//
+// Chrome transforms (navbar / sidebar / page-nav / footer / favicon /
+// bootstrap-icons / canonical-url) require a populated `ProjectIndex`,
+// which the orchestrator pass-1 builds and pass-2 consumes. Driving
+// a website fixture through `SingleFile` mode would test a partial
+// pipeline that doesn't exist in production — so these run in
+// `ProjectOrchestrator` only.
+
+// ─── website-chrome: navbar, sidebar, page-nav, footer, favicon,
+// bootstrap-icons, canonical-url, title-prefix ────────────────────
+
+#[test]
+fn website_chrome() {
+    let fixture = Fixture {
+        name: "website-chrome",
+        setup: Box::new(|root: &Path| {
+            write(
+                &root.join("_quarto.yml"),
+                concat!(
+                    "project:\n",
+                    "  type: website\n",
+                    "\n",
+                    "website:\n",
+                    "  title: Idempotence Chrome\n",
+                    "  site-url: https://example.com/\n",
+                    "  favicon: favicon.ico\n",
+                    "  navbar:\n",
+                    "    title: Idempotence Chrome\n",
+                    "    background: primary\n",
+                    "    left:\n",
+                    "      - index.qmd\n",
+                    "      - other.qmd\n",
+                    "  sidebar:\n",
+                    "    contents:\n",
+                    "      - index.qmd\n",
+                    "      - other.qmd\n",
+                    "  page-navigation: true\n",
+                    "  page-footer: \"Copyright 2026\"\n",
+                ),
+            );
+            write(
+                &root.join("index.qmd"),
+                "---\ntitle: Home\n---\n\nHome body.\n",
+            );
+            write(
+                &root.join("other.qmd"),
+                "---\ntitle: Other\n---\n\nOther body.\n",
+            );
+            // favicon.ico — a tiny stub so any path-resolution side
+            // effect resolves. Per the fixtures README rule.
+            write_bytes(&root.join("favicon.ico"), &[0u8; 4]);
+        }),
+        active: PathBuf::from("index.qmd"),
+        modes: ORCHESTRATOR_ONLY,
+    };
+    fixture.run_in_each_mode();
+}
+
+// ─── website-links: cross-page .qmd body links → link-rewrite,
+// link-resolution stage ───────────────────────────────────────────
+
+#[test]
+fn website_links() {
+    let fixture = Fixture {
+        name: "website-links",
+        setup: Box::new(|root: &Path| {
+            write(
+                &root.join("_quarto.yml"),
+                concat!(
+                    "project:\n",
+                    "  type: website\n",
+                    "\n",
+                    "website:\n",
+                    "  title: Idempotence Links\n",
+                ),
+            );
+            write(
+                &root.join("index.qmd"),
+                "---\ntitle: Home\n---\n\nSee [the other page](other.qmd) for more.\n",
+            );
+            write(
+                &root.join("other.qmd"),
+                "---\ntitle: Other\n---\n\nReturn to [home](index.qmd).\n",
+            );
+        }),
+        active: PathBuf::from("index.qmd"),
+        modes: ORCHESTRATOR_ONLY,
+    };
+    fixture.run_in_each_mode();
+}
+
+// ─── website-listing: listing-generate, listing-render,
+// categories-sidebar, listing-feed-link, listing-feed-stage,
+// listing-item-info stage ─────────────────────────────────────────
+
+#[test]
+fn website_listing() {
+    let fixture = Fixture {
+        name: "website-listing",
+        setup: Box::new(|root: &Path| {
+            write(
+                &root.join("_quarto.yml"),
+                concat!(
+                    "project:\n",
+                    "  type: website\n",
+                    "\n",
+                    "website:\n",
+                    "  title: Idempotence Listing\n",
+                    "  site-url: https://example.com/\n",
+                ),
+            );
+            write(
+                &root.join("index.qmd"),
+                concat!(
+                    "---\n",
+                    "title: Posts\n",
+                    "listing:\n",
+                    "  contents: posts\n",
+                    "  type: default\n",
+                    "  categories: true\n",
+                    "  feed: true\n",
+                    "---\n",
+                    "\n",
+                    "Listing index.\n",
+                ),
+            );
+            write(
+                &root.join("posts/first.qmd"),
+                concat!(
+                    "---\n",
+                    "title: First Post\n",
+                    "categories: [alpha, beta]\n",
+                    "date: 2026-05-01\n",
+                    "---\n",
+                    "\n",
+                    "First body.\n",
+                ),
+            );
+            write(
+                &root.join("posts/second.qmd"),
+                concat!(
+                    "---\n",
+                    "title: Second Post\n",
+                    "categories: [beta]\n",
+                    "date: 2026-05-15\n",
+                    "---\n",
+                    "\n",
+                    "Second body.\n",
+                ),
+            );
+        }),
+        active: PathBuf::from("index.qmd"),
+        modes: ORCHESTRATOR_ONLY,
+    };
+    fixture.run_in_each_mode();
+}

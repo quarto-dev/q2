@@ -997,14 +997,32 @@ No queue entries.
   only — not a hash mismatch but a `MalformedSourceInfoPool` when
   re-parsing the orchestrator's AST JSON. JSON writer/reader
   round-trip bug specific to lipsum-shortcode-generated inlines.
-  Filed as **bd-3odjm**. `SingleFile` mode passes — the pipeline
-  itself is idempotent.
+  Filed as **bd-3odjm**; root-caused 2026-05-21 to the type-code-3
+  mismatch between writer (`FilterProvenance` payload
+  `[filter_path, line]`) and reader (still decodes code 3 as legacy
+  `Transformed` `[parent_id, ...]`). Fix is owned by
+  **[Plan 5](2026-05-04-q2-preview-plan-5-wire-format.md)** —
+  §Goal calls this exact bug out and Plan 5's reader change handles
+  both shapes. Per the long-lived-branch policy below, this stays
+  red on `feature/provenance` until Plan 5 lands; do not patch
+  locally. `SingleFile` mode passes — the pipeline itself is
+  idempotent.
 - [x] Add document-level fixtures, batch 4b (multi-file):
   `include-in-header` (writes a small HTML stub),
   `resource-image` (writes a 67-byte minimal PNG). Both pass on
   first run in both modes.
-- [ ] Add website-project fixtures (orchestrator-mode only):
-  `website-chrome`, `website-links`, `website-listing`.
+- [x] Add website-project fixtures (orchestrator-mode only):
+  `website-chrome`, `website-links`, `website-listing`. **2/3 pass
+  on first run.** `website-chrome` (navbar + sidebar + page-nav +
+  footer + favicon + bootstrap-icons + canonical-url) is clean.
+  `website-listing` (listing with categories + feed) is clean.
+  `website-links` (cross-page `.qmd` body links) is non-idempotent:
+  block 0 hash diverges between runs while meta hash is stable.
+  Filed as **bd-rz2we** — link-rewrite or link-resolution captures
+  something path-dependent into the AST when it should produce a
+  path-independent relative URL. Each `run_q2_preview` call gets a
+  fresh `TempDir`, so the two runs see different absolute project
+  roots; structural AST should not depend on that.
 - [ ] Add attribution fixture: `attribution-basic` (both modes; the
   helper installs an `AttributionSourceProvider` on
   `RenderContext.attribution_provider` — needs a small `Fixture`
