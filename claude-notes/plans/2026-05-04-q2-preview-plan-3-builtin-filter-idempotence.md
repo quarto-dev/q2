@@ -999,8 +999,10 @@ No queue entries.
   round-trip bug specific to lipsum-shortcode-generated inlines.
   Filed as **bd-3odjm**. `SingleFile` mode passes — the pipeline
   itself is idempotent.
-- [ ] Add document-level fixtures, batch 4b (multi-file):
-  `include-in-header`, `resource-image`.
+- [x] Add document-level fixtures, batch 4b (multi-file):
+  `include-in-header` (writes a small HTML stub),
+  `resource-image` (writes a 67-byte minimal PNG). Both pass on
+  first run in both modes.
 - [ ] Add website-project fixtures (orchestrator-mode only):
   `website-chrome`, `website-links`, `website-listing`.
 - [ ] Add attribution fixture: `attribution-basic` (both modes; the

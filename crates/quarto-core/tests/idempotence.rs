@@ -56,6 +56,13 @@ fn write(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
+fn write_bytes(path: &Path, contents: &[u8]) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(path, contents).unwrap();
+}
+
 fn canonical(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
@@ -549,4 +556,61 @@ fn table_bootstrap_class() {
 #[test]
 fn theme_bootstrap() {
     doc_fixture("theme-bootstrap", "---\ntheme: cosmo\n---\n\nBody.\n").run_in_each_mode();
+}
+
+// =====================================================================
+// Phase 4b — gap-closure fixtures (multi-file)
+// =====================================================================
+
+// ─── include-resolve stage ────────────────────────────────────────
+
+#[test]
+fn include_in_header() {
+    let fixture = Fixture {
+        name: "include-in-header",
+        setup: Box::new(|root: &Path| {
+            write(
+                &root.join("header.html"),
+                "<style>.idempotence-marker{display:none}</style>\n",
+            );
+            write(
+                &root.join("index.qmd"),
+                "---\ninclude-in-header: header.html\n---\n\nBody paragraph.\n",
+            );
+        }),
+        active: PathBuf::from("index.qmd"),
+        modes: BOTH_MODES,
+    };
+    fixture.run_in_each_mode();
+}
+
+// ─── resource-collector ───────────────────────────────────────────
+//
+// 67-byte minimal valid PNG (1×1 transparent pixel). The AST-level
+// transforms only record the path, not the bytes, but providing a
+// real file means resource-collector can resolve relative to the
+// fixture root rather than warning about a missing local resource.
+// Per the fixtures README, paths must resolve relative to the
+// project root (no absolute process paths).
+
+const TINY_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+    0x42, 0x60, 0x82,
+];
+
+#[test]
+fn resource_image() {
+    let fixture = Fixture {
+        name: "resource-image",
+        setup: Box::new(|root: &Path| {
+            write_bytes(&root.join("local.png"), TINY_PNG);
+            write(&root.join("index.qmd"), "![alt text](./local.png)\n");
+        }),
+        active: PathBuf::from("index.qmd"),
+        modes: BOTH_MODES,
+    };
+    fixture.run_in_each_mode();
 }
