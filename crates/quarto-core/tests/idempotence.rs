@@ -435,3 +435,118 @@ fn combined_stress() {
     )
     .run_in_each_mode();
 }
+
+// =====================================================================
+// Phase 4a — gap-closure fixtures (single-file, no extra scaffolding)
+// =====================================================================
+
+// ─── code-block-generate, code-block-render, code-highlight ───────
+
+#[test]
+fn code_block_fenced() {
+    doc_fixture(
+        "code-block-fenced",
+        "Some text.\n\n```python\nprint(\"hello\")\n```\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── shortcode-resolve via Lua-loaded handler ─────────────────────
+//
+// `{{< version >}}` returns `quarto.version` joined by dots. Lua
+// state is constructed fresh per pipeline run (see plan §"Design
+// decisions"), so two runs over the same input must agree.
+
+#[test]
+fn lua_shortcode_version() {
+    doc_fixture("lua-shortcode-version", "version: {{< version >}}\n").run_in_each_mode();
+}
+
+// `{{< lipsum 3 >}}` (no `random=` kwarg) — `math.randomseed` runs
+// at module load but `math.random` is never reached on this code
+// path, so the output is deterministically the first 3 paragraphs
+// of the canned text. The `random=true` variant is intentionally
+// non-deterministic and out of scope (plan §"Noted, not actively
+// tested").
+
+#[test]
+fn lua_shortcode_lipsum_fixed() {
+    doc_fixture(
+        "lua-shortcode-lipsum-fixed",
+        // The comment in-document survives as part of the markdown
+        // (it's an HTML comment in the parsed AST), so the seed
+        // observation is recorded in the fixture itself rather than
+        // only in this Rust source.
+        "<!-- lipsum.lua calls math.randomseed at module load; the\n     fixed (non-`random=true`) code path never reaches math.random,\n     so this fixture is deterministic. -->\n\n{{< lipsum 3 >}}\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── proof-sugar ──────────────────────────────────────────────────
+
+#[test]
+fn proof() {
+    doc_fixture(
+        "proof",
+        "::: {.proof}\nThe proof is left as an exercise.\n:::\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── equation-label + crossref-resolve (equation branch) ──────────
+
+#[test]
+fn equation_labeled() {
+    doc_fixture(
+        "equation-labeled",
+        "$$ E = mc^2 $$ {#eq-mass}\n\nSee @eq-mass for the relation.\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── toc-generate, toc-render ─────────────────────────────────────
+
+#[test]
+fn toc_on() {
+    doc_fixture(
+        "toc-on",
+        "---\ntoc: true\n---\n\n## A\n\nBody A.\n\n## B\n\nBody B.\n\n## C\n\nBody C.\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── built-in Lua filter (video) ──────────────────────────────────
+//
+// `resources/extensions/quarto/video/` is embedded at compile time
+// via `include_dir!` (see `crates/quarto-core/src/extension/mod.rs`)
+// and auto-discovered for every `StageContext::new` call, so the
+// fixture needs no scaffolding beyond declaring the filter.
+
+#[test]
+fn video_filter_header() {
+    doc_fixture(
+        "video-filter-header",
+        "---\nfilters:\n  - video\n---\n\n# Title {background-video=\"https://www.youtube.com/embed/abc\"}\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── table-bootstrap-class ────────────────────────────────────────
+
+#[test]
+fn table_bootstrap_class() {
+    doc_fixture("table-bootstrap-class", "| col |\n| --- |\n| val |\n").run_in_each_mode();
+}
+
+// ─── compile-theme-css stage ──────────────────────────────────────
+//
+// Default theme. The `theme:` key isn't required to opt the stage
+// in; `compile-theme-css` runs in the q2-preview stage list for
+// HTML-shaped formats unconditionally. Hash excludes `rendered.*`,
+// so the compiled CSS (which lands under `meta.rendered.*` and may
+// vary in trivial whitespace) doesn't participate.
+
+#[test]
+fn theme_bootstrap() {
+    doc_fixture("theme-bootstrap", "---\ntheme: cosmo\n---\n\nBody.\n").run_in_each_mode();
+}

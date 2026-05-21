@@ -987,18 +987,26 @@ No queue entries.
 
 ### Phase 4 — New-fixture coverage (gap closure)
 
-- [ ] Add document-level fixtures (run in **both** modes):
-  `code-block-fenced`, `lua-shortcode-version`,
+- [x] Add document-level fixtures (run in **both** modes), batch 4a
+  (no extra scaffolding): `code-block-fenced`, `lua-shortcode-version`,
   `lua-shortcode-lipsum-fixed` (with module-load `randomseed` comment
   in the `.qmd` per §"Noted, not actively tested"), `proof`,
   `equation-labeled`, `toc-on`, `video-filter-header`,
-  `include-in-header`, `theme-bootstrap`, `table-bootstrap-class`.
+  `theme-bootstrap`, `table-bootstrap-class`. **9/10 pass on first run.**
+  `lua_shortcode_lipsum_fixed` fails in `ProjectOrchestrator` mode
+  only — not a hash mismatch but a `MalformedSourceInfoPool` when
+  re-parsing the orchestrator's AST JSON. JSON writer/reader
+  round-trip bug specific to lipsum-shortcode-generated inlines.
+  Filed as **bd-3odjm**. `SingleFile` mode passes — the pipeline
+  itself is idempotent.
+- [ ] Add document-level fixtures, batch 4b (multi-file):
+  `include-in-header`, `resource-image`.
 - [ ] Add website-project fixtures (orchestrator-mode only):
   `website-chrome`, `website-links`, `website-listing`.
 - [ ] Add attribution fixture: `attribution-basic` (both modes; the
   helper installs an `AttributionSourceProvider` on
-  `RenderContext.attribution_provider`).
-- [ ] Add resource fixture: `resource-image` (both modes).
+  `RenderContext.attribution_provider` — needs a small `Fixture`
+  extension).
 
 ### Phase 5 — Failure triage
 
