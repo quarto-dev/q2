@@ -22,9 +22,9 @@ patterns apply:
 
 - **Transforms that genuinely synthesize content with no source preimage**
   (Sectionize's section Divs, TitleBlock's synthesized h1, etc.): emit
-  `Generated { by: By::<kind>(), from: vec![] }` from Plan 4.
+  `Generated { by: By::<kind>(), from: smallvec![] }` from Plan 4.
 - **The shortcode resolver, uniformly**: emit `Generated { by: By::shortcode(name),
-  from: vec![Anchor::invocation(token_si)] }` on every resolved
+  from: smallvec![Anchor::invocation(token_si)] }` on every resolved
   node, regardless of whether the handler is Rust-built-in or
   Lua-implemented. The `Invocation` anchor's `source_info` is the
   shortcode token's range; Plan 7's writer uses it for Verbatim-copy
@@ -53,7 +53,7 @@ with the correct provenance:
   Str/Inline (~12 sites). **Fix uniformly via a post-walk helper**:
   immediately after every handler dispatch (Rust handler OR Lua-engine
   dispatch OR extension dispatch), walk the returned nodes and stamp
-  `Generated { by: By::shortcode(name), from: vec![Anchor::invocation(Arc::new(ctx.source_info.clone()))] }`
+  `Generated { by: By::shortcode(name), from: smallvec![Anchor::invocation(Arc::new(ctx.source_info.clone()))] }`
   on each block/inline.
   - The post-walk **enriches**, not overrides: any `by.data` fields the
     Lua machinery attached (`lua_path`, `lua_line`) are preserved by
@@ -62,34 +62,34 @@ with the correct provenance:
   - The post-walk recurses into nested blocks/inlines so every node in
     the dispatch output gets the anchor.
 - **`TitleBlockTransform`** (line 183-185): synthesizes a level-1 Header
-  from `title:` metadata. Fix: emit `Generated { by: By::title_block(), from: vec![] }`
+  from `title:` metadata. Fix: emit `Generated { by: By::title_block(), from: smallvec![] }`
   on the synthesized Header (and any nested Inlines). Note: q2-preview
   skips this transform (Plan 1), but the audit covers the HTML
   pipeline too.
 - **`SectionizeTransform`** (`pampa/src/transforms/sectionize.rs:96, 148`):
-  the synthetic Section Div. Fix: `Generated { by: By::sectionize(), from: vec![] }`.
+  the synthetic Section Div. Fix: `Generated { by: By::sectionize(), from: smallvec![] }`.
   The wrapped Header retains its original source_info. Body blocks retain
   theirs.
 - **`FootnotesTransform`**: the synthesized footnotes container Div.
-  Fix: `Generated { by: By::footnotes(), from: vec![] }`. The
+  Fix: `Generated { by: By::footnotes(), from: smallvec![] }`. The
   synthesized `<sup>` markers are already source-mapped via
   `create_footnote_ref` cloning from the original `Note` inline (so
   they stay Original — no change needed). q2-preview pipeline runs
   this transform (per Plan 2B's audit); the audit applies to both
   pipelines.
 - **`AppendixStructureTransform`**: the synthetic appendix container Div.
-  Fix: `Generated { by: By::appendix(), from: vec![] }`. Same scope
+  Fix: `Generated { by: By::appendix(), from: smallvec![] }`. Same scope
   note as Footnotes.
 - **`theorem.rs::extract_name_attr`** (line 313): the title Str
   extracted from `name="..."` attribute is built with
   `SourceInfo::default()`. Fix: use the attr value's source_info
   (currently lost — inspection needed for whether `attr_source` carries
-  this info). At minimum, `Generated { by: By::raw("theorem-title-attr", json!({})), from: vec![] }`
+  this info). At minimum, `Generated { by: By::raw("theorem-title-attr", json!({})), from: smallvec![] }`
   if we can't recover it, but better to preserve the actual source
   position from the attr-source.
 - **`pampa::pandoc::treesitter_utils::postprocess`** (line 1348): the
   "Synthetic Space" inserted to separate citation from suffix. Fix:
-  `Generated { by: By::tree_sitter_postprocess(), from: vec![] }`.
+  `Generated { by: By::tree_sitter_postprocess(), from: smallvec![] }`.
 
 The audit pass also looks for any *other* sites emitting
 `SourceInfo::default()` that aren't enumerated. Plan 6 starts with a
@@ -151,7 +151,7 @@ comprehensive grep.
 - **Genuine synthesizers use `Generated` with empty anchors**.
   Sectionize, TitleBlock, Footnotes, Appendix containers — none of
   these correspond to source bytes, so they get
-  `Generated { by: By::<kind>(), from: vec![] }`. Plan 7's coarsen
+  `Generated { by: By::<kind>(), from: smallvec![] }`. Plan 7's coarsen
   treats their wrappers as Transparent (recurse into source-bearing
   children) or Omit depending on `by.is_atomic_kind()`.
 - **No `atomic` flag needed**. Plan 7's atomic-violation logic detects
@@ -195,7 +195,7 @@ the first non-C frame and produces (post-Plan 4):
 ```rust
 Generated {
     by: By::filter(lua_path.to_string(), line_num),
-    from: vec![],
+    from: smallvec![],
 }
 ```
 
@@ -212,7 +212,7 @@ Generated {
             "lua_line": <preserved_from_by.data>,
         }),
     },
-    from: vec![Anchor::invocation(Arc::new(ctx.source_info.clone()))],
+    from: smallvec![Anchor::invocation(Arc::new(ctx.source_info.clone()))],
 }
 ```
 
@@ -286,7 +286,7 @@ fn enrich_or_create(
     };
     SourceInfo::Generated {
         by,
-        from: vec![Anchor::invocation(Arc::clone(token_arc))],
+        from: smallvec![Anchor::invocation(Arc::clone(token_arc))],
     }
 }
 ```
@@ -307,7 +307,7 @@ they contain.)
   Inspecting `attr_source` may or may not give the byte range of the
   attr value. Worth investigating; if achievable, use
   `Original{attr_value_range}`; otherwise
-  `Generated { by: By::raw("theorem-title-attr", ...), from: vec![] }`.
+  `Generated { by: By::raw("theorem-title-attr", ...), from: smallvec![] }`.
 - **Escaped shortcodes**: today `Shortcode::is_escaped` is a flag, and
   escaped shortcodes preserve as literal text (no resolution). Don't
   apply the post-walk to escaped shortcodes — they're not resolved;
@@ -549,7 +549,7 @@ This is a "scattered fixes" plan — touches many transform files with
 small per-file changes. Most of the diff is mechanical: `SourceInfo::default()`
 → either `ctx.source_info.clone()` (Original) for synthesizers that DO
 have a source preimage but currently drop it, or
-`Generated { by: By::<kind>(), from: vec![] }` for genuine
+`Generated { by: By::<kind>(), from: smallvec![] }` for genuine
 synthesizers, or `stamp_shortcode_anchors(...)` for shortcode
 dispatches.
 

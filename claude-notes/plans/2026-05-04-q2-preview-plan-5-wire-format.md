@@ -113,7 +113,7 @@ hand-constructed tests in §"Test plan" run.
     map to `Substring` (current behavior), preserving back-compat for
     old JSON.
   - **Latent FilterProvenance** (`data` is `[filter_path, line]` —
-    string then number): decode as `Generated { by: By::filter(filter_path, line), from: vec![] }`.
+    string then number): decode as `Generated { by: By::filter(filter_path, line), from: smallvec![] }`.
     This recovers the FilterProvenance shape that was being silently
     corrupted.
 - After the fix, the writer no longer emits code 3 for new content (code
@@ -235,7 +235,7 @@ offsets — ranges are obtained via the `resolve_byte_range` /
         let line = array.get(1).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         SourceInfo::Generated {
             by: By::filter(filter_path.to_string(), line),
-            from: vec![],
+            from: smallvec![],
         }
     } else {
         return Err(MalformedSourceInfoPool);
@@ -384,7 +384,7 @@ the shortcode token's `Original` entry.
   equality. Cover the full enum.
 - **Filter-provenance recovery test**: hand-construct a JSON pool entry
   with the buggy code-3-with-string-array-payload shape. Read it.
-  Assert the reader produces `Generated { by: filter, from: vec![] }`
+  Assert the reader produces `Generated { by: filter, from: smallvec![] }`
   with the right path/line via `by.as_filter()`.
 - **Legacy Transformed back-compat test**: hand-construct a JSON pool
   entry with code-3-with-numeric-array-payload (the legacy Transformed
@@ -393,7 +393,7 @@ the shortcode token's `Original` entry.
 - **Forward-compat test**: hand-construct a JSON pool entry with code 4
   and an unknown kind (`"kind": "ext/future/foo"`, arbitrary data).
   Assert it decodes as `Generated { by: By { kind: "ext/future/foo",
-  data: ... }, from: vec![] }`. Round-trips unchanged.
+  data: ... }, from: smallvec![] }`. Round-trips unchanged.
 - **Anchor dedup test**: build an AST where multiple inlines have
   Generated source_info each carrying an `Invocation` anchor that
   references the same `Original` (multi-inline shortcode resolution).
