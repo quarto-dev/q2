@@ -1522,8 +1522,203 @@ Google uses `verification_url`; RFC 8628 says `verification_uri`.
 
 → **Google does NOT rotate refresh tokens for this client type.**
 
-### Phase 9 end-to-end verification (to be filled at completion)
+### Phase 9 end-to-end verification — 2026-05-21
 
-> Reserved. Populate at completion with exact commands run, output
-> snippets confirming each end-to-end step, and explicit attestation
-> that each was visually inspected.
+This entry records the **autonomous half** of Phase 9: every check that
+can be driven from a single terminal session without a real Google
+consent screen, two Google accounts, or Claude Code as the MCP
+client. The remaining sub-items (4 full flow, 4a no-auth E2E, 4b
+allowlist-parity, 5 force-refresh, 6 force-reauth) are explicitly
+**deferred to user-driven verification** — see § "Deferred to
+user-driven verification" at the end of this section. Their
+acceptance criteria are unchanged; only the operator is.
+
+#### (1) `cargo xtask verify` — clean
+
+Full WASM-leg verification (12/12 steps) on `feature/hub-mcp-device-flow`
+at `eff8b2a0`:
+
+```bash
+cargo xtask verify
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ✓ All verification steps passed!
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+12 steps including Rust workspace build + nextest, hub-client
+build:all (WASM), hub-client test:ci, trace-viewer build, and the
+q2-preview-spa build that bundles the freshly-rebuilt WASM. The
+Playwright E2E lane was skipped (no `--e2e` flag) — that lane gates
+on browser fixtures and is out of scope for this plan.
+
+Confirms: Phase 2 (Rust hub middleware) and Phases 4–8 (TS
+packages) all compile and test green together; the hub-client
+SPA still typechecks against the updated `@quarto/quarto-sync-client`
+optional `auth` parameter.
+
+#### (7) Dual-credential CVE — observed 400 + body shape
+
+Live hub bound to `127.0.0.1:13099` in production mode:
+
+```bash
+OIDC_CLIENT_ID=phase9-spa.apps.googleusercontent.com \
+QUARTO_HUB_ADDITIONAL_AUDIENCES=phase9-mcp.apps.googleusercontent.com \
+QUARTO_HUB_ALLOWED_DOMAINS=posit.co \
+RUST_LOG="quarto_hub=info,quarto_hub::audit=info,info" \
+  target/debug/hub --data-dir <tmp> --port 13099 \
+                   --host 127.0.0.1 --behind-tls-proxy
+```
+
+At startup the hub discovered Google's JWKS at
+`https://www.googleapis.com/oauth2/v3/certs` and locked the signing
+algorithm to `[RS256]` (visible in log).
+
+**Dual-credential on the WS upgrade endpoint** (the CVE-prevention
+case that drove this audit) — `curl -H 'Cookie: …' -H 'Authorization:
+Bearer …' http://127.0.0.1:13099/`:
+
+```
+HTTP/1.1 400 Bad Request
+content-type: application/json
+content-length: 35
+
+{"error":"conflicting_credentials"}
+```
+
+**Dual-credential on `/health` (an `Authenticated`-extractor route)**:
+
+```
+HTTP/1.1 400 Bad Request
+content-type: application/json
+
+{"error":"conflicting_credentials"}
+```
+
+Both 400s emitted while the supplied JWTs were structurally
+malformed — i.e. the 400 fires at credential extraction *before* any
+token validation. ✓
+
+#### Bearer-vs-Cookie asymmetric Origin gating
+
+In strict mode (no `--allow-insecure-auth`), WebSocket upgrade with
+**no Origin header**:
+
+| Credential | Outcome | Reason |
+|---|---|---|
+| `Authorization: Bearer aaa.bbb.ccc` | 401 | Origin gate skipped; reached JWT validator (JWT-decode failure → 401) |
+| `Cookie: quarto_hub_token=aaa.bbb.ccc` | 403 | Origin gate fired; never reached JWT validator |
+
+The asymmetry is load-bearing for hub-mcp (Node `ws` client doesn't
+default an `Origin` header) — verified with curl above. ✓
+
+#### (8) Audit-log output — observed
+
+`RUST_LOG=quarto_hub::audit=info` produced one event per auth
+decision through `tracing::event!(target: "quarto_hub::audit", ...)`.
+Captured from the live run (de-ANSI'd, tail of strict-mode log):
+
+```
+WARN quarto_hub::audit: action="auth_fail" outcome="deny"
+  credential_kind="bearer" detail="conflicting_credentials"
+INFO quarto_hub::audit: action="auth_fail" outcome="deny"
+  credential_kind="bearer" detail=jwt_decode:JWT error: …
+INFO request{method=GET path="/health"}: quarto_hub::audit:
+  action="auth_fail" outcome="deny" credential_kind="bearer"
+  detail=jwt_decode:JWT error: …
+WARN request{method=GET path="/health"}: quarto_hub::audit:
+  action="auth_fail" outcome="deny" credential_kind="bearer"
+  detail="conflicting_credentials"
+INFO request{method=POST path="/auth/logout"}: quarto_hub::audit:
+  action="auth_fail" outcome="deny" credential_kind="cookie"
+  detail=jwt_decode:JWT error: …
+```
+
+Confirms: `credential_kind` correctly distinguishes the two paths;
+`detail="conflicting_credentials"` is byte-identical between the
+WS-upgrade and `Authenticated`-extractor sites; failure events at
+WARN (dual-cred CVE) and INFO (validation failure) are
+appropriately differentiated; the tracing request span (`method`,
+`path`) annotates extractor-side events and is absent for the WS
+upgrade (which emits before any span enters scope). ✓
+
+#### (4c partial) Insecure-Bearer gate — env-var smokes
+
+Run from the assembled hub-mcp dist:
+
+| Smoke | Env | Outcome |
+|---|---|---|
+| Missing `--server` | both vars set | exit 1, "--server `<url>` or QUARTO_HUB_SERVER is required" |
+| Partial env (`CLIENT_ID` set, `CLIENT_SECRET` unset) | — | exit 1, `MissingCredentialsConfigError` naming both vars literally |
+| Partial env (`CLIENT_SECRET` set, `CLIENT_ID` unset) | — | exit 1, `MissingCredentialsConfigError` naming both vars literally |
+
+Verified message body:
+
+```
+[hub-mcp] QUARTO_HUB_MCP_CLIENT_SECRET is not set. Hub-mcp requires
+QUARTO_HUB_MCP_CLIENT_ID and QUARTO_HUB_MCP_CLIENT_SECRET in the
+MCP-client env. Ask your hub operator for the Google OAuth client
+credentials they registered for hub-mcp.
+```
+
+The remainder of 4c (loopback / non-loopback ws:// behaviour, env-flag
+override, loud warning on every connect) is covered by the
+`connection-manager.test.ts` insecure-transport-gate specs that
+`cargo xtask verify` runs green. The binary-level smoke confirms
+those specs reflect what the shipping `dist/index.js` actually does
+on startup. ✓
+
+#### (4 partial) Plaintext-leak grep — clean
+
+Non-test source files in `ts-packages/quarto-hub-mcp/src/` have **no**
+matches for `*.apps.googleusercontent.com`, `GOCSPX-`, `ya29.`, or
+`1//` (the four token-shape regexes the Phase 4
+`no_baked_default_client_id_or_secret` walker enforces). Matches in
+`*.test.ts` files are fixtures (literally `'GOCSPX-test-secret'`,
+`'ya29.fake-access-token'`, `'1//original-refresh-token'`) and are
+exempted by design. The Phase 4 walker spec passes under
+`npx vitest run`.
+
+Compiled `dist/` mirrors source — non-test `.js` files have no
+literal matches; test compilation outputs (`*.test.js`) carry the
+same fake fixtures. The package's `"private": true` in package.json
+prevents these from ever reaching npm. ✓
+
+The hub log inspection also confirmed redaction is structurally
+intact: the bogus token strings I sent in `Authorization: Bearer …`
+and `Cookie: quarto_hub_token=…` headers (`aaa.bbb.ccc`,
+`zzz.yyy.xxx`) appear **zero** times in the captured hub log,
+including the `tower-http` request span. ✓
+
+#### Deferred to user-driven verification
+
+The following sub-items require a real browser, real Google consent,
+real Claude Code as the MCP client, real grant revocation in the
+Google Account UI, or two distinct Google accounts on different
+domains. They are intentionally deferred from this autonomous pass
+and tracked under their original phase-9 acceptance criteria:
+
+- **(3) SPA cookie path regression** — sign in to the SPA in a real
+  browser via Google OIDC; confirm the cookie path still works.
+- **(4) Full device-flow E2E through Claude Code** — clean keyring,
+  `authenticate_start` → browser consent → `authenticate_finish` →
+  re-issue action; inspect macOS Keychain entry with
+  `security find-generic-password -s dev.quarto.hub-mcp -a
+  <issuer>:<client_id> -w` and confirm no plaintext file under
+  `~/Library/Application Support/quarto/`.
+- **(4a) No-auth hub regression + explicit-authenticate short-circuit**.
+- **(4b) Allowlist-parity E2E** — needs a `@posit.co` and a
+  non-allowlisted account; capture the byte-identical
+  `detail="user_not_allowlisted"` audit entry from cookie 403 and
+  bearer 403 paths.
+- **(5) Force refresh** — modify the keyring blob's
+  `id_token_expires_at` to the past; confirm one `/token` call.
+- **(6) Force re-auth** — revoke at myaccount.google.com → confirm
+  typed `ReauthRequired` with documented message.
+
+The autonomous half above does not block declaring Phases 2–8
+implementation-complete; what remains is the operator-driven
+verification matrix Phase 10 is supposed to ship alongside the
+runbook. When the user runs each of the deferred sub-items, append
+the observed output here under a "Phase 9 user-driven verification"
+sub-heading (date + commit hash) so the log stays append-only.
+
