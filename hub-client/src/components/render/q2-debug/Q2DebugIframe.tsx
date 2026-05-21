@@ -74,7 +74,7 @@ export function Q2DebugIframe({
   return (
     <iframe
       ref={iframeRef}
-      src="/q2-debug.html"
+      src="q2-debug.html"
       title="q2-debug Renderer"
       sandbox="allow-scripts allow-same-origin"
       style={{

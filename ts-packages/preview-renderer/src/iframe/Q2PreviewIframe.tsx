@@ -232,7 +232,7 @@ export function Q2PreviewIframe({
   return (
     <iframe
       ref={iframeRef}
-      src="/q2-preview.html"
+      src="q2-preview.html"
       title="q2-preview Renderer"
       sandbox="allow-scripts allow-same-origin"
       style={{
