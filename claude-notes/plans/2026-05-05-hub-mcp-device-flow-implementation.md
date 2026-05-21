@@ -755,24 +755,24 @@ New module: `ts-packages/quarto-hub-mcp/src/auth/refresh-manager.ts`.
 
 ### Tests first
 
-- [ ] `refresh_called_on_401` — hub returns 401 once; refresh; retry;
+- [x] `refresh_called_on_401` — hub returns 401 once; refresh; retry;
   succeeds.
-- [ ] `refresh_failure_triggers_reauth` — Google returns
+- [x] `refresh_failure_triggers_reauth` — Google returns
   `invalid_grant`; `CredentialStore.clear()`; caller receives
   `ReauthRequired`.
-- [ ] `concurrent_401s_share_single_refresh` — three in-flight requests
+- [x] `concurrent_401s_share_single_refresh` — three in-flight requests
   → one POST to `/token`; all three retries see same new ID token.
-- [ ] `expired_id_token_proactively_refreshes` — within 60 s skew of
+- [x] `expired_id_token_proactively_refreshes` — within 60 s skew of
   expiry → refresh before sending.
-- [ ] `refresh_persists_new_id_token_and_expiry`
-- [ ] `refresh_keeps_original_refresh_token_when_google_omits_field`
+- [x] `refresh_persists_new_id_token_and_expiry`
+- [x] `refresh_keeps_original_refresh_token_when_google_omits_field`
   — **live Google behaviour** (empirically confirmed 2026-05-19,
   3/3 refreshes omitted the field).
-- [ ] `refresh_keeps_original_refresh_token_when_google_returns_same_value`
-- [ ] `refresh_persists_rotated_refresh_token_when_google_returns_new_value`
+- [x] `refresh_keeps_original_refresh_token_when_google_returns_same_value`
+- [x] `refresh_persists_rotated_refresh_token_when_google_returns_new_value`
   — defensive in case Google or future IdP changes behaviour.
-- [ ] `refresh_does_not_log_tokens`
-- [ ] `refresh_does_not_persist_partial_state_on_failure`
+- [x] `refresh_does_not_log_tokens`
+- [x] `refresh_does_not_persist_partial_state_on_failure`
 
 ### Implementation
 
@@ -794,6 +794,65 @@ New module: `ts-packages/quarto-hub-mcp/src/auth/refresh-manager.ts`.
   `CredentialStore.clear()`, throw typed `ReauthRequired`. User-visible
   message: "Your Quarto Hub credentials have expired or were revoked.
   Ask me to authenticate again."
+
+### Phase 6 — completion notes (2026-05-21)
+
+Landed on `feature/hub-mcp-device-flow`:
+
+- New module `ts-packages/quarto-hub-mcp/src/auth/refresh-manager.ts`
+  exposes `RefreshManager` (`getValidIdToken` + `forceRefresh`),
+  the typed `ReauthRequired` error, and the `RefreshManagerDeps` /
+  `RefreshManagerConfig` types.
+- `forceRefresh` shares an in-flight `Promise<string>` mutex; both
+  the direct call and the `getValidIdToken` proactive-refresh path
+  coalesce onto it, so concurrent callers issue exactly one
+  `/token` POST and observe the same new id_token. The mutex
+  detaches its cleanup with `.finally(...).catch(() => undefined)`
+  so the caller observes the underlying rejection (the chained
+  promise would otherwise mask it) and a failed refresh leaves the
+  next call free to start fresh.
+- Refresh-token persistence rule per the Phase-1 lock-in: if the
+  `/token` response carries a non-empty `refresh_token`, we
+  persist it; otherwise we keep the prior value. Verified against
+  empirical Google behaviour (omitted field on live refreshes) and
+  the two defensive paths (same-value, rotated).
+- `id_token_expires_at` is derived from the refreshed id_token's
+  `exp` claim via `jose.decodeJwt` — `expires_in` from the response
+  describes the access token, not the id token. A missing or
+  malformed `exp` is a hard error (no partial-state write).
+- `invalid_grant` is the one terminal failure the manager handles
+  itself: clears the credential store (`store.clear()` failures
+  are swallowed since the original problem is the rejected token,
+  not the cleanup) and throws `ReauthRequired` with the documented
+  user-visible message and `oauthError = 'invalid_grant'` for
+  callers that want to discriminate. All other failures propagate
+  untouched and leave the store byte-identical to its pre-call
+  state — `refresh_does_not_persist_partial_state_on_failure`
+  asserts this against both a network-throw and a 500-response
+  fixture.
+- Logging redaction is structurally guaranteed by routing every
+  log site in `credential-store.ts` (which the manager owns
+  writes through) via `redactTokens`; the manager itself does no
+  direct logging. The `does_not_log_*` spec spies on every
+  `console.*` sink and verifies no token bytes (old or new id /
+  refresh) leak.
+
+Tests live at `src/auth/refresh-manager.test.ts` (co-located, same
+convention Phases 4–5 established). They stub `oauth4webapi`'s
+`customFetch` symbol so no live Google call is ever made. The
+fake-id_token helper fills in `iss`/`aud`/`azp`/`iat` defaults
+because `oauth4webapi.processRefreshTokenResponse` validates those
+claims even on the refreshed token.
+
+Verification: 17 new Vitest specs pass under `npm test` from
+`ts-packages/quarto-hub-mcp/` (77 of the 85 specs in this package
+now pass; 6 failures remain in `src/hub-mcp.test.ts` from the
+documented pre-existing `indexedDB is not defined` issue and 2 are
+the opt-in `[integration]` lane). `npm run typecheck` and
+`npm run build` both clean.
+
+No new dependencies — the module re-uses `oauth4webapi ^3.5.5` and
+`jose ^6.0.11` already added by Phase 4.
 
 ## Phase 7 — hub-mcp MCP-tool exposure for auth (TDD)
 
