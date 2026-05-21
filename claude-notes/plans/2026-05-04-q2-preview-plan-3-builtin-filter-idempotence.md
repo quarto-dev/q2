@@ -1,10 +1,23 @@
 # Plan 3 — Built-in transform and filter idempotence verification (CI-time)
 
-**Date:** 2026-05-04 (revised 2026-05-20)
-**Branch:** feature/q2-preview
+**Date:** 2026-05-04 (revised 2026-05-21)
+**Branch:** feature/provenance (long-lived integration branch — see
+§"Phase 5 — Failure triage" and §"Long-lived branch policy" below)
 **Status:** Development plan (work items below)
 **Milestone:** M2 verification gate (no new milestone — locks in property
 on what's already shipped)
+
+## Long-lived branch policy
+
+`feature/provenance` is **not** intended to merge to `main` while any
+fixture in this plan is red. The integration branch is the *home* of
+the failing-test queue; each red fixture has a beads issue, and the
+queue is drained before merge. This is by design — the plan ships a
+verification gate, and the gate has to be allowed to be red while it
+discovers what's actually non-deterministic in the pipeline today.
+See §"Phase 5 — Failure triage" for the operational rules, and
+§"CI failure policy & sub-agent prompt template" (under §"Decisions")
+for the rationale.
 
 ## Epic context
 
@@ -35,8 +48,15 @@ This plan ships:
 - Documentation of the idempotence contract for future transform/filter
   authors.
 
-When this plan lands, we have CI-enforced confidence that the q2-preview
-round-trip story (Plans 4-8) rests on a stable foundation.
+When this plan lands on `main` (after Phase 5's failure queue is
+drained), the q2-preview round-trip story (Plans 4-8) rests on a
+**CI-enforced** stable foundation: every push to `main` runs the
+idempotence suite and fails the build on regression. *Until* the
+plan lands on `main`, the integration branch
+(`feature/provenance`) carries the suite in a possibly-red state
+as the queue of discovered non-determinism issues is worked
+through — that's the design, not a process gap. See §"Long-lived
+branch policy" and §"Phase 5 — Failure triage."
 
 ## Scope
 
@@ -46,10 +66,10 @@ Two distinct classes, both shipped with Quarto and both in scope:
 
 **Rust transforms** — the source of truth is
 `build_q2_preview_transform_pipeline` in
-`crates/quarto-core/src/pipeline.rs:1220`, which is
+`crates/quarto-core/src/pipeline.rs:1237`, which is
 `build_transform_pipeline` minus the four names in
-`Q2_PREVIEW_TRANSFORM_EXCLUDED` (`pipeline.rs:1181`). As of this
-revision, the q2-preview pipeline runs **36 transforms** across four
+`Q2_PREVIEW_TRANSFORM_EXCLUDED` (`pipeline.rs:1198`). As of this
+revision, the q2-preview pipeline runs **37 transforms** across four
 phases:
 
 - **Normalization**: callout, shortcode-resolve, metadata-normalize,
@@ -64,14 +84,14 @@ phases:
   listing-feed-link, toc-render, navbar-render, sidebar-render,
   page-nav-render, footer-render.
 - **Finalization**: link-rewrite, appendix-structure, code-block-render,
-  resource-collector, attribution-render.
+  resource-collector, table-bootstrap-class, attribution-render.
 
 Excluded by `Q2_PREVIEW_TRANSFORM_EXCLUDED` (out of scope for Plan 3
 because they don't run): callout-resolve, attribution-viewer,
 title-block, crossref-render.
 
 **Stage-level work** in `build_q2_preview_pipeline_stages`
-(`pipeline.rs:379`) also runs around `AstTransformsStage` and can
+(`pipeline.rs:380`) also runs around `AstTransformsStage` and can
 introduce non-determinism: parse-document, metadata-merge,
 include-expansion, include-resolve, listing-item-info, document-profile,
 link-resolution, unwrap-profile, pre-engine-sugaring, capture-splice,
@@ -80,14 +100,19 @@ user-filters-pre/post, resource-report, code-highlight. These are
 exercised implicitly by every fixture (most are no-ops absent specific
 metadata).
 
-`MathJsStage` is excluded from q2-preview by `Q2_PREVIEW_STAGE_EXCLUDED`
-(`pipeline.rs:355`), so `meta.math` never appears under this pipeline
-and contributes nothing to the meta hash. `BootstrapJsStage` and
-`ClipboardJsStage` are present on native q2-preview but write only to
-`ctx.artifacts`, not to `doc.ast.meta` or `doc.ast.blocks` — they
-don't affect the hash. (Whether they should be in
-`Q2_PREVIEW_STAGE_EXCLUDED` at all is a separate question, filed as
-**bd-2ag1c**.)
+`Q2_PREVIEW_STAGE_EXCLUDED` (`pipeline.rs:356`) currently excludes
+three stages by name: `math-js`, `render-html-body`, and
+`apply-template`. `MathJsStage`'s exclusion means `meta.math` never
+appears under this pipeline and contributes nothing to the meta
+hash; `RenderHtmlBodyStage` and `ApplyTemplateStage` produce
+HTML/text side outputs that wouldn't reach the AST anyway, so their
+exclusion is also AST-neutral. `BootstrapJsStage` and
+`ClipboardJsStage` are *not* excluded — they run on native q2-preview
+but write only to `ctx.artifacts`, not to `doc.ast.meta` or
+`doc.ast.blocks`, so they don't affect the hash. (Whether they
+should be in `Q2_PREVIEW_STAGE_EXCLUDED` at all is a separate
+question, filed as **bd-2ag1c** — see §"Open questions for
+implementation" for ordering relative to Plan 3.)
 
 **Lua filters under `resources/extensions/`** — there is exactly **one**
 today: `resources/extensions/quarto/video/video-filter.lua`. It rewrites
@@ -285,9 +310,9 @@ treatment.
     Lua state.
   - **Shortcodes**: `LuaShortcodeEngine::new`
     (`crates/pampa/src/lua/shortcode.rs:68`) is constructed on the
-    stack inside `ShortcodeResolveTransform::transform()` (per the
-    type's own doc-comment at `shortcode_resolve.rs:257`), so each
-    pipeline run also gets a fresh shortcode-side `Lua::new()`.
+    stack inside `ShortcodeResolveTransform::transform()` at
+    `crates/quarto-core/src/transforms/shortcode_resolve.rs:513`, so
+    each pipeline run also gets a fresh shortcode-side `Lua::new()`.
 
   No cross-run state accumulation on either side. This matches
   production (hub-client builds a new pipeline per render) and
@@ -303,12 +328,17 @@ against themselves:
 
 1. **Single-file mode** — `run_pipeline` directly with
    `build_q2_preview_pipeline_stages`. Mirrors the lowest-level entry
-   point used by `render_qmd_to_preview_ast` (`pipeline.rs:855`).
-2. **Project-orchestrator mode** — `ProjectPipeline<RenderToPreviewAstRenderer>`
-   driving the same stages through pass-1 + pass-2, matching the path
-   the real `q2 preview` and hub-client renders take. Template:
-   `render_active_page_preview` in
-   `crates/quarto-core/tests/render_page_in_project.rs:653`.
+   point used by `render_qmd_to_preview_ast` (`pipeline.rs:859`).
+2. **Project-orchestrator mode** — calls the existing
+   `render_active_page_preview` helper at
+   `crates/quarto-core/tests/render_page_in_project.rs:660`. That
+   helper already drives
+   `ProjectPipeline<RenderToPreviewAstRenderer>` end-to-end (project
+   discovery, multi-file re-discovery guard, format setup, `ActivePage`
+   mode), returns `WasmPassTwoOutput`, and panics on pass-1 / pass-2
+   failures. It is exactly the path the real `q2 preview` and
+   hub-client renders take. We use it as-is; no fresh orchestrator
+   wiring is required.
 
 Why both: single-file mode catches stage / transform non-determinism;
 project mode additionally exercises any non-determinism introduced by
@@ -319,9 +349,13 @@ file-iteration order, pass-1 → pass-2 hand-off).
 use quarto_ast_reconcile::{compute_blocks_hash_fresh, compute_meta_hash_fresh_excluding_rendered};
 use quarto_core::format::Format;
 use quarto_core::pipeline::{build_q2_preview_pipeline_stages, run_pipeline};
+use quarto_core::project::pass2_renderer::WasmPassTwoOutput;
 use quarto_core::stage::{DocumentAst, PipelineData};
+use quarto_pandoc_types::Pandoc;
 use quarto_system_runtime::NativeRuntime;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tempfile::TempDir;
 
 /// How a fixture is driven through the pipeline. Every fixture runs
 /// once per mode; both modes hash equal across two runs.
@@ -329,22 +363,35 @@ use std::sync::Arc;
 enum DriveMode {
     /// `run_pipeline` directly with `build_q2_preview_pipeline_stages`.
     SingleFile,
-    /// `ProjectPipeline<RenderToPreviewAstRenderer>` with
-    /// `RenderMode::ActivePage`.
+    /// Reuses the existing `render_active_page_preview` helper at
+    /// `crates/quarto-core/tests/render_page_in_project.rs:660`.
     ProjectOrchestrator,
 }
 
-async fn assert_pipeline_deterministic(
-    fixture: &Fixture,
-    mode: DriveMode,
-) {
-    let doc_1 = run_q2_preview(fixture, mode).await;
-    let doc_2 = run_q2_preview(fixture, mode).await;
+/// A test fixture. The whole project lives in a `TempDir` that the
+/// fixture owns; the `_quarto.yml` (if any) plus the page contents
+/// are written by `setup()`. Document-only fixtures still create a
+/// temp dir + minimal `index.qmd` so the orchestrator mode has
+/// something to discover.
+struct Fixture {
+    name: &'static str,
+    /// Idempotent setup callback. Receives the project root.
+    /// Must write at minimum `<root>/<active>` (the page being rendered),
+    /// optionally `<root>/_quarto.yml` and sibling files.
+    setup: Box<dyn Fn(&Path)>,
+    /// The active page, relative to the project root. Defaults to
+    /// `index.qmd`.
+    active: PathBuf,
+}
 
-    let blocks_a = compute_blocks_hash_fresh(&doc_1.ast.blocks);
-    let blocks_b = compute_blocks_hash_fresh(&doc_2.ast.blocks);
-    let meta_a = compute_meta_hash_fresh_excluding_rendered(&doc_1.ast.meta);
-    let meta_b = compute_meta_hash_fresh_excluding_rendered(&doc_2.ast.meta);
+fn run_fixture(fixture: &Fixture, mode: DriveMode) {
+    let doc_1 = run_q2_preview(fixture, mode);
+    let doc_2 = run_q2_preview(fixture, mode);
+
+    let blocks_a = compute_blocks_hash_fresh(&doc_1.blocks);
+    let blocks_b = compute_blocks_hash_fresh(&doc_2.blocks);
+    let meta_a = compute_meta_hash_fresh_excluding_rendered(&doc_1.meta);
+    let meta_b = compute_meta_hash_fresh_excluding_rendered(&doc_2.meta);
 
     if blocks_a != blocks_b || meta_a != meta_b {
         // Localize before panicking so the failure message gives the
@@ -360,77 +407,99 @@ async fn assert_pipeline_deterministic(
     }
 }
 
-/// Parameter object: lets one fixture serve both modes without
-/// duplicating content. For document-only fixtures, `project_dir` is
-/// None and `SingleFile` mode reads `content` in-memory; project
-/// fixtures supply a `project_dir` on disk so the orchestrator can
-/// run discovery.
-struct Fixture {
-    name: &'static str,
-    content: Vec<u8>,
-    /// Some(dir) for project fixtures; None for single-file fixtures.
-    /// In project mode this is the project root; in single-file mode
-    /// it's used as the synthetic `ProjectContext::dir` if present,
-    /// else a temp dir is created.
-    project_dir: Option<std::path::PathBuf>,
-    /// The active page (relative to `project_dir` if Some, else
-    /// synthetic). Defaults to `index.qmd`.
-    active: std::path::PathBuf,
-}
+fn run_q2_preview(fixture: &Fixture, mode: DriveMode) -> DocumentAst {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    (fixture.setup)(&project_dir);
+    let active = project_dir.join(&fixture.active).canonicalize().unwrap();
 
-async fn run_q2_preview(fixture: &Fixture, mode: DriveMode) -> DocumentAst {
     match mode {
-        DriveMode::SingleFile => run_q2_preview_single_file(fixture).await,
-        DriveMode::ProjectOrchestrator => run_q2_preview_orchestrator(fixture).await,
+        DriveMode::SingleFile => run_single_file(&project_dir, &active),
+        DriveMode::ProjectOrchestrator => run_orchestrator(&project_dir, &active),
     }
 }
 
-async fn run_q2_preview_single_file(fixture: &Fixture) -> DocumentAst {
-    let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
-        Arc::new(NativeRuntime::new());
-    let (project, doc) = make_test_project_and_doc(fixture);
-    let format = Format::from_format_string("q2-preview")
-        .expect("q2-preview is a recognized pseudo-format");
-    let binaries = quarto_core::render::BinaryDependencies::new();
-    let mut ctx = quarto_core::render::RenderContext::new(&project, &doc, &format, &binaries);
+fn run_single_file(project_dir: &Path, active: &Path) -> DocumentAst {
+    // `run_pipeline` is async; the existing tests (e.g.
+    // render_page_in_project.rs) drive it via `pollster::block_on`.
+    pollster::block_on(async {
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(NativeRuntime::new());
+        let mut project = quarto_core::project::ProjectContext::discover(
+            active,
+            runtime.as_ref(),
+        )
+        .unwrap();
+        if !project.is_single_file {
+            project = quarto_core::project::ProjectContext::discover(
+                &project.dir,
+                runtime.as_ref(),
+            )
+            .unwrap();
+        }
+        let doc = project
+            .documents
+            .iter()
+            .find(|d| d.path == active)
+            .expect("active doc in project")
+            .clone();
+        let format = Format::from_format_string("q2-preview")
+            .expect("q2-preview is a recognized pseudo-format");
+        let binaries = quarto_core::render::BinaryDependencies::new();
+        let mut ctx = quarto_core::render::RenderContext::new(
+            &project, &doc, &format, &binaries,
+        );
 
-    let stages = build_q2_preview_pipeline_stages(None, None);
-    let (output, _diagnostics) = run_pipeline(
-        &fixture.content,
-        &fixture.active.to_string_lossy(),
-        &mut ctx,
-        runtime,
-        stages,
-    )
-    .await
-    .expect("pipeline run");
+        let content = std::fs::read(active).unwrap();
+        let stages = build_q2_preview_pipeline_stages(None, None);
+        let (output, _diagnostics) = run_pipeline(
+            &content,
+            &active.to_string_lossy(),
+            &mut ctx,
+            runtime,
+            stages,
+        )
+        .await
+        .expect("pipeline run");
 
-    match output {
-        PipelineData::DocumentAst(ast) => ast,
-        other => panic!("expected DocumentAst, got {:?}", other.kind()),
-    }
+        match output {
+            PipelineData::DocumentAst(ast) => ast,
+            other => panic!("expected DocumentAst, got {:?}", other.kind()),
+        }
+    })
 }
 
-async fn run_q2_preview_orchestrator(fixture: &Fixture) -> DocumentAst {
-    // See `render_active_page_preview` at
-    // crates/quarto-core/tests/render_page_in_project.rs:653 for the
-    // template. Boils down to:
-    //   1. `ProjectContext::discover(active, runtime.as_ref())`
-    //   2. `RenderToPreviewAstRenderer::new(&vfs_root)`
-    //   3. `ProjectPipeline::with_renderer(...).with_mode(ActivePage(active))`
-    //   4. `pipeline.run().await` → `WasmPassTwoOutput`
-    //   5. extract `DocumentAst` from `output.payload` (AstJson +
-    //      reparse, or expose a `as_document_ast()` accessor — see
-    //      §"Open questions for implementation").
-    //
-    // Single helper, reused per fixture.
-    unimplemented!("see Open questions §'Orchestrator-mode DocumentAst extraction'")
+fn run_orchestrator(project_dir: &Path, active: &Path) -> DocumentAst {
+    // Delegates to the existing helper. It already drives
+    // ProjectContext::discover + ProjectPipeline + ActivePage mode,
+    // and panics if pass-1 / pass-2 surface failures. We just lift
+    // the AST JSON out of `Pass2Payload::AstJson` and re-parse it
+    // back into a typed Pandoc via pampa's JSON reader — the source_info
+    // round-trips, but the hash explicitly excludes source_info, so
+    // the parse is a clean conversion for hashing purposes.
+    let output: WasmPassTwoOutput =
+        render_active_page_preview(project_dir, active);
+    let ast_json = output
+        .payload
+        .as_ast_json()
+        .expect("orchestrator must emit Pass2Payload::AstJson");
+    let mut bytes = ast_json.as_bytes();
+    let (pandoc, _ast_ctx) = pampa::readers::json::read(&mut bytes)
+        .expect("re-parse AST JSON");
+    pandoc_to_document_ast(pandoc)
 }
+
+// `pandoc_to_document_ast` converts the re-parsed `Pandoc` into the
+// `DocumentAst` shape the hash helpers want. Pandoc carries blocks
+// + the document meta; the helpers take `&[Block]` and `&ConfigValue`
+// respectively, so this is mostly a field shuffle. Exact body
+// determined during implementation once the DocumentAst struct is
+// inspected next to Pandoc.
 ```
 
 Notes on the helpers:
 
-- `run_pipeline` (`pipeline.rs:626`) is the existing entry point for
+- `run_pipeline` (`pipeline.rs:627`) is the existing entry point for
   the single-file mode; no new driver is needed.
 - The q2-preview pipeline ends at `CodeHighlightStage`, so its output
   is `PipelineData::DocumentAst`.
@@ -438,11 +507,17 @@ Notes on the helpers:
   inside the orchestrator's per-page renderer setup) and fresh Lua
   engines per filter / shortcode invocation — natural per-run
   isolation.
-- The orchestrator path currently exposes `WasmPassTwoOutput` with an
-  `as_ast_json()` accessor. Plan 3 needs a `DocumentAst` directly to
-  hash; how to get one cleanly (re-parse the JSON, add an accessor on
-  `Pass2Payload`, or land a small refactor) is an open question — see
-  §"Open questions for implementation."
+- The orchestrator path's `Pass2Payload::as_ast_json()` accessor
+  (`crates/quarto-core/src/project/pass2_renderer.rs:272`) already
+  exists. `pampa::readers::json::read` (`crates/pampa/src/readers/json.rs:1063`)
+  parses the JSON back into a typed `Pandoc`. The source_info that
+  the JSON writer emits with `include_inline_locations: true`
+  (`crates/quarto-core/src/pipeline.rs:910` area) round-trips through
+  the reader, but **the hash explicitly excludes source_info** — so
+  no stripping pass is required and no production plumbing change is
+  needed. See §"Decisions" /
+  §"Orchestrator-mode `DocumentAst` extraction" for why option (a)
+  beats the typed-plumbing alternative.
 
 ### Fixture-to-mode mapping
 
@@ -537,7 +612,7 @@ marked; new ones are unchecked.
   extension is **embedded at compile time** (`include_dir!` of
   `resources/extensions/` in
   `crates/quarto-core/src/extension/mod.rs:33`) and auto-discovered for
-  every `StageContext::new()` call (`stage/context.rs:220-230`), so the
+  every `StageContext::new()` call (`stage/context.rs:221`), so the
   fixture needs no scaffolding beyond declaring the filter. Minimal
   shape:
 
@@ -558,6 +633,12 @@ marked; new ones are unchecked.
   trivial `foo.html` → include-resolve stage.
 - [ ] `theme-bootstrap` — `theme: cosmo` (or default) in meta →
   compile-theme-css stage.
+- [ ] `table-bootstrap-class` — a simple pipe table (`| col |
+  --- | val |`) → `TableBootstrapClassTransform`. The transform
+  attaches Bootstrap CSS classes (`table`, etc.) to `Table` nodes;
+  the assertion that the same classes appear in the same order on
+  both runs is the idempotence check. Minimal shape: one
+  two-column, two-row pipe table; no extra config needed.
 
 **Website-project fixtures** (each needs a `ProjectContext` wired to a
 `_quarto.yml` with `project.type: website` + the relevant config; one
@@ -578,7 +659,7 @@ combined fixture can cover most chrome transforms):
 **Attribution fixture** (the test helper installs an
 `AttributionSourceProvider` on `RenderContext.attribution_provider`;
 `run_pipeline` forwards it to `StageContext.attribution_provider` at
-`pipeline.rs:663`):
+`pipeline.rs:664`):
 
 - [ ] `attribution-basic` — document with an installed git-based
   attribution provider → attribution-generate stage, attribution-render
@@ -591,127 +672,166 @@ combined fixture can cover most chrome transforms):
 
 If a fixture in this list discovers non-idempotence on first run,
 **leave the test failing** and file a beads issue using the sub-agent
-investigation prompt template in §"Open questions for implementation."
+investigation prompt template in §"CI failure policy & sub-agent
+prompt template."
 The fix lands against the appropriate transform's crate (per §"What
 happens when a fixture fails"). Do not silently drop the fixture, and
 do not `#[ignore]` it without explicit user approval — failing tests
 are the triage backlog.
 
-## Open questions for implementation
+## Decisions (was: open questions)
 
-- **Test crate location**: probably `crates/quarto-core/tests/` as a
-  workspace-level integration test crate. New test file
-  `q2_preview_idempotence.rs`. Confirm during implementation.
-- **Fixture format**: files in
-  `crates/quarto-core/tests/fixtures/q2-preview-idempotence/`,
-  one `.qmd` per fixture; in-source literals for the trivial cases
-  (1-2 lines). Probably files for the substantial cases.
-- **Fixture-authoring rules for path-recording transforms**.
-  Fixtures that exercise `resource-collector`, `include-resolve`,
-  `BUILTIN_EXTENSIONS` (any built-in extension lookup), or other
-  transforms that record absolute paths into meta MUST use only
-  paths that resolve relative to the fixture root, never absolute
-  process paths. Reason: the built-in extensions resource bundle
-  extracts to a `temp_dir()`'d location whose absolute path differs
-  across processes (stable within a single process — fine for
-  Plan 3's two-runs-compare contract, but a latent issue for any
-  future stored-snapshot variant). The fixtures README must spell
-  this out. Two practical rules: (1) use relative URLs in fixture
-  body content (`./local.png`, not `/private/var/.../local.png`);
+- **Test crate location** — settled. The test lives at
+  `crates/quarto-core/tests/idempotence.rs` as a workspace-level
+  integration test (matches the existing pattern in
+  `crates/quarto-core/tests/` — `sidebar_pipeline.rs`,
+  `navbar_footer_pipeline.rs`, `render_page_in_project.rs`, etc.).
+  Invoke with `cargo nextest run -p quarto-core --test idempotence`.
+- **Fixture location** — settled. Files in
+  `crates/quarto-core/tests/fixtures/idempotence/`, one subdirectory
+  per non-trivial fixture (for the website/multi-file ones); in-source
+  literals for the trivial single-page cases written by the fixture's
+  `setup` closure into a `TempDir`. Pattern matches
+  `crates/quarto-core/tests/fixtures/websites/hub-smoke/` and
+  `phase5-website-baseline/`.
+- **`ProjectContext` setup for website fixtures** — resolved by
+  reuse. There is **no need** to write a `make_website_project_ctx`
+  helper. The existing pattern across `crates/quarto-core/tests/`
+  (used by `render_page_in_project.rs`, `sidebar_pipeline.rs`,
+  `navbar_footer_pipeline.rs`, `page_navigation_pipeline.rs`,
+  `listing_pipeline.rs`, `navigation_e2e.rs`, `link_rewriting_pipeline.rs`,
+  `website_post_render.rs`) is: write `_quarto.yml` + page contents
+  into a `TempDir`, then let `ProjectContext::discover` do the rest.
+  Each Plan 3 fixture's `setup` closure does exactly this in 5-30
+  lines. The chrome transforms read their config from the discovered
+  project — they don't need a parameterized builder. For the website
+  fixtures (`website-chrome`, `website-links`, `website-listing`)
+  we can either inline the YAML in `setup` or, for the larger ones,
+  use `copy_fixture(...)` (see `render_page_in_project.rs:616`) to
+  pull a pre-built fixture directory out of `tests/fixtures/idempotence/`.
+- **Fixture-authoring rules for path-recording transforms** —
+  settled. Fixtures that exercise `resource-collector`,
+  `include-resolve`, `BUILTIN_EXTENSIONS` (any built-in extension
+  lookup), or other transforms that record absolute paths into meta
+  MUST use only paths that resolve relative to the fixture root,
+  never absolute process paths. Reason: the built-in extensions
+  resource bundle extracts to a `temp_dir()`'d location whose
+  absolute path differs across processes (stable within a single
+  process — fine for Plan 3's two-runs-compare contract, but a
+  latent issue for any future stored-snapshot variant). The
+  fixtures README must spell this out. Two practical rules:
+  (1) use relative URLs in fixture body content (`./local.png`,
+  not `/private/var/.../local.png`);
   (2) when a transform's output includes a path, the assertion must
   hash the value through `compute_meta_hash_fresh_excluding_rendered`
   (which we already do) so test-process-specific paths under
   `rendered.*` are excluded by construction.
-- **`ProjectContext` setup for website fixtures**: the chrome
-  transforms need a fully-populated project context. Helper:
-  `make_website_project_ctx(temp_dir, navbar_config, sidebar_config, …)`.
-  This is the heaviest part of the new fixture work; ~150 lines on its
-  own.
-- **Orchestrator-mode `DocumentAst` extraction (resolved during plan
-  review; final decision deferred to implementer).** Researched
-  `pipeline.rs:855-929` and `project/pass2_renderer.rs:635-779`. The
-  `DocumentAst` is materialized inside `render_qmd_to_preview_ast`
-  (`pipeline.rs:884`) but discarded after JSON serialization. Both
-  `PreviewAstOutput` (`pipeline.rs:168`) and `Pass2Payload::AstJson`
-  (`pass2_renderer.rs:256`) currently carry only the `ast_json`
-  string. Three plumbing options:
-  - **(a) Re-parse the AST JSON.** Problematic: the JSON writer runs
-    with `include_inline_locations: true` (source_info triples
-    embedded), so the round-tripped `Pandoc` would carry source_info
-    that our hash explicitly excludes — Plan 4's source_info churn
-    would then masquerade as round-trip noise. Doable with a
-    pre-parse stripping pass, but extra moving parts.
-  - **(b) Add `pub ast: DocumentAst` to `PreviewAstOutput` and forward
-    through `WasmPassTwoOutput`** (e.g. a new
-    `document_ast: Option<DocumentAst>` field on the latter, or a
-    typed variant on `Pass2Payload`). The comment at
-    `pipeline.rs:163-166` ("the typed value is no longer interesting
-    to callers") was a production claim, not a hard contract;
-    relaxing it adds ~5 lines of plumbing. **Recommended option.**
-    Production cost is one extra `DocumentAst` clone per render —
-    cheap relative to the pipeline work that just ran. If memory is a
-    concern, gate behind `cfg(test)` (the field exists only in
-    test builds), accepting that the test binary diverges
-    structurally from the production binary.
-  - **(c) Test-only hook on `RenderToPreviewAstRenderer`** (e.g. an
-    `Arc<Mutex<Option<DocumentAst>>>` set by the renderer during
-    `render`). Works but pollutes the renderer with test scaffolding
-    and is order-sensitive (cleared between fixtures).
+- **Orchestrator-mode `DocumentAst` extraction** — settled on
+  option (a). The orchestrator path emits the AST as a JSON string
+  via `Pass2Payload::AstJson`; `Pass2Payload::as_ast_json()`
+  (`crates/quarto-core/src/project/pass2_renderer.rs:272`) is
+  already in the API. `pampa::readers::json::read`
+  (`crates/pampa/src/readers/json.rs:1063`) parses it back into a
+  typed `(Pandoc, ASTContext)`. The JSON writer emits source_info
+  triples (`include_inline_locations: true`), and those round-trip
+  through the reader — but **the hash explicitly excludes
+  source_info** (`compute_blocks_hash_fresh` /
+  `compute_meta_hash_fresh` both skip it), so no stripping pass is
+  needed. Cost: one JSON-string parse per orchestrator-mode
+  assertion, no production plumbing change. The earlier draft of
+  this section preferred option (b) (forward typed `DocumentAst`
+  through `PreviewAstOutput` / `WasmPassTwoOutput`) — abandoned
+  because (a) needs *no* type changes and the source_info concern
+  doesn't actually bite the hash.
+- **bd-2ag1c ordering** — Plan 3 lands first; bd-2ag1c (whether
+  `BootstrapJsStage` / `ClipboardJsStage` belong in
+  `Q2_PREVIEW_STAGE_EXCLUDED`) waits for Plan 3's coverage. The
+  rationale: Plan 3 is what *measures* whether those stages
+  contribute non-determinism to the q2-preview AST; if they don't
+  (they currently only write to `ctx.artifacts`, not to `meta` or
+  `blocks`), bd-2ag1c can be closed without changes. If they do,
+  bd-2ag1c picks up the cleanup with measurements in hand.
 
-  Pick (b) — unconditional plumbing if the clone cost is fine,
-  otherwise (b)-with-`cfg(test)`. Avoid (a) unless (b) turns out to
-  be more invasive than expected. Whichever lands, document the
-  decision inline in `PreviewAstOutput`.
-- **CI failure policy**: the test fails noisily if any transform /
-  filter is non-idempotent — that's the point. Failing fixtures stay
-  **failing** (no auto-`#[ignore]`). For each failure, file a beads
-  issue whose description doubles as a self-contained sub-agent
-  investigation prompt: the fixture path, the two hash values, the
-  diverging key path (block vs meta), and the suspected stage /
-  transform / filter to focus on. `#[ignore]` is only applied when the
-  user explicitly says so. This keeps CI red as a forcing function and
-  surfaces each issue through `br ready` so a triage agent can pick it
-  up without rereading the plan.
+### CI failure policy & sub-agent prompt template
 
-  Sub-agent prompt template (filled in per failure when filing the
-  beads issue — the test driver's panic message provides the
-  fixture, mode, hashes, and `DivergencePoint`, so the agent already
-  has a concrete starting point):
+The test fails noisily if any transform / filter is non-idempotent
+— that's the point. Failing fixtures stay **failing** (no
+auto-`#[ignore]`). For each failure, file a beads issue whose
+description doubles as a self-contained sub-agent investigation
+prompt: the fixture path, the two hash values, the diverging key
+path (block vs meta), and the suspected stage / transform / filter
+to focus on. `#[ignore]` is only applied when the user explicitly
+says so. **The integration branch (`feature/provenance`) is allowed
+to be red while the queue is being drained** — see §"Long-lived
+branch policy" at the top of this plan and §"Phase 5 — Failure
+triage" for the operational mechanics.
 
-  > Investigate non-idempotence in q2-preview fixture
-  > `<fixture-name>` (`<DriveMode>` mode). Two consecutive pipeline
-  > runs over the same input diverge at
-  > `<DivergencePoint from panic message — e.g. "Block { index: 7 }"
-  > or "MetaKey { path: ["listings", "foo"] }">`. Hashes: blocks
-  > `<a>` vs `<b>`, meta `<a>` vs `<b>`. Read
-  > `claude-notes/plans/<this-plan>.md` §"Failure modes the test
-  > catches" for category guidance. Reproduce with `cargo nextest
-  > run -p quarto-core --test q2_preview_idempotence
-  > <fixture-name>`. Suspected source likely lives in
-  > `<transform-or-stage>` based on the divergence location — start
-  > there. Verdict: deterministic source (HashMap iteration, time,
-  > RNG) → propose a fix; non-deterministic but semantically
-  > equivalent (e.g. attribute ordering inside an HTML chrome
-  > payload) → propose either canonicalization at the source or a
-  > targeted hash exclusion. Do not `#[ignore]` the test.
+Sub-agent prompt template (filled in per failure when filing the
+beads issue — the test driver's panic message provides the
+fixture, mode, hashes, and `DivergencePoint`, so the agent already
+has a concrete starting point):
+
+> Investigate non-idempotence in q2-preview fixture
+> `<fixture-name>` (`<DriveMode>` mode). Two consecutive pipeline
+> runs over the same input diverge at
+> `<DivergencePoint from panic message — e.g. "Block { index: 7 }"
+> or "MetaKey { path: ["listings", "foo"] }">`. Hashes: blocks
+> `<a>` vs `<b>`, meta `<a>` vs `<b>`. Read
+> `claude-notes/plans/<this-plan>.md` §"Failure modes the test
+> catches" for category guidance. Reproduce with `cargo nextest
+> run -p quarto-core --test idempotence <fixture-name>`.
+> Suspected source likely lives in `<transform-or-stage>` based on
+> the divergence location — start there. Verdict: deterministic
+> source (HashMap iteration, time, RNG) → propose a fix;
+> non-deterministic but semantically equivalent (e.g. attribute
+> ordering inside an HTML chrome payload) → propose either
+> canonicalization at the source or a targeted hash exclusion. Do
+> not `#[ignore]` the test.
 
 ## References
 
-- `crates/quarto-core/src/pipeline.rs:1220`
+Line numbers below are accurate as of `feature/provenance` HEAD on
+2026-05-21. Plan 4's source_info churn or any pipeline reorganization
+may shift them — when in doubt, grep by symbol name. The plan's
+factual content survives line-number drift; the references are a
+convenience for navigating, not a contract.
+
+- `crates/quarto-core/src/pipeline.rs:1237`
   `build_q2_preview_transform_pipeline` — q2-preview transform list,
   source of truth.
-- `crates/quarto-core/src/pipeline.rs:1181`
+- `crates/quarto-core/src/pipeline.rs:1198`
   `Q2_PREVIEW_TRANSFORM_EXCLUDED` — the four transforms that don't run.
-- `crates/quarto-core/src/pipeline.rs:379`
+- `crates/quarto-core/src/pipeline.rs:380`
   `build_q2_preview_pipeline_stages` — stage-level pipeline.
-- `crates/quarto-core/src/pipeline.rs:626`
+- `crates/quarto-core/src/pipeline.rs:356`
+  `Q2_PREVIEW_STAGE_EXCLUDED` — three excluded stages
+  (`math-js`, `render-html-body`, `apply-template`).
+- `crates/quarto-core/src/pipeline.rs:627`
   `run_pipeline` — pipeline execution entry point used by the test
   runner.
+- `crates/quarto-core/src/pipeline.rs:859`
+  `render_qmd_to_preview_ast` — production entry point that combines
+  `build_q2_preview_pipeline_stages` + `run_pipeline`; mirrors the
+  `DriveMode::SingleFile` helper.
+- `crates/quarto-core/src/pipeline.rs:168`
+  `PreviewAstOutput` — currently carries only `ast_json: String`
+  (no typed `DocumentAst`).
 - `crates/quarto-core/src/transforms/` — the Rust transform crate root.
   Each transform's `name()` matches the kebab-case strings listed in
   §"What 'built-in' covers."
+- `crates/quarto-core/src/transforms/code_highlight.rs:126`
+  `CodeHighlightStage`'s native user-grammar disk scan
+  (`ctx.project.dir.join("_quarto").join("grammars")`). OS-order-
+  dependent if a grammar directory is present; not exercised by
+  Plan 3 fixtures (see §"Noted, not actively tested").
+- `crates/quarto-core/src/transforms/shortcode_resolve.rs:513`
+  `ShortcodeResolveTransform::transform` — site of the per-pipeline
+  fresh `LuaShortcodeEngine::new` construction.
 - `crates/quarto-ast-reconcile/src/hash.rs:115`
-  `compute_blocks_hash_fresh` — the existing block hasher.
+  `compute_blocks_hash_fresh` — the existing blocks hasher (slice).
+- `crates/quarto-ast-reconcile/src/hash.rs:102`
+  `compute_block_hash_fresh` — the singular per-block hasher used
+  by `find_first_divergence` for index-keyed comparison.
 - `crates/quarto-ast-reconcile/src/hash.rs:767`
   `test_same_content_same_hash` — confirms blocks hash excludes
   source_info.
@@ -723,7 +843,18 @@ are the triage backlog.
   `LuaShortcodeEngine::new` — per-pipeline Lua engine for shortcodes
   (constructed on the stack inside
   `ShortcodeResolveTransform::transform`).
-- `crates/quarto-core/src/stage/context.rs:220`
+- `crates/pampa/src/readers/json.rs:1063`
+  `pampa::readers::json::read` — re-parses AST JSON back into a
+  typed `(Pandoc, ASTContext)`; used by `DriveMode::ProjectOrchestrator`
+  to recover a typed AST for hashing.
+- `crates/quarto-core/src/project/pass2_renderer.rs:272`
+  `Pass2Payload::as_ast_json` — accessor used by both the existing
+  test in `render_page_in_project.rs` and Plan 3's orchestrator-mode
+  helper.
+- `crates/quarto-core/src/project/pass2_renderer.rs:254`
+  `Pass2Payload::AstJson` — variant currently carries only
+  `ast_json: String`.
+- `crates/quarto-core/src/stage/context.rs:221`
   `StageContext::new` — calls `discover_extensions` with the embedded
   built-in extensions path, so the `quarto/video` filter extension is
   always discoverable without per-fixture scaffolding.
@@ -731,13 +862,22 @@ are the triage backlog.
   `BUILTIN_EXTENSIONS_DIR` — compile-time
   `include_dir!(resources/extensions)` ensures the video/lipsum/version/
   kbd/placeholder extensions are baked into the binary.
-- `crates/quarto-core/tests/render_page_in_project.rs:653`
-  `render_active_page_preview` — template for the
-  `DriveMode::ProjectOrchestrator` helper.
-- `crates/quarto-core/src/pipeline.rs:855`
-  `render_qmd_to_preview_ast` — production entry point that combines
-  `build_q2_preview_pipeline_stages` + `run_pipeline`; mirrors the
-  `DriveMode::SingleFile` helper.
+- `crates/quarto-core/tests/render_page_in_project.rs:660`
+  `render_active_page_preview` — the **existing**
+  `DriveMode::ProjectOrchestrator` helper. Reused verbatim by Plan 3,
+  not reimplemented.
+- `crates/quarto-core/tests/render_page_in_project.rs:64`
+  `render_active_page` — sibling HTML helper; useful prior art for
+  the project-discovery pattern even though Plan 3 doesn't use it
+  directly.
+- `crates/quarto-core/tests/render_page_in_project.rs:616`
+  `copy_fixture` — utility for copying a pre-built fixture directory
+  out of `tests/fixtures/` into a `TempDir`. Available for the
+  heavier website fixtures.
+- `crates/quarto-core/tests/fixtures/websites/hub-smoke/`,
+  `crates/quarto-core/tests/fixtures/phase5-website-baseline/` —
+  example website fixture directories with `_quarto.yml` + multi-page
+  layouts. Demonstrates the shape Plan 3's website fixtures take.
 - `resources/extensions/quarto/video/video-filter.lua` — the one
   built-in Lua filter today.
 - `claude-notes/plans/lua-filter-pipeline/00-index.md` — Carlos's
@@ -790,29 +930,36 @@ are the triage backlog.
 
 ### Phase 2 — Test crate scaffolding
 
-- [ ] Create `crates/quarto-core/tests/q2_preview_idempotence.rs`.
-- [ ] Implement `Fixture` struct + `assert_pipeline_deterministic(fixture, mode)`
+- [ ] Create `crates/quarto-core/tests/idempotence.rs`.
+- [ ] Implement the `Fixture` struct + `run_fixture(fixture, mode)`
   helper that loops `DriveMode::{SingleFile, ProjectOrchestrator}`
-  (see §"What gets tested concretely").
-- [ ] Implement `run_q2_preview_single_file(fixture) -> DocumentAst`
-  using `Format::from_format_string("q2-preview")` and
-  `build_q2_preview_pipeline_stages` + `run_pipeline`.
-- [ ] Implement `run_q2_preview_orchestrator(fixture) -> DocumentAst`
-  using `ProjectPipeline<RenderToPreviewAstRenderer>`. Resolve the
-  open question about how to extract `DocumentAst` from
-  `WasmPassTwoOutput` first (re-parse, accessor, or test-only hook —
-  see §"Open questions").
-- [ ] Implement `make_test_project_ctx()` (synthetic one-page project
-  for document fixtures) and `make_website_project_ctx(...)` (real
-  on-disk project with `_quarto.yml` for chrome / listing fixtures).
-- [ ] Create `crates/quarto-core/tests/fixtures/q2-preview-idempotence/`
+  (see §"What gets tested concretely" for the body).
+- [ ] Implement `run_single_file(project_dir, active) -> DocumentAst`
+  using `ProjectContext::discover` + `build_q2_preview_pipeline_stages`
+  + `run_pipeline`. (~50 lines; the only genuinely new driver.)
+- [ ] Implement `run_orchestrator(project_dir, active) -> DocumentAst`
+  by delegating to the existing `render_active_page_preview` helper
+  at `crates/quarto-core/tests/render_page_in_project.rs:660` and
+  re-parsing `Pass2Payload::as_ast_json()` via
+  `pampa::readers::json::read`. No new orchestrator wiring is
+  written; no production plumbing change is needed.
+- [ ] Implement `pandoc_to_document_ast(pandoc) -> DocumentAst` — the
+  small field-shuffle between the re-parsed `Pandoc` and the
+  hashing helpers' expected shape. Land inline in `idempotence.rs`;
+  do not promote to library code until a second caller appears.
+- [ ] Create `crates/quarto-core/tests/fixtures/idempotence/`
   directory with a README listing the fixture-format rules:
   - no executable engine cells (fenced `` ```python `` blocks only);
-  - **no absolute process paths** in fixture content — see §"Open
-    questions for implementation" / "Fixture-authoring rules for
-    path-recording transforms";
+  - **no absolute process paths** in fixture content — see §"Decisions"
+    / "Fixture-authoring rules for path-recording transforms";
   - per-fixture mode mapping (document fixtures run in both modes;
     website fixtures orchestrator-only).
+- [ ] Borrow `write` / `canonical` / `snippet` (and optionally
+  `copy_fixture` for the heavier website fixtures) from
+  `render_page_in_project.rs` — copy them into `idempotence.rs` or
+  pull them into a shared `tests/common/` module if the duplication
+  across `quarto-core`'s test files becomes worth deduplicating
+  (out of scope for Plan 3 unless trivial).
 
 ### Phase 3 — Existing-fixture coverage (carry-forward)
 
@@ -831,7 +978,7 @@ are the triage backlog.
   `lua-shortcode-lipsum-fixed` (with module-load `randomseed` comment
   in the `.qmd` per §"Noted, not actively tested"), `proof`,
   `equation-labeled`, `toc-on`, `video-filter-header`,
-  `include-in-header`, `theme-bootstrap`.
+  `include-in-header`, `theme-bootstrap`, `table-bootstrap-class`.
 - [ ] Add website-project fixtures (orchestrator-mode only):
   `website-chrome`, `website-links`, `website-listing`.
 - [ ] Add attribution fixture: `attribution-basic` (both modes; the
@@ -841,19 +988,26 @@ are the triage backlog.
 
 ### Phase 5 — Failure triage
 
+`feature/provenance` is a **long-lived integration branch** that
+holds failing fixtures *on purpose* until the queue is drained.
+The plan does not merge to `main` while any fixture in this gate is
+red. See §"Long-lived branch policy" at the top of this plan for
+the rationale; what follows is the operational loop.
+
 - [ ] Run the full test suite. For each failing fixture, classify the
   cause (filter non-idempotence, transform non-determinism,
   metadata-merge issue, etc.).
 - [ ] For each failure: either fix in-place (if scope is contained and
   obvious) or **file a beads issue using the sub-agent investigation
-  prompt template** from §"Open questions for implementation." Failing
-  tests **stay failing** — no auto-`#[ignore]`. Only ignore when the
-  user explicitly says so.
+  prompt template** from §"CI failure policy & sub-agent prompt
+  template." Failing tests **stay failing** — no auto-`#[ignore]`.
+  Only ignore when the user explicitly says so.
 - [ ] Keep the (still-failing) tests on the integration branch so each
-  beads issue has a live reproduction. They block merging into `main`
-  by design — the merge happens after the queue is drained or the user
-  decides which to `#[ignore]` with a permanent rationale. Until then
-  the failing tests *are* the triage backlog.
+  beads issue has a live reproduction. The integration branch may
+  stay red for an extended period; the merge to `main` happens only
+  after the queue is drained (every red fixture either fixed or
+  explicitly `#[ignore]`-d with a permanent rationale signed off
+  by the user). The failing tests *are* the triage backlog.
 
 ### Phase 6 — Documentation
 
@@ -907,17 +1061,17 @@ transform / filter lives. Failure modes and where their fixes go:
   Plan 4's type changes are the place to investigate.
 
 If a fixture fails on first run, **leave the test failing** and file
-a beads issue (with the sub-agent investigation prompt from §"Open
-questions for implementation"). The failing test stays red until the
-issue is resolved — `#[ignore]` only when the user explicitly says
-so. Do not silently disable.
+a beads issue (with the sub-agent investigation prompt from §"CI
+failure policy & sub-agent prompt template"). The failing test stays
+red until the issue is resolved — `#[ignore]` only when the user
+explicitly says so. Do not silently disable.
 
 ## Risk areas
 
 - **A transform or filter might fail the test on first run**. Triaged
   per Phase 5; **leave failing + file a sub-agent investigation prompt**
-  (see §"Open questions for implementation"). `#[ignore]` only when the
-  user explicitly says so.
+  (see §"CI failure policy & sub-agent prompt template"). `#[ignore]`
+  only when the user explicitly says so.
 - **Hash stability across binary versions**: `FxHasher`'s output is
   stable within a Rust process but not across versions. Tests compare
   hashes computed in the same process, not stored as constants. This is
@@ -928,10 +1082,13 @@ so. Do not silently disable.
   reference real OS paths unless explicitly testing a path-aware
   feature. The attribution fixture is the main case to watch.
 - **Website-project fixture complexity**: assembling a valid
-  `ProjectContext` is non-trivial. Risk: time spent on test scaffolding
-  rather than transform coverage. Mitigation: a single
-  `make_website_project_ctx` helper covers most chrome transforms in
-  one fixture.
+  `ProjectContext` is non-trivial. Risk: time spent on test
+  scaffolding rather than transform coverage. Mitigation: reuse the
+  existing pattern (write `_quarto.yml` + page contents into a
+  `TempDir`, call `ProjectContext::discover`) — the same recipe
+  used by ~10 sibling tests in `crates/quarto-core/tests/`. No
+  parameterized builder is needed. See §"Decisions" /
+  "ProjectContext setup for website fixtures."
 
 ### Noted, not actively tested
 
@@ -941,12 +1098,15 @@ the next person who *does* hit a hash divergence in their neighborhood
 has a head start:
 
 - **`CodeHighlightStage`'s native disk scan for user grammars**
-  (`pipeline.rs:644-650`). On native, when no
-  `user_grammar_provider` is supplied (CLI default), the stage falls
-  back to scanning a directory for user grammars. If that scan returns
-  paths in OS-dependent order, attribute output could differ across
-  machines. Fixtures here don't supply user grammars, so the scan is
-  empty in practice. Not tested today; flag if a future fixture
+  (`crates/quarto-core/src/transforms/code_highlight.rs:126-129`).
+  On native, when no `user_grammar_provider` is supplied (CLI
+  default), the stage falls back to scanning
+  `ctx.project.dir.join("_quarto").join("grammars")` for user
+  grammars. If that scan returns paths in OS-dependent order,
+  attribute output could differ across machines. Fixtures here
+  don't supply user grammars, so the directory is absent and the
+  early-return at the top of the function makes the scan a no-op
+  in practice. Not tested today; flag if a future fixture
   introduces a grammar dependency.
 - **Lipsum module-load `randomseed`**
   (`resources/extensions/quarto/lipsum/lipsum.lua:5`). The Lua module
@@ -965,25 +1125,33 @@ has a head start:
 |---|---|
 | `compute_meta_hash_fresh` + excluding-rendered variant + tests | ~140 |
 | `find_first_divergence` + `DivergencePoint` + tests | ~80 |
-| `PreviewAstOutput::ast` plumbing into `WasmPassTwoOutput` | ~20 |
-| Test crate scaffolding — Fixture struct, both DriveMode helpers, project-ctx builders | ~260 |
-| Per-fixture `.qmd` files (~25 fixtures, 5-30 lines each) | ~280 |
+| Test crate scaffolding — `Fixture` struct, `run_single_file`, `run_orchestrator` (thin wrapper over existing helper), `pandoc_to_document_ast` shuffle | ~100 |
+| Per-fixture `.qmd` files / inline literals (~25 fixtures, 5-30 lines each) | ~280 |
 | Per-fixture (fixture, mode) test assertions (mostly one-liners; ~25 fixtures × 1-2 modes ≈ 40 pairs) | ~120 |
 | `idempotence-contract.md` + fixtures README | ~80 |
-| **Total** | **~980** |
+| **Total** | **~800** |
+
+The scaffolding line item dropped from an earlier estimate of ~260
+to ~100 after pinning the orchestrator path on the existing
+`render_active_page_preview` helper and choosing option (a) for
+`DocumentAst` extraction — neither requires a new orchestrator
+driver, a `make_website_project_ctx` builder, or production
+plumbing changes. `PreviewAstOutput::ast` plumbing is no longer
+needed (was ~20 lines in the earlier draft).
 
 **Inventory note**: an earlier draft estimated "~10-20 built-in filters"
 in `resources/extensions/`. That was wrong — `resources/extensions/`
 contains one Lua filter (`video-filter.lua`) plus five shortcodes
 (kbd, video, lipsum, version, placeholder). The bulk of the universe
-under test is the **36 Rust transforms** in
+under test is the **37 Rust transforms** in
 `build_q2_preview_transform_pipeline`, plus the stage-level work in
-`build_q2_preview_pipeline_stages`. The new estimate reflects the
-actual split.
+`build_q2_preview_pipeline_stages`.
 
-Likely two focused sessions — one for hashing infrastructure +
-scaffolding + carry-forward fixtures, one for gap-closure fixtures
-(particularly the website-project ones).
+Realistic shape: 2-3 focused sessions — one for hashing
+infrastructure + scaffolding + carry-forward fixtures, one for
+gap-closure fixtures (particularly the website-project ones), and
+a third for Phase 5 triage if the first run surfaces multiple red
+fixtures (which is the expected case, not a surprise).
 
 ## Notes
 
