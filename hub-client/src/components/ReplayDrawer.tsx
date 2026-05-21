@@ -56,12 +56,12 @@ function AuthorshipToggle({ authorshipOn, onAuthorshipChange, generating }: Auth
         onAuthorshipChange(!authorshipOn);
       }}
       aria-pressed={authorshipOn}
-      aria-label={`Authorship overlay ${authorshipOn ? 'on' : 'off'}`}
+      aria-label={`Authors overlay ${authorshipOn ? 'on' : 'off'}`}
       aria-busy={generating || undefined}
       title="Highlight authors"
     >
       <span className="replay-drawer__authorship-dot" />
-      <span className="replay-drawer__authorship-label">Authorship</span>
+      <span className="replay-drawer__authorship-label">Authors</span>
     </button>
   );
 }

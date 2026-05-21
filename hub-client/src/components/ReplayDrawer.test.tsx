@@ -279,7 +279,7 @@ describe('ReplayDrawer', () => {
           onAuthorshipChange={vi.fn()}
         />,
       );
-      expect(screen.getByLabelText(/Authorship/)).toBeDefined();
+      expect(screen.getByLabelText(/Authors/)).toBeDefined();
     });
 
     it('renders in expanded state', () => {
@@ -300,7 +300,7 @@ describe('ReplayDrawer', () => {
           onAuthorshipChange={vi.fn()}
         />,
       );
-      expect(screen.getByLabelText(/Authorship/)).toBeDefined();
+      expect(screen.getByLabelText(/Authors/)).toBeDefined();
     });
 
     it('reflects authorshipOn state via aria-pressed', () => {
@@ -312,7 +312,7 @@ describe('ReplayDrawer', () => {
           onAuthorshipChange={vi.fn()}
         />,
       );
-      expect(screen.getByLabelText(/Authorship/).getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getByLabelText(/Authors/).getAttribute('aria-pressed')).toBe('false');
 
       rerender(
         <ReplayDrawer
@@ -322,7 +322,7 @@ describe('ReplayDrawer', () => {
           onAuthorshipChange={vi.fn()}
         />,
       );
-      expect(screen.getByLabelText(/Authorship/).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByLabelText(/Authors/).getAttribute('aria-pressed')).toBe('true');
     });
 
     it('clicking toggles via onAuthorshipChange', () => {
@@ -335,7 +335,7 @@ describe('ReplayDrawer', () => {
           onAuthorshipChange={onChange}
         />,
       );
-      fireEvent.click(screen.getByLabelText(/Authorship/));
+      fireEvent.click(screen.getByLabelText(/Authors/));
       expect(onChange).toHaveBeenCalledWith(true);
     });
 
@@ -348,13 +348,13 @@ describe('ReplayDrawer', () => {
           onAuthorshipChange={vi.fn()}
         />,
       );
-      fireEvent.click(screen.getByLabelText(/Authorship/));
+      fireEvent.click(screen.getByLabelText(/Authors/));
       expect(controls.enter).not.toHaveBeenCalled();
     });
 
     it('is omitted when onAuthorshipChange is not provided', () => {
       render(<ReplayDrawer state={makeState()} controls={controls} />);
-      expect(screen.queryByLabelText(/Authorship/)).toBeNull();
+      expect(screen.queryByLabelText(/Authors/)).toBeNull();
     });
 
     it('applies the generating modifier class and aria-busy when authorshipGenerating is true', () => {
@@ -367,7 +367,7 @@ describe('ReplayDrawer', () => {
           authorshipGenerating={false}
         />,
       );
-      const pill = screen.getByLabelText(/Authorship/);
+      const pill = screen.getByLabelText(/Authors/);
       expect(pill.className).not.toContain('replay-drawer__authorship--generating');
       expect(pill.getAttribute('aria-busy')).toBeNull();
 
