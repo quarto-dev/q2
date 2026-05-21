@@ -96,10 +96,13 @@ export function extractChangeHash(heads: unknown): string | null {
 
 /**
  * History entries processed between idle-callback yields. Larger
- * values reduce the number of rIC round trips (faster
- * time-to-attribution) but make each slice's CPU block bigger (more
- * frame jank risk). 500 gives ~2.5 ms of CPU per slice at the
- * prototype's bench-measured ~5 µs/entry.
+ * values cut yield overhead at the cost of bigger per-slice CPU.
+ *
+ * Per-entry CPU is super-linear (≈30 / 90 / 420 µs at N=500 / 2000 /
+ * 10000 — `A.diff` scales with doc state). 500 sits near the
+ * wallclock knee; raising it saves <20 % even in worst-case yield
+ * scenarios and pushes slices past one frame (16.67 ms) at typical N.
+ * The dominant cost is `A.diff` itself, not this constant.
  */
 export const CHUNK_SIZE = 500;
 
