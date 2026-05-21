@@ -559,54 +559,61 @@ mode would test a partial pipeline that doesn't exist in production.
 
 ## Coverage gaps to address during implementation
 
-Each fixture below covers one or more transforms. Existing fixtures are
-marked; new ones are unchecked.
+Each fixture below covers one or more transforms. **All 26 fixtures
+below now ship in `crates/quarto-core/tests/idempotence.rs`** (plus a
+27th `smoke_plain_paragraph` not enumerated here). Two are in the
+Phase-5 triage queue (marked inline below); the other 24 pass on
+first run in both applicable modes.
 
 **Existing fixtures (carry forward from prior plan draft):**
 
-- [ ] `meta-single` — `{{< meta foo >}}` with single-string foo →
+- [x] `meta-single` — `{{< meta foo >}}` with single-string foo →
   shortcode-resolve, metadata-normalize.
-- [ ] `meta-markdown` — `{{< meta foo >}}` with `**Bold** title` →
+- [x] `meta-markdown` — `{{< meta foo >}}` with `**Bold** title` →
   shortcode-resolve (PandocInlines branch).
-- [ ] `include-trivial` — `{{< include child.qmd >}}` →
+- [x] `include-trivial` — `{{< include child.qmd >}}` →
   include-expansion stage, shortcode-resolve.
-- [ ] `callout-warning` — `::: {.callout-warning} Body :::` → callout.
+- [x] `callout-warning` — `::: {.callout-warning} Body :::` → callout.
   (callout-resolve is excluded; CustomNode survives.)
-- [ ] `theorem` — `::: {.theorem #thm-foo} Math here :::` →
+- [x] `theorem` — `::: {.theorem #thm-foo} Math here :::` →
   theorem-sugar.
-- [ ] `figure-ref-target` — `:::: {#fig-foo} ![cap](img.png) ::::` →
+- [x] `figure-ref-target` — `:::: {#fig-foo} ![cap](img.png) ::::` →
   float-ref-target-sugar.
-- [ ] `crossref-to-theorem` — `See @thm-foo` paired with the theorem
+- [x] `crossref-to-theorem` — `See @thm-foo` paired with the theorem
   above → crossref-index, crossref-resolve.
-- [ ] `sectionize-multi` — `## A` / `### B` / `## C` with body →
+- [x] `sectionize-multi` — `## A` / `### B` / `## C` with body →
   sectionize.
-- [ ] `footnotes-mixed` — inline `^[...]` + reference `[^foo]` →
+- [x] `footnotes-mixed` — inline `^[...]` + reference `[^foo]` →
   footnotes.
-- [ ] `appendix-license` — `license:` / `copyright:` meta +
+- [x] `appendix-license` — `license:` / `copyright:` meta +
   `:::{.appendix}` user block + footnotes → appendix-structure
   (+ footnotes interaction).
-- [ ] `combined-stress` — sectionize + callouts + shortcodes
+- [x] `combined-stress` — sectionize + callouts + shortcodes
   interacting.
 
 **New fixtures (gap audit):**
 
-- [ ] `code-block-fenced` — fenced ``` ```python ``` block with content
+- [x] `code-block-fenced` — fenced ``` ```python ``` block with content
   → code-block-generate, code-block-render, code-highlight stage.
-- [ ] `lua-shortcode-version` — `{{< version >}}` → shortcode-resolve
+- [x] `lua-shortcode-version` — `{{< version >}}` → shortcode-resolve
   (Lua-loaded handler path; simplest deterministic case — returns
   `quarto.version` joined by dots).
-- [ ] `lua-shortcode-lipsum-fixed` — `{{< lipsum 3 >}}` (no `random=`
+- [x] `lua-shortcode-lipsum-fixed` — `{{< lipsum 3 >}}` (no `random=`
   kwarg) → shortcode-resolve via lipsum's Lua handler. The
   `math.randomseed` in `lipsum.lua:5` runs but `math.random` is never
   called on this code path, so the output is the first three
   paragraphs of the canned data deterministically. The `random=true`
   variant is intentionally non-deterministic and out of scope.
-- [ ] `proof` — `::: {.proof} ... :::` → proof-sugar.
-- [ ] `equation-labeled` — `$$ E=mc^2 $$ {#eq-mass}` paired with
+  **In Phase-5 queue (bd-3odjm)**: pipeline IS idempotent (SingleFile
+  mode passes), but ProjectOrchestrator panics with
+  `MalformedSourceInfoPool` re-parsing the AST JSON — known Plan-5
+  wire-format issue, not a transform bug.
+- [x] `proof` — `::: {.proof} ... :::` → proof-sugar.
+- [x] `equation-labeled` — `$$ E=mc^2 $$ {#eq-mass}` paired with
   `@eq-mass` → equation-label, crossref-resolve (equation branch).
-- [ ] `toc-on` — `toc: true` + multiple sections → toc-generate,
+- [x] `toc-on` — `toc: true` + multiple sections → toc-generate,
   toc-render.
-- [ ] `video-filter-header` — exercises
+- [x] `video-filter-header` — exercises
   `resources/extensions/quarto/video/video-filter.lua` (the only
   built-in Lua filter under `resources/extensions/`). The `quarto/video`
   extension is **embedded at compile time** (`include_dir!` of
@@ -629,11 +636,11 @@ marked; new ones are unchecked.
   Headers whose URL matches one of three video hosts. Pattern matches
   the smoke-test at
   `crates/quarto/tests/smoke-all/extensions/filter-extension/test.qmd`.
-- [ ] `include-in-header` — `include-in-header: foo.html` in meta with
+- [x] `include-in-header` — `include-in-header: foo.html` in meta with
   trivial `foo.html` → include-resolve stage.
-- [ ] `theme-bootstrap` — `theme: cosmo` (or default) in meta →
+- [x] `theme-bootstrap` — `theme: cosmo` (or default) in meta →
   compile-theme-css stage.
-- [ ] `table-bootstrap-class` — a simple pipe table (`| col |
+- [x] `table-bootstrap-class` — a simple pipe table (`| col |
   --- | val |`) → `TableBootstrapClassTransform`. The transform
   attaches Bootstrap CSS classes (`table`, etc.) to `Table` nodes;
   the assertion that the same classes appear in the same order on
@@ -644,14 +651,19 @@ marked; new ones are unchecked.
 `_quarto.yml` with `project.type: website` + the relevant config; one
 combined fixture can cover most chrome transforms):
 
-- [ ] `website-chrome` — minimal website with navbar, sidebar, page
+- [x] `website-chrome` — minimal website with navbar, sidebar, page
   navigation, footer, favicon, bootstrap icons → website-title-prefix,
   website-favicon, website-bootstrap-icons, website-canonical-url,
   navbar-generate/render, sidebar-generate/render, page-nav-generate/render,
   footer-generate/render, link-resolution stage.
-- [ ] `website-links` — internal `.qmd` body links between two project
+- [x] `website-links` — internal `.qmd` body links between two project
   pages → link-rewrite + link-resolution.
-- [ ] `website-listing` — minimal listing with two items, one with
+  **In Phase-5 queue (bd-rz2we)**: block 0 hash diverges across runs
+  with different project roots while meta hash is stable —
+  link-rewrite/link-resolution captures something path-dependent into
+  the AST when it should emit a path-independent relative URL. Real
+  finding from this work.
+- [x] `website-listing` — minimal listing with two items, one with
   categories, one with `feed:` config → listing-generate, listing-render,
   categories-sidebar, listing-feed-link, listing-feed-stage (native only),
   listing-item-info stage.
@@ -661,14 +673,17 @@ combined fixture can cover most chrome transforms):
 `run_pipeline` forwards it to `StageContext.attribution_provider` at
 `pipeline.rs:664`):
 
-- [ ] `attribution-basic` — document with an installed git-based
+- [x] `attribution-basic` — document with an installed
   attribution provider → attribution-generate stage, attribution-render
-  transform.
+  transform. Uses `PreBuiltAttributionProvider` (transport JSON) rather
+  than `GitBlameProvider` for determinism — git history would vary
+  across machines.
 
 **Resource fixture:**
 
-- [ ] `resource-image` — `![alt](./local.png)` with the image file
-  present → resource-collector.
+- [x] `resource-image` — `![alt](./local.png)` with the image file
+  present → resource-collector. Image is a 67-byte minimal valid PNG
+  written via `write_bytes`.
 
 If a fixture in this list discovers non-idempotence on first run,
 **leave the test failing** and file a beads issue using the sub-agent
