@@ -934,36 +934,39 @@ convenience for navigating, not a contract.
 
 ### Phase 2 — Test crate scaffolding
 
-- [ ] Create `crates/quarto-core/tests/idempotence.rs`.
-- [ ] Implement the `Fixture` struct + `run_fixture(fixture, mode)`
+- [x] Create `crates/quarto-core/tests/idempotence.rs`.
+- [x] Implement the `Fixture` struct + `run_fixture(fixture, mode)`
   helper that loops `DriveMode::{SingleFile, ProjectOrchestrator}`
   (see §"What gets tested concretely" for the body).
-- [ ] Implement `run_single_file(project_dir, active) -> DocumentAst`
+- [x] Implement `run_single_file(project_dir, active) -> DocumentAst`
   using `ProjectContext::discover` + `build_q2_preview_pipeline_stages`
   + `run_pipeline`. (~50 lines; the only genuinely new driver.)
-- [ ] Implement `run_orchestrator(project_dir, active) -> DocumentAst`
+- [x] Implement `run_orchestrator(project_dir, active) -> DocumentAst`
   by delegating to the existing `render_active_page_preview` helper
   at `crates/quarto-core/tests/render_page_in_project.rs:660` and
   re-parsing `Pass2Payload::as_ast_json()` via
-  `pampa::readers::json::read`. No new orchestrator wiring is
-  written; no production plumbing change is needed.
-- [ ] Implement `pandoc_to_document_ast(pandoc) -> DocumentAst` — the
+  `pampa::readers::json::read`. (Helper copied inline since each
+  `tests/*.rs` is its own binary; the plan flags this as acceptable.)
+  No new orchestrator wiring is written; no production plumbing
+  change is needed.
+- [x] Implement `pandoc_to_document_ast(pandoc) -> DocumentAst` — the
   small field-shuffle between the re-parsed `Pandoc` and the
   hashing helpers' expected shape. Land inline in `idempotence.rs`;
   do not promote to library code until a second caller appears.
-- [ ] Create `crates/quarto-core/tests/fixtures/idempotence/`
+- [x] Create `crates/quarto-core/tests/fixtures/idempotence/`
   directory with a README listing the fixture-format rules:
   - no executable engine cells (fenced `` ```python `` blocks only);
   - **no absolute process paths** in fixture content — see §"Decisions"
     / "Fixture-authoring rules for path-recording transforms";
   - per-fixture mode mapping (document fixtures run in both modes;
     website fixtures orchestrator-only).
-- [ ] Borrow `write` / `canonical` / `snippet` (and optionally
-  `copy_fixture` for the heavier website fixtures) from
-  `render_page_in_project.rs` — copy them into `idempotence.rs` or
-  pull them into a shared `tests/common/` module if the duplication
-  across `quarto-core`'s test files becomes worth deduplicating
-  (out of scope for Plan 3 unless trivial).
+- [x] Borrow `write` / `canonical` (and `snippet` / `copy_fixture` when
+  needed by Phase 4 fixtures) from `render_page_in_project.rs` —
+  copied into `idempotence.rs` for now; pulling them into a shared
+  `tests/common/` module is out of scope for Plan 3.
+- [x] **Phase-2 smoke fixture** (`smoke_plain_paragraph`) drives both
+  modes on a single-paragraph document. Passing this confirms the
+  harness is wired correctly before Phases 3-4 add the real fixtures.
 
 ### Phase 3 — Existing-fixture coverage (carry-forward)
 
