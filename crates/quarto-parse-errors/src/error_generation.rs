@@ -663,7 +663,7 @@ mod tests {
     use crate::tree_sitter_log::{
         ProcessMessage, TreeSitterLogObserver, TreeSitterParseLog, TreeSitterProcessLog,
     };
-    use std::collections::HashMap;
+    use hashlink::LinkedHashMap as HashMap;
 
     /// Build a minimal observer whose parse log carries one error
     /// state at the given (row, column). The state-machine numbers

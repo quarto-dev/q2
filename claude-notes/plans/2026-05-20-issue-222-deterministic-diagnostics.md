@@ -20,32 +20,27 @@ them.*
 
 Phase 1 — test first (TDD).
 
-- [ ] Write a regression test that parses the issue-222 input N times
-      and asserts byte-identical diagnostic output across runs.
-      Decide N: 20 is more than enough — at the observed 63/37 split,
-      P(all-same) < 1e-4.
-- [ ] Place the test where it actually exercises the diagnostic path
-      end-to-end. Two candidates:
-      - `crates/pampa/tests/` driving `readers::qmd::read`
-        (matches the "test the real binary path" guidance in
-        `CLAUDE.md` § End-to-end verification);
-      - `crates/quarto-parse-errors/` driving
-        `produce_diagnostic_messages` directly (smaller, faster).
-      Pick pampa-side — that's what the binary uses. A small unit-level
-      test in quarto-parse-errors is fine *in addition*, not as a
-      replacement.
-- [ ] Run the test and confirm it fails on `99e7f89c`.
+- [x] Write a regression test that parses the issue-222 input N times
+      and asserts byte-identical diagnostic output across runs. Used
+      N=50 (P(all-same by chance) < 1e-10 at the observed 63/37 split).
+- [x] Place the test in `crates/pampa/tests/`. File:
+      `test_diagnostic_determinism.rs`. Drives `readers::qmd::read`,
+      so it exercises the same path the `pampa` binary uses.
+- [x] Run the test on `99e7f89c` — confirmed fails (the test's
+      assertion message shows the Variant A vs Variant B
+      divergence directly).
 
 Phase 2 — fix.
 
-- [ ] Swap `HashMap<usize, TreeSitterProcessLog>` for
+- [x] Swap `HashMap<usize, TreeSitterProcessLog>` for
       `hashlink::LinkedHashMap<usize, TreeSitterProcessLog>` in
-      `tree_sitter_log.rs`. Touches the field declaration, the import,
-      the `HashMap::new()` initializer at line 181, and a one-line
-      addition to `crates/quarto-parse-errors/Cargo.toml`
-      (`hashlink = "0.11"`). Iteration sites keep working without
-      modification (LinkedHashMap implements `.values()` / `.iter()`
-      / indexing the same way).
+      `tree_sitter_log.rs`. Done via `use hashlink::LinkedHashMap as
+      HashMap;` so the in-file name `HashMap` keeps working at every
+      use site. Also had to swap the import in `error_generation.rs`'s
+      test module (`use hashlink::LinkedHashMap as HashMap;`) — the
+      `processes` field is now typed `LinkedHashMap`, so the test
+      builder's `HashMap::new()` literal had to match.
+      Added `hashlink = "0.11"` to `crates/quarto-parse-errors/Cargo.toml`.
 
       Rationale for LinkedHashMap over BTreeMap: it's the data
       structure the rest of the workspace already reaches for when
@@ -66,20 +61,31 @@ Phase 2 — fix.
       version *before* a lower-numbered one after a condense; nothing
       in the captured trace suggests that happens, but the audit
       should keep an eye out.
-- [ ] Run the regression test, confirm it passes.
-- [ ] Run the full pampa test suite (`cargo nextest run -p pampa
-      -p quarto-parse-errors`).
-- [ ] Run `cargo xtask verify --skip-hub-build` (Rust + tree-sitter
-      legs at minimum). If the hub-build leg is needed for CI,
-      the maintainer can run the full verify before merge.
+- [x] Run the regression test, confirm it passes. (50/50 runs
+      produce identical diagnostic text.)
+- [x] Run the full pampa test suite (`cargo nextest run -p pampa
+      -p quarto-parse-errors`) — 3792 passed, 2 skipped.
+- [x] Run `cargo xtask verify` Rust + tree-sitter legs — green.
+      Hub-build + JS legs skipped (pre-existing local
+      `wasm-quarto-hub-client` package-not-found state, unrelated to
+      issue #222); the maintainer should run the full verify before
+      merge to confirm the WASM build.
+
+End-to-end check: `printf -- 'The "_blank" word.' | cargo run --bin
+pampa -- --no-prune-errors` was run 30 times against the patched
+binary. Result: 30/30 Variant A (Q-2-11 at col 13 + Q-2-5 at col 19).
+Diagnostic visually inspected.
 
 Phase 3 — guardrail.
 
-- [ ] Decide whether to add a `CLAUDE.md` note (or a `.claude/rules/`
+- [x] Decide whether to add a `CLAUDE.md` note (or a `.claude/rules/`
       rule) about: "containers iterated to produce user-visible output
-      must have deterministic iteration order — prefer `BTreeMap` /
-      `Vec` over `HashMap` when iteration is observable."
-      Discuss with the user before writing.
+      must have deterministic iteration order — prefer
+      `hashlink::LinkedHashMap` / `BTreeMap` / `Vec` over `HashMap`
+      when iteration is observable."
+      Resolution: rolled into the follow-up audit issue (bd-x5tx2)
+      so the rule lands together with the broader audit, rather than
+      as a standalone codification step here.
 
 ## Open questions for the user (before implementing)
 
@@ -104,9 +110,12 @@ Phase 3 — guardrail.
 3. **Wider HashMap audit.** Should we file a follow-up beads issue to
    audit every `HashMap<*>` iteration in user-facing output paths
    (writers, diagnostic emission, source maps), or treat that as
-   out-of-scope for this fix?
+   out-of-scope for this fix? **Resolved: filed bd-x5tx2
+   (discovered-from bd-hwdlq).**
 
-Once the user signs off on these, proceed with Phase 1.
+User signed off on all three (2026-05-21): tie-break direction is
+irrelevant as long as it's predictable, test goes in
+`crates/pampa/tests`, audit follow-up filed.
 
 ## Notes
 

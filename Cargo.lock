@@ -4138,6 +4138,7 @@ dependencies = [
 name = "quarto-parse-errors"
 version = "0.1.0"
 dependencies = [
+ "hashlink",
  "quarto-error-message-macros",
  "quarto-error-reporting",
  "quarto-source-map",
