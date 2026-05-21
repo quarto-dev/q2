@@ -35,6 +35,37 @@ use std::path::{Path, PathBuf};
 
 use crate::artifact::ArtifactScope;
 
+/// VFS-root resolver state. Splits the two roles a single
+/// `PathBuf` used to play (bd-rz2we): the **disk-write root**
+/// (where `runtime.file_write` and `OutputSink::allowed_roots`
+/// land) and the **URL root** (what gets embedded in HTML
+/// link/asset URLs).
+///
+/// Production WASM constructs this via [`ResourceResolverContext::vfs_root`]
+/// with the two fields populated from one path — they're
+/// intentionally identical, since the WASM runtime serves the
+/// synthetic VFS path from memory. Native test helpers construct
+/// it via [`ResourceResolverContext::vfs_root_with_url_root`]
+/// with a real tempdir for `write_root` and the synthetic
+/// `/.quarto/project-artifacts` string for `url_root`, so that
+/// `runtime.file_write` actually succeeds while rendered AST/HTML
+/// stays path-independent (idempotent across runs in different
+/// tempdirs).
+#[derive(Debug, Clone)]
+struct VfsRootMode {
+    /// Absolute disk path. `runtime.file_write` and
+    /// `OutputSink::allowed_roots` use this. In WASM this is a
+    /// synthetic VFS path (the runtime serves it from memory); in
+    /// native tests it's a real tempdir subdirectory.
+    write_root: PathBuf,
+    /// URL prefix embedded in HTML links / asset srcs. In WASM
+    /// this matches `write_root` by construction. In native tests
+    /// it's a fixed synthetic string (e.g.
+    /// `/.quarto/project-artifacts`) so URLs don't capture the
+    /// host machine's tempdir.
+    url_root: String,
+}
+
 /// Per-page context for resolving artifact paths and URLs.
 ///
 /// All paths are absolute and pre-normalized; the resolver does
@@ -56,12 +87,14 @@ pub struct ResourceResolverContext {
     lib_dir: String,
     /// Per-page resource directory name (e.g. `"api_files"`).
     page_files_dir: String,
-    /// When `Some(root)`, the resolver is in **VFS-root mode**:
-    /// every artifact resolves to `{root}/{artifact_path}` for
-    /// both the on-disk path and the HTML URL, regardless of
-    /// scope. Used by the WASM hub-client where the runtime
-    /// serves files from a synthetic absolute path.
-    vfs_root_mode: Option<PathBuf>,
+    /// When `Some(_)`, the resolver is in **VFS-root mode**: every
+    /// artifact resolves to `{write_root}/{artifact_path}` on disk
+    /// and `{url_root}/{artifact_path}` in HTML, regardless of
+    /// scope. Used by the WASM hub-client (write_root == url_root)
+    /// and by native test helpers (write_root is a tempdir,
+    /// url_root is a synthetic string for idempotence). See
+    /// [`VfsRootMode`].
+    vfs_root_mode: Option<VfsRootMode>,
 }
 
 impl ResourceResolverContext {
@@ -132,18 +165,54 @@ impl ResourceResolverContext {
     /// The browser fetches the URL absolute, the runtime serves
     /// it from VFS at the matching synthetic path. No relative-
     /// path computation needed because the URLs are absolute.
+    ///
+    /// Single-arg form: `write_root == url_root`. Preserves the
+    /// pinned contract that VFS-mode URLs and on-disk paths are
+    /// byte-identical (see
+    /// `website_post_render::vfs_root_resolver_url_matches_on_disk_path`).
     pub fn vfs_root(vfs_root: impl Into<PathBuf>) -> Self {
-        let root = vfs_root.into();
+        let root: PathBuf = vfs_root.into();
+        let url_root = root.to_string_lossy().replace('\\', "/");
+        Self::vfs_root_with_url_root(root, url_root)
+    }
+
+    /// Two-arg VFS-root constructor (bd-rz2we): decouple the
+    /// disk-write root from the URL prefix.
+    ///
+    /// - `write_root` is the absolute on-disk path
+    ///   `runtime.file_write` and `OutputSink::allowed_roots` use.
+    ///   In native test runs this is a real tempdir subdirectory.
+    /// - `url_root` is the URL prefix embedded in HTML links and
+    ///   asset srcs. In native test runs this is a synthetic
+    ///   string (e.g. `"/.quarto/project-artifacts"`) so rendered
+    ///   AST/HTML is independent of the host's tempdir layout.
+    ///
+    /// Production WASM doesn't call this directly — it calls
+    /// [`Self::vfs_root`] with one path that's used for both
+    /// roles. The two-arg form exists for in-process native
+    /// callers of the q2-preview / WASM-style renderers
+    /// (`RenderToPreviewAstRenderer::with_url_root`,
+    /// `RenderToHtmlRenderer::with_url_root`) so their integration
+    /// tests get byte-identical AST output across runs.
+    pub fn vfs_root_with_url_root(
+        write_root: impl Into<PathBuf>,
+        url_root: impl Into<String>,
+    ) -> Self {
+        let write_root: PathBuf = write_root.into();
+        let url_root: String = url_root.into();
         Self {
-            page_output: root.join("__page__.html"),
-            site_root: root.clone(),
+            page_output: write_root.join("__page__.html"),
+            site_root: write_root.clone(),
             // Empty lib_dir on its own would route Project to
             // page_files_dir; we override scope_root to ignore
             // both fields when the resolver is in vfs-root mode
-            // (see the `vfs_root_mode` flag below).
+            // (see the `vfs_root_mode` field below).
             lib_dir: String::new(),
             page_files_dir: String::new(),
-            vfs_root_mode: Some(root),
+            vfs_root_mode: Some(VfsRootMode {
+                write_root,
+                url_root,
+            }),
         }
     }
 
@@ -182,8 +251,8 @@ impl ResourceResolverContext {
     /// - An absolute URL of the form `/{vfs_root}/{artifact_path}`
     ///   (VFS-root mode — used by the WASM hub-client).
     pub fn html_url_for(&self, scope: ArtifactScope, artifact_path: &Path) -> String {
-        if let Some(root) = &self.vfs_root_mode {
-            return rel_to_url(&root.join(artifact_path));
+        if let Some(mode) = &self.vfs_root_mode {
+            return join_url_root(&mode.url_root, artifact_path);
         }
         let target = self.on_disk_path_for(scope, artifact_path);
         let page_dir = self.page_output.parent().unwrap_or_else(|| Path::new("."));
@@ -208,8 +277,8 @@ impl ResourceResolverContext {
     ///   `{site_root}/{target_output_href}`. For single-doc renders
     ///   this collapses to the input (since `site_root == page_dir`).
     pub fn page_url_for(&self, target_output_href: &str) -> String {
-        if let Some(root) = &self.vfs_root_mode {
-            return rel_to_url(&root.join(target_output_href));
+        if let Some(mode) = &self.vfs_root_mode {
+            return join_url_root(&mode.url_root, Path::new(target_output_href));
         }
         let target_abs = self.site_root.join(target_output_href);
         let page_dir = self.page_output.parent().unwrap_or_else(|| Path::new("."));
@@ -248,8 +317,8 @@ impl ResourceResolverContext {
     /// the resolver-side half of bd-cfl67) is then refused by the
     /// sink rather than written.
     pub fn allowed_output_roots(&self) -> Vec<PathBuf> {
-        if let Some(root) = &self.vfs_root_mode {
-            return vec![root.clone()];
+        if let Some(mode) = &self.vfs_root_mode {
+            return vec![mode.write_root.clone()];
         }
         vec![self.site_root.clone()]
     }
@@ -306,8 +375,8 @@ impl ResourceResolverContext {
             "artifact path must be relative (got {}); root-prefixed paths bypass scope_root and risk overwriting source files (bd-cfl67)",
             artifact_path.display(),
         );
-        if let Some(root) = &self.vfs_root_mode {
-            return root.join(artifact_path);
+        if let Some(mode) = &self.vfs_root_mode {
+            return mode.write_root.join(artifact_path);
         }
         let scope_root = self.scope_root(scope);
         scope_root.join(artifact_path)
@@ -333,6 +402,24 @@ impl ResourceResolverContext {
                 }
             }
         }
+    }
+}
+
+/// Build a `{url_root}/{artifact_path}` URL string in VFS-root
+/// mode. `url_root` is taken verbatim (no path manipulation —
+/// the WASM contract is that it stays byte-identical to the
+/// disk path; native tests pass a synthetic string). The
+/// artifact path is rendered with forward-slash separators
+/// regardless of host OS.
+fn join_url_root(url_root: &str, artifact_path: &Path) -> String {
+    let suffix = artifact_path.to_string_lossy().replace('\\', "/");
+    if suffix.is_empty() {
+        return url_root.to_string();
+    }
+    if url_root.ends_with('/') || suffix.starts_with('/') {
+        format!("{}{}", url_root, suffix)
+    } else {
+        format!("{}/{}", url_root, suffix)
     }
 }
 
@@ -696,5 +783,30 @@ mod tests {
         // in the rendered HTML — that's the contract.
         let url = r.html_url_for(ArtifactScope::Project, Path::new("styles.css"));
         assert_eq!(url, on_disk.to_string_lossy().replace('\\', "/"));
+    }
+
+    /// bd-rz2we: the two-arg VFS-root constructor decouples the
+    /// disk-write root (where the runtime actually puts bytes) from
+    /// the URL prefix embedded in HTML. Native test helpers pass a
+    /// real tempdir for the write root and a synthetic string for
+    /// the URL root, so rendered AST/HTML is path-independent
+    /// (idempotent across runs in different tempdirs) while
+    /// `runtime.file_write` still succeeds against a real disk path.
+    #[test]
+    fn resolver_vfs_root_with_url_root_splits_write_and_url() {
+        let r = ResourceResolverContext::vfs_root_with_url_root(
+            "/tmp/abc",
+            "/.quarto/project-artifacts",
+        );
+        // URL side uses url_root.
+        let url = r.html_url_for(ArtifactScope::Project, Path::new("styles.css"));
+        assert_eq!(url, "/.quarto/project-artifacts/styles.css");
+        let page_url = r.page_url_for("about.html");
+        assert_eq!(page_url, "/.quarto/project-artifacts/about.html");
+        // Disk side uses write_root.
+        let on_disk = r.on_disk_path_for(ArtifactScope::Project, Path::new("styles.css"));
+        assert_eq!(on_disk, PathBuf::from("/tmp/abc/styles.css"));
+        // allowed_output_roots tracks the write side.
+        assert_eq!(r.allowed_output_roots(), vec![PathBuf::from("/tmp/abc")]);
     }
 }

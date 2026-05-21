@@ -681,6 +681,14 @@ pub struct RenderToHtmlRenderer {
     /// will be constructed with this root.
     vfs_root: std::path::PathBuf,
 
+    /// bd-rz2we: when set, the per-page resolver is built with
+    /// [`ResourceResolverContext::vfs_root_with_url_root`] using
+    /// this string as the URL prefix while `vfs_root` keeps acting
+    /// as the disk-write root. `None` keeps today's behavior
+    /// (URL root derived from `vfs_root`). Used by native test
+    /// helpers so rendered URLs don't capture the host's tempdir.
+    vfs_url_root: Option<String>,
+
     /// Optional user-grammar provider attached by the caller. Shared
     /// across every page the renderer touches (one
     /// `RenderToHtmlRenderer` may produce many pages in `ActivePage`
@@ -696,6 +704,7 @@ impl RenderToHtmlRenderer {
     pub fn new(vfs_root: impl Into<std::path::PathBuf>) -> Self {
         Self {
             vfs_root: vfs_root.into(),
+            vfs_url_root: None,
             user_grammars: None,
         }
     }
@@ -710,6 +719,25 @@ impl RenderToHtmlRenderer {
     ) -> Self {
         self.user_grammars = Some(provider);
         self
+    }
+
+    /// bd-rz2we: override the URL prefix used for resolved-asset
+    /// links/srcs. Disk writes still go through `vfs_root` (a real
+    /// tempdir in native test runs); only the URL strings embedded
+    /// in HTML change. Used by native test helpers so rendered
+    /// output doesn't leak the host's tempdir.
+    pub fn with_url_root(mut self, url_root: impl Into<String>) -> Self {
+        self.vfs_url_root = Some(url_root.into());
+        self
+    }
+
+    fn build_resolver(&self) -> ResourceResolverContext {
+        match &self.vfs_url_root {
+            Some(url) => {
+                ResourceResolverContext::vfs_root_with_url_root(self.vfs_root.clone(), url.clone())
+            }
+            None => ResourceResolverContext::vfs_root(self.vfs_root.clone()),
+        }
     }
 }
 
@@ -744,7 +772,9 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         // URLs land under `/.quarto/project-artifacts/...` (the
         // post-processor reads from VFS at the matching path); see
         // Phase 5 sub-plan §"`ResourceResolverContext::vfs_root`".
-        let resolver = ResourceResolverContext::vfs_root(self.vfs_root.clone());
+        // bd-rz2we: native test helpers can override the URL prefix
+        // via `with_url_root` to keep rendered URLs path-independent.
+        let resolver = self.build_resolver();
 
         let binaries = BinaryDependencies::new();
         let options = RenderOptions {
@@ -859,7 +889,7 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         // already embeds in HTML. `lib_dir` is intentionally
         // ignored — the post-processor just needs to find the
         // bytes at the URL's path.
-        ResourceResolverContext::vfs_root(self.vfs_root.clone())
+        self.build_resolver()
     }
 }
 
@@ -883,6 +913,14 @@ pub struct RenderToPreviewAstRenderer {
     /// Synthetic VFS root under which every artifact lives in WASM.
     /// Same semantics as [`RenderToHtmlRenderer::new`].
     vfs_root: std::path::PathBuf,
+    /// bd-rz2we: when set, the per-page resolver is built with
+    /// [`ResourceResolverContext::vfs_root_with_url_root`] using
+    /// this string as the URL prefix while `vfs_root` keeps acting
+    /// as the disk-write root. `None` keeps today's behavior
+    /// (URL root derived from `vfs_root`). Used by native test
+    /// helpers (idempotence harness) so rendered URLs don't
+    /// capture the host's tempdir.
+    vfs_url_root: Option<String>,
     /// bd-lucp / bd-5yff4: ordered engine-execution captures used to
     /// splice recorded engine output into the AST at preview time (one
     /// per engine that ran server-side). Plumbed through to
@@ -908,6 +946,7 @@ impl RenderToPreviewAstRenderer {
     pub fn new(vfs_root: impl Into<std::path::PathBuf>) -> Self {
         Self {
             vfs_root: vfs_root.into(),
+            vfs_url_root: None,
             attribution_json: None,
             captures: Vec::new(),
         }
@@ -939,6 +978,26 @@ impl RenderToPreviewAstRenderer {
         self.attribution_json = Some(json);
         self
     }
+
+    /// bd-rz2we: override the URL prefix used for resolved-asset
+    /// links/srcs and cross-page links. Disk writes still go
+    /// through `vfs_root` (a real tempdir in native test runs);
+    /// only the URL strings embedded in the rendered AST change.
+    /// Used by native test helpers so rendered AST is
+    /// path-independent across runs.
+    pub fn with_url_root(mut self, url_root: impl Into<String>) -> Self {
+        self.vfs_url_root = Some(url_root.into());
+        self
+    }
+
+    fn build_resolver(&self) -> ResourceResolverContext {
+        match &self.vfs_url_root {
+            Some(url) => {
+                ResourceResolverContext::vfs_root_with_url_root(self.vfs_root.clone(), url.clone())
+            }
+            None => ResourceResolverContext::vfs_root(self.vfs_root.clone()),
+        }
+    }
 }
 
 #[async_trait(?Send)]
@@ -968,7 +1027,10 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             ))
         })?;
 
-        let resolver = ResourceResolverContext::vfs_root(self.vfs_root.clone());
+        // bd-rz2we: native test helpers can override the URL prefix
+        // via `with_url_root` so rendered AST link/asset URLs stay
+        // path-independent across runs in different tempdirs.
+        let resolver = self.build_resolver();
 
         let binaries = BinaryDependencies::new();
         let options = RenderOptions {
@@ -1105,6 +1167,6 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         // (which runs in the q2-preview pipeline) embeds image URLs
         // using this resolver, so the iframe sees URLs that resolve
         // to the matching VFS path.
-        ResourceResolverContext::vfs_root(self.vfs_root.clone())
+        self.build_resolver()
     }
 }

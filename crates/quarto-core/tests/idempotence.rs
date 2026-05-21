@@ -253,7 +253,15 @@ fn render_active_page_preview(
 
     let project_type = project_type_for(&project);
     let vfs_root = project.dir.join(".quarto/project-artifacts");
-    let mut renderer = RenderToPreviewAstRenderer::new(&vfs_root);
+    // bd-rz2we: override the URL root so rendered AST link/asset
+    // URLs use the synthetic VFS prefix instead of the host's
+    // tempdir path. Disk writes still land under `vfs_root` (the
+    // real tempdir) via `runtime.file_write`, but the URLs
+    // embedded in the AST stay byte-identical across runs in
+    // different tempdirs — which is what this idempotence gate
+    // is asserting.
+    let mut renderer =
+        RenderToPreviewAstRenderer::new(&vfs_root).with_url_root("/.quarto/project-artifacts");
     if let Some(json) = attribution_json {
         renderer = renderer.with_attribution(json.to_string());
     }
