@@ -737,7 +737,7 @@ end
 }
 
 #[tokio::test]
-async fn test_filter_provenance_tracking() {
+async fn test_filter_generated_tracking() {
     // Test that elements created by filters capture their source location
     let dir = TempDir::new().unwrap();
     let filter_path = dir.path().join("provenance_test.lua");
@@ -777,17 +777,23 @@ end
     .unwrap()
     .pandoc;
 
-    // The filtered Str should have FilterProvenance source info
+    // The filtered Str should have filter-kind Generated source info
     match &filtered.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
             Inline::Str(s) => {
                 assert_eq!(s.text, "created-by-filter");
-                // Check that the source_info is FilterProvenance
+                // Check that the source_info is Generated { by: filter, .. }
                 match &s.source_info {
-                    quarto_source_map::SourceInfo::FilterProvenance {
-                        filter_path: path,
-                        line,
-                    } => {
+                    quarto_source_map::SourceInfo::Generated { by, from }
+                        if by.is_kind("filter") =>
+                    {
+                        assert!(
+                            from.is_empty(),
+                            "Filter-constructed Generated nodes carry no anchors yet"
+                        );
+                        let (path, line) = by
+                            .as_filter()
+                            .expect("filter-kind Generated should expose path/line");
                         // The filter_path should contain our filter file name
                         assert!(
                             path.contains("provenance_test.lua"),
@@ -796,13 +802,16 @@ end
                         );
                         // The line should be around line 5 where pandoc.Str is called
                         assert!(
-                            *line >= 4 && *line <= 7,
+                            (4..=7).contains(&line),
                             "Expected line to be between 4-7, got: {}",
                             line
                         );
                     }
                     other => {
-                        panic!("Expected FilterProvenance source info, got: {:?}", other)
+                        panic!(
+                            "Expected filter-kind Generated source info, got: {:?}",
+                            other
+                        )
                     }
                 }
             }
@@ -1799,13 +1808,13 @@ end
     );
 
     // Check source location
-    if let Some(quarto_source_map::SourceInfo::FilterProvenance { filter_path, line }) =
-        &diagnostics[0].location
+    if let Some(quarto_source_map::SourceInfo::Generated { by, .. }) = &diagnostics[0].location
+        && let Some((filter_path, line)) = by.as_filter()
     {
         assert!(filter_path.contains("warn_test.lua"));
-        assert!(*line > 0, "Line should be positive");
+        assert!(line > 0, "Line should be positive");
     } else {
-        panic!("Expected FilterProvenance source info");
+        panic!("Expected filter-kind Generated source info");
     }
 }
 
@@ -6826,7 +6835,9 @@ end
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
-                source_info: quarto_source_map::SourceInfo::filter_provenance("test.lua", 1),
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::filter("test.lua", 1),
+                ),
             })],
             source_info: quarto_source_map::SourceInfo::default(),
         })],

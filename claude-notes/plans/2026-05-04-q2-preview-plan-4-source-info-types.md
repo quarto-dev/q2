@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-04 (substantially revised 2026-05-20)
 **Branch:** feature/q2-preview
-**Status:** Implementation plan (open questions named)
+**Status:** Implementation plan (ready to execute)
 **Milestone:** none directly — foundation for the rest of the provenance
   epic
 
@@ -24,10 +24,10 @@ Extend `SourceInfo` with a single new variant, `Generated`, that
 captures every transform-synthesized node in a uniform shape:
 
 ```rust
-Generated { by: By, anchors: Vec<Anchor> }
+Generated { by: By, from: SmallVec<[Anchor; 2]> }
 ```
 
-`by` answers "which transform produced me." `anchors` is a list of
+`by` answers "which transform produced me." `from` is a list of
 typed, role-labeled source-info pointers that answer "which source
 bytes contributed to me." The list is empty for pure synthesis
 (sectionize wrappers, filter constructions); has one `Invocation`
@@ -42,7 +42,7 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
 
 ### In scope
 
-- Add `Generated { by: By, anchors: Vec<Anchor> }` variant to `SourceInfo`.
+- Add `Generated { by: By, from: SmallVec<[Anchor; 2]> }` variant to `SourceInfo`. Inline capacity 2 covers the steady-state shape after the deferred follow-ups land (Invocation + ValueSource on `meta`/`var` shortcodes; Invocation + Dispatch on Lua-handler shortcodes); see §Risk areas for the trade-off.
 - Define `By` struct: `{ kind: String, data: serde_json::Value }`.
 - Define `Anchor` struct: `{ role: AnchorRole, source_info: Arc<SourceInfo> }`.
 - Define `AnchorRole` enum: `Invocation`, `ValueSource`, `Other(String)`.
@@ -50,33 +50,58 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
 - Implement builder methods on `By` for known kinds: `filter`,
   `sectionize`, `user_edit`, `shortcode`, `include`, `title_block`,
   `footnotes`, `appendix`, `tree_sitter_postprocess`, `raw` (escape hatch).
-- Implement helper accessors on `Generated`:
-  - `invocation(&self) -> Option<&Arc<SourceInfo>>`
-  - `value_source(&self) -> Option<&Arc<SourceInfo>>`
-  - `anchors_with_role(&self, role: &AnchorRole) -> impl Iterator<&Arc<SourceInfo>>`
+- Implement helper accessors on `SourceInfo` for the `Generated` shape:
+  - `invocation_anchor(&self) -> Option<&Arc<SourceInfo>>`
+  - `value_source_anchor(&self) -> Option<&Arc<SourceInfo>>`
+  - `anchors_with_role(&self, role: &AnchorRole) -> impl Iterator<Item = &Arc<SourceInfo>>`
   - `append_anchor(&mut self, role: AnchorRole, source_info: Arc<SourceInfo>)`
 - Migrate all `SourceInfo::FilterProvenance` construction sites to
-  `SourceInfo::Generated { by: By::filter(...), anchors: vec![] }`,
+  `SourceInfo::Generated { by: By::filter(...), from: smallvec![] }`,
   carrying `(filter_path, line)` in `by.data`.
-- Migrate all `SourceInfo::FilterProvenance` pattern-match sites (~22 files
-  flagged earlier) to the new shape.
+- Migrate all `SourceInfo::FilterProvenance` pattern-match sites
+  (15 files, 27 occurrences — see §Risk areas) to the new shape.
 - Remove the `FilterProvenance` variant.
-- Update accessors: `start_offset`, `end_offset`, `length`,
-  `resolve_byte_range`, `preimage_in`, `map_offset`,
-  `remap_file_ids`, `extract_file_id` (in diagnostic.rs) to handle
-  `Generated`. For `Generated`: delegate to `invocation()` for offset
-  and byte-range accessors (returns the invocation anchor's range, or
-  `None` if there is no invocation anchor).
+- Update accessors on `SourceInfo` to handle `Generated`:
+  - `length`, `start_offset`, `end_offset` — return `0` (same as today's
+    `FilterProvenance`; Generated has no characteristic local-text length).
+  - `map_offset` — return `None` (offset-within-current-text is undefined
+    for Generated; callers wanting source coordinates use
+    `resolve_byte_range`).
+  - `resolve_byte_range` — delegate to `invocation_anchor()` and recurse
+    (returns the invocation anchor's chain-resolved range, or `None` if
+    there is no invocation anchor).
+  - `remap_file_ids` — walk every `Anchor.source_info` and recurse via
+    `Arc::make_mut`. Unlike `FilterProvenance` (no-op), `Generated` CAN
+    carry `FileId`s inside its anchors.
+  - File-id extraction across the workspace is **consolidated** into
+    two new `SourceInfo` accessors (see "File-id accessor consolidation"
+    below). The six ad-hoc walkers in `diagnostic.rs`,
+    `pampa/.../location.rs`, `pampa/.../pipe_table.rs`,
+    `pampa/.../section.rs`, `apply_template.rs` (test), and
+    `engine_execution.rs` (test) all collapse onto `root_file_id()` /
+    `collect_file_ids()`. The Generated arm is defined once on those
+    accessors. Empty-`from` Generated returns `None`, which matches
+    today's `FilterProvenance` behavior; the two call sites in
+    `to_ariadne_report` (`diagnostic.rs:674`, `:773`) both tolerate
+    `None` gracefully (the main-location path falls through via `?`;
+    the detail loop `continue`s), so no caller change is required
+    beyond the mechanical swap to `si.root_file_id()`.
 - Update Lua serde (`pampa/src/lua/diagnostics.rs`) for `Generated`.
-  Keep `"FilterProvenance"` recognized as a legacy tag that maps to
-  `Generated { by: By::filter(...), anchors: vec![] }` for back-compat
-  reads.
+  Use `t = "Generated"` as the discriminant; the table carries `by` and
+  `from` sub-tables. Keep `"FilterProvenance"` recognized as a legacy
+  tag that maps to `Generated { by: By::filter(...), from: smallvec![] }`
+  for back-compat reads.
 
 ### Out of scope
 
 - JSON wire format changes (Plan 5 does that).
 - Audit of transforms emitting `SourceInfo::default()` to fix them
-  (Plan 6 does that).
+  (Plan 6 does that). `Default for SourceInfo` itself is unchanged
+  (stays `Original { FileId(0), 0, 0 }`); Plan 6 fixes incorrect
+  emissions at transform sites without modifying the trait impl.
+- The `preimage_in` accessor (Plan 7 owns it). Plan 7's `preimage_in`
+  consumes `invocation_anchor()` defined here; the contiguity rule
+  for `Concat` lives with the implementation in Plan 7.
 - The `is_atomic_custom_node` registry for CustomNode types (Plan 7
   owns it).
 - The metadata loader changes that would populate `ValueSource`
@@ -86,16 +111,208 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
 - Registering Lua filter files in `SourceContext` to enable typed
   `Dispatch` anchors. See "Deferred anchor role" below.
 
+## Inherited pre-existing failure (bd-3odjm)
+
+**One test in the workspace is expected to be red throughout Plan 4
+and only goes green when Plan 5 ships its first reader change.** Do
+not try to fix it inside Plan 4.
+
+- Test: `cargo nextest run -p quarto-core --test idempotence lua_shortcode_lipsum_fixed`
+  (orchestrator mode only; `SingleFile` passes).
+- Symptom: panic with `MalformedSourceInfoPool` when
+  `pampa::readers::json::read` re-parses the orchestrator's AST JSON.
+- Root cause (already established): wire-format type-code-3
+  collision — writer emits the new `FilterProvenance` payload
+  `[filter_path, line]` under code 3, reader still decodes code 3
+  as the legacy `Transformed` `[parent_id, ...]`.
+- Owner: [Plan 5 — wire format](2026-05-04-q2-preview-plan-5-wire-format.md).
+
+Plan 4's verification gate (Phase 7) and `cargo xtask verify`
+therefore expect **exactly one** failing test in
+`quarto-core::idempotence` (the test above) until Plan 5's first
+reader fix lands. Any other failure is a Plan-4 regression and must
+be triaged before continuing.
+
+This is the integration branch's intended long-lived-red state per
+Plan 3's §"Long-lived branch policy" — Plan 4 ships on top of that
+queue, not in spite of it.
+
+## Work items
+
+Phase-ordered. Each phase compiles cleanly before the next begins.
+"Settled" items below (design decisions, semantics rules) are detailed
+later in the plan — this list is the actionable extract.
+
+### Phase 1 — Type definitions in `quarto-source-map`
+
+- [x] Add `smallvec` to the workspace `Cargo.toml` (`[workspace.dependencies]`)
+      with the `serde` feature, and depend on it from
+      `crates/quarto-source-map/Cargo.toml`. Verified absent in both files
+      at the start of Plan 4.
+- [x] Add `By` struct (`kind: String`, `data: serde_json::Value` with
+      `#[serde(default, skip_serializing_if = "serde_json::Value::is_null")]`
+      — the attribute path needs to be fully qualified, not the short
+      `Value::is_null` form).
+- [x] Add `AnchorRole` enum (`Invocation`, `ValueSource`, `Other(String)`).
+- [x] Add `Anchor` struct (`role: AnchorRole`, `source_info: Arc<SourceInfo>`).
+- [x] Add `Generated { by: By, from: SmallVec<[Anchor; 2]> }` variant
+      to `SourceInfo`. Keep `FilterProvenance` for now — it's removed
+      at the end of Phase 5.
+- [x] Verify the new enum still implements `Debug`, `Clone`,
+      `PartialEq`, `Serialize`, `Deserialize` (including with the
+      `SmallVec` field — needs `serde` feature on `smallvec`).
+
+### Phase 2 — Constructors and accessors
+
+- [x] `By::filter`, `By::sectionize`, `By::user_edit`, `By::shortcode`,
+      `By::include`, `By::title_block`, `By::footnotes`, `By::appendix`,
+      `By::tree_sitter_postprocess`, `By::raw`.
+- [x] `By::shortcode` doc-comment states the required-Invocation-anchor
+      invariant (see §"Required-anchor invariant for `shortcode`" for
+      the exact wording).
+- [x] `By::is_atomic_kind` (returns true for `filter | shortcode |
+      title-block | tree-sitter-postprocess`).
+- [x] `By::is_kind`, `By::as_filter`.
+- [x] `Anchor::invocation`, `Anchor::value_source` constructors.
+- [x] `SourceInfo::generated(by)` constructor (empty `from`).
+- [x] `SourceInfo::invocation_anchor`, `SourceInfo::value_source_anchor`.
+- [x] `SourceInfo::anchors_with_role`, `SourceInfo::append_anchor`.
+
+### Phase 3 — Update existing accessors for the `Generated` arm
+
+- [x] `length`, `start_offset`, `end_offset` → return `0` (in `source_info.rs`).
+- [x] `map_offset` → return `None` (in `mapping.rs`).
+- [x] `resolve_byte_range` → delegate to `invocation_anchor()` and recurse.
+- [x] `remap_file_ids` → walk `from`, recurse via `Arc::make_mut`.
+- [x] Add `SourceInfo::root_file_id() -> Option<FileId>` accessor in
+      `source_info.rs`.
+- [x] Add `SourceInfo::collect_file_ids(&self, out: &mut HashSet<FileId>)`
+      accessor in `source_info.rs`.
+- [x] Migrate `DiagnosticMessage::extract_file_id`
+      (`quarto-error-reporting/src/diagnostic.rs:556`) → call
+      `si.root_file_id()`; delete the private fn.
+- [x] Migrate `extract_filename_index`
+      (`pampa/src/pandoc/location.rs:329`) — deleted entirely (callers
+      were tests only; tests deleted in favor of the unified
+      `root_file_id`/`collect_file_ids` coverage in source-map).
+- [x] Migrate the inline-match file-id extraction in
+      `pampa/src/pandoc/treesitter_utils/pipe_table.rs:256-279` →
+      `table_start.root_file_id().unwrap_or(FileId(0))`. Fixes the
+      latent nested-Substring `FileId(0)` fall-through.
+- [x] Migrate the inline-match file-id extraction in
+      `pampa/src/pandoc/treesitter_utils/section.rs:129-152` →
+      `table.source_info.root_file_id().unwrap_or(FileId(0))`. Same
+      latent-nested-Substring bug fixed.
+- [x] Migrate the test-mod `root_file_id` local fn in
+      `crates/quarto-core/src/stage/stages/apply_template.rs:820` →
+      `info.root_file_id()`; delete the local fn.
+- [x] Migrate the test-mod `walk_source_info` inner fn in
+      `crates/quarto-core/src/stage/stages/engine_execution.rs:819`
+      → `si.collect_file_ids(out)`; per-Inline/per-Block walkers
+      retained, only the inner SourceInfo step swapped.
+
+### Phase 4 — Lua serde
+
+- [x] Add `Generated` arm to `source_info_to_lua_table` in
+      `pampa/src/lua/diagnostics.rs` (`t = "Generated"`, `by` and `from`
+      sub-tables; `by.data` is JSON-encoded as a string for Lua transit).
+- [x] Add `Generated` arm to `source_info_from_lua_table`.
+- [x] Keep `"FilterProvenance"` legacy reader: maps to
+      `Generated { by: By::filter(path, line), from: smallvec![] }`.
+      Indefinitely accepted; writes never emit it.
+
+### Phase 5 — Migration
+
+The migration is atomic — one PR, no deprecated-alias scaffold. Only
+4 non-source-map callers of `SourceInfo::filter_provenance(...)` exist,
+all trivially co-migrated with the 27 `SourceInfo::FilterProvenance`
+pattern sites.
+
+- [x] Sweep remaining `SourceInfo::FilterProvenance` references —
+      `git grep "SourceInfo::FilterProvenance"` now returns 0 hits in
+      `crates/`. The legacy `"FilterProvenance"` tag survives only in
+      the Lua reader (as documented in Phase 4).
+- [x] Sweep `SourceInfo::filter_provenance(...)` constructor-function
+      callers (4 non-source-map files + 1 in-crate test) → new
+      `Generated` shape inline; constructor deleted from
+      `source_info.rs`.
+- [x] Remove the `FilterProvenance` variant from `SourceInfo`.
+
+### Phase 6 — Tests (see §Test plan for full descriptions)
+
+Type / builder:
+- [x] Unit tests for every `By` builder (all 10 kinds incl. `raw`).
+- [x] `By::is_atomic_kind` coverage (atomic set + extension kinds).
+- [x] `By::is_kind` + `By::as_filter` coverage.
+- [x] Unit tests for `Anchor::invocation` / `Anchor::value_source`.
+- [x] JSON round-trip: `By`, `Anchor`, `Generated` (no anchors / with
+      Invocation / multi-anchor).
+
+Accessor tests on `Generated`:
+- [x] `length` / `start_offset` / `end_offset` for `Generated` → `0`.
+- [x] `map_offset` for `Generated` → `None` (covered by the existing
+      mapping tests — Generated falls through to the None arm).
+- [x] `resolve_byte_range` recursion through `Invocation -> Substring`
+      → resolves correctly; empty `from` and ValueSource-only `from`
+      → `None`.
+- [x] `remap_file_ids` for `Generated` walks every anchor's source_info
+      via `Arc::make_mut` (regression guard — must NOT be no-op).
+- [x] `root_file_id` for every variant.
+- [x] `collect_file_ids` for every variant, including Generated with
+      mixed-role anchors.
+- [x] `invocation_anchor` coverage (present / absent / ValueSource-only).
+- [x] `value_source_anchor` coverage (parallel).
+- [x] `anchors_with_role` coverage (each known role + unknown role).
+- [x] `append_anchor` mutator coverage.
+
+Structural:
+- [x] Rename `test_filter_provenance_tracking`
+      (`filter_tests.rs:740-813`) → `test_filter_generated_tracking`
+      and updated assertions to the `Generated` shape with
+      `by.as_filter()` recovery.
+- [x] `combine()` × `Generated` structural test (zero-length Concat
+      piece).
+- [x] Lua-serde round-trip including legacy `"FilterProvenance"` tag
+      back-compat read.
+
+### Phase 7 — Verification gate
+
+- [x] `cargo build --workspace` clean.
+- [x] `cargo nextest run --workspace --no-fail-fast`: 9370 passed,
+      1 failed — `quarto-core::idempotence::lua_shortcode_lipsum_fixed`
+      (bd-3odjm, owned by Plan 5). No other regressions.
+- [x] `cargo xtask verify --skip-rust-tests`: all 12 steps passed
+      (Rust build + hub-client npm install/build/wasm/tests + q2-preview
+      SPA build). Rust tests run separately with `nextest --no-fail-fast`
+      above.
+- [x] `git grep "SourceInfo::FilterProvenance"` returns zero hits
+      across `crates/` (variant gone).
+- [x] `git grep "SourceInfo::filter_provenance"` returns zero hits
+      across `crates/` (no alias was added; original constructor
+      removed in Phase 5).
+- [x] `git grep '"FilterProvenance"'` in Rust code returns only the
+      legacy-Lua-reader arm (3 hits — comment in doc-comment for
+      `source_info_to_lua_table`, comment in `source_info_from_lua_table`,
+      and the match arm itself). No writer emissions, no other readers.
+      The `SerializableSourceMapping::FilterProvenance` identifier
+      (wire code 3, Plan 5-owned) is not a string literal and does not
+      match this grep.
+- [x] `git grep "extract_filename_index\|fn root_file_id\|fn walk_source_info"`
+      across `crates/` returns one hit — the new
+      `SourceInfo::root_file_id` accessor in
+      `crates/quarto-source-map/src/source_info.rs`. Six ad-hoc walkers
+      retired.
+
 ## Design decisions (settled in conversation)
 
 - **Single `Generated` variant, not two.** Earlier drafts proposed
   `Synthetic` + `Derived` to separate "no preimage" from "has preimage
-  but is atomic." The unified `Generated { by, anchors: Vec<Anchor> }`
+  but is atomic." The unified `Generated { by, from: SmallVec<[Anchor; 2]> }`
   expresses both with one variant: anchor-list empty for pure
   synthesis, anchor-list with `Invocation` for shortcode-style
-  resolutions. The "has preimage" property is `gen.invocation().is_some()`,
+  resolutions. The "has preimage" property is `gen.invocation_anchor().is_some()`,
   not a separate enum arm.
-- **`by` records generator identity; `anchors` records source contributions.**
+- **`by` records generator identity; `from` records source contributions.**
   These are orthogonal axes. Atomicity is determined by `by.kind`
   (per the `is_atomic_kind()` predicate); anchor-presence is orthogonal
   to atomicity.
@@ -108,12 +325,12 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
   `Str.text = upper(Str.text)` doesn't change source_info. The mutated
   Str retains its Original chain. This is unchanged from the existing
   Lua machinery contract.
-- **Filter constructions become `Generated { by: filter, anchors: [] }`**.
+- **Filter constructions become `Generated { by: filter, from: [] }`**.
   `pandoc.Str("decoration")` in a Lua filter produces this shape (the
   Lua machinery's auto-attach replaces the existing FilterProvenance
   emission). Lua-file path and line live in `by.data` until
   Lua-file-registration lands; then they migrate to a `Dispatch` anchor.
-- **Shortcode resolutions become `Generated { by: shortcode(name), anchors: [Invocation -> token_si] }`.**
+- **Shortcode resolutions become `Generated { by: shortcode(name), from: [Invocation -> token_si] }`.**
   Plan 6 owns the resolver-side stamping; the resolver appends an
   `Invocation` anchor pointing at the shortcode token's source range.
 - **Sugar transforms stay Original**. CalloutTransform et al. inherit
@@ -134,9 +351,32 @@ The pre-existing `FilterProvenance` variant folds into `Generated`
   plans add roles without modifying the type.
 - **Kind-string convention**: kebab-case, namespaced for third-party
   (`ext/<extension>/foo`). Same for `AnchorRole::Other` values.
+- **Anchor list ordering is append order**. `from` is a `SmallVec`;
+  iteration is insertion order. `append_anchor` pushes to the end.
+  Accessors that find by role (`invocation_anchor`, `value_source_anchor`)
+  return the first match — at most one anchor per known role by
+  convention. Serde round-trips preserve order. No producer sorts;
+  no consumer reorders.
 - **Builder methods for known kinds, plus `raw` escape hatch**.
+  `By::raw(kind, data)` accepts any `kind` string — including built-in
+  names like `"shortcode"` or `"filter"`. Forgery (an extension calling
+  `By::raw("shortcode", …)` without the required Invocation anchor)
+  is caught downstream by Plan 6's audit-completion test and Plan 7's
+  `debug_assert!`, so no constructor-level rejection is needed. The
+  convention is still `ext/<extension>/<kind>` for third-party kinds —
+  collisions with built-ins are a misuse caught at audit time, not a
+  type error.
 
 ## The proposed shape
+
+**Naming.** Read the new variant as: this node was generated **by** some
+transform, **from** some anchors. `by` records the producer; `from` is
+the list of `Anchor`s that record the source-side contributions. The
+items in the list are `Anchor` values; methods that operate on individual
+items keep "anchor" in their name (`invocation_anchor`,
+`value_source_anchor`, `append_anchor`, `anchors_with_role`), while the
+field name and any Lua-table key use `from`. `by` / `from` reads cleanly
+in both Rust and Lua serializations — preserve that pairing throughout.
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -144,7 +384,7 @@ pub enum SourceInfo {
     Original { file_id: FileId, start_offset: usize, end_offset: usize },
     Substring { parent: Arc<SourceInfo>, start_offset: usize, end_offset: usize },
     Concat { pieces: Vec<SourcePiece> },
-    Generated { by: By, anchors: Vec<Anchor> },
+    Generated { by: By, from: SmallVec<[Anchor; 2]> },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -155,7 +395,7 @@ pub struct By {
     pub kind: String,
 
     /// Per-kind configuration that is NOT a source-info pointer.
-    /// Anchors live in `Generated.anchors`, not here.
+    /// Anchors live in `Generated.from`, not here.
     /// `Null` for kinds that don't carry per-instance data.
     #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
     pub data: serde_json::Value,
@@ -206,8 +446,8 @@ impl By {
     /// synthesized title h1, tree-sitter-inserted spaces).
     ///
     /// Atomicity is determined by `kind` alone — orthogonal to
-    /// anchor-presence. A `Generated { by: shortcode, anchors: [...] }`
-    /// is atomic; so is a `Generated { by: filter, anchors: [] }`.
+    /// anchor-presence. A `Generated { by: shortcode, from: [...] }`
+    /// is atomic; so is a `Generated { by: filter, from: [] }`.
     pub fn is_atomic_kind(&self) -> bool {
         matches!(
             self.kind.as_str(),
@@ -237,12 +477,12 @@ impl Anchor {
 
 impl SourceInfo {
     pub fn generated(by: By) -> Self {
-        SourceInfo::Generated { by, anchors: Vec::new() }
+        SourceInfo::Generated { by, from: SmallVec::new() }
     }
 }
 
 // Helper methods on Generated-shape access — typically called via
-// matching `SourceInfo::Generated { by, anchors } => ...`. We provide
+// matching `SourceInfo::Generated { by, from } => ...`. We provide
 // the helpers as free functions on the variant pattern; example:
 
 impl SourceInfo {
@@ -251,7 +491,7 @@ impl SourceInfo {
     /// non-`Generated` variants).
     pub fn invocation_anchor(&self) -> Option<&Arc<SourceInfo>> {
         match self {
-            SourceInfo::Generated { anchors, .. } => anchors
+            SourceInfo::Generated { from, .. } => from
                 .iter()
                 .find(|a| matches!(a.role, AnchorRole::Invocation))
                 .map(|a| &a.source_info),
@@ -263,7 +503,7 @@ impl SourceInfo {
     /// `ValueSource`. Returns `None` otherwise.
     pub fn value_source_anchor(&self) -> Option<&Arc<SourceInfo>> {
         match self {
-            SourceInfo::Generated { anchors, .. } => anchors
+            SourceInfo::Generated { from, .. } => from
                 .iter()
                 .find(|a| matches!(a.role, AnchorRole::ValueSource))
                 .map(|a| &a.source_info),
@@ -284,7 +524,7 @@ impl SourceInfo {
   file AND are byte-contiguous in source order. Non-contiguous Concats
   return `None`, and Plan 7's coarsen falls through to Rewrite.
 - **Generated**: produced by a pipeline transform. `by` records the
-  producer; `anchors` records any source-side contributions. The
+  producer; `from` records any source-side contributions. The
   variant subsumes the previous `Synthetic`/`Derived` distinction:
   - Empty anchors → pure synthesis (sectionize wrappers, filter
     constructions, title-block h1, tree-sitter postprocess, footnotes
@@ -308,7 +548,7 @@ transform produces a node:
 
 For non-CustomNode synthesized nodes (sectionize Div, filter Str,
 footnotes Div), there's no other slot for (1), so `source_info` carries
-both via `Generated { by, anchors }`.
+both via `Generated { by, from }`.
 
 For CustomNode synthesized nodes, (1) is already encoded in
 `CustomNode.type_name`. The wrapper *is* a `Callout` / `IncludeExpansion`
@@ -324,13 +564,13 @@ node carried).
 | `Callout` / `Theorem` / `Proof` / etc. | Yes | Yes (the source Div) | Original (inherited) |
 | `CrossrefResolvedRef` | Yes | Yes (the source Cite) | Original (inherited) |
 | `FloatRefTarget` | Yes | Yes (the source Div) | Original (inherited) |
-| Sectionize Section Div | No | No (structural grouping) | `Generated { by: sectionize, anchors: [] }` |
-| Footnotes container Div | No | No (structural grouping) | `Generated { by: footnotes, anchors: [] }` |
-| Appendix wrapper Div | No | No (structural grouping) | `Generated { by: appendix, anchors: [] }` |
-| Title-block synthesized h1 | No | No (synthesized from `title:` YAML) | `Generated { by: title_block, anchors: [] }` |
-| Tree-sitter postprocess Space | No | No (inserted between nodes) | `Generated { by: tree_sitter_postprocess, anchors: [] }` |
-| Shortcode resolution output | No | No (resolved from value, distinct from token bytes) | `Generated { by: shortcode("…"), anchors: [Invocation, …] }` |
-| Filter-constructed node | No | No (filter computed it) | `Generated { by: filter, anchors: [] }` (Dispatch anchor in the future) |
+| Sectionize Section Div | No | No (structural grouping) | `Generated { by: sectionize, from: [] }` |
+| Footnotes container Div | No | No (structural grouping) | `Generated { by: footnotes, from: [] }` |
+| Appendix wrapper Div | No | No (structural grouping) | `Generated { by: appendix, from: [] }` |
+| Title-block synthesized h1 | No | No (synthesized from `title:` YAML) | `Generated { by: title_block, from: [] }` |
+| Tree-sitter postprocess Space | No | No (inserted between nodes) | `Generated { by: tree_sitter_postprocess, from: [] }` |
+| Shortcode resolution output | No | No (resolved from value, distinct from token bytes) | `Generated { by: shortcode("…"), from: [Invocation, …] }` |
+| Filter-constructed node | No | No (filter computed it) | `Generated { by: filter, from: [] }` (Dispatch anchor in the future) |
 
 The rule:
 
@@ -380,9 +620,9 @@ source-side input.
 | `appendix` | No (Transparent) | container; children are editable |
 | `user-edit` | No | React-constructed; user-typed by definition |
 
-Atomicity is per-kind, orthogonal to `anchors`. A `Generated { by: shortcode,
-anchors: [Invocation -> token_si] }` is atomic; so is a
-`Generated { by: filter, anchors: [] }`. The writer's coarsen
+Atomicity is per-kind, orthogonal to `from`. A `Generated { by: shortcode,
+from: [Invocation -> token_si] }` is atomic; so is a
+`Generated { by: filter, from: [] }`. The writer's coarsen
 (Plan 7) consults `by.is_atomic_kind()` and `gen.invocation_anchor()`
 independently.
 
@@ -392,24 +632,153 @@ default. If an extension wants its kind to be atomic, the
 mechanism — see Plan 7 §Open questions) needs to recognize it. v1
 hardcodes the built-in set.
 
+### Required-anchor invariant for `shortcode`
+
+A `Generated { by: shortcode(...), from: [] }` is **not a valid state**.
+Every shortcode-resolution node must carry at least one `Invocation`
+anchor pointing at the source token's byte range. The resolver
+(Plan 6) is responsible for maintaining this invariant; downstream
+consumers (Plan 7's writer, error-reporting) may assume it.
+
+Plan 4 documents the invariant; enforcement is split across the two
+producers/consumers of the shape:
+
+- **Plan 6 (producer)** owns the audit-completion test that walks the
+  post-stamping AST and asserts no `Generated { by: shortcode, from: [] }`
+  remains. The stamper is the only construction site for `by: shortcode`
+  in v1; the test verifies it always attaches the `Invocation` anchor.
+- **Plan 7 (consumer)** adds a `debug_assert!` in `coarsen`'s
+  atomic-no-anchor branch. The writer routes "atomic + no invocation"
+  to `Omit` (drop the node, pipeline regenerates next run); for filter
+  that's correct, for shortcode it's silent data loss — the assertion
+  catches the bad shape before that branch fires, in dev / test builds.
+
+No constructor-level enforcement in v1. The `By::shortcode(name)`
+builder stays symmetric with the other `By::xxx()` builders; the
+required-anchor invariant is a *resolver* invariant, not a *type*
+invariant. If a second required-anchor rule appears later, promote
+the audit assertion into a shared validator pass.
+
+The `By::shortcode` doc-comment must state the invariant explicitly,
+so anyone reaching for the builder from a new call site reads:
+
+```rust
+/// Construct a `By` for a shortcode resolution.
+///
+/// **Invariant.** Every `Generated { by: shortcode(...), .. }` must
+/// carry at least one `Invocation` anchor in `from` pointing at the
+/// source token's byte range. Use only inside a `Generated` whose
+/// anchor list is populated; constructing the bare shape with empty
+/// `from` is rejected by Plan 6's audit-completion test and trips
+/// Plan 7's writer `debug_assert!`.
+pub fn shortcode(name: impl Into<String>) -> Self { ... }
+```
+
 ## Migrations
 
 The pre-existing `FilterProvenance` is renamed/folded:
 
 - **Construction**: `SourceInfo::filter_provenance("path", 42)` →
-  `SourceInfo::Generated { by: By::filter("path", 42), anchors: vec![] }`.
+  `SourceInfo::Generated { by: By::filter("path", 42), from: smallvec![] }`.
   The `(filter_path, line)` pair lives in `by.data` until
-  Lua-file-registration lands.
-  Add a deprecated alias `SourceInfo::filter_provenance` that
-  constructs the new shape; remove after migration completes.
-- **Pattern-match**: every `SourceInfo::FilterProvenance { filter_path, line }`
+  Lua-file-registration lands. No deprecated alias is shipped; the
+  4 non-source-map callers are migrated inline in the same PR (see
+  Phase 5).
+- **Pattern-match (production)**: every `SourceInfo::FilterProvenance { filter_path, line }`
   arm becomes `SourceInfo::Generated { by, .. }` and inspects via
   `by.as_filter()` to recover the path/line.
+- **Pattern-match (tests)**: `Some(SourceInfo::FilterProvenance { filter_path, line })`
+  becomes `Some(SourceInfo::Generated { by, .. })` with `by.as_filter()`
+  for path/line recovery. Empty-bind sites
+  (`Some(SourceInfo::FilterProvenance { .. }) => {}`) become the
+  guard form: `Some(SourceInfo::Generated { by, .. }) if by.is_kind("filter") => {}`.
+  Affected sites verified by grep: `pampa/src/lua/diagnostics.rs:444, 509, 802`,
+  `pampa/src/lua/filter_tests.rs:1802`, plus the renamed
+  `test_filter_provenance_tracking` at `filter_tests.rs:740-813`.
+- **JSON writer arm** (`pampa/src/writers/json.rs:314`): the
+  pattern-match site must stay exhaustive over `SourceInfo` after the
+  variant is gone. Plan 4 produces only `by.kind == "filter"`
+  Generated values; Plan 5 owns wire-code 4 for non-filter kinds.
+  The interim arm emits the legacy code-3 payload exactly as today,
+  preserving bd-3odjm's expected failure mode:
+
+  ```rust
+  SourceInfo::Generated { by, .. } => {
+      let (filter_path, line) = by.as_filter().expect(
+          "Plan 4 produces only filter-kind Generated; non-filter \
+           Generated requires Plan 5's wire-code 4 emitter",
+      );
+      (
+          0,
+          0,
+          SerializableSourceMapping::FilterProvenance {
+              filter_path: filter_path.to_string(),
+              line,
+          },
+      )
+  }
+  ```
+
+  Plan 5 replaces this with the wire-code 4 emitter and removes the
+  `SerializableSourceMapping::FilterProvenance` variant.
 - **Lua serde**: read `"FilterProvenance"` tag (legacy) and reconstruct
-  as `Generated { by: By::filter(...), anchors: vec![] }`. New
-  constructions emit `"Generated"` tag (or whatever Plan 4 picks for
-  the new variant's Lua-table discriminant — convention TBD during
-  implementation).
+  as `Generated { by: By::filter(...), from: smallvec![] }`. New
+  constructions emit `"Generated"` tag with `by` and `from` sub-tables
+  (per §In scope).
+
+## File-id accessor consolidation
+
+Six SourceInfo walkers across the workspace conceptually do the same
+operation — "give me the FileId(s) this SourceInfo refers to" — but
+diverge on Concat semantics, Substring recursion depth, and return
+type:
+
+| Site | Returns | Concat policy | Substring | Status |
+|---|---|---|---|---|
+| `quarto-error-reporting/src/diagnostic.rs:556` `extract_file_id` | `Option<FileId>` | `first().and_then` | full recursion | private, production |
+| `pampa/src/pandoc/location.rs:329` `extract_filename_index` | `Option<usize>` | `iter().find_map` | full recursion | pub, production, has tests |
+| `pampa/src/pandoc/treesitter_utils/pipe_table.rs:256-279` (inline match) | `FileId` (FileId(0) fallback) | first piece only | **one level only** — broken for nested Substring | production, latent bug |
+| `pampa/src/pandoc/treesitter_utils/section.rs:129-152` (inline match) | `FileId` (FileId(0) fallback) | first piece only | **same shallow bug** | production, latent bug |
+| `quarto-core/src/stage/stages/apply_template.rs:820` `root_file_id` | `Option<FileId>` | `first().and_then` | full recursion | test mod |
+| `quarto-core/src/stage/stages/engine_execution.rs:813` `collect_file_ids` / `walk_source_info` | `HashSet<FileId>` | walks every piece | full recursion | test mod |
+
+Plan 4 consolidates these onto two methods on `SourceInfo`:
+
+```rust
+impl SourceInfo {
+    /// First FileId reachable from this SourceInfo's root.
+    ///
+    /// Original → `Some(file_id)`.
+    /// Substring → recurse parent.
+    /// Concat → `pieces.iter().find_map(|p| p.source_info.root_file_id())`
+    /// (find_map semantics — strict superset of every existing
+    /// "first piece" caller; skips Generated holes and empty pieces).
+    /// Generated → `invocation_anchor().and_then(|si| si.root_file_id())`;
+    /// `None` when no Invocation anchor is present.
+    pub fn root_file_id(&self) -> Option<FileId> { ... }
+
+    /// Every FileId reachable from this SourceInfo. Walks every
+    /// Original, every Substring parent, every Concat piece, and
+    /// every Generated anchor (all roles — Invocation, ValueSource,
+    /// Other).
+    pub fn collect_file_ids(&self, out: &mut HashSet<FileId>) { ... }
+}
+```
+
+Migration table (Phase 3):
+
+| Old | New |
+|---|---|
+| `DiagnosticMessage::extract_file_id(si)` | `si.root_file_id()` (delete private fn) |
+| `extract_filename_index(si)` | `si.root_file_id().map(\|fid\| fid.0)` (kept as a one-line shim or inlined) |
+| pipe_table.rs inline match → `FileId` | `table_start.root_file_id().unwrap_or(FileId(0))` — also fixes nested-Substring bug |
+| section.rs inline match → `FileId` | `table.source_info.root_file_id().unwrap_or(FileId(0))` — same fix |
+| test `root_file_id` (apply_template.rs) | `info.root_file_id()` (delete local fn) |
+| test `walk_source_info` (engine_execution.rs) | `si.collect_file_ids(out)` (delete inner fn) |
+
+Net effect: ~60 LOC of duplicate walkers removed, two latent
+production bugs fixed (nested-Substring fall-through to FileId(0)),
+and the Generated arm is defined exactly once.
 
 ## Deferred anchor role
 
@@ -437,7 +806,22 @@ follow-up lands, the data migrates out of `by.data` and into a
 forward-compatible enum extension); and `by.data` for those kinds
 shrinks to per-kind config only.
 
-Filed as a follow-up beads issue at provenance-epic implementation time.
+The migration applies to **both** affected kinds, symmetrically:
+
+| kind | shape today | shape after Lua-file-registration |
+|---|---|---|
+| `filter` | `Generated { by: filter{path, line}, from: [] }` | `Generated { by: filter{}, from: [Dispatch -> lua_si] }` |
+| `shortcode` (Lua handler) | `Generated { by: shortcode{name, lua_path, lua_line}, from: [Invocation -> token_si] }` | `Generated { by: shortcode{name}, from: [Invocation -> token_si, Dispatch -> lua_si] }` |
+| `shortcode` (Rust handler) | `Generated { by: shortcode{name}, from: [Invocation -> token_si] }` | unchanged (no Lua source to point at) |
+
+A Lua-handler shortcode after registration carries **two** anchors —
+`Invocation` for the user-written token, `Dispatch` for the Lua
+handler that resolved it. The anchor list is what makes this clean:
+adding `Dispatch` doesn't disturb `Invocation`, and the writer's
+preimage walk (Plan 7) still looks at `invocation_anchor()` only.
+
+Tracked as **bd-36fr9** ("Provenance follow-up: Dispatch anchor for
+Lua-handler filter & shortcode").
 
 **`ValueSource` anchor (defined, deferred firing).**
 `AnchorRole::ValueSource` is defined in Plan 4's type. The shortcode
@@ -450,11 +834,18 @@ through to the merged value. When that lands, Plan 6's stamper
 appends `ValueSource` anchors for `meta` and `var` shortcode
 resolutions whose values came from outside the active document.
 
+Tracked as **bd-129m3** ("Provenance follow-up: ValueSource anchor
+stamping for meta/var shortcodes").
+
 Both follow-ups are pure additions when they land — neither requires
 reopening Plan 4's type design. The shape is forward-compatible by
 construction.
 
-## Resolve-byte-range and preimage-in semantics
+## Resolve-byte-range semantics
+
+`resolve_byte_range` is Plan 4's responsibility (existing accessor on
+`SourceInfo`, gains a `Generated` arm). `preimage_in` is Plan 7's —
+Plan 4 only ships the building block it depends on, `invocation_anchor()`.
 
 ```rust
 impl SourceInfo {
@@ -472,56 +863,47 @@ impl SourceInfo {
                 .and_then(|si| si.resolve_byte_range()),
         }
     }
-
-    pub fn preimage_in(&self, target: FileId) -> Option<Range<usize>> {
-        match self {
-            SourceInfo::Original { file_id, start_offset, end_offset }
-                if *file_id == target => Some(*start_offset..*end_offset),
-            SourceInfo::Original { .. } => None,
-            SourceInfo::Substring { parent, start_offset, end_offset } => {
-                let parent_range = parent.preimage_in(target)?;
-                Some(parent_range.start + start_offset .. parent_range.start + end_offset)
-            }
-            SourceInfo::Concat { pieces } => /* existing contiguity logic */,
-            SourceInfo::Generated { .. } => self
-                .invocation_anchor()
-                .and_then(|si| si.preimage_in(target)),
-        }
-    }
 }
 ```
 
-Both accessors collapse `Generated`'s handling into "look up the
-invocation anchor; recurse into its source_info." Pure synthesis
-(empty anchors) returns `None`. Multi-anchor Generateds (when
-`ValueSource` lands) still only consult `Invocation` — `ValueSource`
-is diagnostic-only.
+The `Generated` arm collapses to "look up the invocation anchor;
+recurse into its source_info." Pure synthesis (empty `from`) returns
+`None`. Multi-anchor Generateds (when `ValueSource` lands) still only
+consult `Invocation` — `ValueSource` is diagnostic-only.
 
-## Open questions for implementation
-
-- **Lua serde back-compat**: read `"FilterProvenance"` tag (legacy) and
-  reconstruct as `Generated { by: By::filter(...), anchors: vec![] }`.
-  New constructions emit `"Generated"` tag. Read both indefinitely;
-  writes migrate to new immediately.
-- **Tests update**: `pampa/src/lua/filter_tests.rs::test_filter_provenance_tracking`
-  asserts on `SourceInfo::FilterProvenance`. Update to assert on
-  `Generated { by, .. }` with `by.is_kind("filter")` and check
-  `by.as_filter()` returns the right path/line.
-- **`Generated` variant Lua-table discriminant**: convention TBD —
-  candidate is `t = "Generated"` with `by` and `anchors` sub-tables.
+Plan 7's `preimage_in` follows the same `Generated` pattern (it
+delegates to `invocation_anchor()`); see Plan 7 §"`preimage_in`
+semantics" for the full implementation including Concat contiguity.
 
 ## References
 
-- `crates/quarto-source-map/src/source_info.rs:22` — current SourceInfo enum.
-- `crates/quarto-source-map/src/source_info.rs:48-54` — current
-  FilterProvenance variant.
-- `crates/quarto-source-map/src/source_info.rs:185-237` — accessors that
-  need updating (start_offset, end_offset, length, resolve_byte_range,
-  remap_file_ids).
-- `crates/quarto-source-map/src/mapping.rs:17-74` — `map_offset` recursion;
-  needs new arm.
-- `crates/pampa/src/lua/diagnostics.rs:60-145` — Lua serde to extend.
-- `crates/pampa/src/lua/filter_tests.rs:663-728` — test to update.
+- `crates/quarto-source-map/src/source_info.rs:21-55` — current
+  `SourceInfo` enum (incl. `FilterProvenance` variant at lines 49-54).
+- `crates/quarto-source-map/src/source_info.rs:162-264` — accessors that
+  need updating (`length`, `start_offset`, `end_offset`,
+  `resolve_byte_range`, `remap_file_ids`).
+- `crates/quarto-source-map/src/mapping.rs:17-74` — `map_offset`
+  recursion; needs `Generated` arm (returns `None`, like
+  `FilterProvenance` does today).
+- `crates/quarto-error-reporting/src/diagnostic.rs:556-575` —
+  `extract_file_id` private fn; retired in favor of
+  `SourceInfo::root_file_id()`.
+- `crates/pampa/src/pandoc/location.rs:328-344` — `extract_filename_index`;
+  reduced to a one-line shim over `root_file_id()` (or inlined at
+  callers). Has dedicated tests at `location.rs:588-655`.
+- `crates/pampa/src/pandoc/treesitter_utils/pipe_table.rs:256-279` —
+  inline file-id extraction; retired in favor of
+  `root_file_id().unwrap_or(FileId(0))`. Also fixes a latent
+  nested-Substring bug.
+- `crates/pampa/src/pandoc/treesitter_utils/section.rs:129-152` —
+  same shape and same latent fix.
+- `crates/quarto-core/src/stage/stages/apply_template.rs:820-829` —
+  test-mod `root_file_id`; retired in favor of `SourceInfo::root_file_id()`.
+- `crates/quarto-core/src/stage/stages/engine_execution.rs:813-832` —
+  test-mod `walk_source_info`; retired in favor of
+  `SourceInfo::collect_file_ids()`.
+- `crates/pampa/src/lua/diagnostics.rs:50-145` — Lua serde to extend.
+- `crates/pampa/src/lua/filter_tests.rs:740-813` — `test_filter_provenance_tracking`; rename and update assertions to the `Generated` shape.
 - `crates/quarto-pandoc-types/src/custom.rs:75` — `CustomNode.plain_data`
   (the prior-art for `serde_json::Value` at extension seams; same
   convention now applies to `By.data`).
@@ -530,54 +912,164 @@ is diagnostic-only.
 
 ## Test plan
 
-- Unit tests for each `By` builder method (constructs the right kind and data).
+### Type / builder tests
+
+- Unit tests for each `By` builder method (constructs the right kind
+  and data). Cover all ten: `filter`, `sectionize`, `user_edit`,
+  `shortcode`, `include`, `title_block`, `footnotes`, `appendix`,
+  `tree_sitter_postprocess`, `raw`.
+- `By::is_atomic_kind()` test: confirms the set named in §"Atomic-kind
+  set" returns `true` exactly for `filter | shortcode | title-block |
+  tree-sitter-postprocess` and `false` for everything else (including
+  extension `ext/…/…` kinds).
+- `By::is_kind()` / `By::as_filter()` coverage.
 - Unit tests for `Anchor::invocation()` / `Anchor::value_source()`
   constructors.
 - Round-trip test: `By` → JSON → `By` (serde derive).
 - Round-trip test: `Anchor` → JSON → `Anchor` (serde derive).
-- Integration test: filter-provenance test (renamed from
-  `test_filter_provenance_tracking`) confirms a filter-created Str gets
-  `Generated { by: filter, anchors: [] }` with `(filter_path, line)`
-  recoverable via `by.as_filter()`.
-- `invocation_anchor()` accessor test: a Generated with `[Invocation -> X]`
-  returns `Some(X)`; with `[]` returns `None`; with
-  `[ValueSource -> Y]` (no Invocation) returns `None`.
-- `value_source_anchor()` accessor test: parallel coverage.
-- Accessor recursion test: a `Generated { anchors: [Invocation -> Substring{parent: Original{42, 100, 200}, 10, 20}] }`
-  resolves to `(42, 110, 120)` via `resolve_byte_range`; same value via
-  `preimage_in(FileId(42))`.
-- `is_atomic_kind()` test: confirms the set named in §"Atomic-kind set".
+
+### Accessor tests on `Generated`
+
+- `length()` / `start_offset()` / `end_offset()` for `Generated`
+  return `0` regardless of `from` contents.
+- `map_offset()` for `Generated` returns `None` regardless of offset
+  argument.
+- `resolve_byte_range()` recursion: a
+  `Generated { from: [Invocation -> Substring{parent: Original{42, 100, 200}, 10, 20}] }`
+  resolves to `(42, 110, 120)`. A `Generated` with empty `from` returns
+  `None`. A `Generated` with only a `ValueSource` anchor (no
+  `Invocation`) returns `None`. (Plan 7 owns the matching `preimage_in`
+  tests.)
+- `remap_file_ids()` for `Generated`: build a
+  `Generated { from: [Invocation -> Original{FileId(0), …}, ValueSource -> Original{FileId(3), …}] }`,
+  apply `|id| FileId(id.0 + 10)`, assert both anchors' source_info
+  carry remapped FileIds. This catches the "no-op like FilterProvenance"
+  regression — `Generated` must NOT be a no-op since it can hold FileIds.
+- `root_file_id()` coverage on every variant. Generated with an
+  Invocation anchor pointing at `Original{file_id: FileId(7), ...}`
+  returns `Some(FileId(7))`. Generated with only a `ValueSource`
+  anchor returns `None` (matches the empty-`from` case — only
+  Invocation participates in `root_file_id`). Concat with
+  `[Generated{empty}, Original{42}]` returns `Some(FileId(42))`
+  (find_map skips the empty Generated piece) — this also pins the
+  Plan-3 latent bug fixed by the new accessor on
+  pipe_table.rs / section.rs.
+- `collect_file_ids()` coverage: Generated with
+  `[Invocation -> Original{FileId(1), ...}, ValueSource -> Original{FileId(2), ...}, Other(...) -> Original{FileId(3), ...}]`
+  populates the set with `{FileId(1), FileId(2), FileId(3)}` — confirms
+  that all anchor roles participate, not just Invocation. Concat,
+  Substring, nested compositions: every reachable FileId lands.
+- `invocation_anchor()` accessor: a Generated with `[Invocation -> X]`
+  returns `Some(X)`; with `[]` returns `None`; with `[ValueSource -> Y]`
+  (no Invocation) returns `None`.
+- `value_source_anchor()` accessor: parallel coverage.
+- `anchors_with_role()` accessor: a Generated with
+  `[Invocation -> X, ValueSource -> Y, Other("foo") -> Z]` returns the
+  right anchors for each role, and an empty iterator for an unknown role.
+- `append_anchor()` mutator: starting from `Generated { from: [] }`,
+  append an Invocation then a ValueSource; assert both are present in
+  order.
+
+### Structural tests
+
+- Integration test: filter-provenance test renamed from
+  `test_filter_provenance_tracking` (at `filter_tests.rs:740-813`)
+  confirms a filter-created Str gets `Generated { by: filter, from: [] }`
+  with `(filter_path, line)` recoverable via `by.as_filter()`.
+- `combine()` × `Generated` structural test: combining an `Original`
+  with a `Generated` produces a `Concat` whose Generated piece has
+  length `0` (matches `Generated::length()`). `map_offset` over the
+  combined Concat skips the Generated piece. This pins behavior even
+  though no production code path combines Generated source_info today.
 - Lua-serde round-trip: typed → Lua table → typed, including legacy
-  `"FilterProvenance"` tag back-compat.
+  `"FilterProvenance"` tag back-compat (reads as `Generated { by:
+  filter, from: [] }`; never round-trips back to `FilterProvenance`).
 
 ## Dependencies
 
-- Depends on: nothing (pure type change in the foundation crate).
+- Depends on: nothing (pure type change in the foundation crate, plus
+  consolidation of file-id walkers across `quarto-core`, `pampa`, and
+  `quarto-error-reporting` that all already depend on
+  `quarto-source-map`).
 - Blocks: Plan 5 (wire format extension), Plan 6 (provenance audit),
   Plan 7 (writer's preimage walk uses Generated and the
   `invocation_anchor` helper).
 
 ## Risk areas
 
-- **Migration scope**: ~22 files pattern-match `SourceInfo` variants.
-  Each needs migration arms for `Generated`. Most are mechanical:
-  Generated arm returns what FilterProvenance did (usually `0`, `0`,
-  or `None`) when there are no anchors, or delegates to the invocation
-  anchor for offset accessors.
-- **`Vec<Anchor>` allocation**: every Generated value carries an
-  allocation. In practice the vec is empty most of the time
-  (sectionize/footnotes/etc.). `SmallVec<[Anchor; 1]>` or similar
-  could avoid the allocation for the empty / single-entry cases — TBD
-  during implementation if profiling shows it matters. Default to
-  plain `Vec` initially.
+- **Migration scope**: 15 files pattern-match `SourceInfo::FilterProvenance`
+  (27 occurrences total — verified by grep against the worktree).
+  Phase 3's file-id-walker consolidation retires ~6 of those by
+  replacing entire match expressions (the file-id-extraction sites in
+  `diagnostic.rs`, `location.rs`, `pipe_table.rs`, `section.rs`,
+  `apply_template.rs`, `engine_execution.rs`). Phase 5 sweeps the
+  ~21 remaining arms. Most are mechanical: the `Generated` arm
+  returns what `FilterProvenance` did today (`0`/`0`/`None` for
+  offset/length accessors; delegates to `invocation_anchor()` for
+  `resolve_byte_range`). File-id traversals are handled exactly once,
+  inside the new `root_file_id` / `collect_file_ids` accessors —
+  callers walk through those rather than re-implementing the recursion
+  per call site.
+- **Anchor-list allocation**: `from` is typed `SmallVec<[Anchor; 2]>`
+  from day 1 (with the `serde` feature enabled). Inline capacity of 2
+  covers all expected shapes through the deferred follow-ups with zero
+  heap allocation:
+    - empty (sectionize / footnotes / appendix / title-block /
+      tree-sitter-postprocess / filter constructions today) — the bulk
+      of synthesized nodes;
+    - one Invocation (Rust-handler shortcode resolutions, today);
+    - two anchors (Invocation + ValueSource for `meta`/`var` once
+      bd-129m3 lands; Invocation + Dispatch for Lua-handler shortcodes
+      once bd-36fr9 lands).
+  Cap=2 grows the `SmallVec<[Anchor; …]>` field by ~40 bytes (the size
+  of one inline `Anchor` slot — `AnchorRole`'s largest variant
+  `Other(String)` is 32 bytes, plus 8 for `Arc<SourceInfo>`). Because
+  the `SourceInfo` enum's stack size is dictated by its largest
+  variant, **every** `SourceInfo` value in the AST grows by that 40
+  bytes — not just `Generated` instances. For a doc with thousands of
+  Block/Inline nodes (each carrying a `SourceInfo` by value, not
+  Arc-boxed), the cap=1 → cap=2 step costs ~40 bytes per node, i.e.
+  tens-to-hundreds of KB on a large document. The trade is paid in
+  exchange for eliminating the heap spill cap=1 would incur on every
+  multi-anchor shortcode in the steady state. Three-or-more-anchor
+  Generateds (Invocation + ValueSource + Dispatch on a Lua-handler
+  `meta` shortcode) still spill — same cost as `Vec<Anchor>` would have
+  been. If memory-per-node turns out to matter for the q2-preview
+  interactive editor, revisit by Arc-boxing the `Generated` variant
+  (so the SourceInfo enum's stack size drops back to a single pointer
+  for that variant) rather than by reverting to cap=1. Adds a
+  `smallvec` workspace dependency (verified absent today).
 - **`serde_json::Value` in PartialEq derives**: `Value` implements
   `PartialEq` but with potentially weird semantics for floats. For our
   use, kinds carry string + small structured data; should be fine.
-  Test the cases.
+  Test the cases. (Verified: no production call site relies on
+  `SourceInfo == SourceInfo` today — the `PartialEq` derive is required
+  by the wider `Block`/`Inline` derives but isn't itself load-bearing.
+  Plan 7's coarsen may compare structurally once it lands; the
+  `Value::PartialEq` semantics on small kebab-case objects are
+  well-behaved.)
 - **Removing `FilterProvenance` is a breaking change for downstream
   consumers**. Within the q2 workspace this is bounded; if any external
   code imports the variant by name, they'd break. Search for
   non-workspace usages before removing (probably none).
+- **`Default` on containers of `SourceInfo`**: verified no struct in
+  `quarto-pandoc-types/src/{block,inline}.rs` derives `Default` (each
+  `SourceInfo`-bearing struct is constructed explicitly), so changing
+  `SourceInfo`'s arm set can't cascade into a broken
+  `#[derive(Default)]`. The hand-written `Default for SourceInfo` impl
+  (the `Original { FileId(0), 0, 0 }` zero-value) stays unchanged.
+- **`combine()` with a `Generated` operand**: structurally valid (it
+  produces a `Concat` with a zero-length `Generated` piece, since
+  `Generated::length()` returns `0`), but semantically dead — the
+  Generated side carries no preimage bytes for adjacent-text coalescing,
+  and `map_offset` will skip over the zero-length piece. Verified: all
+  17 `.combine(` call sites in the workspace (`attr.rs`,
+  `postprocess.rs`, `location.rs`, `yaml/parser.rs`, etc.) combine
+  Original/Substring shapes; nothing combines FilterProvenance today, so
+  Generated won't be combined either unless a future transform reaches
+  for it. The Phase 6 `combine() × Generated` test documents the
+  intended fall-through behavior for any future caller, not a current
+  regression. No type-level prevention in v1.
 
 ## Estimated scope
 
@@ -586,16 +1078,80 @@ is diagnostic-only.
 | `Generated` variant + `Anchor` + `AnchorRole` types | ~80 |
 | Accessors (invocation_anchor, value_source_anchor, etc.) | ~60 |
 | `By` struct + builders + `is_atomic_kind` | ~120 |
-| `resolve_byte_range` / `preimage_in` / map_offset updates | ~50 |
-| Pattern-match migrations (~22 files) | ~250 |
+| `resolve_byte_range` / `map_offset` / `remap_file_ids` updates | ~40 |
+| `root_file_id` + `collect_file_ids` accessors | ~50 |
+| File-id walker consolidation (6 sites → 2 methods, net delete) | **-30** |
+| Pattern-match migrations (~9 files, ~21 occurrences post-consolidation) | ~140 |
 | FilterProvenance construction site migrations | ~30 |
 | Lua serde extension + back-compat | ~80 |
-| Test updates and new tests | ~250 |
-| **Total** | **~920** |
+| Test updates and new tests | ~280 |
+| **Total** | **~850** |
 
 One to two focused sessions. The unified-variant design reduces the
 total cost vs. the previous Synthetic-plus-Derived dual-variant draft
 (every accessor and migration site collapses one arm).
+
+## Implementation surprises (recorded 2026-05-22 after Plan 4 landed)
+
+A few things diverged from the plan-as-written. Annotating them here so
+Plan 5+ readers can adjust expectations.
+
+- **`gen` is a reserved keyword in current Rust.** Test locals and
+  method-receiver bindings must avoid the identifier `gen` (raw form
+  `r#gen` works but is ugly). The plan's pseudocode used
+  `gen.invocation_anchor()` / `gen.preimage_in()` etc. as shorthand;
+  in real code use `generated`, `g`, or destructure the variant.
+  Plan 7's `preimage_in` sketches should be amended before
+  implementation — the same trap applies.
+
+- **Phase 1's "compiles cleanly" holds only for `quarto-source-map`,
+  not the workspace.** Adding the `Generated` variant immediately
+  triggered non-exhaustive-match errors across ~10 crates. Phase 3's
+  six-walker consolidation rescues part of it, but the workspace
+  doesn't build green again until **Phase 5** lands. The phase boundary
+  semantics are "the source-map crate plus directly-touched
+  consumers"; expect downstream crates to be red between Phase 1 and
+  Phase 5. Future plans that add new `SourceInfo` variants should plan
+  for a "transitional arms inline" interlude or accept that the
+  workspace is red mid-implementation.
+
+- **`extract_filename_index` was tests-only.** The plan suggested
+  "thin shim or inline at the few callers" — turned out the only
+  callers were the function's four dedicated tests plus one
+  commented-out reference in `pampa/src/writers/json.rs`. Deleted the
+  function and the four tests entirely; the equivalent coverage now
+  lives in `quarto-source-map`'s `test_root_file_id_per_variant`.
+  Cleaner than the plan anticipated. Future grep-and-replace plans
+  should re-verify caller counts at start-of-implementation, not just
+  at planning time.
+
+- **`anchors_with_role` returns `Box<dyn Iterator>`, not `impl
+  Iterator`.** The plan's signature was
+  `-> impl Iterator<Item = &Arc<SourceInfo>>`, but the two match arms
+  return different concrete iterator types (a `filter_map` over the
+  anchor list for the `Generated` arm, `std::iter::empty()` for
+  everything else). The fix is `Box<dyn Iterator<...> + 'a>`. Static
+  dispatch would require either a hand-rolled iterator enum or
+  `Either<A, B>` from `itertools` — not worth it for a method called
+  in non-hot paths.
+
+- **`cargo xtask verify` modifies a second lockfile.** The WASM build
+  leg (Step 9, `npm run build:wasm`) re-resolves
+  `crates/wasm-quarto-hub-client/Cargo.lock`, which is distinct from
+  the workspace `Cargo.lock`. Both ended up in the Plan-4 commit. Not
+  a problem, but plans that touch any crate transitively used by
+  `wasm-quarto-hub-client` should expect that second lockfile to be
+  dirty after verification.
+
+- **The bd-3odjm carve-out behaved exactly as predicted.** Single
+  failure, in
+  `quarto-core::idempotence::lua_shortcode_lipsum_fixed`, panicking
+  with `MalformedSourceInfoPool` from the wire-code-3 collision
+  between writer (Generated → code 3 with `[filter_path, line]`
+  payload) and reader (code 3 = legacy `Transformed`). This is a
+  *non-surprise* worth recording: the plan's "Inherited pre-existing
+  failure" section was correct down to the test name, the panic
+  message, and the root cause.
 
 ## Notes
 

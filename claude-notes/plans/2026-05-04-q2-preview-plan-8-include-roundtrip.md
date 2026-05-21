@@ -60,7 +60,7 @@ includes round-tripping; edits inside surfacing as Q-3-43 diagnostics).
     The arm reads `plain_data` only — it does NOT inspect `source_info`,
     so it works identically for pipeline-emitted wrappers (Original
     source_info pointing at the parent file's include token) and
-    user-constructed wrappers (`Generated { by: user_edit, anchors: [] }`
+    user-constructed wrappers (`Generated { by: user_edit, from: [] }`
     source_info from React). This is the path that fires when the user
     replaces or adds an include via a React UI.
   - **Unreachable path** (RecurseIntoContainer on atomic with inner
@@ -179,7 +179,7 @@ transform synthesizes a node:
 
 For non-CustomNode synthesized nodes (Sectionize's Section Div,
 filter-constructed Str, footnotes container Div), there's no other slot
-for (1), so `source_info` carries both via `Generated { by, anchors }`.
+for (1), so `source_info` carries both via `Generated { by, from }`.
 
 For CustomNode synthesized nodes, (1) is **already encoded** in
 `CustomNode.type_name`. The wrapper *is* an `IncludeExpansion` by
@@ -203,7 +203,7 @@ In contrast, Sectionize's Section Div is NOT a CustomNode (it's a
 plain Div) AND it doesn't 1:1-substitute for a source-mapped parser
 node (it's a structural grouping over a Header + its body). So its
 `source_info` has to carry generator identity via `Generated { by:
-sectionize, anchors: [] }`.
+sectionize, from: [] }`.
 
 **The rule, in one sentence**: a synthesized node uses **Original**
 `source_info` if and only if it is a CustomNode whose 1:1 source
@@ -362,7 +362,7 @@ walk — same visual outcome, just no per-type styling).
   qmd writer; the include is gone from output.
 - If the user replaced the include with a fresh IncludeExpansion (e.g.,
   changed `foo.qmd` to `bar.qmd` via a hypothetical UI), the new
-  wrapper has `Generated { by: user_edit, anchors: [] }` source_info
+  wrapper has `Generated { by: user_edit, from: [] }` source_info
   and `plain_data["source_path"] = "bar.qmd"`. The qmd writer's arm
   reads `plain_data` and emits `{{< include bar.qmd >}}`. No warning
   — the user's intent is clear.
@@ -466,7 +466,7 @@ walk — same visual outcome, just no per-type styling).
   source_path), call the writer, assert the output contains
   `{{< include <new_source_path> >}}` with no warning. The qmd writer's
   CustomNode arm hit the Rewrite path with `Generated { by: user_edit,
-  anchors: [] }` source_info and read `plain_data["source_path"]`.
+  from: [] }` source_info and read `plain_data["source_path"]`.
 - **Delete-include let-user-win**: replace an IncludeExpansion with a
   Para in the new AST, call the writer, assert the include token is
   gone from output and the Para's text appears in its place. No
@@ -572,7 +572,7 @@ as the writer's anchor. That's what `CustomNode("IncludeExpansion")`
 provides.
 
 Shortcodes (Plan 6) don't have this issue (they resolve in the same
-file) which is why they use `Generated { by: shortcode, anchors: [Invocation -> ...] }`
+file) which is why they use `Generated { by: shortcode, from: [Invocation -> ...] }`
 instead of a wrapper. The genuine cross-file case is the only one that
 warrants the wrapper.
 

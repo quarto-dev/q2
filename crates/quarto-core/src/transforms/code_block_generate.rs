@@ -815,10 +815,7 @@ mod tests {
         let concat = SourceInfo::Concat { pieces: vec![] };
         assert!(CodeBlockDecorationKey::from_source_info(&concat).is_none());
 
-        let filter = SourceInfo::FilterProvenance {
-            filter_path: "fixture.lua".into(),
-            line: 1,
-        };
+        let filter = SourceInfo::generated(quarto_source_map::By::filter("fixture.lua", 1));
         assert!(CodeBlockDecorationKey::from_source_info(&filter).is_none());
     }
 

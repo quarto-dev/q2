@@ -10,7 +10,8 @@
 
 use mlua::{Error, Lua, MultiValue, Result, Table, Value};
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_source_map::{FileId, SourceInfo, SourcePiece};
+use quarto_source_map::{Anchor, AnchorRole, By, FileId, SourceInfo, SourcePiece};
+use smallvec::SmallVec;
 use std::sync::Arc;
 
 use super::types::{LuaBlock, LuaInline};
@@ -57,7 +58,12 @@ pub fn register_quarto_namespace(lua: &Lua) -> Result<()> {
 /// - Original: { t = "Original", file_id = N, start_offset = N, end_offset = N }
 /// - Substring: { t = "Substring", parent = {...}, start_offset = N, end_offset = N }
 /// - Concat: { t = "Concat", pieces = [{source_info = {...}, offset_in_concat = N, length = N}, ...] }
-/// - FilterProvenance: { t = "FilterProvenance", filter_path = "...", line = N }
+/// - Generated: { t = "Generated", by = { kind = "...", data = "..." (JSON-encoded) },
+///                from = [{role = "Invocation" | "ValueSource" | "Other:<name>",
+///                         source_info = {...}}, ...] }
+///
+/// The reader also accepts the legacy `"FilterProvenance"` tag for back-compat,
+/// mapping it onto `Generated { by: filter, from: [] }`.
 fn source_info_to_lua_table(lua: &Lua, si: &SourceInfo) -> Result<Table> {
     let table = lua.create_table()?;
     match si {
@@ -96,13 +102,48 @@ fn source_info_to_lua_table(lua: &Lua, si: &SourceInfo) -> Result<Table> {
             }
             table.set("pieces", pieces_table)?;
         }
-        SourceInfo::FilterProvenance { filter_path, line } => {
-            table.set("t", "FilterProvenance")?;
-            table.set("filter_path", filter_path.clone())?;
-            table.set("line", *line)?;
+        SourceInfo::Generated { by, from } => {
+            table.set("t", "Generated")?;
+            table.set("by", by_to_lua_table(lua, by)?)?;
+            let from_table = lua.create_table()?;
+            for (i, anchor) in from.iter().enumerate() {
+                let anchor_table = lua.create_table()?;
+                anchor_table.set("role", anchor_role_to_lua_string(&anchor.role))?;
+                anchor_table.set(
+                    "source_info",
+                    source_info_to_lua_table(lua, &anchor.source_info)?,
+                )?;
+                from_table.set(i + 1, anchor_table)?;
+            }
+            table.set("from", from_table)?;
         }
     }
     Ok(table)
+}
+
+/// Serialize a [`By`] to a Lua table: `{ kind = "...", data = "<json>" }`.
+///
+/// `data` is JSON-encoded as a string because Lua tables don't carry the
+/// `serde_json::Value` discriminator; readers decode it back via
+/// [`serde_json::from_str`].
+fn by_to_lua_table(lua: &Lua, by: &By) -> Result<Table> {
+    let table = lua.create_table()?;
+    table.set("kind", by.kind.clone())?;
+    if !by.data.is_null() {
+        let encoded = serde_json::to_string(&by.data)
+            .map_err(|e| Error::runtime(format!("By.data serialize failed: {e}")))?;
+        table.set("data", encoded)?;
+    }
+    Ok(table)
+}
+
+/// Serialize an [`AnchorRole`] to a Lua string.
+fn anchor_role_to_lua_string(role: &AnchorRole) -> String {
+    match role {
+        AnchorRole::Invocation => "Invocation".to_string(),
+        AnchorRole::ValueSource => "ValueSource".to_string(),
+        AnchorRole::Other(name) => format!("Other:{name}"),
+    }
 }
 
 /// Deserialize a SourceInfo from a Lua table
@@ -136,11 +177,58 @@ fn source_info_from_lua_table(table: &Table) -> Result<SourceInfo> {
             }
             Ok(SourceInfo::Concat { pieces })
         }
-        "FilterProvenance" => Ok(SourceInfo::FilterProvenance {
-            filter_path: table.get("filter_path")?,
-            line: table.get("line")?,
+        "Generated" => {
+            let by_table: Table = table.get("by")?;
+            let by = by_from_lua_table(&by_table)?;
+            let mut from: SmallVec<[Anchor; 2]> = SmallVec::new();
+            // The `from` field is optional in serialization; absent means empty.
+            if let Ok(from_table) = table.get::<Table>("from") {
+                for i in 1..=from_table.raw_len() {
+                    let anchor_table: Table = from_table.get(i)?;
+                    let role_str: String = anchor_table.get("role")?;
+                    let role = anchor_role_from_lua_string(&role_str);
+                    let si_table: Table = anchor_table.get("source_info")?;
+                    from.push(Anchor {
+                        role,
+                        source_info: Arc::new(source_info_from_lua_table(&si_table)?),
+                    });
+                }
+            }
+            Ok(SourceInfo::Generated { by, from })
+        }
+        // Legacy back-compat: read the old "FilterProvenance" tag as
+        // `Generated { by: filter(...), from: [] }`. Writers never emit
+        // this tag after Plan 4 Phase 4.
+        "FilterProvenance" => Ok(SourceInfo::Generated {
+            by: By::filter(
+                table.get::<String>("filter_path")?,
+                table.get::<usize>("line")?,
+            ),
+            from: SmallVec::new(),
         }),
         _ => Err(Error::runtime(format!("Unknown SourceInfo type: {}", t))),
+    }
+}
+
+/// Deserialize a [`By`] from `{ kind = "...", data = "<json>" }`.
+fn by_from_lua_table(table: &Table) -> Result<By> {
+    let kind: String = table.get("kind")?;
+    let data = match table.get::<String>("data") {
+        Ok(encoded) => serde_json::from_str(&encoded)
+            .map_err(|e| Error::runtime(format!("By.data parse failed: {e}")))?,
+        Err(_) => serde_json::Value::Null,
+    };
+    Ok(By { kind, data })
+}
+
+/// Inverse of [`anchor_role_to_lua_string`].
+fn anchor_role_from_lua_string(s: &str) -> AnchorRole {
+    if let Some(rest) = s.strip_prefix("Other:") {
+        AnchorRole::Other(rest.to_string())
+    } else if s == "ValueSource" {
+        AnchorRole::ValueSource
+    } else {
+        AnchorRole::Invocation
     }
 }
 
@@ -170,7 +258,10 @@ fn extract_source_info_from_element(lua: &Lua, elem: &Value) -> Result<Option<Ta
 fn get_caller_source_info(lua: &Lua) -> SourceInfo {
     let (source, line) = get_caller_location(lua);
     let source_path = source.strip_prefix('@').unwrap_or(&source);
-    SourceInfo::filter_provenance(source_path, line.max(0) as usize)
+    SourceInfo::Generated {
+        by: By::filter(source_path, line.max(0) as usize),
+        from: SmallVec::new(),
+    }
 }
 
 /// Add a diagnostic to the quarto._diagnostics table
@@ -441,16 +532,18 @@ mod tests {
         // Verify source location was captured
         assert!(diagnostics[0].location.is_some());
 
-        if let Some(SourceInfo::FilterProvenance { filter_path, line }) = &diagnostics[0].location {
+        if let Some(SourceInfo::Generated { by, .. }) = &diagnostics[0].location
+            && let Some((filter_path, line)) = by.as_filter()
+        {
             // The path should contain the filter name (@ prefix is stripped)
             assert!(
                 filter_path.contains("test_filter.lua"),
                 "Expected path to contain 'test_filter.lua', got '{}'",
                 filter_path
             );
-            assert_eq!(*line, 1);
+            assert_eq!(line, 1);
         } else {
-            panic!("Expected FilterProvenance source info");
+            panic!("Expected filter-kind Generated source info");
         }
     }
 
@@ -506,9 +599,10 @@ mod tests {
                 assert_eq!(*start_offset, 100, "start_offset should be preserved");
                 assert_eq!(*end_offset, 110, "end_offset should be preserved");
             }
-            Some(SourceInfo::FilterProvenance { filter_path, line }) => {
+            Some(SourceInfo::Generated { by, .. }) if by.is_kind("filter") => {
+                let (filter_path, line) = by.as_filter().unwrap();
                 panic!(
-                    "Expected SourceInfo::Original, but got FilterProvenance({}, {}). \
+                    "Expected SourceInfo::Original, but got filter-Generated({}, {}). \
                      This is the bug we're fixing!",
                     filter_path, line
                 );
@@ -749,11 +843,45 @@ mod tests {
         let roundtrip = source_info_from_lua_table(&table).unwrap();
         assert_eq!(concat, roundtrip);
 
-        // Test FilterProvenance
-        let filter_prov = SourceInfo::filter_provenance("/path/to/filter.lua", 42);
+        // Test filter-kind Generated round-trip
+        let filter_prov = SourceInfo::generated(By::filter("/path/to/filter.lua", 42));
         let table = source_info_to_lua_table(&lua, &filter_prov).unwrap();
         let roundtrip = source_info_from_lua_table(&table).unwrap();
         assert_eq!(filter_prov, roundtrip);
+
+        // Test shortcode Generated with an Invocation anchor
+        let mut shortcode = SourceInfo::generated(By::shortcode("meta"));
+        shortcode.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::Original {
+                file_id: FileId(3),
+                start_offset: 1,
+                end_offset: 9,
+            }),
+        );
+        let table = source_info_to_lua_table(&lua, &shortcode).unwrap();
+        let roundtrip = source_info_from_lua_table(&table).unwrap();
+        assert_eq!(shortcode, roundtrip);
+    }
+
+    #[test]
+    fn test_legacy_filter_provenance_tag_reads_as_filter_generated() {
+        // Plan 4 Phase 4: writers never emit "FilterProvenance" anymore, but
+        // the reader still accepts the legacy tag and maps it to a
+        // filter-kind Generated with empty anchor list.
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.set("t", "FilterProvenance").unwrap();
+        table.set("filter_path", "legacy.lua").unwrap();
+        table.set("line", 7usize).unwrap();
+        let parsed = source_info_from_lua_table(&table).unwrap();
+        match parsed {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.as_filter(), Some(("legacy.lua", 7)));
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected filter-kind Generated, got {:?}", other),
+        }
     }
 
     // =========================================================================
@@ -797,11 +925,11 @@ mod tests {
         // Should still work, falling back to stack location
         let diagnostics = extract_lua_diagnostics(&lua).unwrap();
         assert_eq!(diagnostics.len(), 1);
-        // Should have FilterProvenance since the element wasn't recognized
+        // Should have filter-Generated since the element wasn't recognized
         match &diagnostics[0].location {
-            Some(SourceInfo::FilterProvenance { .. }) => {}
+            Some(SourceInfo::Generated { by, .. }) if by.is_kind("filter") => {}
             other => panic!(
-                "Expected FilterProvenance for non-userdata element, got {:?}",
+                "Expected filter-Generated for non-userdata element, got {:?}",
                 other
             ),
         }

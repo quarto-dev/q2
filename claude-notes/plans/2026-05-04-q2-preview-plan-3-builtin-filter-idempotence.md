@@ -298,7 +298,7 @@ treatment.
   `rendered.*` keys are HTML strings populated by chrome-render
   transforms; their canonicalization is a separate concern.
 - **Filter mutation provenance stays Original** (post-Plan 4 unified
-  `Generated { by: By::filter(...), anchors: [] }` shape). Idempotence
+  `Generated { by: By::filter(...), from: [] }` shape). Idempotence
   test sees consistent shape across runs.
 - **Each pipeline run uses fresh Lua state.** Two construction sites,
   both verified fresh per pipeline invocation:
@@ -657,12 +657,11 @@ combined fixture can cover most chrome transforms):
   navbar-generate/render, sidebar-generate/render, page-nav-generate/render,
   footer-generate/render, link-resolution stage.
 - [x] `website-links` — internal `.qmd` body links between two project
-  pages → link-rewrite + link-resolution.
-  **In Phase-5 queue (bd-rz2we)**: block 0 hash diverges across runs
-  with different project roots while meta hash is stable —
-  link-rewrite/link-resolution captures something path-dependent into
-  the AST when it should emit a path-independent relative URL. Real
-  finding from this work.
+  pages → link-rewrite + link-resolution. (bd-rz2we: fixed by
+  splitting `vfs_root` into write-root + url-root so native test
+  helpers can pass a synthetic URL prefix while disk writes still
+  land in the tempdir; see
+  `claude-notes/plans/2026-05-21-vfs-url-write-root-split.md`.)
 - [x] `website-listing` — minimal listing with two items, one with
   categories, one with `feed:` config → listing-generate, listing-render,
   categories-sidebar, listing-feed-link, listing-feed-stage (native only),
@@ -1027,17 +1026,21 @@ No queue entries.
   `resource-image` (writes a 67-byte minimal PNG). Both pass on
   first run in both modes.
 - [x] Add website-project fixtures (orchestrator-mode only):
-  `website-chrome`, `website-links`, `website-listing`. **2/3 pass
-  on first run.** `website-chrome` (navbar + sidebar + page-nav +
-  footer + favicon + bootstrap-icons + canonical-url) is clean.
+  `website-chrome`, `website-links`, `website-listing`. **All 3
+  pass.** `website-chrome` (navbar + sidebar + page-nav + footer +
+  favicon + bootstrap-icons + canonical-url) is clean.
   `website-listing` (listing with categories + feed) is clean.
-  `website-links` (cross-page `.qmd` body links) is non-idempotent:
-  block 0 hash diverges between runs while meta hash is stable.
-  Filed as **bd-rz2we** — link-rewrite or link-resolution captures
-  something path-dependent into the AST when it should produce a
-  path-independent relative URL. Each `run_q2_preview` call gets a
-  fresh `TempDir`, so the two runs see different absolute project
-  roots; structural AST should not depend on that.
+  `website-links` (cross-page `.qmd` body links): initial divergence
+  filed as **bd-rz2we** turned out to be `ResourceResolverContext`
+  conflating two roles — disk-write root *and* URL prefix — in a
+  single `PathBuf`. Native test helpers pointed both at a real
+  tempdir, so rendered link URLs leaked the absolute tempdir path
+  into the AST. Fixed by splitting the field into
+  `{ write_root, url_root }` and adding a per-renderer
+  `with_url_root("/.quarto/project-artifacts")` builder; native
+  test helpers now keep the tempdir for disk writes but use the
+  synthetic prefix for URLs. See
+  `claude-notes/plans/2026-05-21-vfs-url-write-root-split.md`.
 - [x] Add attribution fixture: `attribution-basic` (both modes).
   Extended `Fixture` with an optional `attribution_json: Option<&'static str>`
   field. `run_single_file` installs a `PreBuiltAttributionProvider`

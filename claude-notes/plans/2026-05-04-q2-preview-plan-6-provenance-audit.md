@@ -9,7 +9,7 @@
 
 Part of the **provenance epic** (Plans 3–8). Plan 6 is the audit pass
 that converts every transform's `SourceInfo::default()` emission into
-the correct `Generated { by, anchors }` shape Plan 4 defines, and
+the correct `Generated { by, from }` shape Plan 4 defines, and
 attaches `Invocation` anchors uniformly to all shortcode resolutions.
 The file name keeps its q2-preview-plan-N form for continuity with the
 earlier discussion notes.
@@ -22,9 +22,9 @@ patterns apply:
 
 - **Transforms that genuinely synthesize content with no source preimage**
   (Sectionize's section Divs, TitleBlock's synthesized h1, etc.): emit
-  `Generated { by: By::<kind>(), anchors: vec![] }` from Plan 4.
+  `Generated { by: By::<kind>(), from: smallvec![] }` from Plan 4.
 - **The shortcode resolver, uniformly**: emit `Generated { by: By::shortcode(name),
-  anchors: vec![Anchor::invocation(token_si)] }` on every resolved
+  from: smallvec![Anchor::invocation(token_si)] }` on every resolved
   node, regardless of whether the handler is Rust-built-in or
   Lua-implemented. The `Invocation` anchor's `source_info` is the
   shortcode token's range; Plan 7's writer uses it for Verbatim-copy
@@ -53,7 +53,7 @@ with the correct provenance:
   Str/Inline (~12 sites). **Fix uniformly via a post-walk helper**:
   immediately after every handler dispatch (Rust handler OR Lua-engine
   dispatch OR extension dispatch), walk the returned nodes and stamp
-  `Generated { by: By::shortcode(name), anchors: vec![Anchor::invocation(Arc::new(ctx.source_info.clone()))] }`
+  `Generated { by: By::shortcode(name), from: smallvec![Anchor::invocation(Arc::new(ctx.source_info.clone()))] }`
   on each block/inline.
   - The post-walk **enriches**, not overrides: any `by.data` fields the
     Lua machinery attached (`lua_path`, `lua_line`) are preserved by
@@ -62,34 +62,34 @@ with the correct provenance:
   - The post-walk recurses into nested blocks/inlines so every node in
     the dispatch output gets the anchor.
 - **`TitleBlockTransform`** (line 183-185): synthesizes a level-1 Header
-  from `title:` metadata. Fix: emit `Generated { by: By::title_block(), anchors: vec![] }`
+  from `title:` metadata. Fix: emit `Generated { by: By::title_block(), from: smallvec![] }`
   on the synthesized Header (and any nested Inlines). Note: q2-preview
   skips this transform (Plan 1), but the audit covers the HTML
   pipeline too.
 - **`SectionizeTransform`** (`pampa/src/transforms/sectionize.rs:96, 148`):
-  the synthetic Section Div. Fix: `Generated { by: By::sectionize(), anchors: vec![] }`.
+  the synthetic Section Div. Fix: `Generated { by: By::sectionize(), from: smallvec![] }`.
   The wrapped Header retains its original source_info. Body blocks retain
   theirs.
 - **`FootnotesTransform`**: the synthesized footnotes container Div.
-  Fix: `Generated { by: By::footnotes(), anchors: vec![] }`. The
+  Fix: `Generated { by: By::footnotes(), from: smallvec![] }`. The
   synthesized `<sup>` markers are already source-mapped via
   `create_footnote_ref` cloning from the original `Note` inline (so
   they stay Original — no change needed). q2-preview pipeline runs
   this transform (per Plan 2B's audit); the audit applies to both
   pipelines.
 - **`AppendixStructureTransform`**: the synthetic appendix container Div.
-  Fix: `Generated { by: By::appendix(), anchors: vec![] }`. Same scope
+  Fix: `Generated { by: By::appendix(), from: smallvec![] }`. Same scope
   note as Footnotes.
 - **`theorem.rs::extract_name_attr`** (line 313): the title Str
   extracted from `name="..."` attribute is built with
   `SourceInfo::default()`. Fix: use the attr value's source_info
   (currently lost — inspection needed for whether `attr_source` carries
-  this info). At minimum, `Generated { by: By::raw("theorem-title-attr", json!({})), anchors: vec![] }`
+  this info). At minimum, `Generated { by: By::raw("theorem-title-attr", json!({})), from: smallvec![] }`
   if we can't recover it, but better to preserve the actual source
   position from the attr-source.
 - **`pampa::pandoc::treesitter_utils::postprocess`** (line 1348): the
   "Synthetic Space" inserted to separate citation from suffix. Fix:
-  `Generated { by: By::tree_sitter_postprocess(), anchors: vec![] }`.
+  `Generated { by: By::tree_sitter_postprocess(), from: smallvec![] }`.
 
 The audit pass also looks for any *other* sites emitting
 `SourceInfo::default()` that aren't enumerated. Plan 6 starts with a
@@ -129,7 +129,7 @@ comprehensive grep.
   — handled by `IncludeExpansionStage` (a separate pipeline stage) and
   Plan 8's wrapper, not via Generated.
 - **Enrichment, not override**. The Lua machinery's auto-attach
-  produces `Generated { by: filter, anchors: [], by.data: { lua_path,
+  produces `Generated { by: filter, from: [], by.data: { lua_path,
   lua_line } }` (post-Plan-4) for nodes constructed during a Lua
   shortcode dispatch. The shortcode resolver's post-walk enriches:
   - **Appends** an `Invocation` anchor pointing at the shortcode token.
@@ -143,7 +143,7 @@ comprehensive grep.
   transforms just drop it. Mechanical change.
 - **Shortcode resolutions use `Generated` + `Invocation` anchor, not a
   wrapper.** Each resolved Str/Inline/Block gets `Generated { by:
-  shortcode(name), anchors: [Invocation -> Arc::new(ctx.source_info.clone())] }`.
+  shortcode(name), from: [Invocation -> Arc::new(ctx.source_info.clone())] }`.
   The anchor's source_info is the shortcode token's range (an Original
   from `ctx.source_info`). Plan 7's writer uses it for Verbatim-copy
   on KeepBefore. Multi-inline resolutions: every resolved node shares
@@ -151,7 +151,7 @@ comprehensive grep.
 - **Genuine synthesizers use `Generated` with empty anchors**.
   Sectionize, TitleBlock, Footnotes, Appendix containers — none of
   these correspond to source bytes, so they get
-  `Generated { by: By::<kind>(), anchors: vec![] }`. Plan 7's coarsen
+  `Generated { by: By::<kind>(), from: smallvec![] }`. Plan 7's coarsen
   treats their wrappers as Transparent (recurse into source-bearing
   children) or Omit depending on `by.is_atomic_kind()`.
 - **No `atomic` flag needed**. Plan 7's atomic-violation logic detects
@@ -195,7 +195,7 @@ the first non-C frame and produces (post-Plan 4):
 ```rust
 Generated {
     by: By::filter(lua_path.to_string(), line_num),
-    anchors: vec![],
+    from: smallvec![],
 }
 ```
 
@@ -212,7 +212,7 @@ Generated {
             "lua_line": <preserved_from_by.data>,
         }),
     },
-    anchors: vec![Anchor::invocation(Arc::new(ctx.source_info.clone()))],
+    from: smallvec![Anchor::invocation(Arc::new(ctx.source_info.clone()))],
 }
 ```
 
@@ -286,7 +286,7 @@ fn enrich_or_create(
     };
     SourceInfo::Generated {
         by,
-        anchors: vec![Anchor::invocation(Arc::clone(token_arc))],
+        from: smallvec![Anchor::invocation(Arc::clone(token_arc))],
     }
 }
 ```
@@ -307,7 +307,7 @@ they contain.)
   Inspecting `attr_source` may or may not give the byte range of the
   attr value. Worth investigating; if achievable, use
   `Original{attr_value_range}`; otherwise
-  `Generated { by: By::raw("theorem-title-attr", ...), anchors: vec![] }`.
+  `Generated { by: By::raw("theorem-title-attr", ...), from: smallvec![] }`.
 - **Escaped shortcodes**: today `Shortcode::is_escaped` is a flag, and
   escaped shortcodes preserve as literal text (no resolution). Don't
   apply the post-walk to escaped shortcodes — they're not resolved;
@@ -347,6 +347,9 @@ When the follow-up lands, Plan 6's post-walk grows one more anchor
 append at the appropriate dispatch sites. The current Plan 6 ships
 with just `Invocation`; the type is forward-compatible.
 
+Tracked as **bd-129m3** ("Provenance follow-up: ValueSource anchor
+stamping for meta/var shortcodes").
+
 ## Dispatch follow-up
 
 Plan 6 does NOT use a typed `Dispatch` anchor for Lua-side
@@ -361,7 +364,7 @@ The follow-up issue ("register Lua filter files in `SourceContext`"):
 2. Lua engine calls it when loading each filter.
 3. `filter_source_info` produces `Original { file_id, start, end }`
    instead of returning a path-line pair.
-4. Lua-attached source_info becomes `Generated { by: filter, anchors:
+4. Lua-attached source_info becomes `Generated { by: filter, from:
    [Dispatch -> Original{lua_file, ...}] }`.
 5. Plan 6's post-walk's enrichment then preserves the `Dispatch`
    anchor (typed) instead of preserving `by.data` fields.
@@ -369,6 +372,9 @@ The follow-up issue ("register Lua filter files in `SourceContext`"):
 When the follow-up lands, `AnchorRole::Dispatch` joins the enum (a
 non-breaking enum extension); `by.data` for `filter` / Lua-dispatched
 `shortcode` kinds shrinks to per-kind config only.
+
+Tracked as **bd-36fr9** ("Provenance follow-up: Dispatch anchor for
+Lua-handler filter & shortcode").
 
 ## References
 
@@ -406,19 +412,28 @@ non-breaking enum extension); `by.data` for `filter` / Lua-dispatched
   the §Atomic-kind-set / §by.data tables in Plan 4). Defensive
   regression: catches a future PR that adds a transform without
   provenance.
+- **Shortcode required-anchor invariant**: the audit-completion test
+  ALSO walks the post-stamping AST and asserts no `Generated { by:
+  shortcode, from: [] }` remains. Every `by.kind == "shortcode"` node
+  must carry at least one `Invocation` anchor pointing at the source
+  token's bytes. Per Plan 4 §"Required-anchor invariant for shortcode",
+  this is the producer-side enforcement of the rule; Plan 7 adds a
+  `debug_assert!` on the consumer side as belt-and-suspenders. The
+  stamper is the only construction site for `by: shortcode` in v1, so
+  the test exercises the full source of bad shapes.
 - **Per-transform fix tests**: for each fixed transform, a test that
   inspects the produced source_info shape:
   - SectionizeTransform: synthetic Div has `Generated { by: { kind:
-    "sectionize" }, anchors: [] }`. Header inside has its original
+    "sectionize" }, from: [] }`. Header inside has its original
     source_info.
   - ShortcodeResolveTransform (uniform): each resolved Str has
     `Generated { by: { kind: "shortcode", data: { name: "..." } },
-    anchors: [Anchor { role: Invocation, source_info: ... }] }`. The
+    from: [Anchor { role: Invocation, source_info: ... }] }`. The
     anchor's source_info chain-walks to the shortcode token's bytes
     via `resolve_byte_range`.
   - Lua-shortcode test: a `{{< kbd Ctrl+C >}}` invocation produces a
     Span with `Generated { by: { kind: "shortcode", data: { name:
-    "kbd", lua_path: "...", lua_line: N } }, anchors: [Invocation] }`.
+    "kbd", lua_path: "...", lua_line: N } }, from: [Invocation] }`.
     **NOT** `by.kind == "filter"`; the post-walk promoted it.
   - Other built-in Lua shortcodes (lipsum, placeholder, version, video):
     same shape, with the appropriate `name`.
@@ -442,13 +457,13 @@ non-breaking enum extension); `by.data` for `filter` / Lua-dispatched
 - **`source_info` determinism (Plan 6-specific gap)**: Plan 3's hashes
   exclude `source_info` by design (`compute_blocks_hash_fresh` and
   `compute_meta_hash_fresh` both skip it). So Plan 3 does **not**
-  catch a transform whose synthesized `Generated { by, anchors }`
+  catch a transform whose synthesized `Generated { by, from }`
   output is non-deterministic *in the source_info layer* — e.g., an
   `Anchor::invocation` that hashes a different `SourceInfo` on
   repeated runs because the shortcode-token's range was recomputed
   rather than cloned. Plan 6 must add its own per-fixture
   source_info-determinism check: render twice, walk the AST in
-  lockstep, assert every `Generated.by`, every `Generated.anchors[]`,
+  lockstep, assert every `Generated.by`, every `Generated.from[]`,
   and every Original `SourceInfo` is `==`-equal across runs. Place
   this alongside Plan 3's idempotence test (same fixtures, parallel
   assertion) so the test crate covers both contracts.
@@ -534,7 +549,7 @@ This is a "scattered fixes" plan — touches many transform files with
 small per-file changes. Most of the diff is mechanical: `SourceInfo::default()`
 → either `ctx.source_info.clone()` (Original) for synthesizers that DO
 have a source preimage but currently drop it, or
-`Generated { by: By::<kind>(), anchors: vec![] }` for genuine
+`Generated { by: By::<kind>(), from: smallvec![] }` for genuine
 synthesizers, or `stamp_shortcode_anchors(...)` for shortcode
 dispatches.
 
