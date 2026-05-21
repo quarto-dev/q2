@@ -346,6 +346,20 @@ if alignment is KeepBefore(orig_idx):
         // Atomic-kind Generated with no Invocation anchor (filter
         // construction, title-block, tree-sitter-postprocess).
         // Drop from output; baseline regenerates next pipeline run.
+        //
+        // Belt-and-suspenders enforcement of Plan 4's required-anchor
+        // invariant for shortcode: routing a shortcode-Generated to Omit
+        // would mean silent data loss (the source bytes disappear from
+        // the round-tripped document). The Plan 6 stamper is responsible
+        // for never producing this shape, but a regression there would
+        // surface here as a benign-looking Omit. The debug_assert catches
+        // it in dev / test builds.
+        debug_assert!(
+            !by.is_kind("shortcode"),
+            "Generated {{ by: shortcode, from: [] }} reached the writer — \
+             Plan 6's stamper must always attach an Invocation anchor for \
+             shortcode resolutions (Plan 4 §Required-anchor invariant)."
+        );
         CoarsenedEntry::Omit
     }
     else if matches!(original_block.source_info(), SourceInfo::Generated { .. })
@@ -434,7 +448,7 @@ writer failures on malformed input — same as today's writer).
 When `{{< meta foo >}}` resolves to multiple inlines (e.g., metadata is
 markdown like `**Bold** Title` → `[Strong[Str], Space, Str]`), each
 resolved inline has the same `Generated { by: shortcode("meta"),
-anchors: [Invocation -> Original{shortcode_range}] }` source_info.
+from: [Invocation -> Original{shortcode_range}] }` source_info.
 
 Block-level: if both pipeline runs produce the same multi-inline
 output, the surrounding Para is structurally identical → KeepBefore at
@@ -704,7 +718,7 @@ shortcode token from source.
     → assert non-atomic edit applies, shortcode preserved, Q-3-42
     warning shows.
 - **Filter-construction soft-drop test**: build an AST with a
-  filter-constructed Str (Generated { by: filter, anchors: [] }) inside
+  filter-constructed Str (Generated { by: filter, from: [] }) inside
   a Para. User retypes it through React → assert `Q-3-42` warning + the
   original Para's source bytes (without the decoration) appear in
   output. Next pipeline run regenerates the decoration.
@@ -839,7 +853,7 @@ Rewrite path with no special handling.
 ### Filter mutations are not flagged as atomic — accepted corner
 
 Plan 4 distinguishes filter constructions (`pandoc.Str("decoration")`
-→ `Generated { by: filter, anchors: [] }`, atomic) from filter
+→ `Generated { by: filter, from: [] }`, atomic) from filter
 mutations (`Str.text = upper(Str.text)` → keeps Original source_info,
 NOT atomic).
 

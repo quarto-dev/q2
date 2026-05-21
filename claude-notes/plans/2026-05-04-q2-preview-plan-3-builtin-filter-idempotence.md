@@ -298,7 +298,7 @@ treatment.
   `rendered.*` keys are HTML strings populated by chrome-render
   transforms; their canonicalization is a separate concern.
 - **Filter mutation provenance stays Original** (post-Plan 4 unified
-  `Generated { by: By::filter(...), anchors: [] }` shape). Idempotence
+  `Generated { by: By::filter(...), from: [] }` shape). Idempotence
   test sees consistent shape across runs.
 - **Each pipeline run uses fresh Lua state.** Two construction sites,
   both verified fresh per pipeline invocation:

@@ -1,4 +1,4 @@
-# Plan 5 — JSON wire format extension for Generated + anchors
+# Plan 5 — JSON wire format extension for Generated
 
 **Date:** 2026-05-04 (revised 2026-05-20)
 **Branch:** feature/q2-preview
@@ -17,7 +17,7 @@ earlier discussion notes.
 ## Goal
 
 Extend the source-info pool's JSON wire format to encode the
-`Generated { by, anchors }` variant introduced by Plan 4. In the same
+`Generated { by, from }` variant introduced by Plan 4. In the same
 change, fix a latent bug: today's writer emits `FilterProvenance` as
 type code `3` with payload `[filter_path, line]`, but today's reader
 interprets code `3` as the long-removed `Transformed` variant and tries
@@ -39,22 +39,28 @@ only in reach.
 
 ### In scope
 
-- Add wire format code `4` for `Generated { by, anchors }`. Payload
+- Add wire format code `4` for `Generated { by, from }`. Payload
   encoding:
   ```json
   {
     "by": { "kind": "...", "data": <object|null> },
-    "anchors": [
-      { "role": "<role-string>", "from": <pool_id> },
+    "from": [
+      { "role": "<role-string>", "si_id": <pool_id> },
       ...
     ]
   }
   ```
-  `from` is a pool ID referencing another entry in the source-info pool
-  — typically an `Original` covering the source bytes the anchor points
-  at. Multiple anchors share their `from` pool IDs naturally
-  (multi-inline shortcode: every resolved inline's `Invocation` anchor
-  references the same token's pool entry).
+  Outer `from` mirrors the Rust field name (`Generated.from`). Inner
+  `si_id` is the source-info pool reference — it points to another
+  entry in the pool, typically an `Original` covering the source bytes
+  the anchor describes. The name is deliberately distinct from
+  `Substring`'s `parent_id`: a Substring genuinely *has* a parent in
+  the chain (the slice's ancestor), but an anchor's reference is a
+  sideways pointer, not a containment relationship. `si_id` reads as
+  "source-info pool index" with no tree-structure overclaim. Multiple
+  anchors share an `si_id` naturally (multi-inline shortcode: every
+  resolved inline's `Invocation` anchor references the same token's
+  pool entry).
 - Anchor role encoding: `"invocation"`, `"value-source"`, or
   `"other:<extension-defined-name>"` for `AnchorRole::Other(String)`.
   Kebab-case throughout.
@@ -65,7 +71,7 @@ only in reach.
     map to `Substring` (current behavior), preserving back-compat for
     old JSON.
   - **Latent FilterProvenance** (`data` is `[filter_path, line]` —
-    string then number): decode as `Generated { by: By::filter(filter_path, line), anchors: vec![] }`.
+    string then number): decode as `Generated { by: By::filter(filter_path, line), from: vec![] }`.
     This recovers the FilterProvenance shape that was being silently
     corrupted.
 - After the fix, the writer no longer emits code 3 for new content (code
@@ -95,17 +101,17 @@ only in reach.
 - **One new wire code (4)**, not two. The original Plan 4 / 5 drafts
   split `Synthetic` (code 4) and `Derived` (code 5). The unified
   `Generated` variant collapses these. Code 5 remains unassigned.
-- **Typed anchor list at the wire level.** Each entry in the `anchors`
-  array carries a `role` string and a `from` pool ID. This keeps the
-  source-info chain typed even at the wire boundary — `from` refers to
-  another pool entry, never an inlined object.
+- **Typed anchor list at the wire level.** Each entry in the `from`
+  array carries a `role` string and an `si_id` pool reference. This
+  keeps the source-info chain typed even at the wire boundary —
+  `si_id` refers to another pool entry, never an inlined object.
 - **Code 3 stays as a legacy reader** — fixes the latent bug AND
   retires `FilterProvenance` in one step. The reader recognizes both
   old shapes (legacy Transformed array of numbers; FilterProvenance
   `[filter_path, line]`) and dispatches accordingly. Post-Plan 5,
   writers never emit code 3.
-- **Verbose keys (`kind`, `data`, `by`, `anchors`, `role`, `from`)** at
-  the payload level for self-documentation. The wire format's outer
+- **Verbose keys (`kind`, `data`, `by`, `from`, `role`, `si_id`)**
+  at the payload level for self-documentation. The wire format's outer
   fields (`t`, `r`, `d` at the SourceInfoJson level) stay compact for
   consistency with existing code.
 
@@ -126,8 +132,8 @@ tree-sitter-postprocess, user-edit):
 ```
 
 (The `"data"` field is omitted when `By.data` is `null`, per the serde
-`skip_serializing_if` on `By`. The `"anchors"` field is omitted when the
-vec is empty.)
+`skip_serializing_if` on `By`. The `"from"` field is omitted when the
+list is empty.)
 
 The source-info pool entry for a `Generated` value with **one
 Invocation anchor** (shortcode resolution):
@@ -138,8 +144,8 @@ Invocation anchor** (shortcode resolution):
   "r": [0, 0],
   "d": {
     "by": { "kind": "shortcode", "data": { "name": "meta" } },
-    "anchors": [
-      { "role": "invocation", "from": 7 }
+    "from": [
+      { "role": "invocation", "si_id": 7 }
     ]
   }
 }
@@ -155,9 +161,9 @@ source after the metadata-loader follow-up lands):
   "r": [0, 0],
   "d": {
     "by": { "kind": "shortcode", "data": { "name": "meta" } },
-    "anchors": [
-      { "role": "invocation",   "from": 7 },
-      { "role": "value-source", "from": 12 }
+    "from": [
+      { "role": "invocation",   "si_id": 7 },
+      { "role": "value-source", "si_id": 12 }
     ]
   }
 }
@@ -187,7 +193,7 @@ offsets — ranges are obtained via the `resolve_byte_range` /
         let line = array.get(1).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         SourceInfo::Generated {
             by: By::filter(filter_path.to_string(), line),
-            anchors: vec![],
+            from: vec![],
         }
     } else {
         return Err(MalformedSourceInfoPool);
@@ -203,7 +209,7 @@ for now it's a no-cost read-only compat shim.
 
 ```rust
 4 => {
-    // Generated { by, anchors }
+    // Generated { by, from }
     let obj = data.as_object().ok_or(MalformedSourceInfoPool)?;
     let by_obj = obj.get("by").and_then(|v| v.as_object())
         .ok_or(MalformedSourceInfoPool)?;
@@ -212,24 +218,24 @@ for now it's a no-cost read-only compat shim.
     let by_data = by_obj.get("data").cloned().unwrap_or(Value::Null);
     let by = By { kind, data: by_data };
 
-    let mut anchors = Vec::new();
-    if let Some(anchors_arr) = obj.get("anchors").and_then(|v| v.as_array()) {
-        for entry in anchors_arr {
+    let mut from = SmallVec::<[Anchor; 1]>::new();
+    if let Some(from_arr) = obj.get("from").and_then(|v| v.as_array()) {
+        for entry in from_arr {
             let role_str = entry.get("role").and_then(|v| v.as_str())
                 .ok_or(MalformedSourceInfoPool)?;
             let role = parse_anchor_role(role_str)?;
-            let from_id = entry.get("from").and_then(|v| v.as_u64())
+            let si_id = entry.get("si_id").and_then(|v| v.as_u64())
                 .ok_or(MalformedSourceInfoPool)? as usize;
-            if from_id >= current_index {
-                return Err(CircularSourceInfoReference(from_id));
+            if si_id >= current_index {
+                return Err(CircularSourceInfoReference(si_id));
             }
-            let from = pool.get(from_id).cloned()
-                .ok_or(InvalidSourceInfoRef(from_id))?;
-            anchors.push(Anchor { role, source_info: Arc::new(from) });
+            let si = pool.get(si_id).cloned()
+                .ok_or(InvalidSourceInfoRef(si_id))?;
+            from.push(Anchor { role, source_info: Arc::new(si) });
         }
     }
 
-    SourceInfo::Generated { by, anchors }
+    SourceInfo::Generated { by, from }
 }
 
 fn parse_anchor_role(s: &str) -> Result<AnchorRole, MalformedSourceInfoPool> {
@@ -253,12 +259,12 @@ SerializableSourceMapping::Generated { by, anchor_pool_ids } => {
     let mut d = json!({ "by": by_json });
     if !anchor_pool_ids.is_empty() {
         let arr: Vec<Value> = anchor_pool_ids.iter()
-            .map(|(role, from_id)| json!({
+            .map(|(role, si_id)| json!({
                 "role": serialize_anchor_role(role),
-                "from": from_id,
+                "si_id": si_id,
             }))
             .collect();
-        d["anchors"] = Value::Array(arr);
+        d["from"] = Value::Array(arr);
     }
 
     (4, d)
@@ -294,16 +300,18 @@ the shortcode token's `Original` entry.
   streaming source-info-pool writer): both writer paths need updating.
   Today both have the same code-3 → FilterProvenance shape — the bug
   applies to both. Update both to emit code 4 for Generated.
-- **Pool deduplication of anchor `from` references**: when many
+- **Pool deduplication of anchor `si_id` references**: when many
   Generated entries share the same anchor target (multi-inline
   shortcode), the writer interns once and reuses the ID. The existing
-  `arc_parent_ids` HashMap pattern handles this.
+  `arc_parent_ids` HashMap pattern (already used for `Substring.parent`)
+  handles this — same interning mechanism, different reader-side name
+  (`si_id` for anchors, `parent_id` for substrings).
 - **TypeScript hand-mirror updates**: `ts-packages/preview-renderer/src/types/sourceInfo.ts`
   defines `SourceInfoEntry` for JS consumers. After Plan 5, the entry
-  type for code 4 grows an optional `anchors` field with `{ role,
-  from }` shape. The TS type and the Rust serializer must agree
-  byte-for-byte; sync via doc-comment convention as we do for the
-  atomic-CustomNodes registry.
+  type for code 4 grows an optional `from` field with
+  `{ role, si_id }` entries. The TS type and the Rust serializer
+  must agree byte-for-byte; sync via doc-comment convention as we do
+  for the atomic-CustomNodes registry.
 
 ## References
 
@@ -320,7 +328,8 @@ the shortcode token's `Original` entry.
 - `crates/quarto-source-map/src/source_info.rs:22-55` — SourceInfo enum
   (extended by Plan 4).
 - `ts-packages/preview-renderer/src/types/sourceInfo.ts` — JS-side
-  `SourceInfoEntry` type definition (needs the `anchors` field).
+  `SourceInfoEntry` type definition (needs the `from` field of
+  `{ role, si_id }` entries).
 - `ts-packages/preview-renderer/src/utils/sourceInfo.ts` — JS-side
   helpers (`isAtomicSourceInfo`, etc.); needs adjustment for the new
   shape per Plan 4 / Plan 7.
@@ -333,7 +342,7 @@ the shortcode token's `Original` entry.
   equality. Cover the full enum.
 - **Filter-provenance recovery test**: hand-construct a JSON pool entry
   with the buggy code-3-with-string-array-payload shape. Read it.
-  Assert the reader produces `Generated { by: filter, anchors: vec![] }`
+  Assert the reader produces `Generated { by: filter, from: vec![] }`
   with the right path/line via `by.as_filter()`.
 - **Legacy Transformed back-compat test**: hand-construct a JSON pool
   entry with code-3-with-numeric-array-payload (the legacy Transformed
@@ -342,12 +351,12 @@ the shortcode token's `Original` entry.
 - **Forward-compat test**: hand-construct a JSON pool entry with code 4
   and an unknown kind (`"kind": "ext/future/foo"`, arbitrary data).
   Assert it decodes as `Generated { by: By { kind: "ext/future/foo",
-  data: ... }, anchors: vec![] }`. Round-trips unchanged.
+  data: ... }, from: vec![] }`. Round-trips unchanged.
 - **Anchor dedup test**: build an AST where multiple inlines have
   Generated source_info each carrying an `Invocation` anchor that
   references the same `Original` (multi-inline shortcode resolution).
   Serialize. Confirm the pool contains the `Original` exactly once and
-  each Generated entry's anchors[0].from references it by ID.
+  each Generated entry's `from[0].si_id` references it by ID.
 - **AnchorRole round-trip test**: round-trip a Generated with each role
   (Invocation, ValueSource, Other(String)) through JSON; assert the
   role survives.
@@ -366,10 +375,10 @@ the shortcode token's `Original` entry.
      `pampa::readers::json::read`.
   4. Assert the round-trip succeeds (no `MalformedSourceInfoPool`
      error) AND the recovered source_info is `Generated { by:
-     shortcode, anchors: [Invocation -> ...] }` after Plan 6's
+     shortcode, from: [Invocation -> ...] }` after Plan 6's
      post-walk has stamped it. (If running Plan 5 alone — before
      Plan 6 lands — the recovered shape is `Generated { by: filter,
-     anchors: [] }` with `(filter_path, line)` in `by.data`; the
+     from: [] }` with `(filter_path, line)` in `by.data`; the
      round-trip still succeeds.)
 
   This is distinct from the hand-constructed "Filter-provenance
