@@ -176,6 +176,22 @@ export interface ASTOptions {
 }
 
 // ============================================================================
+// Auth Options
+// ============================================================================
+
+/**
+ * Bearer-auth options for the sync client's WebSocket upgrade.
+ *
+ * `getBearer` is a getter (not a static string) so the retry loop sees
+ * a freshly-refreshed token after the connection-manager's refresh-on-
+ * 401 path runs. Presence of this field selects the Node WebSocket
+ * adapter; absence selects the browser adapter unchanged.
+ */
+export interface SyncClientAuthOptions {
+  getBearer: () => Promise<string>;
+}
+
+// ============================================================================
 // Result Types
 // ============================================================================
 
@@ -204,6 +220,12 @@ export interface CreateProjectOptions {
     contentType: 'text' | 'binary';
     mimeType?: string;
   }>;
+  /**
+   * Bearer-auth options. When set, the Node WebSocket adapter is used
+   * and the upgrade request carries `Authorization: Bearer <token>`.
+   * When unset, the browser adapter is used unchanged.
+   */
+  auth?: SyncClientAuthOptions;
 }
 
 /**

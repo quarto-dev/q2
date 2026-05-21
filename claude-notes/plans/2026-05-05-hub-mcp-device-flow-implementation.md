@@ -1086,40 +1086,128 @@ Follow-up beads issue: submit upstream PR to thread `headers` through
 
 ### Tests first
 
-- [ ] `client_passes_authorization_header_to_adapter` — mock `ws`,
-  assert constructor receives header.
-- [ ] `client_does_not_log_authorization`
-- [ ] `client_redacts_token_in_error_messages` — `[redacted]`, not token.
-- [ ] `connection_manager_threads_token_through_when_creds_exist`
-- [ ] `connection_manager_omits_authorization_when_no_creds`
-- [ ] `connection_manager_succeeds_against_no_auth_hub_without_creds` —
-  hub `auth_config: None` (`context.rs:71`) returns 101; connect
-  succeeds with no device-flow trigger.
-- [ ] `connection_manager_succeeds_against_no_auth_hub_with_stale_creds`
-- [ ] `connection_manager_handles_401_via_refresh_then_retry`
-- [ ] `connection_manager_surfaces_reauth_required` — typed error
+- [x] `client_passes_authorization_header_to_adapter` — `WebSocketFactory`
+  test seam captures the constructor headers.
+- [x] `client_does_not_log_authorization`
+- [x] `client_redacts_token_in_error_messages` — `[redacted]`, not token.
+- [x] `connection_manager_threads_token_through_when_creds_exist`
+- [x] `connection_manager_omits_authorization_when_no_creds`
+- [x] `connection_manager_succeeds_against_no_auth_hub_without_creds` —
+  probe `/health` returns 200 with no header; connect succeeds with no
+  device-flow trigger.
+- [x] `connection_manager_succeeds_against_no_auth_hub_with_stale_creds`
+- [x] `connection_manager_handles_401_via_refresh_then_retry`
+- [x] `connection_manager_surfaces_reauth_required` — typed error
   named `authenticate_start`.
-- [ ] `connection_manager_surfaces_auth_required_when_hub_demands_auth_and_no_creds`
+- [x] `connection_manager_surfaces_auth_required_when_hub_demands_auth_and_no_creds`
   — trigger is the hub's 401, not absence of creds.
-- [ ] `connection_manager_surfaces_reauth_after_post_refresh_401` —
+- [x] `connection_manager_surfaces_reauth_after_post_refresh_401` —
   second consecutive 401 trigger.
-- [ ] `last_observed_auth_mode_starts_unknown`
-- [ ] `last_observed_auth_mode_becomes_no_auth_on_101_without_creds`
-- [ ] `last_observed_auth_mode_becomes_requires_auth_on_101_with_creds`
-- [ ] `last_observed_auth_mode_becomes_requires_auth_on_401`
-- [ ] `last_observed_auth_mode_unchanged_on_network_error`
-- [ ] `last_observed_auth_mode_not_persisted_across_restart`
-- [ ] `browser_path_unchanged_when_no_auth` — additive change.
-- [ ] `insecure_bearer_to_loopback_succeeds_without_env_flag` —
+- [x] `last_observed_auth_mode_starts_unknown`
+- [x] `last_observed_auth_mode_becomes_no_auth_on_101_without_creds`
+- [x] `last_observed_auth_mode_becomes_requires_auth_on_101_with_creds`
+- [x] `last_observed_auth_mode_becomes_requires_auth_on_401`
+- [x] `last_observed_auth_mode_unchanged_on_network_error`
+- [x] `last_observed_auth_mode_not_persisted_across_restart` — trivially
+  satisfied; the field lives on the class instance, no persistence layer.
+- [x] `browser_path_unchanged_when_no_auth` — `buildWsAdapter` falls
+  through to `BrowserWebSocketClientAdapter` when `auth` is absent.
+- [x] `insecure_bearer_to_loopback_succeeds_without_env_flag` —
   `localhost` / `127.0.0.1` / `::1` / `*.localhost`.
-- [ ] `insecure_bearer_to_non_loopback_throws_without_env_flag` —
+- [x] `insecure_bearer_to_non_loopback_throws_without_env_flag` —
   `InsecureTransportError` naming the env var. No HTTP issued.
   **CVE-prevention test.**
-- [ ] `insecure_bearer_to_non_loopback_succeeds_with_env_flag` — loud
+- [x] `insecure_bearer_to_non_loopback_succeeds_with_env_flag` — loud
   warning on every connect (not just first).
-- [ ] `no_bearer_over_http_to_non_loopback_succeeds_without_env_flag`
+- [x] `no_bearer_over_http_to_non_loopback_succeeds_without_env_flag`
   — no Bearer to leak, gate doesn't fire.
-- [ ] `wss_bearer_to_non_loopback_succeeds_without_env_flag` — baseline.
+- [x] `wss_bearer_to_non_loopback_succeeds_without_env_flag` — baseline.
+
+### Phase 8 — completion notes (2026-05-21)
+
+Landed on `feature/hub-mcp-device-flow`:
+
+- New `quarto-sync-client/src/NodeWebSocketClientAdapter.ts` — Node-only
+  `NetworkAdapter` that constructs `new WebSocket(url, [], { headers })`
+  via the `ws` package, threading `Authorization: Bearer <token>` into
+  the WebSocket upgrade. The `getBearer()` getter is invoked on every
+  `connect` (including upstream's retry loop) so the refreshed token
+  surfaces on reconnect. A `WebSocketFactory` test seam lets unit tests
+  drive the adapter without standing up a real socket.
+- `quarto-sync-client/src/client.ts` — `connect()` and `createNewProject()`
+  now accept `auth?: { getBearer: () => Promise<string> }`. When `auth`
+  is set, the Node adapter is lazily imported via dynamic
+  `import('./NodeWebSocketClientAdapter.js')` so browser bundles never
+  pull in `ws`. When `auth` is absent, the existing
+  `BrowserWebSocketClientAdapter` path runs unchanged.
+- `redactAuthorization` is exported from `quarto-sync-client` — a small
+  helper that swaps `Authorization: Bearer <token>` for
+  `Authorization: [redacted]` in arbitrary strings. The adapter funnels
+  every error-throw through it.
+- `quarto-hub-mcp/src/connection-manager.ts` — rewritten around an
+  HTTP `/health` probe + try-then-fallback policy. New constructor
+  takes `ConnectionManagerDeps` (`serverUrl`, optional `credentialStore`,
+  optional `refreshManager`, plus `fetch` / `env` / `syncClientFactory` /
+  `probePath` test seams). The legacy `new ConnectionManager(url)`
+  signature is still accepted for the no-auth path. `connect()` walks:
+  1. Read bundle (`null` if missing or store absent).
+  2. With bundle: insecure-transport gate, `getValidIdToken()`, probe
+     `/health`. 401 → `forceRefresh()` + retry. Still 401 → throw
+     `ReauthRequired`. 200 → open WS with a `getBearer` getter that
+     pulls a freshly-refreshed token on each attach.
+  3. Without bundle: probe with no header. 200 → no-auth hub, open WS
+     without header. 401 → throw `AuthRequiredError` naming
+     `authenticate_start`.
+  4. Network error → typed connection error; auth state unchanged.
+- `lastObservedAuthMode()` flips per the documented state machine —
+  `'no-auth'` on 200-without-header, `'requires-auth'` on
+  200-with-header (conservative) or 401, unchanged on network error.
+  Process-local; resets to `'unknown'` on restart by construction.
+- Insecure-transport gate fires **only** when a Bearer is about to be
+  attached. Loopback (`localhost`, `127.0.0.1`, `::1`, `*.localhost`)
+  is always permitted. Non-loopback `ws://` / `http://` is rejected
+  unless `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1` is set; with the env
+  var set the gate emits a loud `console.warn` on every connect.
+- `quarto-hub-mcp/src/index.ts` — bootstraps the auth chain when both
+  `QUARTO_HUB_MCP_CLIENT_ID` and `QUARTO_HUB_MCP_CLIENT_SECRET` are
+  set. Partial env config fails loud through `MissingCredentialsConfigError`
+  with both var names named. When auth env is absent, hub-mcp runs
+  unauthenticated and a no-auth hub still works (the connection-manager's
+  no-creds branch covers it). `installRedactingErrorHandlers` wires
+  `uncaughtException` / `unhandledRejection` scrubbers that run every
+  message through `redactTokens` before logging.
+- `quarto-hub-mcp/src/tools.ts` — `registerTools` gained an optional
+  `AuthToolsState` parameter. When provided, the dispatcher composes
+  the auth tools (`authenticate_start` / `authenticate_finish`) with
+  the data tools under a single `CallToolRequestSchema` handler; the
+  `ListTools` response surfaces both families. Error messages from
+  data-tool handlers run through `redactTokens` defensively.
+
+Tests live at `ts-packages/quarto-sync-client/src/NodeWebSocketClientAdapter.test.ts`
+(5 specs) and `ts-packages/quarto-hub-mcp/src/connection-manager.test.ts`
+(24 specs). Both files inject all external surfaces (fetch / WebSocket
+factory / RefreshManager) so no live Google / hub call is ever made.
+
+Verification: `npm test` from `ts-packages/quarto-sync-client/` passes
+86/86 specs; from `ts-packages/quarto-hub-mcp/` 127 of 135 specs pass,
+with the 6 pre-existing `indexedDB is not defined` failures in
+`hub-mcp.test.ts` and 2 opt-in `[integration]` keyring specs unchanged
+from the documented baseline. `npm run typecheck` and `npm run build`
+clean in both packages. `cargo xtask verify --skip-hub-build
+--skip-rust-tests` green (this phase touches only TypeScript).
+`hub-client` (the SPA that consumes `@quarto/quarto-sync-client`)
+typechecks clean — backwards-compatibility on the optional `auth`
+parameter is intact.
+
+Smoke tests: `node dist/index.js --help` prints usage; the no-args
+path errors with the required-arg message; the partial-env path
+(`QUARTO_HUB_MCP_CLIENT_ID` set, `_CLIENT_SECRET` unset) exits 1 with
+`MissingCredentialsConfigError` naming both vars.
+
+Dependencies added to `ts-packages/quarto-sync-client/package.json`:
+`ws ^8.18.0` (Node-only WebSocket library that supports custom
+upgrade headers) and dev-dep `@types/ws ^8.18.1`. `npm install` from
+repo root hoisted them; root `package-lock.json` is the change record.
 
 ### Implementation
 

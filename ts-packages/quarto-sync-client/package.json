@@ -33,9 +33,11 @@
     "@automerge/automerge-repo-network-websocket": "^2.5.1",
     "@automerge/automerge-repo-storage-indexeddb": "^2.5.4",
     "@quarto/quarto-automerge-schema": "*",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "typescript": "~5.9.3",
     "vitest": "^4.0.17"
   }

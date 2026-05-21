@@ -11,6 +11,7 @@ import type { DocumentId, Patch } from '@automerge/automerge-repo';
 import { clone as automergeClone, from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
+import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 
 import type {
   IndexDocument,
@@ -37,8 +38,28 @@ import type {
   CreateBinaryFileResult,
   CreateProjectOptions,
   CreateProjectResult,
+  SyncClientAuthOptions,
 } from './types.js';
 import { computeSHA256 } from './hash.js';
+
+/**
+ * Build the WebSocket adapter for a sync connection. With `auth` set,
+ * we lazily import the Node adapter (which depends on `ws`) so browser
+ * bundles never pull it in. Without `auth`, the upstream browser
+ * adapter is used unchanged.
+ */
+async function buildWsAdapter(
+  url: string,
+  auth: SyncClientAuthOptions | undefined,
+): Promise<NetworkAdapter> {
+  if (!auth) {
+    return new BrowserWebSocketClientAdapter(url) as unknown as NetworkAdapter;
+  }
+  const mod = await import('./NodeWebSocketClientAdapter.js');
+  return new mod.NodeWebSocketClientAdapter(url, {
+    getBearer: auth.getBearer,
+  }) as unknown as NetworkAdapter;
+}
 
 // FileDocument can be text or binary - use runtime detection
 type FileDocument = TextDocumentContent | BinaryDocumentContent;
@@ -48,7 +69,7 @@ type FileDocument = TextDocumentContent | BinaryDocumentContent;
  */
 interface SyncClientState {
   repo: Repo | null;
-  wsAdapter: BrowserWebSocketClientAdapter | null;
+  wsAdapter: NetworkAdapter | null;
   indexHandle: DocHandle<IndexDocument> | null;
   fileHandles: Map<string, DocHandle<FileDocument>>;
   binaryFiles: Set<string>;
@@ -356,12 +377,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    * otherwise automerge-repo's synchronizer marks the doc unavailable
    * because `#peers` is empty when `handle.request()` fires.
    */
-  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMs: number = 1): Promise<FileEntry[]> {
+  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMs: number = 1, auth?: SyncClientAuthOptions): Promise<FileEntry[]> {
     // Disconnect from any existing connection
     await disconnect();
 
     try {
-      state.wsAdapter = new BrowserWebSocketClientAdapter(syncServerUrl);
+      state.wsAdapter = await buildWsAdapter(syncServerUrl, auth);
       state.repo = new Repo({
         network: [state.wsAdapter],
         storage: new IndexedDBStorageAdapter(),
@@ -482,7 +503,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     astCache.clear();
 
     if (state.wsAdapter) {
-      state.wsAdapter.disconnect();
+      (state.wsAdapter as { disconnect: () => void }).disconnect();
       state.wsAdapter = null;
     }
 
@@ -793,7 +814,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = new BrowserWebSocketClientAdapter(options.syncServer);
+      state.wsAdapter = await buildWsAdapter(options.syncServer, options.auth);
       state.repo = new Repo({
         network: [state.wsAdapter],
         storage: new IndexedDBStorageAdapter(),

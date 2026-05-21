@@ -15,6 +15,12 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ConnectionManager } from './connection-manager.js';
+import {
+  AUTH_TOOL_DEFINITIONS,
+  AuthToolsState,
+  type AuthToolName,
+} from './auth/auth-tools.js';
+import { redactTokens } from './auth/device-flow.js';
 
 function text(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }] };
@@ -32,7 +38,12 @@ function getReadTools(): Tool[] {
   return [
     {
       name: 'connect_project',
-      description: 'Connect to a Quarto Hub project by its automerge index document ID. Returns the list of files in the project.',
+      description:
+        'Connect to a Quarto Hub project by its automerge index document ID. ' +
+        'Returns the list of files in the project. ' +
+        'If the hub requires authentication and no valid credentials are cached, ' +
+        'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
+        '`authenticate_start` to begin the device-flow.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -357,19 +368,26 @@ async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): 
 export function registerTools(
   server: Server,
   manager: ConnectionManager,
-  readOnly: boolean
+  readOnly: boolean,
+  authToolsState?: AuthToolsState,
 ): void {
-  const tools = [...getReadTools(), ...(readOnly ? [] : getWriteTools())];
+  const dataTools = [...getReadTools(), ...(readOnly ? [] : getWriteTools())];
+  const allTools = authToolsState
+    ? [...AUTH_TOOL_DEFINITIONS, ...dataTools]
+    : dataTools;
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools };
+    return { tools: allTools };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    // Verify tool exists
-    const tool = tools.find(t => t.name === name);
+    if (authToolsState && (name === 'authenticate_start' || name === 'authenticate_finish')) {
+      return authToolsState.handle(name as AuthToolName);
+    }
+
+    const tool = dataTools.find(t => t.name === name);
     if (!tool) {
       return error(`Unknown tool: ${name}`);
     }
@@ -378,7 +396,8 @@ export function registerTools(
       return await handleTool(name, args ?? {}, manager);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return error(`Error in ${name}: ${message}`);
+      // Redact in case the error message carries token bytes (defensive).
+      return error(`Error in ${name}: ${redactTokens(message)}`);
     }
   });
 }
