@@ -1023,10 +1023,14 @@ No queue entries.
   path-independent relative URL. Each `run_q2_preview` call gets a
   fresh `TempDir`, so the two runs see different absolute project
   roots; structural AST should not depend on that.
-- [ ] Add attribution fixture: `attribution-basic` (both modes; the
-  helper installs an `AttributionSourceProvider` on
-  `RenderContext.attribution_provider` — needs a small `Fixture`
-  extension).
+- [x] Add attribution fixture: `attribution-basic` (both modes).
+  Extended `Fixture` with an optional `attribution_json: Option<&'static str>`
+  field. `run_single_file` installs a `PreBuiltAttributionProvider`
+  on `ctx.attribution_provider` when present; `render_active_page_preview`
+  forwards the JSON to `RenderToPreviewAstRenderer::with_attribution`.
+  Stub JSON has one actor + one run covering bytes 0..1024 so the
+  attribution map overlaps the entire fixture body. Passes on first
+  run in both modes.
 
 ### Phase 5 — Failure triage
 

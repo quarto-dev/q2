@@ -105,6 +105,12 @@ struct Fixture {
     /// orchestrator-only (chrome transforms need a populated
     /// ProjectIndex).
     modes: &'static [DriveMode],
+    /// Optional transport-shape attribution JSON. When set, both
+    /// `DriveMode`s install a
+    /// `PreBuiltAttributionProvider(json.to_string())` on the
+    /// `RenderContext` (single-file) or pass it to the renderer
+    /// via `with_attribution` (orchestrator). `None` = no provider.
+    attribution_json: Option<&'static str>,
 }
 
 impl Fixture {
@@ -150,8 +156,10 @@ fn run_q2_preview(fixture: &Fixture, mode: DriveMode) -> DocumentAst {
     let active = canonical(&project_dir.join(&fixture.active));
 
     let doc = match mode {
-        DriveMode::SingleFile => run_single_file(&project_dir, &active),
-        DriveMode::ProjectOrchestrator => run_orchestrator(&project_dir, &active),
+        DriveMode::SingleFile => run_single_file(&project_dir, &active, fixture.attribution_json),
+        DriveMode::ProjectOrchestrator => {
+            run_orchestrator(&project_dir, &active, fixture.attribution_json)
+        }
     };
     drop(temp);
     doc
@@ -159,7 +167,11 @@ fn run_q2_preview(fixture: &Fixture, mode: DriveMode) -> DocumentAst {
 
 // ─── SingleFile mode ──────────────────────────────────────────────
 
-fn run_single_file(_project_dir: &Path, active: &Path) -> DocumentAst {
+fn run_single_file(
+    _project_dir: &Path,
+    active: &Path,
+    attribution_json: Option<&'static str>,
+) -> DocumentAst {
     pollster::block_on(async {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
@@ -183,6 +195,11 @@ fn run_single_file(_project_dir: &Path, active: &Path) -> DocumentAst {
             .expect("q2-preview is a recognized pseudo-format");
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc_info, &format, &binaries);
+        if let Some(json) = attribution_json {
+            ctx.attribution_provider = Some(Arc::new(
+                quarto_core::attribution::PreBuiltAttributionProvider::new(json.to_string()),
+            ));
+        }
 
         let content = std::fs::read(active).unwrap();
         let stages = build_q2_preview_pipeline_stages(None, Vec::new());
@@ -204,8 +221,12 @@ fn run_single_file(_project_dir: &Path, active: &Path) -> DocumentAst {
 
 // ─── ProjectOrchestrator mode ─────────────────────────────────────
 
-fn run_orchestrator(_project_dir: &Path, active: &Path) -> DocumentAst {
-    let output = render_active_page_preview(active);
+fn run_orchestrator(
+    _project_dir: &Path,
+    active: &Path,
+    attribution_json: Option<&'static str>,
+) -> DocumentAst {
+    let output = render_active_page_preview(active, attribution_json);
     let ast_json = output
         .payload
         .as_ast_json()
@@ -220,7 +241,10 @@ fn run_orchestrator(_project_dir: &Path, active: &Path) -> DocumentAst {
 /// Each `tests/*.rs` is its own binary, so the helper has to be
 /// duplicated rather than imported. The plan flags this as
 /// acceptable for now.
-fn render_active_page_preview(active: &Path) -> WasmPassTwoOutput {
+fn render_active_page_preview(
+    active: &Path,
+    attribution_json: Option<&'static str>,
+) -> WasmPassTwoOutput {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let mut project = ProjectContext::discover(active, runtime.as_ref()).unwrap();
     if !project.is_single_file {
@@ -229,7 +253,10 @@ fn render_active_page_preview(active: &Path) -> WasmPassTwoOutput {
 
     let project_type = project_type_for(&project);
     let vfs_root = project.dir.join(".quarto/project-artifacts");
-    let renderer = RenderToPreviewAstRenderer::new(&vfs_root);
+    let mut renderer = RenderToPreviewAstRenderer::new(&vfs_root);
+    if let Some(json) = attribution_json {
+        renderer = renderer.with_attribution(json.to_string());
+    }
 
     let format =
         Format::from_format_string("q2-preview").expect("q2-preview is a recognized pseudo-format");
@@ -290,6 +317,7 @@ fn doc_fixture(name: &'static str, content: &'static str) -> Fixture {
         }),
         active: PathBuf::from("index.qmd"),
         modes: BOTH_MODES,
+        attribution_json: None,
     }
 }
 
@@ -348,6 +376,7 @@ fn include_trivial() {
         }),
         active: PathBuf::from("index.qmd"),
         modes: BOTH_MODES,
+        attribution_json: None,
     };
     fixture.run_in_each_mode();
 }
@@ -580,6 +609,7 @@ fn include_in_header() {
         }),
         active: PathBuf::from("index.qmd"),
         modes: BOTH_MODES,
+        attribution_json: None,
     };
     fixture.run_in_each_mode();
 }
@@ -611,6 +641,7 @@ fn resource_image() {
         }),
         active: PathBuf::from("index.qmd"),
         modes: BOTH_MODES,
+        attribution_json: None,
     };
     fixture.run_in_each_mode();
 }
@@ -672,6 +703,7 @@ fn website_chrome() {
         }),
         active: PathBuf::from("index.qmd"),
         modes: ORCHESTRATOR_ONLY,
+        attribution_json: None,
     };
     fixture.run_in_each_mode();
 }
@@ -705,6 +737,7 @@ fn website_links() {
         }),
         active: PathBuf::from("index.qmd"),
         modes: ORCHESTRATOR_ONLY,
+        attribution_json: None,
     };
     fixture.run_in_each_mode();
 }
@@ -771,6 +804,47 @@ fn website_listing() {
         }),
         active: PathBuf::from("index.qmd"),
         modes: ORCHESTRATOR_ONLY,
+        attribution_json: None,
+    };
+    fixture.run_in_each_mode();
+}
+
+// =====================================================================
+// Phase 4d — attribution fixture
+// =====================================================================
+//
+// Deterministic stub. `PreBuiltAttributionProvider` reads a static
+// JSON payload; the writer-side machinery (`AttributionGenerateStage`
+// + `AttributionRenderTransform`) then populates `format_options.json`
+// and writes per-node attribution records into the AST. Using
+// `GitBlameProvider` here would be flaky — depends on actual git
+// history; the prebuilt path is the same shape the WASM client
+// drives in production.
+
+/// Tiny transport-shape attribution JSON: one actor, one run
+/// covering bytes 0..1024 so it overlaps anything the fixture
+/// document might contain.
+const STUB_ATTRIBUTION_JSON: &str = concat!(
+    "{",
+    "\"runs\":[{\"start\":0,\"end\":1024,\"actor\":\"alice\",\"time\":1700000000}],",
+    "\"identities\":{\"alice\":{\"name\":\"Alice\",\"color\":\"#ff0000\"}}",
+    "}"
+);
+
+#[test]
+fn attribution_basic() {
+    let fixture = Fixture {
+        name: "attribution-basic",
+        setup: Box::new(|root: &Path| {
+            // Plenty of bytes for the attribution run to overlap.
+            write(
+                &root.join("index.qmd"),
+                "---\ntitle: Attributed\n---\n\n## Section\n\nA paragraph attributed to alice for the whole byte range.\n",
+            );
+        }),
+        active: PathBuf::from("index.qmd"),
+        modes: BOTH_MODES,
+        attribution_json: Some(STUB_ATTRIBUTION_JSON),
     };
     fixture.run_in_each_mode();
 }
