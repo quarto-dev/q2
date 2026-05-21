@@ -159,13 +159,12 @@ describe('loadDeviceFlowConfigFromEnv', () => {
 });
 
 describe('no_baked_default_client_id_or_secret', () => {
-  // Sourcing rule lock-in: scan every file under src/ for hard-coded
-  // Google OAuth credentials. The only legitimate match is this very
-  // assertion file (excluded explicitly).
+  // Sourcing rule lock-in: scan every non-test file under src/ for
+  // hard-coded Google OAuth credentials. Test files are allowed to
+  // carry fixture-shaped strings.
   it('contains no apps.googleusercontent.com literal in any source file', () => {
     const root = join(__dirname, '..');
     const violations: string[] = [];
-    const skip = new Set(['device-flow.test.ts']);
     function walk(dir: string): void {
       for (const ent of readdirSync(dir)) {
         const p = join(dir, ent);
@@ -174,7 +173,7 @@ describe('no_baked_default_client_id_or_secret', () => {
           walk(p);
           continue;
         }
-        if (!p.endsWith('.ts') || skip.has(ent)) continue;
+        if (!p.endsWith('.ts') || p.endsWith('.test.ts')) continue;
         const text = readFileSync(p, 'utf8');
         if (/[A-Za-z0-9_-]+\.apps\.googleusercontent\.com/.test(text)) {
           violations.push(`${p}: apps.googleusercontent.com literal`);

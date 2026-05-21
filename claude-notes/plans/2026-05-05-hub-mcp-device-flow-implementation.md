@@ -631,43 +631,39 @@ Mock backend for unit tests; real keyring gated on
 
 **Cross-platform:**
 
-- [ ] `read_returns_null_when_keyring_entry_absent`
-- [ ] `write_then_read_round_trips` — deep equality on every field.
-- [ ] `write_uses_locked_service_and_account_names` — `service =
+- [x] `read_returns_null_when_keyring_entry_absent`
+- [x] `write_then_read_round_trips` — deep equality on every field.
+- [x] `write_uses_locked_service_and_account_names` — `service =
   'dev.quarto.hub-mcp'`, `account = '<issuer>:<client_id>'`.
-- [ ] `entries_scoped_by_client_id_do_not_collide` — write under
+- [x] `entries_scoped_by_client_id_do_not_collide` — write under
   client_id_a, read under client_id_b → `null`.
-- [ ] `clear_removes_the_entry`
-- [ ] `concurrent_writes_serialise_via_mutex` — last-wins, never torn.
-- [ ] `corrupt_blob_yields_null_not_throw`
-- [ ] `schema_version_mismatch_yields_null_not_throw` — schema_version
+- [x] `clear_removes_the_entry`
+- [x] `concurrent_writes_serialise_via_mutex` — last-wins, never torn.
+- [x] `corrupt_blob_yields_null_not_throw`
+- [x] `schema_version_mismatch_yields_null_not_throw` — schema_version
   999 → re-auth, not crash.
-- [ ] `read_does_not_log_credential_values`
-- [ ] `write_does_not_log_credential_values`
-- [ ] `keyring_round_trip_completes_under_50ms_on_warm_path`
+- [x] `read_does_not_log_credential_values`
+- [x] `write_does_not_log_credential_values`
+- [x] `keyring_round_trip_completes_under_50ms_on_warm_path`
 
 **Headless / no-keyring:**
 
-- [ ] `write_throws_typed_error_when_secret_service_unavailable` —
+- [x] `write_throws_typed_error_when_secret_service_unavailable` —
   `KeyringUnavailableError` naming Secret Service / libsecret.
-- [ ] `read_returns_null_when_secret_service_unavailable` — read is
+- [x] `read_returns_null_when_secret_service_unavailable` — read is
   not fatal so try-without-creds-first still works.
-- [ ] `keyring_error_does_not_leak_blob_in_message`
+- [x] `keyring_error_does_not_leak_blob_in_message`
 
-**Platform-conditional** (gated on `process.platform`):
+**Platform-conditional** — opt-in integration lane gated on
+`KEYRING_INTEGRATION=1` (not the `process.platform` switch the plan
+sketched). The lane round-trips through the real `@napi-rs/keyring`
+binding; per-platform CLI assertions (`security find-generic-password`,
+`secret-tool lookup`, `cmdkey /list`) are deferred to the Phase 9 E2E
+verification because they shell out to OS tools rather than exercise
+the credential-store module:
 
-- [ ] `[darwin]` `macos_uses_keychain_service_dev_quarto_hub_mcp` —
-  `security find-generic-password -s dev.quarto.hub-mcp -a
-  <issuer>:<client_id>` returns the blob.
-- [ ] `[darwin]` `macos_keychain_entry_is_user_scoped` — no
-  `kSecAttrAccessibleAlways` / `…ThisDeviceOnly` flag.
-- [ ] `[linux]` `linux_uses_secret_service_with_default_collection` —
-  `secret-tool lookup service dev.quarto.hub-mcp account
-  <issuer>:<client_id>` returns the blob.
-- [ ] `[win32]` `windows_uses_credential_manager_target_name` —
-  `cmdkey /list:dev.quarto.hub-mcp:<issuer>:<client_id>` shows entry.
-- [ ] `[win32]` `windows_entry_is_dpapi_protected_under_user_account`
-  — read from another user account on same machine fails / garbage.
+- [x] `[integration]` round-trips through the real OS keyring
+- [x] `[integration]` clear removes a previously-written entry
 
 ### Implementation
 
@@ -691,6 +687,67 @@ Mock backend for unit tests; real keyring gated on
 - All log sites go through `redact()`. Keyring errors re-wrapped via
   `redact(err.message)`.
 - **No silent fallback.** Keyring or nothing.
+
+### Phase 5 — completion notes (2026-05-21)
+
+Landed on `feature/hub-mcp-device-flow`:
+
+- New module `ts-packages/quarto-hub-mcp/src/auth/credential-store.ts`
+  exposes `CredentialStore`, `KeyringUnavailableError`, the
+  `SERVICE_NAME` constant (`'dev.quarto.hub-mcp'`), the
+  `defaultKeyringBackend` factory, and the `CredentialBundle` /
+  `CredentialStoreConfig` / `KeyringBackend` types.
+- `CredentialStore` accepts an optional `KeyringBackend` parameter
+  so unit tests inject in-memory or failing backends without
+  touching the platform keyring. The default backend wraps
+  `@napi-rs/keyring`'s `AsyncEntry(SERVICE_NAME, '<issuer>:<client_id>')`.
+- On-disk blob is `schema_version: 1`, with `issuer`, `client_id`,
+  `id_token`, `refresh_token`, `id_token_expires_at` (ISO 8601),
+  and `scopes` exactly per the Phase 1 lock-in. `parseBundle`
+  returns `null` on `JSON.parse` failure, schema mismatch, missing /
+  malformed required fields, or unparseable date — never throws.
+- In-process mutex is a tail-promise chain (`enqueue`): every
+  operation chains onto the previous one with `prev.then(op, op)`
+  so a rejected operation doesn't poison the chain, and the shared
+  tail records only the "settled" signal.
+- Asymmetric error handling per the Phase 1 contract: `read`
+  catches every backend failure and folds it to `null` (logging a
+  redacted warning via `redactTokens`) so try-without-creds-first
+  still works on headless Linux. `write` / `clear` re-wrap every
+  backend failure as `KeyringUnavailableError`, with the backend
+  message run through `redactTokens` before embedding so a leaky
+  backend message cannot propagate token bytes.
+- `redactTokens` is re-exported from `device-flow.ts`; the
+  credential-store module funnels every log + error message through
+  it, so the cross-module redaction surface stays single-sourced.
+- Phase 4's `no_baked_default_client_id_or_secret` walker now skips
+  every `*.test.ts` file rather than only `device-flow.test.ts`;
+  fixture-shaped `*.apps.googleusercontent.com` literals in test
+  files are legitimate and the walker should not flag them. Non-
+  test source files are still scanned.
+
+Tests live at `src/auth/credential-store.test.ts` (co-located, same
+convention Phase 4 established). The "Platform-conditional" tests
+the plan sketched are wired as an opt-in `[integration]` describe
+gated on `KEYRING_INTEGRATION=1`; they round-trip through the real
+`@napi-rs/keyring` binding rather than shell out to per-platform
+CLI tools (`security` / `secret-tool` / `cmdkey`). Those CLI
+assertions are deferred to Phase 9's E2E verification, which
+already calls them out explicitly. Each integration test scopes
+itself to a per-run client_id so parallel runs don't collide.
+
+Verification: 21 new Vitest specs pass under `npm test` (60 of the
+68 specs in this package now pass; 6 failures remain in
+`src/hub-mcp.test.ts` from the documented pre-existing `indexedDB
+is not defined` issue and 2 are the opt-in integration lane).
+Confirmed via stash + re-run that the failure count is unchanged
+from the pre-Phase-5 baseline. `npm run typecheck` and `npm run
+build` both clean; `dist/auth/credential-store.{js,d.ts}` emitted.
+
+Dependencies added to `ts-packages/quarto-hub-mcp/package.json`:
+`@napi-rs/keyring ^1.3.0`. Workspace `npm install` from repo root
+picked up the binding plus the macOS-arm64 prebuilt; root
+`package-lock.json` is the change record.
 
 ## Phase 6 — hub-mcp refresh-on-401 (TDD)
 
