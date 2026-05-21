@@ -271,6 +271,21 @@ fn pandoc_to_document_ast(pandoc: Pandoc, ast_context: ASTContext, path: PathBuf
     }
 }
 
+// ─── Convenience constructors ─────────────────────────────────────
+
+/// Single-file fixture: writes `content` to `<root>/index.qmd`,
+/// runs in both `SingleFile` and `ProjectOrchestrator` modes.
+fn doc_fixture(name: &'static str, content: &'static str) -> Fixture {
+    Fixture {
+        name,
+        setup: Box::new(move |root: &Path| {
+            write(&root.join("index.qmd"), content);
+        }),
+        active: PathBuf::from("index.qmd"),
+        modes: BOTH_MODES,
+    }
+}
+
 // =====================================================================
 // Phase-2 smoke fixture
 // =====================================================================
@@ -283,13 +298,140 @@ fn pandoc_to_document_ast(pandoc: Pandoc, ast_context: ASTContext, path: PathBuf
 
 #[test]
 fn smoke_plain_paragraph() {
+    doc_fixture("smoke-plain-paragraph", "hello\n").run_in_each_mode();
+}
+
+// =====================================================================
+// Phase 3 — carry-forward fixtures (one per transform / feature)
+// =====================================================================
+//
+// Each `#[test]` calls `run_in_each_mode`, which loops through
+// `SingleFile` and `ProjectOrchestrator`. Failures are *expected* on
+// first run for some of these — that's the whole point of the gate.
+// Per Phase 5 / §"CI failure policy", leave failing fixtures failing
+// and file a beads issue using the sub-agent investigation prompt
+// the panic message fills in. Do NOT `#[ignore]` without explicit
+// user approval.
+
+// ─── shortcode-resolve, metadata-normalize ────────────────────────
+
+#[test]
+fn meta_single() {
+    doc_fixture("meta-single", "---\nfoo: hello\n---\n\n{{< meta foo >}}\n").run_in_each_mode();
+}
+
+#[test]
+fn meta_markdown() {
+    doc_fixture(
+        "meta-markdown",
+        "---\nfoo: '**Bold** title'\n---\n\n{{< meta foo >}}\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── include-expansion + shortcode-resolve ────────────────────────
+
+#[test]
+fn include_trivial() {
     let fixture = Fixture {
-        name: "smoke-plain-paragraph",
+        name: "include-trivial",
         setup: Box::new(|root: &Path| {
-            write(&root.join("index.qmd"), "hello\n");
+            write(&root.join("child.qmd"), "Child content\n");
+            write(&root.join("index.qmd"), "{{< include child.qmd >}}\n");
         }),
         active: PathBuf::from("index.qmd"),
         modes: BOTH_MODES,
     };
     fixture.run_in_each_mode();
+}
+
+// ─── callout (callout-resolve is excluded from q2-preview) ────────
+
+#[test]
+fn callout_warning() {
+    doc_fixture(
+        "callout-warning",
+        "::: {.callout-warning}\nBody of the callout.\n:::\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── theorem-sugar ────────────────────────────────────────────────
+
+#[test]
+fn theorem() {
+    doc_fixture(
+        "theorem",
+        "::: {#thm-foo .theorem}\nThere is a theorem here.\n:::\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── float-ref-target-sugar ───────────────────────────────────────
+
+#[test]
+fn figure_ref_target() {
+    // Image file is not actually opened by AST transforms; absence
+    // is fine for AST-level hashing. If a downstream transform
+    // grows a path-resolution side effect, add a tiny stub here.
+    doc_fixture(
+        "figure-ref-target",
+        ":::: {#fig-foo}\n![cap](img.png)\n::::\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── crossref-index + crossref-resolve ────────────────────────────
+
+#[test]
+fn crossref_to_theorem() {
+    doc_fixture(
+        "crossref-to-theorem",
+        "::: {#thm-foo .theorem}\nThere is a theorem here.\n:::\n\nSee @thm-foo for the proof.\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── sectionize ───────────────────────────────────────────────────
+
+#[test]
+fn sectionize_multi() {
+    doc_fixture(
+        "sectionize-multi",
+        "## A\n\nBody A.\n\n### B\n\nBody B.\n\n## C\n\nBody C.\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── footnotes ────────────────────────────────────────────────────
+
+#[test]
+fn footnotes_mixed() {
+    doc_fixture(
+        "footnotes-mixed",
+        "Text with inline^[an inline footnote] and reference[^foo].\n\n[^foo]: footnote body\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── appendix-structure (with license meta + footnotes interaction)
+
+#[test]
+fn appendix_license() {
+    doc_fixture(
+        "appendix-license",
+        "---\nlicense: CC BY\ncopyright: 2026 ACME\n---\n\nBody paragraph.\n\n::: {.appendix}\nAppendix content.\n:::\n\nReference[^a]\n\n[^a]: footnote\n",
+    )
+    .run_in_each_mode();
+}
+
+// ─── combined: sectionize + callouts + shortcodes ────────────────
+
+#[test]
+fn combined_stress() {
+    doc_fixture(
+        "combined-stress",
+        "---\ntitle: '**Bold** title'\n---\n\n## A\n\n::: {.callout-warning}\nWarning: {{< meta title >}}\n:::\n\n### B\n\nMore body text.\n",
+    )
+    .run_in_each_mode();
 }

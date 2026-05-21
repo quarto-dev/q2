@@ -970,13 +970,20 @@ convenience for navigating, not a contract.
 
 ### Phase 3 — Existing-fixture coverage (carry-forward)
 
-- [ ] Add fixtures: `meta-single`, `meta-markdown`, `include-trivial`,
+- [x] Add fixtures: `meta-single`, `meta-markdown`, `include-trivial`,
   `callout-warning`, `theorem`, `figure-ref-target`,
   `crossref-to-theorem`, `sectionize-multi`, `footnotes-mixed`,
   `appendix-license`, `combined-stress`.
-- [ ] Wire one assertion per (fixture, mode) pair — these are all
+- [x] Wire one assertion per (fixture, mode) pair — these are all
   document fixtures, so each runs in both `SingleFile` and
-  `ProjectOrchestrator` mode.
+  `ProjectOrchestrator` mode. (For now each `#[test]` calls
+  `run_in_each_mode` which loops over both modes; if a fixture
+  later goes red in only one mode, the panic message names the
+  mode, and we can split into two `#[test]` functions for finer
+  reporting at that point.)
+
+All 11 carry-forward fixtures pass on first run, in both modes.
+No queue entries.
 
 ### Phase 4 — New-fixture coverage (gap closure)
 
