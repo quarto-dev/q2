@@ -326,6 +326,15 @@
   border-color: var(--editor-text-dim);
 }
 
+.replay-drawer__attribution:disabled,
+.replay-drawer__attribution:disabled:hover {
+  cursor: not-allowed;
+  opacity: 0.4;
+  color: var(--editor-text-dim);
+  border-color: var(--editor-accent-border);
+  background: var(--editor-accent-bg);
+}
+
 .replay-drawer__attribution--on {
   color: var(--editor-success);
   border-color: var(--editor-success);

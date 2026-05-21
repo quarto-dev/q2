@@ -1082,6 +1082,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           attributionOn={attributionOn}
           onAttributionChange={setAttributionOn}
           attributionGenerating={attributionGenerating}
+          attributionDisabled={
+            currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
+          }
         />
       )}
 

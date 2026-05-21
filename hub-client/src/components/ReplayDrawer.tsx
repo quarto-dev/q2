@@ -31,22 +31,37 @@ interface Props {
    * the hook only generates when the toggle is on.
    */
   attributionGenerating?: boolean;
+  /**
+   * When true the pill renders greyed-out and non-interactive. Used
+   * for formats that don't surface attribution visually
+   * (everything but q2-debug / q2-preview today). The `attributionOn`
+   * state is preserved across the disabled period so toggling back
+   * to a supported format restores the user's previous preference.
+   */
+  attributionDisabled?: boolean;
 }
 
 interface AttributionToggleProps {
   attributionOn: boolean;
   onAttributionChange: (next: boolean) => void;
   generating: boolean;
+  disabled: boolean;
 }
 
-function AttributionToggle({ attributionOn, onAttributionChange, generating }: AttributionToggleProps) {
+function AttributionToggle({ attributionOn, onAttributionChange, generating, disabled }: AttributionToggleProps) {
   const classes = [
     'replay-drawer__attribution',
-    attributionOn && 'replay-drawer__attribution--on',
-    generating && 'replay-drawer__attribution--generating',
+    attributionOn && !disabled && 'replay-drawer__attribution--on',
+    generating && !disabled && 'replay-drawer__attribution--generating',
   ]
     .filter(Boolean)
     .join(' ');
+  const titleText = disabled
+    ? 'Authors overlay is not available for this format'
+    : 'Highlight authors';
+  const ariaLabel = disabled
+    ? 'Authors overlay unavailable for this format'
+    : `Authors overlay ${attributionOn ? 'on' : 'off'}`;
   return (
     <button
       type="button"
@@ -55,10 +70,11 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating }: A
         e.stopPropagation();
         onAttributionChange(!attributionOn);
       }}
-      aria-pressed={attributionOn}
-      aria-label={`Authors overlay ${attributionOn ? 'on' : 'off'}`}
-      aria-busy={generating || undefined}
-      title="Highlight authors"
+      disabled={disabled}
+      aria-pressed={disabled ? undefined : attributionOn}
+      aria-label={ariaLabel}
+      aria-busy={generating && !disabled || undefined}
+      title={titleText}
     >
       <span className="replay-drawer__attribution-dot" />
       <span className="replay-drawer__attribution-label">Authors</span>
@@ -101,6 +117,7 @@ export default function ReplayDrawer({
   attributionOn,
   onAttributionChange,
   attributionGenerating,
+  attributionDisabled,
 }: Props) {
   const showAttributionToggle =
     attributionOn !== undefined && onAttributionChange !== undefined;
@@ -212,6 +229,7 @@ export default function ReplayDrawer({
             attributionOn={attributionOn!}
             onAttributionChange={onAttributionChange!}
             generating={!!attributionGenerating}
+            disabled={!!attributionDisabled}
           />
         )}
       </div>
@@ -274,6 +292,7 @@ export default function ReplayDrawer({
             attributionOn={attributionOn!}
             onAttributionChange={onAttributionChange!}
             generating={!!attributionGenerating}
+            disabled={!!attributionDisabled}
           />
         )}
       </div>

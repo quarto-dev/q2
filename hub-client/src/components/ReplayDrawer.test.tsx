@@ -383,5 +383,51 @@ describe('ReplayDrawer', () => {
       expect(pill.className).toContain('replay-drawer__attribution--generating');
       expect(pill.getAttribute('aria-busy')).toBe('true');
     });
+
+    it('renders disabled with an explanatory title when attributionDisabled is true', () => {
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          attributionOn={false}
+          onAttributionChange={vi.fn()}
+          attributionDisabled={true}
+        />,
+      );
+      const pill = screen.getByLabelText(/unavailable/);
+      expect((pill as HTMLButtonElement).disabled).toBe(true);
+      expect(pill.getAttribute('title')).toMatch(/not available for this format/);
+    });
+
+    it('suppresses on/generating modifier classes while disabled', () => {
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          attributionOn={true}
+          onAttributionChange={vi.fn()}
+          attributionGenerating={true}
+          attributionDisabled={true}
+        />,
+      );
+      const pill = screen.getByLabelText(/unavailable/);
+      expect(pill.className).not.toContain('replay-drawer__attribution--on');
+      expect(pill.className).not.toContain('replay-drawer__attribution--generating');
+    });
+
+    it('does not fire onAttributionChange when clicked while disabled', () => {
+      const onChange = vi.fn();
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          attributionOn={false}
+          onAttributionChange={onChange}
+          attributionDisabled={true}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText(/unavailable/));
+      expect(onChange).not.toHaveBeenCalled();
+    });
   });
 });
