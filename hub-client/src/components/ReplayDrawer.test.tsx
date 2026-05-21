@@ -384,6 +384,28 @@ describe('ReplayDrawer', () => {
       expect(pill.getAttribute('aria-busy')).toBe('true');
     });
 
+    it('title text follows the on/off state when enabled', () => {
+      const { rerender } = render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          attributionOn={false}
+          onAttributionChange={vi.fn()}
+        />,
+      );
+      expect(screen.getByLabelText(/Authors/).getAttribute('title')).toBe('Show authors overlay');
+
+      rerender(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          attributionOn={true}
+          onAttributionChange={vi.fn()}
+        />,
+      );
+      expect(screen.getByLabelText(/Authors/).getAttribute('title')).toBe('Hide authors overlay');
+    });
+
     it('renders disabled with an explanatory title when attributionDisabled is true', () => {
       render(
         <ReplayDrawer

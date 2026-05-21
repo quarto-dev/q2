@@ -58,7 +58,9 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     .join(' ');
   const titleText = disabled
     ? 'Authors overlay is not available for this format'
-    : 'Highlight authors';
+    : attributionOn
+      ? 'Hide authors overlay'
+      : 'Show authors overlay';
   const ariaLabel = disabled
     ? 'Authors overlay unavailable for this format'
     : `Authors overlay ${attributionOn ? 'on' : 'off'}`;
