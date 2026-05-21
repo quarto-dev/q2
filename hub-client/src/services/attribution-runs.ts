@@ -249,7 +249,6 @@ export async function buildRunListAttribution(
   let lastHeads: unknown[] = [];
 
   for (let chunkStart = 0; chunkStart < history.length; chunkStart += CHUNK_SIZE) {
-    await waitForIdle();
     if (signal?.aborted) return null;
 
     const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, history.length);
@@ -288,6 +287,8 @@ export async function buildRunListAttribution(
       prevHeads = currHeads;
       lastHeads = Array.isArray(currHeads) ? currHeads : [currHeads];
     }
+
+    if (chunkEnd < history.length) await waitForIdle();
   }
 
   return {
