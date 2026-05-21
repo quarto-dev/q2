@@ -4,10 +4,12 @@ Holds the per-fixture project directories the q2-preview idempotence
 gate at `crates/quarto-core/tests/idempotence.rs` drives through the
 pipeline twice and hashes for equality.
 
-See
-`claude-notes/plans/2026-05-04-q2-preview-plan-3-builtin-filter-idempotence.md`
-for the full contract. The rules below are the ones that bite at
-fixture-authoring time.
+For the contract a transform / filter / stage author must meet to
+land here without breaking the gate, read
+`claude-notes/instructions/idempotence-contract.md`. The full plan
+that introduced the gate lives at
+`claude-notes/plans/2026-05-04-q2-preview-plan-3-builtin-filter-idempotence.md`.
+The rules below are the ones that bite at fixture-authoring time.
 
 ## Fixture-format rules
 

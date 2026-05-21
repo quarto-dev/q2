@@ -1057,12 +1057,12 @@ the rationale; what follows is the operational loop.
 
 ### Phase 6 — Documentation
 
-- [ ] Add `claude-notes/instructions/idempotence-contract.md` covering:
+- [x] Add `claude-notes/instructions/idempotence-contract.md` covering:
   what the contract requires of new transforms, the meta-hash
   `rendered.*` exclusion, how to add a fixture when introducing a new
   transform, the engine-cells-forbidden rule.
-- [ ] Cross-link from the README of the fixtures directory.
-- [ ] Cross-link from Plan 7a (so authors looking at runtime user-filter
+- [x] Cross-link from the README of the fixtures directory.
+- [x] Cross-link from Plan 7a (so authors looking at runtime user-filter
   idempotence find the CI contract too).
 
 ### Phase 7 — Verification

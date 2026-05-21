@@ -321,7 +321,10 @@ whole-set check, two per filter for attribution). For 5 filters,
 - Plan 3 — CI-time pipeline-determinism verification for built-in
   transforms and the one built-in Lua filter. Plan 3 ships
   `compute_meta_hash_fresh` which this plan reuses for the meta
-  comparison in the round-trip check.
+  comparison in the round-trip check. The transform/filter-author
+  contract Plan 3 enforces is documented at
+  `claude-notes/instructions/idempotence-contract.md`; new transforms
+  on both the built-in and user-filter sides must meet it.
 - Plan 4 — `By` types; `is_atomic_kind()` is unrelated to this plan
   but the runtime check shares the source-info-blind hash. Plan 4's
   "Dispatch follow-up" (Lua-file registration in `SourceContext`) is
