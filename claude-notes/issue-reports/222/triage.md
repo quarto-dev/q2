@@ -9,9 +9,9 @@
 
 ## Summary
 
-Reproduced. The tree-sitter parse trace is byte-identical across runs (verified across 15 runs), so the GLR parser itself is deterministic on this input. **All of the nondeterminism is downstream**, in `quarto-parse-errors`: a `HashMap<usize, TreeSitterProcessLog>` keyed by GLR version number is iterated by `.values()` to extract diagnostic states, and a `(row, column)` dedupe drops every state but the first. With three GLR branches all hitting `detect_error` at `(row=0, col=18)`, whichever HashMap bucket is iterated first wins. Default `RandomState` randomizes per process. Confirmed by swapping `HashMap` → `BTreeMap` locally — 30/30 runs then produce Variant A. Fix is one line; the recommendation below sticks with BTreeMap, but lists the alternatives and the audit obligations.
+Reproduced. The tree-sitter parse trace is byte-identical across runs (verified across 15 runs), so the GLR parser itself is deterministic on this input. **All of the nondeterminism is downstream**, in `quarto-parse-errors`: a `HashMap<usize, TreeSitterProcessLog>` keyed by GLR version number is iterated by `.values()` to extract diagnostic states, and a `(row, column)` dedupe drops every state but the first. With three GLR branches all hitting `detect_error` at `(row=0, col=18)`, whichever HashMap bucket is iterated first wins. Default `RandomState` randomizes per process. Confirmed by swapping `HashMap` → both `BTreeMap` and `hashlink::LinkedHashMap` locally — each gives 30/30 runs the same diagnostic (Variant A). Fix is one line; the recommendation below uses `LinkedHashMap` to match the convention already used elsewhere in the workspace.
 
-The user's clarification on the ticket is "either diagnostic is acceptable, as long as the tie is always broken consistently to one of them." Both `HashMap`→`BTreeMap` (deterministically pick lowest GLR version) and `HashMap`→sort-then-iterate satisfy that.
+The user's clarification on the ticket is "either diagnostic is acceptable, as long as the tie is always broken consistently to one of them." Both `LinkedHashMap` (preserves insertion order — tree-sitter inserts version 0 first) and `BTreeMap` (sorts by key — version 0 is lowest) satisfy that. They give identical output on this input because tree-sitter inserts GLR versions in numeric order.
 
 ## Reproduction
 
@@ -75,9 +75,12 @@ The final `sort_by_key` on `start_offset` is a red herring: the first diagnostic
 
 ### Step 3 — confirm the fix
 
-Local experimental change to `tree_sitter_log.rs`: `use std::collections::BTreeMap as HashMap;` (so `processes` becomes a `BTreeMap<usize, …>` everywhere it's used).
+Two local experimental changes to `tree_sitter_log.rs`, each tried independently:
 
-Result: 30/30 runs produce Variant A (Q-2-5 Underscore Emphasis). BTreeMap iterates keys in ascending order ⇒ GLR version 0 wins ⇒ Variant A. Reverted the change before recording this triage.
+1. `use std::collections::BTreeMap as HashMap;` — 30/30 runs produce Variant A. BTreeMap iterates keys in ascending order ⇒ GLR version 0 wins.
+2. `use hashlink::LinkedHashMap as HashMap;` (plus `hashlink = "0.11"` added to `crates/quarto-parse-errors/Cargo.toml`) — 30/30 runs produce Variant A. LinkedHashMap preserves insertion order; tree-sitter inserts version 0 first on this trace, so version 0 wins.
+
+Both reverted before recording this triage. Recommended fix is LinkedHashMap because the rest of the workspace already uses `hashlink::LinkedHashMap` for the same kind of deterministic-iteration requirement (8 crates, including `crates/pampa/src/readers/json.rs`).
 
 ### Step 4 — audit for other order-dependent HashMap/HashSet in the diagnostic path
 
@@ -101,13 +104,14 @@ So the production fix is one site. The audit conclusion is that there is no othe
 - *Is the tree-sitter parse non-deterministic?* No. Trace is byte-identical across 15 runs.
 - *Is the variation only in the second diagnostic?* Yes. The first diagnostic (Q-2-11 at col 13) comes from a process that hits its `detect_error` at a different `(row, column)` than the others (col 12-ish vs col 18), so the dedupe doesn't apply. Only the col-18 trio competes.
 - *Does the final `sort_by_key` matter?* No. The first/second diagnostics are at different columns, so sorting never reorders them.
-- *Is BTreeMap (version 0 wins) the right tie-break?* Acceptable per the user's clarification ("either diagnostic is acceptable, as long as the tie is always broken consistently"). Variant A is also the trace's "main line" (version 0 is the version that continued through the recovery), so it has weak intuitive grounding.
+- *Is "GLR version 0 wins" the right tie-break?* Acceptable per the user's clarification ("either diagnostic is acceptable, as long as the tie is always broken consistently"). Variant A is also the trace's "main line" (version 0 is the version that continued through the recovery), so it has weak intuitive grounding.
+- *LinkedHashMap or BTreeMap?* LinkedHashMap, to stay consistent with the workspace's existing convention for "iteration order must be deterministic" containers (see `pampa/src/readers/json.rs`, plus 7 other crates using `hashlink`). On this trace they produce identical output because tree-sitter inserts GLR versions in numeric order.
 
 ## Outcome / recommended next step
 
 Filed bd-hwdlq with the fix scope:
 
-1. **Fix**: change `processes: HashMap<usize, TreeSitterProcessLog>` to `BTreeMap<usize, TreeSitterProcessLog>` in `crates/quarto-parse-errors/src/tree_sitter_log.rs:48`. Localized, one import + one type swap. Adjust `processes: HashMap::new()` at the call sites accordingly (or keep an `HashMap as` re-alias).
+1. **Fix**: change `processes: HashMap<usize, TreeSitterProcessLog>` to `hashlink::LinkedHashMap<usize, TreeSitterProcessLog>` in `crates/quarto-parse-errors/src/tree_sitter_log.rs:48`. Localized: one import swap (`use std::collections::HashMap;` → `use hashlink::LinkedHashMap as HashMap;` keeps the in-file name `HashMap` working), one initializer (`HashMap::new()` at line 181 stays compiled-the-same thanks to the alias), and `hashlink = "0.11"` added to `crates/quarto-parse-errors/Cargo.toml`. No other call sites need to change.
 
 2. **Regression test**: add a test that parses the issue-222 input N times in-process (e.g. N=20) and asserts that all N runs produce byte-identical diagnostic output. The test will fail on the current code (probabilistically — N=20 has ≥99.9% chance of failure with the observed 63/37 split) and pass under the fix. Place under `crates/pampa/tests/` or in a new test on `quarto-parse-errors`.
 

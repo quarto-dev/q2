@@ -39,11 +39,33 @@ Phase 1 — test first (TDD).
 Phase 2 — fix.
 
 - [ ] Swap `HashMap<usize, TreeSitterProcessLog>` for
-      `BTreeMap<usize, TreeSitterProcessLog>` in
+      `hashlink::LinkedHashMap<usize, TreeSitterProcessLog>` in
       `tree_sitter_log.rs`. Touches the field declaration, the import,
-      and the `HashMap::new()` initializer at line 181. Iteration sites
-      keep working without modification (BTreeMap implements the same
-      `.values()` / `.iter()` API and indexing).
+      the `HashMap::new()` initializer at line 181, and a one-line
+      addition to `crates/quarto-parse-errors/Cargo.toml`
+      (`hashlink = "0.11"`). Iteration sites keep working without
+      modification (LinkedHashMap implements `.values()` / `.iter()`
+      / indexing the same way).
+
+      Rationale for LinkedHashMap over BTreeMap: it's the data
+      structure the rest of the workspace already reaches for when
+      iteration order has to be deterministic — 8 crates depend on
+      `hashlink` (quarto-pandoc-types, quarto-ast-reconcile,
+      quarto-core, comrak-to-pandoc, quarto-citeproc, pampa,
+      quarto-highlight, plus the reconcile-viewer experiment).
+      `pampa/src/readers/json.rs` uses `LinkedHashMap<String, _>` for
+      the same kind of "iteration order matters" reason. Sticking with
+      the established pattern is preferred.
+
+      For *this particular bug* either choice gives the same observable
+      output: tree-sitter inserts GLR versions in numeric order (0, 1,
+      2 on the issue-222 trace), and the lowest version wins under
+      both BTreeMap (sorted) and LinkedHashMap (insertion). Both
+      experimentally produce 30/30 Variant A. The two would only
+      diverge if tree-sitter ever introduced a brand-new high-numbered
+      version *before* a lower-numbered one after a condense; nothing
+      in the captured trace suggests that happens, but the audit
+      should keep an eye out.
 - [ ] Run the regression test, confirm it passes.
 - [ ] Run the full pampa test suite (`cargo nextest run -p pampa
       -p quarto-parse-errors`).
@@ -61,16 +83,16 @@ Phase 3 — guardrail.
 
 ## Open questions for the user (before implementing)
 
-1. **Tie-break direction.** BTreeMap picks the lowest version key
-   (here, GLR version 0 ⇒ Variant A, the "underscore-emphasis" diag).
-   Acceptable per the GH clarification, but is there a reason to
-   prefer the highest version, or a non-version-based tie-break
-   (e.g. lexically earliest, fewest skips)? Default
-   recommendation: lowest version. It's the path tree-sitter
-   considered first (and Pandoc broadly agrees on this case — it
-   parses `_blank` inside the quote as text, not as emphasis open,
-   *because* the quote isn't closed, but only Quarto reports both
-   problems).
+1. **Tie-break direction.** LinkedHashMap picks the version inserted
+   first (here, GLR version 0 ⇒ Variant A, the
+   "underscore-emphasis" diag). Acceptable per the GH clarification,
+   but is there a reason to prefer the highest version, or a
+   non-version-based tie-break (e.g. lexically earliest, fewest
+   skips)? Default recommendation: first-inserted (version 0). It's
+   the path tree-sitter considered first — and on this input Pandoc
+   broadly agrees on the spirit of it (parses `_blank` inside the
+   quote as text, not as emphasis open, *because* the quote isn't
+   closed); only Quarto reports both problems.
 
 2. **Scope of the regression test.** Is it acceptable to add a test
    that loops N times in-process? Two concerns:
@@ -90,12 +112,11 @@ Once the user signs off on these, proceed with Phase 1.
 
 - `processes` is also iterated by `TreeSitterParseLog::is_good`
   (`tree_sitter_log.rs:72`). That's a boolean reduction (`all` over
-  process is_good) — order-independent. The BTreeMap swap is a no-op
-  there.
-- BTreeMap's performance characteristics differ from HashMap (O(log n)
-  vs amortized O(1) lookup), but `processes` is at most a handful of
-  entries (one per concurrent GLR version, typically 1-3). Performance
-  is irrelevant at this size.
+  process is_good) — order-independent. The LinkedHashMap swap is a
+  no-op there.
+- LinkedHashMap keeps amortized O(1) insert/lookup (it's a HashMap
+  backed by a doubly-linked list for iteration order); performance
+  is a wash. `processes` is at most a handful of entries anyway.
 - We retain the `(row, column)` dedupe. Reconsidering it (e.g.
   emitting all distinct GLR interpretations) is a separate question;
   the user has explicitly said "either diagnostic is acceptable" so
