@@ -21,6 +21,13 @@ use crate::format::{Format, FormatIdentifier};
 /// A contiguous byte-range run attributed to a single author at a
 /// single point in time.
 ///
+/// `start` and `end` are UTF-8 **byte** offsets into the source text,
+/// deliberately distinct from the UTF-16 code units used on the JS
+/// side (`hub-client/src/services/attribution-runs.ts`) and by
+/// Automerge text splice positions. Conversion happens once, at the
+/// WASM wire, inside `buildAttributionPayload`. See
+/// `claude-notes/designs/attribution-encoding-contract.md`.
+///
 /// `actor` is `Arc<str>` (not `String`) so the same Arc is shared
 /// across every run by the same author. For a doc with 5
 /// contributors and 1000 runs this is 5 string allocations + 1000

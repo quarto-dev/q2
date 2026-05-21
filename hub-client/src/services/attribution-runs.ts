@@ -15,6 +15,10 @@
  * Algorithm reference (and known-good baseline): the prototype branch
  * `feat/node-attribution` carries this file along with the consumer-side
  * surface and the `attribution-runs.test.ts` invariant suite.
+ *
+ * See `claude-notes/designs/attribution-encoding-contract.md` for the
+ * full statement of the UTF-16 / UTF-8 boundary and why both sides are
+ * correct in their own coordinate space.
  */
 
 import { diff } from '@automerge/automerge';
