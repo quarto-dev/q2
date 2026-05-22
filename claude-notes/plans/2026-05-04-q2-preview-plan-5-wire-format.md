@@ -289,9 +289,13 @@ for now it's a no-cost read-only compat shim.
 4 => {
     // Generated { by, from }. The outer `r` field is parsed by the
     // caller and *ignored here* — Generated entries don't carry their
-    // own offsets; ranges come from chain-walking the Invocation anchor.
-    // A code-4 entry with `r != [0, 0]` is silently accepted (precedent:
-    // today's Concat arm also parses `r` but doesn't use it).
+    // own offsets; ranges come from chain-walking the Invocation anchor
+    // via `resolve_byte_range` / `preimage_in`. The writer hard-codes
+    // `r: [0, 0]` for code-4 entries; downstream code that reads `r`
+    // directly will see zeros — that's the signal to walk the anchor
+    // chain instead. A code-4 entry with `r != [0, 0]` from an
+    // older/future writer is silently accepted (precedent: today's
+    // Concat arm also parses `r` but doesn't use it).
     //
     // Strict on every other shape: missing `by`, `by.kind`, `from` entry
     // missing `role`/`si_id`, `from` present but not an array, or an
@@ -534,6 +538,21 @@ build break.
       independently revertible (the reader change is purely additive
       — restoring the prior arm removes only the new FilterProvenance
       recovery branch).
+- [ ] **Rollback signal:** the Phase-1 reader change only touches the
+      code-3 arm; other code-paths and other pool entries are
+      unaffected. If a Plan-3 idempotence case *other than*
+      `lua_shortcode_lipsum_fixed` regresses (or a workspace test
+      outside the idempotence suite regresses), that is a real signal
+      — either the dual-shape discriminator misclassifies a payload
+      shape that *isn't* the buggy FilterProvenance, or the new
+      `Generated` recovery loses information a downstream test
+      depended on. Do not paper over it by relaxing the strict
+      rejection rules. Investigate the failing case's pool entries
+      with `jq '.astContext.sourceInfoPool'` on the offending fixture's
+      JSON, identify which code-3 entries are present, and decide
+      whether the discriminator needs an additional case or the failing
+      test had a buggy pre-existing expectation. Either way, file a
+      beads issue.
 
 ### Phase 2 — Code-4 reader
 
@@ -615,10 +634,11 @@ variant at once.
 ### Phase 4 — Streaming writer parity (atomic with Phase 3)
 
 - [ ] Add the code-4 arm in `stream_write_source_info_pool`
-      (`writers/json.rs:3472-3522`); mirror the `to_json` shape exactly.
-- [ ] Remove the FilterProvenance arms (lines 3499-3504 emit, line 3516
-      tag). They become unreachable once `SerializableSourceMapping::FilterProvenance`
-      is gone from Phase 3.
+      (`writers/json.rs:3482-3532` as of `eb06c4cf`; refresh before
+      implementing); mirror the `to_json` shape exactly.
+- [ ] Remove the FilterProvenance arms (lines 3509-3514 emit, line 3526
+      tag as of `eb06c4cf`). They become unreachable once
+      `SerializableSourceMapping::FilterProvenance` is gone from Phase 3.
 
 ### Phase 5 — TypeScript types
 
@@ -629,7 +649,18 @@ variant at once.
       - Code 3's `d` becomes `[string, number] | [number, ...number[]]`.
       - Remove the code-5 entry.
       - Rewrite the header doc-comment to describe Generated, not
-        Synthetic/Derived.
+        Synthetic/Derived. The current header cites
+        `crates/pampa/src/writers/json.rs:54-91`, which is stale (the
+        wire-format types now live at ~lines 109-207 of that file). The
+        new doc-comment should cite **two** sources of truth: the Rust
+        enum `SourceInfo` in
+        `crates/quarto-source-map/src/source_info.rs` (canonical
+        producer-side definition) and the JSON wire mirror in
+        `crates/pampa/src/writers/json.rs` (`SerializableSourceMapping`
+        ~lines 193-207, `SourceInfoJson` ~lines 109-116, code-4
+        serializer in `to_json` ~lines 167-190). Do not bake in exact
+        line numbers — cite the type names; they will outlast line
+        drift.
 - [ ] Update `ts-packages/preview-renderer/src/utils/sourceInfo.ts` per
       §"TypeScript wire-format definitions" → `utils/sourceInfo.ts`
       reconciliation:
@@ -645,6 +676,38 @@ variant at once.
         `By::is_atomic_synthesizer()`" to "mirrors `By::is_atomic_kind()`."
       - Migrate any remaining `isDerived` callers (`grep -rn isDerived ts-packages/`)
         to the new `isAtomicSourceInfo` shape.
+- [ ] Update `ts-packages/preview-renderer/src/utils/sourceInfo.test.ts`
+      — the existing tests will not compile after the changes above.
+      Specifically:
+      - Drop the `import { isDerived, ATOMIC_SYNTHETIC_KINDS }` lines
+        and the entire `describe('isDerived', …)` block. `isDerived` is
+        gone; `ATOMIC_SYNTHETIC_KINDS` is renamed `ATOMIC_KINDS` and now
+        populated (the existing `is empty in 2A` assertion no longer
+        holds).
+      - Rewrite `samplePool`:
+        - Drop the code-5 entry entirely (codes 5 unassigned post-Plan-5).
+        - Reshape the code-4 entry from `d: { kind: 'IncludeShortcode' }`
+          (bare `By`) to `d: { by: { kind: 'shortcode', data: { name: 'meta' } } }`
+          (no `from` — absent is the canonical empty form). Add a second
+          code-4 entry with `from: [{ role: 'invocation', si_id: 0 }]`
+          so the `entry.d.from ?? []` access pattern is exercised.
+        - Reshape the code-3 entry: keep one with `d: ['filter.lua', 42]`
+          (string-headed legacy FilterProvenance) and add a sibling with
+          `d: [0]` (numeric-headed legacy Transformed) to exercise the
+          new dual-shape `d` type.
+      - Rewrite the `isAtomicSourceInfo` describe block: the
+        "Synthetic vs Derived" framing is dead. Drive new assertions
+        against `ATOMIC_KINDS` populated with the Plan-4 atomic set,
+        using a code-4 entry whose `by.kind` is `"shortcode"` (atomic)
+        and another whose `by.kind` is `"sectionize"` (non-atomic).
+      - Add an `ATOMIC_KINDS` describe block asserting the four
+        Plan-4 atomic kinds are members and at least one non-atomic kind
+        (`"sectionize"`) is not. Replaces the deleted
+        `ATOMIC_SYNTHETIC_KINDS` block.
+      - Run `cd hub-client && npm run build:all` after the rewrite — the
+        production build (`tsc -b && vite build`) is stricter than
+        `tsc --noEmit` / vitest and catches type-narrowing errors that
+        unit tests miss.
 
 ### Phase 6 — Tests
 
@@ -680,6 +743,18 @@ the writer emits code 4.
       production paths emit this shape (e.g. coalesced filter-emitted
       spans). Sits in the writer-side test module since it exercises
       the recursive intern of mixed-variant pieces.
+- [ ] Substring-of-Generated round-trip case: a
+      `Substring { parent: Arc::new(Generated { … }), … }` — e.g. a
+      filter-emitted span whose substring is later coalesced. The
+      writer's existing `intern` recursion routes
+      `Substring.parent: Arc<SourceInfo>` through the new code-4 path
+      with no extra logic, and the reader's existing Substring arm
+      reads the parent_id back as a code-4 pool entry. The test serves
+      as a regression guard for that path: confirm pool ordering
+      (parent Generated entry interns strictly before the Substring
+      child) and assert structural equality across serialize →
+      deserialize. Co-located with the Concat-of-Generated case in
+      the writer-side test module.
 - [ ] Filter-provenance recovery test (hand-constructed code-3 with
       string-array payload → `Generated { by: filter, from: smallvec![] }`).
 - [ ] Legacy Transformed back-compat test (hand-constructed code-3 with
@@ -690,8 +765,9 @@ the writer emits code 4.
 - [ ] Forward-compat test (code-4 with unknown `by.kind`, arbitrary
       `data` → preserved round-trip).
 - [ ] Strict code-4 rejection tests: missing `by`, missing `by.kind`,
-      `from` present but not an array, `from` entry missing `role`/`si_id`,
-      role string `"other:"` (empty suffix) → all `MalformedSourceInfoPool`.
+      `from` present but not an array, `from` entry not an object,
+      `from` entry missing `role`/`si_id`, role string `"other:"`
+      (empty suffix) → all `MalformedSourceInfoPool`.
 - [ ] **Anchor dedup test (writer-side only).** Hand-construct an AST
       with N inlines, each carrying
       `Generated { by: By::shortcode("meta"), from: smallvec![Anchor::invocation(Arc::clone(&shared))] }`.
@@ -738,12 +814,16 @@ the writer emits code 4.
 - [ ] `git grep "FilterProvenance"` returns only legacy-reader / legacy
       doc references (no writer emissions, no `SerializableSourceMapping`
       variant).
-- [ ] Update bd-3odjm: close as duplicate of Plan 5 PR. Refresh its
-      description to use `from:` not `anchors:` if reopened for any
-      reason. **If Phase 3 or 4 introduces a *new* failure mode in the
-      lipsum fixture, file a fresh beads issue** rather than reopening
-      bd-3odjm — that issue is specifically the code-3 collision and
-      should stay scoped to it.
+- [ ] Update bd-3odjm: close at the Phase-1 commit (the reader change
+      that turns `lua_shortcode_lipsum_fixed` green). The close trigger
+      is the commit itself, not a downstream PR or merge — Plan 5 lands
+      on the `feature/provenance` integration branch via merge commits,
+      not a standalone PR, so tying the close to the commit gives the
+      issue a concrete reference. Refresh its description to use `from:`
+      not `anchors:` if reopened for any reason. **If Phase 3 or 4
+      introduces a *new* failure mode in the lipsum fixture, file a
+      fresh beads issue** rather than reopening bd-3odjm — that issue is
+      specifically the code-3 collision and should stay scoped to it.
 
 ## Implementation guidance carried over from Plan 4
 
@@ -816,7 +896,8 @@ starting Plan 5:
   definitions" above. Settled — code 4's `d` becomes `{ by; from? }`,
   code 5 is removed, code 3's `d` becomes a union for the dual-shape
   legacy reader, `ATOMIC_SYNTHETIC_KINDS` renames to `ATOMIC_KINDS`
-  with the Plan-4 atomic set populated.
+  with the Plan-4 atomic set populated. The companion test file
+  `utils/sourceInfo.test.ts` is rewritten in lockstep — see Phase 5.
 - **Writer JSON-build style**: hand-build via `json!` macro, matching
   the existing convention throughout `writers/json.rs`. Not derive-based.
   Settled.
@@ -846,9 +927,9 @@ will shift these; refresh before implementing.)
 - `crates/pampa/src/writers/json.rs:260-333` — `SourceInfoSerializer::intern`;
   Phase 3 adds a `SourceInfo::Generated` arm with topologically-ordered
   anchor recursion.
-- `crates/pampa/src/writers/json.rs:3472-3522` — `stream_write_source_info_pool`;
-  Phase 4 mirrors the to_json changes here (lines 3499-3504 emit, line
-  3516 tag).
+- `crates/pampa/src/writers/json.rs:3482-3532` — `stream_write_source_info_pool`;
+  Phase 4 mirrors the to_json changes here (lines 3509-3514 emit, line
+  3526 tag).
 - `crates/pampa/src/readers/json.rs:99-293` — `SourceInfoDeserializer::new`
   (the pool reader). Code-3 arm at lines 252-283 (Phase 1 rewrites);
   Phase 2 adds a code-4 arm.
@@ -876,6 +957,15 @@ Phase 6 for test-file placement and per-phase landing.)
   filter-emitted spans). Serialize → deserialize → assert structural
   equality. Closes a coverage gap not exercised by the per-variant
   property test above.
+- **Substring-of-Generated round-trip**: a
+  `Substring { parent: Arc::new(Generated { … }), … }`.
+  `Substring.parent: Arc<SourceInfo>` is structurally unrestricted, so
+  this shape can arise whenever a transform produces a span and a
+  downstream coalesce or slice carves a substring out of it. The
+  serializer's `Substring` arm interns the parent recursively, which
+  routes through the new code-4 arm; the reader's `Substring` arm then
+  reads the parent_id back. Round-trip the construction and assert
+  structural equality.
 - **Filter-provenance recovery test**: hand-construct a JSON pool entry
   with the buggy code-3-with-string-array-payload shape. Read it.
   Assert the reader produces `Generated { by: filter, from: smallvec![] }`
@@ -993,7 +1083,10 @@ Phase 6 for test-file placement and per-phase landing.)
   explicitly skip `source_info` (see
   `claude-notes/plans/2026-05-04-q2-preview-plan-3-builtin-filter-idempotence.md`
   §"Goal" — *"skips `source_info` and `key_source`"*). Same contract as
-  today's `Substring.parent` reads.
+  today's `Substring.parent` reads. The reader-side `Arc::new(si)`
+  pattern in the new code-4 arm matches the existing Substring arm at
+  `readers/json.rs:196-200`, which also calls `Arc::new(pool.get(parent_id).cloned()?)`
+  on every read — no sharing on the read side, by design.
 - **Acyclic-by-construction assumption.** `SourceInfo` graphs are
   acyclic by construction — transforms build bottom-up, `Arc<SourceInfo>`
   is immutable post-construction. The writer's recursive interning
