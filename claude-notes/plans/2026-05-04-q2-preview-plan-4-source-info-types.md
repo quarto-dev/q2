@@ -868,12 +868,24 @@ semantics" for the full implementation including Concat contiguity.
     - two anchors (Invocation + ValueSource for `meta`/`var` once
       bd-129m3 lands; Invocation + Dispatch for Lua-handler shortcodes
       once bd-36fr9 lands).
-  Cap=2 costs +16 bytes per `Generated` over cap=1 even when `from` is
-  empty, but eliminates the heap spill cap=1 would incur on every
+  Cap=2 grows the `SmallVec<[Anchor; …]>` field by ~40 bytes (the size
+  of one inline `Anchor` slot — `AnchorRole`'s largest variant
+  `Other(String)` is 32 bytes, plus 8 for `Arc<SourceInfo>`). Because
+  the `SourceInfo` enum's stack size is dictated by its largest
+  variant, **every** `SourceInfo` value in the AST grows by that 40
+  bytes — not just `Generated` instances. For a doc with thousands of
+  Block/Inline nodes (each carrying a `SourceInfo` by value, not
+  Arc-boxed), the cap=1 → cap=2 step costs ~40 bytes per node, i.e.
+  tens-to-hundreds of KB on a large document. The trade is paid in
+  exchange for eliminating the heap spill cap=1 would incur on every
   multi-anchor shortcode in the steady state. Three-or-more-anchor
   Generateds (Invocation + ValueSource + Dispatch on a Lua-handler
   `meta` shortcode) still spill — same cost as `Vec<Anchor>` would have
-  been. Adds a `smallvec` workspace dependency (verified absent today).
+  been. If memory-per-node turns out to matter for the q2-preview
+  interactive editor, revisit by Arc-boxing the `Generated` variant
+  (so the SourceInfo enum's stack size drops back to a single pointer
+  for that variant) rather than by reverting to cap=1. Adds a
+  `smallvec` workspace dependency (verified absent today).
 - **`serde_json::Value` in PartialEq derives**: `Value` implements
   `PartialEq` but with potentially weird semantics for floats. For our
   use, kinds carry string + small structured data; should be fine.
