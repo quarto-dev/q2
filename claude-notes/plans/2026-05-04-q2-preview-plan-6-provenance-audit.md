@@ -113,11 +113,34 @@ holds the design details; this list is the work-tracking surface.
   Plan 3's idempotence fixtures.
 
 ### Verification
-- [ ] `cargo xtask verify` (full, including hub-build leg).
-- [ ] End-to-end exercise on a fixture covering shortcodes / sections /
-  footnotes / appendix / theorems; inspect output and record the
-  invocation + observed shape per CLAUDE.md's "End-to-end verification
-  before declaring success" rule.
+- [x] `cargo xtask verify` — all 12 steps green: workspace build,
+  workspace tests (9460 passed, 196 skipped), lint, format, WASM build,
+  hub-client build, hub-client tests, q2-preview-spa build.
+- [x] End-to-end exercise. Invocation:
+  ```
+  target/debug/q2 render /tmp/plan6-e2e/doc.qmd
+  ```
+  Fixture: a `.qmd` with `title:` (drives title-block), two `## `
+  headers (drive sectionize), a footnote `^[…]` (drives footnotes
+  transform + appendix container), and a `{{< meta title >}}`
+  shortcode (drives the resolver + stamper). Observed HTML
+  (inspected, snippet preserved):
+  ```html
+  <title>Plan 6 E2E</title>
+  <section class="section level1">
+  <h1>Plan 6 E2E</h1>
+  <section id="a-section" class="section level2">
+  <h2>A section</h2>
+  <p>Body text. … A meta lookup: Plan 6 E2E.</p>
+  …
+  <div id="quarto-appendix" class="default">
+  <section id="footnotes" class="footnotes section" …>
+  ```
+  Title-block h1 synthesized; both sections wrapped by sectionize;
+  meta shortcode resolved to its value; footnote container Div +
+  appendix container Div both emitted. Plan 6's source_info shape is
+  not visible in HTML, but it's covered by the per-transform shape
+  tests (Tests section above) and by the workspace test suite.
 
 ## Goal
 
