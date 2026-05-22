@@ -386,7 +386,7 @@ title: Hello
     let config = rawblock_to_config_value(&block, &mut diagnostics);
 
     // The config itself should have source info
-    let default_source = quarto_source_map::SourceInfo::default();
+    let default_source = quarto_source_map::SourceInfo::for_test();
     assert!(
         config.source_info != default_source,
         "Config source should be tracked"

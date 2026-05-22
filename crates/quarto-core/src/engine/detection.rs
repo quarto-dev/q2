@@ -298,7 +298,7 @@ mod tests {
 
     /// Helper to create a simple string ConfigValue
     fn string_config(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s, SourceInfo::default())
+        ConfigValue::new_string(s, SourceInfo::for_test())
     }
 
     /// Helper to create a map ConfigValue
@@ -307,11 +307,11 @@ mod tests {
             .into_iter()
             .map(|(key, value)| ConfigMapEntry {
                 key: key.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value,
             })
             .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
     // === DetectedEngine tests ===
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_detect_engine_empty_metadata() {
-        let meta = ConfigValue::new_map(vec![], SourceInfo::default());
+        let meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
 
         let detected = detect_engine(&meta);
         assert_eq!(detected.name, "markdown");
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn test_detect_engine_null_metadata() {
-        let meta = ConfigValue::null(SourceInfo::default());
+        let meta = ConfigValue::null(SourceInfo::for_test());
 
         let detected = detect_engine(&meta);
         assert_eq!(detected.name, "markdown");
@@ -508,7 +508,7 @@ mod tests {
     // === bd-5yff4: multi-engine detection (detect_engines) ===
 
     fn array_config(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     #[test]

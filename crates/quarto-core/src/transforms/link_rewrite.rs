@@ -323,7 +323,7 @@ mod tests {
     }
 
     fn empty_meta() -> ConfigValue {
-        ConfigValue::new_map(Vec::<ConfigMapEntry>::new(), SourceInfo::default())
+        ConfigValue::new_map(Vec::<ConfigMapEntry>::new(), SourceInfo::for_test())
     }
 
     fn link_inline(url: &str, text: &str) -> Inline {
@@ -331,10 +331,10 @@ mod tests {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
         })
@@ -348,10 +348,10 @@ mod tests {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo {
                 url: Some(url_source),
@@ -365,10 +365,10 @@ mod tests {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
                 text: alt.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
         })
@@ -377,7 +377,7 @@ mod tests {
     fn para(content: Vec<Inline>) -> Block {
         Block::Paragraph(Paragraph {
             content,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
@@ -459,7 +459,7 @@ mod tests {
             link_inline("about.qmd", "About"),
             Inline::Str(Str {
                 text: " or ".into(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             link_inline("docs/api.qmd", "API"),
         ])];
@@ -494,7 +494,7 @@ mod tests {
     async fn link_rewrite_walks_nested_emph_link() {
         let emph = Inline::Emph(Emph {
             content: vec![link_inline("about.qmd", "About")],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let blocks = vec![para(vec![emph])];
         let (out, _) = run(
@@ -525,7 +525,7 @@ mod tests {
         let div = Block::Div(Div {
             attr: Attr::default(),
             content: vec![para(vec![link_inline("about.qmd", "About")])],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         });
         let (out, _) = run(
@@ -548,7 +548,7 @@ mod tests {
     async fn link_rewrite_walks_lists() {
         let bl = Block::BulletList(BulletList {
             content: vec![vec![para(vec![link_inline("about.qmd", "About")])]],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let (out, _) = run(
             vec![bl],
@@ -571,7 +571,7 @@ mod tests {
         // Build a minimal CustomNode with one Inlines slot
         // containing the link. We don't need a registered custom-
         // node type for the walker — it iterates `slots` generically.
-        let mut custom = CustomNode::new("test:wrapper", Attr::default(), SourceInfo::default());
+        let mut custom = CustomNode::new("test:wrapper", Attr::default(), SourceInfo::for_test());
         let link = link_inline("about.qmd", "About");
         custom
             .slots

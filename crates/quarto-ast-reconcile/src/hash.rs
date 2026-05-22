@@ -2311,6 +2311,162 @@ mod tests {
         assert!(structural_eq_slot(&slot1, &slot2));
     }
 
+    // ==================== Plan 7 — Generated source_info blindness ====================
+    //
+    // The reconciler must compare nodes for structural equality WITHOUT
+    // consulting their source_info. This is the foundation invariant the
+    // writer relies on: KeepBefore decisions are made off these functions,
+    // and a leak of source_info into the comparison would degenerate
+    // round-trips to whole-document Rewrite.
+
+    fn generated_with_by(by: quarto_source_map::source_info::By) -> SourceInfo {
+        SourceInfo::generated(by)
+    }
+
+    #[test]
+    fn test_structural_eq_blocks_generated_different_by_payloads() {
+        // Two paragraphs with identical content but Generated source_info
+        // carrying *different* By payloads (sectionize vs shortcode).
+        // Reconciler must still see them as equal.
+        let blocks1 = vec![Block::Paragraph(Paragraph {
+            content: vec![make_str("a")],
+            source_info: generated_with_by(quarto_source_map::source_info::By::sectionize()),
+        })];
+        let blocks2 = vec![Block::Paragraph(Paragraph {
+            content: vec![make_str("a")],
+            source_info: generated_with_by(quarto_source_map::source_info::By::shortcode("meta")),
+        })];
+
+        assert!(structural_eq_blocks(&blocks1, &blocks2));
+    }
+
+    #[test]
+    fn test_structural_eq_blocks_generated_different_anchor_lists() {
+        // Two paragraphs with identical content. Both Generated with
+        // matching By, but with different anchor lists (one empty, one
+        // with an Invocation anchor pointing into file 0).
+        use quarto_source_map::source_info::{AnchorRole, By};
+        use std::sync::Arc;
+
+        let mut si_with_anchor = SourceInfo::generated(By::shortcode("meta"));
+        si_with_anchor.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(0), 10, 25)),
+        );
+
+        let blocks1 = vec![Block::Paragraph(Paragraph {
+            content: vec![make_str("a")],
+            source_info: si_with_anchor,
+        })];
+        let blocks2 = vec![Block::Paragraph(Paragraph {
+            content: vec![make_str("a")],
+            source_info: SourceInfo::generated(By::shortcode("meta")),
+        })];
+
+        assert!(structural_eq_blocks(&blocks1, &blocks2));
+    }
+
+    #[test]
+    fn test_structural_eq_inlines_generated_different_by_and_anchors() {
+        // Inline-level analogue of the above two tests bundled.
+        use quarto_source_map::source_info::{AnchorRole, By};
+        use std::sync::Arc;
+
+        let mut si_a = SourceInfo::generated(By::shortcode("meta"));
+        si_a.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(0), 10, 25)),
+        );
+
+        let mut si_b = SourceInfo::generated(By::shortcode("var"));
+        si_b.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(1), 200, 215)),
+        );
+
+        let inlines1 = vec![Inline::Str(Str {
+            text: "x".into(),
+            source_info: si_a,
+        })];
+        let inlines2 = vec![Inline::Str(Str {
+            text: "x".into(),
+            source_info: si_b,
+        })];
+
+        assert!(structural_eq_inlines(&inlines1, &inlines2));
+    }
+
+    #[test]
+    fn test_structural_eq_custom_node_generated_source_info_blind() {
+        // CustomNode whose wrapper source_info is Generated (the
+        // Plan-6-stamped shape) vs an Original — equal iff structure matches.
+        let cn_generated = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::json!({"type": "note"}),
+            slots: LinkedHashMap::new(),
+            source_info: generated_with_by(quarto_source_map::source_info::By::sectionize()),
+        };
+        let cn_original = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::json!({"type": "note"}),
+            slots: LinkedHashMap::new(),
+            source_info: dummy_source(),
+        };
+
+        assert!(structural_eq_custom_node(&cn_generated, &cn_original));
+    }
+
+    #[test]
+    fn test_structural_eq_custom_node_slot_child_source_info_blind() {
+        // CustomNode with slot children whose own source_infos differ
+        // (Generated with anchors vs Original). Same structural content
+        // → must be equal.
+        use quarto_source_map::source_info::{AnchorRole, By};
+        use std::sync::Arc;
+
+        let mut child_si = SourceInfo::generated(By::shortcode("meta"));
+        child_si.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(0), 0, 5)),
+        );
+
+        let mut slots_a = LinkedHashMap::new();
+        slots_a.insert(
+            "body".into(),
+            Slot::Blocks(vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("hi")],
+                source_info: child_si,
+            })]),
+        );
+        let mut slots_b = LinkedHashMap::new();
+        slots_b.insert(
+            "body".into(),
+            Slot::Blocks(vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("hi")],
+                source_info: other_source(),
+            })]),
+        );
+
+        let cn_a = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::Value::Null,
+            slots: slots_a,
+            source_info: dummy_source(),
+        };
+        let cn_b = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::Value::Null,
+            slots: slots_b,
+            source_info: dummy_source(),
+        };
+
+        assert!(structural_eq_custom_node(&cn_a, &cn_b));
+    }
+
     // ==================== NodePtr Tests ====================
 
     #[test]

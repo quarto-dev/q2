@@ -141,17 +141,17 @@ mod tests {
         ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: key.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value,
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         )
     }
 
     fn bool_value(b: bool) -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Boolean(b)),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         }
     }
@@ -180,7 +180,7 @@ mod tests {
         // the disabled check.
         let meta = meta_with(
             "toc",
-            ConfigValue::new_string("auto", SourceInfo::default()),
+            ConfigValue::new_string("auto", SourceInfo::for_test()),
         );
         assert!(!is_feature_disabled(&meta, "toc"));
     }

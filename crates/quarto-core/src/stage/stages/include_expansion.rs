@@ -357,9 +357,9 @@ mod tests {
                 name: "meta".to_string(),
                 positional_args: vec![ShortcodeArg::String("title".to_string())],
                 keyword_args: hashlink::LinkedHashMap::new(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         assert_eq!(extract_include_path(&block), None);
     }
@@ -371,17 +371,17 @@ mod tests {
             content: vec![
                 Inline::Str(Str {
                     text: "some text ".to_string(),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 }),
                 Inline::Shortcode(Shortcode {
                     is_escaped: false,
                     name: "include".to_string(),
                     positional_args: vec![ShortcodeArg::String("file.qmd".to_string())],
                     keyword_args: hashlink::LinkedHashMap::new(),
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 }),
             ],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         assert_eq!(extract_include_path(&block), None);
     }
@@ -392,7 +392,7 @@ mod tests {
         let block = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
             attr: quarto_pandoc_types::attr::empty_attr(),
             text: "{{< include file.qmd >}}".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
         });
         assert_eq!(extract_include_path(&block), None);
@@ -402,7 +402,7 @@ mod tests {
     fn extract_include_path_empty_paragraph() {
         let block = Block::Paragraph(Paragraph {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         assert_eq!(extract_include_path(&block), None);
     }

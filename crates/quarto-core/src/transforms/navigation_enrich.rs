@@ -23,7 +23,7 @@
 
 use quarto_navigation::NavigationItem;
 use quarto_pandoc_types::config_value::ConfigValue;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use std::path::Path;
 
 use crate::project::index::ProjectIndex;
@@ -56,7 +56,10 @@ pub(crate) fn enrich_one(item: &mut NavigationItem, index: &ProjectIndex) {
     };
     if let Some(profile) = index.lookup_by_source(Path::new(href)) {
         if let Some(title) = &profile.title {
-            item.text = Some(ConfigValue::new_string(title, SourceInfo::default()));
+            item.text = Some(ConfigValue::new_string(
+                title,
+                SourceInfo::generated(By::programmatic_config()),
+            ));
         }
     }
 }
@@ -102,7 +105,7 @@ mod tests {
         let idx = ProjectIndex::new(vec![profile("about.qmd", "About Us")]);
         let mut items = vec![NavigationItem {
             href: Some("about.qmd".to_string()),
-            text: Some(ConfigValue::new_string("Profile", SourceInfo::default())),
+            text: Some(ConfigValue::new_string("Profile", SourceInfo::for_test())),
             ..NavigationItem::default()
         }];
         enrich_navigation_items(&mut items, &idx);
@@ -125,7 +128,7 @@ mod tests {
             profile("ref.qmd", "Reference"),
         ]);
         let mut items = vec![NavigationItem {
-            text: Some(ConfigValue::new_string("Docs", SourceInfo::default())),
+            text: Some(ConfigValue::new_string("Docs", SourceInfo::for_test())),
             menu: vec![
                 NavigationItem {
                     href: Some("start.qmd".to_string()),
@@ -176,7 +179,7 @@ mod tests {
     fn enrich_noop_for_item_without_href() {
         let idx = ProjectIndex::new(vec![profile("about.qmd", "About")]);
         let mut items = vec![NavigationItem {
-            text: Some(ConfigValue::new_string("Header", SourceInfo::default())),
+            text: Some(ConfigValue::new_string("Header", SourceInfo::for_test())),
             ..NavigationItem::default()
         }];
         enrich_navigation_items(&mut items, &idx);

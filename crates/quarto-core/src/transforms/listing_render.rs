@@ -42,7 +42,7 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::project::listing::ResolvedListing;
@@ -257,7 +257,7 @@ fn render_one(
                 attrs,
             ),
             content: parsed_blocks,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::programmatic_config()),
             attr_source: AttrSourceInfo::empty(),
         }));
     }
@@ -598,7 +598,7 @@ mod tests {
             blocks: vec![Block::Div(Div {
                 attr: (id.to_string(), vec![], LinkedHashMap::new()),
                 content: vec![],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
             })],
         }
@@ -940,11 +940,11 @@ mod tests {
         let mut listing = make_custom_listing("params.template");
         listing.template_params.insert(
             "color".to_string(),
-            ConfigValue::new_string("red".to_string(), SourceInfo::default()),
+            ConfigValue::new_string("red".to_string(), SourceInfo::for_test()),
         );
         listing.template_params.insert(
             "count".to_string(),
-            ConfigValue::new_string("3".to_string(), SourceInfo::default()),
+            ConfigValue::new_string("3".to_string(), SourceInfo::for_test()),
         );
         let items = vec![make_item("a", Some("2026-01-01"))];
         let resolved = vec![ResolvedListing { listing, items }];
@@ -976,12 +976,12 @@ mod tests {
         let mut a = make_item("alpha", Some("2026-01-01"));
         a.extra.insert(
             "status".to_string(),
-            ConfigValue::new_string("draft".to_string(), SourceInfo::default()),
+            ConfigValue::new_string("draft".to_string(), SourceInfo::for_test()),
         );
         let mut b = make_item("beta", Some("2026-01-02"));
         b.extra.insert(
             "status".to_string(),
-            ConfigValue::new_string("published".to_string(), SourceInfo::default()),
+            ConfigValue::new_string("published".to_string(), SourceInfo::for_test()),
         );
         let resolved = vec![ResolvedListing {
             listing,
@@ -1393,10 +1393,10 @@ mod tests {
         ast.meta = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "listing".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_bool(false, SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_bool(false, SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         let resolved = vec![ResolvedListing { listing, items }];
         let (ast, _) = run_transform(ast, resolved).await;

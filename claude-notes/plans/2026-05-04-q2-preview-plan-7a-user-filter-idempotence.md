@@ -114,6 +114,20 @@ by any current plan — see §"Notes" for the rationale.
   - Hint: `Fix the filter to produce stable output, or add idempotent: false to its config in _quarto.yml to silence this check.`
   - Location: filter file path; no document-side range (the warning
     is about the filter, not a place in the active doc).
+  - **Sectionize-wrapper-aware hint (optional, follow-up).** A
+    common Lua-author error is `pandoc.walk_block(doc.blocks[1], …)`
+    intending to touch the user's first paragraph — but after
+    `SectionizeTransform` runs, `doc.blocks[1]` is the synthesized
+    sectionize Div and the walk operates on the wrapper, not the
+    user content. Idempotence detection sees the divergence and
+    fires Q-3-44 correctly, but the hint doesn't help the author
+    diagnose. When the AST diff is concentrated under a
+    `is_transparent_wrapper(doc.blocks[0])` (see
+    [`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md)),
+    extend the hint with: "Note: your filter may be walking into a
+    sectionize wrapper. Use `doc.blocks[1].content[0]` to reach
+    the first user block, or iterate `doc.blocks` recursively
+    skipping wrapper Divs."
 - **`Q-3-45` diagnostic** (Info severity), three-variant body:
   - Title (all variants): `Filter <path> exempted from idempotence checking`
   - Problem (UserConfig source): `idempotent: false set in <config_path>. Edits may cause unintended changes elsewhere in the document.`
@@ -288,16 +302,30 @@ whole-set check, two per filter for attribution). For 5 filters,
   flow through the same path. Confirm they reach the diagnostic panel
   and are visually distinguishable from pipeline warnings (or
   acceptably co-mingled — TBD by hub-client UX, same as Q-3-42/Q-3-43).
-- **Per-Lua-line attribution (future)**: Q-3-44 today references the
-  filter file path via `<path>`. When the Lua-file-registration
-  follow-up lands (see Plan 4 / Plan 6's "Dispatch follow-up"),
-  filter-constructed nodes will carry a `Dispatch` anchor pointing at
-  a typed `Original{lua_file_id, line_start, line_end}`. The Q-3-44
-  diagnostic could then sharpen "filter `<path>` is not idempotent" to
-  "filter `<path>` line `<N>` is not idempotent" — pointing at the
-  specific Lua-side construction site that produced the non-idempotent
-  output. Deferred until the registration work lands; the current
+- **Per-Lua-line attribution (Plan 10 follow-up)**: Q-3-44 today
+  references the filter file path via `<path>` read from
+  `FilterMetadata.spec` (the filter spec, not from `by.data` on any
+  Generated node), so Plan 7a is structurally independent of `By`'s
+  data shape. When **Plan 10**
+  (`claude-notes/plans/2026-05-22-provenance-plan-10-dispatch-
+  anchor.md`) lands, filter-constructed nodes carry a `Dispatch`
+  anchor pointing at a typed
+  `Original{lua_file_id, line_start, line_end}`. The Q-3-44 diagnostic
+  can then sharpen "filter `<path>` is not idempotent" to "filter
+  `<path>` line `<N>` is not idempotent" — pointing at the specific
+  Lua-side construction site. The migration is purely additive — read
+  the Dispatch anchor when present, fall back to filter-spec path
+  when absent. Deferred until Plan 10 lands; the current
   `<path>`-only diagnostic is actionable.
+
+- **`filter_sources_hash` coordination with Plan 10.** Plan 7a
+  defines `filter_sources_hash` (SHA-256 over filter file bytes +
+  opt-out flags) as a `Pass1KeyInputs` field. Plan 10 Phase 7
+  also wants Lua-filter-file content to invalidate `pass1_key`.
+  Since Plan 7a lands first, **Plan 10 reuses Plan 7a's
+  `filter_sources_hash` field** rather than introducing a parallel
+  hash. Plan 10's Phase 7 task reduces to: confirm the field
+  exists, confirm semantics match, no new field added.
 
 ## References
 
@@ -326,10 +354,13 @@ whole-set check, two per filter for attribution). For 5 filters,
   `claude-notes/instructions/idempotence-contract.md`; new transforms
   on both the built-in and user-filter sides must meet it.
 - Plan 4 — `By` types; `is_atomic_kind()` is unrelated to this plan
-  but the runtime check shares the source-info-blind hash. Plan 4's
-  "Dispatch follow-up" (Lua-file registration in `SourceContext`) is
-  the prerequisite for the per-Lua-line attribution refinement noted
-  under "Open questions" above.
+  but the runtime check shares the source-info-blind hash.
+- Plan 10 (`claude-notes/plans/2026-05-22-provenance-plan-10-
+  dispatch-anchor.md`) — Lua-file registration in `SourceContext`;
+  prerequisite for the per-Lua-line attribution refinement noted
+  under "Open questions" above. Plan 7a lands first; Plan 10
+  reuses Plan 7a's `filter_sources_hash` field per the
+  cross-plan coordination note in §Open questions.
 
 ## Test plan
 
@@ -366,6 +397,47 @@ whole-set check, two per filter for attribution). For 5 filters,
   ("Edits may cause unintended changes elsewhere in the document.");
   Q-3-45 variants match their respective bodies; hint text mentions
   the opt-out path.
+
+- **Filter-mutation round-trip behavior test** (added 2026-05-25
+  from code-review pass on Plan 7). The writer contract
+  (`claude-notes/designs/incremental-writer-contract.md`,
+  §"Filter mutations versus constructions") admits this corner:
+  a filter that *mutates* an existing node (rather than
+  *constructs* a new one) leaves the input's `Original`
+  source_info untouched, so the editability gate treats the
+  resulting text as editable. When the filter is non-idempotent
+  (`x => upper(x) + "!"`), the user's typed text round-trips as
+  `TYPED!` on the first save, `TYPED!!` on the next, etc.
+
+  The Plan-7a runtime warning catches this — but the contract
+  doc doesn't pin *when* the warning fires:
+  - Does it fire on the first save (writer detects the filter
+    is non-idempotent at the AST level)?
+  - Does it fire only after a second save shows divergence
+    between consecutive pipeline runs?
+  - Does it suppress on subsequent saves to avoid flooding?
+
+  Test plan (one fixture, three assertions):
+
+  1. Build a single-file doc with a non-idempotent user filter
+     (the canonical `f(x) = upper(x) + "!"` shape).
+  2. Render once. Assert Q-3-44 fires with `filter_path =
+     "f.lua"`. Capture the warning ID.
+  3. Simulate a user edit on a filter-mutated `Str`. Round-trip
+     through `incremental_write`. Re-render. Assert *either* the
+     same Q-3-44 fires again, *or* it's suppressed (whichever
+     the implementation picks) — but the test pins the choice.
+  4. Repeat step 3 with no user edit (re-render of the same
+     content). Assert the warning behaviour matches step 3 — the
+     existence of a user edit doesn't change the diagnostic
+     surface; the filter's non-idempotence does.
+
+  Output: the test pins behaviour and the assertion comments
+  document the contract. If the implementation prefers "fire
+  on every render" (loud, recoverable), the test asserts that.
+  If it prefers "fire once per cache key" (quiet, requires the
+  cache), the test asserts that. Either way, future contributors
+  read the test and know what behaviour is contracted.
 
 ## Dependencies
 
@@ -420,7 +492,8 @@ whole-set check, two per filter for attribution). For 5 filters,
 | Q-3-44 / Q-3-45 catalog entries + builders | ~50 |
 | Session cache integration | ~40 |
 | Tests (unit + integration) | ~250 |
-| **Total** | **~600** |
+| Filter-mutation round-trip behavior test (added 2026-05-25) | ~60 |
+| **Total** | **~660** |
 
 Single focused session. Risk: per-filter attribution may surface
 unexpected interactions; budget a second session if attribution proves

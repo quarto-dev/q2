@@ -44,7 +44,7 @@
 use pampa::toc::{NavigationToc, TocEntry};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -109,7 +109,7 @@ impl AstTransform for TocRenderTransform {
         // Store rendered HTML
         ast.meta.insert_path(
             &["rendered", "navigation", "toc"],
-            ConfigValue::new_string(&html, SourceInfo::default()),
+            ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
         Ok(())
@@ -168,7 +168,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn dummy_source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn make_test_project() -> ProjectContext {
@@ -538,9 +538,9 @@ mod tests {
         ConfigValue::new_inlines(
             vec![Inline::Str(Str {
                 text: s.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         )
     }
 
@@ -551,21 +551,21 @@ mod tests {
         for (i, word) in words.iter().enumerate() {
             if i > 0 {
                 inlines.push(Inline::Space(Space {
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::for_test(),
                 }));
             }
             inlines.push(Inline::Str(Str {
                 text: word.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }));
         }
-        ConfigValue::new_inlines(inlines, SourceInfo::default())
+        ConfigValue::new_inlines(inlines, SourceInfo::for_test())
     }
 
     /// Create a ConfigValue for a string-encoded integer.
     /// This simulates how YAML integers are sometimes parsed as strings.
     fn yaml_int_as_string(n: i32) -> ConfigValue {
-        ConfigValue::new_string(&n.to_string(), SourceInfo::default())
+        ConfigValue::new_string(&n.to_string(), SourceInfo::for_test())
     }
 
     /// Create a TOC entry ConfigValue in YAML-parsed format.
@@ -574,21 +574,21 @@ mod tests {
             vec![
                 ConfigMapEntry {
                     key: "id".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_string_value(id),
                 },
                 ConfigMapEntry {
                     key: "title".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_string_value(title),
                 },
                 ConfigMapEntry {
                     key: "level".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_int_as_string(level),
                 },
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         )
     }
 
@@ -598,21 +598,21 @@ mod tests {
             vec![
                 ConfigMapEntry {
                     key: "id".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_string_value(id),
                 },
                 ConfigMapEntry {
                     key: "title".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_multiword_string(title_words),
                 },
                 ConfigMapEntry {
                     key: "level".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_int_as_string(level),
                 },
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         )
     }
 
@@ -627,26 +627,26 @@ mod tests {
             vec![
                 ConfigMapEntry {
                     key: "id".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_string_value(id),
                 },
                 ConfigMapEntry {
                     key: "title".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_multiword_string(title_words),
                 },
                 ConfigMapEntry {
                     key: "level".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_int_as_string(level),
                 },
                 ConfigMapEntry {
                     key: "children".to_string(),
-                    key_source: SourceInfo::default(),
-                    value: ConfigValue::new_array(children, SourceInfo::default()),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_array(children, SourceInfo::for_test()),
                 },
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         )
     }
 
@@ -667,13 +667,13 @@ mod tests {
         let toc_value = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "entries".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: ConfigValue::new_array(
                     vec![yaml_toc_entry("tldr", "TL;DR", 1)],
-                    SourceInfo::default(),
+                    SourceInfo::for_test(),
                 ),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         ast.meta.insert_path(&["navigation", "toc"], toc_value);
 
@@ -717,13 +717,13 @@ mod tests {
         let toc_value = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "entries".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: ConfigValue::new_array(
                     vec![yaml_toc_entry_multiword("details", &["The", "Details"], 1)],
-                    SourceInfo::default(),
+                    SourceInfo::for_test(),
                 ),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         ast.meta.insert_path(&["navigation", "toc"], toc_value);
 
@@ -771,10 +771,10 @@ mod tests {
         let toc_value = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "entries".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_array(vec![parent_entry], SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_array(vec![parent_entry], SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         ast.meta.insert_path(&["navigation", "toc"], toc_value);
 
@@ -824,20 +824,20 @@ mod tests {
         let custom_html = "<ul><li><a href=\"#custom\">My Custom TOC</a></li></ul>";
         ast.meta.insert_path(
             &["rendered", "navigation", "toc"],
-            ConfigValue::new_string(custom_html, SourceInfo::default()),
+            ConfigValue::new_string(custom_html, SourceInfo::for_test()),
         );
 
         // Also add navigation.toc that would normally be rendered
         let toc_value = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "entries".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: ConfigValue::new_array(
                     vec![yaml_toc_entry("intro", "Introduction", 1)],
-                    SourceInfo::default(),
+                    SourceInfo::for_test(),
                 ),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         ast.meta.insert_path(&["navigation", "toc"], toc_value);
 
@@ -882,19 +882,19 @@ mod tests {
             vec![
                 ConfigMapEntry {
                     key: "title".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: yaml_multiword_string(&["Quick", "Links"]),
                 },
                 ConfigMapEntry {
                     key: "entries".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: ConfigValue::new_array(
                         vec![yaml_toc_entry("intro", "Introduction", 1)],
-                        SourceInfo::default(),
+                        SourceInfo::for_test(),
                     ),
                 },
             ],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         ast.meta.insert_path(&["navigation", "toc"], toc_value);
 

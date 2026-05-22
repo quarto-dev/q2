@@ -259,7 +259,7 @@ A paragraph.
     if let pampa::pandoc::Block::Paragraph(ref mut p) = new_ast.blocks[0] {
         p.content = vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
             text: "Modified paragraph.".to_string(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })];
     }
 
@@ -1628,4 +1628,129 @@ fn roundtrip_kanban_no_trailing_newline_via_json() {
             "Block structural mismatch in kanban no-trailing-newline JSON roundtrip"
         );
     }
+}
+
+// =============================================================================
+// b43fadef — writer crash on Concat/Generated-led inline boundary
+//
+// A paragraph whose first inline carries a (contiguous, well-formed) `Concat`
+// source_info — e.g. `Str "Table:"` = Concat[Original "Table" ++ Original ":"] —
+// has `start_offset() == 0` (the Concat sentinel). `assemble_inline_splice`
+// computed prefix/suffix via `start_offset()`/`end_offset()`, so editing inside
+// such a block produced `original_qmd[block.start .. 0]` — a reversed slice that
+// panics. Fix: derive boundaries via `preimage_in`, fall back when None.
+// =============================================================================
+
+/// Edit a Str inside a Concat-led paragraph and confirm the incremental writer
+/// does not panic on the reversed prefix slice.
+#[test]
+fn inline_splice_concat_led_paragraph_does_not_panic() {
+    use pampa::pandoc::{Block, Inline};
+    use quarto_source_map::SourceInfo;
+
+    // Real parse: `Table:` becomes a contiguous Concat-led Str, and the
+    // paragraph is block[1] (block.start = 35 > 0).
+    let original_qmd =
+        std::fs::read_to_string("tests/smoke/table.qmd").expect("table.qmd fixture present");
+    let orig = parse_qmd(&original_qmd);
+
+    // Sanity: block[1] is the Concat-led paragraph.
+    assert!(matches!(orig.blocks.get(1), Some(Block::Paragraph(_))));
+
+    // Mutate the last Str in block[1] ("work." -> "works.") so the reconciler
+    // pairs the block as RecurseIntoContainer -> InlineSplice. The prefix slice
+    // uses orig_inlines[0] ("Table:"), whose start_offset() is the Concat
+    // sentinel 0 -> reversed slice on the unfixed code.
+    let mut new = orig.clone();
+    if let Some(Block::Paragraph(p)) = new.blocks.get_mut(1) {
+        if let Some(Inline::Str(s)) = p.content.last_mut() {
+            s.text = "works.".to_string();
+            s.source_info = SourceInfo::for_test();
+        }
+    }
+
+    let plan = compute_reconciliation(&orig, &new);
+    let out = writers::incremental::incremental_write(&original_qmd, &orig, &new, &plan)
+        .expect("incremental_write should not error");
+    assert!(
+        out.contains("Table:"),
+        "output should preserve the paragraph text"
+    );
+}
+
+/// Property: `incremental_write` must never panic on any parseable qmd in the
+/// pampa corpus, under identity reconciliation OR a single-Str edit (which
+/// forces the InlineSplice path). Covers every confirmed b43fadef trigger —
+/// table captions, links/images, anchor shorthands, math-with-attr,
+/// smart-punctuation — by scanning the real fixtures rather than hand-built ASTs.
+#[test]
+fn incremental_write_never_panics_on_pampa_corpus() {
+    use pampa::pandoc::{Block, Inline, Pandoc};
+    use quarto_source_map::SourceInfo;
+
+    // Clone `ast`, mutate the first `Str` in the first inline-content block, so
+    // the reconciler pairs that block as RecurseIntoContainer -> InlineSplice.
+    fn mutate_first_str(ast: &Pandoc) -> Option<Pandoc> {
+        let mut new = ast.clone();
+        for b in new.blocks.iter_mut() {
+            let content = match b {
+                Block::Paragraph(p) => &mut p.content,
+                Block::Plain(p) => &mut p.content,
+                Block::Header(h) => &mut h.content,
+                _ => continue,
+            };
+            for inl in content.iter_mut() {
+                if let Inline::Str(s) = inl {
+                    s.text = format!("{}X", s.text);
+                    s.source_info = SourceInfo::for_test();
+                    return Some(new);
+                }
+            }
+        }
+        None
+    }
+
+    let listed = std::process::Command::new("git")
+        .args(["ls-files", "*.qmd"])
+        .output()
+        .expect("git ls-files");
+    let files = String::from_utf8(listed.stdout).unwrap();
+
+    // Suppress panic backtraces during the sweep; collect offenders instead.
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let mut failures: Vec<String> = Vec::new();
+    let mut scanned = 0usize;
+    for f in files.lines() {
+        let Ok(src) = std::fs::read_to_string(f) else {
+            continue;
+        };
+        let Ok((orig, _, _)) =
+            pampa::readers::qmd::read(src.as_bytes(), false, f, &mut std::io::sink(), true, None)
+        else {
+            continue;
+        };
+        scanned += 1;
+        let new = mutate_first_str(&orig).unwrap_or_else(|| orig.clone());
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let plan = compute_reconciliation(&orig, &new);
+            let _ = writers::incremental::incremental_write(&src, &orig, &new, &plan);
+        }));
+        if res.is_err() {
+            failures.push(f.to_string());
+        }
+    }
+    std::panic::set_hook(prev);
+
+    assert!(
+        failures.is_empty(),
+        "incremental_write panicked on {} of {} parseable qmd files: {:?}",
+        failures.len(),
+        scanned,
+        failures,
+    );
+    assert!(
+        scanned > 0,
+        "scanned no qmd files — corpus enumeration broken"
+    );
 }

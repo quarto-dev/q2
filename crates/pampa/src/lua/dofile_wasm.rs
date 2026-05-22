@@ -108,9 +108,9 @@ mod tests {
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
         }
     }

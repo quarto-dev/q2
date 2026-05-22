@@ -337,8 +337,33 @@ pub struct InlineAttr {
 }
 
 impl InlineAttr {
-    pub fn new(attr: Attr, attr_source: AttrSourceInfo) -> Self {
-        let source_info = attr_source.combine_all().unwrap_or_default();
+    /// Construct an `InlineAttr` with explicit `source_info`.
+    ///
+    /// The producer is responsible for supplying a meaningful
+    /// `source_info` — typically the union of `attr_source.combine_all()`
+    /// when the producer has access to a populated `AttrSourceInfo`, or
+    /// a `Generated{by:…}` shape when constructing programmatically.
+    pub fn new(
+        attr: Attr,
+        attr_source: AttrSourceInfo,
+        source_info: quarto_source_map::SourceInfo,
+    ) -> Self {
+        Self {
+            attr,
+            attr_source,
+            source_info,
+        }
+    }
+
+    /// Convenience: derive `source_info` from a non-empty `AttrSourceInfo`.
+    ///
+    /// Panics if `attr_source.combine_all()` returns `None`. Use the
+    /// three-argument [`InlineAttr::new`] with an explicit `source_info`
+    /// when no real `AttrSourceInfo` exists.
+    pub fn new_from_attr_source(attr: Attr, attr_source: AttrSourceInfo) -> Self {
+        let source_info = attr_source.combine_all().expect(
+            "InlineAttr requires non-empty AttrSourceInfo; use new() with explicit source_info",
+        );
         Self {
             attr,
             attr_source,
@@ -1450,19 +1475,6 @@ mod tests {
     }
 
     #[test]
-    fn source_info_attr_empty() {
-        // Empty AttrSourceInfo → source_info is SourceInfo::default()
-        let inline = Inline::Attr(InlineAttr::new(
-            (String::new(), vec![], LinkedHashMap::new()),
-            AttrSourceInfo::empty(),
-        ));
-        assert_eq!(
-            inline.source_info(),
-            &quarto_source_map::SourceInfo::default()
-        );
-    }
-
-    #[test]
     fn source_info_attr_with_id() {
         // AttrSourceInfo with an id → precomputed source_info matches the id's SourceInfo
         let id_si = test_si(2, 10, 15);
@@ -1471,7 +1483,7 @@ mod tests {
             classes: vec![],
             attributes: vec![],
         };
-        let inline = Inline::Attr(InlineAttr::new(
+        let inline = Inline::Attr(InlineAttr::new_from_attr_source(
             ("myid".into(), vec![], LinkedHashMap::new()),
             attr_source,
         ));
@@ -1488,7 +1500,7 @@ mod tests {
             classes: vec![Some(class_si)],
             attributes: vec![],
         };
-        let inline = Inline::Attr(InlineAttr::new(
+        let inline = Inline::Attr(InlineAttr::new_from_attr_source(
             ("myid".into(), vec!["myclass".into()], LinkedHashMap::new()),
             attr_source,
         ));

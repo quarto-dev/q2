@@ -703,12 +703,6 @@ export async function writeQmd(astJson: string): Promise<WriteQmdResult> {
   }
 }
 
-/**
- * Incrementally write a modified AST back to QMD, preserving unchanged
- * portions of the original source text verbatim.
- *
- * Must call initWasm() before first use.
- */
 export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): string {
   if (!wasmModule) {
     throw new Error('WASM not initialized. Call initWasm() first.')

@@ -25,7 +25,7 @@ use quarto_doctemplate::{MemoryResolver, Template, TemplateContext, TemplateValu
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::project::listing::ResolvedListing;
@@ -593,13 +593,13 @@ fn make_q_12_15() -> DiagnosticMessage {
             .to_string(),
     )
     .with_code("Q-12-15")
-    .with_location(SourceInfo::default())
+    .with_location(SourceInfo::generated(By::unknown()))
     .build()
 }
 
 fn diagnostic_warning(msg: String) -> DiagnosticMessage {
     DiagnosticMessageBuilder::warning(msg)
-        .with_location(SourceInfo::default())
+        .with_location(SourceInfo::generated(By::unknown()))
         .build()
 }
 
@@ -624,7 +624,7 @@ mod tests {
     use std::sync::Arc;
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value.to_string(), SourceInfo::default())
+        ConfigValue::new_string(value.to_string(), SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -632,11 +632,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     fn make_item(title: &str, date: Option<&str>) -> ListingItem {

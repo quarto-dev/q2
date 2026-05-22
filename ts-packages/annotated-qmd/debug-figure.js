@@ -5,12 +5,12 @@ const json = JSON.parse(readFileSync('examples/minimal-figure.json', 'utf-8'));
 json.astContext.files[0].content = readFileSync('examples/minimal-figure.qmd', 'utf-8');
 
 console.log('=== Source Info Pool ===');
-console.log('Pool size:', json.astContext.sourceInfoPool.length);
+console.log('Pool size:', json.astContext.p.length);
 
 // Check specific source IDs
 const sourceIds = [17, 25];
 for (const id of sourceIds) {
-  const entry = json.astContext.sourceInfoPool[id];
+  const entry = json.astContext.p[id];
   console.log(`\nSource ID ${id}:`, entry);
 }
 

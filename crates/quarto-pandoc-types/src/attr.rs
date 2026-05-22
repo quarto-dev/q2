@@ -43,8 +43,11 @@ pub fn is_empty_attr(attr: &Attr) -> bool {
 ///
 /// Until those fix-ups land, indexing consumers should guard with a
 /// runtime length check (`kvs.len() == attr_source.attributes.len()`)
-/// plus a `debug_assert_eq!` and fall back to `SourceInfo::default()`
-/// on mismatch so production never panics on misaligned input.
+/// plus a `debug_assert_eq!` and fall back to `None` (or whatever
+/// `Option<SourceInfo>`-aware behavior the consumer prefers) on
+/// mismatch so production never panics on misaligned input. See
+/// `quarto-core/src/transforms/theorem.rs` and `proof.rs` for the
+/// canonical fall-back-to-`None` pattern.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttrSourceInfo {
     pub id: Option<SourceInfo>,

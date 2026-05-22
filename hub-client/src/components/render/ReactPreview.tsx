@@ -9,7 +9,7 @@ import {
   isWasmReady,
   incrementalWriteQmd,
 } from '@quarto/preview-runtime';
-import { pipelineKindForFormat } from '../../utils/pipelineKind';
+import { pipelineKindForFormat } from '@quarto/preview-runtime';
 import { useAttribution } from '../../hooks/useAttribution';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';

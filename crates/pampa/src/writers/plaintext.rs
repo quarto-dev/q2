@@ -891,6 +891,7 @@ mod tests {
                     hashlink::LinkedHashMap::new(),
                 ),
                 crate::pandoc::attr::AttrSourceInfo::empty(),
+                quarto_source_map::SourceInfo::for_test(),
             )),
         ];
         let (result, diags) = inlines_to_string(&inlines);

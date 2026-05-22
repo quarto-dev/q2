@@ -16,7 +16,7 @@ use std::sync::Arc;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::inline::{Inline, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -276,7 +276,7 @@ impl JupyterTransform {
                     // Replace the Code inline with a Str inline
                     para.content[inline_idx] = Inline::Str(Str {
                         text: result,
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::jupyter_output()),
                     });
                 }
             }
@@ -406,7 +406,7 @@ mod tests {
                 Default::default(),
             ),
             text: code.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         })
     }
@@ -415,16 +415,16 @@ mod tests {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
     #[test]
     fn test_extract_code_cells_empty() {
         let ast = Pandoc {
-            meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+            meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
             blocks: vec![make_paragraph("Hello")],
         };
 
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn test_extract_code_cells_python() {
         let ast = Pandoc {
-            meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+            meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
             blocks: vec![
                 make_paragraph("Intro"),
                 make_code_block("python", "print('hello')"),
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn test_extract_code_cells_non_jupyter() {
         let ast = Pandoc {
-            meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+            meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
             blocks: vec![
                 make_code_block("rust", "fn main() {}"),
                 make_code_block("javascript", "console.log('hi')"),

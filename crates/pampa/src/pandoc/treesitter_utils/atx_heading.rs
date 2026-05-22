@@ -35,8 +35,11 @@ pub fn process_atx_heading(
             "atx_h5_marker" => level = 5,
             "atx_h6_marker" => level = 6,
             "attribute" | "attribute_specifier" => {
-                if let PandocNativeIntermediate::IntermediateAttr(inner_attr, inner_attr_source) =
-                    child
+                if let PandocNativeIntermediate::IntermediateAttr(
+                    inner_attr,
+                    inner_attr_source,
+                    _,
+                ) = child
                 {
                     attr = inner_attr;
                     attr_source = inner_attr_source;

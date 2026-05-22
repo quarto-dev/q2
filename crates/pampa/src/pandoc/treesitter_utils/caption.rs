@@ -22,6 +22,7 @@ pub fn process_caption(
     let mut caption_attr: Option<(
         crate::pandoc::attr::Attr,
         crate::pandoc::attr::AttrSourceInfo,
+        quarto_source_map::SourceInfo,
     )> = None;
 
     for (node_name, child) in children {
@@ -32,10 +33,10 @@ pub fn process_caption(
             PandocNativeIntermediate::IntermediateInlines(inlines) => {
                 caption_inlines.extend(inlines);
             }
-            PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
+            PandocNativeIntermediate::IntermediateAttr(attr, attr_source, attr_si) => {
                 // Attributes from attribute_specifier nodes
                 if node_name == "attribute_specifier" {
-                    caption_attr = Some((attr, attr_source));
+                    caption_attr = Some((attr, attr_source, attr_si));
                 }
             }
             _ => {
@@ -45,9 +46,9 @@ pub fn process_caption(
     }
 
     // If we found an attribute, append it as Inline::Attr
-    if let Some((attr, attr_source)) = caption_attr {
+    if let Some((attr, attr_source, attr_si)) = caption_attr {
         caption_inlines.push(crate::pandoc::inline::Inline::Attr(
-            crate::pandoc::inline::InlineAttr::new(attr, attr_source),
+            crate::pandoc::inline::InlineAttr::new(attr, attr_source, attr_si),
         ));
     }
 

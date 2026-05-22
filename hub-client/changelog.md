@@ -29,6 +29,10 @@ be in reverse chronological order (latest first).
 
 - [`301ca456`](https://github.com/quarto-dev/q2/commits/301ca456): Add "Import from ZIP" to the project selector — create a new project from an uploaded .zip archive (the inverse of "Export to ZIP").
 
+### 2026-06-01
+
+- [`d336daa`](https://github.com/quarto-dev/q2/commits/d336daa): q2-debug's Figure caption edit now preserves the Figure's `s:` source_info reference; previously every caption-inline edit dropped it. Precondition for Plan 7f's strict JSON reader (Phase 4).
+
 ### 2026-05-27
 
 - [`9aa29ee1`](https://github.com/quarto-dev/q2/commits/9aa29ee1): View toggle buttons now order markup-left / preview-right (matching the editor-left / preview-right layout) instead of preview-left / markup-right.
@@ -36,6 +40,15 @@ be in reverse chronological order (latest first).
 ### 2026-05-26
 
 - [`1bc3d2cd`](https://github.com/quarto-dev/q2/commits/1bc3d2cd): Fix Monaco editor in light mode falling back to its default theme because the configured name (`light`) was not a registered Monaco theme; use `vs` instead.
+
+### 2026-05-25
+
+- [`5f2bbab0`](https://github.com/quarto-dev/q2/commits/5f2bbab0): Soft-drop warnings (Q-3-42, Q-3-43) now surface in the diagnostic panel even when the rewrite produces byte-identical output. Before, clicking +react inside a shortcode-resolved region (e.g. `{{< lipsum 3 >}}`) silently declined the edit with no visible feedback; the warning was queued for the next render but no re-render fired because nothing changed.
+- [`bdcfdc53`](https://github.com/quarto-dev/q2/commits/bdcfdc53): Fix q2-preview edits silently failing with "Incremental write failed: undefined" on documents where the render pipeline produced a single top-level sectionize wrapper around the user content. The writer now recurses into non-atomic Generated wrappers (sectionize, footnotes-container, appendix-container) instead of soft-dropping the whole document.
+
+### 2026-05-24
+
+- [`a0a4c7c8`](https://github.com/quarto-dev/q2/commits/a0a4c7c8): q2-preview edits now write back to the document. The read-only guard is gone; component-driven edits (kanban drag, future comment buttons) flow through the incremental writer using the live preview AST as the baseline, and soft-drop warnings (Q-3-42 / Q-3-43) surface in the existing diagnostics panel when an edit hits an atomic region.
 
 ### 2026-05-21
 

@@ -26,7 +26,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::{RuntimeError, SystemRuntime};
 use regex::RegexBuilder;
 
@@ -326,13 +326,13 @@ fn make_q_12_16(path: &Path) -> DiagnosticMessage {
         path.display()
     ))
     .with_code("Q-12-16")
-    .with_location(SourceInfo::default())
+    .with_location(SourceInfo::generated(By::unknown()))
     .build()
 }
 
 fn diagnostic_warning(msg: String) -> DiagnosticMessage {
     DiagnosticMessageBuilder::warning(msg)
-        .with_location(SourceInfo::default())
+        .with_location(SourceInfo::generated(By::unknown()))
         .build()
 }
 
@@ -348,7 +348,7 @@ mod tests {
     use quarto_system_runtime::NativeRuntime;
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value.to_string(), SourceInfo::default())
+        ConfigValue::new_string(value.to_string(), SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -356,11 +356,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     fn site_meta() -> ConfigValue {

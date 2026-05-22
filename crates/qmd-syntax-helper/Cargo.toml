@@ -24,6 +24,7 @@ regex = "1.12"
 colored = "3.1"
 pampa.workspace = true
 quarto-error-reporting.workspace = true
+quarto-source-map.workspace = true
 include_dir = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

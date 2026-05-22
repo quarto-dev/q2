@@ -1635,11 +1635,11 @@ pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
             }
             if has_newline {
                 result.push(Inline::SoftBreak(SoftBreak {
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::unknown()),
                 }));
             } else {
                 result.push(Inline::Space(Space {
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::unknown()),
                 }));
             }
         } else {
@@ -1654,7 +1654,7 @@ pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
             }
             result.push(Inline::Str(Str {
                 text: word,
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::unknown()),
             }));
         }
     }
@@ -1746,7 +1746,7 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
             let inlines = peek_inlines_fuzzy(lua, val)?;
             Ok(Block::Plain(Plain {
                 content: inlines,
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::unknown()),
             }))
         }
         _ => {
@@ -1754,7 +1754,7 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
             match peek_inlines_fuzzy(lua, val) {
                 Ok(inlines) => Ok(Block::Plain(Plain {
                     content: inlines,
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::unknown()),
                 })),
                 Err(_) => Err(Error::runtime("expected Block, list of Inlines, or string")),
             }
@@ -1788,7 +1788,7 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
             let inlines = peek_inlines_fuzzy(lua, val)?;
             Ok(vec![Block::Plain(Plain {
                 content: inlines,
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::generated(By::unknown()),
             })])
         }
         _ => {
@@ -1796,7 +1796,7 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
             match peek_inlines_fuzzy(lua, val) {
                 Ok(inlines) => Ok(vec![Block::Plain(Plain {
                     content: inlines,
-                    source_info: SourceInfo::default(),
+                    source_info: SourceInfo::generated(By::unknown()),
                 })]),
                 Err(_) => Err(Error::runtime(
                     "expected Block, list of Blocks, or compatible element",
@@ -1840,7 +1840,7 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
     }
 
     // Fallback if we couldn't get debug info
-    SourceInfo::default()
+    SourceInfo::generated(By::unknown())
 }
 
 // ---------------------------------------------------------------------------
@@ -2675,7 +2675,7 @@ mod tests {
 
     // Helper to create default SourceInfo
     fn si() -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::default()
+        quarto_source_map::SourceInfo::for_test()
     }
 
     // Helper to create empty attr source info
@@ -2932,6 +2932,7 @@ mod tests {
         let inline = Inline::Attr(crate::pandoc::inline::InlineAttr::new(
             (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_si(),
+            quarto_source_map::SourceInfo::for_test(),
         ));
         assert_eq!(LuaInline::new(inline).tag_name(), "Attr");
     }

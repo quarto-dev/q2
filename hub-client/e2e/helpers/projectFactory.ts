@@ -161,17 +161,6 @@ export async function bootstrapProjectSet(
  * synced project set is initialized; otherwise the App lands on the
  * needs-migration screen.
  *
- * Before returning, this waits until the seeded project is actually present
- * in the *connected, synced* project set — not just written to IDB. That
- * closes the race behind the smoke-all flakiness (bd-3nzyd): `addProject`
- * only writes IDB, and the app reconciles IDB→set on the status→connected
- * transition, which does NOT re-fire for a project seeded *after* the set is
- * already connected. So we wait for the real peer connection, run the
- * idempotent reconciler ourselves, and wait for the project to appear. The
- * full Automerge sync path stays exercised end-to-end — the test just stops
- * racing it. Waits are bounded so a genuinely unreachable sync server fails
- * loudly here instead of surfacing 75s later as a preview-render timeout.
- *
  * Returns the local project ID (UUID) used in URL navigation.
  */
 export async function seedProjectInBrowser(
@@ -186,34 +175,6 @@ export async function seedProjectInBrowser(
       const hooks = window.__quartoTest;
       if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
       const entry = await hooks.projectStorage.addProject(indexDocId, syncServer, name);
-
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-      const deadline = Date.now() + 30000;
-
-      // 1) Wait for the real project-set peer connection (the app's implicit
-      //    5s waitForPeer is too tight in CI; give it a generous window).
-      while (!hooks.projectSet.isConnected() && Date.now() < deadline) {
-        await sleep(100);
-      }
-      if (!hooks.projectSet.isConnected()) {
-        throw new Error(
-          'Project set did not reach connected state within 30s — sync server unreachable?',
-        );
-      }
-
-      // 2) Land the seeded IDB entry into the synced set (idempotent), then
-      //    wait until it is observably present before the caller navigates.
-      while (!hooks.projectSet.getProject(indexDocId) && Date.now() < deadline) {
-        await hooks.reconcileProjectSet();
-        if (hooks.projectSet.getProject(indexDocId)) break;
-        await sleep(100);
-      }
-      if (!hooks.projectSet.getProject(indexDocId)) {
-        throw new Error(
-          `Seeded project ${indexDocId} never appeared in the connected project set within 30s`,
-        );
-      }
-
       return entry.id;
     },
     { indexDocId, syncServer, name },

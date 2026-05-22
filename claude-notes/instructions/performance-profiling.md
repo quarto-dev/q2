@@ -365,7 +365,9 @@ def resolve_pool_entry(pool, id_val):
     return entry
 
 def canonicalize(doc):
-    pool = doc["astContext"]["sourceInfoPool"]
+    # `astContext.p` is the source-info pool (renamed from `sourceInfoPool`
+    # in Plan 7f Phase 5).
+    pool = doc["astContext"]["p"]
     # walk the whole doc, replacing id-carrying fields with resolved content
     # return the canonicalized doc
 

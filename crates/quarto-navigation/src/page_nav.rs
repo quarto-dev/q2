@@ -21,7 +21,7 @@
 
 use quarto_pandoc_types::ConfigMapEntry;
 use quarto_pandoc_types::config_value::ConfigValue;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::item::NavigationItem;
 
@@ -49,7 +49,7 @@ impl PageNavigation {
     /// the emitted map (omit-default convention; matches
     /// `NavigationItem::to_config_value`).
     pub fn to_config_value(&self) -> ConfigValue {
-        let info = SourceInfo::default();
+        let info = SourceInfo::generated(By::programmatic_config());
         let mut entries: Vec<ConfigMapEntry> = Vec::new();
         if let Some(ref prev) = self.prev {
             entries.push(ConfigMapEntry {
@@ -74,7 +74,7 @@ mod tests {
     use super::*;
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     /// Test 1 — default is empty.

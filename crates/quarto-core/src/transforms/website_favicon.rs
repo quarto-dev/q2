@@ -177,7 +177,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value.to_string(), SourceInfo::default())
+        ConfigValue::new_string(value.to_string(), SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -185,11 +185,11 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     /// Read `rendered.includes.header` (the canonical post-resolve
@@ -310,7 +310,7 @@ mod tests {
             &["rendered", "includes", "header"],
             ConfigValue::new_array(
                 vec![s("<meta name=\"foo\" content=\"bar\">")],
-                SourceInfo::default(),
+                SourceInfo::for_test(),
             ),
         );
         apply_favicon(&mut meta, Some(&root_page_resolver()));

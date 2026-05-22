@@ -79,9 +79,13 @@ export type SourceInfoPool = readonly SourceInfoEntry[];
 /**
  * The `astContext` field of a serialized Pandoc AST. Mirrors
  * `AstContextJson` in the JSON writer.
+ *
+ * `p` is the source-info pool (renamed from `sourceInfoPool` in Plan 7f
+ * Phase 5). The wire-format key is `p`; consumers reading it should
+ * destructure `astContext.p`.
  */
 export interface AstContext {
     files: Array<{ name: string; lineBreaks?: number[]; totalLength?: number }>;
     metaTopLevelKeySources?: unknown;
-    sourceInfoPool?: SourceInfoPool;
+    p?: SourceInfoPool;
 }

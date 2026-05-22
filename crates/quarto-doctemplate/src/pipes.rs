@@ -413,11 +413,11 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn pipe(name: &str) -> Pipe {
-        Pipe::new(name, SourceInfo::default())
+        Pipe::new(name, SourceInfo::for_test())
     }
 
     fn pipe_with_args(name: &str, args: Vec<PipeArg>) -> Pipe {
-        Pipe::with_args(name, args, SourceInfo::default())
+        Pipe::with_args(name, args, SourceInfo::for_test())
     }
 
     fn s(value: &str) -> TemplateValue {

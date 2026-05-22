@@ -22,15 +22,15 @@ use quarto_source_map::SourceInfo;
 use std::path::PathBuf;
 
 fn s(x: &str) -> ConfigValue {
-    ConfigValue::new_string(x, SourceInfo::default())
+    ConfigValue::new_string(x, SourceInfo::for_test())
 }
 
 fn b(x: bool) -> ConfigValue {
-    ConfigValue::new_bool(x, SourceInfo::default())
+    ConfigValue::new_bool(x, SourceInfo::for_test())
 }
 
 fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-    let info = SourceInfo::default();
+    let info = SourceInfo::for_test();
     let map_entries: Vec<ConfigMapEntry> = entries
         .into_iter()
         .map(|(k, v)| ConfigMapEntry {
@@ -43,7 +43,7 @@ fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
 }
 
 fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-    ConfigValue::new_array(items, SourceInfo::default())
+    ConfigValue::new_array(items, SourceInfo::for_test())
 }
 
 fn make_test_project() -> ProjectContext {

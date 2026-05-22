@@ -1803,17 +1803,17 @@ mod tests {
     fn project_with_theme(theme: &str) -> ProjectContext {
         let theme_value = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let entry = ConfigMapEntry {
             key: "theme".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: theme_value,
         };
         let metadata = ConfigValue {
             value: ConfigValueKind::Map(vec![entry]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         ProjectContext {

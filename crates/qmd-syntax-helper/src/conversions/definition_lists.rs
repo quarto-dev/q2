@@ -178,8 +178,14 @@ impl DefinitionListConverter {
 
         // Step 2: Use library to convert JSON to markdown
         let mut json_reader = std::io::Cursor::new(&pandoc_output.stdout);
+        // Pandoc subprocess output lacks q2's `s:` references. Route through
+        // the completing reader with `By::unknown()` (plan 7f Phase 4 per-caller
+        // table). Downstream qmd writer dispatch shifts from R1-empty to
+        // R5-synthesize for these nodes — the AST has no preimage and the new
+        // behavior is the correct one.
         let (pandoc_ast, _ctx) =
-            json::read(&mut json_reader).context("Failed to parse JSON output from pandoc")?;
+            json::read_completing_source_info(&mut json_reader, quarto_source_map::By::unknown())
+                .context("Failed to parse JSON output from pandoc")?;
 
         let mut output = Vec::new();
         qmd::write(&pandoc_ast, &mut output).map_err(|diagnostics| {

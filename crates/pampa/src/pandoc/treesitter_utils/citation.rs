@@ -8,7 +8,9 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Citation, CitationMode, Cite, Inline, Space, Str};
-use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::location::{
+    leading_whitespace_source_info, node_source_info_with_context, tight_source_info_for_node,
+};
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -63,6 +65,9 @@ where
     let has_leading_space = text.starts_with(|c: char| c.is_ascii_whitespace());
     let trimmed_text = text.trim_ascii().to_string();
 
+    let whole_si = node_source_info_with_context(node, context);
+    let tight_si = tight_source_info_for_node(node, context);
+
     let cite = Inline::Cite(Cite {
         citations: vec![Citation {
             id: citation_id,
@@ -75,16 +80,17 @@ where
         }],
         content: vec![Inline::Str(Str {
             text: trimmed_text,
-            source_info: crate::pandoc::location::node_source_info_with_context(node, context),
+            source_info: tight_si.clone(),
         })],
-        source_info: crate::pandoc::location::node_source_info_with_context(node, context),
+        source_info: tight_si.clone(),
     });
 
     // Build result with leading Space if needed to distinguish "Hi @cite" from "Hi@cite"
     if has_leading_space {
+        let space_si = leading_whitespace_source_info(&whole_si, &tight_si).unwrap_or(whole_si);
         PandocNativeIntermediate::IntermediateInlines(vec![
             Inline::Space(Space {
-                source_info: node_source_info_with_context(node, context),
+                source_info: space_si,
             }),
             cite,
         ])

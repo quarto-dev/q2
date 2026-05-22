@@ -55,7 +55,7 @@ use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::Inline;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -446,7 +446,7 @@ impl PipelineStage for MathJsStage {
         // block lands ahead of the loader (matters for MathJax).
         doc.ast.meta.insert_path(
             &["math"],
-            ConfigValue::new_string(math_html, SourceInfo::default()),
+            ConfigValue::new_string(math_html, SourceInfo::generated(By::programmatic_config())),
         );
 
         trace_event!(
@@ -499,7 +499,7 @@ mod tests {
     fn empty_meta() -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         }
     }
@@ -507,16 +507,16 @@ mod tests {
     fn meta_with_string(key: &str, value: &str) -> ConfigValue {
         let v = ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(value.to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         };
         ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: key.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         }
     }
@@ -527,33 +527,33 @@ mod tests {
             value: ConfigValueKind::Map(vec![
                 ConfigMapEntry {
                     key: "method".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: ConfigValue {
                         value: ConfigValueKind::Scalar(Yaml::String(method.to_string())),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                         merge_op: MergeOp::Concat,
                     },
                 },
                 ConfigMapEntry {
                     key: "url".to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: ConfigValue {
                         value: ConfigValueKind::Scalar(Yaml::String(url.to_string())),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                         merge_op: MergeOp::Concat,
                     },
                 },
             ]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         };
         ConfigValue {
             value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "html-math-method".to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: inner,
             }]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         }
     }
@@ -562,7 +562,7 @@ mod tests {
         Inline::Math(Math {
             math_type: MathType::InlineMath,
             text: text.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
@@ -570,21 +570,21 @@ mod tests {
         Inline::Math(Math {
             math_type: MathType::DisplayMath,
             text: text.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
     fn str_inline(s: &str) -> Inline {
         Inline::Str(Str {
             text: s.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
     fn paragraph(content: Vec<Inline>) -> Block {
         Block::Paragraph(Paragraph {
             content,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })
     }
 
@@ -828,7 +828,7 @@ mod tests {
     /// into the slot.
     #[tokio::test]
     async fn labelled_equation_via_customnode_triggers_injection() {
-        let mut node = CustomNode::new("Equation", empty_attr(), SourceInfo::default());
+        let mut node = CustomNode::new("Equation", empty_attr(), SourceInfo::for_test());
         node.slots.insert(
             "content".to_string(),
             Slot::Inlines(vec![display_math("x = y \\tag{1}")]),
@@ -837,7 +837,7 @@ mod tests {
         let math = run_and_get_math(
             vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Custom(node)],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             empty_meta(),
         )
@@ -937,7 +937,7 @@ mod tests {
         let para = paragraph(vec![str_inline("see "), inline_math("E = mc^2")]);
         let bq = Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
             content: vec![para],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
 
         let math = run_and_get_math(vec![bq], empty_meta()).await;
@@ -953,7 +953,7 @@ mod tests {
     #[tokio::test]
     async fn math_in_callout_slot_triggers_injection() {
         let inner_para = paragraph(vec![inline_math("a + b")]);
-        let mut callout = CustomNode::new("Callout", empty_attr(), SourceInfo::default());
+        let mut callout = CustomNode::new("Callout", empty_attr(), SourceInfo::for_test());
         callout
             .slots
             .insert("content".to_string(), Slot::Blocks(vec![inner_para]));
@@ -974,7 +974,7 @@ mod tests {
         let cb = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
             attr: empty_attr(),
             text: "$x = y$".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         });
 

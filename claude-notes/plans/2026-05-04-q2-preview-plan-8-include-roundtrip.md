@@ -49,6 +49,21 @@ includes round-tripping; edits inside surfacing as Q-3-43 diagnostics).
   `{ "source_path": "<literal arg>", "atomic": true }`.
 - **The wrapper's `source_info` stays `Original`, NOT `Generated`** —
   see "Why the wrapper is Original" below.
+
+  This is also what keeps `IncludeExpansion` from being a
+  *transparent wrapper* in the sense of
+  [`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md).
+  The writer's descent helpers (`derive_target_file_id`,
+  `first_target_anchored_start_in`) stop at the wrapper and read
+  *its* `Original` source_info — which is exactly right: the
+  include-token bytes live in the parent qmd, that's where the
+  metadata region and the file id come from. If a future variant
+  ever emits an `IncludeExpansion` with `Generated` source_info
+  at the top of a parent document, descent would skip into the
+  *child* qmd's bytes and the parent's frontmatter would
+  silently mis-extract — add a debug-assert in
+  `IncludeExpansionStage` that the wrapper's `root_file_id()`
+  matches the parent.
 - Update the qmd writer (`pampa/src/writers/qmd.rs` CustomNode arm) to
   handle `"IncludeExpansion"`. Two paths:
   - **Verbatim path** (KeepBefore in Plan 7's coarsen): nothing to do —

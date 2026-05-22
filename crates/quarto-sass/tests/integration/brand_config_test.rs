@@ -40,13 +40,13 @@ fn flattened_config(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
         .into_iter()
         .map(|(k, v)| ConfigMapEntry {
             key: k.to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: v,
         })
         .collect();
     ConfigValue {
         value: ConfigValueKind::Map(map_entries),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     }
 }
@@ -54,7 +54,7 @@ fn flattened_config(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
 fn scalar_string(s: &str) -> ConfigValue {
     ConfigValue {
         value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     }
 }
@@ -62,7 +62,7 @@ fn scalar_string(s: &str) -> ConfigValue {
 fn array_strings(items: &[&str]) -> ConfigValue {
     ConfigValue {
         value: ConfigValueKind::Array(items.iter().map(|s| scalar_string(s)).collect()),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     }
 }
@@ -143,7 +143,7 @@ fn brand_key_as_inline_map_produces_inline_ref() {
 
     let brand_value = ConfigValue {
         value: ConfigValueKind::Scalar(Yaml::Hash(brand_map)),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     };
 
@@ -182,7 +182,7 @@ fn resolve_inline_brand_parses_typed_brand() {
 
     let brand_value = ConfigValue {
         value: ConfigValueKind::Scalar(Yaml::Hash(brand_map)),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     };
 

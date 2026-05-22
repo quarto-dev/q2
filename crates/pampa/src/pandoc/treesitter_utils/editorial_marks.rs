@@ -42,7 +42,7 @@ macro_rules! process_editorial_mark {
 
                 for (_node_name, child) in children {
                     match child {
-                        PandocNativeIntermediate::IntermediateAttr(a, as_) => {
+                        PandocNativeIntermediate::IntermediateAttr(a, as_, _) => {
                             attr = a;
                             attr_source = as_;
                         }

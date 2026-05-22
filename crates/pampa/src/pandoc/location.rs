@@ -254,6 +254,63 @@ pub fn range_to_source_info_with_context(
     quarto_source_map::SourceInfo::from_range(file_id, range.clone())
 }
 
+// =============================================================================
+// Plan 7g Phase 3 — tight-range helpers
+// =============================================================================
+
+/// Return the tight [`SourceInfo`] for `node`, trimming leading and trailing
+/// ASCII whitespace (P1/P3 tightness). Use this instead of
+/// [`node_source_info_with_context`] for handlers that peel a leading/trailing
+/// `Space` node from an otherwise-wide token range.
+pub fn tight_source_info_for_node(
+    node: &tree_sitter::Node,
+    context: &ASTContext,
+) -> quarto_source_map::SourceInfo {
+    node_source_info_with_options(node, context, &SourceInfoOptions::trim_all())
+}
+
+/// Given the whole-node `SourceInfo` and the trimmed content `SourceInfo`,
+/// return the `SourceInfo` for the leading whitespace bytes
+/// (bytes between `whole.start` and `content.start`).
+///
+/// Returns `None` when there is no leading whitespace (starts are equal) or
+/// when the variant combination is unsupported. Both arguments must come from
+/// the same node — use [`node_source_info_with_context`] for `whole` and
+/// [`tight_source_info_for_node`] for `content`.
+pub fn leading_whitespace_source_info(
+    whole: &quarto_source_map::SourceInfo,
+    content: &quarto_source_map::SourceInfo,
+) -> Option<quarto_source_map::SourceInfo> {
+    use quarto_source_map::SourceInfo;
+    match (whole, content) {
+        (
+            SourceInfo::Original {
+                file_id,
+                start_offset: ws,
+                ..
+            },
+            SourceInfo::Original {
+                start_offset: cs, ..
+            },
+        ) if *ws < *cs => Some(SourceInfo::original(*file_id, *ws, *cs)),
+        (
+            SourceInfo::Substring {
+                parent,
+                start_offset: ws,
+                ..
+            },
+            SourceInfo::Substring {
+                start_offset: cs, ..
+            },
+        ) if *ws < *cs => Some(SourceInfo::Substring {
+            parent: parent.clone(),
+            start_offset: *ws,
+            end_offset: *cs,
+        }),
+        _ => None,
+    }
+}
+
 /// Convert quarto-source-map::SourceInfo to a quarto_source_map::Range, with a fallback if mapping fails.
 ///
 /// This is for use with PandocNativeIntermediate which uses quarto_source_map::Range.

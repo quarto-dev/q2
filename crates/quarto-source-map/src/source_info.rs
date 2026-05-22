@@ -105,6 +105,15 @@ pub enum AnchorRole {
 
     /// Extension-defined or future role we haven't enumerated.
     /// String is kebab-case, namespaced (`ext/<name>/<role>`).
+    ///
+    /// **`preimage_in` does not walk this role.** Future anchor roles
+    /// default to non-walked unless explicitly added to
+    /// [`SourceInfo::preimage_in`]'s `Generated` arm. Extensions adding
+    /// `Other("…")` should treat this as a feature: attribution data
+    /// attached via `Other` is not accidentally consulted by the writer's
+    /// byte-copying path. If a role *does* contribute to body-text
+    /// preimage in `target`, it must be explicitly enumerated in
+    /// `preimage_in`.
     Other(String),
 }
 
@@ -138,6 +147,23 @@ impl Default for SourceInfo {
 }
 
 impl SourceInfo {
+    /// Deprecated: use `SourceInfo::for_test()` in tests or an explicit
+    /// `Generated{by: <kind>}` in production. See provenance-contract.md.
+    ///
+    /// This inherent method shadows `Default::default()` so that callers
+    /// writing `SourceInfo::default()` see a deprecation error under
+    /// `deny(deprecated)`. The trait impl is retained (and called by this
+    /// method) so that `unwrap_or_default()` and `#[derive(Default)]` still
+    /// compile; those are caught by separate grep tooling.
+    #[deprecated(
+        since = "0.x",
+        note = "Use SourceInfo::for_test() in tests, or the appropriate Generated{by: <kind>} in production. See provenance-contract.md."
+    )]
+    #[doc(hidden)]
+    pub fn default() -> Self {
+        <Self as Default>::default()
+    }
+
     /// Create source info for a position in an original file (from offsets)
     pub fn original(file_id: FileId, start_offset: usize, end_offset: usize) -> Self {
         SourceInfo::Original {
@@ -203,6 +229,18 @@ impl SourceInfo {
     pub fn generated(by: By) -> Self {
         SourceInfo::Generated {
             by,
+            from: SmallVec::new(),
+        }
+    }
+
+    /// Convenience for tests: produce a non-atomic `Generated` source_info
+    /// with `By::test_scaffold()` and no anchors. Use this in test code
+    /// where a constructor requires a `SourceInfo` but there's no real
+    /// provenance to record. Replaces the historical
+    /// `SourceInfo::default()` pattern in tests.
+    pub fn for_test() -> Self {
+        SourceInfo::Generated {
+            by: By::test_scaffold(),
             from: SmallVec::new(),
         }
     }
@@ -361,6 +399,74 @@ impl SourceInfo {
             SourceInfo::Generated { .. } => self
                 .invocation_anchor()
                 .and_then(|si| si.resolve_byte_range()),
+        }
+    }
+
+    /// Byte range in `target` that this `SourceInfo`'s preimage covers, if any.
+    ///
+    /// This is the writer's "can I Verbatim-copy bytes from `target` for the
+    /// node carrying this source_info?" check.
+    ///
+    /// Semantics by variant:
+    /// - `Original` → `Some(start..end)` iff the file matches `target`, else `None`.
+    /// - `Substring` → recurse the parent; offsets compose additively.
+    /// - `Concat` → every piece must resolve into `target` AND the resolved
+    ///   ranges must be byte-contiguous (no gaps, no overlaps). A gappy Concat
+    ///   returns `None` — the writer can't Verbatim-copy a non-contiguous span.
+    /// - `Generated` → walk the `Invocation` anchor only via
+    ///   [`invocation_anchor`](Self::invocation_anchor). **No other anchor
+    ///   role is consulted** — not `ValueSource` (Plan 9), not future
+    ///   `Dispatch` (Plan 10), not `AnchorRole::Other`. See the
+    ///   role-asymmetry section below.
+    ///
+    /// # Role asymmetry
+    ///
+    /// `preimage_in` only walks `AnchorRole::Invocation`. This is load-bearing:
+    /// copying bytes from a `ValueSource` source range would emit raw YAML
+    /// metadata (or whatever the value lived in) into the body — a hard
+    /// correctness bug. The same applies to `Dispatch` (which points at Lua
+    /// source) and to any extension-defined `Other` role.
+    ///
+    /// **Future anchor roles default to non-walked.** Extensions introducing
+    /// `AnchorRole::Other("…")` should treat this as a feature: their
+    /// attribution metadata is not accidentally consulted by the writer's
+    /// byte-copying path. If a role *does* contribute to body-text preimage,
+    /// it must be explicitly added to this function's `Generated` arm.
+    pub fn preimage_in(&self, target: FileId) -> Option<std::ops::Range<usize>> {
+        match self {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } if *file_id == target => Some(*start_offset..*end_offset),
+            SourceInfo::Original { .. } => None,
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                end_offset,
+            } => {
+                let parent_range = parent.preimage_in(target)?;
+                Some(parent_range.start + start_offset..parent_range.start + end_offset)
+            }
+            SourceInfo::Concat { pieces } => {
+                let ranges: Vec<std::ops::Range<usize>> = pieces
+                    .iter()
+                    .map(|p| p.source_info.preimage_in(target))
+                    .collect::<Option<Vec<_>>>()?;
+                if ranges.is_empty() {
+                    return None;
+                }
+                if ranges.windows(2).all(|w| w[0].end == w[1].start) {
+                    let first = ranges.first().unwrap().start;
+                    let last = ranges.last().unwrap().end;
+                    Some(first..last)
+                } else {
+                    None
+                }
+            }
+            SourceInfo::Generated { .. } => self
+                .invocation_anchor()
+                .and_then(|si| si.preimage_in(target)),
         }
     }
 
@@ -542,6 +648,111 @@ impl By {
         }
     }
 
+    /// "We don't know" placeholder used by `json::read_completing_source_info`
+    /// when a node arrives without an `s:` field from outside the q2
+    /// source-tracking world (qmd-syntax-helper Pandoc subprocess, CLI
+    /// `--from json`, external filter binaries, Lua AST handoff).
+    ///
+    /// Non-atomic by design — nodes carrying `By::unknown()` remain
+    /// editable in the preview; user edits re-stamp them as `user_edit`
+    /// on save. See Plan 7f Phase 4's per-caller table for placement
+    /// guidance.
+    pub fn unknown() -> Self {
+        Self {
+            kind: "unknown".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for test scaffolding. Non-atomic; appears only in
+    /// test code where `source_info` is required by a constructor but
+    /// has no real provenance to record. Paired with
+    /// [`SourceInfo::for_test`].
+    pub fn test_scaffold() -> Self {
+        Self {
+            kind: "test-scaffold".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for citeproc-rendered content (citation Str
+    /// replacements, bibliography `Div`s, `#refs` wrappers). The bytes
+    /// come from CSL processing of bibliographic metadata, not from
+    /// user-written source.
+    ///
+    /// Atomic — citeproc output is generated content the user can't
+    /// edit through the preview; changes go through the CSL pipeline,
+    /// not through inline editing.
+    pub fn citeproc() -> Self {
+        Self {
+            kind: "citeproc".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for content synthesized from execution-engine
+    /// output (Jupyter cell stdout / stderr, rich-display MIME bundles,
+    /// kernel error tracebacks). The bytes come from kernel execution,
+    /// not from user-written source.
+    ///
+    /// Atomic — execution outputs are regenerated on every re-run;
+    /// editing them through the preview would be a UX bug.
+    pub fn jupyter_output() -> Self {
+        Self {
+            kind: "jupyter-output".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for callout-decoration synthesis:
+    /// default-title injection (`Note`, `Warning`, etc. when the user
+    /// omits a title and `appearance="default"`) and the
+    /// screen-reader-only type announcement span.
+    ///
+    /// Non-atomic — the wrapper Div is structural, and its children
+    /// (the user's actual callout body) remain editable through the
+    /// preview. The synthesized title text itself has no preimage but
+    /// regenerates from the callout type when the user changes it,
+    /// so atomicity at the wrapper level would be incorrect.
+    pub fn callout() -> Self {
+        Self {
+            kind: "callout".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Empty-Map sentinel `ConfigValue` used during metadata merging
+    /// when no value is present. Non-atomic. The bytes don't exist —
+    /// the node is structural. See [`By::is_programmatic_sentinel`].
+    pub fn config_default() -> Self {
+        Self {
+            kind: "config-default".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Programmatic construction of `ConfigValue` (e.g.
+    /// `ConfigValue::from_path`, intermediate maps created during
+    /// `insert_path`). No source bytes exist for these nodes.
+    /// See [`By::is_programmatic_sentinel`].
+    pub fn programmatic_config() -> Self {
+        Self {
+            kind: "programmatic-config".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// True for kinds whose source bytes don't exist — `config-default`,
+    /// `programmatic-config`, `unknown`. Used by code that needs to
+    /// distinguish "no real source" sentinels from a genuine
+    /// `Original{FileId(0), …}` pointing at a real document.
+    pub fn is_programmatic_sentinel(&self) -> bool {
+        matches!(
+            self.kind.as_str(),
+            "config-default" | "programmatic-config" | "unknown"
+        )
+    }
+
     /// Escape-hatch constructor for any `kind` string — including built-in
     /// names and extension-defined kinds (`ext/<extension>/<kind>`).
     ///
@@ -570,7 +781,12 @@ impl By {
     pub fn is_atomic_kind(&self) -> bool {
         matches!(
             self.kind.as_str(),
-            "filter" | "shortcode" | "title-block" | "tree-sitter-postprocess"
+            "filter"
+                | "shortcode"
+                | "title-block"
+                | "tree-sitter-postprocess"
+                | "citeproc"
+                | "jupyter-output"
         )
     }
 
@@ -763,13 +979,114 @@ mod tests {
         assert!(By::shortcode("meta").is_atomic_kind());
         assert!(By::title_block().is_atomic_kind());
         assert!(By::tree_sitter_postprocess().is_atomic_kind());
+        assert!(By::citeproc().is_atomic_kind());
+        assert!(By::jupyter_output().is_atomic_kind());
+
+        assert!(!By::callout().is_atomic_kind());
 
         assert!(!By::sectionize().is_atomic_kind());
         assert!(!By::user_edit().is_atomic_kind());
         assert!(!By::include().is_atomic_kind());
         assert!(!By::footnotes().is_atomic_kind());
         assert!(!By::appendix().is_atomic_kind());
+        assert!(!By::unknown().is_atomic_kind());
+        assert!(!By::test_scaffold().is_atomic_kind());
+        assert!(!By::config_default().is_atomic_kind());
+        assert!(!By::programmatic_config().is_atomic_kind());
         assert!(!By::raw("ext/anywhere/foo", serde_json::Value::Null).is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_unknown_constructor() {
+        let by = By::unknown();
+        assert_eq!(by.kind, "unknown");
+        assert!(by.data.is_null());
+        // Non-atomic — nodes carrying By::unknown() remain editable; the
+        // strict reader rejects missing `s:`, the completing reader stamps
+        // them with this kind only at the explicit call site.
+        assert!(!by.is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_test_scaffold_constructor() {
+        let by = By::test_scaffold();
+        assert_eq!(by.kind, "test-scaffold");
+        assert!(by.data.is_null());
+        assert!(!by.is_atomic_kind());
+        // Not a "no real source" sentinel — it's test scaffolding.
+        assert!(!by.is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_by_config_default_constructor() {
+        let by = By::config_default();
+        assert_eq!(by.kind, "config-default");
+        assert!(by.data.is_null());
+        assert!(!by.is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_programmatic_config_constructor() {
+        let by = By::programmatic_config();
+        assert_eq!(by.kind, "programmatic-config");
+        assert!(by.data.is_null());
+        assert!(!by.is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_citeproc_constructor() {
+        let by = By::citeproc();
+        assert_eq!(by.kind, "citeproc");
+        assert!(by.data.is_null());
+        // Atomic — citeproc output is non-editable in the preview.
+        assert!(by.is_atomic_kind());
+        // Not a "no real source" sentinel; the bytes come from CSL output.
+        assert!(!by.is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_by_jupyter_output_constructor() {
+        let by = By::jupyter_output();
+        assert_eq!(by.kind, "jupyter-output");
+        assert!(by.data.is_null());
+        // Atomic — execution outputs regenerate on every re-run.
+        assert!(by.is_atomic_kind());
+        assert!(!by.is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_by_callout_constructor() {
+        let by = By::callout();
+        assert_eq!(by.kind, "callout");
+        assert!(by.data.is_null());
+        // Non-atomic — callout wrapper is structural; children stay editable.
+        assert!(!by.is_atomic_kind());
+        assert!(!by.is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_by_is_programmatic_sentinel() {
+        assert!(By::config_default().is_programmatic_sentinel());
+        assert!(By::programmatic_config().is_programmatic_sentinel());
+        assert!(By::unknown().is_programmatic_sentinel());
+
+        assert!(!By::user_edit().is_programmatic_sentinel());
+        assert!(!By::filter("x.lua", 1).is_programmatic_sentinel());
+        assert!(!By::shortcode("meta").is_programmatic_sentinel());
+        assert!(!By::test_scaffold().is_programmatic_sentinel());
+        assert!(!By::sectionize().is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_source_info_for_test() {
+        let si = SourceInfo::for_test();
+        match si {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "test-scaffold");
+                assert!(from.is_empty());
+            }
+            _ => panic!("for_test() must return Generated"),
+        }
     }
 
     #[test]
@@ -1531,5 +1848,167 @@ mod tests {
         // Verify round-trip
         let deserialized: SourceInfo = serde_json::from_value(json).unwrap();
         assert_eq!(combined, deserialized);
+    }
+
+    // -------------------------------------------------------------------------
+    // Plan 7 — preimage_in accessor
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_preimage_in_original_same_file() {
+        let info = SourceInfo::original(FileId(0), 10, 25);
+        assert_eq!(info.preimage_in(FileId(0)), Some(10..25));
+    }
+
+    #[test]
+    fn test_preimage_in_original_different_file_returns_none() {
+        let info = SourceInfo::original(FileId(0), 10, 25);
+        assert_eq!(info.preimage_in(FileId(1)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_substring_composes_offsets() {
+        // Parent points at bytes 100..200 in file 0.
+        // Substring takes bytes 5..15 *relative to parent*.
+        // Preimage in file 0 should be 105..115.
+        let parent = SourceInfo::original(FileId(0), 100, 200);
+        let info = SourceInfo::substring(parent, 5, 15);
+        assert_eq!(info.preimage_in(FileId(0)), Some(105..115));
+    }
+
+    #[test]
+    fn test_preimage_in_substring_different_file_returns_none() {
+        let parent = SourceInfo::original(FileId(0), 100, 200);
+        let info = SourceInfo::substring(parent, 5, 15);
+        assert_eq!(info.preimage_in(FileId(7)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_substring_chain() {
+        // Original 1000..2000 in file 0; Substring 100..500 relative; Substring 10..50 relative.
+        // Expected preimage in file 0: 1100 + 10 .. 1100 + 50 = 1110..1150.
+        let root = SourceInfo::original(FileId(0), 1000, 2000);
+        let mid = SourceInfo::substring(root, 100, 500);
+        let leaf = SourceInfo::substring(mid, 10, 50);
+        assert_eq!(leaf.preimage_in(FileId(0)), Some(1110..1150));
+    }
+
+    #[test]
+    fn test_preimage_in_concat_contiguous() {
+        // Two adjacent pieces of file 0: 10..15 and 15..25 → contiguous → 10..25.
+        let a = SourceInfo::original(FileId(0), 10, 15);
+        let b = SourceInfo::original(FileId(0), 15, 25);
+        let info = SourceInfo::concat(vec![(a, 5), (b, 10)]);
+        assert_eq!(info.preimage_in(FileId(0)), Some(10..25));
+    }
+
+    #[test]
+    fn test_preimage_in_concat_gappy_returns_none() {
+        // 10..15 then 20..25 → gap between 15 and 20 → None.
+        let a = SourceInfo::original(FileId(0), 10, 15);
+        let b = SourceInfo::original(FileId(0), 20, 25);
+        let info = SourceInfo::concat(vec![(a, 5), (b, 5)]);
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_concat_overlapping_returns_none() {
+        // 10..20 then 15..25 → overlap → not byte-contiguous → None.
+        let a = SourceInfo::original(FileId(0), 10, 20);
+        let b = SourceInfo::original(FileId(0), 15, 25);
+        let info = SourceInfo::concat(vec![(a, 10), (b, 10)]);
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_concat_mixed_files_returns_none() {
+        // One piece in file 0, another in file 1 → resolving in file 0 fails
+        // because the file-1 piece can't be resolved.
+        let a = SourceInfo::original(FileId(0), 10, 15);
+        let b = SourceInfo::original(FileId(1), 15, 25);
+        let info = SourceInfo::concat(vec![(a, 5), (b, 10)]);
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_no_anchors_returns_none() {
+        // Sectionize-style wrapper, footnotes-container, etc.: Generated with
+        // empty `from`. No Invocation anchor → no preimage.
+        let info = SourceInfo::generated(By::sectionize());
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_with_invocation_in_target() {
+        // Shortcode resolution: Generated with an Invocation anchor pointing
+        // at the {{< meta foo >}} token bytes.
+        let token = SourceInfo::original(FileId(0), 50, 70);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        assert_eq!(info.preimage_in(FileId(0)), Some(50..70));
+    }
+
+    #[test]
+    fn test_preimage_in_generated_with_invocation_outside_target() {
+        // Invocation anchor points at file 0; query asks about file 1 → None.
+        let token = SourceInfo::original(FileId(0), 50, 70);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        assert_eq!(info.preimage_in(FileId(1)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_walks_through_substring_in_invocation() {
+        // Invocation anchor is itself a Substring chain. preimage_in must
+        // walk through it correctly.
+        let root = SourceInfo::original(FileId(0), 100, 200);
+        let token = SourceInfo::substring(root, 10, 30);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        assert_eq!(info.preimage_in(FileId(0)), Some(110..130));
+    }
+
+    // -------------------------------------------------------------------------
+    // Plan 7 — preimage_in role-asymmetry: only Invocation is walked.
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_preimage_in_generated_value_source_only_returns_none() {
+        // Plan 9-shape: Generated whose only anchor is ValueSource (points at
+        // YAML metadata bytes). The writer must NOT copy those bytes into the
+        // body — preimage_in returns None.
+        let meta_si = SourceInfo::original(FileId(0), 10, 25);
+        let mut info = SourceInfo::generated(By::appendix());
+        info.append_anchor(AnchorRole::ValueSource, Arc::new(meta_si));
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_other_only_returns_none() {
+        // Extension-defined Other role. preimage_in must not walk it.
+        let lua_si = SourceInfo::original(FileId(0), 10, 25);
+        let mut info = SourceInfo::generated(By::filter("upper.lua", 14));
+        info.append_anchor(
+            AnchorRole::Other("ext/my-ext/dispatch".to_string()),
+            Arc::new(lua_si),
+        );
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_invocation_plus_value_source_walks_invocation_only() {
+        // Plan 2/Plan 9 mixed shape: Invocation in file 0 + ValueSource in
+        // file 1. Query file 0 → Invocation resolves → Some(token range).
+        // Query file 1 → Invocation resolves to file 0 (not 1) → None.
+        // (The writer must not see the value-source range when asked about
+        // any file, even the file the ValueSource points into.)
+        let token = SourceInfo::original(FileId(0), 50, 70);
+        let value = SourceInfo::original(FileId(1), 200, 215);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        info.append_anchor(AnchorRole::ValueSource, Arc::new(value));
+
+        assert_eq!(info.preimage_in(FileId(0)), Some(50..70));
+        assert_eq!(info.preimage_in(FileId(1)), None);
     }
 }

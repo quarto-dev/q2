@@ -991,25 +991,25 @@ fn test_json_serialization_includes_attr_source() {
     let span = &inlines[0];
     assert_eq!(span["t"], "Span", "First inline should be Span");
 
-    // Verify attrS field exists
+    // Verify `a` (attribute source info) field exists
     assert!(
-        span.get("attrS").is_some(),
-        "Span should have attrS field in JSON output"
+        span.get("a").is_some(),
+        "Span should have `a` field in JSON output"
     );
 
-    // Verify attrS has the expected structure
-    let attr_s = &span["attrS"];
-    assert!(attr_s.get("id").is_some(), "attrS should have id field");
+    // Verify `a` has the expected structure
+    let attr_s = &span["a"];
+    assert!(attr_s.get("id").is_some(), "`a` should have id field");
     assert!(
         attr_s.get("classes").is_some(),
-        "attrS should have classes field"
+        "`a` should have classes field"
     );
-    assert!(attr_s.get("kvs").is_some(), "attrS should have kvs field");
+    assert!(attr_s.get("kvs").is_some(), "`a` should have kvs field");
 
     // Verify id is not null (since we have #my-id)
     assert!(
         !attr_s["id"].is_null(),
-        "attrS.id should not be null for span with ID"
+        "`a`.id should not be null for span with ID"
     );
 }
 
@@ -1032,20 +1032,14 @@ fn test_json_serialization_header_with_attr_source() {
     let header = &blocks[0];
     assert_eq!(header["t"], "Header");
 
-    // Verify attrS exists on header
-    assert!(
-        header.get("attrS").is_some(),
-        "Header should have attrS field"
-    );
+    // Verify `a` (attribute source info) exists on header
+    assert!(header.get("a").is_some(), "Header should have `a` field");
 
-    let attr_s = &header["attrS"];
-    assert!(
-        !attr_s["id"].is_null(),
-        "Header attrS.id should not be null"
-    );
+    let attr_s = &header["a"];
+    assert!(!attr_s["id"].is_null(), "Header `a`.id should not be null");
     assert!(
         !attr_s["classes"].as_array().unwrap().is_empty(),
-        "Header attrS.classes should not be empty"
+        "Header `a`.classes should not be empty"
     );
 }
 
@@ -1068,16 +1062,16 @@ fn test_json_serialization_code_block_with_attr_source() {
     let code_block = &blocks[0];
     assert_eq!(code_block["t"], "CodeBlock");
 
-    // Verify attrS exists
+    // Verify `a` (attribute source info) exists
     assert!(
-        code_block.get("attrS").is_some(),
-        "CodeBlock should have attrS field"
+        code_block.get("a").is_some(),
+        "CodeBlock should have `a` field"
     );
 
-    let attr_s = &code_block["attrS"];
+    let attr_s = &code_block["a"];
     assert!(
         !attr_s["id"].is_null(),
-        "CodeBlock attrS.id should not be null"
+        "CodeBlock `a`.id should not be null"
     );
 }
 
@@ -1486,9 +1480,9 @@ fn test_summary_all_inline_and_block_types_tested() {
     //   9. Table (via caption) ✓ (id, classes, combined)
     //
     // JSON Serialization tests:
-    //   10. Span JSON with attrS ✓
-    //   11. Header JSON with attrS ✓
-    //   12. CodeBlock JSON with attrS ✓
+    //   10. Span JSON with `a` (attribute source info) ✓
+    //   11. Header JSON with `a` (attribute source info) ✓
+    //   12. CodeBlock JSON with `a` (attribute source info) ✓
     //
     // Attribute patterns tested:
     //   - ID only

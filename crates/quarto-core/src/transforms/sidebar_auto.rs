@@ -24,7 +24,7 @@
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_navigation::{AutoSpec, NavigationItem, Sidebar, SidebarEntry};
 use quarto_pandoc_types::config_value::ConfigValue;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use crate::document_profile::DocumentProfile;
 use crate::project::index::ProjectIndex;
@@ -308,14 +308,17 @@ fn section_for_dir(dir: &str, members: &[&DocumentProfile], index: &ProjectIndex
         Some(p) => {
             let title = p.title.clone().unwrap_or_else(|| capitalize(dir));
             (
-                Some(ConfigValue::new_string(&title, SourceInfo::default())),
+                Some(ConfigValue::new_string(
+                    &title,
+                    SourceInfo::generated(By::programmatic_config()),
+                )),
                 Some(index_src.clone()),
             )
         }
         None => (
             Some(ConfigValue::new_string(
                 &capitalize(dir),
-                SourceInfo::default(),
+                SourceInfo::generated(By::programmatic_config()),
             )),
             None,
         ),
@@ -335,7 +338,7 @@ fn section_for_dir(dir: &str, members: &[&DocumentProfile], index: &ProjectIndex
         // `auto:` expansion produces synthetic entries — no source
         // YAML to point back at. Default SourceInfo is the safe
         // sentinel for "programmatically constructed."
-        href_source: SourceInfo::default(),
+        href_source: SourceInfo::generated(By::programmatic_config()),
         id: None,
         contents,
         expanded: false,
@@ -362,7 +365,10 @@ fn link_entry(profile: &DocumentProfile) -> SidebarEntry {
     SidebarEntry::Link {
         item: NavigationItem {
             href: Some(href),
-            text: Some(ConfigValue::new_string(&text, SourceInfo::default())),
+            text: Some(ConfigValue::new_string(
+                &text,
+                SourceInfo::generated(By::programmatic_config()),
+            )),
             ..NavigationItem::default()
         },
     }
@@ -694,9 +700,9 @@ mod tests {
         let inner_auto = SidebarEntry::Auto(AutoSpec::All);
         let mut sb = Sidebar {
             contents: vec![SidebarEntry::Section {
-                text: Some(ConfigValue::new_string("Outer", SourceInfo::default())),
+                text: Some(ConfigValue::new_string("Outer", SourceInfo::for_test())),
                 href: None,
-                href_source: SourceInfo::default(),
+                href_source: SourceInfo::for_test(),
                 id: None,
                 contents: vec![inner_auto],
                 expanded: false,

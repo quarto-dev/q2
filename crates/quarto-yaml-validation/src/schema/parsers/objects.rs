@@ -53,7 +53,7 @@ fn normalize_convention(input: &str, location: &quarto_yaml::SourceInfo) -> Sche
 
         _ => Err(SchemaError::InvalidStructure {
             message: format!("Unknown naming convention: '{}'", input),
-            location: location.clone(),
+            location: Some(location.clone()),
         }),
     }
 }
@@ -83,7 +83,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
             .as_hash()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "properties must be an object".to_string(),
-                location: props_yaml.source_info.clone(),
+                location: Some(props_yaml.source_info.clone()),
             })?;
 
         let mut props = HashMap::new();
@@ -94,7 +94,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                 .as_str()
                 .ok_or_else(|| SchemaError::InvalidStructure {
                     message: "property key must be a string".to_string(),
-                    location: entry.key.source_info.clone(),
+                    location: Some(entry.key.source_info.clone()),
                 })?;
             let schema = from_yaml(&entry.value)?;
             props.insert(key.to_string(), schema);
@@ -112,7 +112,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                     .as_hash()
                     .ok_or_else(|| SchemaError::InvalidStructure {
                         message: "patternProperties must be an object".to_string(),
-                        location: pattern_props_yaml.source_info.clone(),
+                        location: Some(pattern_props_yaml.source_info.clone()),
                     })?;
 
             let mut props = HashMap::new();
@@ -123,7 +123,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                     .as_str()
                     .ok_or_else(|| SchemaError::InvalidStructure {
                         message: "patternProperty key must be a string".to_string(),
-                        location: entry.key.source_info.clone(),
+                        location: Some(entry.key.source_info.clone()),
                     })?;
                 let schema = from_yaml(&entry.value)?;
                 props.insert(key.to_string(), schema);
@@ -154,7 +154,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                         "Invalid required value: '{}' (expected 'all' or array)",
                         req_str
                     ),
-                    location: required_yaml.source_info.clone(),
+                    location: Some(required_yaml.source_info.clone()),
                 });
             }
         } else {
@@ -163,7 +163,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                 .as_array()
                 .ok_or_else(|| SchemaError::InvalidStructure {
                     message: "required must be 'all' or an array".to_string(),
-                    location: required_yaml.source_info.clone(),
+                    location: Some(required_yaml.source_info.clone()),
                 })?;
 
             let result: SchemaResult<Vec<_>> = items
@@ -172,7 +172,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                     item.yaml.as_str().map(|s| s.to_string()).ok_or_else(|| {
                         SchemaError::InvalidStructure {
                             message: "required items must be strings".to_string(),
-                            location: item.source_info.clone(),
+                            location: Some(item.source_info.clone()),
                         }
                     })
                 })
@@ -211,7 +211,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                         .as_str()
                         .ok_or_else(|| SchemaError::InvalidStructure {
                             message: "namingConvention items must be strings".to_string(),
-                            location: item.source_info.clone(),
+                            location: Some(item.source_info.clone()),
                         })
                         .and_then(|s| normalize_convention(s, &item.source_info))
                 })
@@ -220,7 +220,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
         } else {
             return Err(SchemaError::InvalidStructure {
                 message: "namingConvention must be a string or array of strings".to_string(),
-                location: nc_yaml.source_info.clone(),
+                location: Some(nc_yaml.source_info.clone()),
             });
         }
     } else {
@@ -342,7 +342,7 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
             .as_hash()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "record properties must be an object".to_string(),
-                location: props_yaml.source_info.clone(),
+                location: Some(props_yaml.source_info.clone()),
             })?;
 
         let mut props = HashMap::new();
@@ -353,7 +353,7 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
                 .as_str()
                 .ok_or_else(|| SchemaError::InvalidStructure {
                     message: "property key must be a string".to_string(),
-                    location: entry.key.source_info.clone(),
+                    location: Some(entry.key.source_info.clone()),
                 })?;
             let schema = from_yaml(&entry.value)?;
             props.insert(key.to_string(), schema);
@@ -366,7 +366,7 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
             .as_hash()
             .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "record must be an object".to_string(),
-                location: yaml.source_info.clone(),
+                location: Some(yaml.source_info.clone()),
             })?;
 
         let mut props = HashMap::new();
@@ -377,7 +377,7 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
                 .as_str()
                 .ok_or_else(|| SchemaError::InvalidStructure {
                     message: "property key must be a string".to_string(),
-                    location: entry.key.source_info.clone(),
+                    location: Some(entry.key.source_info.clone()),
                 })?;
             let schema = from_yaml(&entry.value)?;
             props.insert(key.to_string(), schema);

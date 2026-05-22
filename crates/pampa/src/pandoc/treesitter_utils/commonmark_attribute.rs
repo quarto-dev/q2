@@ -14,6 +14,7 @@ use quarto_source_map::SourceInfo;
 pub fn process_commonmark_attribute(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
+    span: SourceInfo,
 ) -> PandocNativeIntermediate {
     let mut attr = (String::new(), vec![], LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
@@ -55,5 +56,5 @@ pub fn process_commonmark_attribute(
         };
     }
 
-    PandocNativeIntermediate::IntermediateAttr(attr, attr_source)
+    PandocNativeIntermediate::IntermediateAttr(attr, attr_source, span)
 }

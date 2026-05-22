@@ -1269,9 +1269,11 @@ impl Output {
 // Pandoc Inline conversion
 // ============================================================================
 
-/// Helper to create an empty SourceInfo for generated content.
+/// Helper to create a `Generated{by: citeproc}` `SourceInfo` for
+/// CSL-rendered Pandoc inlines/blocks. Citeproc output is atomic —
+/// the user edits citation styles via CSL, not through inline editing.
 fn empty_source_info() -> quarto_source_map::SourceInfo {
-    quarto_source_map::SourceInfo::default()
+    quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc())
 }
 
 /// Helper to create an empty AttrSourceInfo.

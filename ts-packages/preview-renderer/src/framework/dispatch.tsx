@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { RegistryContext } from './RegistryContext';
 import { isAtomicSourceInfo, ATOMIC_KINDS } from '../utils/sourceInfo';
 import { isAtomicCustomNode } from '../utils/atomicCustomNodes';
+
 import type {
     BlockNode,
     InlineNode,

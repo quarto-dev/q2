@@ -2,6 +2,7 @@ import { describe, test, expect } from 'vitest';
 import { entryFor, isAtomicSourceInfo, ATOMIC_KINDS } from './sourceInfo';
 import type { SourceInfoPool } from '../types/sourceInfo';
 
+
 // Build a representative pool covering each wire code shipped by the
 // Rust writer post-Plan-5. Code 5 is unassigned — no entry exists.
 const samplePool: SourceInfoPool = [
@@ -96,3 +97,4 @@ describe('ATOMIC_KINDS', () => {
         expect(ATOMIC_KINDS.has('include')).toBe(false);
     });
 });
+

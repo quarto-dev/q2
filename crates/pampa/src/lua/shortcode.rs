@@ -10,6 +10,7 @@
  */
 
 use mlua::{Function, Lua, Result, Table, Value};
+use quarto_source_map::{By, SourceInfo};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -413,9 +414,9 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
                     Inline::Strong(crate::pandoc::Strong {
                         content: vec![Inline::Str(crate::pandoc::Str {
                             text,
-                            source_info: Default::default(),
+                            source_info: SourceInfo::generated(By::unknown()),
                         })],
-                        source_info: Default::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     })
                 };
                 match context.as_str() {
@@ -423,7 +424,7 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
                         let para = lua.create_userdata(LuaBlock::new(Block::Paragraph(
                             crate::pandoc::Paragraph {
                                 content: vec![make_strong_inline(err_text)],
-                                source_info: Default::default(),
+                                source_info: SourceInfo::generated(By::unknown()),
                             },
                         )))?;
                         Ok(Value::UserData(para))

@@ -881,7 +881,7 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn si() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn meta_with(entries: Vec<ConfigMapEntry>) -> ConfigValue {

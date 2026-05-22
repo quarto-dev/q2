@@ -398,11 +398,11 @@ mod tests {
     }
 
     fn cv_str(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s, SourceInfo::default())
+        ConfigValue::new_string(s, SourceInfo::for_test())
     }
 
     fn cv_array(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn cv_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -411,11 +411,11 @@ mod tests {
                 .into_iter()
                 .map(|(k, v)| ConfigMapEntry {
                     key: k.to_string(),
-                    key_source: SourceInfo::default(),
+                    key_source: SourceInfo::for_test(),
                     value: v,
                 })
                 .collect(),
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         )
     }
 

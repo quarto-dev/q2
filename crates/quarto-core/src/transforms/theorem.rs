@@ -46,6 +46,7 @@ use quarto_pandoc_types::block::{Block, Blocks, Div, Header};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::inline::Inlines;
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_source_map::{By, SourceInfo};
 use serde_json::json;
 
 use crate::Result;
@@ -309,8 +310,8 @@ fn convert_div(mut div: Div, ref_type: &str, kind: &str) -> CustomNode {
 ///
 /// Uses `AttrSourceInfo`'s positional-alignment invariant (see
 /// `crates/quarto-pandoc-types/src/attr.rs`) to find the value's
-/// `SourceInfo`; falls back to `SourceInfo::default()` if alignment
-/// fails (bd-3aolj / bd-1e6a5) so production never panics.
+/// `SourceInfo`; falls back to `None` if alignment fails (bd-3aolj
+/// / bd-1e6a5) so production never panics.
 fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<Inlines> {
     let (_id, _classes, kvs) = attr;
 
@@ -343,7 +344,8 @@ fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<In
     Some(vec![quarto_pandoc_types::inline::Inline::Str(
         quarto_pandoc_types::inline::Str {
             text: name,
-            source_info: value_source.unwrap_or_default(),
+            source_info: value_source
+                .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config())),
         },
     )])
 }

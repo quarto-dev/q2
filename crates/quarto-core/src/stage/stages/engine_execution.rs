@@ -1378,8 +1378,13 @@ mod tests {
             PathBuf::from("/project/doc.qmd"),
             "html",
         );
-        // Default source_info should be SourceInfo::default()
-        assert_eq!(ctx.source_info, quarto_source_map::SourceInfo::default());
+        // ExecutionContext::new stamps the "no source location known
+        // yet" sentinel; `with_source_info` overwrites it with the
+        // real qmd serialization range before any consumer reads it.
+        assert_eq!(
+            ctx.source_info,
+            quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+        );
     }
 
     #[test]

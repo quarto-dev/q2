@@ -252,8 +252,8 @@ impl Schema {
                             "Cannot resolve eager reference '{}' - not found in registry",
                             r.reference
                         ),
-                        // Schema structure error - not tied to specific source location
-                        location: quarto_yaml::SourceInfo::default(),
+                        // Schema-structure bug — no user-YAML to point at.
+                        location: None,
                     }
                 })?;
 

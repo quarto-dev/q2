@@ -189,6 +189,24 @@ class="{r}">` in the iframe DOM). The engine-name check is against
 the `engine_name` field of the capture itself, so we only attempt to
 splice cells belonging to the captured engine.
 
+### Pre-engine timing — why a flat walk is safe
+
+Both `derive_cell_outputs(A1, B1)` and `splice(A2, output_map)`
+above iterate `.blocks` flatly. This is correct **only because the
+splice runs at the pre-engine checkpoint** — strictly before
+`SectionizeTransform` (and the other "sugar phase" synthesizers)
+add the top-level transparent wrapper Div that the writer learned
+about the hard way in commits `bdcfdc53` / `b9f64b56` / `2bf92664`.
+At the pre-engine checkpoint, `A2.blocks[0]` is a real user block.
+
+If a future variant ever moves the splice point past the sugar
+phase (or runs it on a post-pipeline AST for any other reason),
+the flat walk would miss every cell inside the wrapper. Route the
+walker through `first_in_user_tree` / a `visit_user_blocks`
+sibling per
+[`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md)
+in that case.
+
 ## Where the splice lives in the pipeline
 
 Two viable insertion points; the v1 picks the simpler:

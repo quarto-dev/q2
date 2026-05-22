@@ -588,7 +588,7 @@ mod tests {
     // --- ConfigValue helpers ---
 
     fn s(value: &str) -> ConfigValue {
-        ConfigValue::new_string(value.to_string(), SourceInfo::default())
+        ConfigValue::new_string(value.to_string(), SourceInfo::for_test())
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
@@ -596,15 +596,15 @@ mod tests {
             .into_iter()
             .map(|(k, v)| ConfigMapEntry {
                 key: k.to_string(),
-                key_source: SourceInfo::default(),
+                key_source: SourceInfo::for_test(),
                 value: v,
             })
             .collect();
-        ConfigValue::new_map(entries, SourceInfo::default())
+        ConfigValue::new_map(entries, SourceInfo::for_test())
     }
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
-        ConfigValue::new_array(items, SourceInfo::default())
+        ConfigValue::new_array(items, SourceInfo::for_test())
     }
 
     fn rendered_strings(meta: &ConfigValue, slot: &str) -> Vec<String> {
@@ -1067,7 +1067,7 @@ mod tests {
         // Build a PandocInlines value matching what the YAML reader
         // produces for: `<script>console.log('AFTER');</script>`
         // (RawInline + Str + Quoted + Str + RawInline).
-        let si = SourceInfo::default();
+        let si = SourceInfo::for_test();
         let inlines = vec![
             Inline::RawInline(RawInline {
                 format: "html".to_string(),

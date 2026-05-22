@@ -3815,6 +3815,7 @@ dependencies = [
  "include_dir",
  "pampa",
  "quarto-error-reporting",
+ "quarto-source-map",
  "regex",
  "serde",
  "serde_json",

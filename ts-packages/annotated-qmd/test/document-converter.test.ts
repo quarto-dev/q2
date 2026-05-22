@@ -52,7 +52,7 @@ describe('DocumentConverter', () => {
     const json = loadExample('simple');
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );
@@ -107,7 +107,7 @@ describe('DocumentConverter', () => {
       },
       blocks: [],
       astContext: {
-        sourceInfoPool: [
+        p: [
           { t: 0, d: 0, r: [0, 100] }
         ],
         files: [
@@ -119,7 +119,7 @@ describe('DocumentConverter', () => {
 
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );
@@ -152,7 +152,7 @@ describe('DocumentConverter', () => {
         }
       ],
       astContext: {
-        sourceInfoPool: [
+        p: [
           { t: 0, d: 0, r: [0, 5] },    // "Hello"
           { t: 0, d: 0, r: [5, 6] },    // space
           { t: 0, d: 0, r: [6, 11] },   // "World"
@@ -166,7 +166,7 @@ describe('DocumentConverter', () => {
 
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );
@@ -183,7 +183,7 @@ describe('DocumentConverter', () => {
     const json = loadExample('simple');
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );
@@ -208,7 +208,7 @@ describe('DocumentConverter', () => {
     const json = loadExample('simple');
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );
@@ -232,7 +232,7 @@ describe('DocumentConverter', () => {
     const json = loadExample('links');
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );
@@ -260,7 +260,7 @@ describe('DocumentConverter', () => {
     const json = loadExample('simple');
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );
@@ -290,7 +290,7 @@ describe('DocumentConverter', () => {
     const json = loadExample('simple');
     const sourceContext = createSourceContext(json);
     const reconstructor = new SourceInfoReconstructor(
-      json.astContext.sourceInfoPool,
+      json.astContext.p,
       sourceContext,
       () => {}
     );

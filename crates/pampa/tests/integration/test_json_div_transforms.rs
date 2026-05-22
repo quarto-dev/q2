@@ -15,10 +15,18 @@ fn make_json_doc(blocks_json: &str) -> String {
     )
 }
 
-/// Read JSON and apply div transforms (mimics what main.rs does for JSON input)
+/// Read JSON and apply div transforms (mimics what main.rs does for JSON input).
+///
+/// The test JSON is hand-crafted in pampa format without `s:` references —
+/// same shape as Pandoc subprocess output. Route through the completing
+/// reader with `By::unknown()`, matching the CLI's `--from json` path (plan
+/// 7f Phase 4).
 fn read_json_with_transforms(json_input: &str) -> pampa::pandoc::Pandoc {
-    let (pandoc, _context) =
-        json::read(&mut json_input.as_bytes()).expect("Failed to read JSON input");
+    let (pandoc, _context) = json::read_completing_source_info(
+        &mut json_input.as_bytes(),
+        quarto_source_map::By::unknown(),
+    )
+    .expect("Failed to read JSON input");
     let mut error_collector = DiagnosticCollector::new();
     transform_divs(pandoc, &mut error_collector)
 }

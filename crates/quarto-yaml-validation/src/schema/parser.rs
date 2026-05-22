@@ -49,7 +49,7 @@ pub(super) fn from_yaml(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
 
         _ => Err(SchemaError::InvalidStructure {
             message: format!("Expected schema, got {:?}", yaml.yaml),
-            location: yaml.source_info.clone(),
+            location: Some(yaml.source_info.clone()),
         }),
     }
 }
@@ -90,13 +90,13 @@ fn parse_object_form(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
         .as_hash()
         .ok_or_else(|| SchemaError::InvalidStructure {
             message: "Expected hash for object form schema".to_string(),
-            location: yaml.source_info.clone(),
+            location: Some(yaml.source_info.clone()),
         })?;
 
     if entries.is_empty() {
         return Err(SchemaError::InvalidStructure {
             message: "Empty schema object".to_string(),
-            location: yaml.source_info.clone(),
+            location: Some(yaml.source_info.clone()),
         });
     }
 
@@ -108,7 +108,7 @@ fn parse_object_form(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
         .as_str()
         .ok_or_else(|| SchemaError::InvalidStructure {
             message: "Schema type key must be a string".to_string(),
-            location: first_entry.key.source_info.clone(),
+            location: Some(first_entry.key.source_info.clone()),
         })?;
 
     match key {
@@ -138,7 +138,7 @@ fn parse_inline_enum(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
         .as_array()
         .ok_or_else(|| SchemaError::InvalidStructure {
             message: "Expected array for inline enum".to_string(),
-            location: yaml.source_info.clone(),
+            location: Some(yaml.source_info.clone()),
         })?;
 
     // Convert YamlWithSourceInfo items to serde_json::Value for enum values

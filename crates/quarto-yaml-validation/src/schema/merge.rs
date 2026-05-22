@@ -28,8 +28,8 @@ fn resolve_base_schema(schema: &Schema, registry: &SchemaRegistry) -> SchemaResu
                         "Cannot resolve reference '{}' - not found in registry",
                         ref_schema.reference
                     ),
-                    // Schema structure error - not tied to specific source location
-                    location: quarto_yaml::SourceInfo::default(),
+                    // Schema-structure bug — no user-YAML to point at.
+                    location: None,
                 })
         }
         _ => Ok(schema.clone()),
@@ -47,8 +47,8 @@ fn expect_object_schema(schema: &Schema) -> SchemaResult<&ObjectSchema> {
                 "Base schema must be an object schema, got {}",
                 schema.type_name()
             ),
-            // Schema structure error - not tied to specific source location
-            location: quarto_yaml::SourceInfo::default(),
+            // Schema-structure bug — no user-YAML to point at.
+            location: None,
         }),
     }
 }
@@ -84,8 +84,8 @@ pub fn merge_object_schemas(
     if base_objects.is_empty() {
         return Err(SchemaError::InvalidStructure {
             message: "base schema cannot be empty list".to_string(),
-            // Schema structure error - not tied to specific source location
-            location: quarto_yaml::SourceInfo::default(),
+            // Schema-structure bug — no user-YAML to point at.
+            location: None,
         });
     }
 

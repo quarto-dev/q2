@@ -3,6 +3,22 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+//! JSON reader with a strict/completing split.
+//!
+//! **`read`** (strict) — rejects nodes missing an `s:` field with
+//! [`JsonReadError::MissingSourceInfoRef`]. Used by the WASM bridge's
+//! `incremental_write_qmd` and all q2-internal JSON paths where every node
+//! is guaranteed to carry source info.
+//!
+//! **`read_completing_source_info(input, default_by)`** (completing) — fills
+//! missing `s:` with `Generated{by: default_by, from: []}` instead of
+//! erroring. Used by outside-world callers (Pandoc subprocess, Lua filter
+//! output, CLI `--from json`, qmd-syntax-helper) that produce JSON without
+//! q2's source-info extension. Each call site passes an explicit `default_by`
+//! declaring the provenance of the completing nodes.
+//!
+//! See plan 7f Phase 4 for the design rationale and per-caller table.
+
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::{Location, Range};
 use crate::pandoc::{
@@ -29,6 +45,16 @@ pub enum JsonReadError {
     UnsupportedVariant(String),
     InvalidSourceInfoRef(usize),
     ExpectedSourceInfoRef,
+    /// Strict reader (`json::read`) hit a node missing its `s:` reference.
+    /// `node_path` is a best-effort hint about where in the JSON tree the
+    /// offending node lives (e.g. `"Block.Para"`, `"Inline.Str"`).
+    /// Callers consuming JSON from outside the q2 source-tracking world
+    /// (Pandoc subprocess, CLI `--from json`, etc.) should use
+    /// [`read_completing_source_info`] with an explicit `default_by`
+    /// instead — see plan 7f Phase 4.
+    MissingSourceInfoRef {
+        node_path: String,
+    },
     MalformedSourceInfoPool,
     CircularSourceInfoReference(usize),
 }
@@ -48,13 +74,20 @@ impl std::fmt::Display for JsonReadError {
             JsonReadError::ExpectedSourceInfoRef => {
                 write!(f, "Expected SourceInfo $ref, got inline SourceInfo")
             }
+            JsonReadError::MissingSourceInfoRef { node_path } => {
+                write!(
+                    f,
+                    "Missing source_info reference at {}; use read_completing_source_info for JSON without `s:`",
+                    node_path
+                )
+            }
             JsonReadError::MalformedSourceInfoPool => {
-                write!(f, "Malformed sourceInfoPool in astContext")
+                write!(f, "Malformed source-info pool (`p`) in astContext")
             }
             JsonReadError::CircularSourceInfoReference(id) => {
                 write!(
                     f,
-                    "Circular or forward reference in sourceInfoPool: ID {} references a parent that doesn't exist yet",
+                    "Circular or forward reference in source-info pool (`p`): ID {} references a parent that doesn't exist yet",
                     id
                 )
             }
@@ -68,7 +101,7 @@ type Result<T> = std::result::Result<T, JsonReadError>;
 
 /// Deserializer that reconstructs SourceInfo objects from a pool.
 ///
-/// During JSON deserialization, the sourceInfoPool from astContext is parsed
+/// During JSON deserialization, the source-info pool (`p`) from astContext is parsed
 /// into a Vec<SourceInfo>. References in the AST ({"$ref": id}) are resolved
 /// by looking up the ID in this pool.
 ///
@@ -82,15 +115,60 @@ type Result<T> = std::result::Result<T, JsonReadError>;
 #[derive(Debug)]
 struct SourceInfoDeserializer {
     pool: Vec<quarto_source_map::SourceInfo>,
+    /// When `Some(by)`, missing `s:` references are filled with a fresh
+    /// `Generated { by: <by>, from: [] }` instead of raising
+    /// [`JsonReadError::MissingSourceInfoRef`]. Used by
+    /// [`read_completing_source_info`] for outside-world JSON consumers
+    /// (Pandoc subprocess, CLI `--from json`, Lua AST handoff,
+    /// qmd-syntax-helper) — see plan 7f Phase 4.
+    ///
+    /// When `None`, the deserializer is in strict mode and missing `s:`
+    /// is an error. This is the contract for q2-internal JSON.
+    completing_default_by: Option<By>,
 }
 
 impl SourceInfoDeserializer {
     /// Create a new empty deserializer (for documents without SourceInfo)
     fn empty() -> Self {
-        SourceInfoDeserializer { pool: Vec::new() }
+        SourceInfoDeserializer {
+            pool: Vec::new(),
+            completing_default_by: None,
+        }
     }
 
-    /// Build the pool from the sourceInfoPool JSON array (compact format)
+    /// Resolve a node's `s:` field to a `SourceInfo`.
+    ///
+    /// In strict mode (`completing_default_by == None`), missing `s:`
+    /// fails with [`JsonReadError::MissingSourceInfoRef`] carrying
+    /// `node_path` so a JS-side debugger seeing the error in an
+    /// `incremental_write_qmd` response can find the responsible
+    /// producer site.
+    ///
+    /// In completing mode, missing `s:` is filled with a fresh
+    /// `Generated { by: <default_by>, from: [] }`. The fresh value is
+    /// constructed in-place; the pool isn't grown on read (the writer
+    /// allocates a new pool entry on re-serialize per the design in
+    /// [`incremental-writer-contract.md`]).
+    fn resolve_source_info(
+        &self,
+        s_val: Option<&Value>,
+        node_path: &str,
+    ) -> Result<quarto_source_map::SourceInfo> {
+        match s_val {
+            Some(v) => self.from_json_ref(v),
+            None => match &self.completing_default_by {
+                Some(by) => Ok(quarto_source_map::SourceInfo::Generated {
+                    by: by.clone(),
+                    from: SmallVec::new(),
+                }),
+                None => Err(JsonReadError::MissingSourceInfoRef {
+                    node_path: node_path.to_string(),
+                }),
+            },
+        }
+    }
+
+    /// Build the pool from the `p` (source-info pool) JSON array (compact format)
     ///
     /// New format: {"r": [start_offset, end_offset], "t": type_code, "d": data}
     /// Old format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
@@ -386,7 +464,10 @@ impl SourceInfoDeserializer {
             pool.push(source_info);
         }
 
-        Ok(SourceInfoDeserializer { pool })
+        Ok(SourceInfoDeserializer {
+            pool,
+            completing_default_by: None,
+        })
     }
 
     /// Resolve a numeric reference to a SourceInfo
@@ -555,7 +636,7 @@ fn read_attr_source(
     value: Option<&Value>,
     deserializer: &SourceInfoDeserializer,
 ) -> Result<AttrSourceInfo> {
-    // If attrS field is missing or null, return empty
+    // If `a` (attr_source) field is missing or null, return empty
     let Some(obj) = value.and_then(|v| v.as_object()) else {
         return Ok(AttrSourceInfo::empty());
     };
@@ -660,18 +741,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
-    // Extract source information - try new format ("s" field) first, fall back to old format ("l" field)
-    let source_info = if let Some(s_val) = obj.get("s") {
-        // New format: source info reference to pool
-        deserializer.from_json_ref(s_val)?
-    } else {
-        // Old format: inline location
-        let (filename_index, range) = obj
-            .get("l")
-            .and_then(read_location)
-            .unwrap_or_else(|| (None, empty_range()));
-        make_source_info(filename_index, range)
-    };
+    let source_info = deserializer.resolve_source_info(obj.get("s"), &format!("Inline.{}", t))?;
 
     match t {
         "Str" => {
@@ -728,7 +798,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .as_str()
                 .ok_or_else(|| JsonReadError::InvalidType("Code text must be string".to_string()))?
                 .to_string();
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Inline::Code(Code {
                 attr,
                 text,
@@ -898,7 +968,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .ok_or_else(|| JsonReadError::InvalidType("Link title must be string".to_string()))?
                 .to_string();
             let target = (url, title);
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
             Ok(Inline::Link(Link {
                 attr,
@@ -974,7 +1044,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 })?
                 .to_string();
             let target = (url, title);
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
             Ok(Inline::Image(Image {
                 attr,
@@ -1006,7 +1076,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             }
 
             let content = read_inlines(&arr[1], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Inline::Span(Span {
                 attr,
                 content,
@@ -1184,16 +1254,55 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
     })
 }
 
+/// Strict JSON reader for q2-internal JSON.
+///
+/// Every wire-format node with an `s:` field (Block, Inline, Cell, Row,
+/// TableHead, TableBody, TableFoot, ConfigValue, Caption) must carry a
+/// valid pool reference. Missing-`s:` fails with
+/// [`JsonReadError::MissingSourceInfoRef`].
+///
+/// For JSON from outside the q2 source-tracking world — Pandoc subprocess
+/// output, CLI `--from json`, Lua AST handoff, qmd-syntax-helper — use
+/// [`read_completing_source_info`] with an explicit `default_by`.
 pub fn read<R: std::io::Read>(reader: &mut R) -> Result<(Pandoc, ASTContext)> {
     let mut buffer = String::new();
     reader
         .read_to_string(&mut buffer)
         .map_err(|e| JsonReadError::InvalidJson(serde_json::Error::io(e)))?;
     let json: Value = serde_json::from_str(&buffer).map_err(JsonReadError::InvalidJson)?;
-    read_pandoc(&json)
+    read_pandoc(&json, None)
 }
 
-fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
+/// Lenient JSON reader for outside-world JSON.
+///
+/// Behaves like [`read`] except that any wire-format node missing its
+/// `s:` field is filled with a fresh `Generated { by: default_by, from: [] }`
+/// instead of returning [`JsonReadError::MissingSourceInfoRef`]. Used by:
+///
+/// - `json_filter.rs` → Lua filter subprocess output, with
+///   `By::filter(filter_path, 0)`.
+/// - `qmd-syntax-helper/conversions/{definition_lists,grid_tables}.rs`
+///   → Pandoc subprocess output, with `By::unknown()`.
+/// - `pampa/src/main.rs` → CLI `--from json`, with `By::unknown()`.
+/// - `pampa/src/lua/readwrite.rs` → Lua AST handoff, with `By::unknown()`.
+///
+/// Per the design, no pool entries are allocated on read; the fresh
+/// `SourceInfo` value is constructed in-place and the writer assigns it a
+/// pool ID on re-serialize. See `claude-notes/designs/provenance-contract.md`
+/// and plan 7f Phase 4 for the per-caller rationale.
+pub fn read_completing_source_info<R: std::io::Read>(
+    reader: &mut R,
+    default_by: By,
+) -> Result<(Pandoc, ASTContext)> {
+    let mut buffer = String::new();
+    reader
+        .read_to_string(&mut buffer)
+        .map_err(|e| JsonReadError::InvalidJson(serde_json::Error::io(e)))?;
+    let json: Value = serde_json::from_str(&buffer).map_err(JsonReadError::InvalidJson)?;
+    read_pandoc(&json, Some(default_by))
+}
+
+fn read_pandoc(value: &Value, completing_default_by: Option<By>) -> Result<(Pandoc, ASTContext)> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Pandoc".to_string()))?;
@@ -1209,10 +1318,10 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
         ASTContext::new()
     };
 
-    // Extract sourceInfoPool and create deserializer
-    let deserializer = if let Some(ast_context_val) = obj.get("astContext") {
+    // Extract `p` (source-info pool) and create deserializer
+    let mut deserializer = if let Some(ast_context_val) = obj.get("astContext") {
         if let Some(ast_context_obj) = ast_context_val.as_object() {
-            if let Some(pool_json) = ast_context_obj.get("sourceInfoPool") {
+            if let Some(pool_json) = ast_context_obj.get("p") {
                 SourceInfoDeserializer::new(pool_json)?
             } else {
                 SourceInfoDeserializer::empty()
@@ -1223,6 +1332,7 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
     } else {
         SourceInfoDeserializer::empty()
     };
+    deserializer.completing_default_by = completing_default_by;
 
     // Extract metaTopLevelKeySources if present
     let key_sources = if let Some(ast_context_val) = obj.get("astContext") {
@@ -1349,16 +1459,10 @@ fn read_caption(
         Some(read_blocks(&arr[1], deserializer)?)
     };
 
-    // Read source info from parallel source value if provided
-    let source_info = if let Some(s_val) = source_val {
-        if s_val.is_number() {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        }
-    } else {
-        quarto_source_map::SourceInfo::default()
-    };
+    // Caption's source_val is the entry from the parent struct's parallel
+    // source field; it's the `s:` value directly, not an object containing
+    // an `s:` field. Pass it through to the helper.
+    let source_info = deserializer.resolve_source_info(source_val, "Caption")?;
 
     Ok(Caption {
         short,
@@ -1467,21 +1571,11 @@ fn read_cell(
         as usize;
     let content = read_blocks(&arr[4], deserializer)?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        (source_info, attr_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "Cell")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
 
     Ok(Cell {
         attr,
@@ -1516,23 +1610,14 @@ fn read_row(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Row cells must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, cells_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let cells_source = s_obj.get("cellsS").and_then(|v| v.as_array());
-        (source_info, attr_source, cells_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "Row")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let cells_source = s_obj_map
+        .and_then(|o| o.get("cellsS"))
+        .and_then(|v| v.as_array());
 
     // Read cells with their source info
     let cells = cells_arr
@@ -1574,23 +1659,14 @@ fn read_table_head(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableHead rows must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, rows_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let rows_source = s_obj.get("rowsS").and_then(|v| v.as_array());
-        (source_info, attr_source, rows_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableHead")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let rows_source = s_obj_map
+        .and_then(|o| o.get("rowsS"))
+        .and_then(|v| v.as_array());
 
     // Read rows with their source info
     let rows = rows_arr
@@ -1638,25 +1714,17 @@ fn read_table_body(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody body must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, head_source, body_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let head_source = s_obj.get("headS").and_then(|v| v.as_array());
-        let body_source = s_obj.get("bodyS").and_then(|v| v.as_array());
-        (source_info, attr_source, head_source, body_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableBody")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let head_source = s_obj_map
+        .and_then(|o| o.get("headS"))
+        .and_then(|v| v.as_array());
+    let body_source = s_obj_map
+        .and_then(|o| o.get("bodyS"))
+        .and_then(|v| v.as_array());
 
     // Read head rows with their source info
     let head = head_arr
@@ -1710,23 +1778,14 @@ fn read_table_foot(
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableFoot rows must be array".to_string()))?;
 
-    // Read source info from parallel source structure if provided
-    let (source_info, attr_source, rows_source) = if let Some(s_obj) = source_val {
-        let source_info = if let Some(s_val) = s_obj.get("s") {
-            deserializer.from_json_ref(s_val)?
-        } else {
-            quarto_source_map::SourceInfo::default()
-        };
-        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
-        let rows_source = s_obj.get("rowsS").and_then(|v| v.as_array());
-        (source_info, attr_source, rows_source)
-    } else {
-        (
-            quarto_source_map::SourceInfo::default(),
-            AttrSourceInfo::empty(),
-            None,
-        )
-    };
+    // Read source info from parallel source structure
+    let s_obj_map = source_val.and_then(|v| v.as_object());
+    let source_info =
+        deserializer.resolve_source_info(s_obj_map.and_then(|o| o.get("s")), "TableFoot")?;
+    let attr_source = read_attr_source(s_obj_map.and_then(|o| o.get("a")), deserializer)?;
+    let rows_source = s_obj_map
+        .and_then(|o| o.get("rowsS"))
+        .and_then(|v| v.as_array());
 
     // Read rows with their source info
     let rows = rows_arr
@@ -1755,18 +1814,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
-    // Extract source information - try new format ("s" field) first, fall back to old format ("l" field)
-    let source_info = if let Some(s_val) = obj.get("s") {
-        // New format: source info reference to pool
-        deserializer.from_json_ref(s_val)?
-    } else {
-        // Old format: inline location
-        let (filename_index, range) = obj
-            .get("l")
-            .and_then(read_location)
-            .unwrap_or_else(|| (None, empty_range()));
-        make_source_info(filename_index, range)
-    };
+    let source_info = deserializer.resolve_source_info(obj.get("s"), &format!("Block.{}", t))?;
 
     match t {
         "Para" => {
@@ -1824,7 +1872,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                     JsonReadError::InvalidType("CodeBlock text must be string".to_string())
                 })?
                 .to_string();
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::CodeBlock(CodeBlock {
                 attr,
                 text,
@@ -1947,7 +1995,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             })? as usize;
             let attr = read_attr(&arr[1])?;
             let content = read_inlines(&arr[2], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Header(Header {
                 level,
                 attr,
@@ -1970,10 +2018,12 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 ));
             }
             let attr = read_attr(&arr[0])?;
-            // Figure caption uses old format (object), not parallel source fields yet
-            let caption = read_caption(&arr[1], deserializer, None)?;
+            // Plan 7f Phase 4: Figure now emits `captionS` (sibling source
+            // info for the caption) — same shape as Table.
+            let caption_source = obj.get("captionS");
+            let caption = read_caption(&arr[1], deserializer, caption_source)?;
             let content = read_blocks(&arr[2], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Figure(Figure {
                 attr,
                 caption,
@@ -2023,7 +2073,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 })
                 .collect::<Result<Vec<_>>>()?;
             let foot = read_table_foot(&arr[5], deserializer, foot_source)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Table(Table {
                 attr,
                 caption,
@@ -2055,7 +2105,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             }
 
             let content = read_blocks(&arr[1], deserializer)?;
-            let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
+            let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(Block::Div(Div {
                 attr,
                 content,
@@ -2135,6 +2185,9 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
 
 /// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
 /// This function reads the top-level metadata from Pandoc JSON format.
+// SourceInfo::default() calls below are intentional backward-compatibility fallbacks for
+// legacy JSON that predates source tracking. See provenance-contract.md §10.
+#[allow(deprecated)]
 fn read_config_value_top_level(
     value: &Value,
     key_sources: Option<&Value>,
@@ -2174,13 +2227,21 @@ fn read_config_value_top_level(
 
     Ok(ConfigValue {
         value: ConfigValueKind::Map(entries),
-        // Legitimate default: top-level meta doesn't have source tracking in JSON
-        source_info: quarto_source_map::SourceInfo::default(),
+        // Top-level meta doesn't have a JSON-level source_info field, so we
+        // stamp it with the same `config_default` provenance the writer uses
+        // for `ConfigValue::default()`. Plan 7f Phase 6.5: matches the
+        // `By::config_default()` kind landing in `quarto-pandoc-types`.
+        source_info: quarto_source_map::SourceInfo::generated(
+            quarto_source_map::By::config_default(),
+        ),
         merge_op: quarto_pandoc_types::MergeOp::default(),
     })
 }
 
 /// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
+// SourceInfo::default() calls below are intentional backward-compatibility fallbacks for
+// legacy JSON that predates source tracking. See provenance-contract.md §10.
+#[allow(deprecated)]
 fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<ConfigValue> {
     let obj = value
         .as_object()
@@ -2190,13 +2251,8 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
-    // Read source_info using deserializer (new format), or use default (old format for backwards compatibility)
-    let source_info = if let Some(s) = obj.get("s") {
-        deserializer.from_json_ref(s)?
-    } else {
-        // Legitimate default: Old JSON format doesn't have "s" field (backward compatibility)
-        quarto_source_map::SourceInfo::default()
-    };
+    let source_info =
+        deserializer.resolve_source_info(obj.get("s"), &format!("ConfigValue.{}", t))?;
 
     let merge_op = quarto_pandoc_types::MergeOp::default();
 

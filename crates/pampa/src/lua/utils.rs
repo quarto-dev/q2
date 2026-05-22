@@ -12,7 +12,7 @@ use mlua::{Function, Lua, Result, Table, Value};
 use sha1::{Digest, Sha1};
 
 use crate::pandoc::{Block, Inline, LineBreak};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 
 use super::types::{LuaBlock, LuaInline, filter_source_info, inlines_to_lua_table};
 
@@ -133,7 +133,7 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
             for (i, inner_block) in b.content.iter().enumerate() {
                 if i > 0 {
                     result.push(Inline::LineBreak(LineBreak {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     }));
                 }
                 result.extend(block_to_inlines(inner_block));
@@ -145,13 +145,13 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
             for (i, items) in l.content.iter().enumerate() {
                 if i > 0 {
                     result.push(Inline::LineBreak(LineBreak {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     }));
                 }
                 for (j, block) in items.iter().enumerate() {
                     if j > 0 {
                         result.push(Inline::LineBreak(LineBreak {
-                            source_info: SourceInfo::default(),
+                            source_info: SourceInfo::generated(By::unknown()),
                         }));
                     }
                     result.extend(block_to_inlines(block));
@@ -164,13 +164,13 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
             for (i, items) in l.content.iter().enumerate() {
                 if i > 0 {
                     result.push(Inline::LineBreak(LineBreak {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     }));
                 }
                 for (j, block) in items.iter().enumerate() {
                     if j > 0 {
                         result.push(Inline::LineBreak(LineBreak {
-                            source_info: SourceInfo::default(),
+                            source_info: SourceInfo::generated(By::unknown()),
                         }));
                     }
                     result.extend(block_to_inlines(block));
@@ -183,7 +183,7 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
             for (i, inner_block) in d.content.iter().enumerate() {
                 if i > 0 {
                     result.push(Inline::LineBreak(LineBreak {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     }));
                 }
                 result.extend(block_to_inlines(inner_block));
@@ -195,7 +195,7 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
             for (i, line) in l.content.iter().enumerate() {
                 if i > 0 {
                     result.push(Inline::LineBreak(LineBreak {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     }));
                 }
                 result.extend(line.clone());
@@ -207,14 +207,14 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
             for (i, (term, defs)) in d.content.iter().enumerate() {
                 if i > 0 {
                     result.push(Inline::LineBreak(LineBreak {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     }));
                 }
                 result.extend(term.clone());
                 for def_blocks in defs {
                     for block in def_blocks {
                         result.push(Inline::LineBreak(LineBreak {
-                            source_info: SourceInfo::default(),
+                            source_info: SourceInfo::generated(By::unknown()),
                         }));
                         result.extend(block_to_inlines(block));
                     }
@@ -227,7 +227,7 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
             for (i, inner_block) in f.content.iter().enumerate() {
                 if i > 0 {
                     result.push(Inline::LineBreak(LineBreak {
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::generated(By::unknown()),
                     }));
                 }
                 result.extend(block_to_inlines(inner_block));
@@ -1610,25 +1610,25 @@ mod tests {
         assert_eq!(
             get_inline_type_name(&Inline::Str(Str {
                 text: "".into(),
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Str"
         );
         assert_eq!(
             get_inline_type_name(&Inline::Space(Space {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Space"
         );
         assert_eq!(
             get_inline_type_name(&Inline::SoftBreak(SoftBreak {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "SoftBreak"
         );
         assert_eq!(
             get_inline_type_name(&Inline::LineBreak(LineBreak {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "LineBreak"
         );
@@ -1643,20 +1643,20 @@ mod tests {
         assert_eq!(
             get_block_type_name(&Block::Paragraph(Paragraph {
                 content: vec![],
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Para"
         );
         assert_eq!(
             get_block_type_name(&Block::Plain(Plain {
                 content: vec![],
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Plain"
         );
         assert_eq!(
             get_block_type_name(&Block::HorizontalRule(HorizontalRule {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "HorizontalRule"
         );

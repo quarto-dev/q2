@@ -80,7 +80,7 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn s(x: &str) -> ConfigValue {
-        ConfigValue::new_string(x, SourceInfo::default())
+        ConfigValue::new_string(x, SourceInfo::for_test())
     }
 
     /// Phase 3 test 19 — item whose href matches `page_source` becomes

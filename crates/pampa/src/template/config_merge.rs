@@ -31,7 +31,7 @@ use crate::writers::plaintext;
 use quarto_config::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp, MergedConfig};
 use quarto_doctemplate::{TemplateContext, TemplateValue};
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use std::collections::HashMap;
 use yaml_rust2::Yaml;
 
@@ -169,20 +169,26 @@ pub fn compute_template_defaults(meta: &ConfigValue) -> ConfigValue {
     // Default language
     defaults.push(ConfigMapEntry {
         key: "lang".to_string(),
-        key_source: SourceInfo::default(),
-        value: ConfigValue::new_scalar(Yaml::String("en".to_string()), SourceInfo::default()),
+        key_source: SourceInfo::generated(By::config_default()),
+        value: ConfigValue::new_scalar(
+            Yaml::String("en".to_string()),
+            SourceInfo::generated(By::config_default()),
+        ),
     });
 
     // Derive pagetitle from title
     if let Some(pagetitle) = derive_pagetitle(meta) {
         defaults.push(ConfigMapEntry {
             key: "pagetitle".to_string(),
-            key_source: SourceInfo::default(),
-            value: ConfigValue::new_scalar(Yaml::String(pagetitle), SourceInfo::default()),
+            key_source: SourceInfo::generated(By::config_default()),
+            value: ConfigValue::new_scalar(
+                Yaml::String(pagetitle),
+                SourceInfo::generated(By::config_default()),
+            ),
         });
     }
 
-    ConfigValue::new_map(defaults, SourceInfo::default())
+    ConfigValue::new_map(defaults, SourceInfo::generated(By::config_default()))
 }
 
 /// Derive a plain-text pagetitle from document metadata.
@@ -274,7 +280,7 @@ mod tests {
     use crate::pandoc::inline::{Emph, Inline, Space, Str};
 
     fn dummy_source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn make_str(text: &str) -> Inline {

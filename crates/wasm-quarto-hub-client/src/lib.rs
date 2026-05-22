@@ -2771,13 +2771,24 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
 /// Incrementally write a modified AST back to QMD, preserving unchanged
 /// portions of the original source text verbatim.
 ///
-/// Re-parses `original_qmd` internally to obtain an AST with accurate source
-/// spans, then computes a reconciliation plan against the new AST and applies
-/// the incremental writer.
+/// Deserializes the caller-supplied **baseline** AST (the AST whose
+/// source spans line up byte-for-byte with `original_qmd`) and computes
+/// a reconciliation plan against the new AST. Plan 7 removed the
+/// internal re-parse: previously the bridge re-parsed `original_qmd`
+/// to recover spans, which lost any provenance the host had already
+/// attached to the baseline (e.g. `preimage_in` after a prior
+/// incremental edit). Now the caller is responsible for the
+/// baseline-tier contract.
 ///
 /// # Arguments
 /// * `original_qmd` - The original QMD source text
-/// * `new_ast_json` - JSON-serialized Pandoc AST representing the modified document
+/// * `baseline_ast_json` - JSON-serialized Pandoc AST whose source
+///   spans correspond to `original_qmd`. **Must be the same tier as
+///   `new_ast_json`** (e.g. both `parse`-tier or both
+///   `parse+sugar`-tier). Mixing tiers will mis-anchor reconciliation
+///   and corrupt the write.
+/// * `new_ast_json` - JSON-serialized Pandoc AST representing the
+///   modified document, in the same tier as `baseline_ast_json`.
 ///
 /// # Returns
 /// JSON: `{ "success": true, "qmd": "<result-qmd-text>" }`

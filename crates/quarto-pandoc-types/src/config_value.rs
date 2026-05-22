@@ -11,7 +11,7 @@
 
 use crate::block::Blocks;
 use crate::inline::{Inline, Inlines};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
@@ -412,7 +412,7 @@ impl Default for ConfigValue {
     fn default() -> Self {
         Self {
             value: ConfigValueKind::Map(vec![]),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::generated(By::config_default()),
             merge_op: MergeOp::Concat,
         }
     }
@@ -536,7 +536,7 @@ impl ConfigValue {
     /// // Creates: { format: { html: { source-location: "full" } } }
     /// ```
     pub fn from_path(path: &[&str], value: &str) -> Self {
-        let source_info = SourceInfo::default();
+        let source_info = SourceInfo::generated(By::programmatic_config());
 
         if path.is_empty() {
             return Self::new_string(value, source_info);
@@ -781,7 +781,10 @@ impl ConfigValue {
     /// let mut config = ConfigValue::default();
     /// config.insert_path(
     ///     &["navigation", "toc", "title"],
-    ///     ConfigValue::new_string("Contents", SourceInfo::default()),
+    ///     ConfigValue::new_string(
+    ///         "Contents",
+    ///         SourceInfo::generated(By::programmatic_config()),
+    ///     ),
     /// );
     /// // config is now: { navigation: { toc: { title: "Contents" } } }
     /// ```
@@ -819,11 +822,14 @@ impl ConfigValue {
                     entry.value.insert_path(rest, value);
                 } else {
                     // Entry doesn't exist - create an empty map and recurse
-                    let mut new_map = ConfigValue::new_map(vec![], SourceInfo::default());
+                    let mut new_map = ConfigValue::new_map(
+                        vec![],
+                        SourceInfo::generated(By::programmatic_config()),
+                    );
                     new_map.insert_path(rest, value);
                     entries.push(ConfigMapEntry {
                         key: first_key.to_string(),
-                        key_source: SourceInfo::default(),
+                        key_source: SourceInfo::generated(By::programmatic_config()),
                         value: new_map,
                     });
                 }
@@ -868,7 +874,7 @@ mod tests {
 
     #[test]
     fn test_config_value_scalar() {
-        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::default());
+        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::for_test());
 
         assert!(value.is_scalar());
         assert!(!value.is_array());
@@ -879,10 +885,10 @@ mod tests {
     #[test]
     fn test_config_value_array() {
         let items = vec![
-            ConfigValue::new_scalar(Yaml::String("a".into()), SourceInfo::default()),
-            ConfigValue::new_scalar(Yaml::String("b".into()), SourceInfo::default()),
+            ConfigValue::new_scalar(Yaml::String("a".into()), SourceInfo::for_test()),
+            ConfigValue::new_scalar(Yaml::String("b".into()), SourceInfo::for_test()),
         ];
-        let value = ConfigValue::new_array(items, SourceInfo::default());
+        let value = ConfigValue::new_array(items, SourceInfo::for_test());
 
         assert!(value.is_array());
         assert_eq!(value.as_array().unwrap().len(), 2);
@@ -893,10 +899,10 @@ mod tests {
     fn test_config_value_map() {
         let entries = vec![ConfigMapEntry {
             key: "key".to_string(),
-            key_source: SourceInfo::default(),
-            value: ConfigValue::new_scalar(Yaml::String("value".into()), SourceInfo::default()),
+            key_source: SourceInfo::for_test(),
+            value: ConfigValue::new_scalar(Yaml::String("value".into()), SourceInfo::for_test()),
         }];
-        let value = ConfigValue::new_map(entries, SourceInfo::default());
+        let value = ConfigValue::new_map(entries, SourceInfo::for_test());
 
         assert!(value.is_map());
         assert_eq!(value.as_map_entries().unwrap().len(), 1);
@@ -905,7 +911,7 @@ mod tests {
 
     #[test]
     fn test_config_value_with_merge_op() {
-        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::default())
+        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::for_test())
             .with_merge_op(MergeOp::Prefer);
 
         assert_eq!(value.merge_op, MergeOp::Prefer);
@@ -913,33 +919,33 @@ mod tests {
 
     #[test]
     fn test_pandoc_inlines_default_prefer() {
-        let value = ConfigValue::new_inlines(vec![], SourceInfo::default());
+        let value = ConfigValue::new_inlines(vec![], SourceInfo::for_test());
         assert_eq!(value.merge_op, MergeOp::Prefer);
     }
 
     #[test]
     fn test_pandoc_blocks_default_prefer() {
-        let value = ConfigValue::new_blocks(vec![], SourceInfo::default());
+        let value = ConfigValue::new_blocks(vec![], SourceInfo::for_test());
         assert_eq!(value.merge_op, MergeOp::Prefer);
     }
 
     #[test]
     fn test_path_variant() {
-        let value = ConfigValue::new_path("./data/file.csv".to_string(), SourceInfo::default());
+        let value = ConfigValue::new_path("./data/file.csv".to_string(), SourceInfo::for_test());
         assert!(value.is_scalar()); // Path is considered scalar-like
         assert_eq!(value.as_str(), Some("./data/file.csv"));
     }
 
     #[test]
     fn test_glob_variant() {
-        let value = ConfigValue::new_glob("*.qmd".to_string(), SourceInfo::default());
+        let value = ConfigValue::new_glob("*.qmd".to_string(), SourceInfo::for_test());
         assert!(value.is_scalar());
         assert_eq!(value.as_str(), Some("*.qmd"));
     }
 
     #[test]
     fn test_expr_variant() {
-        let value = ConfigValue::new_expr("params$threshold".to_string(), SourceInfo::default());
+        let value = ConfigValue::new_expr("params$threshold".to_string(), SourceInfo::for_test());
         assert!(value.is_scalar());
         assert_eq!(value.as_str(), Some("params$threshold"));
     }
@@ -949,16 +955,16 @@ mod tests {
         let entries = vec![
             ConfigMapEntry {
                 key: "foo".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_scalar(Yaml::String("bar".into()), SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_scalar(Yaml::String("bar".into()), SourceInfo::for_test()),
             },
             ConfigMapEntry {
                 key: "baz".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::for_test()),
             },
         ];
-        let map = ConfigValue::new_map(entries, SourceInfo::default());
+        let map = ConfigValue::new_map(entries, SourceInfo::for_test());
 
         assert!(map.contains_key("foo"));
         assert!(map.contains_key("baz"));
@@ -970,11 +976,11 @@ mod tests {
 
     #[test]
     fn test_is_string_value() {
-        let scalar = ConfigValue::new_scalar(Yaml::String("hello".into()), SourceInfo::default());
+        let scalar = ConfigValue::new_scalar(Yaml::String("hello".into()), SourceInfo::for_test());
         assert!(scalar.is_string_value("hello"));
         assert!(!scalar.is_string_value("world"));
 
-        let path = ConfigValue::new_path("./file.txt".to_string(), SourceInfo::default());
+        let path = ConfigValue::new_path("./file.txt".to_string(), SourceInfo::for_test());
         assert!(path.is_string_value("./file.txt"));
     }
 
@@ -982,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_new_string() {
-        let value = ConfigValue::new_string("hello", SourceInfo::default());
+        let value = ConfigValue::new_string("hello", SourceInfo::for_test());
         assert!(value.is_scalar());
         assert_eq!(value.as_str(), Some("hello"));
         assert_eq!(value.merge_op, MergeOp::Concat);
@@ -990,17 +996,17 @@ mod tests {
 
     #[test]
     fn test_new_bool() {
-        let value_true = ConfigValue::new_bool(true, SourceInfo::default());
+        let value_true = ConfigValue::new_bool(true, SourceInfo::for_test());
         assert!(value_true.is_scalar());
         assert_eq!(value_true.as_bool(), Some(true));
 
-        let value_false = ConfigValue::new_bool(false, SourceInfo::default());
+        let value_false = ConfigValue::new_bool(false, SourceInfo::for_test());
         assert_eq!(value_false.as_bool(), Some(false));
     }
 
     #[test]
     fn test_null() {
-        let value = ConfigValue::null(SourceInfo::default());
+        let value = ConfigValue::null(SourceInfo::for_test());
         assert!(value.is_scalar());
         assert!(value.is_null());
         assert_eq!(value.merge_op, MergeOp::Concat);
@@ -1019,109 +1025,109 @@ mod tests {
     #[test]
     fn test_as_bool_non_bool() {
         // Test that as_bool returns None for non-boolean values
-        let string_val = ConfigValue::new_string("true", SourceInfo::default());
+        let string_val = ConfigValue::new_string("true", SourceInfo::for_test());
         assert_eq!(string_val.as_bool(), None);
 
-        let int_val = ConfigValue::new_scalar(Yaml::Integer(1), SourceInfo::default());
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(1), SourceInfo::for_test());
         assert_eq!(int_val.as_bool(), None);
     }
 
     #[test]
     fn test_as_int() {
-        let value = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::default());
+        let value = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::for_test());
         assert_eq!(value.as_int(), Some(42));
 
-        let value_neg = ConfigValue::new_scalar(Yaml::Integer(-100), SourceInfo::default());
+        let value_neg = ConfigValue::new_scalar(Yaml::Integer(-100), SourceInfo::for_test());
         assert_eq!(value_neg.as_int(), Some(-100));
     }
 
     #[test]
     fn test_as_int_non_int() {
         // Test that as_int returns None for non-integer values
-        let string_val = ConfigValue::new_string("42", SourceInfo::default());
+        let string_val = ConfigValue::new_string("42", SourceInfo::for_test());
         assert_eq!(string_val.as_int(), None);
 
-        let bool_val = ConfigValue::new_bool(true, SourceInfo::default());
+        let bool_val = ConfigValue::new_bool(true, SourceInfo::for_test());
         assert_eq!(bool_val.as_int(), None);
     }
 
     #[test]
     fn test_is_null() {
-        let null_val = ConfigValue::null(SourceInfo::default());
+        let null_val = ConfigValue::null(SourceInfo::for_test());
         assert!(null_val.is_null());
 
-        let string_val = ConfigValue::new_string("", SourceInfo::default());
+        let string_val = ConfigValue::new_string("", SourceInfo::for_test());
         assert!(!string_val.is_null());
 
-        let int_val = ConfigValue::new_scalar(Yaml::Integer(0), SourceInfo::default());
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(0), SourceInfo::for_test());
         assert!(!int_val.is_null());
     }
 
     #[test]
     fn test_is_empty() {
         // Empty map
-        let empty_map = ConfigValue::new_map(vec![], SourceInfo::default());
+        let empty_map = ConfigValue::new_map(vec![], SourceInfo::for_test());
         assert!(empty_map.is_empty());
 
         // Non-empty map
         let non_empty_map = ConfigValue::new_map(
             vec![ConfigMapEntry {
                 key: "k".to_string(),
-                key_source: SourceInfo::default(),
-                value: ConfigValue::null(SourceInfo::default()),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::null(SourceInfo::for_test()),
             }],
-            SourceInfo::default(),
+            SourceInfo::for_test(),
         );
         assert!(!non_empty_map.is_empty());
 
         // Empty array
-        let empty_arr = ConfigValue::new_array(vec![], SourceInfo::default());
+        let empty_arr = ConfigValue::new_array(vec![], SourceInfo::for_test());
         assert!(empty_arr.is_empty());
 
         // Non-empty array
         let non_empty_arr = ConfigValue::new_array(
-            vec![ConfigValue::null(SourceInfo::default())],
-            SourceInfo::default(),
+            vec![ConfigValue::null(SourceInfo::for_test())],
+            SourceInfo::for_test(),
         );
         assert!(!non_empty_arr.is_empty());
 
         // Scalar is not empty (by definition)
-        let scalar = ConfigValue::new_string("", SourceInfo::default());
+        let scalar = ConfigValue::new_string("", SourceInfo::for_test());
         assert!(!scalar.is_empty());
     }
 
     #[test]
     fn test_as_yaml() {
-        let scalar = ConfigValue::new_scalar(Yaml::Integer(123), SourceInfo::default());
+        let scalar = ConfigValue::new_scalar(Yaml::Integer(123), SourceInfo::for_test());
         let yaml = scalar.as_yaml().unwrap();
         assert_eq!(yaml.as_i64(), Some(123));
 
         // Non-scalar returns None
-        let array = ConfigValue::new_array(vec![], SourceInfo::default());
+        let array = ConfigValue::new_array(vec![], SourceInfo::for_test());
         assert!(array.as_yaml().is_none());
     }
 
     #[test]
     fn test_as_array_non_array() {
-        let scalar = ConfigValue::new_string("test", SourceInfo::default());
+        let scalar = ConfigValue::new_string("test", SourceInfo::for_test());
         assert!(scalar.as_array().is_none());
 
-        let map = ConfigValue::new_map(vec![], SourceInfo::default());
+        let map = ConfigValue::new_map(vec![], SourceInfo::for_test());
         assert!(map.as_array().is_none());
     }
 
     #[test]
     fn test_as_map_entries_non_map() {
-        let scalar = ConfigValue::new_string("test", SourceInfo::default());
+        let scalar = ConfigValue::new_string("test", SourceInfo::for_test());
         assert!(scalar.as_map_entries().is_none());
 
-        let array = ConfigValue::new_array(vec![], SourceInfo::default());
+        let array = ConfigValue::new_array(vec![], SourceInfo::for_test());
         assert!(array.as_map_entries().is_none());
     }
 
     #[test]
     fn test_get_non_map() {
-        let scalar = ConfigValue::new_string("test", SourceInfo::default());
+        let scalar = ConfigValue::new_string("test", SourceInfo::for_test());
         assert!(scalar.get("key").is_none());
     }
 
@@ -1168,14 +1174,14 @@ mod tests {
 
     #[test]
     fn test_is_string_value_glob() {
-        let glob = ConfigValue::new_glob("*.md".to_string(), SourceInfo::default());
+        let glob = ConfigValue::new_glob("*.md".to_string(), SourceInfo::for_test());
         assert!(glob.is_string_value("*.md"));
         assert!(!glob.is_string_value("*.txt"));
     }
 
     #[test]
     fn test_is_string_value_expr() {
-        let expr = ConfigValue::new_expr("params$x".to_string(), SourceInfo::default());
+        let expr = ConfigValue::new_expr("params$x".to_string(), SourceInfo::for_test());
         assert!(expr.is_string_value("params$x"));
         assert!(!expr.is_string_value("params$y"));
     }
@@ -1186,9 +1192,9 @@ mod tests {
 
         let str_node = Inline::Str(Str {
             text: "hello".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
-        let value = ConfigValue::new_inlines(vec![str_node], SourceInfo::default());
+        let value = ConfigValue::new_inlines(vec![str_node], SourceInfo::for_test());
 
         assert!(value.is_string_value("hello"));
         assert!(!value.is_string_value("world"));
@@ -1200,13 +1206,13 @@ mod tests {
 
         let str1 = Inline::Str(Str {
             text: "hello".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let str2 = Inline::Str(Str {
             text: " world".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
-        let value = ConfigValue::new_inlines(vec![str1, str2], SourceInfo::default());
+        let value = ConfigValue::new_inlines(vec![str1, str2], SourceInfo::for_test());
 
         // Multiple inlines should not match
         assert!(!value.is_string_value("hello world"));
@@ -1218,9 +1224,9 @@ mod tests {
         use crate::inline::{Inline, Space};
 
         let space = Inline::Space(Space {
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
-        let value = ConfigValue::new_inlines(vec![space], SourceInfo::default());
+        let value = ConfigValue::new_inlines(vec![space], SourceInfo::for_test());
 
         // Non-Str inline should not match
         assert!(!value.is_string_value(" "));
@@ -1229,13 +1235,13 @@ mod tests {
 
     #[test]
     fn test_is_string_value_non_string_scalar() {
-        let int_val = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::default());
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::for_test());
         assert!(!int_val.is_string_value("42"));
 
-        let bool_val = ConfigValue::new_bool(true, SourceInfo::default());
+        let bool_val = ConfigValue::new_bool(true, SourceInfo::for_test());
         assert!(!bool_val.is_string_value("true"));
 
-        let null_val = ConfigValue::null(SourceInfo::default());
+        let null_val = ConfigValue::null(SourceInfo::for_test());
         assert!(!null_val.is_string_value(""));
         assert!(!null_val.is_string_value("null"));
     }
@@ -1435,8 +1441,8 @@ mod tests {
     #[test]
     fn test_config_value_kind_serialize_array() {
         let kind = ConfigValueKind::Array(vec![
-            ConfigValue::new_string("a", SourceInfo::default()),
-            ConfigValue::new_string("b", SourceInfo::default()),
+            ConfigValue::new_string("a", SourceInfo::for_test()),
+            ConfigValue::new_string("b", SourceInfo::for_test()),
         ]);
         let json = serde_json::to_string(&kind).unwrap();
         let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
@@ -1447,8 +1453,8 @@ mod tests {
     fn test_config_value_kind_serialize_map() {
         let kind = ConfigValueKind::Map(vec![ConfigMapEntry {
             key: "key".to_string(),
-            key_source: SourceInfo::default(),
-            value: ConfigValue::new_string("value", SourceInfo::default()),
+            key_source: SourceInfo::for_test(),
+            value: ConfigValue::new_string("value", SourceInfo::for_test()),
         }]);
         let json = serde_json::to_string(&kind).unwrap();
         let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
@@ -1474,7 +1480,7 @@ mod tests {
     #[test]
     fn test_config_value_serialize_roundtrip() {
         let value =
-            ConfigValue::new_string("test", SourceInfo::default()).with_merge_op(MergeOp::Prefer);
+            ConfigValue::new_string("test", SourceInfo::for_test()).with_merge_op(MergeOp::Prefer);
 
         let json = serde_json::to_string(&value).unwrap();
         let deserialized: ConfigValue = serde_json::from_str(&json).unwrap();
@@ -1487,8 +1493,8 @@ mod tests {
     fn test_config_map_entry_serialize_roundtrip() {
         let entry = ConfigMapEntry {
             key: "test_key".to_string(),
-            key_source: SourceInfo::default(),
-            value: ConfigValue::new_bool(true, SourceInfo::default()),
+            key_source: SourceInfo::for_test(),
+            value: ConfigValue::new_bool(true, SourceInfo::for_test()),
         };
 
         let json = serde_json::to_string(&entry).unwrap();
@@ -1502,45 +1508,45 @@ mod tests {
 
     #[test]
     fn test_as_str_returns_none_for_non_strings() {
-        let int_val = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::default());
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::for_test());
         assert!(int_val.as_str().is_none());
 
-        let bool_val = ConfigValue::new_bool(true, SourceInfo::default());
+        let bool_val = ConfigValue::new_bool(true, SourceInfo::for_test());
         assert!(bool_val.as_str().is_none());
 
-        let null_val = ConfigValue::null(SourceInfo::default());
+        let null_val = ConfigValue::null(SourceInfo::for_test());
         assert!(null_val.as_str().is_none());
 
-        let array_val = ConfigValue::new_array(vec![], SourceInfo::default());
+        let array_val = ConfigValue::new_array(vec![], SourceInfo::for_test());
         assert!(array_val.as_str().is_none());
 
-        let map_val = ConfigValue::new_map(vec![], SourceInfo::default());
+        let map_val = ConfigValue::new_map(vec![], SourceInfo::for_test());
         assert!(map_val.as_str().is_none());
     }
 
     #[test]
     fn test_is_scalar_for_all_scalar_types() {
         // All these should be considered scalar
-        assert!(ConfigValue::new_string("s", SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::new_bool(true, SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::new_scalar(Yaml::Integer(1), SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::null(SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::new_path("p".to_string(), SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::new_glob("g".to_string(), SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::new_expr("e".to_string(), SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::new_inlines(vec![], SourceInfo::default()).is_scalar());
-        assert!(ConfigValue::new_blocks(vec![], SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_string("s", SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::new_bool(true, SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::new_scalar(Yaml::Integer(1), SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::null(SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::new_path("p".to_string(), SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::new_glob("g".to_string(), SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::new_expr("e".to_string(), SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::new_inlines(vec![], SourceInfo::for_test()).is_scalar());
+        assert!(ConfigValue::new_blocks(vec![], SourceInfo::for_test()).is_scalar());
 
         // These should not be scalar
-        assert!(!ConfigValue::new_array(vec![], SourceInfo::default()).is_scalar());
-        assert!(!ConfigValue::new_map(vec![], SourceInfo::default()).is_scalar());
+        assert!(!ConfigValue::new_array(vec![], SourceInfo::for_test()).is_scalar());
+        assert!(!ConfigValue::new_map(vec![], SourceInfo::for_test()).is_scalar());
     }
 
     // === Tests for path-based navigation methods ===
 
     #[test]
     fn test_get_path_empty() {
-        let value = ConfigValue::new_string("hello", SourceInfo::default());
+        let value = ConfigValue::new_string("hello", SourceInfo::for_test());
         // Empty path returns self
         let result = value.get_path(&[]);
         assert_eq!(result.unwrap().as_str(), Some("hello"));
@@ -1610,15 +1616,15 @@ mod tests {
 
     #[test]
     fn test_contains_path_empty() {
-        let value = ConfigValue::new_string("hello", SourceInfo::default());
+        let value = ConfigValue::new_string("hello", SourceInfo::for_test());
         // Empty path always exists (returns self)
         assert!(value.contains_path(&[]));
     }
 
     #[test]
     fn test_insert_path_empty() {
-        let mut value = ConfigValue::new_string("old", SourceInfo::default());
-        value.insert_path(&[], ConfigValue::new_string("new", SourceInfo::default()));
+        let mut value = ConfigValue::new_string("old", SourceInfo::for_test());
+        value.insert_path(&[], ConfigValue::new_string("new", SourceInfo::for_test()));
         assert_eq!(value.as_str(), Some("new"));
     }
 
@@ -1627,7 +1633,7 @@ mod tests {
         let mut value = ConfigValue::default(); // Empty map
         value.insert_path(
             &["title"],
-            ConfigValue::new_string("My Title", SourceInfo::default()),
+            ConfigValue::new_string("My Title", SourceInfo::for_test()),
         );
 
         assert!(value.contains_path(&["title"]));
@@ -1642,7 +1648,7 @@ mod tests {
         let mut value = ConfigValue::default(); // Empty map
         value.insert_path(
             &["navigation", "toc", "title"],
-            ConfigValue::new_string("Contents", SourceInfo::default()),
+            ConfigValue::new_string("Contents", SourceInfo::for_test()),
         );
 
         // Verify intermediate maps were created
@@ -1664,7 +1670,7 @@ mod tests {
 
         value.insert_path(
             &["format", "html", "toc"],
-            ConfigValue::new_string("new", SourceInfo::default()),
+            ConfigValue::new_string("new", SourceInfo::for_test()),
         );
 
         assert_eq!(
@@ -1679,7 +1685,7 @@ mod tests {
 
         value.insert_path(
             &["format", "html", "toc-depth"],
-            ConfigValue::new_scalar(Yaml::Integer(3), SourceInfo::default()),
+            ConfigValue::new_scalar(Yaml::Integer(3), SourceInfo::for_test()),
         );
 
         // Original still exists
@@ -1707,7 +1713,7 @@ mod tests {
         // Insert at a path that goes through the scalar - it should replace it with a map
         value.insert_path(
             &["format", "html", "toc"],
-            ConfigValue::new_bool(true, SourceInfo::default()),
+            ConfigValue::new_bool(true, SourceInfo::for_test()),
         );
 
         // format is now a map, not a scalar
@@ -1727,7 +1733,7 @@ mod tests {
         let mut value = ConfigValue::from_path(&["title"], "Old Title");
 
         if let Some(title) = value.get_mut("title") {
-            *title = ConfigValue::new_string("New Title", SourceInfo::default());
+            *title = ConfigValue::new_string("New Title", SourceInfo::for_test());
         }
 
         assert_eq!(
@@ -1738,7 +1744,7 @@ mod tests {
 
     #[test]
     fn test_get_mut_non_map() {
-        let mut value = ConfigValue::new_string("hello", SourceInfo::default());
+        let mut value = ConfigValue::new_string("hello", SourceInfo::for_test());
         assert!(value.get_mut("key").is_none());
     }
 
@@ -1747,7 +1753,7 @@ mod tests {
         let mut value = ConfigValue::from_path(&["format", "html", "toc"], "false");
 
         if let Some(toc) = value.get_path_mut(&["format", "html", "toc"]) {
-            *toc = ConfigValue::new_bool(true, SourceInfo::default());
+            *toc = ConfigValue::new_bool(true, SourceInfo::for_test());
         }
 
         assert_eq!(

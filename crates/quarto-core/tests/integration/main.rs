@@ -18,6 +18,7 @@ pub mod document_profile_pipeline;
 pub mod engine_merge;
 pub mod fail_fast;
 pub mod get_config_merge;
+pub mod idempotence;
 pub mod include_resolve_pipeline;
 pub mod incremental_rebuild;
 pub mod jupyter_integration;

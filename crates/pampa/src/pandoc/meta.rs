@@ -83,7 +83,9 @@ fn parse_yaml_string_as_markdown_to_config(
                 diagnostics.add(diagnostic);
             }
 
-            // Return error recovery span
+            // Return error recovery span. The bytes are the raw YAML
+            // value; reuse the caller's source_info so attribution
+            // points at the offending YAML range rather than nowhere.
             let span = Span {
                 attr: (
                     String::new(),
@@ -92,9 +94,9 @@ fn parse_yaml_string_as_markdown_to_config(
                 ),
                 content: vec![Inline::Str(Str {
                     text: value.to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: source_info.clone(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
             };
             ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
@@ -228,7 +230,10 @@ pub fn yaml_to_config_value(
                                 text: s,
                                 source_info: source_info.clone(),
                             })],
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            // Wrapper around the tagged scalar — reuse
+                            // the value's source range so attribution
+                            // points at the YAML.
+                            source_info: source_info.clone(),
                             attr_source: AttrSourceInfo::empty(),
                         };
                         ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
@@ -390,7 +395,7 @@ mod tests {
     use quarto_yaml::YamlWithSourceInfo;
 
     fn si() -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::default()
+        quarto_source_map::SourceInfo::for_test()
     }
 
     #[test]

@@ -233,7 +233,7 @@ fn make_python_code_block(code: &str) -> Block {
             Default::default(),
         ),
         text: code.to_string(),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     })
 }
@@ -242,9 +242,9 @@ fn make_paragraph(text: &str) -> Block {
     Block::Paragraph(Paragraph {
         content: vec![Inline::Str(Str {
             text: text.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
     })
 }
 
@@ -259,7 +259,7 @@ async fn test_jupyter_transform_print() {
 
     // Create an AST with a Python code block
     let mut ast = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
         blocks: vec![
             make_paragraph("Introduction"),
             make_python_code_block("print('Hello from transform!')"),
@@ -330,7 +330,7 @@ async fn test_jupyter_transform_expression() {
     }
 
     let mut ast = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
         blocks: vec![make_python_code_block("1 + 1")],
     };
 
@@ -376,7 +376,7 @@ async fn test_daemon_persistence() {
 
     // Create first AST - set a variable
     let mut ast1 = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
         blocks: vec![make_python_code_block("test_var = 42")],
     };
 
@@ -396,7 +396,7 @@ async fn test_daemon_persistence() {
 
     // Create second AST - read the variable
     let mut ast2 = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
         blocks: vec![make_python_code_block("print(test_var)")],
     };
 
@@ -511,20 +511,20 @@ fn make_paragraph_with_inline_expr(prefix: &str, expr: &str, suffix: &str) -> Bl
         content: vec![
             Inline::Str(Str {
                 text: prefix.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
             Inline::Code(Code {
                 attr: (String::new(), vec![], Default::default()),
                 text: expr.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
             }),
             Inline::Str(Str {
                 text: suffix.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
         ],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
     })
 }
 
@@ -540,7 +540,7 @@ async fn test_jupyter_transform_inline_expression() {
     // Create an AST with an inline expression
     // The text is: "The answer is `{python} 2+2`!"
     let mut ast = Pandoc {
-        meta: ConfigValue::new_map(vec![], SourceInfo::default()),
+        meta: ConfigValue::new_map(vec![], SourceInfo::for_test()),
         blocks: vec![make_paragraph_with_inline_expr(
             "The answer is ",
             "{python} 2+2",
