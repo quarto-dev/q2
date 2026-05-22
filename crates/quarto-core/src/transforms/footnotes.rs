@@ -1069,4 +1069,31 @@ mod tests {
         // Check footnotes section exists
         assert!(matches!(ast.blocks[1], Block::Div(_)));
     }
+
+    #[test]
+    fn test_create_footnotes_section_has_generated_provenance() {
+        // Plan 6: the synthesized footnotes container Div (and its embedded
+        // chrome — HorizontalRule, OrderedList) carry
+        // Generated { by: footnotes(), from: [] }. The footnote *items*
+        // inside retain the original Note's source_info via
+        // create_footnote_item.
+        let block = create_footnotes_section(&[]);
+        let Block::Div(div) = &block else {
+            panic!("Expected Div");
+        };
+        match &div.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "footnotes");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+        // The embedded HorizontalRule chrome carries the same shape.
+        let Block::HorizontalRule(hr) = &div.content[0] else {
+            panic!("Expected HorizontalRule");
+        };
+        assert!(
+            matches!(&hr.source_info, SourceInfo::Generated { by, .. } if by.kind == "footnotes")
+        );
+    }
 }

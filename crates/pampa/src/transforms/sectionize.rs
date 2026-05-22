@@ -531,6 +531,53 @@ mod tests {
     }
 
     #[test]
+    fn test_sectionize_section_div_has_generated_provenance() {
+        // Plan 6: every synthesized Section Div carries
+        // Generated { by: sectionize(), from: [] }. The wrapped Header retains
+        // its original source_info.
+        let blocks = vec![
+            make_header(2, "sec-a", vec![], "A"),
+            make_para("body"),
+            make_header(2, "sec-b", vec![], "B"),
+        ];
+        let result = sectionize_blocks(blocks);
+        assert_eq!(result.len(), 2);
+
+        // First section's outer Div is Generated.
+        let Block::Div(div) = &result[0] else {
+            panic!("Expected section Div");
+        };
+        match &div.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "sectionize");
+                assert!(
+                    from.is_empty(),
+                    "sectionize synthesizers carry no source-side anchors"
+                );
+            }
+            other => panic!("Expected Generated source_info, got {:?}", other),
+        }
+
+        // Second section (end-of-input path) — same shape.
+        let Block::Div(div2) = &result[1] else {
+            panic!("Expected section Div");
+        };
+        match &div2.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "sectionize");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated source_info, got {:?}", other),
+        }
+
+        // The wrapped Header inside the section retains its original
+        // (dummy) source_info — only the Div is synthesized.
+        let Block::Header(_) = &div.content[0] else {
+            panic!("Expected Header inside section");
+        };
+    }
+
+    #[test]
     fn test_sectionize_class_order() {
         // Classes should be: "section", "levelN", then user classes
         let blocks = vec![

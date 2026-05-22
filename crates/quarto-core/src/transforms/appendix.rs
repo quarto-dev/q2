@@ -894,4 +894,21 @@ mod tests {
             panic!("Expected appendix Div");
         }
     }
+
+    #[test]
+    fn test_create_appendix_container_has_generated_provenance() {
+        // Plan 6: the synthesized appendix container Div carries
+        // Generated { by: appendix(), from: [] }.
+        let block = create_appendix_container(vec![], "default");
+        let Block::Div(div) = &block else {
+            panic!("Expected Div");
+        };
+        match &div.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "appendix");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
 }

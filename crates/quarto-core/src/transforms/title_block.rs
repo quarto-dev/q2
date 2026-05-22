@@ -506,4 +506,32 @@ mod tests {
         let transform = TitleBlockTransform::new();
         assert_eq!(transform.name(), "title-block");
     }
+
+    #[test]
+    fn test_create_title_header_has_generated_provenance() {
+        // Plan 6: the synthesized h1 + inner Str both carry
+        // Generated { by: title_block(), from: [] }.
+        let block = create_title_header("My Title");
+        let Block::Header(header) = &block else {
+            panic!("Expected Header");
+        };
+        match &header.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "title-block");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+        // Inner Str carries the same shape.
+        let Inline::Str(s) = &header.content[0] else {
+            panic!("Expected Str inside header");
+        };
+        match &s.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "title-block");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+    }
 }

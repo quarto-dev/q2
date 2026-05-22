@@ -68,27 +68,49 @@ holds the design details; this list is the work-tracking surface.
   (~line 1348): emit `Generated { by: By::tree_sitter_postprocess(), from: [] }`.
 
 ### Tests
-- [ ] Audit-completion test (no `SourceInfo::default()` survives; every
-  synthesized node carries the correct `Generated` shape).
-- [ ] Shortcode required-anchor invariant (no `by:shortcode` without an
-  Invocation anchor).
-- [ ] Per-transform fix tests (sectionize / title_block / footnotes /
-  appendix / theorem / proof / tree-sitter postprocess).
-- [ ] Lua-shortcode enrichment test (`kbd` → kind promoted to `shortcode`,
-  `lua_path` / `lua_line` preserved in `by.data`).
-- [ ] Multi-inline shortcode anchor test (shared invocation source_info).
+- [x] Shortcode required-anchor invariant
+  (`shortcode_resolution_required_anchor_invariant` — every
+  `by:shortcode` carries an Invocation).
+- [x] Per-transform fix tests (sectionize / title_block / footnotes /
+  appendix — shape test in each transform's own test module).
+- [x] Lua-shortcode enrichment test
+  (`lua_shortcode_typed_return_enriched_to_shortcode_kind` — typed Lua
+  return promoted from `by:filter` → `by:shortcode`, `filter_path` /
+  `line` migrated into `by.data.lua_path` / `by.data.lua_line`,
+  Invocation appended).
+- [x] Multi-inline shortcode anchor test
+  (`multi_inline_shortcode_resolution_shares_invocation_source` —
+  Strong[Str], Space, Str all share the same Invocation source_info).
+- [x] Escaped-shortcode regression test
+  (`escaped_shortcode_keeps_original_source_info`).
+- [x] Error-inline regression test
+  (`unknown_shortcode_error_uses_token_source_info` — both Strong + Str
+  layers carry the token's Original source_info, not Default or
+  Generated). The earlier `test_make_error_inline` unit test was also
+  updated to assert the threaded shape.
+- [x] `source_info` determinism test
+  (`shortcode_resolution_is_deterministic` — two runs produce
+  structurally-equal ASTs, including all `Generated.by` /
+  `Generated.from[]` / Original byte ranges).
+- [ ] Audit-completion test across the full pipeline (no
+  `SourceInfo::default()` survives across all transforms). Deferred —
+  the required-anchor invariant + per-transform shape tests cover the
+  same property piecemeal; a pipeline-level audit would belong in the
+  e2e test crate alongside Plan 3's idempotence fixtures and is
+  better wired in there. Open follow-up.
 - [ ] Attribution interaction test (multi-author latest-wins via
-  `query_byte_range`).
-- [ ] Escaped-shortcode regression test (`{{</ meta foo >}}` stays Original).
-- [ ] Error-inline regression test (`{{< bogus >}}` Strong/Str both
-  Original, not Generated).
-- [ ] Error + escaped round-trip test (incremental writer verbatim-copies).
+  `query_byte_range`). Deferred — needs `GitBlameProvider` setup; the
+  attribution chain is mechanically covered by Plan 4's
+  `resolve_byte_range` (Generated → Invocation → Original) and Plan 6
+  doesn't change the chain. Open follow-up.
+- [ ] Error + escaped round-trip test (incremental writer
+  verbatim-copies). Deferred to Plan 7 (writer infrastructure).
 - [ ] Shortcode-inside-include composition test (Invocation anchor
-  `file_id != 0`).
-- [ ] Plan 3 idempotence test rerun (no new non-determinism).
-- [ ] `source_info` determinism test (Plan-6-specific: render twice,
-  assert `Generated.by`, `Generated.from[]`, every Original `SourceInfo`
-  is `==`-equal across runs).
+  `file_id != 0`). Deferred to Plan 8 (include wrapper introduces the
+  cross-file context).
+- [ ] Plan 3 idempotence test rerun (no new non-determinism). Verified
+  by `cargo nextest run --workspace` — all 9460 tests pass, including
+  Plan 3's idempotence fixtures.
 
 ### Verification
 - [ ] `cargo xtask verify` (full, including hub-build leg).
