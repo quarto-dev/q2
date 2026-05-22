@@ -65,9 +65,9 @@ impl SourceInfo {
                 }
                 None // Offset not found in any piece
             }
-            SourceInfo::FilterProvenance { .. } => {
-                // FilterProvenance doesn't have traditional byte offsets
-                // The location information is stored directly in the variant
+            SourceInfo::Generated { .. } => {
+                // Generated nodes have no offset-within-current-text;
+                // callers wanting source coordinates use resolve_byte_range.
                 None
             }
         }

@@ -817,19 +817,9 @@ mod tests {
             .or(diag.location.as_ref())
             .expect("diagnostic should carry a SourceInfo location");
 
-        fn root_file_id(info: &quarto_source_map::SourceInfo) -> Option<quarto_source_map::FileId> {
-            match info {
-                quarto_source_map::SourceInfo::Original { file_id, .. } => Some(*file_id),
-                quarto_source_map::SourceInfo::Substring { parent, .. } => root_file_id(parent),
-                quarto_source_map::SourceInfo::Concat { pieces } => {
-                    pieces.first().and_then(|p| root_file_id(&p.source_info))
-                }
-                quarto_source_map::SourceInfo::FilterProvenance { .. } => None,
-            }
-        }
-
-        let file_id =
-            root_file_id(location).expect("diagnostic location should have a resolvable FileId");
+        let file_id = location
+            .root_file_id()
+            .expect("diagnostic location should have a resolvable FileId");
         let file = result
             .source_context
             .get_file(file_id)

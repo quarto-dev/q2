@@ -311,14 +311,24 @@ impl<'a> SourceInfoSerializer<'a> {
                     },
                 )
             }
-            SourceInfo::FilterProvenance { filter_path, line } => (
-                0,
-                0,
-                SerializableSourceMapping::FilterProvenance {
-                    filter_path: filter_path.clone(),
-                    line: *line,
-                },
-            ),
+            SourceInfo::Generated { by, .. } => {
+                // Plan 4 produces only `by.kind == "filter"` Generated values.
+                // Non-filter kinds require Plan 5's wire-code 4 emitter; until
+                // then this arm preserves bd-3odjm's expected failure mode by
+                // emitting the legacy code-3 `FilterProvenance` payload.
+                let (filter_path, line) = by.as_filter().expect(
+                    "Plan 4 produces only filter-kind Generated; non-filter \
+                     Generated requires Plan 5's wire-code 4 emitter",
+                );
+                (
+                    0,
+                    0,
+                    SerializableSourceMapping::FilterProvenance {
+                        filter_path: filter_path.to_string(),
+                        line,
+                    },
+                )
+            }
         };
 
         let id = self.pool.len();
@@ -555,7 +565,7 @@ fn node_with_source(
 // to map offsets to row/column positions. Commenting out for now.
 // fn write_location(source_info: &quarto_source_map::SourceInfo, ctx: &SourceContext) -> Value {
 //     // Extract filename index by walking to the Original mapping
-//     let filename_index = crate::pandoc::location::extract_filename_index(source_info);
+//     let filename_index = source_info.root_file_id().map(|fid| fid.0);
 //
 //     // Map start and end offsets to locations with row/column
 //     let start_mapped = source_info.map_offset(0, ctx).unwrap();

@@ -15,7 +15,8 @@ use mlua::{
     Error, IntoLua, Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods,
     UserDataRef, Value, Variadic,
 };
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::SmallVec;
 
 use crate::pandoc::{Block, Inline};
 
@@ -723,8 +724,8 @@ impl UserData for LuaInline {
 /// `:byte_range()` and `:file_id()` accessors that chain-resolve the
 /// underlying `SourceInfo` to a `(file_id, start, end)` tuple in the
 /// root source file. Both return `nil` when the chain resolves to
-/// `SourceInfo::Concat` or `SourceInfo::FilterProvenance` — the same
-/// rule applied by `AttributionRenderTransform`.
+/// `SourceInfo::Concat` or a `Generated` node without an `Invocation`
+/// anchor — the same rule applied by `AttributionRenderTransform`.
 ///
 /// This is the building block of the `quarto.attribution.lookup(el)`
 /// convenience: it reads `el.source_info:byte_range()` then calls
@@ -1825,7 +1826,10 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
                 // The source often starts with "@" for file paths
                 let path: &str = src.strip_prefix("@").unwrap_or(&src);
                 let line_num = line.unwrap_or(0);
-                return Some(SourceInfo::filter_provenance(path.to_string(), line_num));
+                return Some(SourceInfo::Generated {
+                    by: By::filter(path.to_string(), line_num),
+                    from: SmallVec::new(),
+                });
             }
             None
         }) {

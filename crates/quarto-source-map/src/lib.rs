@@ -41,6 +41,6 @@ pub mod utils;
 pub use context::{FileMetadata, SourceContext, SourceFile};
 pub use file_info::FileInformation;
 pub use mapping::MappedLocation;
-pub use source_info::{SourceInfo, SourcePiece};
+pub use source_info::{Anchor, AnchorRole, By, SourceInfo, SourcePiece};
 pub use types::{FileId, Location, Range};
 pub use utils::{line_col_to_offset, offset_to_location, range_from_offsets};

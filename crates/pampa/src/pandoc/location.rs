@@ -325,24 +325,6 @@ pub fn empty_source_info() -> quarto_source_map::SourceInfo {
     )
 }
 
-/// Extract filename index from quarto_source_map::SourceInfo by walking to Original mapping
-pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<usize> {
-    match info {
-        quarto_source_map::SourceInfo::Original { file_id, .. } => Some(file_id.0),
-        quarto_source_map::SourceInfo::Substring { parent, .. } => extract_filename_index(parent),
-        quarto_source_map::SourceInfo::Concat { pieces } => {
-            // Return first non-None filename_index from pieces
-            pieces
-                .iter()
-                .find_map(|p| extract_filename_index(&p.source_info))
-        }
-        quarto_source_map::SourceInfo::FilterProvenance { .. } => {
-            // Filter provenance doesn't have a filename index
-            None
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -566,93 +548,6 @@ mod tests {
         assert_eq!(si.start_offset(), 0);
         assert_eq!(si.end_offset(), 0);
         assert_eq!(si.length(), 0);
-    }
-
-    #[test]
-    fn test_extract_filename_index_original() {
-        let si = quarto_source_map::SourceInfo::from_range(
-            quarto_source_map::FileId(42),
-            quarto_source_map::Range {
-                start: quarto_source_map::Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: quarto_source_map::Location {
-                    offset: 10,
-                    row: 0,
-                    column: 10,
-                },
-            },
-        );
-        assert_eq!(extract_filename_index(&si), Some(42));
-    }
-
-    #[test]
-    fn test_extract_filename_index_substring() {
-        let parent = quarto_source_map::SourceInfo::from_range(
-            quarto_source_map::FileId(99),
-            quarto_source_map::Range {
-                start: quarto_source_map::Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: quarto_source_map::Location {
-                    offset: 100,
-                    row: 5,
-                    column: 0,
-                },
-            },
-        );
-        let substring = quarto_source_map::SourceInfo::substring(parent, 10, 50);
-        assert_eq!(extract_filename_index(&substring), Some(99));
-    }
-
-    #[test]
-    fn test_extract_filename_index_concat() {
-        let piece1 = quarto_source_map::SourceInfo::from_range(
-            quarto_source_map::FileId(7),
-            quarto_source_map::Range {
-                start: quarto_source_map::Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: quarto_source_map::Location {
-                    offset: 10,
-                    row: 0,
-                    column: 10,
-                },
-            },
-        );
-        let piece2 = quarto_source_map::SourceInfo::from_range(
-            quarto_source_map::FileId(8),
-            quarto_source_map::Range {
-                start: quarto_source_map::Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: quarto_source_map::Location {
-                    offset: 20,
-                    row: 1,
-                    column: 0,
-                },
-            },
-        );
-        // concat takes Vec<(SourceInfo, usize)> - pairs of source info and length
-        let concat = quarto_source_map::SourceInfo::concat(vec![(piece1, 10), (piece2, 20)]);
-        // Should return the first piece's file_id
-        assert_eq!(extract_filename_index(&concat), Some(7));
-    }
-
-    #[test]
-    fn test_extract_filename_index_filter_provenance() {
-        // filter_provenance takes filter_path and line number
-        let filter_prov = quarto_source_map::SourceInfo::filter_provenance("test-filter.lua", 42);
-        // FilterProvenance doesn't have a filename index
-        assert_eq!(extract_filename_index(&filter_prov), None);
     }
 
     #[test]

@@ -252,31 +252,11 @@ pub fn process_pipe_table(
         let table_start = node_source_info_with_context(node, context);
         let start_offset = table_start.start_offset();
         let end_offset = cap_info.end_offset();
-        // Extract file_id from the table's source info
-        let file_id = match &table_start {
-            quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
-            quarto_source_map::SourceInfo::Substring { parent, .. } => {
-                // Recursively extract from parent (should always reach Original eventually)
-                match **parent {
-                    quarto_source_map::SourceInfo::Original { file_id, .. } => file_id,
-                    _ => quarto_source_map::FileId(0), // Fallback
-                }
-            }
-            quarto_source_map::SourceInfo::Concat { pieces } => {
-                // Use first piece's file_id
-                if let Some(piece) = pieces.first() {
-                    match &piece.source_info {
-                        quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
-                        _ => quarto_source_map::FileId(0), // Fallback
-                    }
-                } else {
-                    quarto_source_map::FileId(0) // Fallback
-                }
-            }
-            quarto_source_map::SourceInfo::FilterProvenance { .. } => {
-                quarto_source_map::FileId(0) // Fallback - filter-created tables shouldn't reach this
-            }
-        };
+        // Extract file_id from the table's source info; root_file_id walks
+        // every nesting level, so this works for arbitrarily deep Substrings.
+        let file_id = table_start
+            .root_file_id()
+            .unwrap_or(quarto_source_map::FileId(0));
         // Create a new SourceInfo spanning from table start to caption end
         quarto_source_map::SourceInfo::original(file_id, start_offset, end_offset)
     } else {

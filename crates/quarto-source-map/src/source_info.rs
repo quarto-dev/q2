@@ -2,6 +2,7 @@
 
 use crate::types::{FileId, Range};
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::sync::Arc;
 
 /// Source information tracking a location and its transformation history
@@ -13,7 +14,9 @@ use std::sync::Arc;
 /// - Original: Points directly to a file with byte offsets
 /// - Substring: Points to a range within a parent SourceInfo (offsets are relative to parent)
 /// - Concat: Combines multiple SourceInfo pieces (preserves provenance when coalescing text)
-/// - FilterProvenance: Tracks elements created by Lua filters for diagnostics
+/// - Generated: Produced by a pipeline transform. `by` records the producer; `from`
+///   records source-side anchors (empty for pure synthesis, `Invocation` for
+///   shortcode-style resolutions).
 ///
 /// The Transformed variant was removed because it's not used in production code.
 /// Text transformations (smart quotes, em-dashes) use Original SourceInfo pointing
@@ -42,16 +45,75 @@ pub enum SourceInfo {
     /// Used when coalescing adjacent text nodes while preserving
     /// the fact that they came from different source locations.
     Concat { pieces: Vec<SourcePiece> },
-    /// Provenance from a Lua filter
+    /// Node produced by a pipeline transform
     ///
-    /// Used to track elements created by Lua filters for diagnostic messages.
-    /// Contains the filter file path and line number where the element was created.
-    FilterProvenance {
-        /// Path to the Lua filter file (from debug.getinfo source)
-        filter_path: String,
-        /// Line number in the filter where the element was created
-        line: usize,
+    /// `by` records the producer ("which transform made me"); `from` is a
+    /// list of typed, role-labeled source-info pointers ("which source
+    /// bytes contributed to me"). Empty `from` means pure synthesis
+    /// (sectionize wrappers, filter constructions, title-block h1).
+    /// An `Invocation` anchor present means there is a source-side
+    /// preimage (every shortcode resolution).
+    Generated {
+        by: By,
+        #[serde(default, skip_serializing_if = "SmallVec::is_empty")]
+        from: SmallVec<[Anchor; 2]>,
     },
+}
+
+/// Producer identity for a [`SourceInfo::Generated`] node.
+///
+/// `kind` is a short, kebab-case identifier describing which transform
+/// produced the node ("filter", "shortcode", "sectionize", ...). Third
+/// parties should namespace as `ext/<extension>/<kind>`.
+///
+/// `data` is per-kind configuration that is **not** a source-info pointer.
+/// Source-side anchors live in the parent `Generated.from` list, not here.
+/// `Null` for kinds that don't carry per-instance data.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct By {
+    /// Short kind tag, kebab-case. Examples: "filter", "shortcode",
+    /// "sectionize", "user-edit", "title-block".
+    /// Third-party kinds should namespace: "ext/my-extension/foo".
+    pub kind: String,
+
+    /// Per-kind configuration that is NOT a source-info pointer.
+    /// Anchors live in `Generated.from`, not here.
+    /// `Null` for kinds that don't carry per-instance data.
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub data: serde_json::Value,
+}
+
+/// Role describing what kind of source-side contribution an anchor records.
+///
+/// The known roles are load-bearing — `Invocation` is what the writer's
+/// preimage walk and attribution consult; `ValueSource` is diagnostic-only.
+/// `Other(String)` is an open escape hatch for extension-defined roles.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AnchorRole {
+    /// The user-written construct that triggered this node's creation
+    /// (e.g. the `{{< meta foo >}}` token in the active document).
+    /// Load-bearing: the writer's `preimage_in` and attribution's
+    /// `resolve_byte_range` consult the first anchor with this role.
+    /// At most one per node by convention.
+    Invocation,
+
+    /// Where the VALUE this node carries was defined, when distinct
+    /// from the invocation site (e.g. `footer:` in `_metadata.yml` for
+    /// a `{{< meta footer >}}` resolution). Diagnostic-only — does not
+    /// affect the writer or attribution decisions in v1.
+    ValueSource,
+
+    /// Extension-defined or future role we haven't enumerated.
+    /// String is kebab-case, namespaced (`ext/<name>/<role>`).
+    Other(String),
+}
+
+/// A single typed, role-labeled source-info pointer attached to a
+/// [`SourceInfo::Generated`] node.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Anchor {
+    pub role: AnchorRole,
+    pub source_info: Arc<SourceInfo>,
 }
 
 /// A piece of a concatenated source
@@ -133,15 +195,80 @@ impl SourceInfo {
         }
     }
 
-    /// Create source info for a filter-created element
+    /// Create a [`SourceInfo::Generated`] with an empty anchor list.
     ///
-    /// Used to track the provenance of elements created by Lua filters.
-    /// The filter_path should be the path to the filter file (from debug.getinfo source).
-    /// The line should be the line number where the element was created.
-    pub fn filter_provenance(filter_path: impl Into<String>, line: usize) -> Self {
-        SourceInfo::FilterProvenance {
-            filter_path: filter_path.into(),
-            line,
+    /// Use [`SourceInfo::append_anchor`] to add anchors after construction.
+    /// For Generated nodes that need to carry anchors at construction
+    /// time, build the variant directly: `SourceInfo::Generated { by, from }`.
+    pub fn generated(by: By) -> Self {
+        SourceInfo::Generated {
+            by,
+            from: SmallVec::new(),
+        }
+    }
+
+    /// If this is a [`SourceInfo::Generated`], return the first anchor whose
+    /// role is [`AnchorRole::Invocation`].
+    ///
+    /// Returns `None` otherwise (including for non-`Generated` variants).
+    /// By convention there is at most one `Invocation` anchor per node.
+    pub fn invocation_anchor(&self) -> Option<&Arc<SourceInfo>> {
+        match self {
+            SourceInfo::Generated { from, .. } => from
+                .iter()
+                .find(|a| matches!(a.role, AnchorRole::Invocation))
+                .map(|a| &a.source_info),
+            _ => None,
+        }
+    }
+
+    /// If this is a [`SourceInfo::Generated`], return the first anchor whose
+    /// role is [`AnchorRole::ValueSource`].
+    ///
+    /// Returns `None` otherwise. By convention there is at most one
+    /// `ValueSource` anchor per node.
+    pub fn value_source_anchor(&self) -> Option<&Arc<SourceInfo>> {
+        match self {
+            SourceInfo::Generated { from, .. } => from
+                .iter()
+                .find(|a| matches!(a.role, AnchorRole::ValueSource))
+                .map(|a| &a.source_info),
+            _ => None,
+        }
+    }
+
+    /// Iterate over every anchor in this [`SourceInfo::Generated`] whose role
+    /// equals `role`.
+    ///
+    /// Returns an empty iterator for non-`Generated` variants. Iteration order
+    /// is the append order.
+    pub fn anchors_with_role<'a>(
+        &'a self,
+        role: &'a AnchorRole,
+    ) -> Box<dyn Iterator<Item = &'a Arc<SourceInfo>> + 'a> {
+        match self {
+            SourceInfo::Generated { from, .. } => Box::new(
+                from.iter()
+                    .filter(move |a| &a.role == role)
+                    .map(|a| &a.source_info),
+            ),
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+
+    /// Append `(role, source_info)` to this [`SourceInfo::Generated`]'s
+    /// anchor list.
+    ///
+    /// Panics if `self` is not [`SourceInfo::Generated`]. By convention there
+    /// is at most one anchor per known role; appending a second anchor with
+    /// the same role does not replace the first — accessors that find by
+    /// role return the earliest match.
+    pub fn append_anchor(&mut self, role: AnchorRole, source_info: Arc<SourceInfo>) {
+        match self {
+            SourceInfo::Generated { from, .. } => {
+                from.push(Anchor { role, source_info });
+            }
+            _ => panic!("append_anchor called on non-Generated SourceInfo"),
         }
     }
 
@@ -173,7 +300,7 @@ impl SourceInfo {
                 ..
             } => end_offset - start_offset,
             SourceInfo::Concat { pieces } => pieces.iter().map(|p| p.length).sum(),
-            SourceInfo::FilterProvenance { .. } => 0,
+            SourceInfo::Generated { .. } => 0,
         }
     }
 
@@ -181,13 +308,13 @@ impl SourceInfo {
     ///
     /// For Original and Substring, returns the start_offset field.
     /// For Concat, returns 0 (the concat represents a new text starting at 0).
-    /// For FilterProvenance, returns 0.
+    /// For Generated, returns 0.
     pub fn start_offset(&self) -> usize {
         match self {
             SourceInfo::Original { start_offset, .. } => *start_offset,
             SourceInfo::Substring { start_offset, .. } => *start_offset,
             SourceInfo::Concat { .. } => 0,
-            SourceInfo::FilterProvenance { .. } => 0,
+            SourceInfo::Generated { .. } => 0,
         }
     }
 
@@ -195,24 +322,26 @@ impl SourceInfo {
     ///
     /// For Original and Substring, returns the end_offset field.
     /// For Concat, returns the total length.
-    /// For FilterProvenance, returns 0.
+    /// For Generated, returns 0.
     pub fn end_offset(&self) -> usize {
         match self {
             SourceInfo::Original { end_offset, .. } => *end_offset,
             SourceInfo::Substring { end_offset, .. } => *end_offset,
             SourceInfo::Concat { .. } => self.length(),
-            SourceInfo::FilterProvenance { .. } => 0,
+            SourceInfo::Generated { .. } => 0,
         }
     }
 
     /// Chain-resolve to `(file_id, start_offset, end_offset)` in the
     /// root source file.
     ///
-    /// Returns `None` for `Concat` and `FilterProvenance` — these
-    /// don't map cleanly to a single contiguous byte range. The
-    /// attribution v1 sidecar relies on this contract; project-scoped
-    /// (v2) features that need the full chain resolver should use
-    /// `map_offset` against a `SourceContext` instead.
+    /// Returns `None` for `Concat` — Concat doesn't map cleanly to a
+    /// single contiguous byte range. For `Generated`, delegates to the
+    /// first `Invocation` anchor and recurses (`None` when no
+    /// `Invocation` anchor is present). The attribution v1 sidecar
+    /// relies on this contract; project-scoped (v2) features that need
+    /// the full chain resolver should use `map_offset` against a
+    /// `SourceContext` instead.
     pub fn resolve_byte_range(&self) -> Option<(usize, usize, usize)> {
         match self {
             SourceInfo::Original {
@@ -228,7 +357,10 @@ impl SourceInfo {
                 let (fid, parent_start, _) = parent.resolve_byte_range()?;
                 Some((fid, parent_start + start_offset, parent_start + end_offset))
             }
-            SourceInfo::Concat { .. } | SourceInfo::FilterProvenance { .. } => None,
+            SourceInfo::Concat { .. } => None,
+            SourceInfo::Generated { .. } => self
+                .invocation_anchor()
+                .and_then(|si| si.resolve_byte_range()),
         }
     }
 
@@ -257,9 +389,225 @@ impl SourceInfo {
                     piece.source_info.remap_file_ids(map);
                 }
             }
-            SourceInfo::FilterProvenance { .. } => {
-                // No FileId inside — the filter_path is a separate string.
+            SourceInfo::Generated { from, .. } => {
+                for anchor in from {
+                    // Arc::make_mut clones if there are other references.
+                    let inner = Arc::make_mut(&mut anchor.source_info);
+                    inner.remap_file_ids(map);
+                }
             }
+        }
+    }
+
+    /// First `FileId` reachable from this `SourceInfo`'s root.
+    ///
+    /// - `Original` → `Some(file_id)`.
+    /// - `Substring` → recurse parent.
+    /// - `Concat` → `pieces.iter().find_map(|p| p.source_info.root_file_id())`
+    ///   (`find_map` semantics — skips Generated holes and empty pieces).
+    /// - `Generated` → `invocation_anchor().and_then(|si| si.root_file_id())`;
+    ///   `None` when no `Invocation` anchor is present.
+    pub fn root_file_id(&self) -> Option<FileId> {
+        match self {
+            SourceInfo::Original { file_id, .. } => Some(*file_id),
+            SourceInfo::Substring { parent, .. } => parent.root_file_id(),
+            SourceInfo::Concat { pieces } => {
+                pieces.iter().find_map(|p| p.source_info.root_file_id())
+            }
+            SourceInfo::Generated { .. } => {
+                self.invocation_anchor().and_then(|si| si.root_file_id())
+            }
+        }
+    }
+
+    /// Insert every `FileId` reachable from this `SourceInfo` into `out`.
+    ///
+    /// Walks every `Original`, every `Substring` parent, every `Concat`
+    /// piece, and every `Generated` anchor (all roles — `Invocation`,
+    /// `ValueSource`, `Other`).
+    pub fn collect_file_ids(&self, out: &mut std::collections::HashSet<FileId>) {
+        match self {
+            SourceInfo::Original { file_id, .. } => {
+                out.insert(*file_id);
+            }
+            SourceInfo::Substring { parent, .. } => parent.collect_file_ids(out),
+            SourceInfo::Concat { pieces } => {
+                for piece in pieces {
+                    piece.source_info.collect_file_ids(out);
+                }
+            }
+            SourceInfo::Generated { from, .. } => {
+                for anchor in from {
+                    anchor.source_info.collect_file_ids(out);
+                }
+            }
+        }
+    }
+}
+
+impl By {
+    /// Producer kind for a node constructed by a Lua filter
+    /// (e.g. `pandoc.Str("decoration")` inside a filter callback).
+    ///
+    /// `filter_path` is the path the Lua engine reported via
+    /// `debug.getinfo(...).source` (with the leading "@" stripped);
+    /// `line` is the line number inside that file where the constructor
+    /// ran. Until Lua-file-registration lands (bd-36fr9), `(filter_path,
+    /// line)` lives in `by.data`; afterwards it migrates to a `Dispatch`
+    /// anchor and `by.data` shrinks to `{}`.
+    pub fn filter(filter_path: impl Into<String>, line: usize) -> Self {
+        Self {
+            kind: "filter".to_string(),
+            data: serde_json::json!({
+                "filter_path": filter_path.into(),
+                "line": line,
+            }),
+        }
+    }
+
+    /// Producer kind for the `SectionizeTransform`'s synthesized section
+    /// Divs. Children remain editable; the wrapper itself is structural.
+    pub fn sectionize() -> Self {
+        Self {
+            kind: "sectionize".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for React-constructed (user-typed) content reaching
+    /// the AST through the q2-preview client.
+    pub fn user_edit() -> Self {
+        Self {
+            kind: "user-edit".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for shortcode resolutions.
+    ///
+    /// **Invariant.** Every `Generated { by: shortcode(...), .. }` must
+    /// carry at least one `Invocation` anchor in `from` pointing at the
+    /// source token's byte range. Use only inside a `Generated` whose
+    /// anchor list is populated; constructing the bare shape with empty
+    /// `from` is rejected by Plan 6's audit-completion test and trips
+    /// Plan 7's writer `debug_assert!`.
+    pub fn shortcode(name: impl Into<String>) -> Self {
+        Self {
+            kind: "shortcode".to_string(),
+            data: serde_json::json!({ "name": name.into() }),
+        }
+    }
+
+    /// Producer kind for `IncludeStage`'s expansion wrapper. Note that
+    /// most include-related synthesized content keeps its `Original`
+    /// `source_info` (inherited from the include-line Paragraph) — this
+    /// kind is only used where a `Generated` is explicitly required.
+    pub fn include() -> Self {
+        Self {
+            kind: "include".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for the title-block stage's synthesized title `h1`.
+    pub fn title_block() -> Self {
+        Self {
+            kind: "title-block".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for the footnotes stage's container Div.
+    pub fn footnotes() -> Self {
+        Self {
+            kind: "footnotes".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for the appendix-structure stage's wrapper Div.
+    pub fn appendix() -> Self {
+        Self {
+            kind: "appendix".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Producer kind for parser-side synthetic Spaces inserted by the
+    /// tree-sitter post-processing pass.
+    pub fn tree_sitter_postprocess() -> Self {
+        Self {
+            kind: "tree-sitter-postprocess".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Escape-hatch constructor for any `kind` string — including built-in
+    /// names and extension-defined kinds (`ext/<extension>/<kind>`).
+    ///
+    /// Forgery (an extension calling `By::raw("shortcode", …)` without the
+    /// required `Invocation` anchor) is caught downstream by Plan 6's
+    /// audit-completion test and Plan 7's `debug_assert!`. The convention
+    /// for third-party kinds is `ext/<extension>/<kind>`.
+    pub fn raw(kind: impl Into<String>, data: serde_json::Value) -> Self {
+        Self {
+            kind: kind.into(),
+            data,
+        }
+    }
+
+    /// True if a `Generated { by: <self>, .. }` node should be treated
+    /// as atomic by the incremental writer.
+    ///
+    /// Atomic nodes are produced by the pipeline and represent content
+    /// the user shouldn't edit through React (filter constructions,
+    /// shortcode resolutions, synthesized title h1, tree-sitter-inserted
+    /// spaces). Atomicity is determined by `kind` alone — orthogonal to
+    /// anchor-presence.
+    ///
+    /// Extensions that contribute new `by.kind` values are not atomic by
+    /// default in v1.
+    pub fn is_atomic_kind(&self) -> bool {
+        matches!(
+            self.kind.as_str(),
+            "filter" | "shortcode" | "title-block" | "tree-sitter-postprocess"
+        )
+    }
+
+    /// True if this `By`'s `kind` equals `kind`.
+    pub fn is_kind(&self, kind: &str) -> bool {
+        self.kind == kind
+    }
+
+    /// If `self.kind == "filter"`, return `(filter_path, line)`.
+    ///
+    /// Returns `None` for any other kind, or when the data payload is
+    /// malformed (missing or non-string `filter_path`, missing or
+    /// non-integer `line`).
+    pub fn as_filter(&self) -> Option<(&str, usize)> {
+        if self.kind != "filter" {
+            return None;
+        }
+        let path = self.data.get("filter_path")?.as_str()?;
+        let line = self.data.get("line")?.as_u64()? as usize;
+        Some((path, line))
+    }
+}
+
+impl Anchor {
+    /// Construct an [`AnchorRole::Invocation`] anchor.
+    pub fn invocation(source_info: Arc<SourceInfo>) -> Self {
+        Self {
+            role: AnchorRole::Invocation,
+            source_info,
+        }
+    }
+
+    /// Construct an [`AnchorRole::ValueSource`] anchor.
+    pub fn value_source(source_info: Arc<SourceInfo>) -> Self {
+        Self {
+            role: AnchorRole::ValueSource,
+            source_info,
         }
     }
 }
@@ -346,16 +694,399 @@ mod tests {
     }
 
     #[test]
-    fn test_remap_file_ids_filter_provenance_is_noop() {
-        let mut info = SourceInfo::filter_provenance("foo.lua", 42);
+    fn test_remap_file_ids_generated_empty_from_is_noop() {
+        let mut info = SourceInfo::generated(By::filter("foo.lua", 42));
         info.remap_file_ids(&|_| FileId(99));
         match info {
-            SourceInfo::FilterProvenance { filter_path, line } => {
-                assert_eq!(filter_path, "foo.lua");
+            SourceInfo::Generated { by, from } => {
+                assert!(from.is_empty());
+                let (path, line) = by.as_filter().unwrap();
+                assert_eq!(path, "foo.lua");
                 assert_eq!(line, 42);
             }
-            _ => panic!("Expected FilterProvenance"),
+            _ => panic!("Expected Generated"),
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Plan 4 — By / Anchor / Generated coverage
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_by_filter_builder() {
+        let by = By::filter("a.lua", 7);
+        assert_eq!(by.kind, "filter");
+        assert_eq!(by.as_filter(), Some(("a.lua", 7)));
+    }
+
+    #[test]
+    fn test_by_sectionize_builder() {
+        let by = By::sectionize();
+        assert_eq!(by.kind, "sectionize");
+        assert!(by.data.is_null());
+    }
+
+    #[test]
+    fn test_by_user_edit_builder() {
+        assert_eq!(By::user_edit().kind, "user-edit");
+    }
+
+    #[test]
+    fn test_by_shortcode_builder_records_name() {
+        let by = By::shortcode("meta");
+        assert_eq!(by.kind, "shortcode");
+        assert_eq!(by.data.get("name").and_then(|v| v.as_str()), Some("meta"));
+    }
+
+    #[test]
+    fn test_by_include_title_footnotes_appendix_tree_sitter_builders() {
+        assert_eq!(By::include().kind, "include");
+        assert_eq!(By::title_block().kind, "title-block");
+        assert_eq!(By::footnotes().kind, "footnotes");
+        assert_eq!(By::appendix().kind, "appendix");
+        assert_eq!(
+            By::tree_sitter_postprocess().kind,
+            "tree-sitter-postprocess"
+        );
+    }
+
+    #[test]
+    fn test_by_raw_builder_accepts_any_kind() {
+        let by = By::raw("ext/my-plugin/foo", serde_json::json!({"k": 1}));
+        assert_eq!(by.kind, "ext/my-plugin/foo");
+        assert_eq!(by.data.get("k").and_then(|v| v.as_u64()), Some(1));
+    }
+
+    #[test]
+    fn test_by_is_atomic_kind() {
+        assert!(By::filter("x.lua", 1).is_atomic_kind());
+        assert!(By::shortcode("meta").is_atomic_kind());
+        assert!(By::title_block().is_atomic_kind());
+        assert!(By::tree_sitter_postprocess().is_atomic_kind());
+
+        assert!(!By::sectionize().is_atomic_kind());
+        assert!(!By::user_edit().is_atomic_kind());
+        assert!(!By::include().is_atomic_kind());
+        assert!(!By::footnotes().is_atomic_kind());
+        assert!(!By::appendix().is_atomic_kind());
+        assert!(!By::raw("ext/anywhere/foo", serde_json::Value::Null).is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_is_kind() {
+        let by = By::shortcode("meta");
+        assert!(by.is_kind("shortcode"));
+        assert!(!by.is_kind("filter"));
+    }
+
+    #[test]
+    fn test_by_as_filter_rejects_non_filter() {
+        assert!(By::sectionize().as_filter().is_none());
+        // Malformed filter (missing line) → None.
+        let by = By {
+            kind: "filter".to_string(),
+            data: serde_json::json!({ "filter_path": "x.lua" }),
+        };
+        assert!(by.as_filter().is_none());
+    }
+
+    #[test]
+    fn test_anchor_invocation_value_source_constructors() {
+        let original = Arc::new(SourceInfo::original(FileId(1), 0, 5));
+        let inv = Anchor::invocation(Arc::clone(&original));
+        let vs = Anchor::value_source(Arc::clone(&original));
+        assert!(matches!(inv.role, AnchorRole::Invocation));
+        assert!(matches!(vs.role, AnchorRole::ValueSource));
+    }
+
+    #[test]
+    fn test_by_json_round_trip() {
+        let by = By::shortcode("meta");
+        let json = serde_json::to_string(&by).unwrap();
+        let back: By = serde_json::from_str(&json).unwrap();
+        assert_eq!(by, back);
+    }
+
+    #[test]
+    fn test_anchor_json_round_trip() {
+        let anchor = Anchor::invocation(Arc::new(SourceInfo::original(FileId(2), 10, 20)));
+        let json = serde_json::to_string(&anchor).unwrap();
+        let back: Anchor = serde_json::from_str(&json).unwrap();
+        assert_eq!(anchor, back);
+    }
+
+    #[test]
+    fn test_generated_json_round_trip_empty_from() {
+        let info = SourceInfo::generated(By::sectionize());
+        let json = serde_json::to_string(&info).unwrap();
+        let back: SourceInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(info, back);
+    }
+
+    #[test]
+    fn test_generated_json_round_trip_with_invocation_anchor() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(5), 100, 110)),
+        );
+        let json = serde_json::to_string(&info).unwrap();
+        let back: SourceInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(info, back);
+    }
+
+    #[test]
+    fn test_generated_json_round_trip_multi_anchor() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(5), 100, 110)),
+        );
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(7), 200, 220)),
+        );
+        let json = serde_json::to_string(&info).unwrap();
+        let back: SourceInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(info, back);
+    }
+
+    #[test]
+    fn test_generated_length_start_end_are_zero() {
+        let info = SourceInfo::generated(By::sectionize());
+        assert_eq!(info.length(), 0);
+        assert_eq!(info.start_offset(), 0);
+        assert_eq!(info.end_offset(), 0);
+    }
+
+    #[test]
+    fn test_generated_resolve_byte_range_recurses_through_substring() {
+        let parent = SourceInfo::original(FileId(42), 100, 200);
+        let sub = SourceInfo::substring(parent, 10, 20);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(sub));
+        assert_eq!(info.resolve_byte_range(), Some((42, 110, 120)));
+    }
+
+    #[test]
+    fn test_generated_resolve_byte_range_empty_returns_none() {
+        let info = SourceInfo::generated(By::sectionize());
+        assert!(info.resolve_byte_range().is_none());
+    }
+
+    #[test]
+    fn test_generated_resolve_byte_range_value_source_only_returns_none() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(5), 100, 110)),
+        );
+        assert!(info.resolve_byte_range().is_none());
+    }
+
+    #[test]
+    fn test_generated_remap_file_ids_walks_anchors() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(0), 0, 5)),
+        );
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(3), 10, 20)),
+        );
+        info.remap_file_ids(&|id| FileId(id.0 + 10));
+        match &info {
+            SourceInfo::Generated { from, .. } => {
+                assert_eq!(from.len(), 2);
+                match from[0].source_info.as_ref() {
+                    SourceInfo::Original { file_id, .. } => assert_eq!(*file_id, FileId(10)),
+                    _ => panic!("Expected Original anchor 0"),
+                }
+                match from[1].source_info.as_ref() {
+                    SourceInfo::Original { file_id, .. } => assert_eq!(*file_id, FileId(13)),
+                    _ => panic!("Expected Original anchor 1"),
+                }
+            }
+            _ => panic!("Expected Generated"),
+        }
+    }
+
+    #[test]
+    fn test_root_file_id_per_variant() {
+        // Original
+        let original = SourceInfo::original(FileId(7), 0, 5);
+        assert_eq!(original.root_file_id(), Some(FileId(7)));
+
+        // Substring → recurse parent
+        let sub = SourceInfo::substring(original.clone(), 0, 5);
+        assert_eq!(sub.root_file_id(), Some(FileId(7)));
+
+        // Concat find_map skips Generated holes
+        let empty_gen = SourceInfo::generated(By::sectionize());
+        let real = SourceInfo::original(FileId(42), 0, 5);
+        let concat = SourceInfo::concat(vec![(empty_gen, 0), (real, 5)]);
+        assert_eq!(concat.root_file_id(), Some(FileId(42)));
+
+        // Generated with Invocation
+        let mut g = SourceInfo::generated(By::shortcode("meta"));
+        g.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(9), 0, 1)),
+        );
+        assert_eq!(g.root_file_id(), Some(FileId(9)));
+
+        // Generated with no Invocation
+        let mut g2 = SourceInfo::generated(By::shortcode("meta"));
+        g2.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(9), 0, 1)),
+        );
+        assert_eq!(g2.root_file_id(), None);
+
+        // Generated empty
+        let g3 = SourceInfo::generated(By::sectionize());
+        assert_eq!(g3.root_file_id(), None);
+    }
+
+    #[test]
+    fn test_collect_file_ids_walks_every_anchor_role() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(1), 0, 1)),
+        );
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(2), 0, 1)),
+        );
+        info.append_anchor(
+            AnchorRole::Other("dispatch".to_string()),
+            Arc::new(SourceInfo::original(FileId(3), 0, 1)),
+        );
+        let mut out = std::collections::HashSet::new();
+        info.collect_file_ids(&mut out);
+        assert!(out.contains(&FileId(1)));
+        assert!(out.contains(&FileId(2)));
+        assert!(out.contains(&FileId(3)));
+        assert_eq!(out.len(), 3);
+    }
+
+    #[test]
+    fn test_collect_file_ids_walks_concat_and_substring() {
+        let inner = SourceInfo::original(FileId(5), 0, 100);
+        let sub = SourceInfo::substring(inner, 10, 20);
+        let other = SourceInfo::original(FileId(11), 0, 5);
+        let concat = SourceInfo::concat(vec![(sub, 10), (other, 5)]);
+        let mut out = std::collections::HashSet::new();
+        concat.collect_file_ids(&mut out);
+        assert!(out.contains(&FileId(5)));
+        assert!(out.contains(&FileId(11)));
+        assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn test_invocation_anchor_accessor() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        assert!(info.invocation_anchor().is_none());
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(2), 0, 1)),
+        );
+        assert!(info.invocation_anchor().is_none());
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(1), 0, 1)),
+        );
+        assert!(info.invocation_anchor().is_some());
+        // Non-Generated returns None.
+        assert!(
+            SourceInfo::original(FileId(0), 0, 0)
+                .invocation_anchor()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_value_source_anchor_accessor() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        assert!(info.value_source_anchor().is_none());
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(1), 0, 1)),
+        );
+        assert!(info.value_source_anchor().is_none());
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(2), 0, 1)),
+        );
+        assert!(info.value_source_anchor().is_some());
+    }
+
+    #[test]
+    fn test_anchors_with_role() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(1), 0, 1)),
+        );
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(2), 0, 1)),
+        );
+        info.append_anchor(
+            AnchorRole::Other("ext/foo".to_string()),
+            Arc::new(SourceInfo::original(FileId(3), 0, 1)),
+        );
+        assert_eq!(info.anchors_with_role(&AnchorRole::Invocation).count(), 1);
+        assert_eq!(info.anchors_with_role(&AnchorRole::ValueSource).count(), 1);
+        assert_eq!(
+            info.anchors_with_role(&AnchorRole::Other("ext/foo".to_string()))
+                .count(),
+            1
+        );
+        assert_eq!(
+            info.anchors_with_role(&AnchorRole::Other("missing".to_string()))
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_append_anchor_preserves_order() {
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(
+            AnchorRole::Invocation,
+            Arc::new(SourceInfo::original(FileId(1), 0, 1)),
+        );
+        info.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(FileId(2), 0, 1)),
+        );
+        match info {
+            SourceInfo::Generated { from, .. } => {
+                assert_eq!(from.len(), 2);
+                assert!(matches!(from[0].role, AnchorRole::Invocation));
+                assert!(matches!(from[1].role, AnchorRole::ValueSource));
+            }
+            _ => panic!("Expected Generated"),
+        }
+    }
+
+    #[test]
+    fn test_combine_with_generated_is_zero_length_piece() {
+        let original = SourceInfo::original(FileId(0), 10, 20);
+        let generated = SourceInfo::generated(By::sectionize());
+        let combined = original.combine(&generated);
+        match &combined {
+            SourceInfo::Concat { pieces } => {
+                assert_eq!(pieces.len(), 2);
+                assert_eq!(pieces[1].length, 0);
+            }
+            _ => panic!("Expected Concat"),
+        }
+        // Length of the combined value equals only the Original side.
+        assert_eq!(combined.length(), 10);
     }
 
     #[test]

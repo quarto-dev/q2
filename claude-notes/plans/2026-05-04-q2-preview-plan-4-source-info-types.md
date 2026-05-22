@@ -145,98 +145,81 @@ later in the plan — this list is the actionable extract.
 
 ### Phase 1 — Type definitions in `quarto-source-map`
 
-- [ ] Add `smallvec` to the workspace `Cargo.toml` (`[workspace.dependencies]`)
+- [x] Add `smallvec` to the workspace `Cargo.toml` (`[workspace.dependencies]`)
       with the `serde` feature, and depend on it from
       `crates/quarto-source-map/Cargo.toml`. Verified absent in both files
       at the start of Plan 4.
-- [ ] Add `By` struct (`kind: String`, `data: serde_json::Value` with
+- [x] Add `By` struct (`kind: String`, `data: serde_json::Value` with
       `#[serde(default, skip_serializing_if = "serde_json::Value::is_null")]`
       — the attribute path needs to be fully qualified, not the short
       `Value::is_null` form).
-- [ ] Add `AnchorRole` enum (`Invocation`, `ValueSource`, `Other(String)`).
-- [ ] Add `Anchor` struct (`role: AnchorRole`, `source_info: Arc<SourceInfo>`).
-- [ ] Add `Generated { by: By, from: SmallVec<[Anchor; 2]> }` variant
+- [x] Add `AnchorRole` enum (`Invocation`, `ValueSource`, `Other(String)`).
+- [x] Add `Anchor` struct (`role: AnchorRole`, `source_info: Arc<SourceInfo>`).
+- [x] Add `Generated { by: By, from: SmallVec<[Anchor; 2]> }` variant
       to `SourceInfo`. Keep `FilterProvenance` for now — it's removed
       at the end of Phase 5.
-- [ ] Verify the new enum still implements `Debug`, `Clone`,
+- [x] Verify the new enum still implements `Debug`, `Clone`,
       `PartialEq`, `Serialize`, `Deserialize` (including with the
       `SmallVec` field — needs `serde` feature on `smallvec`).
 
 ### Phase 2 — Constructors and accessors
 
-- [ ] `By::filter`, `By::sectionize`, `By::user_edit`, `By::shortcode`,
+- [x] `By::filter`, `By::sectionize`, `By::user_edit`, `By::shortcode`,
       `By::include`, `By::title_block`, `By::footnotes`, `By::appendix`,
       `By::tree_sitter_postprocess`, `By::raw`.
-- [ ] `By::shortcode` doc-comment states the required-Invocation-anchor
+- [x] `By::shortcode` doc-comment states the required-Invocation-anchor
       invariant (see §"Required-anchor invariant for `shortcode`" for
       the exact wording).
-- [ ] `By::is_atomic_kind` (returns true for `filter | shortcode |
+- [x] `By::is_atomic_kind` (returns true for `filter | shortcode |
       title-block | tree-sitter-postprocess`).
-- [ ] `By::is_kind`, `By::as_filter`.
-- [ ] `Anchor::invocation`, `Anchor::value_source` constructors.
-- [ ] `SourceInfo::generated(by)` constructor (empty `from`).
-- [ ] `SourceInfo::invocation_anchor`, `SourceInfo::value_source_anchor`.
-- [ ] `SourceInfo::anchors_with_role`, `SourceInfo::append_anchor`.
+- [x] `By::is_kind`, `By::as_filter`.
+- [x] `Anchor::invocation`, `Anchor::value_source` constructors.
+- [x] `SourceInfo::generated(by)` constructor (empty `from`).
+- [x] `SourceInfo::invocation_anchor`, `SourceInfo::value_source_anchor`.
+- [x] `SourceInfo::anchors_with_role`, `SourceInfo::append_anchor`.
 
 ### Phase 3 — Update existing accessors for the `Generated` arm
 
-- [ ] `length`, `start_offset`, `end_offset` → return `0` (in `source_info.rs`).
-- [ ] `map_offset` → return `None` (in `mapping.rs`).
-- [ ] `resolve_byte_range` → delegate to `invocation_anchor()` and recurse.
-- [ ] `remap_file_ids` → walk `from`, recurse via `Arc::make_mut`.
-- [ ] Add `SourceInfo::root_file_id() -> Option<FileId>` accessor in
-      `source_info.rs`. Original → `Some(file_id)`; Substring → recurse
-      parent; Concat → `pieces.iter().find_map(|p| p.source_info.root_file_id())`
-      (find_map semantics — strict superset of every existing
-      "first piece" caller); Generated → `invocation_anchor().and_then(|si| si.root_file_id())`;
-      **FilterProvenance → `None`** (transitional arm — Phase 5 removes
-      it together with the variant).
-- [ ] Add `SourceInfo::collect_file_ids(&self, out: &mut HashSet<FileId>)`
-      accessor in `source_info.rs`. Walks every Original/Substring
-      parent/Concat piece/Generated anchor (all roles, not just
-      `Invocation`). **FilterProvenance → no-op** (transitional arm —
-      Phase 5 removes it together with the variant).
-- [ ] Migrate `DiagnosticMessage::extract_file_id`
+- [x] `length`, `start_offset`, `end_offset` → return `0` (in `source_info.rs`).
+- [x] `map_offset` → return `None` (in `mapping.rs`).
+- [x] `resolve_byte_range` → delegate to `invocation_anchor()` and recurse.
+- [x] `remap_file_ids` → walk `from`, recurse via `Arc::make_mut`.
+- [x] Add `SourceInfo::root_file_id() -> Option<FileId>` accessor in
+      `source_info.rs`.
+- [x] Add `SourceInfo::collect_file_ids(&self, out: &mut HashSet<FileId>)`
+      accessor in `source_info.rs`.
+- [x] Migrate `DiagnosticMessage::extract_file_id`
       (`quarto-error-reporting/src/diagnostic.rs:556`) → call
       `si.root_file_id()`; delete the private fn.
-- [ ] Migrate `extract_filename_index`
-      (`pampa/src/pandoc/location.rs:329`) → thin shim
-      `si.root_file_id().map(|fid| fid.0)`, or inline at the few
-      callers if no longer load-bearing.
-- [ ] Migrate the inline-match file-id extraction in
+- [x] Migrate `extract_filename_index`
+      (`pampa/src/pandoc/location.rs:329`) — deleted entirely (callers
+      were tests only; tests deleted in favor of the unified
+      `root_file_id`/`collect_file_ids` coverage in source-map).
+- [x] Migrate the inline-match file-id extraction in
       `pampa/src/pandoc/treesitter_utils/pipe_table.rs:256-279` →
-      `table_start.root_file_id().unwrap_or(FileId(0))`. This **also
-      fixes a latent bug**: today's shallow `match **parent` only
-      unwraps one level, so nested-Substring SourceInfos silently
-      fall back to `FileId(0)`.
-- [ ] Migrate the inline-match file-id extraction in
+      `table_start.root_file_id().unwrap_or(FileId(0))`. Fixes the
+      latent nested-Substring `FileId(0)` fall-through.
+- [x] Migrate the inline-match file-id extraction in
       `pampa/src/pandoc/treesitter_utils/section.rs:129-152` →
       `table.source_info.root_file_id().unwrap_or(FileId(0))`. Same
       latent-nested-Substring bug fixed.
-- [ ] Migrate the test-mod `root_file_id` local fn in
+- [x] Migrate the test-mod `root_file_id` local fn in
       `crates/quarto-core/src/stage/stages/apply_template.rs:820` →
       `info.root_file_id()`; delete the local fn.
-- [ ] Migrate the test-mod `walk_source_info` inner fn in
+- [x] Migrate the test-mod `walk_source_info` inner fn in
       `crates/quarto-core/src/stage/stages/engine_execution.rs:819`
-      → `si.collect_file_ids(out)`; keep the per-Inline/per-Block
-      walkers but replace the inner SourceInfo step with a single
-      method call.
+      → `si.collect_file_ids(out)`; per-Inline/per-Block walkers
+      retained, only the inner SourceInfo step swapped.
 
 ### Phase 4 — Lua serde
 
-- [ ] Add `Generated` arm to `source_info_to_lua_table` in
+- [x] Add `Generated` arm to `source_info_to_lua_table` in
       `pampa/src/lua/diagnostics.rs` (`t = "Generated"`, `by` and `from`
-      sub-tables).
-- [ ] Add `Generated` arm to `source_info_from_lua_table`.
-- [ ] Keep `"FilterProvenance"` legacy reader: maps to
+      sub-tables; `by.data` is JSON-encoded as a string for Lua transit).
+- [x] Add `Generated` arm to `source_info_from_lua_table`.
+- [x] Keep `"FilterProvenance"` legacy reader: maps to
       `Generated { by: By::filter(path, line), from: smallvec![] }`.
-      Indefinitely accepted; writes never emit it. The Concat arm
-      already recurses through `source_info_from_lua_table`, so a
-      legacy `"FilterProvenance"` table nested inside a `Concat` piece
-      is handled automatically — no Concat-specific code path needed.
-      (Verified: no `.snap` or `.json` file in `crates/` or `tests/`
-      contains the `"FilterProvenance"` string today, so no fixture
-      migration is required either.)
+      Indefinitely accepted; writes never emit it.
 
 ### Phase 5 — Migration
 
@@ -245,88 +228,80 @@ The migration is atomic — one PR, no deprecated-alias scaffold. Only
 all trivially co-migrated with the 27 `SourceInfo::FilterProvenance`
 pattern sites.
 
-- [ ] Sweep remaining `SourceInfo::FilterProvenance` references.
-      Pre-Plan-4 baseline is 15 files / 27 occurrences (verify with
-      `git grep "SourceInfo::FilterProvenance"` at start of Plan 4);
-      Phase 3's consolidation has already retired ~6 of those by
-      replacing the entire containing match expressions in
-      `diagnostic.rs`, `location.rs`, `pipe_table.rs`, `section.rs`,
-      `apply_template.rs`, and `engine_execution.rs`. Phase 5 owns
-      the ~21 remaining sites. Construction sites →
-      `SourceInfo::Generated { by: By::filter(...), from: smallvec![] }`.
-      Pattern-match arms → `Generated { by, .. }` checking
-      `by.as_filter()` where path/line is needed. See §Migrations
-      for the per-shape template, including the test-pattern guard
-      form and the JSON-writer arm.
-- [ ] Sweep `SourceInfo::filter_provenance(...)` constructor-function
-      callers (4 non-source-map files per
-      `git grep "SourceInfo::filter_provenance("`) → new `Generated`
-      shape inline. Then delete the constructor from `source_info.rs`.
-- [ ] Remove the `FilterProvenance` variant from `SourceInfo`.
+- [x] Sweep remaining `SourceInfo::FilterProvenance` references —
+      `git grep "SourceInfo::FilterProvenance"` now returns 0 hits in
+      `crates/`. The legacy `"FilterProvenance"` tag survives only in
+      the Lua reader (as documented in Phase 4).
+- [x] Sweep `SourceInfo::filter_provenance(...)` constructor-function
+      callers (4 non-source-map files + 1 in-crate test) → new
+      `Generated` shape inline; constructor deleted from
+      `source_info.rs`.
+- [x] Remove the `FilterProvenance` variant from `SourceInfo`.
 
 ### Phase 6 — Tests (see §Test plan for full descriptions)
 
 Type / builder:
-- [ ] Unit tests for every `By` builder (all 10 kinds incl. `raw`).
-- [ ] `By::is_atomic_kind` coverage (atomic set + extension kinds).
-- [ ] `By::is_kind` + `By::as_filter` coverage.
-- [ ] Unit tests for `Anchor::invocation` / `Anchor::value_source`.
-- [ ] JSON round-trip: `By`, `Anchor`, `Generated` (no anchors / with
+- [x] Unit tests for every `By` builder (all 10 kinds incl. `raw`).
+- [x] `By::is_atomic_kind` coverage (atomic set + extension kinds).
+- [x] `By::is_kind` + `By::as_filter` coverage.
+- [x] Unit tests for `Anchor::invocation` / `Anchor::value_source`.
+- [x] JSON round-trip: `By`, `Anchor`, `Generated` (no anchors / with
       Invocation / multi-anchor).
 
 Accessor tests on `Generated`:
-- [ ] `length` / `start_offset` / `end_offset` for `Generated` → `0`.
-- [ ] `map_offset` for `Generated` → `None`.
-- [ ] `resolve_byte_range` recursion through `Invocation -> Substring`
+- [x] `length` / `start_offset` / `end_offset` for `Generated` → `0`.
+- [x] `map_offset` for `Generated` → `None` (covered by the existing
+      mapping tests — Generated falls through to the None arm).
+- [x] `resolve_byte_range` recursion through `Invocation -> Substring`
       → resolves correctly; empty `from` and ValueSource-only `from`
       → `None`.
-- [ ] `remap_file_ids` for `Generated` walks every anchor's source_info
+- [x] `remap_file_ids` for `Generated` walks every anchor's source_info
       via `Arc::make_mut` (regression guard — must NOT be no-op).
-- [ ] `root_file_id` for every variant: Original (returns own
-      file_id); Substring (recurses parent); Concat (find_map across
-      pieces — skip empty/Generated-hole, find first that resolves);
-      Generated with Invocation anchor (delegates and recurses);
-      Generated with no Invocation anchor (returns None).
-- [ ] `collect_file_ids` for every variant, including Generated with
-      mixed-role anchors — verify EVERY anchor's source_info FileIds
-      land in the set (not just Invocation).
-- [ ] `invocation_anchor` coverage (present / absent / ValueSource-only).
-- [ ] `value_source_anchor` coverage (parallel).
-- [ ] `anchors_with_role` coverage (each known role + unknown role).
-- [ ] `append_anchor` mutator coverage.
+- [x] `root_file_id` for every variant.
+- [x] `collect_file_ids` for every variant, including Generated with
+      mixed-role anchors.
+- [x] `invocation_anchor` coverage (present / absent / ValueSource-only).
+- [x] `value_source_anchor` coverage (parallel).
+- [x] `anchors_with_role` coverage (each known role + unknown role).
+- [x] `append_anchor` mutator coverage.
 
 Structural:
-- [ ] Rename `test_filter_provenance_tracking`
-      (`filter_tests.rs:740-813`) and update assertions to the
-      `Generated` shape with `by.as_filter()` recovery.
-- [ ] `combine()` × `Generated` structural test (zero-length Concat
-      piece, `map_offset` skips over it).
-- [ ] Lua-serde round-trip including legacy `"FilterProvenance"` tag
+- [x] Rename `test_filter_provenance_tracking`
+      (`filter_tests.rs:740-813`) → `test_filter_generated_tracking`
+      and updated assertions to the `Generated` shape with
+      `by.as_filter()` recovery.
+- [x] `combine()` × `Generated` structural test (zero-length Concat
+      piece).
+- [x] Lua-serde round-trip including legacy `"FilterProvenance"` tag
       back-compat read.
 
 ### Phase 7 — Verification gate
 
-- [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace`: **exactly one** failure —
-      `quarto-core::idempotence::lua_shortcode_lipsum_fixed`
-      (bd-3odjm, owned by Plan 5). Any other failure is a Plan-4
-      regression and must be triaged. See §"Inherited pre-existing
-      failure (bd-3odjm)" above.
-- [ ] `cargo xtask verify`: Step 5 trips on the same single
-      bd-3odjm failure; every other step green (full — `quarto-source-map`
-      is consumed by the WASM client, so the hub-build leg matters).
-- [ ] `git grep "SourceInfo::FilterProvenance"` returns zero hits
+- [x] `cargo build --workspace` clean.
+- [x] `cargo nextest run --workspace --no-fail-fast`: 9370 passed,
+      1 failed — `quarto-core::idempotence::lua_shortcode_lipsum_fixed`
+      (bd-3odjm, owned by Plan 5). No other regressions.
+- [x] `cargo xtask verify --skip-rust-tests`: all 12 steps passed
+      (Rust build + hub-client npm install/build/wasm/tests + q2-preview
+      SPA build). Rust tests run separately with `nextest --no-fail-fast`
+      above.
+- [x] `git grep "SourceInfo::FilterProvenance"` returns zero hits
       across `crates/` (variant gone).
-- [ ] `git grep "SourceInfo::filter_provenance"` returns zero hits
+- [x] `git grep "SourceInfo::filter_provenance"` returns zero hits
       across `crates/` (no alias was added; original constructor
       removed in Phase 5).
-- [ ] `git grep '"FilterProvenance"'` in Rust code returns only the
-      legacy-Lua-reader arm and the legacy code-3 JSON-reader arm —
-      no writer emissions, no other readers.
-- [ ] `git grep "extract_filename_index\|fn root_file_id\|fn walk_source_info"`
-      across `crates/` returns zero hits (six ad-hoc walkers retired,
-      consolidated onto `SourceInfo::root_file_id` /
-      `SourceInfo::collect_file_ids`).
+- [x] `git grep '"FilterProvenance"'` in Rust code returns only the
+      legacy-Lua-reader arm (3 hits — comment in doc-comment for
+      `source_info_to_lua_table`, comment in `source_info_from_lua_table`,
+      and the match arm itself). No writer emissions, no other readers.
+      The `SerializableSourceMapping::FilterProvenance` identifier
+      (wire code 3, Plan 5-owned) is not a string literal and does not
+      match this grep.
+- [x] `git grep "extract_filename_index\|fn root_file_id\|fn walk_source_info"`
+      across `crates/` returns one hit — the new
+      `SourceInfo::root_file_id` accessor in
+      `crates/quarto-source-map/src/source_info.rs`. Six ad-hoc walkers
+      retired.
 
 ## Design decisions (settled in conversation)
 

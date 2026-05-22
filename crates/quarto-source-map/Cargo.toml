@@ -8,6 +8,8 @@ repository.workspace = true
 
 [dependencies]
 serde = { workspace = true, features = ["derive", "rc"] }
+serde_json.workspace = true
+smallvec.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -125,31 +125,13 @@ pub fn process_section(
                     // Extend table's source_info to include the caption
                     let table_start_offset = table.source_info.start_offset();
                     let caption_end_offset = caption_source_info.end_offset();
-                    // Extract file_id from table's source info
-                    let file_id = match &table.source_info {
-                        quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
-                        quarto_source_map::SourceInfo::Substring { parent, .. } => {
-                            match **parent {
-                                quarto_source_map::SourceInfo::Original { file_id, .. } => file_id,
-                                _ => quarto_source_map::FileId(0), // Fallback
-                            }
-                        }
-                        quarto_source_map::SourceInfo::Concat { pieces } => {
-                            if let Some(piece) = pieces.first() {
-                                match &piece.source_info {
-                                    quarto_source_map::SourceInfo::Original { file_id, .. } => {
-                                        *file_id
-                                    }
-                                    _ => quarto_source_map::FileId(0), // Fallback
-                                }
-                            } else {
-                                quarto_source_map::FileId(0) // Fallback
-                            }
-                        }
-                        quarto_source_map::SourceInfo::FilterProvenance { .. } => {
-                            quarto_source_map::FileId(0) // Fallback - filter-created tables
-                        }
-                    };
+                    // Extract file_id from table's source info; root_file_id
+                    // walks every nesting level, so nested Substrings resolve
+                    // correctly (the previous shallow match returned FileId(0)).
+                    let file_id = table
+                        .source_info
+                        .root_file_id()
+                        .unwrap_or(quarto_source_map::FileId(0));
                     table.source_info = quarto_source_map::SourceInfo::original(
                         file_id,
                         table_start_offset,
