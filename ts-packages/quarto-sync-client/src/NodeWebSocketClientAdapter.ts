@@ -58,7 +58,7 @@ export interface WebSocketLike {
     handler: WSEventHandler,
   ): void;
   close(): void;
-  send(data: ArrayBuffer): void;
+  send(data: Uint8Array): void;
 }
 
 /**
@@ -278,12 +278,10 @@ export class NodeWebSocketClientAdapter extends NetworkAdapter {
     if (this.socket.readyState !== WS_OPEN) {
       throw new Error(`Websocket not ready (${this.socket.readyState})`);
     }
-    const encoded = cborApi.encode(message);
-    const { buffer, byteOffset, byteLength } = encoded;
-    // `Uint8Array#buffer` is typed as `ArrayBuffer | SharedArrayBuffer`;
-    // cbor allocates a plain `ArrayBuffer`, so the narrowing is safe.
-    const arrBuf = buffer as ArrayBuffer;
-    this.socket.send(arrBuf.slice(byteOffset, byteOffset + byteLength));
+    // The Node `ws` package and the browser `WebSocket` both accept
+    // a `Uint8Array` directly, so we can hand off cbor's output without
+    // allocating a fresh `ArrayBuffer` per message.
+    this.socket.send(cborApi.encode(message));
   }
 
   private peerCandidate(remotePeerId: PeerId, peerMetadata: PeerMetadata): void {

@@ -23,13 +23,13 @@ type Handler = (event: unknown) => void;
 /** Minimal in-memory WebSocket fake the adapter can drive. */
 function makeFakeSocket(): WebSocketLike & {
   emit: (kind: 'open' | 'close' | 'message' | 'error', event: unknown) => void;
-  sentRaw: ArrayBuffer[];
+  sentRaw: Uint8Array[];
   closed: number;
 } {
   const handlers: Record<string, Handler[]> = {};
   const fake: WebSocketLike & {
     emit: (kind: 'open' | 'close' | 'message' | 'error', event: unknown) => void;
-    sentRaw: ArrayBuffer[];
+    sentRaw: Uint8Array[];
     closed: number;
   } = {
     readyState: 1, // OPEN
@@ -46,7 +46,7 @@ function makeFakeSocket(): WebSocketLike & {
     close() {
       this.closed += 1;
     },
-    send(data: ArrayBuffer) {
+    send(data: Uint8Array) {
       this.sentRaw.push(data);
     },
     emit(kind, event) {
