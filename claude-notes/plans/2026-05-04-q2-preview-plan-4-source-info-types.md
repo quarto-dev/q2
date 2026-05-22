@@ -1091,6 +1091,68 @@ One to two focused sessions. The unified-variant design reduces the
 total cost vs. the previous Synthetic-plus-Derived dual-variant draft
 (every accessor and migration site collapses one arm).
 
+## Implementation surprises (recorded 2026-05-22 after Plan 4 landed)
+
+A few things diverged from the plan-as-written. Annotating them here so
+Plan 5+ readers can adjust expectations.
+
+- **`gen` is a reserved keyword in current Rust.** Test locals and
+  method-receiver bindings must avoid the identifier `gen` (raw form
+  `r#gen` works but is ugly). The plan's pseudocode used
+  `gen.invocation_anchor()` / `gen.preimage_in()` etc. as shorthand;
+  in real code use `generated`, `g`, or destructure the variant.
+  Plan 7's `preimage_in` sketches should be amended before
+  implementation — the same trap applies.
+
+- **Phase 1's "compiles cleanly" holds only for `quarto-source-map`,
+  not the workspace.** Adding the `Generated` variant immediately
+  triggered non-exhaustive-match errors across ~10 crates. Phase 3's
+  six-walker consolidation rescues part of it, but the workspace
+  doesn't build green again until **Phase 5** lands. The phase boundary
+  semantics are "the source-map crate plus directly-touched
+  consumers"; expect downstream crates to be red between Phase 1 and
+  Phase 5. Future plans that add new `SourceInfo` variants should plan
+  for a "transitional arms inline" interlude or accept that the
+  workspace is red mid-implementation.
+
+- **`extract_filename_index` was tests-only.** The plan suggested
+  "thin shim or inline at the few callers" — turned out the only
+  callers were the function's four dedicated tests plus one
+  commented-out reference in `pampa/src/writers/json.rs`. Deleted the
+  function and the four tests entirely; the equivalent coverage now
+  lives in `quarto-source-map`'s `test_root_file_id_per_variant`.
+  Cleaner than the plan anticipated. Future grep-and-replace plans
+  should re-verify caller counts at start-of-implementation, not just
+  at planning time.
+
+- **`anchors_with_role` returns `Box<dyn Iterator>`, not `impl
+  Iterator`.** The plan's signature was
+  `-> impl Iterator<Item = &Arc<SourceInfo>>`, but the two match arms
+  return different concrete iterator types (a `filter_map` over the
+  anchor list for the `Generated` arm, `std::iter::empty()` for
+  everything else). The fix is `Box<dyn Iterator<...> + 'a>`. Static
+  dispatch would require either a hand-rolled iterator enum or
+  `Either<A, B>` from `itertools` — not worth it for a method called
+  in non-hot paths.
+
+- **`cargo xtask verify` modifies a second lockfile.** The WASM build
+  leg (Step 9, `npm run build:wasm`) re-resolves
+  `crates/wasm-quarto-hub-client/Cargo.lock`, which is distinct from
+  the workspace `Cargo.lock`. Both ended up in the Plan-4 commit. Not
+  a problem, but plans that touch any crate transitively used by
+  `wasm-quarto-hub-client` should expect that second lockfile to be
+  dirty after verification.
+
+- **The bd-3odjm carve-out behaved exactly as predicted.** Single
+  failure, in
+  `quarto-core::idempotence::lua_shortcode_lipsum_fixed`, panicking
+  with `MalformedSourceInfoPool` from the wire-code-3 collision
+  between writer (Generated → code 3 with `[filter_path, line]`
+  payload) and reader (code 3 = legacy `Transformed`). This is a
+  *non-surprise* worth recording: the plan's "Inherited pre-existing
+  failure" section was correct down to the test name, the panic
+  message, and the root cause.
+
 ## Notes
 
 The conceptual surface is "one new variant, `Generated`, with a typed
