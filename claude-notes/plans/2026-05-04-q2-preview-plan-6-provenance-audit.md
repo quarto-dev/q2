@@ -1,8 +1,9 @@
 # Plan 6 — Provenance audit (Generated for synthesizers, anchors for shortcodes)
 
-**Date:** 2026-05-04 (revised 2026-05-20)
+**Date:** 2026-05-04 (revised 2026-05-20, review pass 2026-05-22)
 **Branch:** feature/q2-preview
-**Status:** Implementation plan (open questions named)
+**Status:** Implementation plan (review-pass edits applied; theorem
+attr_source question closed)
 **Milestone:** none directly — completes the AST shape Plans 7/8 rely on
 
 ## Epic context
@@ -41,6 +42,45 @@ the same file (includes — different FileId — Plan 8 handles those). For
 shortcodes the resolved nodes can carry source_info pointing into the
 parent file directly via the typed `Invocation` anchor.
 
+## Prerequisite — Phase 0: mutable accessors on Inline / Block
+
+Plan 6's `stamp_shortcode_anchors` helper (see "The post-walk helper"
+below) takes `&mut Inline` / `&mut Block` and rewrites the
+`source_info` field. Today `crates/quarto-pandoc-types/src/inline.rs:57`
+defines only `pub fn source_info(&self) -> &SourceInfo` (immutable);
+Plan 4 does not add a mutable counterpart. Every existing site that
+mutates `source_info` in the workspace holds a *typed* reference
+(`&mut Str`, `&mut CodeBlock`, …) and assigns the public field
+directly — there is no generic `&mut Inline -> &mut SourceInfo`
+accessor.
+
+**Before any stamping code can compile**, add to
+`crates/quarto-pandoc-types/src/inline.rs` and `block.rs`:
+
+```rust
+impl Inline {
+    pub fn source_info_mut(&mut self) -> &mut quarto_source_map::SourceInfo {
+        match self {
+            Inline::Str(s) => &mut s.source_info,
+            // ... 28 variants, mechanical mirror of `source_info(&self)`
+        }
+    }
+}
+
+impl Block {
+    pub fn source_info_mut(&mut self) -> &mut quarto_source_map::SourceInfo {
+        match self {
+            Block::Plain(p) => &mut p.source_info,
+            // ... 18 variants, mechanical mirror of `source_info(&self)`
+        }
+    }
+}
+```
+
+Pure mechanical mirror of the existing read accessors — ~33 LOC for
+`Inline` + ~24 LOC for `Block`. Add a unit test that round-trips a
+mutation through the accessor on one representative variant of each.
+
 ## Scope
 
 ### In scope
@@ -49,18 +89,39 @@ For each transform that currently emits `SourceInfo::default()`, replace
 with the correct provenance:
 
 - **`ShortcodeResolveTransform`** (`crates/quarto-core/src/transforms/shortcode_resolve.rs`):
-  Currently emits `SourceInfo::default()` on every resolved
-  Str/Inline (~12 sites). **Fix uniformly via a post-walk helper**:
-  immediately after every handler dispatch (Rust handler OR Lua-engine
-  dispatch OR extension dispatch), walk the returned nodes and stamp
+  Currently emits `SourceInfo::default()` on 12 production sites (see
+  References for the per-line breakdown). **Fix the dispatch funnel
+  uniformly via a post-walk helper**: immediately after every handler
+  dispatch (Rust handler OR Lua-engine dispatch OR extension
+  dispatch), walk the returned nodes and stamp
   `Generated { by: By::shortcode(name), from: smallvec![Anchor::invocation(Arc::new(ctx.source_info.clone()))] }`
   on each block/inline.
   - The post-walk **enriches**, not overrides: any `by.data` fields the
-    Lua machinery attached (`lua_path`, `lua_line`) are preserved by
-    promoting the kind from `filter` to `shortcode` while keeping the
-    data fields. See "Lua-shortcode enrichment" below.
-  - The post-walk recurses into nested blocks/inlines so every node in
+    Lua machinery attached (`filter_path`, `line` — Plan 4's filter
+    `by.data` shape) are preserved by promoting the kind from
+    `filter` to `shortcode`, renaming to `lua_path` / `lua_line` in
+    `by.data` to reflect the new context. See "Lua-shortcode
+    enrichment" below.
+  - The post-walk recurses into nested blocks/inlines (model on
+    `recurse_inline` / `resolve_block` in this file) so every node in
     the dispatch output gets the anchor.
+  - **Two outlier sites do NOT pass through the dispatch funnel** and
+    need call-site source_info threading instead of the stamper:
+    - `make_error_inline` (lines 1030-1038): visible `?key` Str +
+      Strong wrapper for unknown shortcodes. Today both layers carry
+      `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
+      through from call sites at lines 659 and 914, and use it as the
+      Str/Strong's `source_info` (an `Original` pointing at the
+      shortcode token's bytes — same shape Plan 6's
+      audit-completion test expects).
+    - `shortcode_to_literal` (lines 1043-1109): the literal-text Str
+      produced for escaped `{{</ ... >}}` shortcodes. Today it emits
+      `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
+      through from call sites at lines 665 and 920, and use it as the
+      Str's `source_info`. This is required to satisfy the
+      "Escaped-shortcode regression test" (line 453: "its source_info
+      stays Original (not Generated)") — without this fix, the
+      regression test would fail on Plan 6's own implementation.
 - **`TitleBlockTransform`** (line 183-185): synthesizes a level-1 Header
   from `title:` metadata. Fix: emit `Generated { by: By::title_block(), from: smallvec![] }`
   on the synthesized Header (and any nested Inlines). Note: q2-preview
@@ -80,13 +141,22 @@ with the correct provenance:
 - **`AppendixStructureTransform`**: the synthetic appendix container Div.
   Fix: `Generated { by: By::appendix(), from: smallvec![] }`. Same scope
   note as Footnotes.
-- **`theorem.rs::extract_name_attr`** (line 313): the title Str
-  extracted from `name="..."` attribute is built with
-  `SourceInfo::default()`. Fix: use the attr value's source_info
-  (currently lost — inspection needed for whether `attr_source` carries
-  this info). At minimum, `Generated { by: By::raw("theorem-title-attr", json!({})), from: smallvec![] }`
-  if we can't recover it, but better to preserve the actual source
-  position from the attr-source.
+- **`theorem.rs::extract_name_attr`** (line 313) **and the parallel
+  `proof.rs::extract_name_attr`** (line 167): the title Str extracted
+  from `name="..."` is currently built with `SourceInfo::default()`.
+  Fix: thread `&div.attr_source` into `extract_name_attr` in both
+  files; index by `kvs.keys().position(|k| k == "name")` *before* the
+  `remove`; use `attr_source.attributes[idx].1` (an
+  `Option<SourceInfo>` carrying the parser-recorded
+  `Original{file_id, value_start, value_end}` for the attribute
+  value's bytes) as the Str's `source_info`. Falls back to
+  `SourceInfo::default()` only when the Option is `None` (which would
+  indicate an upstream parser gap, not a normal path). The parser
+  populates the value range at
+  `crates/pampa/src/pandoc/treesitter.rs:1075-1107` →
+  `treesitter_utils/commonmark_attribute.rs:38-50`; no parser-side
+  prerequisite is needed. See "Open questions for implementation"
+  (closed) for the investigation that resolved this.
 - **`pampa::pandoc::treesitter_utils::postprocess`** (line 1348): the
   "Synthetic Space" inserted to separate citation from suffix. Fix:
   `Generated { by: By::tree_sitter_postprocess(), from: smallvec![] }`.
@@ -128,16 +198,46 @@ comprehensive grep.
   shortcodes via Lua: same. `{{< include >}}` is the genuine exception
   — handled by `IncludeExpansionStage` (a separate pipeline stage) and
   Plan 8's wrapper, not via Generated.
+- **Include×shortcode composition is architecturally well-defined.**
+  `IncludeExpansionStage` runs at the stage layer
+  (`crates/quarto-core/src/pipeline.rs:258`) before
+  `AstTransformsStage` (`pipeline.rs:312`), so includes are spliced
+  flat before any shortcode resolution. Shortcode resolution is
+  single-pass — `resolve_blocks` advances its index *past* inserted
+  blocks (`shortcode_resolve.rs:625-677`); returned content is never
+  re-scanned, so a shortcode emitting the literal text
+  `"{{< include foo.qmd >}}"` lands as a `Str`, never as a parsed
+  `Shortcode` (the reverse composition is structurally impossible).
+  When a shortcode appears *inside* include-spliced content, the
+  Invocation anchor's `source_info` points into the included file
+  (different `FileId` than the parent) — this is correct: the token's
+  bytes live there. Plan 8's wrapper carries the parent-file anchor
+  independently; Plan 7's `preimage_in(parent_file)` returns `None`
+  for the included children and the wrapper governs verbatim-copy.
 - **Enrichment, not override**. The Lua machinery's auto-attach
-  produces `Generated { by: filter, from: [], by.data: { lua_path,
-  lua_line } }` (post-Plan-4) for nodes constructed during a Lua
-  shortcode dispatch. The shortcode resolver's post-walk enriches:
+  produces `Generated { by: filter, from: [], by.data: { filter_path,
+  line } }` (post-Plan-4, per Plan 4 §"by.data shape table" line 590)
+  for *typed* Inline/Block nodes constructed during a Lua shortcode
+  dispatch (e.g. `return pandoc.Str(...)`). Bare-string returns
+  (`return "text"` → `LuaShortcodeResult::Text`) do NOT pass through
+  `filter_source_info`; they land with `SourceInfo::default()` and
+  enter the post-walk's fresh-Generated branch directly. The shortcode
+  resolver's post-walk enriches the filter-attached cases:
   - **Appends** an `Invocation` anchor pointing at the shortcode token.
-  - **Promotes** `by.kind` from `"filter"` to `"shortcode"` while
-    preserving the Lua-side fields in `by.data` (`lua_path`, `lua_line`)
-    AND adding the shortcode `name`.
+  - **Promotes** `by.kind` from `"filter"` to `"shortcode"`, renaming
+    `filter_path` → `lua_path` and `line` → `lua_line` in `by.data`
+    (reflecting the new shortcode context) and adding the shortcode
+    `name`.
   The Lua-side dispatch precision is preserved; the shortcode context
   layer is added on top. No information is discarded.
+
+  **Scope**: this enrichment fires only from
+  `ShortcodeResolveTransform::resolve_shortcode`. General Lua filter
+  dispatches (`UserFiltersStage`) leave `Generated { by: filter, ... }`
+  intact — that is the steady-state for filter constructions, per
+  Plan 4 §"Filter constructions become Generated { by: filter, from:
+  [] }". The post-walk is not wired into the filter stage and should
+  not be.
 - **Most transforms just need to preserve ctx.source_info**. The
   "audit and fix" is mostly bug fixes — ctx already has the info; the
   transforms just drop it. Mechanical change.
@@ -190,17 +290,24 @@ Plan 4's chain-walking accessor — no special-case code.
 
 The Lua machinery's `filter_source_info` (in
 `crates/pampa/src/lua/types.rs`) walks the live Lua call stack to find
-the first non-C frame and produces (post-Plan 4):
+the first non-C frame and produces (post-Plan 4) the canonical
+filter-construction shape:
 
 ```rust
 Generated {
-    by: By::filter(lua_path.to_string(), line_num),
+    by: By::filter(filter_path, line),  // by.data = { filter_path, line }
     from: smallvec![],
 }
 ```
 
-When this happens inside a Lua shortcode handler dispatch, the resolver's
-post-walk sees this shape and enriches it to:
+This auto-attach fires when Lua code constructs *typed* nodes via
+`pandoc.Str(...)`, `pandoc.Span(...)`, etc. Bare-string Lua returns
+(`return "text"` → `LuaShortcodeResult::Text`) do NOT pass through
+`filter_source_info`; their resulting Str carries
+`SourceInfo::default()` instead.
+
+When this filter-shape source_info appears inside a Lua shortcode
+handler dispatch, the resolver's post-walk enriches it to:
 
 ```rust
 Generated {
@@ -208,17 +315,21 @@ Generated {
         kind: "shortcode".to_string(),
         data: json!({
             "name": shortcode_name,
-            "lua_path": <preserved_from_by.data>,
-            "lua_line": <preserved_from_by.data>,
+            "lua_path": <by.data["filter_path"]>,
+            "lua_line": <by.data["line"]>,
         }),
     },
     from: smallvec![Anchor::invocation(Arc::new(ctx.source_info.clone()))],
 }
 ```
 
-The Lua-side `lua_path` / `lua_line` precision is preserved in `by.data`;
-the shortcode `name` is added; the kind is promoted. **Nothing is
-discarded.**
+The Lua-side `filter_path` / `line` precision is preserved in
+`by.data` under the more contextually-precise names `lua_path` /
+`lua_line`; the shortcode `name` is added; the kind is promoted from
+`filter` to `shortcode`. **Nothing is discarded.** Nodes that entered
+the post-walk with `SourceInfo::default()` (bare-string Lua returns,
+or Rust handler returns) hit the fresh-Generated branch instead and
+end up with `by.data = { name }` plus the Invocation anchor.
 
 This is the canonical "enrichment-via-post-walk" pattern. Other
 transforms that wrap dispatch may follow the same shape later (always
@@ -302,20 +413,38 @@ they contain.)
   appropriate by-kind / emit Generated with Invocation / leave as-is
   (test code). Plan 6's first commit is the audit report; subsequent
   commits fix each site.
-- **Theorem title from attr**: when `extract_name_attr` extracts the
-  title from `name="Pythagoras"`, it gets a String with no source_info.
-  Inspecting `attr_source` may or may not give the byte range of the
-  attr value. Worth investigating; if achievable, use
-  `Original{attr_value_range}`; otherwise
-  `Generated { by: By::raw("theorem-title-attr", ...), from: smallvec![] }`.
+- **Theorem title from attr (CLOSED, 2026-05-22)**: `AttrSourceInfo`
+  already carries the attribute value's byte range as
+  `Option<SourceInfo>` (see `quarto-pandoc-types/src/attr.rs:27-32`,
+  populated by the parser at `treesitter.rs:1075-1107` →
+  `treesitter_utils/commonmark_attribute.rs:38-50`). The fix is to
+  thread `&div.attr_source` into `extract_name_attr` in both
+  `theorem.rs:304` and `proof.rs:158`, index by
+  `kvs.keys().position(|k| k == "name")` before the `remove`, and use
+  `attr_source.attributes[idx].1` for the Str's `source_info` (falling
+  back to `SourceInfo::default()` only when the Option is `None`). No
+  `By::raw("theorem-title-attr", ...)` fallback shape needed; no
+  parser-side prerequisite.
 - **Escaped shortcodes**: today `Shortcode::is_escaped` is a flag, and
   escaped shortcodes preserve as literal text (no resolution). Don't
   apply the post-walk to escaped shortcodes — they're not resolved;
   they stay as literal text with their original source_info.
-- **Recursion into deep AST**: the post-walk must traverse Span, Link,
-  Image, Strong, Emph, etc. for inlines; Div, BlockQuote, etc. for
-  blocks. The walk is similar to existing transform machinery; reuse
-  patterns from CalloutTransform or theorem.rs if possible.
+- **Recursion into deep AST**: the post-walk must traverse the full
+  container set — for inlines: Strong, Emph, Strikeout, Superscript,
+  Subscript, SmallCaps, Quoted, Cite, Link, Image (alt/caption), Span,
+  Underline, Delete, Insert, Highlight, EditComment, Note (block
+  content), Custom (slot contents); for blocks: Div, BlockQuote,
+  OrderedList, BulletList, DefinitionList, Figure, Table (cells),
+  Custom (slot contents). The canonical reusable shape is in
+  `crates/quarto-core/src/transforms/shortcode_resolve.rs`'s own
+  `recurse_inline` (~lines 945-1027) and `resolve_block`
+  (~lines 710-863), which already cover this set including Image's
+  alt/caption content and Note's nested blocks. Model the new mutable
+  walkers on these — drop the async + shortcode-resolution logic,
+  keep the match-arm dispatch and Image/Note recursion. The narrower
+  walkers in `callout.rs` and `theorem.rs` are block-only and do NOT
+  cover the inline variants the stamper needs; do not use them as the
+  reference shape.
 
 ## ValueSource follow-up
 
@@ -379,28 +508,67 @@ Lua-handler filter & shortcode").
 ## References
 
 - `crates/quarto-core/src/transforms/shortcode_resolve.rs` — main fix
-  site. Lines 172, 179, 186, 203, 208, 215, 222, 238, etc. emit
-  `SourceInfo::default()`.
-- `crates/quarto-core/src/transforms/shortcode_resolve.rs:306-322` —
+  site. Per-line breakdown of production `SourceInfo::default()`
+  emissions:
+  - Lines 172, 179, 186, 203, 208, 215, 222 — `config_value_to_inlines`
+    (Str construction for `meta` / `var` lookups).
+  - Line 238 — `flatten_blocks_to_inlines` (synthesized
+    paragraph-separator Space; NOT part of `config_value_to_inlines`).
+  - Line 470 — `lua_result_to_shortcode_result::Text` arm (bare-string
+    Lua return wrapped in a Str).
+  - Lines 1034, 1036 — `make_error_inline` (visible `?key` Str + Strong
+    wrapper for unknown shortcodes).
+  - Line 1109 — `shortcode_to_literal` (escaped-shortcode literal text).
+  The stamper handles the first three groups uniformly via the dispatch
+  funnel; `make_error_inline` and `shortcode_to_literal` need call-site
+  source_info threading (see "In scope" bullet).
+- `crates/quarto-core/src/transforms/shortcode_resolve.rs:306-371` —
   `resolve_shortcode` method (single funnel for all dispatches; the
   post-walk hooks in here).
+- `crates/quarto-core/src/transforms/shortcode_resolve.rs:710-1027` —
+  existing `resolve_block` / `recurse_inline` walkers. Canonical
+  reusable shape for the new mutable walkers (drop async +
+  shortcode-resolution logic; keep the match-arm dispatch and
+  Image/Note recursion).
 - `crates/quarto-core/src/transforms/title_block.rs:183, 185` — h1
   synthesis sites.
-- `crates/pampa/src/transforms/sectionize.rs:96, 148, 169` — section
-  Div synthesis sites.
-- `crates/quarto-core/src/transforms/footnotes.rs` — investigate
-  container site.
-- `crates/quarto-core/src/transforms/appendix.rs` — investigate wrapper
-  site.
-- `crates/quarto-core/src/transforms/theorem.rs:281, 313` — name-attr
-  title extraction.
+- `crates/pampa/src/transforms/sectionize.rs:96, 148` — section Div
+  synthesis sites. (Line 169 in that file is a `dummy_source_info()`
+  test helper, not a production site.)
+- `crates/quarto-core/src/transforms/footnotes.rs` — container Div
+  synthesis (around line 495 / `create_footnotes_section`).
+- `crates/quarto-core/src/transforms/appendix.rs` — appendix container
+  Div synthesis (`create_appendix_container` ~line 257).
+- `crates/quarto-core/src/transforms/theorem.rs:313` and
+  `crates/quarto-core/src/transforms/proof.rs:167` — name-attr title
+  extraction in `extract_name_attr`. Both pass `&div.attr_source`
+  through and use `attr_source.attributes[idx].1` (an
+  `Option<SourceInfo>`).
+- `crates/quarto-pandoc-types/src/attr.rs:27-32` — `AttrSourceInfo`
+  shape (`attributes: Vec<(Option<SourceInfo>, Option<SourceInfo>)>`
+  for key/value source ranges).
+- `crates/pampa/src/pandoc/treesitter.rs:1075-1107` and
+  `crates/pampa/src/pandoc/treesitter_utils/commonmark_attribute.rs:38-50`
+  — parser sites that populate the attr value's byte range. No
+  prerequisite parser change needed.
 - `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs:1348` —
   synthetic Space.
 - `crates/pampa/src/lua/types.rs:1812-1840` — `filter_source_info`
-  Lua-side auto-attach.
+  Lua-side auto-attach. Note: only fires for typed Inline/Block
+  returns (`pandoc.Str(...)`); bare-string returns
+  (`return "text"` → `LuaShortcodeResult::Text`) bypass it.
 - `crates/quarto-pandoc-types/src/custom.rs` — CustomNode shape.
 - `crates/quarto-core/src/transforms/callout.rs` — example pattern for
-  sugar transforms wrapping output in CustomNode.
+  sugar transforms wrapping output in CustomNode. NOTE: callout +
+  theorem are block-only walkers; for inline recursion, use
+  `shortcode_resolve.rs::recurse_inline` instead.
+- `crates/quarto-core/src/stage/stages/user_filters.rs` — general Lua
+  filter dispatch site. Does NOT invoke the post-walk; its
+  constructions keep `by.kind == "filter"` as steady state.
+- `crates/quarto-core/src/pipeline.rs:258, 312` — `IncludeExpansionStage`
+  precedes `AstTransformsStage`, so includes are spliced before
+  shortcodes resolve. See §"Include×shortcode composition" in Design
+  decisions.
 
 ## Test plan
 
@@ -527,21 +695,23 @@ Lua-handler filter & shortcode").
 
 | Component | Lines (rough) |
 |---|---|
+| Phase 0: `Inline::source_info_mut` + `Block::source_info_mut` accessors + unit tests | ~70 |
 | Audit pass (grep + categorize) | ~30 (mostly notes) |
-| `stamp_shortcode_anchors` helper + recursion walks | ~80 |
-| Shortcode resolver fix (~12 sites, all use the helper) | ~50 |
+| `stamp_shortcode_anchors` helper + mutable recursion walks (modeled on `shortcode_resolve.rs::recurse_inline` / `resolve_block`) | ~220 |
+| Shortcode resolver dispatch-site fixes — 12 production sites: `config_value_to_inlines` ×7, `flatten_blocks_to_inlines` ×1, `lua_result_to_shortcode_result::Text` ×1, `make_error_inline` ×2, `shortcode_to_literal` ×1. Most covered by the stamper; `make_error_inline` and `shortcode_to_literal` need call-site source_info threading. | ~70 |
 | TitleBlock fix | ~20 |
 | Sectionize fix | ~20 |
 | Footnotes fix | ~30 |
 | Appendix fix | ~30 |
-| Theorem title-from-attr fix | ~20 |
+| Theorem + proof title-from-attr fix (thread `attr_source` through `extract_name_attr` in both files) | ~30 |
 | TreeSitter postprocess fix | ~10 |
-| Tests | ~250 |
-| **Total** | **~540** |
+| Tests | ~280 |
+| **Total** | **~810** |
 
-Smaller than earlier drafts because the unified `Generated` type
-collapses all shortcode handlers into a single funnel + helper. One
-focused session likely.
+The earlier "~540" estimate omitted the Phase-0 mut accessors (~70 LOC),
+under-counted the recursion walkers (mutable walks over the full
+inline/block container set are ~220 LOC, not ~80), and missed the
+`make_error_inline` / `shortcode_to_literal` / `proof.rs` fix sites.
 
 ## Notes
 
