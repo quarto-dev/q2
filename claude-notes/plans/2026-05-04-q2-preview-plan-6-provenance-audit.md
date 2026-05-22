@@ -26,9 +26,12 @@ holds the design details; this list is the work-tracking surface.
   for one representative variant of each.
 
 ### Audit
-- [ ] Comprehensive grep + categorize `SourceInfo::default()` sites in
+- [x] Comprehensive grep + categorize `SourceInfo::default()` sites in
   `crates/quarto-core/src/transforms/` and `crates/pampa/src/`.
-- [ ] Document the positional-alignment invariant on `AttrSourceInfo.attributes`
+  (Report: `claude-notes/research/2026-05-22-plan-6-audit.md`.
+  Follow-ups: bd-12vrr callout default-title, bd-1inj0 code-block
+  chrome.)
+- [x] Document the positional-alignment invariant on `AttrSourceInfo.attributes`
   (`crates/quarto-pandoc-types/src/attr.rs:31`).
 
 ### Stamper + dispatch funnel
