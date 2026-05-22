@@ -42,19 +42,15 @@ export class DeviceFlowExpiredError extends DeviceFlowError {
 // Redaction
 // ---------------------------------------------------------------------------
 
-const TOKEN_PATTERNS: readonly RegExp[] = [
-  // Google access tokens
-  /ya29\.[A-Za-z0-9_-]+/g,
-  // Google refresh tokens
-  /1\/\/[A-Za-z0-9_-]+/g,
-  // JWT-shaped (three base64url segments separated by dots)
-  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
-];
+// Single alternation so we scan the input once per call. Branches:
+//   ya29\....            — Google access tokens
+//   1\/\/...             — Google refresh tokens
+//   eyJ....\....\....    — JWT-shaped (three base64url segments)
+const TOKEN_PATTERN =
+  /ya29\.[A-Za-z0-9_-]+|1\/\/[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 
 export function redactTokens(s: string): string {
-  let out = s;
-  for (const p of TOKEN_PATTERNS) out = out.replace(p, '[redacted-token]');
-  return out;
+  return s.replace(TOKEN_PATTERN, '[redacted-token]');
 }
 
 // ---------------------------------------------------------------------------
