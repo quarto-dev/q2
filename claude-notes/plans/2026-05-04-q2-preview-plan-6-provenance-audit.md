@@ -113,7 +113,14 @@ with the correct provenance:
       through from call sites at lines 659 and 914, and use it as the
       Str/Strong's `source_info` (an `Original` pointing at the
       shortcode token's bytes — same shape Plan 6's
-      audit-completion test expects).
+      audit-completion test expects). **Atomicity intent**: the error
+      region is treated as normal editable user-source content (NOT
+      atomic). If the user edits `?meta:bad` in React, the bytes
+      change in the source qmd via the verbatim-copy path. Plan 7's
+      `is_atomic_kind()` does not fire because the source_info is
+      Original, not Generated. The Strong-wraps-Str overlap (both
+      layers carry the same range) is structurally parallel to the
+      footnote `<sup>` case Plan 7:261-267 already documents.
     - `shortcode_to_literal` (lines 1043-1109): the literal-text Str
       produced for escaped `{{</ ... >}}` shortcodes. Today it emits
       `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
@@ -135,9 +142,13 @@ with the correct provenance:
   Fix: `Generated { by: By::footnotes(), from: smallvec![] }`. The
   synthesized `<sup>` markers are already source-mapped via
   `create_footnote_ref` cloning from the original `Note` inline (so
-  they stay Original — no change needed). q2-preview pipeline runs
-  this transform (per Plan 2B's audit); the audit applies to both
-  pipelines.
+  they stay Original — no change needed). The four synthesized inline
+  layers (Span/Superscript/Link/Str) all carry the same range,
+  producing a multi-node overlap; Plan 7:261-267 documents that this
+  is round-trip-friendly without extra writer work (block-level
+  Verbatim of the surrounding Para covers it). q2-preview pipeline
+  runs this transform (per Plan 2B's audit); the audit applies to
+  both pipelines.
 - **`AppendixStructureTransform`**: the synthetic appendix container Div.
   Fix: `Generated { by: By::appendix(), from: smallvec![] }`. Same scope
   note as Footnotes.
@@ -150,13 +161,52 @@ with the correct provenance:
   `Option<SourceInfo>` carrying the parser-recorded
   `Original{file_id, value_start, value_end}` for the attribute
   value's bytes) as the Str's `source_info`. Falls back to
-  `SourceInfo::default()` only when the Option is `None` (which would
-  indicate an upstream parser gap, not a normal path). The parser
+  `SourceInfo::default()` only when the Option is `None` (e.g. JSON
+  read from external Pandoc producers that don't emit `attrS`) OR
+  when length-alignment fails (see safeguards below). The parser
   populates the value range at
   `crates/pampa/src/pandoc/treesitter.rs:1075-1107` →
   `treesitter_utils/commonmark_attribute.rs:38-50`; no parser-side
-  prerequisite is needed. See "Open questions for implementation"
-  (closed) for the investigation that resolved this.
+  prerequisite is needed.
+
+  **Positional-alignment safeguards** (review-pass 2026-05-22): the
+  fix relies on the invariant *"`AttrSourceInfo.attributes[i]` is the
+  `(key_src, val_src)` for the i-th entry in `Attr.2`'s insertion
+  order."* This invariant holds in the parser's main path but **is
+  not documented and is broken in two preexisting code paths**
+  (duplicate-key handling in `commonmark_attribute.rs:41-49`;
+  caption-attr-into-table merge in `section.rs:85-113` and
+  `postprocess.rs:1483-1496`). Plan 6 therefore:
+  1. **Documents the invariant** with a doc-comment on
+     `AttrSourceInfo.attributes` in `crates/quarto-pandoc-types/src/attr.rs:31`.
+  2. **Guards the index in `extract_name_attr`** with a runtime
+     length check (`if kvs.len() == attr_source.attributes.len()`)
+     and a `debug_assert_eq!` on lengths. Falls back to
+     `SourceInfo::default()` when they diverge, so production never
+     panics on misaligned input.
+  3. **Two follow-up beads tracked** (out-of-band, preexisting bugs):
+     **bd-3aolj** (duplicate-key handling in
+     `commonmark_attribute.rs:41-49` — `LinkedHashMap::insert` updates
+     in place while `attr_source.attributes.push` always appends) and
+     **bd-1e6a5** (caption-attr-into-table merge in
+     `section.rs:85-113` / `postprocess.rs:1483-1496` — same root
+     cause when caption + table keys overlap). Plan 6 does not block
+     on them; its runtime guard handles the failure mode safely.
+  4. Note: `kvs.remove("name")` after the index lookup itself shrinks
+     `attr.2` by one without touching `attr_source.attributes`. The
+     surviving `div.attr_source` is then handed to `CustomNode::new`
+     (`theorem.rs:281`). Downstream consumers of `attr_source` on
+     that CustomNode see misaligned data. The rest of `convert_div`
+     does not re-index `attr_source`, so this is harmless locally,
+     but a future consumer of the constructed CustomNode's
+     `attr_source` could trip on it. Considered acceptable for v1;
+     if a future caller indexes, it should use the same guarded
+     pattern.
+
+  JSON round-trip preserves the value range: `attrS.kvs` serializes
+  as a positional array of `[key_ref, val_ref]` pairs
+  (`json.rs:600-633`) and reads back identically (`json.rs:423-508`).
+  No Plan-5 follow-up needed.
 - **`pampa::pandoc::treesitter_utils::postprocess`** (line 1348): the
   "Synthetic Space" inserted to separate citation from suffix. Fix:
   `Generated { by: By::tree_sitter_postprocess(), from: smallvec![] }`.
@@ -384,6 +434,18 @@ fn enrich_or_create(
 ) -> SourceInfo {
     // If the Lua machinery attached Generated { by: filter, ... },
     // promote it. Otherwise fresh Generated.
+    //
+    // NOTE (bd-36fr9 co-change): the by.data["filter_path"]/["line"]
+    // reads below are temporary. Once Lua-file registration lands,
+    // those fields move out of by.data and into a Dispatch anchor in
+    // `from`. This branch then reads the existing Dispatch anchor
+    // from `existing.from[]` and copies it into the new from-list
+    // alongside Invocation. See §"Dispatch follow-up".
+    //
+    // NOTE (bd-129m3 integration point): for `meta` / `var` shortcodes
+    // post-loader-change, the helper also appends a ValueSource
+    // anchor pointing at the metadata value's source range. See
+    // §"ValueSource follow-up".
     let by = match existing {
         SourceInfo::Generated { by, .. } if by.kind == "filter" => {
             let lua_path = by.data.get("filter_path").cloned();
@@ -411,31 +473,29 @@ they contain.)
   `crates/quarto-core/src/transforms/` and `crates/pampa/src/`.
   Categorize each site: preserve ctx info / emit Generated with
   appropriate by-kind / emit Generated with Invocation / leave as-is
-  (test code). Plan 6's first commit is the audit report; subsequent
-  commits fix each site.
-- **Theorem title from attr (CLOSED, 2026-05-22)**: `AttrSourceInfo`
-  already carries the attribute value's byte range as
-  `Option<SourceInfo>` (see `quarto-pandoc-types/src/attr.rs:27-32`,
-  populated by the parser at `treesitter.rs:1075-1107` →
-  `treesitter_utils/commonmark_attribute.rs:38-50`). The fix is to
-  thread `&div.attr_source` into `extract_name_attr` in both
-  `theorem.rs:304` and `proof.rs:158`, index by
-  `kvs.keys().position(|k| k == "name")` before the `remove`, and use
-  `attr_source.attributes[idx].1` for the Str's `source_info` (falling
-  back to `SourceInfo::default()` only when the Option is `None`). No
-  `By::raw("theorem-title-attr", ...)` fallback shape needed; no
-  parser-side prerequisite.
-- **Escaped shortcodes**: today `Shortcode::is_escaped` is a flag, and
-  escaped shortcodes preserve as literal text (no resolution). Don't
-  apply the post-walk to escaped shortcodes — they're not resolved;
-  they stay as literal text with their original source_info.
-- **Recursion into deep AST**: the post-walk must traverse the full
-  container set — for inlines: Strong, Emph, Strikeout, Superscript,
-  Subscript, SmallCaps, Quoted, Cite, Link, Image (alt/caption), Span,
-  Underline, Delete, Insert, Highlight, EditComment, Note (block
-  content), Custom (slot contents); for blocks: Div, BlockQuote,
-  OrderedList, BulletList, DefinitionList, Figure, Table (cells),
-  Custom (slot contents). The canonical reusable shape is in
+  (test code). Plan 6's first commit (after Phase 0) is the audit
+  report; subsequent commits fix each site.
+
+(Previously-open questions resolved by review pass 2026-05-22:
+"Theorem title from attr" — `AttrSourceInfo` already carries the
+value range; see §Scope theorem bullet for the threaded-in fix.
+"Escaped shortcodes" — the In-scope `shortcode_to_literal` fix at
+the call site (passing `shortcode_owned.source_info` through)
+produces the Original shape the regression test expects.
+"Recursion into deep AST" — concrete reusable shape and full
+container-variant set documented; see §Implementation notes
+below.)
+
+## Implementation notes
+
+- **Recursion shape for the post-walk.** The walker must traverse the
+  full container set — for inlines: Strong, Emph, Strikeout,
+  Superscript, Subscript, SmallCaps, Quoted, Cite, Link,
+  Image (alt/caption), Span, Underline, Delete, Insert, Highlight,
+  EditComment, Note (block content), Custom (slot contents); for
+  blocks: Div, BlockQuote, OrderedList, BulletList, DefinitionList,
+  Figure, Table (cells), Custom (slot contents). The canonical
+  reusable shape is in
   `crates/quarto-core/src/transforms/shortcode_resolve.rs`'s own
   `recurse_inline` (~lines 945-1027) and `resolve_block`
   (~lines 710-863), which already cover this set including Image's
@@ -476,6 +536,13 @@ When the follow-up lands, Plan 6's post-walk grows one more anchor
 append at the appropriate dispatch sites. The current Plan 6 ships
 with just `Invocation`; the type is forward-compatible.
 
+**Integration point**: bd-129m3 should append the ValueSource anchor
+inside `enrich_or_create` (see §"The post-walk helper" below). Once
+the metadata loader threads per-key source-info through, the helper
+gains access to the value's source range via the `ShortcodeContext`
+and pushes a second anchor into `from` alongside the Invocation. No
+other call sites in Plan 6 change.
+
 Tracked as **bd-129m3** ("Provenance follow-up: ValueSource anchor
 stamping for meta/var shortcodes").
 
@@ -501,6 +568,16 @@ The follow-up issue ("register Lua filter files in `SourceContext`"):
 When the follow-up lands, `AnchorRole::Dispatch` joins the enum (a
 non-breaking enum extension); `by.data` for `filter` / Lua-dispatched
 `shortcode` kinds shrinks to per-kind config only.
+
+**Co-change in `enrich_or_create`**: bd-36fr9 must update Plan 6's
+helper (§"The post-walk helper" below). The current "enrich" branch
+reads `by.data.get("filter_path")` and `by.data.get("line")` from
+the existing `Generated{by:filter, ...}`; post-bd-36fr9, those
+fields are gone from `by.data` and the relevant info lives in the
+`Dispatch` anchor inside `from`. The helper then reads the existing
+Dispatch anchor and copies it into the new shortcode-shape `from`
+alongside the Invocation. The §"Lua-shortcode enrichment" example
+above also needs updating to show the post-bd-36fr9 shape.
 
 Tracked as **bd-36fr9** ("Provenance follow-up: Dispatch anchor for
 Lua-handler filter & shortcode").
@@ -620,6 +697,28 @@ Lua-handler filter & shortcode").
   policy.
 - **Escaped-shortcode regression test**: `{{</ meta foo >}}` resolves
   to literal text; its source_info stays Original (not Generated).
+- **Error-inline regression test**: an unknown shortcode `{{< bogus >}}`
+  resolves via `make_error_inline` to `Strong[Str("?bogus")]`. Both
+  layers carry `Original` source_info pointing at the bogus
+  shortcode's token bytes (NOT `Default`, NOT `Generated`). Plan 7's
+  `is_atomic_kind()` does not fire; round-trip through the
+  incremental writer Verbatim-copies the original token bytes.
+- **Error / escaped round-trip test**: full incremental-writer
+  round-trip on a fixture containing both `{{</ meta foo >}}` and
+  `{{< bogus >}}`. After Plan 6's stamping + Plan 7's writer, the
+  output qmd should byte-equal the input for those regions
+  (verbatim-copy via the Original anchor in both cases).
+- **Shortcode-inside-include composition test**: `parent.qmd`
+  contains `{{< include foo.qmd >}}`; `foo.qmd` contains
+  `{{< meta title >}}`. After Plan 6 stamping (and Plan 8's wrapper),
+  the resolved Str inside the IncludeExpansion wrapper has
+  `Generated { by: { kind: "shortcode", data: { name: "title" } },
+  from: [Invocation -> Original{file_id: <foo.qmd's FileId>, ...}] }`.
+  Assert the Invocation anchor's source_info `file_id != 0` (i.e.
+  points into the included file, not the parent). Plan 8's wrapper
+  carries the parent-file anchor at its level; this test exercises
+  Plan 6's stamping invariant under the cross-file context. Plan 8's
+  own test plan covers wrapper round-trip independently.
 - **Idempotence still holds**: re-run Plan 3's idempotence test after
   the audit — the changes shouldn't introduce non-determinism.
 - **`source_info` determinism (Plan 6-specific gap)**: Plan 3's hashes

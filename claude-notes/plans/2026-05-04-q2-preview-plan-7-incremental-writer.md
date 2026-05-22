@@ -265,6 +265,19 @@ and through automerge to the ephemeral hub's disk-write.
   the same byte range as the user's `^[footnote text]` syntax.
   Round-trip-friendly as `Original` without extra writer work; only
   the bare `<div class="footnotes">` wrapper is the Transparent case.
+
+  **Plan 6's `make_error_inline` and `shortcode_to_literal` follow
+  the same pattern** (added 2026-05-22). For unknown shortcodes
+  (`{{< bogus >}}`) and escaped shortcodes (`{{</ meta foo >}}`),
+  Plan 6 threads the *original shortcode token's* source_info through
+  to the visible Str (and the wrapping Strong for the error case).
+  Both layers carry `Original` source_info covering the same token
+  bytes — structurally identical to the footnote `<sup>` overlap.
+  `is_atomic_kind()` does NOT fire (source_info is Original, not
+  Generated); these regions go through the writer's normal
+  Verbatim-copy path. The user can edit `?bogus` or `{{</...>}}` in
+  React just like any other text region. No special writer handling
+  needed; Plan 6's test plan adds a round-trip regression for both.
 - **Atomic detection has two convergent paths** (collapsed from three
   in earlier drafts; the unified `Generated` variant replaces the
   separate "Derived" path):

@@ -495,6 +495,27 @@ walk — same visual outcome, just no per-type styling).
   affordance).
 - **Idempotence**: re-run Plan 3's idempotence test with includes. The
   wrapper should be deterministic across runs.
+- **Shortcode-inside-include provenance shape** (cross-reference to
+  Plan 6): Plan 6 owns the test that asserts a shortcode resolving
+  inside include-spliced content gets an Invocation anchor with
+  `file_id != 0` (pointing into the included file, not the parent).
+  Plan 8's wrapper carries the parent-file `Original` independently;
+  the two anchors compose correctly. Plan 8's tests above exercise
+  the wrapper round-trip in isolation; the composition shape lives
+  in Plan 6's §Test plan ("Shortcode-inside-include composition
+  test").
+- **Cross-file Invocation in resolve transform**: after the
+  `IncludeExpansionResolveTransform` (Plan 8) unwraps the wrapper,
+  any shortcode-resolved Generated children retain
+  `Invocation -> Original{foo.qmd, ...}` source_info. The unwrapped
+  HTML pipeline sees these children with `file_id != 0`, and
+  `query_attribution` skips them per the v1 single-doc invariant
+  (matching §HTML attribution above). Round-trip-equivalent to a
+  fixture without includes: the HTML writer doesn't care about
+  source_info; it just renders the nodes. Regression test: render
+  parent + foo (foo contains `{{< meta title >}}`) through the HTML
+  pipeline, grep for the resolved title in the output, assert the
+  rendered text matches `meta.title` from foo.qmd's metadata.
 
 ## Dependencies
 
