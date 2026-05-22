@@ -383,7 +383,12 @@ export function registerTools(
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    if (authToolsState && (name === 'authenticate_start' || name === 'authenticate_finish')) {
+    if (
+      authToolsState &&
+      (name === 'authenticate_start' ||
+        name === 'authenticate_finish' ||
+        name === 'authenticate_clear')
+    ) {
       return authToolsState.handle(name as AuthToolName);
     }
 

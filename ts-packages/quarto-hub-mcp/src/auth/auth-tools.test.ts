@@ -273,16 +273,34 @@ function textOf(result: { content: ReadonlyArray<{ readonly type: string; readon
 // ---------------------------------------------------------------------------
 
 describe('AUTH_TOOL_DEFINITIONS', () => {
-  it('exposes authenticate_start and authenticate_finish with non-idempotent annotations', () => {
+  it('exposes authenticate_start, authenticate_finish, and authenticate_clear', () => {
     const names = AUTH_TOOL_DEFINITIONS.map((t) => t.name).sort();
-    expect(names).toEqual(['authenticate_finish', 'authenticate_start']);
+    expect(names).toEqual([
+      'authenticate_clear',
+      'authenticate_finish',
+      'authenticate_start',
+    ]);
+  });
+
+  it('marks authenticate_start and authenticate_finish as non-idempotent and non-destructive', () => {
     for (const t of AUTH_TOOL_DEFINITIONS) {
+      if (t.name === 'authenticate_clear') continue;
       expect(t.annotations).toEqual({
         readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: false,
       });
     }
+  });
+
+  it('marks authenticate_clear as destructive and idempotent', () => {
+    const t = AUTH_TOOL_DEFINITIONS.find((x) => x.name === 'authenticate_clear');
+    expect(t).toBeDefined();
+    expect(t!.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    });
   });
 });
 
@@ -709,6 +727,74 @@ describe('authenticate_finish', () => {
     expect(successCount).toBe(1);
     const errorCount = [a, b].filter((r) => r.isError).length;
     expect(errorCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authenticate_clear
+// ---------------------------------------------------------------------------
+
+describe('authenticate_clear', () => {
+  it('clears the credential store', async () => {
+    const t0 = new Date('2026-05-22T12:00:00Z');
+    const h = await makeHarness({
+      initialNow: t0,
+      seedBundle: {
+        idToken: fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL }),
+        refreshToken: '1//rt-seeded',
+        idTokenExpiresAt: new Date(t0.getTime() + 60 * 60 * 1000),
+        scopes: ['openid', 'email', 'profile'],
+      },
+      responder: () => new Response('', { status: 500 }),
+    });
+    expect(await h.store.read()).not.toBeNull();
+
+    const res = await h.state.handle('authenticate_clear');
+    expect(res.isError).not.toBe(true);
+    expect(textOf(res).toLowerCase()).toContain('cleared');
+    expect(await h.store.read()).toBeNull();
+  });
+
+  it('clears any in-progress device-flow cache', async () => {
+    const t0 = new Date('2026-05-22T12:00:00Z');
+    const h = await makeHarness({
+      initialNow: t0,
+      responder: () => jsonResponse(200, deviceAuthBody({ interval: 5 })),
+    });
+    await h.state.handleStart();
+    expect(h.state.hasCachedDeviceCode()).toBe(true);
+
+    await h.state.handle('authenticate_clear');
+    expect(h.state.hasCachedDeviceCode()).toBe(false);
+  });
+
+  it('is safe when no credentials are present', async () => {
+    const h = await makeHarness({
+      responder: () => new Response('', { status: 500 }),
+    });
+    expect(await h.store.read()).toBeNull();
+
+    const res = await h.state.handle('authenticate_clear');
+    expect(res.isError).not.toBe(true);
+    expect(await h.store.read()).toBeNull();
+  });
+
+  it('does not call Google', async () => {
+    const t0 = new Date('2026-05-22T12:00:00Z');
+    const h = await makeHarness({
+      initialNow: t0,
+      seedBundle: {
+        idToken: fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL }),
+        refreshToken: '1//rt-seeded',
+        idTokenExpiresAt: new Date(t0.getTime() + 60 * 60 * 1000),
+        scopes: ['openid', 'email', 'profile'],
+      },
+      responder: () => {
+        throw new Error('authenticate_clear should never hit Google');
+      },
+    });
+    await h.state.handle('authenticate_clear');
+    expect(h.requests).toHaveLength(0);
   });
 });
 

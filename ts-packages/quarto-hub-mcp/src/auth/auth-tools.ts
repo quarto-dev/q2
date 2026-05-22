@@ -110,9 +110,29 @@ export const AUTH_TOOL_DEFINITIONS: readonly Tool[] = [
       idempotentHint: false,
     },
   },
+  {
+    name: 'authenticate_clear',
+    description:
+      'Remove any locally-cached Quarto Hub credentials from the OS ' +
+      'keyring and discard any in-progress device-flow state. Use this ' +
+      'as an escape hatch when the hub rejects the cached credentials ' +
+      'and authenticate_start short-circuits with "Already authenticated".' +
+      ' Does not touch Google-side grants; revoke those at ' +
+      'myaccount.google.com if needed. Idempotent: safe to call when ' +
+      'no credentials are present.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
+  },
 ];
 
-export type AuthToolName = 'authenticate_start' | 'authenticate_finish';
+export type AuthToolName =
+  | 'authenticate_start'
+  | 'authenticate_finish'
+  | 'authenticate_clear';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -169,6 +189,7 @@ export class AuthToolsState {
   async handle(name: AuthToolName): Promise<CallToolResult> {
     if (name === 'authenticate_start') return this.handleStart();
     if (name === 'authenticate_finish') return this.handleFinish();
+    if (name === 'authenticate_clear') return this.handleClear();
     return errorResult(`Unknown auth tool: ${String(name)}`);
   }
 
@@ -240,6 +261,31 @@ export class AuthToolsState {
 
   async handleFinish(): Promise<CallToolResult> {
     return this.enqueueFinish(() => this.doFinish());
+  }
+
+  /**
+   * Remove any persisted credential bundle and discard the in-process
+   * device-flow cache. Idempotent. The bundle going away forces the
+   * next `authenticate_start` to fall through `getValidIdToken`'s
+   * `ReauthRequired` branch and initiate a fresh device flow.
+   */
+  async handleClear(): Promise<CallToolResult> {
+    this.cached = undefined;
+    try {
+      await this.deps.credentialStore.clear();
+    } catch (err) {
+      // Surface as a tool error so the agent can show the user what
+      // went wrong (e.g. headless Linux without Secret Service). The
+      // in-memory cache was already cleared above, so a partial
+      // success is acceptable.
+      const msg = err instanceof Error ? err.message : String(err);
+      return errorResult(
+        `Cleared in-memory device-flow state, but failed to clear the OS keyring entry: ${redactTokens(msg)}`,
+      );
+    }
+    return textResult(
+      'Quarto Hub credentials cleared. Call authenticate_start to authenticate again.',
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -429,7 +475,11 @@ export function registerAuthTools(server: Server, deps: AuthToolsDeps): AuthTool
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: _args } = request.params;
-    if (name === 'authenticate_start' || name === 'authenticate_finish') {
+    if (
+      name === 'authenticate_start' ||
+      name === 'authenticate_finish' ||
+      name === 'authenticate_clear'
+    ) {
       return state.handle(name);
     }
     return errorResult(`Unknown tool: ${name}`);
