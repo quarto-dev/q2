@@ -10,8 +10,9 @@ import { Repo, DocHandle, updateText, splice, generateAutomergeUrl, parseAutomer
 import type { DocumentId, Patch } from '@automerge/automerge-repo';
 import { clone as automergeClone, from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
-import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
 import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
+
+import { buildStorageAdapter } from './storage-adapter.js';
 
 import type {
   IndexDocument,
@@ -385,7 +386,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       state.wsAdapter = await buildWsAdapter(syncServerUrl, auth);
       state.repo = new Repo({
         network: [state.wsAdapter],
-        storage: new IndexedDBStorageAdapter(),
+        storage: buildStorageAdapter(),
       });
       state.actorId = actorId ?? null;
 
@@ -817,7 +818,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       state.wsAdapter = await buildWsAdapter(options.syncServer, options.auth);
       state.repo = new Repo({
         network: [state.wsAdapter],
-        storage: new IndexedDBStorageAdapter(),
+        storage: buildStorageAdapter(),
       });
 
       // Try to connect to peer, but continue in offline mode if it fails

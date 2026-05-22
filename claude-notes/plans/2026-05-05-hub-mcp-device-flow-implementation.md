@@ -1219,6 +1219,27 @@ Dependencies added to `ts-packages/quarto-sync-client/package.json`:
 upgrade headers) and dev-dep `@types/ws ^8.18.1`. `npm install` from
 repo root hoisted them; root `package-lock.json` is the change record.
 
+**Follow-up fix (2026-05-22):** the 6 `indexedDB is not defined`
+failures in `hub-mcp.test.ts > live: …` that Phases 5, 6, 7, and 8
+completion notes labelled "pre-existing baseline" were not actually
+pre-existing — they were a real runtime bug. `quarto-sync-client/src/client.ts`
+unconditionally constructed `new IndexedDBStorageAdapter()` in both
+`connect` and `createNewProject`; the adapter's constructor reads the
+`indexedDB` global eagerly, so Node throws on construction. The 6
+"live" tests in `hub-mcp.test.ts` were the only specs that exercised
+the real SyncClient (the others mock the storage adapter via
+`vi.mock`), so they tripped the bug while everything else stayed
+green. The fix is a new `quarto-sync-client/src/storage-adapter.ts`
+exporting `buildStorageAdapter()` plus a self-contained
+`MemoryStorageAdapter`: at construction time the helper inspects
+`typeof globalThis.indexedDB` and routes Node to the in-memory
+adapter, browser to IndexedDB. Both `client.ts` construction sites
+now go through it. Test deltas: `quarto-sync-client` 86 → 91 passing
+(+5: 3 selector + 2 round-trip), `quarto-hub-mcp` 136 / 6-fail →
+142 / 0-fail with the 6 live tests now actually exercising
+`wss://sync.automerge.org`. Discovered during Phase 9 user-driven
+verification when `list_files` surfaced the same error to the agent.
+
 ### Implementation
 
 - Add `auth?: { getBearer: () => Promise<string> }` to `connect()`
