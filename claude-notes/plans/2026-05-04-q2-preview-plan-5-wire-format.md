@@ -152,10 +152,35 @@ hand-constructed tests in §"Test plan" run.
   old shapes (legacy Transformed array of numbers; FilterProvenance
   `[filter_path, line]`) and dispatches accordingly. Post-Plan 5,
   writers never emit code 3.
+- **`from` is one name across three layers, with different inner types
+  at each layer.** Worth knowing before reading any one layer in
+  isolation:
+  - **User-facing (`quarto-source-map`):** `SourceInfo::Generated.from:
+    SmallVec<[Anchor; 2]>` where `Anchor { role, source_info: Arc<SourceInfo> }`.
+    Carries actual `Arc<SourceInfo>` references.
+  - **Writer-internal (`writers/json.rs`):** `SerializableSourceMapping::Generated.from:
+    Vec<(AnchorRole, usize)>` where the `usize` is the pool ID returned
+    by `intern` for the anchor's source_info. Same semantic concept,
+    flattened to pool IDs.
+  - **On the wire (JSON):** `"from": [{ "role": "...", "si_id": <pool_id> }, ...]`,
+    omitted when empty. Same data, JSON-shaped.
+  The name `from` is preserved at every layer so the implementer can
+  read top-down without renames; the inner type changes are
+  deliberate (Arc → ID → JSON) and follow the pattern already
+  established by `Substring.parent` → `parent_id`.
 - **Verbose keys (`kind`, `data`, `by`, `from`, `role`, `si_id`)**
   at the payload level for self-documentation. The wire format's outer
   fields (`t`, `r`, `d` at the SourceInfoJson level) stay compact for
-  consistency with existing code.
+  consistency with existing code. The asymmetry is intentional: outer
+  fields appear once per pool entry across the whole pool (N×K bytes
+  for K outer fields, repeated for each of N entries — the compact
+  names amortize across thousands of entries), while the inner payload
+  keys appear only inside Generated entries (a minority of pool entries
+  — most are Substring/Original from parsing). Document-level overhead
+  from the verbose payload keys is empirically small; clarity at the
+  new boundary outweighs it. Pool JSON is also gzipped on the wire in
+  the orchestrator and hub-client transports, which collapses the
+  repeated short keys further.
 
 ## Concrete wire format
 
@@ -294,13 +319,13 @@ fn parse_anchor_role(s: &str) -> Result<AnchorRole, MalformedSourceInfoPool> {
 Writer:
 
 ```rust
-SerializableSourceMapping::Generated { by, anchor_pool_ids } => {
+SerializableSourceMapping::Generated { by, from } => {
     let mut by_json = json!({ "kind": by.kind });
     if !by.data.is_null() { by_json["data"] = by.data.clone(); }
 
     let mut d = json!({ "by": by_json });
-    if !anchor_pool_ids.is_empty() {
-        let arr: Vec<Value> = anchor_pool_ids.iter()
+    if !from.is_empty() {
+        let arr: Vec<Value> = from.iter()
             .map(|(role, si_id)| json!({
                 "role": serialize_anchor_role(role),
                 "si_id": si_id,
@@ -328,6 +353,218 @@ Multi-inline shortcode resolution thus produces N `Generated` entries,
 each with one `Invocation` anchor, all referencing the same pool ID for
 the shortcode token's `Original` entry.
 
+### TypeScript wire-format definitions
+
+`ts-packages/preview-renderer/src/types/sourceInfo.ts` is a hand-mirror
+of the Rust wire format. Earlier provenance-epic churn (during the
+2026-05-20 design discussion) left it carrying a stale forward-declared
+split: code 4 = `Synthetic { d: By }`, code 5 = `Derived { d: { from, by } }`.
+That split never shipped. Plan 5 reconciles the file with the unified
+Generated design:
+
+**Before Plan 5 (current file):**
+
+```ts
+export type SourceInfoEntry =
+    | { t: 0; r: [number, number]; d: number }
+    | { t: 1; r: [number, number]; d: number }
+    | { t: 2; r: [number, number]; d: Array<[number, number, number]> }
+    | { t: 3; r: [number, number]; d: [string, number] }
+    | { t: 4; r: [0, 0]; d: By }                                // Synthetic — never shipped
+    | { t: 5; r: [0, 0]; d: { from: number; by: By } };         // Derived — never shipped
+```
+
+**After Plan 5:**
+
+```ts
+export interface AnchorRef {
+    role: string;          // "invocation" | "value-source" | "other:<name>"
+    si_id: number;         // index into the source-info pool
+}
+
+export type SourceInfoEntry =
+    | { t: 0; r: [number, number]; d: number }                              // Original
+    | { t: 1; r: [number, number]; d: number }                              // Substring
+    | { t: 2; r: [number, number]; d: Array<[number, number, number]> }    // Concat
+    | { t: 3; r: [number, number]; d: [string, number] | [number, ...number[]] } // legacy reader only (no new writes)
+    | { t: 4; r: [0, 0]; d: { by: By; from?: AnchorRef[] } };               // Generated
+// code 5 — unassigned, free for future reservation
+```
+
+Changes vs. current file:
+
+- Code 4's `d` shape narrows from bare `By` to `{ by: By; from?: AnchorRef[] }`.
+- Code 5's entry is removed entirely. It was never emitted by any
+  shipping writer; no on-disk artifact carries it. Removing the variant
+  is safe.
+- Code 3's `d` shape widens to a union to reflect the dual-shape legacy
+  reader (string-headed = FilterProvenance, numeric-headed = old
+  Transformed). New writers don't emit code 3 either way, so this is a
+  read-side typing only.
+- The file's header doc-comment (lines 10–19 of the current file)
+  references `Synthetic` and `Derived` by name and says "Plan 5 wires
+  this up." Rewrite it to describe Generated instead and drop the
+  Synthetic/Derived nomenclature.
+
+The TS type and the Rust serializer must agree byte-for-byte; the
+header doc-comment cites the Rust file as the source of truth, same
+convention as for the atomic-CustomNodes registry.
+
+## Work items
+
+Phase-ordered. Each phase compiles cleanly and runs its own slice of
+the test suite before the next begins. Phase 1 lands on its own as the
+bd-3odjm fix even if the rest of Plan 5 stalls.
+
+### Phase 0 — Start gate
+
+- [ ] Confirm Plan 4 (Generated + By + Anchor + AnchorRole) has merged
+      into `feature/provenance`. If not, stop — Plan 5 cannot build.
+      Verify with `git grep -n "enum SourceInfo" crates/quarto-source-map/src/source_info.rs`
+      and confirm a `Generated` arm exists.
+
+### Phase 1 — Legacy code-3 dual-shape reader (closes bd-3odjm)
+
+- [ ] Add `parse_anchor_role` helper in `crates/pampa/src/readers/json.rs`
+      (used by Phase 4 too — landing it here is a no-op until then).
+- [ ] Rewrite the code-3 arm in `SourceInfoDeserializer::new` (currently
+      `crates/pampa/src/readers/json.rs:252-283`) to dispatch on `data[0]`:
+      numeric → legacy Substring (today's behavior); string → `Generated
+      { by: By::filter(path, line), from: smallvec![] }`; neither → `MalformedSourceInfoPool`.
+- [ ] Run `cargo nextest run -p quarto-core --test idempotence lua_shortcode_lipsum_fixed`
+      → green (closes bd-3odjm).
+- [ ] Run the full Plan-3 idempotence suite → 27/27 green.
+
+### Phase 2 — Writer code-4 emit (`SerializableSourceMapping` + intern + `to_json`)
+
+Starting state from Plan 4: `SourceInfo::FilterProvenance` is gone, but
+`SerializableSourceMapping::FilterProvenance` survives because Plan 4's
+interim writer arm (see Plan 4 §"Migrations", `pampa/src/writers/json.rs:314`)
+converts `SourceInfo::Generated { by: filter, .. }` into the legacy
+shape via `by.as_filter().expect(...)`. That arm panics for non-filter
+Generated kinds, so the workspace only stays buildable as long as no
+non-filter Generated is constructed — Plan 6 doesn't ship shortcode
+stamping until later, so Plan 4's expect is safe in the interim.
+Phase 2 removes both the interim arm and the `SerializableSourceMapping::FilterProvenance`
+variant at once.
+
+- [ ] Add `Generated { by: By, from: Vec<(AnchorRole, usize)> }` to
+      `SerializableSourceMapping` in `crates/pampa/src/writers/json.rs`.
+- [ ] Replace Plan 4's interim `SourceInfo::Generated { by, .. } => …
+      SerializableSourceMapping::FilterProvenance` arm with a real
+      `SerializableSourceMapping::Generated { … }` construction (no more
+      `by.as_filter().expect(...)`); supports all `by.kind` values
+      uniformly.
+- [ ] Remove `SerializableSourceMapping::FilterProvenance` (no longer
+      reachable after the interim arm above is rewritten).
+- [ ] Update `SourceInfoSerializer::intern` (`writers/json.rs:260-333`):
+      - Recognize `SourceInfo::Generated { by, from }`.
+      - **Recursively intern each anchor's `source_info` BEFORE pushing
+        the parent pool entry** (same pattern as today's `Concat` and
+        `Substring` arms), so anchor `si_id`s are strictly less than
+        the Generated's own id. The reader's `si_id < current_index`
+        guard requires this invariant.
+      - **Reuse the existing `arc_parent_ids` cache** (keyed by
+        `Arc::as_ptr(&anchor.source_info)`) for anchor dedup. Same cache,
+        same key shape as `Substring.parent`. Multi-inline shortcode
+        resolutions (every resolved inline shares one `Arc` for the
+        token's `Original`) hit the cache and produce a single pool
+        entry for the shared target — exactly the dedup behavior the
+        "Anchor dedup test" in Phase 6 verifies.
+      - Build the `(start_offset, end_offset, mapping)` return tuple as
+        `(0, 0, SerializableSourceMapping::Generated { by, from: from_ids })`
+        — the `r: [0, 0]` rule is enforced at this tuple, just like
+        today's FilterProvenance arm at lines 314-322.
+- [ ] Update `SerializableSourceInfo::to_json` (`writers/json.rs:169-190`)
+      with the code-4 arm per §"Code 4 — Reader / writer".
+- [ ] Add `serialize_anchor_role` helper.
+
+### Phase 3 — Streaming writer parity
+
+- [ ] Add the code-4 arm in `stream_write_source_info_pool`
+      (`writers/json.rs:3472-3522`); mirror the `to_json` shape exactly.
+- [ ] Remove the FilterProvenance arms (lines 3499-3504 emit, line 3516
+      tag). They become unreachable once `SerializableSourceMapping::FilterProvenance`
+      is gone from Phase 2.
+
+### Phase 4 — Code-4 reader
+
+- [ ] Add a `4 => { … }` arm in `SourceInfoDeserializer::new`
+      (`readers/json.rs:154-287`) per §"Code 4 — Reader / writer":
+      decode `by` (kind + optional data), decode `from` array entries
+      via `parse_anchor_role` + `si_id`, with the `si_id < current_index`
+      circular-ref guard.
+- [ ] Reject malformed code-4 payloads with `MalformedSourceInfoPool`:
+      missing `by`; missing `by.kind`; `from` entry missing `role`;
+      `from` entry missing `si_id`; unrecognized role string. (See
+      §"Open questions for implementation" — settled here.)
+- [ ] Prefer `s.strip_prefix("other:").map(...)` over `s[6..]` in
+      `parse_anchor_role`. Cosmetic — both are UTF-8-safe here because
+      `"other:"` is 6 ASCII bytes, but `strip_prefix` is clearer and
+      avoids the magic number.
+
+### Phase 5 — TypeScript types
+
+- [ ] Rewrite `ts-packages/preview-renderer/src/types/sourceInfo.ts`
+      per §"TypeScript wire-format definitions":
+      - Add `AnchorRef` interface.
+      - Code 4's `d` becomes `{ by: By; from?: AnchorRef[] }`.
+      - Code 3's `d` becomes `[string, number] | [number, ...number[]]`.
+      - Remove the code-5 entry.
+      - Rewrite the header doc-comment to describe Generated, not
+        Synthetic/Derived.
+- [ ] Audit `ts-packages/preview-renderer/src/utils/sourceInfo.ts`
+      (`isAtomicSourceInfo` and helpers) for code-paths that match on
+      the old code-4 = bare-By shape; adjust per the new shape.
+
+### Phase 6 — Tests
+
+- [ ] Round-trip property test for every `SourceInfo` variant (Original,
+      Substring, Concat, Generated with various By kinds and `from`
+      configurations). See §Test plan.
+- [ ] Filter-provenance recovery test (hand-constructed code-3 with
+      string-array payload → `Generated { by: filter, from: smallvec![] }`).
+- [ ] Legacy Transformed back-compat test (hand-constructed code-3 with
+      numeric-array payload → `Substring`).
+- [ ] Forward-compat test (code-4 with unknown `by.kind`, arbitrary
+      `data` → preserved round-trip).
+- [ ] Anchor dedup test (multi-inline shortcode → one `Original` pool
+      entry, N Generated entries each `from[0].si_id` referencing it).
+      **Hand-construct the AST with `Arc::clone(&shared)` directly** —
+      do not drive through the shortcode resolver, which doesn't ship
+      until Plan 6. The test exercises the serializer's `arc_parent_ids`
+      cache against the same Arc-sharing contract Plan 6 will later
+      satisfy in production. Test passes Plan-5-alone.
+- [ ] Ensure at least one Phase 6 test routes through
+      `stream_write_pandoc` (not just the non-streaming `write_pandoc`)
+      with Generated entries in the pool. The streaming writer's match
+      arms are independent of `to_json`'s; without explicit coverage,
+      a Phase-3 regression in `stream_write_source_info_pool` could
+      slip through.
+- [ ] AnchorRole round-trip test (Invocation / ValueSource / Other).
+- [ ] End-to-end production reachability test (kbd-shortcode fixture →
+      `render_qmd_to_preview_ast` → JSON → `pampa::readers::json::read`
+      → assert success and recovered shape).
+- [ ] TypeScript-side type round-trip (parse a JSON pool with Generated
+      entries; confirm `SourceInfoEntry` shape matches).
+
+### Phase 7 — Verification gate
+
+- [ ] `cargo build --workspace` clean.
+- [ ] `cargo nextest run --workspace` all green (bd-3odjm closed in
+      Phase 1; no other regressions).
+- [ ] `cargo xtask verify` (full — `quarto-core`/`pampa` are WASM
+      consumers; hub-build leg matters).
+- [ ] `git grep "FilterProvenance"` returns only legacy-reader / legacy
+      doc references (no writer emissions, no `SerializableSourceMapping`
+      variant).
+- [ ] Update bd-3odjm: close as duplicate of Plan 5 PR. Refresh its
+      description to use `from:` not `anchors:` if reopened for any
+      reason. **If Phase 2 or 3 introduces a *new* failure mode in the
+      lipsum fixture, file a fresh beads issue** rather than reopening
+      bd-3odjm — that issue is specifically the code-3 collision and
+      should stay scoped to it.
+
 ## Open questions for implementation
 
 - **Eventually retiring code 3**: at some point, no JSON files in the
@@ -335,43 +572,55 @@ the shortcode token's `Original` entry.
   round-tripped before Plan 5; the legacy Transformed shape predates a
   transition we made earlier). Could remove the legacy reader. Don't
   need to decide now.
-- **Detecting malformed code 4 payloads**: if shape doesn't match
-  expectation, error with `MalformedSourceInfoPool`. Confirm the exact
-  error variant for each malformation.
-- **Streaming writer parity** (`stream_write_custom_block` and the
-  streaming source-info-pool writer): both writer paths need updating.
-  Today both have the same code-3 → FilterProvenance shape — the bug
-  applies to both. Update both to emit code 4 for Generated.
+- **Detecting malformed code 4 payloads**: settled in Phase 4 of
+  §"Work items" — `MalformedSourceInfoPool` for missing `by`, missing
+  `by.kind`, `from` entry missing `role`/`si_id`, or unrecognized role
+  string.
+- **Streaming writer parity** (`stream_write_source_info_pool`): settled
+  in Phase 3 of §"Work items". Both the non-streaming `to_json` path
+  and the streaming writer iterate `SerializableSourceMapping`, so the
+  Phase 2 enum change drives both — Phase 3 only needs the inline
+  match-arm update in the streaming writer.
 - **Pool deduplication of anchor `si_id` references**: when many
   Generated entries share the same anchor target (multi-inline
   shortcode), the writer interns once and reuses the ID. The existing
   `arc_parent_ids` HashMap pattern (already used for `Substring.parent`)
   handles this — same interning mechanism, different reader-side name
   (`si_id` for anchors, `parent_id` for substrings).
-- **TypeScript hand-mirror updates**: `ts-packages/preview-renderer/src/types/sourceInfo.ts`
-  defines `SourceInfoEntry` for JS consumers. After Plan 5, the entry
-  type for code 4 grows an optional `from` field with
-  `{ role, si_id }` entries. The TS type and the Rust serializer
-  must agree byte-for-byte; sync via doc-comment convention as we do
-  for the atomic-CustomNodes registry.
+- **TypeScript hand-mirror updates**: see §"TypeScript wire-format
+  definitions" above. Settled — code 4's `d` becomes `{ by; from? }`,
+  code 5 is removed, code 3's `d` becomes a union for the dual-shape
+  legacy reader.
 
 ## References
 
-- `crates/pampa/src/writers/json.rs:80` — type code comment.
-- `crates/pampa/src/writers/json.rs:115` — `SourceInfoJson` struct
-  (the type code comment lives here in current main).
-- `crates/pampa/src/writers/json.rs:132-155` — `SerializableSourceInfo::to_json`.
-- `crates/pampa/src/writers/json.rs:145-148` — current FilterProvenance →
-  code 3 emit (the buggy line).
-- `crates/pampa/src/writers/json.rs:225-298` — full SerializableSourceInfo
-  enum and conversion.
-- `crates/pampa/src/readers/json.rs:155-290` — pool reader; the code-3
-  branch is at line 252.
-- `crates/quarto-source-map/src/source_info.rs:22-55` — SourceInfo enum
-  (extended by Plan 4).
+(Line numbers as of `feature/provenance` @ 4c465768. Plan 4's migration
+will shift these; refresh before implementing.)
+
+- `crates/pampa/src/writers/json.rs:115` — `SourceInfoJson.t` field
+  comment, currently `"0=Original, 1=Substring, 2=Concat, 3=FilterProvenance"`.
+  Plan 5 extends the legend to include `4=Generated` and notes code 3
+  as legacy reader only.
+- `crates/pampa/src/writers/json.rs:160-190` — `SerializableSourceInfo`
+  struct and `to_json` method. Code-3 emit at lines 180-182 (the bug).
+- `crates/pampa/src/writers/json.rs:193-207` — `SerializableSourceMapping`
+  enum (Original/Substring/Concat/FilterProvenance arms). Phase 2 adds
+  a `Generated` arm and removes `FilterProvenance`.
+- `crates/pampa/src/writers/json.rs:260-333` — `SourceInfoSerializer::intern`;
+  Phase 2 adds a `SourceInfo::Generated` arm with topologically-ordered
+  anchor recursion.
+- `crates/pampa/src/writers/json.rs:3472-3522` — `stream_write_source_info_pool`;
+  Phase 3 mirrors the to_json changes here (lines 3499-3504 emit, line
+  3516 tag).
+- `crates/pampa/src/readers/json.rs:99-293` — `SourceInfoDeserializer::new`
+  (the pool reader). Code-3 arm at lines 252-283 (Phase 1 rewrites);
+  Phase 4 adds a code-4 arm.
+- `crates/quarto-source-map/src/source_info.rs:21-55` — `SourceInfo` enum
+  (extended by Plan 4 — confirm Generated/By/Anchor/AnchorRole present
+  before Plan 5 starts; see Phase 0).
 - `ts-packages/preview-renderer/src/types/sourceInfo.ts` — JS-side
-  `SourceInfoEntry` type definition (needs the `from` field of
-  `{ role, si_id }` entries).
+  `SourceInfoEntry`. See §"TypeScript wire-format definitions" for the
+  full before/after.
 - `ts-packages/preview-renderer/src/utils/sourceInfo.ts` — JS-side
   helpers (`isAtomicSourceInfo`, etc.); needs adjustment for the new
   shape per Plan 4 / Plan 7.
@@ -455,11 +704,16 @@ the shortcode token's `Original` entry.
 
 ## Risk areas
 
-- **Streaming writer code path**: there are two writer paths in
-  `json.rs` (`write_custom_block` non-streaming and
-  `stream_write_custom_block` streaming). Both have the same
-  source-info-pool emission logic. Both need updating. Easy to forget
-  the streaming variant.
+- **Streaming writer code path**: source-info-pool emission lives in
+  two functions in `crates/pampa/src/writers/json.rs`:
+  `SerializableSourceInfo::to_json` (used by the non-streaming
+  `write_pandoc` at line 1657) and `stream_write_source_info_pool`
+  (called from `stream_write_pandoc` at line 3530). Both consume the
+  same `SerializableSourceMapping` enum but inline their own match
+  arms. Compiler exhaustiveness catches missed arms after Phase 2's
+  enum change — a deliberate safety property. The named-but-unrelated
+  pair `write_custom_block` / `stream_write_custom_block` handles
+  `CustomNode` blocks, not the pool; don't confuse them.
 - **Pool ID stability**: changing the format of pool entries shouldn't
   affect their IDs (which are sequential by intern order). Verify.
 - **Old JSON files**: anyone with on-disk JSON snapshots of ASTs (test
@@ -509,3 +763,14 @@ The single-code-4 design (no separate code 5) is the result of
 unifying `Synthetic` + `Derived` into `Generated` during the 2026-05-20
 design discussion. Code 5 is left unassigned, free for future
 reservation.
+
+**`r: [0, 0]` for Generated entries during the Plan-5↔Plan-7 window.**
+After Plan 5 ships, all `Generated` pool entries carry `r: [0, 0]` —
+the per-entry range field is no longer the right accessor for
+Generated; use `resolve_byte_range` (via the Invocation anchor) for
+chain-resolved ranges. Any diagnostic UI (q2-debug, hub-client devtools)
+that reads `r` directly will see uninformative zeros for these entries.
+This is a long-lived integration branch and the same developer is
+implementing all of Plans 5–7, so the surprise window is local; once
+Plan 7's `preimage_in` lands, the standard accessor pattern reaches
+through Generated correctly. No external consumers need warning.
