@@ -201,6 +201,46 @@ mod tests {
         assert!(DEFAULT_CSS.contains(".callout"));
     }
 
+    /// `theme: none` documents ship `DEFAULT_CSS` as the only stylesheet.
+    /// It must therefore carry rules for the canonical Bootstrap-aligned
+    /// callout class vocabulary (matching what `CalloutResolveTransform`
+    /// emits and what `resources/scss/bootstrap/_bootstrap-rules.scss`
+    /// keys off of), not the pre-2026-05-22 q2-only scheme.
+    ///
+    /// See `claude-notes/plans/2026-05-22-callout-class-vocabulary-fix.md`
+    /// Phase 4 for the rewrite. Until that phase lands this test will
+    /// fail — that's the intent.
+    #[test]
+    fn test_default_css_uses_canonical_callout_selectors() {
+        for selector in &[
+            ".callout-style-default",
+            ".callout-style-simple",
+            ".callout-titled",
+            ".no-icon",
+        ] {
+            assert!(
+                DEFAULT_CSS.contains(selector),
+                "DEFAULT_CSS must contain canonical callout selector `{}` (see Phase 4 of \
+                 2026-05-22-callout-class-vocabulary-fix.md). Current contents do not match TS \
+                 Quarto's Bootstrap class scheme.",
+                selector
+            );
+        }
+        // Old q2-only selectors must not appear — they are not emitted
+        // by the new resolver and would be dead rules.
+        for legacy in &[
+            ".callout-appearance-simple",
+            ".callout-appearance-minimal",
+            ".callout-appearance-default",
+        ] {
+            assert!(
+                !DEFAULT_CSS.contains(legacy),
+                "DEFAULT_CSS must not contain legacy selector `{}`",
+                legacy
+            );
+        }
+    }
+
     #[test]
     fn test_write_html_resources_creates_directory() {
         let runtime = NativeRuntime::new();

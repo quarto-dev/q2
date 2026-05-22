@@ -23,14 +23,22 @@ import { Ast } from '../framework';
 import type { FormatRegistry, NodeArgs, PandocAST } from '../framework';
 import { previewRegistry } from './registry';
 import {
+    BS_ALIGN_CONTENT_CENTER,
+    BS_COLLAPSE,
+    BS_D_FLEX,
+    BS_SHOW,
     CALLOUT,
     CALLOUT_BODY,
     CALLOUT_BODY_CONTAINER,
+    CALLOUT_COLLAPSE,
+    CALLOUT_EMPTY_CONTENT,
     CALLOUT_FLEX_FILL,
     CALLOUT_HEADER,
     CALLOUT_ICON,
     CALLOUT_ICON_CONTAINER,
     CALLOUT_TITLE_CONTAINER,
+    CALLOUT_TITLED,
+    NO_ICON,
     PROOF,
     QUARTO_XREF,
     THEOREM,
@@ -70,6 +78,7 @@ function calloutAst(opts: {
     type?: string;
     appearance?: string;
     collapse?: boolean;
+    collapseStartsCollapsed?: boolean;
     icon?: boolean;
     title?: any[] | undefined; // undefined = no title slot; [] = empty Inlines
     content?: any[];
@@ -88,6 +97,7 @@ function calloutAst(opts: {
             type: opts.type ?? 'note',
             appearance: opts.appearance ?? 'default',
             collapse: opts.collapse ?? false,
+            collapse_starts_collapsed: opts.collapseStartsCollapsed ?? false,
             icon: opts.icon ?? true,
         },
         attr: [opts.id ?? '', [], []],
@@ -269,19 +279,111 @@ describe('Callout', () => {
         expect(titleContainer!.textContent).not.toContain('Note');
     });
 
-    it('emits callout-appearance-{a} class for non-default appearance', () => {
-        const { container } = mount([calloutAst({ appearance: 'simple' })]);
-        const callout = container.querySelector('div.callout');
-        expect(callout!.classList.contains('callout-appearance-simple')).toBe(true);
-    });
-
-    it('omits callout-appearance class for the default appearance', () => {
+    it('always emits callout-style-{appearance} on the outer div (default)', () => {
         const { container } = mount([calloutAst({ appearance: 'default' })]);
         const callout = container.querySelector('div.callout');
-        const hasAppearance = Array.from(callout!.classList).some((c) =>
-            c.startsWith('callout-appearance-'),
-        );
-        expect(hasAppearance).toBe(false);
+        expect(callout!.classList.contains('callout-style-default')).toBe(true);
+    });
+
+    it('emits callout-style-simple for simple appearance', () => {
+        const { container } = mount([calloutAst({ appearance: 'simple', title: [STR('T')] })]);
+        const callout = container.querySelector('div.callout');
+        expect(callout!.classList.contains('callout-style-simple')).toBe(true);
+    });
+
+    it('normalizes minimal → simple + no-icon', () => {
+        const { container } = mount([calloutAst({ appearance: 'minimal', title: [STR('T')] })]);
+        const callout = container.querySelector('div.callout');
+        expect(callout!.classList.contains('callout-style-simple')).toBe(true);
+        expect(callout!.classList.contains(NO_ICON)).toBe(true);
+        expect(container.querySelector(`.${CALLOUT_ICON_CONTAINER}`)).toBeNull();
+    });
+
+    it('emits no legacy callout-appearance-* classes', () => {
+        for (const appearance of ['default', 'simple', 'minimal']) {
+            const { container } = mount([calloutAst({ appearance, title: [STR('T')] })]);
+            const callout = container.querySelector('div.callout');
+            const hasLegacy = Array.from(callout!.classList).some((c) =>
+                c.startsWith('callout-appearance-'),
+            );
+            expect(hasLegacy, `appearance=${appearance}`).toBe(false);
+        }
+    });
+
+    it('adds callout-titled when callout has a user title', () => {
+        const { container } = mount([calloutAst({ title: [STR('My Title')] })]);
+        const callout = container.querySelector('div.callout');
+        expect(callout!.classList.contains(CALLOUT_TITLED)).toBe(true);
+    });
+
+    it('adds callout-titled when appearance=default + no user title (default-injected)', () => {
+        const { container } = mount([calloutAst({ appearance: 'default', title: undefined })]);
+        const callout = container.querySelector('div.callout');
+        expect(callout!.classList.contains(CALLOUT_TITLED)).toBe(true);
+    });
+
+    it('untitled-path: appearance=simple + no user title → no callout-titled, body is callout-body.d-flex', () => {
+        const { container } = mount([calloutAst({ appearance: 'simple', title: undefined })]);
+        const callout = container.querySelector('div.callout');
+        expect(callout!.classList.contains(CALLOUT_TITLED)).toBe(false);
+        // Outer's single child is `.callout-body.d-flex` (no header div).
+        expect(callout!.querySelector(`.${CALLOUT_HEADER}`)).toBeNull();
+        const body = callout!.querySelector(`.${CALLOUT_BODY}.${BS_D_FLEX}`);
+        expect(body).not.toBeNull();
+        // Inside the body: icon container, then a `.callout-body-container`
+        // WITHOUT the `.callout-body` co-class.
+        const innerContainer = body!.querySelector(`.${CALLOUT_BODY_CONTAINER}`);
+        expect(innerContainer).not.toBeNull();
+        expect(innerContainer!.classList.contains(CALLOUT_BODY)).toBe(false);
+    });
+
+    it('adds no-icon class when icon=false', () => {
+        const { container } = mount([calloutAst({ icon: false, title: [STR('T')] })]);
+        const callout = container.querySelector('div.callout');
+        expect(callout!.classList.contains(NO_ICON)).toBe(true);
+        expect(container.querySelector(`.${CALLOUT_ICON_CONTAINER}`)).toBeNull();
+    });
+
+    it('adds callout-empty-content when content slot is empty', () => {
+        const { container } = mount([calloutAst({ title: [STR('T')], content: [] })]);
+        const callout = container.querySelector('div.callout');
+        expect(callout!.classList.contains(CALLOUT_EMPTY_CONTENT)).toBe(true);
+    });
+
+    it('header carries d-flex + align-content-center utility classes', () => {
+        const { container } = mount([calloutAst({ title: [STR('T')] })]);
+        const header = container.querySelector(`.${CALLOUT_HEADER}`);
+        expect(header).not.toBeNull();
+        expect(header!.classList.contains(BS_D_FLEX)).toBe(true);
+        expect(header!.classList.contains(BS_ALIGN_CONTENT_CENTER)).toBe(true);
+    });
+
+    it('collapse=true wraps body in .callout-collapse.collapse (no .show when starts collapsed)', () => {
+        const { container } = mount([
+            calloutAst({
+                title: [STR('T')],
+                collapse: true,
+                collapseStartsCollapsed: true,
+            }),
+        ]);
+        const wrapper = container.querySelector(`.${CALLOUT_COLLAPSE}`);
+        expect(wrapper).not.toBeNull();
+        expect(wrapper!.classList.contains(BS_COLLAPSE)).toBe(true);
+        expect(wrapper!.classList.contains(BS_SHOW)).toBe(false);
+        // Body container nested inside the wrapper.
+        expect(wrapper!.querySelector(`.${CALLOUT_BODY_CONTAINER}`)).not.toBeNull();
+    });
+
+    it('collapse=true + starts-expanded keeps body open via .show', () => {
+        const { container } = mount([
+            calloutAst({
+                title: [STR('T')],
+                collapse: true,
+                collapseStartsCollapsed: false,
+            }),
+        ]);
+        const wrapper = container.querySelector(`.${CALLOUT_COLLAPSE}`);
+        expect(wrapper!.classList.contains(BS_SHOW)).toBe(true);
     });
 
     it('omits id attribute when attr id is empty', () => {

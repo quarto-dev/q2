@@ -1,0 +1,115 @@
+---
+title: "Callouts canonical-class matrix"
+format: html
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        # Patterns the rendered HTML MUST contain. Schema is two-array:
+        # [0] = must-match, [1] = must-NOT-match (see
+        # `crates/quarto-test/src/spec.rs::parse_ensure_file_regex_matches`).
+        - - "callout-note"
+          - "callout-warning"
+          - "callout-tip"
+          - "callout-important"
+          - "callout-caution"
+          - "callout-style-default"
+          - "callout-style-simple"
+          - "callout-titled"
+          - "no-icon"
+          - "callout-empty-content"
+          - "callout-collapse"
+          - 'bs-toggle="collapse"'
+          - "callout-body-container"
+          - "callout-body"
+          - "callout-header"
+          - "d-flex"
+          - "align-content-center"
+        # Legacy q2-only vocabulary must NOT appear.
+        - - "callout-appearance-default"
+          - "callout-appearance-simple"
+          - "callout-appearance-minimal"
+---
+
+# All five types — default appearance, titled
+
+::: {.callout-note}
+## A note title
+A note callout body.
+:::
+
+::: {.callout-warning}
+## A warning title
+A warning callout body.
+:::
+
+::: {.callout-tip}
+## A tip title
+A tip callout body.
+:::
+
+::: {.callout-important}
+## An important title
+An important callout body.
+:::
+
+::: {.callout-caution}
+## A caution title
+A caution callout body.
+:::
+
+# Default appearance — no user title → default-title injection
+
+::: {.callout-note}
+Untitled note body (should inject "Note" as title via default-injection).
+:::
+
+# Simple appearance
+
+::: {.callout-tip appearance="simple"}
+## Simple titled tip
+With user title, simple-style border.
+:::
+
+::: {.callout-tip appearance="simple"}
+Untitled simple tip — should take the untitled path (no header, no callout-titled).
+:::
+
+# Minimal appearance → normalized to simple + no-icon
+
+::: {.callout-warning appearance="minimal"}
+## Minimal warning
+Minimal normalizes to simple appearance + no-icon.
+:::
+
+# Explicit icon=false
+
+::: {.callout-important icon="false"}
+## No icon
+icon=false adds the no-icon class and omits the icon container.
+:::
+
+# Empty content
+
+::: {.callout-caution}
+## Empty-content caution
+:::
+
+# Collapse — starts collapsed, then starts expanded
+
+::: {.callout-note collapse="true"}
+## Click to expand
+This body should start collapsed.
+:::
+
+::: {.callout-note collapse="false"}
+## Always open (collapsible)
+This body is collapsible but starts expanded.
+:::
+
+# User id is preserved
+
+::: {#my-warn .callout-warning}
+## Referenceable
+Has the user-supplied id on the outer div.
+:::

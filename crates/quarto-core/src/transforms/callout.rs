@@ -202,15 +202,29 @@ fn convert_div_to_callout(
     }
 
     // Extract additional attributes from the div
-    let appearance = extract_attr_value(&div.attr, "appearance").unwrap_or("default".to_string());
-    let collapse = extract_attr_value(&div.attr, "collapse").is_some_and(|v| v == "true");
-    let icon = extract_attr_value(&div.attr, "icon").is_none_or(|v| v != "false");
+    let appearance_raw =
+        extract_attr_value(&div.attr, "appearance").unwrap_or("default".to_string());
+    let collapse_attr = extract_attr_value(&div.attr, "collapse");
+    let collapse = collapse_attr.is_some();
+    let collapse_starts_collapsed = collapse_attr.as_deref() == Some("true");
+    let icon_raw = extract_attr_value(&div.attr, "icon").is_none_or(|v| v != "false");
+
+    // Normalize `appearance="minimal"` → `appearance="simple"` AND `icon=false`,
+    // matching TS Quarto's `nameForCalloutStyle` (src/resources/filters/customnodes/callout.lua).
+    // Doing it here means the resolver only ever sees the canonical
+    // `default` or `simple` appearance string.
+    let (appearance, icon) = if appearance_raw == "minimal" {
+        ("simple".to_string(), false)
+    } else {
+        (appearance_raw, icon_raw)
+    };
 
     // Build the plain_data JSON
     let mut plain_data = json!({
         "type": callout_type,
         "appearance": appearance,
         "collapse": collapse,
+        "collapse_starts_collapsed": collapse_starts_collapsed,
         "icon": icon
     });
 

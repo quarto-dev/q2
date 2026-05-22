@@ -35,22 +35,36 @@ export const QUARTO_REUSE = 'quarto-reuse'; // license section
 export const QUARTO_COPYRIGHT = 'quarto-copyright'; // copyright section
 export const QUARTO_CITATION = 'quarto-citation'; // how-to-cite section
 
-// Callout — emitted by CalloutResolveTransform (excluded from q2-preview;
-// q2-preview keeps the Callout CustomNode wrapper, but the class names
-// must match for theme CSS compatibility).
+// Callout — TS Quarto / Bootstrap-aligned class vocabulary (matches
+// `CalloutResolveTransform` post-2026-05-22 rewrite). CalloutResolveTransform
+// itself is still excluded from the q2-preview pipeline, so the
+// Callout React component (`./custom/Callout.tsx`) emits the same
+// classes the resolver would have produced for the HTML pipeline.
+//
 // Source: crates/quarto-core/src/transforms/callout_resolve.rs
-//   :170,172,175,199,215,226,234
+//   :220-241 (outer), :345-380 (titled-path header), :404-426 (untitled-path body)
+// Mirror in TS Quarto: src/resources/filters/modules/callouts.lua
+//   :247-260 (outer), :286-289 (header), :336-337 (untitled body).
 export const CALLOUT = 'callout';
 export const CALLOUT_TYPE_PREFIX = 'callout-'; // callout-note, callout-warning, callout-tip, callout-important, callout-caution
-export const CALLOUT_APPEARANCE_PREFIX = 'callout-appearance-'; // callout-appearance-{simple,minimal} — `default` is omitted
-export const CALLOUT_COLLAPSE = 'callout-collapse';
-export const CALLOUT_HEADER = 'callout-header';
-export const CALLOUT_TITLE_CONTAINER = 'callout-title-container';
-export const CALLOUT_FLEX_FILL = 'flex-fill'; // co-class on .callout-title-container — callout_resolve.rs:215
+export const CALLOUT_STYLE_PREFIX = 'callout-style-'; // callout-style-default | callout-style-simple — ALWAYS emitted
+export const CALLOUT_TITLED = 'callout-titled'; // outer; present when callout has a title
+export const NO_ICON = 'no-icon'; // outer; present when icon=false OR type unknown
+export const CALLOUT_EMPTY_CONTENT = 'callout-empty-content'; // outer; present when body has no content
+export const CALLOUT_COLLAPSE = 'callout-collapse'; // collapse wrapper; co-class with COLLAPSE_BS and SHOW_BS
+export const CALLOUT_HEADER = 'callout-header'; // titled path only
+export const CALLOUT_TITLE_CONTAINER = 'callout-title-container'; // titled path; inside .callout-header
+export const CALLOUT_FLEX_FILL = 'flex-fill'; // co-class on .callout-title-container
 export const CALLOUT_ICON_CONTAINER = 'callout-icon-container';
 export const CALLOUT_ICON = 'callout-icon';
 export const CALLOUT_BODY_CONTAINER = 'callout-body-container';
-export const CALLOUT_BODY = 'callout-body';
+export const CALLOUT_BODY = 'callout-body'; // titled: co-class on .callout-body-container; untitled: standalone outer wrap
+
+// Bootstrap utility classes used by the canonical callout markup.
+export const BS_D_FLEX = 'd-flex';
+export const BS_ALIGN_CONTENT_CENTER = 'align-content-center';
+export const BS_COLLAPSE = 'collapse';
+export const BS_SHOW = 'show';
 
 // Theorem / Proof — crates/quarto-core/src/transforms/crossref_render.rs:346,482,537
 //   theorem env class is computed via theoremEnvFor() in ./theoremEnvs.ts
