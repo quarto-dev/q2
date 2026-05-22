@@ -182,7 +182,40 @@ export async function initiateDeviceFlow(
   const resp = requestOpts
     ? await oauth.deviceAuthorizationRequest(as, client, noAuth, params, requestOpts)
     : await oauth.deviceAuthorizationRequest(as, client, noAuth, params);
-  return await oauth.processDeviceAuthorizationResponse(as, client, resp);
+  // Google's /device/code endpoint returns `verification_url` instead
+  // of the RFC 8628 `verification_uri` (empirically confirmed
+  // 2026-05-19; see Phase 0 verification log). `oauth4webapi` strictly
+  // asserts `verification_uri`, so we rewrite the JSON body before
+  // handing it off. Only copy when the canonical field is absent so
+  // we never overwrite an upstream-supplied value.
+  const normalised = await normaliseDeviceAuthResponse(resp);
+  return await oauth.processDeviceAuthorizationResponse(as, client, normalised);
+}
+
+async function normaliseDeviceAuthResponse(resp: Response): Promise<Response> {
+  // Non-2xx responses are passed through unchanged so oauth4webapi's
+  // error-mapping path (which inspects `error` / `error_description`)
+  // is left intact.
+  if (!resp.ok) return resp;
+  const ct = resp.headers.get('content-type') ?? '';
+  if (!ct.includes('json')) return resp;
+  let json: Record<string, unknown>;
+  try {
+    json = (await resp.clone().json()) as Record<string, unknown>;
+  } catch {
+    return resp;
+  }
+  if (
+    typeof json['verification_uri'] !== 'string' &&
+    typeof json['verification_url'] === 'string'
+  ) {
+    json['verification_uri'] = json['verification_url'];
+  }
+  return new Response(JSON.stringify(json), {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers: resp.headers,
+  });
 }
 
 export type PollResult =

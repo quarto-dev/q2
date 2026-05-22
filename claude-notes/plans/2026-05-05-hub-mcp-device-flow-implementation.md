@@ -514,6 +514,16 @@ Landed on `feature/hub-mcp-device-flow`:
   token-endpoint poll uses `ClientSecretPost` per the Phase-1
   lock-in. The test `pollDeviceFlowOnce > resolves with tokens on
   success` asserts both halves of this contract.
+- **Follow-up fix (2026-05-22):** `initiateDeviceFlow` now wraps the
+  device-auth response through `normaliseDeviceAuthResponse`, which
+  copies `verification_url` → `verification_uri` when only the
+  Google-shape field is present. Without this, `oauth4webapi@3.8.6`'s
+  `processDeviceAuthorizationResponse` throws `OperationProcessingError`
+  on every live Google response. Two new specs pin the behaviour:
+  `initiateDeviceFlow > normalises Google's verification_url to RFC 8628
+  verification_uri` and `> preserves verification_uri when both fields
+  are present` (defensive — never clobber an upstream-supplied
+  canonical value).
 - Single-poll-per-call: `pollDeviceFlowOnce` performs **one** request
   and returns a discriminated `PollResult` (`pending` / `slow_down` /
   `tokens`) without retrying. Higher-level cadence + RFC 8628 §3.5
@@ -1540,7 +1550,15 @@ Both returned:
   "verification_url": "https://www.google.com/device" }
 ```
 Google uses `verification_url`; RFC 8628 says `verification_uri`.
-`oauth4webapi` normalises. `verification_uri_complete` not returned.
+`oauth4webapi@3.8.6` does **not** normalise — `processDeviceAuthorizationResponse`
+asserts `verification_uri` is a string and throws `OperationProcessingError`
+otherwise. `initiateDeviceFlow` rewrites the response body
+(`verification_url → verification_uri` when only the former is
+present) before handing off, so the rest of the pipeline sees the
+canonical RFC field. Discovered live during Phase 9 user-driven
+verification on 2026-05-22; original "normalises" claim in this log
+was wrong (Phase 4 fixtures used the RFC field and hid the gap).
+`verification_uri_complete` not returned.
 
 **Token-endpoint response on successful grant** (redacted):
 ```json

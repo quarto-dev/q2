@@ -268,6 +268,52 @@ describe('initiateDeviceFlow', () => {
     }
   });
 
+  it('normalises Google\'s verification_url to RFC 8628 verification_uri', async () => {
+    // Live Google /device/code returns `verification_url` (with `_url`,
+    // not the RFC 8628 `verification_uri`). `oauth4webapi`'s
+    // `processDeviceAuthorizationResponse` strictly asserts
+    // `verification_uri` is a string and throws otherwise — so without
+    // a normaliser, every live `authenticate_start` fails before the
+    // device flow can begin. The Phase 0 verification log (2026-05-19)
+    // captured Google's exact shape; this test pins it.
+    const googleBody = {
+      device_code: 'AH-1Ng-test',
+      user_code: 'FJZL-WTDR',
+      verification_url: 'https://www.google.com/device',
+      expires_in: 1800,
+      interval: 5,
+    };
+    const { fetch } = makeFetch(() => jsonResponse(200, googleBody));
+    const got = await initiateDeviceFlow(
+      AS,
+      { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET, scopes: ['openid', 'email', 'profile'] },
+      { fetch }
+    );
+    expect(got.verification_uri).toBe('https://www.google.com/device');
+    expect(got.device_code).toBe('AH-1Ng-test');
+    expect(got.user_code).toBe('FJZL-WTDR');
+  });
+
+  it('preserves verification_uri when both fields are present', async () => {
+    // Defensive: if Google ever updates to send both spellings (or only
+    // the RFC one), we must not clobber the canonical field.
+    const both = {
+      device_code: 'AH-1Ng-test',
+      user_code: 'FJZL-WTDR',
+      verification_uri: 'https://www.google.com/device',
+      verification_url: 'https://attacker.example/device',
+      expires_in: 1800,
+      interval: 5,
+    };
+    const { fetch } = makeFetch(() => jsonResponse(200, both));
+    const got = await initiateDeviceFlow(
+      AS,
+      { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET, scopes: ['openid', 'email', 'profile'] },
+      { fetch }
+    );
+    expect(got.verification_uri).toBe('https://www.google.com/device');
+  });
+
   it('honours abort signal', async () => {
     const ctl = new AbortController();
     const { fetch } = makeFetch(async () => {
