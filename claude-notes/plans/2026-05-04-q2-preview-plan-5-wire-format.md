@@ -485,6 +485,24 @@ build break.
       into `feature/provenance`. If not, stop — Plan 5 cannot build.
       Verify with `git grep -n "enum SourceInfo" crates/quarto-source-map/src/source_info.rs`
       and confirm a `Generated` arm exists.
+- [ ] Confirm the Plan-4 interim writer state is present in
+      `crates/pampa/src/writers/json.rs`: a `SourceInfo::Generated { by, .. }`
+      arm in `SourceInfoSerializer::intern` that recovers
+      `(filter_path, line)` via `by.as_filter().expect(...)` and emits
+      `SerializableSourceMapping::FilterProvenance`. This is the arm
+      Phase 3 rewrites. As of Plan 4's commit, the arm lives around
+      `writers/json.rs:314-331`; refresh before implementing. Verify
+      with `git grep -n "Plan 5's wire-code 4 emitter" crates/pampa/src/writers/json.rs`
+      — exactly one hit (Plan 4's `expect` message).
+- [ ] Confirm `SerializableSourceMapping::FilterProvenance` still
+      exists as a variant in `writers/json.rs` (it does post-Plan-4 —
+      Plan 4 deliberately kept the *serializable* enum variant even
+      though the source-map variant is gone, because the interim
+      writer arm above still emits it). Verify with
+      `git grep -n "SerializableSourceMapping::FilterProvenance" crates/pampa/`
+      — expect ~4 hits (writer's `to_json` arm, the interim `intern`
+      arm above, the streaming writer's two arms in
+      `stream_write_source_info_pool`). All four go away in Phase 3+4.
 - [ ] Confirm no on-disk JSON snapshots carry code-3 entries that the
       new dual-shape reader would need to decode. Verified at planning
       time: `grep -rn '"t":3\|"t": 3' crates/ tests/ hub-client/`
@@ -708,10 +726,15 @@ the writer emits code 4.
 ### Phase 7 — Verification gate
 
 - [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace` all green (bd-3odjm closed in
-      Phase 1; no other regressions).
+- [ ] `cargo nextest run --workspace --no-fail-fast` all green
+      (bd-3odjm closed in Phase 1; no other regressions). Use
+      `--no-fail-fast` so a single regression doesn't hide downstream
+      green tests — same convention used to close Plan 4.
 - [ ] `cargo xtask verify` (full — `quarto-core`/`pampa` are WASM
-      consumers; hub-build leg matters).
+      consumers; hub-build leg matters). The WASM rebuild leg will
+      modify `crates/wasm-quarto-hub-client/Cargo.lock` as a side
+      effect (separate lockfile from the workspace one); include it
+      in the commit. Plan 4 hit this and committed it without issue.
 - [ ] `git grep "FilterProvenance"` returns only legacy-reader / legacy
       doc references (no writer emissions, no `SerializableSourceMapping`
       variant).
@@ -721,6 +744,48 @@ the writer emits code 4.
       lipsum fixture, file a fresh beads issue** rather than reopening
       bd-3odjm — that issue is specifically the code-3 collision and
       should stay scoped to it.
+
+## Implementation guidance carried over from Plan 4
+
+A few small things came up during Plan 4 that are worth knowing before
+starting Plan 5:
+
+- **`SmallVec::new()` is the construction pattern, not `smallvec![]`.**
+  Plan 4 uniformly used `SmallVec::<[Anchor; 2]>::new()` for empty
+  lists, never the `smallvec!` macro. The reader file
+  `crates/pampa/src/readers/json.rs` does not currently import
+  `smallvec::smallvec`. Code samples in this plan that show
+  `smallvec![]` are pseudocode — when implementing, write
+  `SmallVec::new()` (matches Plan 4's convention, avoids a needless
+  import). The `SmallVec` type itself needs
+  `use smallvec::SmallVec;` at the top of the file — Plan 4 added
+  this to every consumer it touched (`pampa/src/lua/diagnostics.rs`,
+  `pampa/src/lua/types.rs`); `readers/json.rs` and the writer's
+  Generated arm (Phase 3) will need it too.
+
+- **Don't name a local `gen`.** Rust 2024 makes `gen` a reserved
+  keyword. Plan 4's test code had to rename a `let gen = ...` to
+  `let generated = ...`. None of Plan 5's code samples currently use
+  `gen` as an identifier — keep it that way. (Plan 7's prose still
+  uses `gen.invocation_anchor()` as shorthand; that's pseudocode, not
+  literal Rust to type.)
+
+- **Phase boundary "compiles cleanly" semantics.** Plan 4 found that
+  "each phase compiles cleanly" really means "the directly-touched
+  crate compiles cleanly" — adding a new `SourceInfo` variant
+  immediately broke `match` exhaustiveness across ~10 crates, and the
+  workspace stayed red between Plan-4 Phase 1 and Phase 5. Plan 5's
+  Phase 1 → 2 → 3+4 ordering above explicitly avoids this trap (each
+  phase leaves the workspace green); the *atomic* Phase 3+4 squash is
+  the only place where you have to land more than one commit's worth
+  of code in a single push.
+
+- **`cargo xtask verify --skip-rust-tests` is a useful intermediate.**
+  Plan 4 ran `cargo nextest run --workspace --no-fail-fast` first
+  (confirms only bd-3odjm is red), then `cargo xtask verify
+  --skip-rust-tests` (confirms the WASM/hub-client legs are green
+  without re-running the same Rust tests). Plan 5 should follow the
+  same split for the final verification gate.
 
 ## Open questions for implementation
 
