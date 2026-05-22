@@ -6,7 +6,7 @@
       "args": [
         "ts-packages/quarto-hub-mcp/dist/index.js",
         "--server",
-        "wss://sync.automerge.org"
+        "wss://quarto-hub.com/ws"
       ]
     }
   }
