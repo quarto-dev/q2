@@ -485,11 +485,11 @@ build break.
 
 ### Phase 0 — Start gate
 
-- [ ] Confirm Plan 4 (Generated + By + Anchor + AnchorRole) has merged
+- [x] Confirm Plan 4 (Generated + By + Anchor + AnchorRole) has merged
       into `feature/provenance`. If not, stop — Plan 5 cannot build.
       Verify with `git grep -n "enum SourceInfo" crates/quarto-source-map/src/source_info.rs`
       and confirm a `Generated` arm exists.
-- [ ] Confirm the Plan-4 interim writer state is present in
+- [x] Confirm the Plan-4 interim writer state is present in
       `crates/pampa/src/writers/json.rs`: a `SourceInfo::Generated { by, .. }`
       arm in `SourceInfoSerializer::intern` that recovers
       `(filter_path, line)` via `by.as_filter().expect(...)` and emits
@@ -498,7 +498,7 @@ build break.
       `writers/json.rs:314-331`; refresh before implementing. Verify
       with `git grep -n "Plan 5's wire-code 4 emitter" crates/pampa/src/writers/json.rs`
       — exactly one hit (Plan 4's `expect` message).
-- [ ] Confirm `SerializableSourceMapping::FilterProvenance` still
+- [x] Confirm `SerializableSourceMapping::FilterProvenance` still
       exists as a variant in `writers/json.rs` (it does post-Plan-4 —
       Plan 4 deliberately kept the *serializable* enum variant even
       though the source-map variant is gone, because the interim
@@ -507,7 +507,7 @@ build break.
       — expect ~4 hits (writer's `to_json` arm, the interim `intern`
       arm above, the streaming writer's two arms in
       `stream_write_source_info_pool`). All four go away in Phase 3+4.
-- [ ] Confirm no on-disk JSON snapshots carry code-3 entries that the
+- [x] Confirm no on-disk JSON snapshots carry code-3 entries that the
       new dual-shape reader would need to decode. Verified at planning
       time: `grep -rn '"t":3\|"t": 3' crates/ tests/ hub-client/`
       returns zero hits and `grep -rln 'FilterProvenance' crates/pampa/snapshots
@@ -517,28 +517,28 @@ build break.
 
 ### Phase 1 — Legacy code-3 dual-shape reader (closes bd-3odjm)
 
-- [ ] Add `parse_anchor_role` helper in `crates/pampa/src/readers/json.rs`
+- [x] Add `parse_anchor_role` helper in `crates/pampa/src/readers/json.rs`
       (used by Phase 2 too — landing it here is a no-op until then).
-- [ ] Rewrite the code-3 arm in `SourceInfoDeserializer::new` (currently
+- [x] Rewrite the code-3 arm in `SourceInfoDeserializer::new` (currently
       `crates/pampa/src/readers/json.rs:252-283`) per §"Code 3 — Legacy
       reader only": dispatch on `data[0]` numeric → legacy Substring;
       string → strict `[path, line]` decode to `Generated { by:
       By::filter(path, line), from: smallvec![] }`; otherwise
       `MalformedSourceInfoPool`. No silent `unwrap_or(0)` — line must
       be a number or the entry is malformed.
-- [ ] Rewrite the code-3 reader's doc-comment to:
+- [x] Rewrite the code-3 reader's doc-comment to:
       "Legacy reader for code 3 — accepts both old Transformed
       numeric-array and buggy FilterProvenance string-array; writes
       never emit code 3."
-- [ ] Run `cargo nextest run -p quarto-core --test idempotence lua_shortcode_lipsum_fixed`
+- [x] Run `cargo nextest run -p quarto-core --test idempotence lua_shortcode_lipsum_fixed`
       → green (closes bd-3odjm).
-- [ ] Run the full Plan-3 idempotence suite → 27/27 green.
-- [ ] **Per-phase verification gate:** `cargo nextest run --workspace`
+- [x] Run the full Plan-3 idempotence suite → 27/27 green.
+- [x] **Per-phase verification gate:** `cargo nextest run --workspace`
       → all green. bd-3odjm closed; no regressions. Phase 1 is
       independently revertible (the reader change is purely additive
       — restoring the prior arm removes only the new FilterProvenance
       recovery branch).
-- [ ] **Rollback signal:** the Phase-1 reader change only touches the
+- [x] **Rollback signal:** the Phase-1 reader change only touches the
       code-3 arm; other code-paths and other pool entries are
       unaffected. If a Plan-3 idempotence case *other than*
       `lua_shortcode_lipsum_fixed` regresses (or a workspace test
@@ -561,20 +561,20 @@ when Phase 3 starts emitting code 4. Phase 2 alone leaves the workspace
 green: no production code emits code 4 yet, so the new arm is exercised
 only by hand-constructed tests.
 
-- [ ] Add a `4 => { … }` arm in `SourceInfoDeserializer::new`
+- [x] Add a `4 => { … }` arm in `SourceInfoDeserializer::new`
       (`readers/json.rs:154-287`) per §"Code 4 — Reader / writer":
       decode `by` (kind + optional data), decode `from` array entries
       via `parse_anchor_role` + `si_id`, with the `si_id < current_index`
       circular-ref guard.
-- [ ] Reject malformed code-4 payloads with `MalformedSourceInfoPool`:
+- [x] Reject malformed code-4 payloads with `MalformedSourceInfoPool`:
       missing `by`; missing `by.kind`; `from` present but not an array;
       `from` entry not an object; `from` entry missing `role`; `from`
       entry missing `si_id`; unrecognized role string; `Other("")` with
       empty suffix. See §"Code 4 — Reader / writer" for the full
       snippet — same strictness as the Substring/Concat arms.
-- [ ] Silently accept code-4 entries with `r != [0, 0]` (one-line
+- [x] Silently accept code-4 entries with `r != [0, 0]` (one-line
       comment in the arm; precedent: today's Concat arm).
-- [ ] Add the forward-compat unit tests in `readers/json.rs::tests` —
+- [x] Add the forward-compat unit tests in `readers/json.rs::tests` —
       see Phase 6 for the full list of tests landing here.
 
 ### Phase 3 — Writer code-4 emit (`SerializableSourceMapping` + intern + `to_json`) **+ Phase 4 streaming-writer parity, landed atomically**
@@ -594,16 +594,16 @@ stamping until later, so Plan 4's expect is safe in the interim.
 Phase 3 removes both the interim arm and the `SerializableSourceMapping::FilterProvenance`
 variant at once.
 
-- [ ] Add `Generated { by: By, from: Vec<(AnchorRole, usize)> }` to
+- [x] Add `Generated { by: By, from: Vec<(AnchorRole, usize)> }` to
       `SerializableSourceMapping` in `crates/pampa/src/writers/json.rs`.
-- [ ] Replace Plan 4's interim `SourceInfo::Generated { by, .. } => …
+- [x] Replace Plan 4's interim `SourceInfo::Generated { by, .. } => …
       SerializableSourceMapping::FilterProvenance` arm with a real
       `SerializableSourceMapping::Generated { … }` construction (no more
       `by.as_filter().expect(...)`); supports all `by.kind` values
       uniformly.
-- [ ] Remove `SerializableSourceMapping::FilterProvenance` (no longer
+- [x] Remove `SerializableSourceMapping::FilterProvenance` (no longer
       reachable after the interim arm above is rewritten).
-- [ ] Update `SourceInfoSerializer::intern` (`writers/json.rs:260-333`):
+- [x] Update `SourceInfoSerializer::intern` (`writers/json.rs:260-333`):
       - Recognize `SourceInfo::Generated { by, from }`.
       - **Recursively intern each anchor's `source_info` BEFORE pushing
         the parent pool entry** (same pattern as today's `Concat` and
@@ -623,26 +623,26 @@ variant at once.
         `r: [0, 0]` rule is enforced by hard-coding the first two
         components to zero, exactly as today's FilterProvenance arm at
         lines 314-322 does.
-- [ ] Update `SerializableSourceInfo::to_json` (`writers/json.rs:169-190`)
+- [x] Update `SerializableSourceInfo::to_json` (`writers/json.rs:169-190`)
       with the code-4 arm per §"Code 4 — Reader / writer".
-- [ ] Add `serialize_anchor_role` helper.
-- [ ] Update the `SourceInfoJson.t` legend comment at
+- [x] Add `serialize_anchor_role` helper.
+- [x] Update the `SourceInfoJson.t` legend comment at
       `writers/json.rs:115` from
       `"0=Original, 1=Substring, 2=Concat, 3=FilterProvenance"` to
       `"0=Original, 1=Substring, 2=Concat, 3=Legacy (read-only), 4=Generated"`.
 
 ### Phase 4 — Streaming writer parity (atomic with Phase 3)
 
-- [ ] Add the code-4 arm in `stream_write_source_info_pool`
+- [x] Add the code-4 arm in `stream_write_source_info_pool`
       (`writers/json.rs:3482-3532` as of `eb06c4cf`; refresh before
       implementing); mirror the `to_json` shape exactly.
-- [ ] Remove the FilterProvenance arms (lines 3509-3514 emit, line 3526
+- [x] Remove the FilterProvenance arms (lines 3509-3514 emit, line 3526
       tag as of `eb06c4cf`). They become unreachable once
       `SerializableSourceMapping::FilterProvenance` is gone from Phase 3.
 
 ### Phase 5 — TypeScript types
 
-- [ ] Rewrite `ts-packages/preview-renderer/src/types/sourceInfo.ts`
+- [x] Rewrite `ts-packages/preview-renderer/src/types/sourceInfo.ts`
       per §"TypeScript wire-format definitions":
       - Add `AnchorRef` interface.
       - Code 4's `d` becomes `{ by: By; from?: AnchorRef[] }`.
@@ -661,7 +661,7 @@ variant at once.
         serializer in `to_json` ~lines 167-190). Do not bake in exact
         line numbers — cite the type names; they will outlast line
         drift.
-- [ ] Update `ts-packages/preview-renderer/src/utils/sourceInfo.ts` per
+- [x] Update `ts-packages/preview-renderer/src/utils/sourceInfo.ts` per
       §"TypeScript wire-format definitions" → `utils/sourceInfo.ts`
       reconciliation:
       - Delete `isDerived` entirely.
@@ -676,7 +676,7 @@ variant at once.
         `By::is_atomic_synthesizer()`" to "mirrors `By::is_atomic_kind()`."
       - Migrate any remaining `isDerived` callers (`grep -rn isDerived ts-packages/`)
         to the new `isAtomicSourceInfo` shape.
-- [ ] Update `ts-packages/preview-renderer/src/utils/sourceInfo.test.ts`
+- [x] Update `ts-packages/preview-renderer/src/utils/sourceInfo.test.ts`
       — the existing tests will not compile after the changes above.
       Specifically:
       - Drop the `import { isDerived, ATOMIC_SYNTHETIC_KINDS }` lines
@@ -733,17 +733,17 @@ the writer emits code 4.
 
 **Tests:**
 
-- [ ] Round-trip property test for every `SourceInfo` variant (Original,
+- [x] Round-trip property test for every `SourceInfo` variant (Original,
       Substring, Concat, Generated with various By kinds and `from`
       configurations). Hand-written cases (one per shape). See §Test
       plan.
-- [ ] Concat-of-Generated round-trip case: a `Concat { pieces }` whose
+- [x] Concat-of-Generated round-trip case: a `Concat { pieces }` whose
       pieces' `source_info` is `Generated`. Serialize → deserialize →
       assert structural equality. Closes a coverage gap — current
       production paths emit this shape (e.g. coalesced filter-emitted
       spans). Sits in the writer-side test module since it exercises
       the recursive intern of mixed-variant pieces.
-- [ ] Substring-of-Generated round-trip case: a
+- [x] Substring-of-Generated round-trip case: a
       `Substring { parent: Arc::new(Generated { … }), … }` — e.g. a
       filter-emitted span whose substring is later coalesced. The
       writer's existing `intern` recursion routes
@@ -755,20 +755,20 @@ the writer emits code 4.
       child) and assert structural equality across serialize →
       deserialize. Co-located with the Concat-of-Generated case in
       the writer-side test module.
-- [ ] Filter-provenance recovery test (hand-constructed code-3 with
+- [x] Filter-provenance recovery test (hand-constructed code-3 with
       string-array payload → `Generated { by: filter, from: smallvec![] }`).
-- [ ] Legacy Transformed back-compat test (hand-constructed code-3 with
+- [x] Legacy Transformed back-compat test (hand-constructed code-3 with
       numeric-array payload → `Substring`).
-- [ ] Strict code-3 rejection tests: `[path]` (missing line) and
+- [x] Strict code-3 rejection tests: `[path]` (missing line) and
       `[path, "not-a-number"]` (non-numeric line) both
       → `MalformedSourceInfoPool`. Guards the no-`unwrap_or(0)` rule.
-- [ ] Forward-compat test (code-4 with unknown `by.kind`, arbitrary
+- [x] Forward-compat test (code-4 with unknown `by.kind`, arbitrary
       `data` → preserved round-trip).
-- [ ] Strict code-4 rejection tests: missing `by`, missing `by.kind`,
+- [x] Strict code-4 rejection tests: missing `by`, missing `by.kind`,
       `from` present but not an array, `from` entry not an object,
       `from` entry missing `role`/`si_id`, role string `"other:"`
       (empty suffix) → all `MalformedSourceInfoPool`.
-- [ ] **Anchor dedup test (writer-side only).** Hand-construct an AST
+- [x] **Anchor dedup test (writer-side only).** Hand-construct an AST
       with N inlines, each carrying
       `Generated { by: By::shortcode("meta"), from: smallvec![Anchor::invocation(Arc::clone(&shared))] }`.
       Serialize. Assert: the pool contains the shared target exactly
@@ -779,42 +779,42 @@ the writer emits code 4.
       on `Arc::as_ptr`. See [[anchor-dedup-invariant]] in §"Risk areas"
       for the broader contract. Test passes Plan-5-alone (no shortcode
       resolver needed — Arc sharing is hand-wired).
-- [ ] Streaming-writer parity test. Helper shape:
+- [x] Streaming-writer parity test. Helper shape:
       `roundtrip_via_stream(ast) -> ast` that calls `stream_write_pandoc`
       into a `Vec<u8>`, reads back via `pampa::readers::json::read`,
       and asserts SourceInfo equality at chosen Generated nodes. The
       streaming writer's match arms are independent of `to_json`'s;
       without this coverage, a Phase-4 regression in
       `stream_write_source_info_pool` could slip through.
-- [ ] AnchorRole round-trip test: build a `Generated` with each role
+- [x] AnchorRole round-trip test: build a `Generated` with each role
       (`Invocation`, `ValueSource`, `Other("ext/foo/bar")`) wrapped in
       anchors; serialize through JSON via the writer's code-4 path;
       deserialize via the reader's code-4 path; assert the role survives.
-- [ ] End-to-end production reachability test (kbd-shortcode fixture →
+- [x] End-to-end production reachability test (kbd-shortcode fixture →
       `render_qmd_to_preview_ast` → JSON → `pampa::readers::json::read`
       → assert success and recovered shape). Lives in
       `crates/pampa/tests/json_reader_smoke_tests.rs`.
-- [ ] TypeScript-side type round-trip (parse a JSON pool with Generated
+- [x] TypeScript-side type round-trip (parse a JSON pool with Generated
       entries; confirm `SourceInfoEntry` shape matches; confirm
       `entry.d.from ?? []` access pattern works for both absent and
       present `from`).
 
 ### Phase 7 — Verification gate
 
-- [ ] `cargo build --workspace` clean.
-- [ ] `cargo nextest run --workspace --no-fail-fast` all green
+- [x] `cargo build --workspace` clean.
+- [x] `cargo nextest run --workspace --no-fail-fast` all green
       (bd-3odjm closed in Phase 1; no other regressions). Use
       `--no-fail-fast` so a single regression doesn't hide downstream
       green tests — same convention used to close Plan 4.
-- [ ] `cargo xtask verify` (full — `quarto-core`/`pampa` are WASM
+- [x] `cargo xtask verify` (full — `quarto-core`/`pampa` are WASM
       consumers; hub-build leg matters). The WASM rebuild leg will
       modify `crates/wasm-quarto-hub-client/Cargo.lock` as a side
       effect (separate lockfile from the workspace one); include it
       in the commit. Plan 4 hit this and committed it without issue.
-- [ ] `git grep "FilterProvenance"` returns only legacy-reader / legacy
+- [x] `git grep "FilterProvenance"` returns only legacy-reader / legacy
       doc references (no writer emissions, no `SerializableSourceMapping`
       variant).
-- [ ] Update bd-3odjm: close at the Phase-1 commit (the reader change
+- [x] Update bd-3odjm: close at the Phase-1 commit (the reader change
       that turns `lua_shortcode_lipsum_fixed` green). The close trigger
       is the commit itself, not a downstream PR or merge — Plan 5 lands
       on the `feature/provenance` integration branch via merge commits,
