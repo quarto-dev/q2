@@ -35,13 +35,13 @@ holds the design details; this list is the work-tracking surface.
   (`crates/quarto-pandoc-types/src/attr.rs:31`).
 
 ### Stamper + dispatch funnel
-- [ ] Implement `stamp_shortcode_anchors` + mutable AST walkers in
+- [x] Implement `stamp_shortcode_anchors` + mutable AST walkers in
   `shortcode_resolve.rs` (model on existing `recurse_inline` /
   `resolve_block`).
-- [ ] Wire the stamper into `resolve_shortcode`'s dispatch funnel so every
+- [x] Wire the stamper into `resolve_shortcode`'s dispatch funnel so every
   Rust / Lua / extension dispatch is post-walked.
-- [ ] Thread `shortcode_owned.source_info` into `make_error_inline` and
-  `shortcode_to_literal` from their four call sites (lines 659/665/914/920).
+- [x] Thread `shortcode_owned.source_info` into `make_error_inline` and
+  `shortcode_to_literal` from their four call sites.
 
 ### Synthesizer fixes
 - [ ] `TitleBlockTransform`: emit `Generated { by: By::title_block(), from: [] }`

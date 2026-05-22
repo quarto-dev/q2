@@ -41,7 +41,8 @@ use quarto_pandoc_types::inline::{
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::shortcode::{Shortcode, ShortcodeArg};
 use quarto_pandoc_types::table::Table;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{Anchor, By, SourceInfo};
+use smallvec::smallvec;
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -303,7 +304,33 @@ impl ShortcodeResolveTransform {
     /// Resolve a shortcode using the appropriate handler.
     ///
     /// Priority: built-in Rust handlers > loaded Lua handlers > extension name lookup.
+    ///
+    /// All `ShortcodeResult::Inlines`/`Blocks` outcomes flow through this single
+    /// funnel and are post-walked by `stamp_shortcode_anchors`, which stamps each
+    /// returned node with `Generated { by: shortcode(name), from: [Invocation -> ctx.source_info] }`
+    /// (and enriches any Lua filter-attached source_info). `Preserve` and `Error`
+    /// outcomes do not need stamping — `Preserve` becomes a literal Str via
+    /// `shortcode_to_literal` and `Error` becomes a visible error via
+    /// `make_error_inline`; both sites carry the token's `Original` source_info
+    /// directly.
     async fn resolve_shortcode(
+        &self,
+        shortcode: &Shortcode,
+        ctx: &ShortcodeContext<'_>,
+        resolution_ctx: ResolutionContext,
+        lua_engine: &mut Option<pampa::lua::LuaShortcodeEngine>,
+    ) -> ShortcodeResult {
+        let mut result = self
+            .dispatch_shortcode(shortcode, ctx, resolution_ctx, lua_engine)
+            .await;
+        stamp_shortcode_anchors(&mut result, &shortcode.name, ctx.source_info);
+        result
+    }
+
+    /// Inner dispatch — picks the handler and returns the raw result. Wrapped by
+    /// [`resolve_shortcode`], which post-walks the result to stamp Invocation
+    /// anchors.
+    async fn dispatch_shortcode(
         &self,
         shortcode: &Shortcode,
         ctx: &ShortcodeContext<'_>,
@@ -483,6 +510,292 @@ fn lua_result_to_shortcode_result(
     }
 }
 
+/// After every shortcode handler dispatch, stamp Invocation provenance on the
+/// returned nodes. Recurses into nested AST so every block and inline gets the
+/// anchor.
+///
+/// Enrichment rules (per Plan 6 §"Lua-shortcode enrichment"):
+/// - If the existing source_info is `Generated { by: filter, ... }` (Lua's
+///   `filter_source_info` auto-attach), promote `by.kind` to `"shortcode"` and
+///   move the `filter_path`/`line` data fields into `lua_path`/`lua_line`,
+///   then append the Invocation anchor.
+/// - Otherwise, replace with a fresh `Generated { by: shortcode(name),
+///   from: [Invocation] }`.
+fn stamp_shortcode_anchors(
+    result: &mut ShortcodeResult,
+    shortcode_name: &str,
+    token_si: &SourceInfo,
+) {
+    let token_arc = Arc::new(token_si.clone());
+    match result {
+        ShortcodeResult::Inlines(inlines) => {
+            for inline in inlines.iter_mut() {
+                stamp_inline(inline, shortcode_name, &token_arc);
+            }
+        }
+        ShortcodeResult::Blocks(blocks) => {
+            for block in blocks.iter_mut() {
+                stamp_block(block, shortcode_name, &token_arc);
+            }
+        }
+        ShortcodeResult::Preserve | ShortcodeResult::Error(_) => {}
+    }
+}
+
+/// Stamp the Invocation anchor on a single inline and recurse into its children.
+fn stamp_inline(inline: &mut Inline, name: &str, token_arc: &Arc<SourceInfo>) {
+    let new_si = enrich_or_create(inline.source_info(), name, token_arc);
+    *inline.source_info_mut() = new_si;
+    match inline {
+        Inline::Emph(Emph { content, .. })
+        | Inline::Underline(Underline { content, .. })
+        | Inline::Strong(Strong { content, .. })
+        | Inline::Strikeout(Strikeout { content, .. })
+        | Inline::Superscript(Superscript { content, .. })
+        | Inline::Subscript(Subscript { content, .. })
+        | Inline::SmallCaps(SmallCaps { content, .. })
+        | Inline::Insert(Insert { content, .. })
+        | Inline::Delete(Delete { content, .. })
+        | Inline::Highlight(Highlight { content, .. })
+        | Inline::Quoted(Quoted { content, .. })
+        | Inline::Cite(Cite { content, .. })
+        | Inline::Link(Link { content, .. })
+        | Inline::Image(Image { content, .. })
+        | Inline::Span(Span { content, .. })
+        | Inline::EditComment(EditComment { content, .. }) => {
+            for child in content.iter_mut() {
+                stamp_inline(child, name, token_arc);
+            }
+        }
+        Inline::Note(Note { content, .. }) => {
+            for child in content.iter_mut() {
+                stamp_block(child, name, token_arc);
+            }
+        }
+        Inline::Custom(custom) => {
+            for slot in custom.slots.values_mut() {
+                match slot {
+                    quarto_pandoc_types::custom::Slot::Inline(i) => {
+                        stamp_inline(i, name, token_arc);
+                    }
+                    quarto_pandoc_types::custom::Slot::Inlines(is) => {
+                        for child in is.iter_mut() {
+                            stamp_inline(child, name, token_arc);
+                        }
+                    }
+                    quarto_pandoc_types::custom::Slot::Block(b) => {
+                        stamp_block(b, name, token_arc);
+                    }
+                    quarto_pandoc_types::custom::Slot::Blocks(bs) => {
+                        for child in bs.iter_mut() {
+                            stamp_block(child, name, token_arc);
+                        }
+                    }
+                }
+            }
+        }
+        // Leaves — no nested AST to walk.
+        Inline::Str(_)
+        | Inline::Code(_)
+        | Inline::Space(_)
+        | Inline::SoftBreak(_)
+        | Inline::LineBreak(_)
+        | Inline::Math(_)
+        | Inline::RawInline(_)
+        | Inline::Shortcode(_)
+        | Inline::NoteReference(_)
+        | Inline::Attr(_) => {}
+    }
+}
+
+/// Stamp the Invocation anchor on a single block and recurse into its children.
+fn stamp_block(block: &mut Block, name: &str, token_arc: &Arc<SourceInfo>) {
+    let new_si = enrich_or_create(block.source_info(), name, token_arc);
+    *block.source_info_mut() = new_si;
+    match block {
+        Block::Plain(Plain { content, .. }) | Block::Paragraph(Paragraph { content, .. }) => {
+            for child in content.iter_mut() {
+                stamp_inline(child, name, token_arc);
+            }
+        }
+        Block::LineBlock(LineBlock { content, .. }) => {
+            for line in content.iter_mut() {
+                for child in line.iter_mut() {
+                    stamp_inline(child, name, token_arc);
+                }
+            }
+        }
+        Block::Header(Header { content, .. }) => {
+            for child in content.iter_mut() {
+                stamp_inline(child, name, token_arc);
+            }
+        }
+        Block::BlockQuote(BlockQuote { content, .. }) => {
+            for child in content.iter_mut() {
+                stamp_block(child, name, token_arc);
+            }
+        }
+        Block::OrderedList(OrderedList { content, .. })
+        | Block::BulletList(BulletList { content, .. }) => {
+            for item in content.iter_mut() {
+                for child in item.iter_mut() {
+                    stamp_block(child, name, token_arc);
+                }
+            }
+        }
+        Block::DefinitionList(DefinitionList { content, .. }) => {
+            for (term, defs) in content.iter_mut() {
+                for child in term.iter_mut() {
+                    stamp_inline(child, name, token_arc);
+                }
+                for def in defs.iter_mut() {
+                    for child in def.iter_mut() {
+                        stamp_block(child, name, token_arc);
+                    }
+                }
+            }
+        }
+        Block::Figure(Figure {
+            content, caption, ..
+        }) => {
+            for child in content.iter_mut() {
+                stamp_block(child, name, token_arc);
+            }
+            if let Some(short) = caption.short.as_mut() {
+                for child in short.iter_mut() {
+                    stamp_inline(child, name, token_arc);
+                }
+            }
+            if let Some(long) = caption.long.as_mut() {
+                for child in long.iter_mut() {
+                    stamp_block(child, name, token_arc);
+                }
+            }
+        }
+        Block::Div(Div { content, .. }) => {
+            for child in content.iter_mut() {
+                stamp_block(child, name, token_arc);
+            }
+        }
+        Block::Table(Table {
+            caption,
+            head,
+            bodies,
+            foot,
+            ..
+        }) => {
+            if let Some(short) = caption.short.as_mut() {
+                for child in short.iter_mut() {
+                    stamp_inline(child, name, token_arc);
+                }
+            }
+            if let Some(long) = caption.long.as_mut() {
+                for child in long.iter_mut() {
+                    stamp_block(child, name, token_arc);
+                }
+            }
+            for row in head.rows.iter_mut() {
+                for cell in row.cells.iter_mut() {
+                    for child in cell.content.iter_mut() {
+                        stamp_block(child, name, token_arc);
+                    }
+                }
+            }
+            for body in bodies.iter_mut() {
+                for row in body.body.iter_mut() {
+                    for cell in row.cells.iter_mut() {
+                        for child in cell.content.iter_mut() {
+                            stamp_block(child, name, token_arc);
+                        }
+                    }
+                }
+            }
+            for row in foot.rows.iter_mut() {
+                for cell in row.cells.iter_mut() {
+                    for child in cell.content.iter_mut() {
+                        stamp_block(child, name, token_arc);
+                    }
+                }
+            }
+        }
+        Block::Custom(custom) => {
+            for slot in custom.slots.values_mut() {
+                match slot {
+                    quarto_pandoc_types::custom::Slot::Inline(i) => {
+                        stamp_inline(i, name, token_arc);
+                    }
+                    quarto_pandoc_types::custom::Slot::Inlines(is) => {
+                        for child in is.iter_mut() {
+                            stamp_inline(child, name, token_arc);
+                        }
+                    }
+                    quarto_pandoc_types::custom::Slot::Block(b) => {
+                        stamp_block(b, name, token_arc);
+                    }
+                    quarto_pandoc_types::custom::Slot::Blocks(bs) => {
+                        for child in bs.iter_mut() {
+                            stamp_block(child, name, token_arc);
+                        }
+                    }
+                }
+            }
+        }
+        // Leaves — no nested AST to walk.
+        Block::CodeBlock(_)
+        | Block::RawBlock(_)
+        | Block::HorizontalRule(_)
+        | Block::BlockMetadata(_)
+        | Block::NoteDefinitionPara(_)
+        | Block::NoteDefinitionFencedBlock(_)
+        | Block::CaptionBlock(_) => {}
+    }
+}
+
+/// Build the `SourceInfo` for a freshly-resolved shortcode node.
+///
+/// If the existing source_info is `Generated { by: filter, ... }` (a Lua
+/// auto-attach from `filter_source_info`), promote the kind to `"shortcode"`
+/// and migrate the `filter_path`/`line` data fields into `lua_path`/`lua_line`,
+/// preserving the Lua-side dispatch precision alongside the new shortcode
+/// context. Otherwise, mint a fresh `Generated { by: shortcode(name), ... }`.
+///
+/// In both branches, append an Invocation anchor pointing at the shortcode
+/// token's source range (`token_arc`).
+///
+/// NOTE: the `filter_path`/`line` reads below are temporary. When
+/// **bd-36fr9** (Lua-file registration in `SourceContext`) lands, those
+/// fields move out of `by.data` and into a typed `Dispatch` anchor inside
+/// `from`. This branch will then read the existing Dispatch anchor and copy
+/// it alongside the Invocation.
+///
+/// NOTE: **bd-129m3** (ValueSource anchor stamping for `meta` / `var`
+/// shortcodes) is the integration point for appending a second anchor
+/// when the metadata loader threads per-key source-info through.
+fn enrich_or_create(existing: &SourceInfo, name: &str, token_arc: &Arc<SourceInfo>) -> SourceInfo {
+    let by = match existing {
+        SourceInfo::Generated { by, .. } if by.kind == "filter" => {
+            let lua_path = by.data.get("filter_path").cloned();
+            let lua_line = by.data.get("line").cloned();
+            let mut data = serde_json::json!({ "name": name });
+            if let Some(p) = lua_path {
+                data["lua_path"] = p;
+            }
+            if let Some(l) = lua_line {
+                data["lua_line"] = l;
+            }
+            By {
+                kind: "shortcode".to_string(),
+                data,
+            }
+        }
+        _ => By::shortcode(name),
+    };
+    SourceInfo::Generated {
+        by,
+        from: smallvec![Anchor::invocation(Arc::clone(token_arc))],
+    }
+}
+
 /// Extract shortcode paths from merged metadata.
 ///
 /// After metadata merge, `meta["shortcodes"]` contains an array of paths
@@ -656,7 +969,8 @@ fn resolve_blocks<'a>(
                     }
                     ShortcodeResult::Error(error) => {
                         diagnostics.push(error.diagnostic);
-                        let error_inline = make_error_inline(&error.key);
+                        let error_inline =
+                            make_error_inline(&error.key, &shortcode_owned.source_info);
                         replace_shortcode_in_block(&mut blocks[i], vec![error_inline]);
                         i += 1;
                         continue;
@@ -911,7 +1225,8 @@ fn resolve_inlines<'a>(
                         // Emit diagnostic
                         diagnostics.push(error.diagnostic);
                         // Replace with visible error (TS Quarto style)
-                        let error_inline = make_error_inline(&error.key);
+                        let error_inline =
+                            make_error_inline(&error.key, &shortcode_owned.source_info);
                         inlines[i] = error_inline;
                         i += 1;
                     }
@@ -1027,19 +1342,29 @@ fn recurse_inline<'a>(
 }
 
 /// Create visible error inline: Strong("?key")
-fn make_error_inline(key: &str) -> Inline {
+///
+/// Both the inner Str and outer Strong carry the shortcode token's original
+/// `source_info` (not `Generated`). The error region is treated as normal
+/// editable user-source content — Plan 7's `is_atomic_kind()` does not fire on
+/// Original, so the incremental writer Verbatim-copies the original token
+/// bytes on round-trip. The Strong-wraps-Str overlap is structurally parallel
+/// to the footnote `<sup>` case (Plan 7 §footnotes).
+fn make_error_inline(key: &str, token_source_info: &SourceInfo) -> Inline {
     Inline::Strong(Strong {
         content: vec![Inline::Str(Str {
             text: format!("?{}", key),
-            source_info: SourceInfo::default(),
+            source_info: token_source_info.clone(),
         })],
-        source_info: SourceInfo::default(),
+        source_info: token_source_info.clone(),
     })
 }
 
 /// Convert an escaped shortcode to literal text.
 ///
-/// For `{{{< meta title >}}}`, this produces `{{< meta title >}}`
+/// For `{{{< meta title >}}}`, this produces `{{< meta title >}}`. The
+/// resulting `Str` carries the shortcode token's original `source_info`
+/// (an Original), so Plan 7's `is_atomic_kind()` does not fire — round-trip
+/// through the incremental writer verbatim-copies the source bytes.
 fn shortcode_to_literal(shortcode: &Shortcode) -> Inline {
     let mut text = String::from("{{< ");
     text.push_str(&shortcode.name);
@@ -1106,7 +1431,7 @@ fn shortcode_to_literal(shortcode: &Shortcode) -> Inline {
 
     Inline::Str(Str {
         text,
-        source_info: SourceInfo::default(),
+        source_info: shortcode.source_info.clone(),
     })
 }
 
@@ -1329,12 +1654,16 @@ mod tests {
 
     #[test]
     fn test_make_error_inline() {
-        let inline = make_error_inline("meta:title");
+        let token_si = dummy_source_info();
+        let inline = make_error_inline("meta:title", &token_si);
         match inline {
             Inline::Strong(strong) => {
                 assert_eq!(strong.content.len(), 1);
+                // Both layers carry the token's source_info (not Default, not Generated).
+                assert_eq!(&strong.source_info, &token_si);
                 if let Inline::Str(s) = &strong.content[0] {
                     assert_eq!(s.text, "?meta:title");
+                    assert_eq!(&s.source_info, &token_si);
                 } else {
                     panic!("Expected Str inline");
                 }
