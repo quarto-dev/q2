@@ -15,6 +15,76 @@ attaches `Invocation` anchors uniformly to all shortcode resolutions.
 The file name keeps its q2-preview-plan-N form for continuity with the
 earlier discussion notes.
 
+## Work items checklist
+
+Implementation order. The plan body (Scope / Implementation notes / Test plan)
+holds the design details; this list is the work-tracking surface.
+
+### Phase 0 — prerequisite
+- [x] Add `Inline::source_info_mut` (~33 LOC) + `Block::source_info_mut`
+  (~24 LOC) accessors in `quarto-pandoc-types`, with round-trip unit tests
+  for one representative variant of each.
+
+### Audit
+- [ ] Comprehensive grep + categorize `SourceInfo::default()` sites in
+  `crates/quarto-core/src/transforms/` and `crates/pampa/src/`.
+- [ ] Document the positional-alignment invariant on `AttrSourceInfo.attributes`
+  (`crates/quarto-pandoc-types/src/attr.rs:31`).
+
+### Stamper + dispatch funnel
+- [ ] Implement `stamp_shortcode_anchors` + mutable AST walkers in
+  `shortcode_resolve.rs` (model on existing `recurse_inline` /
+  `resolve_block`).
+- [ ] Wire the stamper into `resolve_shortcode`'s dispatch funnel so every
+  Rust / Lua / extension dispatch is post-walked.
+- [ ] Thread `shortcode_owned.source_info` into `make_error_inline` and
+  `shortcode_to_literal` from their four call sites (lines 659/665/914/920).
+
+### Synthesizer fixes
+- [ ] `TitleBlockTransform`: emit `Generated { by: By::title_block(), from: [] }`
+  on the synthesized h1.
+- [ ] `SectionizeTransform`: emit `Generated { by: By::sectionize(), from: [] }`
+  on the synthetic Section Div (both close-on-stack and end-of-input sites).
+- [ ] `FootnotesTransform`: emit `Generated { by: By::footnotes(), from: [] }`
+  on the container Div.
+- [ ] `AppendixStructureTransform`: emit `Generated { by: By::appendix(), from: [] }`
+  on the container Div (plus bibliography / license wrappers if covered).
+- [ ] `theorem.rs::extract_name_attr` + `proof.rs::extract_name_attr`:
+  thread `&div.attr_source` through; index before `kvs.remove("name")`;
+  fall back on length-mismatch with a `debug_assert_eq!`.
+- [ ] `pampa::pandoc::treesitter_utils::postprocess` synthetic Space
+  (~line 1348): emit `Generated { by: By::tree_sitter_postprocess(), from: [] }`.
+
+### Tests
+- [ ] Audit-completion test (no `SourceInfo::default()` survives; every
+  synthesized node carries the correct `Generated` shape).
+- [ ] Shortcode required-anchor invariant (no `by:shortcode` without an
+  Invocation anchor).
+- [ ] Per-transform fix tests (sectionize / title_block / footnotes /
+  appendix / theorem / proof / tree-sitter postprocess).
+- [ ] Lua-shortcode enrichment test (`kbd` → kind promoted to `shortcode`,
+  `lua_path` / `lua_line` preserved in `by.data`).
+- [ ] Multi-inline shortcode anchor test (shared invocation source_info).
+- [ ] Attribution interaction test (multi-author latest-wins via
+  `query_byte_range`).
+- [ ] Escaped-shortcode regression test (`{{</ meta foo >}}` stays Original).
+- [ ] Error-inline regression test (`{{< bogus >}}` Strong/Str both
+  Original, not Generated).
+- [ ] Error + escaped round-trip test (incremental writer verbatim-copies).
+- [ ] Shortcode-inside-include composition test (Invocation anchor
+  `file_id != 0`).
+- [ ] Plan 3 idempotence test rerun (no new non-determinism).
+- [ ] `source_info` determinism test (Plan-6-specific: render twice,
+  assert `Generated.by`, `Generated.from[]`, every Original `SourceInfo`
+  is `==`-equal across runs).
+
+### Verification
+- [ ] `cargo xtask verify` (full, including hub-build leg).
+- [ ] End-to-end exercise on a fixture covering shortcodes / sections /
+  footnotes / appendix / theorems; inspect output and record the
+  invocation + observed shape per CLAUDE.md's "End-to-end verification
+  before declaring success" rule.
+
 ## Goal
 
 Audit every transform that emits `SourceInfo::default()` (a meaningless

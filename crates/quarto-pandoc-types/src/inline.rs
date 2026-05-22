@@ -86,6 +86,42 @@ impl Inline {
             Inline::Custom(c) => &c.source_info,
         }
     }
+
+    /// Mutable counterpart to [`source_info`]. Mechanical mirror of the read
+    /// accessor; lets Plan-6 stamping rewrite the per-node `source_info` field
+    /// through the enum without holding a typed variant reference.
+    pub fn source_info_mut(&mut self) -> &mut quarto_source_map::SourceInfo {
+        match self {
+            Inline::Str(s) => &mut s.source_info,
+            Inline::Emph(e) => &mut e.source_info,
+            Inline::Underline(u) => &mut u.source_info,
+            Inline::Strong(s) => &mut s.source_info,
+            Inline::Strikeout(s) => &mut s.source_info,
+            Inline::Superscript(s) => &mut s.source_info,
+            Inline::Subscript(s) => &mut s.source_info,
+            Inline::SmallCaps(s) => &mut s.source_info,
+            Inline::Quoted(q) => &mut q.source_info,
+            Inline::Cite(c) => &mut c.source_info,
+            Inline::Code(c) => &mut c.source_info,
+            Inline::Space(s) => &mut s.source_info,
+            Inline::SoftBreak(s) => &mut s.source_info,
+            Inline::LineBreak(l) => &mut l.source_info,
+            Inline::Math(m) => &mut m.source_info,
+            Inline::RawInline(r) => &mut r.source_info,
+            Inline::Link(l) => &mut l.source_info,
+            Inline::Image(i) => &mut i.source_info,
+            Inline::Note(n) => &mut n.source_info,
+            Inline::Span(s) => &mut s.source_info,
+            Inline::Shortcode(s) => &mut s.source_info,
+            Inline::NoteReference(n) => &mut n.source_info,
+            Inline::Attr(a) => &mut a.source_info,
+            Inline::Insert(i) => &mut i.source_info,
+            Inline::Delete(d) => &mut d.source_info,
+            Inline::Highlight(h) => &mut h.source_info,
+            Inline::EditComment(e) => &mut e.source_info,
+            Inline::Custom(c) => &mut c.source_info,
+        }
+    }
 }
 
 pub type Inlines = Vec<Inline>;
@@ -1477,5 +1513,18 @@ mod tests {
             target_source: TargetSourceInfo::empty(),
         });
         assert_eq!(inline.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_mut_round_trip_str() {
+        let original = test_si(0, 0, 5);
+        let updated = test_si(7, 100, 110);
+        let mut inline = Inline::Str(Str {
+            text: "hello".into(),
+            source_info: original.clone(),
+        });
+        assert_eq!(inline.source_info(), &original);
+        *inline.source_info_mut() = updated.clone();
+        assert_eq!(inline.source_info(), &updated);
     }
 }
