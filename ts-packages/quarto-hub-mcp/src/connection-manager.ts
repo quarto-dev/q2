@@ -312,6 +312,22 @@ export class ConnectionManager {
       status = await this.probeAuth(token);
       if (status === 401) {
         this.recordObservation(401, true);
+        // Hub rejects a freshly-refreshed token — local view and hub
+        // view disagree on whether these credentials are usable. Clear
+        // the store so `authenticate_start`'s "already authenticated"
+        // short-circuit cannot keep the agent trapped against a hub
+        // that won't accept this identity. The next `getValidIdToken`
+        // call raises ReauthRequired, falling through to the device
+        // flow.
+        if (this.credentialStore) {
+          try {
+            await this.credentialStore.clear();
+          } catch {
+            // Don't mask the underlying auth failure with a keyring
+            // unavailability error — the user still needs to see
+            // ReauthRequired and decide what to do.
+          }
+        }
         throw new ReauthRequired();
       }
     }

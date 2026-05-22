@@ -316,6 +316,33 @@ describe('ConnectionManager with creds', () => {
     expect(mgr.lastObservedAuthMode()).toBe('requires-auth');
   });
 
+  it('clears the credential store on persistent 401 so authenticate_start starts a fresh flow', async () => {
+    // Regression: before this, ConnectionManager threw ReauthRequired
+    // but left a freshly-refreshed id_token in the store. The next
+    // `authenticate_start` would then short-circuit on
+    // `RefreshManager.getValidIdToken()` and reply "Already
+    // authenticated as …", trapping the agent in a state mismatch
+    // between local view (token works) and hub view (token rejected).
+    // After this fix, the store is cleared on persistent 401 so the
+    // next `getValidIdToken` raises ReauthRequired and the device
+    // flow runs.
+    const auth = seededAuth();
+    auth.forceRefresh.mockResolvedValueOnce('still-bad-token');
+    const fetchSpy = scriptedFetch([401, 401]);
+    const sync = spySyncClientFactory();
+
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+
+    await expect(mgr.connect('idx-1')).rejects.toBeInstanceOf(ReauthRequired);
+    expect(await auth.store.read()).toBeNull();
+  });
+
   it('succeeds against a no-auth hub even with stale creds in the store', async () => {
     const auth = seededAuth();
     const fetchSpy = scriptedFetch([200]);
