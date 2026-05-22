@@ -46,7 +46,8 @@
 use crate::pandoc::block::{Block, Div, Header};
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 
 /// Wrap headers in section Divs.
 ///
@@ -93,7 +94,10 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
                     let section_div = Block::Div(Div {
                         attr: section_attr,
                         content: section_content,
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::Generated {
+                            by: By::sectionize(),
+                            from: smallvec![],
+                        },
                         attr_source: AttrSourceInfo::empty(),
                     });
                     // Add closed section to parent, or output if no parent
@@ -145,7 +149,10 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
         let section_div = Block::Div(Div {
             attr: section_attr,
             content: section_content,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::Generated {
+                by: By::sectionize(),
+                from: smallvec![],
+            },
             attr_source: AttrSourceInfo::empty(),
         });
         if let Some((_, _, parent_content)) = section_stack.last_mut() {

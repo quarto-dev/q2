@@ -50,7 +50,8 @@ use quarto_pandoc_types::block::{Block, Div, OrderedList, Paragraph};
 use quarto_pandoc_types::inline::{Inline, Link, Span, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, Inlines, ListNumberDelim, ListNumberStyle};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 
 use quarto_pandoc_types::ConfigValue;
 
@@ -492,7 +493,14 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
 /// </section>
 /// ```
 fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
-    let source_info = SourceInfo::default();
+    // The synthesized container chrome (section Div, embedded <hr>, and the
+    // OrderedList wrapping the footnote items) is pure synthesis: it
+    // corresponds to no source bytes. The footnote content inside (created
+    // by `create_footnote_item`) retains the original Note's source_info.
+    let source_info = SourceInfo::Generated {
+        by: By::footnotes(),
+        from: smallvec![],
+    };
 
     // Create list items for each footnote
     let list_items: Vec<Blocks> = footnotes

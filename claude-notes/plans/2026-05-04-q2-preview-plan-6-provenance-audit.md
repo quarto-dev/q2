@@ -44,18 +44,27 @@ holds the design details; this list is the work-tracking surface.
   `shortcode_to_literal` from their four call sites.
 
 ### Synthesizer fixes
-- [ ] `TitleBlockTransform`: emit `Generated { by: By::title_block(), from: [] }`
+- [x] `TitleBlockTransform`: emit `Generated { by: By::title_block(), from: [] }`
   on the synthesized h1.
-- [ ] `SectionizeTransform`: emit `Generated { by: By::sectionize(), from: [] }`
+- [x] `SectionizeTransform`: emit `Generated { by: By::sectionize(), from: [] }`
   on the synthetic Section Div (both close-on-stack and end-of-input sites).
-- [ ] `FootnotesTransform`: emit `Generated { by: By::footnotes(), from: [] }`
+- [x] `FootnotesTransform`: emit `Generated { by: By::footnotes(), from: [] }`
   on the container Div.
-- [ ] `AppendixStructureTransform`: emit `Generated { by: By::appendix(), from: [] }`
-  on the container Div (plus bibliography / license wrappers if covered).
-- [ ] `theorem.rs::extract_name_attr` + `proof.rs::extract_name_attr`:
+- [x] `AppendixStructureTransform`: emit `Generated { by: By::appendix(), from: [] }`
+  on the container Div, bibliography wrapper, license/copyright/citation
+  helpers (all 5 sites — the helpers were not enumerated in the plan body
+  but are structurally identical synthesizers; see audit report §"Decisions
+  on plan-adjacent sites").
+- [x] `theorem.rs::extract_name_attr` + `proof.rs::extract_name_attr`:
   thread `&div.attr_source` through; index before `kvs.remove("name")`;
-  fall back on length-mismatch with a `debug_assert_eq!`.
-- [ ] `pampa::pandoc::treesitter_utils::postprocess` synthetic Space
+  fall back on length-mismatch. **Implementation note**: the
+  `debug_assert_eq!` form the plan body suggested is too strict — it
+  fires on the common test pattern of `AttrSourceInfo::empty()` plus a
+  non-empty `kvs`. Relaxed to `debug_assert!(attr_source.attributes.
+  is_empty() || kvs.len() == attr_source.attributes.len(), ...)`. The
+  empty case is "no provenance" (not a bug); only populated-but-
+  misaligned input is a bd-3aolj/bd-1e6a5 sync error.
+- [x] `pampa::pandoc::treesitter_utils::postprocess` synthetic Space
   (~line 1348): emit `Generated { by: By::tree_sitter_postprocess(), from: [] }`.
 
 ### Tests

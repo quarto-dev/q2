@@ -32,7 +32,8 @@ use quarto_pandoc_types::block::{Block, Header};
 use quarto_pandoc_types::inline::{Inline, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 
 use crate::Result;
 use crate::format::is_minimal_html;
@@ -174,15 +175,24 @@ fn blocks_to_plain_text(blocks: &[Block]) -> String {
 }
 
 /// Create a level-1 header block with the given title.
+///
+/// The synthesized Header (and its inner Str) carry
+/// `Generated { by: title_block(), from: [] }` provenance. Both nodes are
+/// atomic per Plan 4's `is_atomic_kind` set — the writer treats them as a
+/// single non-editable unit on round-trip.
 fn create_title_header(title: &str) -> Block {
+    let source_info = SourceInfo::Generated {
+        by: By::title_block(),
+        from: smallvec![],
+    };
     Block::Header(Header {
         level: 1,
         attr: empty_attr(),
         content: vec![Inline::Str(Str {
             text: title.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: source_info.clone(),
         })],
-        source_info: SourceInfo::default(),
+        source_info,
         attr_source: AttrSourceInfo::empty(),
     })
 }

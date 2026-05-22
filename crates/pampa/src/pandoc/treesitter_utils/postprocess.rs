@@ -49,7 +49,8 @@ use quarto_pandoc_types::AttrSourceInfo;
 use quarto_pandoc_types::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -1349,8 +1350,12 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                         // bracket attached to the first word and closing bracket to the last word
                                         // e.g., "@knuth [p. 33]" becomes: Str("@knuth"), Space, Str("[p."), Space, Str("33]")
                                         cite.content.push(Inline::Space(Space {
-                                            // Synthetic Space: inserted to separate citation from suffix
-                                            source_info: quarto_source_map::SourceInfo::default(),
+                                            // Synthetic Space: inserted to separate citation from suffix.
+                                            // Plan 6 §"tree-sitter postprocess" — Generated, no preimage.
+                                            source_info: SourceInfo::Generated {
+                                                by: By::tree_sitter_postprocess(),
+                                                from: smallvec![],
+                                            },
                                         }));
 
                                         // The span content may have been merged into a single string, so we need to
