@@ -1025,6 +1025,11 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
 
         filenames.push(filename.clone());
 
+        // bd-ky14a: use the hash-based FileId so this deserialized
+        // ASTContext stays compatible with `current_file_id()` and
+        // with any SourceInfo carrying the same hash.
+        let file_id = quarto_yaml::file_id_for_filename(&filename);
+
         // Try to extract FileInformation fields
         let has_line_breaks = file_map.get("line_breaks").is_some();
         let has_total_length = file_map.get("total_length").is_some();
@@ -1045,19 +1050,26 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
 
             let file_info =
                 quarto_source_map::FileInformation::from_parts(line_breaks, total_length);
-            source_context.add_file_with_info(filename, file_info);
+            source_context.add_file_with_id_and_info(file_id, filename, file_info);
         } else {
             // No FileInformation - try to read from disk
-            source_context.add_file(filename, None);
+            source_context.add_file_with_id(file_id, filename, None);
         }
     }
 
-    Ok(ASTContext {
+    // Primary FileId is the hash of the first filename (or, if no
+    // files were deserialized, a sentinel matching what
+    // `ASTContext::new()` would have produced for `<unknown>`).
+    let primary_file_id = filenames
+        .first()
+        .map(|name| quarto_yaml::file_id_for_filename(name))
+        .unwrap_or_else(|| quarto_yaml::file_id_for_filename("<unknown>"));
+
+    Ok(ASTContext::from_parts(
         filenames,
-        example_list_counter: std::cell::Cell::new(1),
         source_context,
-        parent_source_info: None,
-    })
+        primary_file_id,
+    ))
 }
 
 pub fn read<R: std::io::Read>(reader: &mut R) -> Result<(Pandoc, ASTContext)> {

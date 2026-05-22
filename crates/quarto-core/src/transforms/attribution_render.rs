@@ -136,9 +136,27 @@ impl AstTransform for AttributionRenderTransform {
         // lookup).
         let mut slice: Vec<Option<AttributionRecord>> = Vec::new();
         let mut by_node: HashMap<usize, AttributionRecord> = HashMap::new();
-        slice.push(query_attribution(&ast.meta.source_info, &data.runs));
+        // bd-ky14a: determine the primary FileId by inspecting the
+        // first block whose source info resolves to a real file.
+        // Top-level `ast.meta.source_info` is frequently
+        // `SourceInfo::default()` (FileId 0) when the metadata map
+        // is synthesized by MetadataMergeStage, so it's not a
+        // reliable anchor. The first block's source info, in
+        // contrast, comes from the parser and carries the document's
+        // hash-based FileId. Nodes whose source spans resolve to a
+        // *different* FileId (includes, splices) are skipped.
+        let primary_file_id = ast
+            .blocks
+            .iter()
+            .find_map(|b| resolve_byte_range(b.source_info()).map(|(fid, _, _)| fid))
+            .unwrap_or(0);
+        slice.push(query_attribution(
+            &ast.meta.source_info,
+            &data.runs,
+            primary_file_id,
+        ));
         for block in &ast.blocks {
-            walk_block(block, &data.runs, &mut slice, &mut by_node);
+            walk_block(block, &data.runs, primary_file_id, &mut slice, &mut by_node);
         }
 
         let slice_arc: Arc<[Option<AttributionRecord>]> = Arc::from(slice.into_boxed_slice());
@@ -164,13 +182,21 @@ impl AstTransform for AttributionRenderTransform {
 
 /// Query `runs` for the most-recent `(actor, time)` hit covering the
 /// given SourceInfo, applying the v1 single-doc invariant: if the
-/// node resolves to `file_id != 0` (e.g. spliced in via
-/// `{{< include other.qmd >}}`), return `None` without querying. This
-/// prevents silent misattribution by byte-range collision against
-/// the primary doc's runs.
-fn query_attribution(si: &SourceInfo, runs: &AttributionMap) -> Option<AttributionRecord> {
+/// node resolves to a file other than the primary (e.g. spliced in
+/// via `{{< include other.qmd >}}`), return `None` without querying.
+/// This prevents silent misattribution by byte-range collision
+/// against the primary doc's runs.
+///
+/// bd-ky14a: `primary_file_id` is the [`quarto_yaml::file_id_for_filename`]
+/// hash of the primary document — replaces the old `file_id == 0`
+/// check now that pampa's FileIds are hash-based.
+fn query_attribution(
+    si: &SourceInfo,
+    runs: &AttributionMap,
+    primary_file_id: usize,
+) -> Option<AttributionRecord> {
     let (file_id, start, end) = resolve_byte_range(si)?;
-    if file_id != 0 || start >= end {
+    if file_id != primary_file_id || start >= end {
         return None;
     }
     runs.query_byte_range(start, end)
@@ -179,11 +205,12 @@ fn query_attribution(si: &SourceInfo, runs: &AttributionMap) -> Option<Attributi
 fn visit_block(
     block: &Block,
     runs: &AttributionMap,
+    primary_file_id: usize,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     let source_info = block.source_info();
-    let record = query_attribution(source_info, runs);
+    let record = query_attribution(source_info, runs, primary_file_id);
     if let Some(r) = record.as_ref() {
         let key = source_info as *const SourceInfo as usize;
         by_node.insert(key, r.clone());
@@ -194,11 +221,12 @@ fn visit_block(
 fn visit_inline(
     inline: &Inline,
     runs: &AttributionMap,
+    primary_file_id: usize,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     let source_info = inline.source_info();
-    let record = query_attribution(source_info, runs);
+    let record = query_attribution(source_info, runs, primary_file_id);
     if let Some(r) = record.as_ref() {
         let key = source_info as *const SourceInfo as usize;
         by_node.insert(key, r.clone());
@@ -209,64 +237,69 @@ fn visit_inline(
 fn walk_block(
     block: &Block,
     runs: &AttributionMap,
+    primary_file_id: usize,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
-    visit_block(block, runs, slice, by_node);
+    visit_block(block, runs, primary_file_id, slice, by_node);
     match block {
-        Block::Plain(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::Paragraph(b) => walk_inlines(&b.content, runs, slice, by_node),
+        Block::Plain(b) => walk_inlines(&b.content, runs, primary_file_id, slice, by_node),
+        Block::Paragraph(b) => walk_inlines(&b.content, runs, primary_file_id, slice, by_node),
         Block::LineBlock(b) => {
             for line in &b.content {
-                walk_inlines(line, runs, slice, by_node);
+                walk_inlines(line, runs, primary_file_id, slice, by_node);
             }
         }
-        Block::BlockQuote(b) => walk_blocks(&b.content, runs, slice, by_node),
+        Block::BlockQuote(b) => walk_blocks(&b.content, runs, primary_file_id, slice, by_node),
         Block::OrderedList(b) => {
             for item in &b.content {
-                walk_blocks(item, runs, slice, by_node);
+                walk_blocks(item, runs, primary_file_id, slice, by_node);
             }
         }
         Block::BulletList(b) => {
             for item in &b.content {
-                walk_blocks(item, runs, slice, by_node);
+                walk_blocks(item, runs, primary_file_id, slice, by_node);
             }
         }
         Block::DefinitionList(b) => {
             for (term, defs) in &b.content {
-                walk_inlines(term, runs, slice, by_node);
+                walk_inlines(term, runs, primary_file_id, slice, by_node);
                 for def in defs {
-                    walk_blocks(def, runs, slice, by_node);
+                    walk_blocks(def, runs, primary_file_id, slice, by_node);
                 }
             }
         }
-        Block::Header(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::Figure(b) => walk_blocks(&b.content, runs, slice, by_node),
-        Block::Div(b) => walk_blocks(&b.content, runs, slice, by_node),
+        Block::Header(b) => walk_inlines(&b.content, runs, primary_file_id, slice, by_node),
+        Block::Figure(b) => walk_blocks(&b.content, runs, primary_file_id, slice, by_node),
+        Block::Div(b) => walk_blocks(&b.content, runs, primary_file_id, slice, by_node),
         Block::Table(t) => {
             if let Some(short) = &t.caption.short {
-                walk_inlines(short, runs, slice, by_node);
+                walk_inlines(short, runs, primary_file_id, slice, by_node);
             }
             if let Some(long) = &t.caption.long {
-                walk_blocks(long, runs, slice, by_node);
+                walk_blocks(long, runs, primary_file_id, slice, by_node);
             }
             for row in t.head.rows.iter().chain(t.foot.rows.iter()) {
                 for cell in &row.cells {
-                    walk_blocks(&cell.content, runs, slice, by_node);
+                    walk_blocks(&cell.content, runs, primary_file_id, slice, by_node);
                 }
             }
             for body in &t.bodies {
                 for row in &body.body {
                     for cell in &row.cells {
-                        walk_blocks(&cell.content, runs, slice, by_node);
+                        walk_blocks(&cell.content, runs, primary_file_id, slice, by_node);
                     }
                 }
             }
         }
-        Block::NoteDefinitionPara(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::NoteDefinitionFencedBlock(b) => walk_blocks(&b.content, runs, slice, by_node),
-        Block::CaptionBlock(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::Custom(c) => walk_custom_node(c, runs, slice, by_node),
+        Block::NoteDefinitionPara(b) => {
+            walk_inlines(&b.content, runs, primary_file_id, slice, by_node)
+        }
+        Block::NoteDefinitionFencedBlock(b) => {
+            walk_blocks(&b.content, runs, primary_file_id, slice, by_node)
+        }
+        Block::CaptionBlock(b) => walk_inlines(&b.content, runs, primary_file_id, slice, by_node),
+        Block::Custom(c) => walk_custom_node(c, runs, primary_file_id, slice, by_node),
         Block::CodeBlock(_)
         | Block::RawBlock(_)
         | Block::HorizontalRule(_)
@@ -277,40 +310,42 @@ fn walk_block(
 fn walk_blocks(
     blocks: &[Block],
     runs: &AttributionMap,
+    primary_file_id: usize,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     for b in blocks {
-        walk_block(b, runs, slice, by_node);
+        walk_block(b, runs, primary_file_id, slice, by_node);
     }
 }
 
 fn walk_inline(
     inline: &Inline,
     runs: &AttributionMap,
+    primary_file_id: usize,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
-    visit_inline(inline, runs, slice, by_node);
+    visit_inline(inline, runs, primary_file_id, slice, by_node);
     match inline {
-        Inline::Emph(e) => walk_inlines(&e.content, runs, slice, by_node),
-        Inline::Underline(u) => walk_inlines(&u.content, runs, slice, by_node),
-        Inline::Strong(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Strikeout(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Superscript(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Subscript(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::SmallCaps(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Quoted(q) => walk_inlines(&q.content, runs, slice, by_node),
-        Inline::Cite(c) => walk_inlines(&c.content, runs, slice, by_node),
-        Inline::Link(l) => walk_inlines(&l.content, runs, slice, by_node),
-        Inline::Image(i) => walk_inlines(&i.content, runs, slice, by_node),
-        Inline::Note(n) => walk_blocks(&n.content, runs, slice, by_node),
-        Inline::Span(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Insert(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Delete(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Highlight(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::EditComment(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Custom(c) => walk_custom_node(c, runs, slice, by_node),
+        Inline::Emph(e) => walk_inlines(&e.content, runs, primary_file_id, slice, by_node),
+        Inline::Underline(u) => walk_inlines(&u.content, runs, primary_file_id, slice, by_node),
+        Inline::Strong(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Strikeout(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Superscript(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Subscript(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::SmallCaps(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Quoted(q) => walk_inlines(&q.content, runs, primary_file_id, slice, by_node),
+        Inline::Cite(c) => walk_inlines(&c.content, runs, primary_file_id, slice, by_node),
+        Inline::Link(l) => walk_inlines(&l.content, runs, primary_file_id, slice, by_node),
+        Inline::Image(i) => walk_inlines(&i.content, runs, primary_file_id, slice, by_node),
+        Inline::Note(n) => walk_blocks(&n.content, runs, primary_file_id, slice, by_node),
+        Inline::Span(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Insert(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Delete(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Highlight(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::EditComment(s) => walk_inlines(&s.content, runs, primary_file_id, slice, by_node),
+        Inline::Custom(c) => walk_custom_node(c, runs, primary_file_id, slice, by_node),
         Inline::Str(_)
         | Inline::Code(_)
         | Inline::Space(_)
@@ -327,26 +362,28 @@ fn walk_inline(
 fn walk_inlines(
     inlines: &[Inline],
     runs: &AttributionMap,
+    primary_file_id: usize,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     for i in inlines {
-        walk_inline(i, runs, slice, by_node);
+        walk_inline(i, runs, primary_file_id, slice, by_node);
     }
 }
 
 fn walk_custom_node(
     node: &CustomNode,
     runs: &AttributionMap,
+    primary_file_id: usize,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     for (_name, slot) in &node.slots {
         match slot {
-            Slot::Block(b) => walk_block(b, runs, slice, by_node),
-            Slot::Blocks(bs) => walk_blocks(bs, runs, slice, by_node),
-            Slot::Inline(i) => walk_inline(i, runs, slice, by_node),
-            Slot::Inlines(is) => walk_inlines(is, runs, slice, by_node),
+            Slot::Block(b) => walk_block(b, runs, primary_file_id, slice, by_node),
+            Slot::Blocks(bs) => walk_blocks(bs, runs, primary_file_id, slice, by_node),
+            Slot::Inline(i) => walk_inline(i, runs, primary_file_id, slice, by_node),
+            Slot::Inlines(is) => walk_inlines(is, runs, primary_file_id, slice, by_node),
         }
     }
 }

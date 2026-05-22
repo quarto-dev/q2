@@ -311,7 +311,7 @@ impl PipelineStage for EngineExecutionStage {
         // attribution in the trace), this is adequate; a future refinement
         // could expose the on-disk intermediate via the engine interface.
         let intermediate_name = intermediate_filename(&doc_ast.path);
-        let (mut executed_ast, executed_ast_context, parse_warnings) = pampa::readers::qmd::read(
+        let (executed_ast, executed_ast_context, parse_warnings) = pampa::readers::qmd::read(
             result.markdown.as_bytes(),
             false,              // loose mode
             &intermediate_name, // filename for error messages
@@ -325,32 +325,41 @@ impl PipelineStage for EngineExecutionStage {
 
         // Step 7a: Build the merged ASTContext that covers BOTH files.
         //
-        // Slot 0 = original `.qmd` (FileId(0) in original AST). Slot 1 =
-        // intermediate `.rmarkdown` (FileId(0) in executed AST — remapped
-        // to FileId(1) below). This keeps the reconcile contract intact:
-        // FileId in the reconciled AST identifies provenance.
+        // bd-ky14a: with hash-based FileIds, each file lands at its
+        // canonical FileId(hash(filename)) natively — no remap step
+        // needed. We just need to make sure the intermediate file's
+        // content is registered in the merged context under the
+        // same FileId pampa already put on the executed AST's
+        // SourceInfos.
         let mut merged_ast_context = doc_ast.ast_context.clone();
-        // `executed_ast_context` has the intermediate file as FileId(0) with
-        // the right FileInformation (line breaks, total length) — carry that
-        // into the merged context at slot 1.
+        let intermediate_file_id = quarto_yaml::file_id_for_filename(&intermediate_name);
+        // `executed_ast_context` has the intermediate file under
+        // its hash FileId; lift the FileInformation (line breaks,
+        // total length) into the merged context under the same ID.
         if let Some(intermediate_file) = executed_ast_context
             .source_context
-            .get_file(quarto_source_map::FileId(0))
+            .get_file(intermediate_file_id)
             .cloned()
         {
             if let Some(info) = intermediate_file.file_info {
-                merged_ast_context
-                    .source_context
-                    .add_file_with_info(intermediate_name.clone(), info);
+                merged_ast_context.source_context.add_file_with_id_and_info(
+                    intermediate_file_id,
+                    intermediate_name.clone(),
+                    info,
+                );
             } else {
-                merged_ast_context
-                    .source_context
-                    .add_file(intermediate_name.clone(), None);
+                merged_ast_context.source_context.add_file_with_id(
+                    intermediate_file_id,
+                    intermediate_name.clone(),
+                    None,
+                );
             }
         } else {
-            merged_ast_context
-                .source_context
-                .add_file(intermediate_name.clone(), None);
+            merged_ast_context.source_context.add_file_with_id(
+                intermediate_file_id,
+                intermediate_name.clone(),
+                None,
+            );
         }
         merged_ast_context.filenames.push(intermediate_name);
         // Example-list counter is cell-ordering state tied to the executed
@@ -360,14 +369,12 @@ impl PipelineStage for EngineExecutionStage {
             .example_list_counter
             .set(executed_ast_context.example_list_counter.get());
 
-        // Step 7b: Pre-remap the executed AST so its `FileId(0)` references
-        // become `FileId(1)` (the intermediate file's slot in the merged
-        // context). After this, kept original blocks still reference
-        // `FileId(0)` (the `.qmd`) and new executed blocks reference
-        // `FileId(1)` (the intermediate).
-        quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
-            quarto_source_map::FileId(id.0 + 1)
-        });
+        // Step 7b: bd-ky14a previously required a `FileId(0) → FileId(1)`
+        // remap of the executed AST so the intermediate file's
+        // SourceInfos didn't collide with the original's `FileId(0)`.
+        // Under hash-based FileIds, the executed AST already has
+        // `FileId(hash(intermediate_name))` on every SourceInfo — no
+        // collision is possible — so the remap is a no-op.
 
         // Step 8: Reconcile source locations
         // For content that hasn't changed, preserve original source locations.
@@ -913,25 +920,30 @@ mod tests {
             ]
         );
 
-        // Both FileId(0) (.qmd, kept blocks) and FileId(1) (.rmarkdown,
-        // appended block) should appear in the reconciled AST.
+        // bd-ky14a: FileIds are hash-based, so .qmd and .rmarkdown
+        // each have a distinct hash derived from their filename.
+        // Both must appear in the reconciled AST.
+        let qmd_fid = quarto_yaml::file_id_for_filename("/project/test.qmd");
+        let rmd_fid = quarto_yaml::file_id_for_filename("/project/test.rmarkdown");
         let ids = collect_file_ids(&result.ast);
         assert!(
-            ids.contains(&quarto_source_map::FileId(0)),
-            "expected FileId(0) for kept blocks, got {:?}",
-            ids
+            ids.contains(&qmd_fid),
+            "expected .qmd's FileId ({:?}) for kept blocks, got {:?}",
+            qmd_fid,
+            ids,
         );
         assert!(
-            ids.contains(&quarto_source_map::FileId(1)),
-            "expected FileId(1) for appended block, got {:?}",
-            ids
+            ids.contains(&rmd_fid),
+            "expected .rmarkdown's FileId ({:?}) for appended block, got {:?}",
+            rmd_fid,
+            ids,
         );
-        // No stray FileIds.
+        // No stray FileIds — only the two known files should appear.
         for id in &ids {
             assert!(
-                id.0 < 2,
+                *id == qmd_fid || *id == rmd_fid,
                 "unexpected FileId {:?} in reconciled AST (merged context has 2 slots)",
-                id
+                id,
             );
         }
     }
@@ -1073,9 +1085,10 @@ mod tests {
             "map_offset should resolve for a body text offset"
         );
         let mapped = mapped.unwrap();
+        // bd-ky14a: FileId is the hash of the primary filename, not 0.
         assert_eq!(
             mapped.file_id,
-            quarto_source_map::FileId(0),
+            quarto_yaml::file_id_for_filename("test.qmd"),
             "Should map to the main file"
         );
     }

@@ -3441,6 +3441,7 @@ dependencies = [
  "pollster",
  "quarto-core",
  "quarto-system-runtime",
+ "quarto-yaml",
 ]
 
 [[package]]

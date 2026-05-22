@@ -2,4 +2,4 @@
 source: crates/pampa/tests/test.rs
 expression: output
 ---
-{"blocks":[{"attrS":{"classes":[1],"id":null,"kvs":[]},"c":[2,["project",["a-class"],[]],[{"c":"project","s":2,"t":"Str"}]],"s":0,"t":"Header"}],"meta":{},"pandoc-api-version":[1,23,1],"astContext":{"files":[{"line_breaks":[21],"name":"tests/snapshots/json/header-autoid-01-with-class.qmd","total_length":22}],"sourceInfoPool":[{"d":0,"r":[0,22],"t":0},{"d":0,"r":[12,20],"t":0},{"d":0,"r":[3,10],"t":0}]}}
+{"blocks":[{"attrS":{"classes":[1],"id":null,"kvs":[]},"c":[2,["project",["a-class"],[]],[{"c":"project","s":2,"t":"Str"}]],"s":0,"t":"Header"}],"meta":{},"pandoc-api-version":[1,23,1],"astContext":{"files":[{"line_breaks":[21],"name":"tests/snapshots/json/header-autoid-01-with-class.qmd","total_length":22}],"sourceInfoPool":[{"d":15356238733727365132,"r":[0,22],"t":0},{"d":15356238733727365132,"r":[12,20],"t":0},{"d":15356238733727365132,"r":[3,10],"t":0}]}}

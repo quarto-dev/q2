@@ -159,35 +159,53 @@ fn expand_includes_in_blocks(
                 }
             };
 
-            // Register included file in BOTH SourceContexts with the same FileId
+            // Register the included file in both SourceContexts under
+            // its canonical hash FileId.
+            //
+            // bd-ky14a: the sub-doc was parsed via
+            // `pampa::readers::qmd::read(filename, …)`, so its
+            // SourceInfos already carry `FileId(file_id_for_filename(filename))`.
+            // We just need to register the file's content/info in
+            // the parent's contexts under that same FileId — no
+            // FileId remap on the AST is required.
             let content_str = String::from_utf8_lossy(&content).into_owned();
+            let new_file_id = quarto_yaml::file_id_for_filename(&filename);
 
-            // Register in ast_context.source_context (for map_offset resolution)
-            let new_file_id = if let Some(file_info) = included_ast_context
+            // Register in ast_context.source_context (for map_offset
+            // resolution), reusing the sub-doc's FileInformation
+            // when available.
+            if doc
+                .ast_context
                 .source_context
-                .get_file(quarto_source_map::FileId(0))
-                .and_then(|f| f.file_info.clone())
+                .get_file(new_file_id)
+                .is_none()
             {
-                doc.ast_context
+                if let Some(file_info) = included_ast_context
                     .source_context
-                    .add_file_with_info(filename.clone(), file_info)
-            } else {
-                doc.ast_context
-                    .source_context
-                    .add_file(filename.clone(), Some(content_str.clone()))
-            };
-
-            // Register in top-level source_context (for ariadne error snippets)
-            // Use add_file which returns a new FileId, but we need the same one.
-            // Since both contexts grow sequentially, they should stay in sync if
-            // we register in the same order. However, to be safe we verify.
-            let snippet_file_id = doc
-                .source_context
-                .add_file(filename.clone(), Some(content_str));
-            debug_assert_eq!(
-                new_file_id, snippet_file_id,
-                "FileId mismatch between ast_context.source_context and source_context"
-            );
+                    .get_file(new_file_id)
+                    .and_then(|f| f.file_info.clone())
+                {
+                    doc.ast_context.source_context.add_file_with_id_and_info(
+                        new_file_id,
+                        filename.clone(),
+                        file_info,
+                    );
+                } else {
+                    doc.ast_context.source_context.add_file_with_id(
+                        new_file_id,
+                        filename.clone(),
+                        Some(content_str.clone()),
+                    );
+                }
+            }
+            // Register in top-level source_context (for ariadne error snippets).
+            if doc.source_context.get_file(new_file_id).is_none() {
+                doc.source_context.add_file_with_id(
+                    new_file_id,
+                    filename.clone(),
+                    Some(content_str),
+                );
+            }
 
             // Merge filenames
             for name in &included_ast_context.filenames {
@@ -196,21 +214,14 @@ fn expand_includes_in_blocks(
                 }
             }
 
-            // Remap FileIds in the parsed AST: FileId(0) → new_file_id
-            let mut included_blocks = included_pandoc.blocks;
-            // Remap each block's source info and all nested source info
-            let mut temp_pandoc = quarto_pandoc_types::pandoc::Pandoc {
-                meta: quarto_pandoc_types::config_value::ConfigValue::default(),
-                blocks: included_blocks,
-            };
-            quarto_ast_reconcile::remap_file_ids(&mut temp_pandoc, &|id| {
-                if id == quarto_source_map::FileId(0) {
-                    new_file_id
-                } else {
-                    id
-                }
-            });
-            included_blocks = temp_pandoc.blocks;
+            // bd-ky14a: previously we ran
+            // `quarto_ast_reconcile::remap_file_ids(FileId(0) → new_file_id)`
+            // here to rewrite the sub-doc's locally-numbered
+            // FileId(0) to a freshly-assigned sequential slot in the
+            // parent's context. Under hash-based FileIds the sub-doc
+            // already lands at FileId(hash(filename)) natively, so
+            // the remap was a no-op anyway and we drop it.
+            let included_blocks = included_pandoc.blocks;
 
             // Replace the paragraph containing the shortcode with included blocks
             doc.ast.blocks.remove(i);
@@ -819,19 +830,25 @@ mod tests {
         assert!(ctx.diagnostics.is_empty());
         assert_eq!(doc.ast.blocks.len(), 2);
 
-        // First block (Main) should have FileId(0)
+        // bd-ky14a: FileIds are hash-based. Main block belongs to
+        // /project/doc.qmd; the included block to /project/other.qmd.
+        let main_fid = quarto_yaml::file_id_for_filename("/project/doc.qmd");
+        let other_fid = quarto_yaml::file_id_for_filename("/project/other.qmd");
+
         let main_si = doc.ast.blocks[0].source_info();
         if let SourceInfo::Original { file_id, .. } = main_si {
-            assert_eq!(*file_id, FileId(0), "Main block should be FileId(0)");
+            assert_eq!(
+                *file_id, main_fid,
+                "Main block should have doc.qmd's hash FileId"
+            );
         }
 
-        // Second block (Other content) should have a different FileId (the included file)
+        // Second block (Other content) should have the included file's FileId.
         let included_si = doc.ast.blocks[1].source_info();
         if let SourceInfo::Original { file_id, .. } = included_si {
-            assert_ne!(
-                *file_id,
-                FileId(0),
-                "Included block should NOT be FileId(0)"
+            assert_eq!(
+                *file_id, other_fid,
+                "Included block should have other.qmd's hash FileId",
             );
         }
     }

@@ -53,8 +53,9 @@ fn test_json_location_enabled() {
     let location = &first_inline["l"];
     assert!(!location.is_null(), "'l' field should be present");
 
-    // Check file_id
-    assert_eq!(location["f"], 0);
+    // Check file_id — bd-ky14a: hash(filename), not 0.
+    let expected_fid = quarto_yaml::file_id_for_filename("test.qmd").0;
+    assert_eq!(location["f"], expected_fid);
 
     // Check begin position
     let begin = &location["b"];

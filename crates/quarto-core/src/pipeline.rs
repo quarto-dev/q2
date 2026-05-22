@@ -893,10 +893,14 @@ pub async fn render_qmd_to_preview_ast(
     })?;
 
     // Source context for translating diagnostic offsets into
-    // line/column on the JS side.
+    // line/column on the JS side. bd-ky14a: register the source
+    // under the hash-based FileId so the ASTContext we build below
+    // (also keyed by `file_id_for_filename`) refers to the same
+    // file entry.
+    let primary_file_id = quarto_yaml::file_id_for_filename(source_name);
     let mut source_context = SourceContext::new();
     let content_str = String::from_utf8_lossy(content).to_string();
-    source_context.add_file(source_name.to_string(), Some(content_str));
+    source_context.add_file_with_id(primary_file_id, source_name.to_string(), Some(content_str));
 
     // Build an `ASTContext` from the source context — the JSON
     // writer needs this to emit `[file_id, start, end]` source-
@@ -905,12 +909,11 @@ pub async fn render_qmd_to_preview_ast(
     // entry point (`wasm-quarto-hub-client/src/lib.rs:914-916`)
     // so q2-preview's JSON envelope matches q2-debug's at the
     // wire level.
-    let ast_context = pampa::pandoc::ASTContext {
-        filenames: vec![source_name.to_string()],
-        example_list_counter: std::cell::Cell::new(1),
-        source_context: source_context.clone(),
-        parent_source_info: None,
-    };
+    let ast_context = pampa::pandoc::ASTContext::from_parts(
+        vec![source_name.to_string()],
+        source_context.clone(),
+        primary_file_id,
+    );
     // When `AttributionRenderTransform` ran (i.e. a provider was
     // installed on `ctx.attribution_provider`), forward
     // `ctx.format_options.json` into `JsonConfig` so the writer emits

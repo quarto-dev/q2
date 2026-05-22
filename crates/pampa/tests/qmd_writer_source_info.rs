@@ -209,8 +209,15 @@ fn round_trip_code_block_offset_accuracy() {
 
     let (buf, source_info) = write_with_source_info(&pandoc).unwrap();
 
+    // bd-ky14a: register under the hash-based FileId so the
+    // SourceInfo's FileId (also hash-based) resolves into this ctx.
+    let expected_fid = quarto_yaml::file_id_for_filename("test.qmd");
     let mut ctx = SourceContext::new();
-    ctx.add_file("test.qmd".to_string(), Some(input.to_string()));
+    ctx.add_file_with_id(
+        expected_fid,
+        "test.qmd".to_string(),
+        Some(input.to_string()),
+    );
 
     let output = String::from_utf8(buf).unwrap();
 
@@ -219,7 +226,7 @@ fn round_trip_code_block_offset_accuracy() {
         let mapped = source_info.map_offset(code_pos, &ctx);
         assert!(mapped.is_some(), "Code block offset should be resolvable");
         let mapped = mapped.unwrap();
-        assert_eq!(mapped.file_id, FileId(0));
+        assert_eq!(mapped.file_id, expected_fid);
         // The original "print('hello')" starts around offset 42 in the input
         let original_pos = input.find("print('hello')").unwrap();
         // Allow some tolerance for fence formatting differences

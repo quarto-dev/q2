@@ -101,6 +101,40 @@ impl SourceContext {
         id
     }
 
+    /// Add a file with both a specific [`FileId`] and pre-computed
+    /// [`FileInformation`].
+    ///
+    /// Combines [`add_file_with_id`](Self::add_file_with_id) and
+    /// [`add_file_with_info`](Self::add_file_with_info) for the
+    /// case where a deserializer (e.g. the pampa JSON reader)
+    /// knows both the canonical FileId for the path *and* has the
+    /// pre-computed line-break index. Used by bd-ky14a to keep
+    /// JSON-round-tripped `ASTContext`s consistent with the new
+    /// hash-based FileId scheme.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the FileId already exists in the context.
+    pub fn add_file_with_id_and_info(
+        &mut self,
+        id: FileId,
+        path: String,
+        file_info: FileInformation,
+    ) -> FileId {
+        if self.get_file(id).is_some() {
+            panic!("FileId {:?} already exists in SourceContext", id);
+        }
+        let index = self.files.len();
+        self.files.push(SourceFile {
+            path,
+            content: None,
+            file_info: Some(file_info),
+            metadata: FileMetadata { file_type: None },
+        });
+        self.file_id_map.insert(id.0, index);
+        id
+    }
+
     /// Add a file with a specific FileId
     ///
     /// This is useful when interfacing with systems that use hash-based or non-sequential

@@ -78,12 +78,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .map_err(|e| format!("parse_qmd_to_ast: {}", e))?;
 
-        let ast_context = ASTContext {
-            filenames: vec!["/input.qmd".to_string()],
-            example_list_counter: std::cell::Cell::new(1),
-            source_context: result.source_context.clone(),
-            parent_source_info: None,
-        };
+        let primary_file_id = quarto_yaml::file_id_for_filename("/input.qmd");
+        let ast_context = ASTContext::from_parts(
+            vec!["/input.qmd".to_string()],
+            result.source_context.clone(),
+            primary_file_id,
+        );
 
         let mut buf = Vec::new();
         let json_config = pampa::writers::json::JsonConfig {

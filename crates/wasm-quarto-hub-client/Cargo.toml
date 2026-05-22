@@ -24,6 +24,7 @@ quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-sass = { path = "../quarto-sass" }
 quarto-source-map = { path = "../quarto-source-map" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }
+quarto-yaml = { path = "../quarto-yaml" }
 quarto-project-create = { path = "../quarto-project-create" }
 quarto-trace = { path = "../quarto-trace" }
 flate2 = "1.1"

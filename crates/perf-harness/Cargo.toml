@@ -13,6 +13,7 @@ path = "src/bin/parse_qmd_to_ast.rs"
 pampa = { path = "../pampa" }
 quarto-core = { path = "../quarto-core" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }
+quarto-yaml = { path = "../quarto-yaml" }
 pollster = { workspace = true }
 
 [lints]

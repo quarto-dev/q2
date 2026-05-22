@@ -90,10 +90,16 @@ impl PipelineStage for ParseDocumentStage {
 
         // Create SourceContext for error reporting and location mapping.
         // This contains the file content needed for ariadne to show source snippets.
+        //
+        // bd-ky14a: register under the hash-based FileId that
+        // pampa's parser uses (`quarto_yaml::file_id_for_filename`),
+        // so SourceInfos produced by the parser resolve correctly
+        // against this context.
         let mut source_context = SourceContext::new();
         let content_str = source.content_string();
         let source_name = source.path.display().to_string();
-        source_context.add_file(source_name.clone(), Some(content_str));
+        let primary_file_id = quarto_yaml::file_id_for_filename(&source_name);
+        source_context.add_file_with_id(primary_file_id, source_name.clone(), Some(content_str));
 
         // Parse the QMD content
         let mut output_stream = std::io::sink();

@@ -95,12 +95,19 @@ pub fn read<T: Write>(
     let mut context = ASTContext::with_filename(filename.to_string());
     // Store parent source info for recursive parses
     context.parent_source_info = parent_source_info;
-    // Add the input content to the SourceContext for proper error rendering
+    // Add the input content to the SourceContext for proper error rendering.
+    // bd-ky14a: register under the same hash-based FileId that
+    // `with_filename` set up, so `current_file_id()` and
+    // `source_context.get_file(current_file_id())` agree.
+    // We reset the source_context because `with_filename` only
+    // registered the file metadata; here we need the actual content
+    // for ariadne to render snippets.
     let input_str = String::from_utf8_lossy(input_bytes).to_string();
+    let primary_file_id = context.current_file_id();
     context.source_context = quarto_source_map::SourceContext::new();
     context
         .source_context
-        .add_file(filename.to_string(), Some(input_str));
+        .add_file_with_id(primary_file_id, filename.to_string(), Some(input_str));
 
     if fast_log_observer.had_errors() {
         parser.parser.set_logger(Some(Box::new(|log_type, message| {

@@ -860,13 +860,16 @@ pub async fn parse_qmd_to_ast_with_attribution(
         }
     }
 
-    // Create an ASTContext from the SourceContext returned by the pipeline
-    let ast_context = pampa::pandoc::ASTContext {
-        filenames: vec!["/input.qmd".to_string()],
-        example_list_counter: std::cell::Cell::new(1),
-        source_context: output.source_context.clone(),
-        parent_source_info: None,
-    };
+    // Create an ASTContext from the SourceContext returned by the pipeline.
+    // bd-ky14a: use the hash-based FileId for the input path so the
+    // ASTContext we hand to the JSON writer matches the FileIds on
+    // the SourceInfos produced by pampa upstream.
+    let primary_file_id = quarto_yaml::file_id_for_filename("/input.qmd");
+    let ast_context = pampa::pandoc::ASTContext::from_parts(
+        vec!["/input.qmd".to_string()],
+        output.source_context.clone(),
+        primary_file_id,
+    );
 
     // Serialize the AST to JSON using pampa's writer. When attribution
     // ran, forward `ctx.format_options.json` into JsonConfig so the

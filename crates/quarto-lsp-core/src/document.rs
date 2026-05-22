@@ -80,18 +80,26 @@ impl Document {
     ///
     /// This is used to track source locations during parsing.
     /// Returns the SourceContext and the FileId for this document.
+    ///
+    /// bd-ky14a: register the file under the same hash-based
+    /// FileId that pampa's parser uses (via
+    /// `quarto_yaml::file_id_for_filename`), so a `SourceInfo`
+    /// produced by pampa resolves correctly against this context.
     pub fn create_source_context(&self) -> SourceContext {
-        let mut ctx = SourceContext::default();
-        ctx.add_file(self.filename().to_string(), Some(self.content.clone()));
-        ctx
+        self.create_source_context_with_id().0
     }
 
     /// Create a SourceContext and get the FileId for this document.
     ///
     /// This is useful when you need both the context and the file ID.
     pub fn create_source_context_with_id(&self) -> (SourceContext, quarto_source_map::FileId) {
+        let file_id = quarto_yaml::file_id_for_filename(self.filename());
         let mut ctx = SourceContext::default();
-        let file_id = ctx.add_file(self.filename().to_string(), Some(self.content.clone()));
+        ctx.add_file_with_id(
+            file_id,
+            self.filename().to_string(),
+            Some(self.content.clone()),
+        );
         (ctx, file_id)
     }
 
