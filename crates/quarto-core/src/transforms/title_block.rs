@@ -32,7 +32,8 @@ use quarto_pandoc_types::block::{Block, Header};
 use quarto_pandoc_types::inline::{Inline, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 
 use crate::Result;
 use crate::format::is_minimal_html;
@@ -174,15 +175,24 @@ fn blocks_to_plain_text(blocks: &[Block]) -> String {
 }
 
 /// Create a level-1 header block with the given title.
+///
+/// The synthesized Header (and its inner Str) carry
+/// `Generated { by: title_block(), from: [] }` provenance. Both nodes are
+/// atomic per Plan 4's `is_atomic_kind` set — the writer treats them as a
+/// single non-editable unit on round-trip.
 fn create_title_header(title: &str) -> Block {
+    let source_info = SourceInfo::Generated {
+        by: By::title_block(),
+        from: smallvec![],
+    };
     Block::Header(Header {
         level: 1,
         attr: empty_attr(),
         content: vec![Inline::Str(Str {
             text: title.to_string(),
-            source_info: SourceInfo::default(),
+            source_info: source_info.clone(),
         })],
-        source_info: SourceInfo::default(),
+        source_info,
         attr_source: AttrSourceInfo::empty(),
     })
 }
@@ -495,5 +505,33 @@ mod tests {
     async fn test_transform_name() {
         let transform = TitleBlockTransform::new();
         assert_eq!(transform.name(), "title-block");
+    }
+
+    #[test]
+    fn test_create_title_header_has_generated_provenance() {
+        // Plan 6: the synthesized h1 + inner Str both carry
+        // Generated { by: title_block(), from: [] }.
+        let block = create_title_header("My Title");
+        let Block::Header(header) = &block else {
+            panic!("Expected Header");
+        };
+        match &header.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "title-block");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
+        // Inner Str carries the same shape.
+        let Inline::Str(s) = &header.content[0] else {
+            panic!("Expected Str inside header");
+        };
+        match &s.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "title-block");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
+        }
     }
 }

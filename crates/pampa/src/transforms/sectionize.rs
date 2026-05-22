@@ -46,7 +46,8 @@
 use crate::pandoc::block::{Block, Div, Header};
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 
 /// Wrap headers in section Divs.
 ///
@@ -93,7 +94,10 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
                     let section_div = Block::Div(Div {
                         attr: section_attr,
                         content: section_content,
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::Generated {
+                            by: By::sectionize(),
+                            from: smallvec![],
+                        },
                         attr_source: AttrSourceInfo::empty(),
                     });
                     // Add closed section to parent, or output if no parent
@@ -145,7 +149,10 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
         let section_div = Block::Div(Div {
             attr: section_attr,
             content: section_content,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::Generated {
+                by: By::sectionize(),
+                from: smallvec![],
+            },
             attr_source: AttrSourceInfo::empty(),
         });
         if let Some((_, _, parent_content)) = section_stack.last_mut() {
@@ -521,6 +528,53 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert!(matches!(&result[0], Block::Paragraph(_)));
         assert!(matches!(&result[1], Block::Paragraph(_)));
+    }
+
+    #[test]
+    fn test_sectionize_section_div_has_generated_provenance() {
+        // Plan 6: every synthesized Section Div carries
+        // Generated { by: sectionize(), from: [] }. The wrapped Header retains
+        // its original source_info.
+        let blocks = vec![
+            make_header(2, "sec-a", vec![], "A"),
+            make_para("body"),
+            make_header(2, "sec-b", vec![], "B"),
+        ];
+        let result = sectionize_blocks(blocks);
+        assert_eq!(result.len(), 2);
+
+        // First section's outer Div is Generated.
+        let Block::Div(div) = &result[0] else {
+            panic!("Expected section Div");
+        };
+        match &div.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "sectionize");
+                assert!(
+                    from.is_empty(),
+                    "sectionize synthesizers carry no source-side anchors"
+                );
+            }
+            other => panic!("Expected Generated source_info, got {:?}", other),
+        }
+
+        // Second section (end-of-input path) — same shape.
+        let Block::Div(div2) = &result[1] else {
+            panic!("Expected section Div");
+        };
+        match &div2.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "sectionize");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated source_info, got {:?}", other),
+        }
+
+        // The wrapped Header inside the section retains its original
+        // (dummy) source_info — only the Div is synthesized.
+        let Block::Header(_) = &div.content[0] else {
+            panic!("Expected Header inside section");
+        };
     }
 
     #[test]

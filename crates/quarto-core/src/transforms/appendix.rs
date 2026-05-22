@@ -49,7 +49,8 @@ use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, Header, Paragraph};
 use quarto_pandoc_types::inline::{Inline, Link, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{By, SourceInfo};
+use smallvec::smallvec;
 
 use quarto_pandoc_types::ConfigValue;
 
@@ -233,7 +234,10 @@ fn extract_footnotes(blocks: &mut Vec<Block>) -> Option<Block> {
 
 /// Wrap bibliography in a section with appropriate attributes.
 fn wrap_bibliography(bibliography: Block) -> Block {
-    let source_info = SourceInfo::default();
+    let source_info = SourceInfo::Generated {
+        by: By::appendix(),
+        from: smallvec![],
+    };
 
     // Create header for the bibliography section
     let header = Block::Header(Header {
@@ -268,7 +272,10 @@ fn create_appendix_container(sections: Blocks, style_class: &str) -> Block {
             LinkedHashMap::new(),
         ),
         content: sections,
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::Generated {
+            by: By::appendix(),
+            from: smallvec![],
+        },
         attr_source: AttrSourceInfo::empty(),
     })
 }
@@ -291,7 +298,10 @@ fn create_license_section(meta: &ConfigValue) -> Option<Block> {
             .and_then(|v| v.as_plain_text())?
     };
 
-    let source_info = SourceInfo::default();
+    let source_info = SourceInfo::Generated {
+        by: By::appendix(),
+        from: smallvec![],
+    };
 
     let header = Block::Header(Header {
         level: 2,
@@ -342,7 +352,10 @@ fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
             .and_then(|v| v.as_plain_text())?
     };
 
-    let source_info = SourceInfo::default();
+    let source_info = SourceInfo::Generated {
+        by: By::appendix(),
+        from: smallvec![],
+    };
 
     let header = Block::Header(Header {
         level: 2,
@@ -386,7 +399,10 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
     // (bd-y89ihf0i)
     let citation_url = citation.get("url").and_then(|v| v.as_plain_text());
 
-    let source_info = SourceInfo::default();
+    let source_info = SourceInfo::Generated {
+        by: By::appendix(),
+        from: smallvec![],
+    };
 
     let header = Block::Header(Header {
         level: 2,
@@ -889,6 +905,23 @@ mod tests {
             assert!(div.attr.1.contains(&"plain".to_string()));
         } else {
             panic!("Expected appendix Div");
+        }
+    }
+
+    #[test]
+    fn test_create_appendix_container_has_generated_provenance() {
+        // Plan 6: the synthesized appendix container Div carries
+        // Generated { by: appendix(), from: [] }.
+        let block = create_appendix_container(vec![], "default");
+        let Block::Div(div) = &block else {
+            panic!("Expected Div");
+        };
+        match &div.source_info {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "appendix");
+                assert!(from.is_empty());
+            }
+            other => panic!("Expected Generated, got {:?}", other),
         }
     }
 }

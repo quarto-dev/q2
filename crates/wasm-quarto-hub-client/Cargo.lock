@@ -2651,6 +2651,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2 0.11.0",
+ "smallvec",
  "tempfile",
  "thiserror 2.0.18",
  "time",

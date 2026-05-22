@@ -64,6 +64,33 @@ impl Block {
             Block::Custom(b) => &b.source_info,
         }
     }
+
+    /// Mutable counterpart to [`source_info`]. Mechanical mirror of the read
+    /// accessor; lets Plan-6 stamping rewrite the per-node `source_info` field
+    /// through the enum without holding a typed variant reference.
+    pub fn source_info_mut(&mut self) -> &mut quarto_source_map::SourceInfo {
+        match self {
+            Block::Plain(b) => &mut b.source_info,
+            Block::Paragraph(b) => &mut b.source_info,
+            Block::LineBlock(b) => &mut b.source_info,
+            Block::CodeBlock(b) => &mut b.source_info,
+            Block::RawBlock(b) => &mut b.source_info,
+            Block::BlockQuote(b) => &mut b.source_info,
+            Block::OrderedList(b) => &mut b.source_info,
+            Block::BulletList(b) => &mut b.source_info,
+            Block::DefinitionList(b) => &mut b.source_info,
+            Block::Header(b) => &mut b.source_info,
+            Block::HorizontalRule(b) => &mut b.source_info,
+            Block::Table(b) => &mut b.source_info,
+            Block::Figure(b) => &mut b.source_info,
+            Block::Div(b) => &mut b.source_info,
+            Block::BlockMetadata(b) => &mut b.source_info,
+            Block::NoteDefinitionPara(b) => &mut b.source_info,
+            Block::NoteDefinitionFencedBlock(b) => &mut b.source_info,
+            Block::CaptionBlock(b) => &mut b.source_info,
+            Block::Custom(b) => &mut b.source_info,
+        }
+    }
 }
 
 pub type Blocks = Vec<Block>;
@@ -256,5 +283,18 @@ mod tests {
             source_info: si.clone(),
         });
         assert_eq!(block.source_info(), &si);
+    }
+
+    #[test]
+    fn source_info_mut_round_trip_paragraph() {
+        let original = test_si(0, 0, 10);
+        let updated = test_si(9, 200, 220);
+        let mut block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: original.clone(),
+        });
+        assert_eq!(block.source_info(), &original);
+        *block.source_info_mut() = updated.clone();
+        assert_eq!(block.source_info(), &updated);
     }
 }
