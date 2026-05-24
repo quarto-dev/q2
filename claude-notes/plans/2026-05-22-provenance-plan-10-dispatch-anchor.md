@@ -96,9 +96,13 @@ authors can rely on.
 - Add `Dispatch` variant to `AnchorRole` enum in
   `crates/quarto-source-map/src/source_info.rs:91-118` alongside the
   existing `Invocation`, `ValueSource`, `Other`.
-- Doc-comment explicitly references the Plan-9-established policy:
-  `preimage_in` walks `Invocation` only; `Dispatch` is
-  diagnostic-only and never consulted by the writer.
+- Doc-comment on `Dispatch` references the
+  Plan-7-established / Plan-9-confirmed policy: `preimage_in` walks
+  `Invocation` only; `Dispatch` is diagnostic-only and never
+  consulted by the writer. Plan 7 documents the policy in terms of
+  "all non-`Invocation` roles, present and future, are skipped";
+  Plan 10 names `Dispatch` in the exclusion list once the variant
+  exists.
 - Add `Anchor::dispatch(source_info: Arc<SourceInfo>) -> Self`
   constructor parallel to `Anchor::invocation` / `Anchor::value_source`.
 
