@@ -113,10 +113,11 @@ the `Dispatch` anchor back to the Lua function that produced a node.
   1. `By::filter` is workspace-internal Rust — no FFI, no extension
      SDK, no TS mirror.
   2. Plan 5 has shipped `By::filter(path, line)` to the JSON wire
-     format. **Wire migration required** (see §Phase 6 below) —
-     readers temporarily accept both shapes; writers emit the new
-     shape after Plan 10 lands; legacy readers removed in a
-     subsequent cleanup.
+     format. **Clean break** (see §Phase 6 below) — writers emit
+     the new shape after Plan 10 lands; the old shape disappears
+     from the codebase in the same PR. No dual-reader window. No
+     on-disk artifacts hold the old shape, so no migration path is
+     needed.
 - `By::as_filter()` accessor (currently returns
   `Option<(&str, usize)>` from `by.data`) gets removed or
   repurposed. Callers needing path/line read the Dispatch anchor's
@@ -135,41 +136,43 @@ the `Dispatch` anchor back to the Lua function that produced a node.
   in (already known via the registration call site). Stash that
   alongside the handler binding.
 
-#### Phase 6 — Wire format migration
+#### Phase 6 — Wire format clean break
 
 - Plan 5 emits `Generated { by: filter, by.data: {filter_path, line} }`
   to JSON wire code 4. After Plan 10:
   - Writers emit `Generated { by: filter, by.data: null }` plus a
     `Dispatch` anchor in the `from` list.
-  - Readers accept both shapes during a transition window:
-    - Old shape (path/line in `by.data`): synthesize the Dispatch
-      anchor at read time from the data payload. Requires looking
-      up the path in SourceContext or registering on the fly.
-    - New shape: pass through.
-- The transition window is one release cycle; document the cleanup
-  follow-up.
-- Equivalent migration on the Lua-shortcode-handler shape
-  (currently `by.data: {name, lua_path, lua_line}` → `by.data:
-  {name}` + Dispatch anchor).
+  - Readers accept the new shape only. The old shape disappears from
+    the workspace in the same PR.
+- **Clean break, no dual reader.** Same rationale as `By::appendix`
+  and `By::filter`: this is a workspace-internal wire format with no
+  on-disk artifacts holding the old shape. The IndexedDB profile
+  cache is invalidated by `pass1_key` (Phase 7 below); any in-flight
+  WASM bundles rebuild from source. The CI build chain ensures Rust
+  and TS rebuild in lockstep — no in-the-wild client holds an old
+  WASM expecting the old shape.
+- Equivalent break on the Lua-shortcode-handler shape (currently
+  `by.data: {name, lua_path, lua_line}` → `by.data: {name}` +
+  Dispatch anchor). Same one-PR migration.
 
-#### Phase 7 — Cache-key surface
+#### Phase 7 — Cache-key surface (reuses Plan 7a's field)
 
-- Lua filter file content becomes Pass1 cache input. Either:
-  - (A) Extend `Pass1KeyInputs`
-    (`crates/quarto-core/src/project/cache_key.rs:108`) with a
-    `lua_filter_files: &[(PathBuf, Vec<u8>)]` field, hash filter
-    bytes there; or
-  - (B) Reference SourceContext-registered Lua files by `FileId` +
-    content (cleaner but requires SourceContext to be cache-key
-    aware).
-- **Coordinate with Plan 7a's `filter_sources_hash`** (planned
-  parallel implementation in `crates/quarto-core/src/cache_key.rs`):
-  - Plan 7a hashes filter file bytes for idempotence verdicts.
-  - Plan 10 hashes filter file bytes for cache invalidation.
-  - These are the same hash conceptually; merge into one
-    computation. Recommendation: Plan 10's Phase 7 lands the
-    `lua_filter_files` field; Plan 7a's idempotence cache reuses
-    the same field rather than re-hashing.
+- Lua filter file content becomes Pass1 cache input. **Plan 7a
+  lands first** and introduces `filter_sources_hash` on
+  `Pass1KeyInputs` (SHA-256 over filter file bytes + opt-out flags).
+  Plan 10 **reuses** that field — no new field, no parallel hash.
+- Plan 10 Phase 7 reduces to:
+  - Confirm the existing `filter_sources_hash` semantics cover
+    Plan 10's needs (cache invalidates when a Lua filter file's
+    bytes change). They do — both plans hash the same files.
+  - Add a smoke test: register a Lua filter file in SourceContext,
+    edit its bytes, confirm `pass1_key` changes accordingly. Likely
+    Plan 7a's existing tests already cover this; verify during
+    implementation.
+- If Plan 7a hasn't landed when Plan 10 starts (reversed order),
+  Plan 10 introduces the field itself with Plan 7a's semantics, and
+  Plan 7a later reuses it. The structural answer is the same; the
+  PR that lands first owns the field.
 
 ### Out of scope
 
@@ -235,10 +238,11 @@ the `Dispatch` anchor back to the Lua function that produced a node.
 
 - **No backward-compat carve-out for the wire format.** Plan 5's
   emitted shape (`by.data: {filter_path, line}`) has shipped, but
-  Plan 7's incremental writer has not — so no qmd files persist
-  with this shape on disk. The wire format appears only in caches
-  / IPC transcripts that are forward-readable for one release cycle
-  (Phase 6's dual-reader window).
+  appears only in WASM-internal AST flow and IndexedDB profile
+  cache. The cache is invalidated by `pass1_key` (Phase 7); no
+  on-disk artifacts hold the old shape. Clean break in one PR —
+  no dual-reader window. Same rationale as `By::appendix` (Plan 9)
+  and `By::filter` (Phase 4 above).
 
 - **Plan posture: research plan.** This document settles the API
   shape (the Dispatch role, the `By::filter` migration, the
@@ -299,16 +303,6 @@ must be pinned:
   setup. Need to ensure SourceContext is available at extension
   load — likely via the existing `StageContext`-style threading.
   Confirm.
-
-- **Reader behavior for unknown Lua paths during legacy-shape
-  decode.** When the legacy `by.data: {filter_path, line}` shape
-  arrives at a reader and the named path isn't yet registered in
-  SourceContext, two options:
-  - Register on the fly (read the file bytes, synthesize a FileId).
-  - Emit a `Dispatch` anchor pointing at a file-less SourceInfo
-    (e.g. `Original { file_id: SENTINEL_UNKNOWN, … }`).
-  Recommend the first; the reader has the path string and can
-  populate SourceContext.
 
 - **Migration of existing Plan 4 tests.** The unit tests in
   `crates/quarto-source-map/src/source_info.rs:715-770` exercise
@@ -402,13 +396,14 @@ must be pinned:
   shortcode(name), from: [Invocation, Dispatch] }`. Built-in
   shortcode resolutions (meta, var) stay `from: [Invocation]` only.
 
-### Phase 6 (wire format migration)
+### Phase 6 (wire format clean break)
 
-- Writer: emits the new shape.
-- Reader: accepts both old and new shapes; legacy decode produces
-  the same in-memory shape as a fresh write would.
-- Snapshot test asserting byte-for-byte stability of a few sample
-  Lua-filter-emitting fixtures after migration.
+- Writer: emits the new shape (`by.data: null` + Dispatch anchor).
+- Reader: accepts only the new shape; old shape removed entirely.
+- Snapshot test asserting byte-for-byte stability of Lua-filter-
+  emitting fixtures under the new shape.
+- Compile-time confirmation that no reader code references the old
+  `filter_path` / `line` keys in `by.data`.
 
 ### Phase 7 (cache-key surface)
 
@@ -473,10 +468,12 @@ must be pinned:
   could dominate filter runtime. Mitigation: batch via Plan 6's
   post-walk helper if necessary; benchmark.
 
-- **Wire-format dual-reader correctness.** Bugs in the legacy-shape
-  decoder could silently corrupt the in-memory shape. Mitigation:
-  snapshot tests in Phase 6 + an explicit `compute_blocks_hash_fresh`
-  comparison between legacy-decoded and freshly-emitted ASTs.
+- **Wire-format clean-break coordination.** Plan 10's PR must
+  rebuild WASM and TS in lockstep — the WASM emits the new shape;
+  TS expects only the new shape. No in-flight client holds an old
+  WASM expecting the old shape (no npm-published consumer). CI's
+  `cargo xtask verify` chain catches drift if the rebuild is
+  incomplete.
 
 - **SourceContext lifetime / sharing.** Lua files registered eagerly
   at `apply_lua_filters` entry need to be available for the
@@ -484,12 +481,13 @@ must be pinned:
   pattern (likely `Arc<Mutex<…>>` or `&mut` through the pipeline)
   must accommodate Lua-file additions mid-pipeline. Verify.
 
-- **Coordination friction with Plan 7a.** Both plans touch
-  `cache_key.rs` and want to hash filter files. If Plans 7a and 10
-  land in arbitrary order, the second one merging may have to
-  reconcile field naming / shape. Mitigation: settle the
-  `lua_filter_files: &[(PathBuf, Vec<u8>)]` field naming in this
-  research plan; Plan 7a's research plan refers to the same shape.
+- **Coordination friction with Plan 7a — resolved.** Both plans
+  touch `cache_key.rs` and want to hash filter files. Resolved by
+  agreement: Plan 7a lands first and owns `filter_sources_hash` on
+  `Pass1KeyInputs`; Plan 10 reuses it. The order is also the
+  natural one — Plan 7a is independent of Plan 10's Lua-source
+  registration; Plan 10 benefits from Plan 7a's hashing already
+  being in place.
 
 - **Migration tests that touch `By::filter("foo.lua", 42)`.** ~10
   unit tests in `source_info.rs` migrate mechanically; if any are
@@ -506,10 +504,10 @@ must be pinned:
 | 3: Lua bridge FileId threading + byte-range computation | ~200 |
 | 4: `By::filter` signature shrinkage + call-site migration | ~120 |
 | 5: Lua-handler shortcode Dispatch attachment | ~80 |
-| 6: Wire-format dual-reader + tests | ~150 |
-| 7: Cache-key extension + Plan 7a coordination | ~80 |
+| 6: Wire-format clean break + tests | ~80 |
+| 7: Cache-key smoke test (reuses Plan 7a's `filter_sources_hash`) | ~30 |
 | Tests across phases | ~350 |
-| **Total** | **~1100** |
+| **Total** | **~980** |
 
 Two focused sessions likely; high-complexity due to mlua interop
 and the wire-format migration. The Lua engine bridge work in

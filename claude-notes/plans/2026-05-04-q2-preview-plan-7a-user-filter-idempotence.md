@@ -288,16 +288,30 @@ whole-set check, two per filter for attribution). For 5 filters,
   flow through the same path. Confirm they reach the diagnostic panel
   and are visually distinguishable from pipeline warnings (or
   acceptably co-mingled — TBD by hub-client UX, same as Q-3-42/Q-3-43).
-- **Per-Lua-line attribution (future)**: Q-3-44 today references the
-  filter file path via `<path>`. When the Lua-file-registration
-  follow-up lands (see Plan 4 / Plan 6's "Dispatch follow-up"),
-  filter-constructed nodes will carry a `Dispatch` anchor pointing at
-  a typed `Original{lua_file_id, line_start, line_end}`. The Q-3-44
-  diagnostic could then sharpen "filter `<path>` is not idempotent" to
-  "filter `<path>` line `<N>` is not idempotent" — pointing at the
-  specific Lua-side construction site that produced the non-idempotent
-  output. Deferred until the registration work lands; the current
+- **Per-Lua-line attribution (Plan 10 follow-up)**: Q-3-44 today
+  references the filter file path via `<path>` read from
+  `FilterMetadata.spec` (the filter spec, not from `by.data` on any
+  Generated node), so Plan 7a is structurally independent of `By`'s
+  data shape. When **Plan 10**
+  (`claude-notes/plans/2026-05-22-provenance-plan-10-dispatch-
+  anchor.md`) lands, filter-constructed nodes carry a `Dispatch`
+  anchor pointing at a typed
+  `Original{lua_file_id, line_start, line_end}`. The Q-3-44 diagnostic
+  can then sharpen "filter `<path>` is not idempotent" to "filter
+  `<path>` line `<N>` is not idempotent" — pointing at the specific
+  Lua-side construction site. The migration is purely additive — read
+  the Dispatch anchor when present, fall back to filter-spec path
+  when absent. Deferred until Plan 10 lands; the current
   `<path>`-only diagnostic is actionable.
+
+- **`filter_sources_hash` coordination with Plan 10.** Plan 7a
+  defines `filter_sources_hash` (SHA-256 over filter file bytes +
+  opt-out flags) as a `Pass1KeyInputs` field. Plan 10 Phase 7
+  also wants Lua-filter-file content to invalidate `pass1_key`.
+  Since Plan 7a lands first, **Plan 10 reuses Plan 7a's
+  `filter_sources_hash` field** rather than introducing a parallel
+  hash. Plan 10's Phase 7 task reduces to: confirm the field
+  exists, confirm semantics match, no new field added.
 
 ## References
 
@@ -326,10 +340,13 @@ whole-set check, two per filter for attribution). For 5 filters,
   `claude-notes/instructions/idempotence-contract.md`; new transforms
   on both the built-in and user-filter sides must meet it.
 - Plan 4 — `By` types; `is_atomic_kind()` is unrelated to this plan
-  but the runtime check shares the source-info-blind hash. Plan 4's
-  "Dispatch follow-up" (Lua-file registration in `SourceContext`) is
-  the prerequisite for the per-Lua-line attribution refinement noted
-  under "Open questions" above.
+  but the runtime check shares the source-info-blind hash.
+- Plan 10 (`claude-notes/plans/2026-05-22-provenance-plan-10-
+  dispatch-anchor.md`) — Lua-file registration in `SourceContext`;
+  prerequisite for the per-Lua-line attribution refinement noted
+  under "Open questions" above. Plan 7a lands first; Plan 10
+  reuses Plan 7a's `filter_sources_hash` field per the
+  cross-plan coordination note in §Open questions.
 
 ## Test plan
 

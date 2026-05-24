@@ -408,8 +408,8 @@ the `.diagnostics-banner` for unlocated.
 
 #### Diagnostic codes
 
-Two codes, per the Q-3 conventions in
-`crates/quarto-error-reporting/src/error_catalog.json`:
+Two codes, registered in
+`crates/quarto-error-reporting/error_catalog.json`:
 
 - **`Q-3-42` — "Shortcode edit dropped".** Emitted when an
   inline-level edit to shortcode-resolved (or other atomic-Generated)
@@ -418,8 +418,7 @@ Two codes, per the Q-3 conventions in
   `Invocation` anchor) so editor UIs can highlight it.
 
 - **`Q-3-43` — "Generated content edit dropped".** Three emission
-  paths, sharing the same code and structural shape; the body
-  carries different attribution text:
+  paths, sharing the same code and structural shape:
   - Block-level RecurseIntoContainer on an atomic CustomNode
     (Plan 8's `IncludeExpansion`): body names the include's
     `source_path` from `plain_data`. Message: "To edit this content,
@@ -435,6 +434,28 @@ Two codes, per the Q-3 conventions in
 Both are `DiagnosticKind::Warning`. Both carry source ranges
 (the wrapper's preimage range when available, else the surrounding
 block's range), so they squiggle naturally in Monaco.
+
+**Catalog mechanics** (verified). Each Q-* code in
+`error_catalog.json` carries one static `message_template` plus
+title / subsystem / docs_url. Per-call-site body text uses the
+existing `DiagnosticMessageBuilder` API
+(`crates/quarto-error-reporting/src/builder.rs`):
+
+```rust
+DiagnosticMessageBuilder::warning("Generated content edit dropped")
+    .with_code("Q-3-43")
+    .problem(format!("To edit this content, open `{}` directly.",
+                     source_path))
+    .add_hint("...")
+    .build()
+```
+
+The catalog entry provides one generic `message_template`; the
+three emission paths supply their distinct text via the builder.
+**No template-able-body infrastructure needed** — the existing
+builder API already covers it. Phase 3 ships one catalog entry per
+code and three builder helper functions (`diagnostic_q3_42`,
+`diagnostic_q3_43_include`, `diagnostic_q3_43_metadata`).
 
 #### `is_atomic_custom_node` registry
 
@@ -454,6 +475,20 @@ registration mechanism (see §Open questions); the const set
 covers built-ins.
 
 #### Hub-client integration
+
+**Scope clarification: first-demo UX.** Plan 7 lifts the coarse
+`pipelineKindForFormat(format) === 'preview'` read-only guard at
+`ReactPreview.tsx:429-440` and replaces it with the writer's
+soft-drop path. The writer's Q-3-42 / Q-3-43 diagnostics are the
+user-facing safety net for the first demo — bad edits don't reach
+source, and the user sees a warning. A fine-grained React-side
+gate (greying out the affordance per region via the
+`is_editable_inside` predicate consulted from JS) is **deferred**
+to a future frontend pass. For the first demo, the experience is
+"you can type, but it doesn't take, and you see a warning"; that
+is the deliverable. Plan 2A's existing atomic-CustomNode gate
+continues to prevent the most surprising cases (editing inside
+includes) without further work.
 
 - Lift the `handleSetAst` read-only guard in `ReactPreview.tsx:429-440`
   introduced in Plan 1. Wire `setLocalAst` through with the current
@@ -1173,6 +1208,14 @@ Work items grouped by phase. Each phase's items are roughly
 sequential; phases themselves are mostly sequential, with some
 parallelism noted. Plan 6 must land before Phase 1 starts.
 
+**Coordination posture.** This checklist is sized for serial
+implementation in a single fresh 1M-context session — the phases
+flow linearly, and the entire plan fits comfortably in one
+context window. No beads-per-phase split needed. Open a follow-up
+beads only for items that surface during implementation and are
+genuinely out of scope (e.g. preexisting bugs found in adjacent
+code; future-plan-bound features).
+
 ### Phase 1 — Foundation primitives (`quarto-source-map`, `quarto-core`)
 
 - [ ] `SourceInfo::preimage_in(target: FileId) -> Option<Range<usize>>` accessor with full match (Original, Substring, Concat, Generated)
@@ -1275,7 +1318,11 @@ parallelism noted. Plan 6 must land before Phase 1 starts.
 ### Phase 9 — Verification + cleanup
 
 - [ ] `cargo xtask verify` green (full chain: Rust workspace + hub-build + hub-tests)
-- [ ] q2 preview end-to-end smoke: `cargo run --bin q2 -- preview <fixture>` with a real edit round-trip
+- [ ] **Refresh `q2 preview` WASM chain before smoke testing** (per `CLAUDE.md` §"Verifying Rust changes in `q2 preview`"; addresses the 2026-05-20 stale-WASM incident):
+    - [ ] `cd hub-client && npm run build:wasm` — rebuild WASM from Plan 7's Rust changes
+    - [ ] `cargo xtask build-q2-preview-spa` — bundle WASM into `q2-preview-spa/dist/`
+    - [ ] `cargo build --bin q2` — re-embed `dist/` via `include_dir!`
+- [ ] q2 preview end-to-end smoke: `cargo run --bin q2 -- preview <fixture>` with a real edit round-trip; observe Q-3-42/Q-3-43 fire when edits hit atomic regions
 - [ ] Hub-client manual smoke: edit a sectionized doc, verify the section structure preserved in saved qmd
 - [ ] SPA manual smoke: edit a doc, verify automerge + disk both reflect the edit; verify no echo-loop
 - [ ] Update `crates/pampa/CLAUDE.md` if any conventions changed (probably none)
