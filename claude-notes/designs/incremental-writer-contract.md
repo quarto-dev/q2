@@ -86,10 +86,18 @@ the case. The qmd writer's arms for these wrappers thus become
 surface for coarsen bugs, not a user-facing failure mode.
 
 This is why `incremental_write` returns `Result<(qmd, warnings),
-WriterError>` with `Err` reserved for invariant violations only
-(debug-assert hits, structurally impossible reconciliation states).
-Every user-facing bad-edit case is handled by soft-drop, not by
-returning `Err`.
+Vec<DiagnosticMessage>>` — `Ok` is the normal path (write
+succeeded; warnings carry any soft-drops); `Err` keeps its
+pre-Plan-7 meaning, surfacing qmd-writer failures that bubble up
+via `?` from the underlying serializer. Programmer errors —
+invariant violations from coarsen bugs, structurally impossible
+reconciliation states — do **not** flow through `Result`; they
+`panic!()` / `unreachable!()` / `debug_assert!()` inline. This is
+the idiomatic q2 pattern (see existing uses across
+`pampa/src/writers/`) and the WASM-side surface is loud:
+`console_error_panic_hook` is installed at module init, so a panic
+becomes a JS exception with a full stack trace. Every user-facing
+bad-edit case is handled by soft-drop, not by returning `Err`.
 
 ## The role-asymmetry contract on `Generated.from`
 

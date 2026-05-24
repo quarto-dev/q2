@@ -186,14 +186,16 @@ remain in Plan 7's `quarto-source-map` test module (the `preimage_in
 skips non-Invocation roles` unit test, lines 982-986 of Plan 7).
 
 
-- **`preimage_in` role-asymmetry unit test**: build
-  `Generated { by: By::appendix(AppendixSection::License), from: [ValueSource(meta_si)] }`
+- **`preimage_in` appendix-specific role-asymmetry unit test**:
+  build `Generated { by: By::appendix(AppendixSection::License), from: [ValueSource(meta_si)] }`
   where `meta_si` is `Original { file_id: 0, start: 10, end: 25 }`.
   Call `preimage_in(FileId(0))` and assert it returns `None` (NOT the
   byte range of the meta-key — that would copy YAML into the body).
-  Pins the `Invocation` vs `ValueSource` asymmetry documented in
-  Plan 7 §`preimage_in` semantics. Lives in `quarto-source-map`'s
-  test module.
+  Belt-and-suspenders companion to Plan 7's Phase 1 structural test
+  (which uses generic `By` + `value_source()` and ships without
+  Plan 9 types); this version pins the same invariant against the
+  real `By::appendix(...)` shape that Plan 9 introduces. Lives in
+  `quarto-source-map`'s test module.
 
 - **Appendix-license end-to-end round-trip test**: build a project
   fixture with frontmatter `license: MIT` and a synthesized

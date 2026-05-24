@@ -225,6 +225,31 @@ bad-edit case has a safe substitution, so `AtomicViolation` is
 unnecessary. The writer's return type carries warnings alongside
 the saved qmd, not as fatal errors.
 
+**Writer return type after Plan 7.** `incremental_write` returns
+`Result<(String, Vec<DiagnosticMessage>), Vec<DiagnosticMessage>>`.
+`Ok((qmd, warnings))` carries the qmd plus the soft-drop warnings
+collected by `coarsen`. `Err(diags)` keeps its existing meaning:
+qmd-writer failures that bubble up via `?` from the underlying
+serializer (e.g. UTF-8 validation in `write_inline_to_string` at
+`incremental.rs:813`). The WASM bridge maps `Err` to `{ success:
+false, error: "Incremental write failed: ..." }` unchanged from
+today. `compute_incremental_edits` takes the same shape:
+`Result<(Vec<TextEdit>, Vec<DiagnosticMessage>), Vec<DiagnosticMessage>>`.
+
+**Programmer errors do not flow through `Result`.** Invariant
+violations — Plan-6-stamper bugs, structurally impossible
+reconciliation states, post-coarsen contract violations — are
+`panic!()` / `unreachable!("...")` / `debug_assert!()` inline.
+This is the idiomatic q2 pattern: see existing uses at
+`incremental.rs:825`, throughout `pampa/src/writers/json_stream.rs`,
+`pampa/src/writers/html.rs:1188`, `pampa/src/writers/ansi.rs:223`,
+and 10+ sites across `pampa/src/writers/json.rs`. The WASM bridge
+already installs `console_error_panic_hook` at module init
+(`wasm-quarto-hub-client/src/lib.rs:115`), so an in-process panic
+surfaces as a JS exception with full stack trace — loud, immediate,
+and the surface we want for "this should never happen." No
+`WriterError` enum is introduced.
+
 #### Coarsen pseudo-code
 
 ```
@@ -271,7 +296,10 @@ if alignment is KeepBefore(orig_idx):
         // Catch-all: KeepBefore with no preimage and no Generated-cascade
         // shape that maps to Omit or Transparent. Examples: cross-file
         // Original (no Plan-8 wrapper yet), Substring chain rooted outside
-        // target, gappy Concat. Fall back to Rewrite — re-serialize the
+        // target. (Gappy Concat is structurally impossible from in-repo
+        // callers — see §Open questions — but the catch-all is the safe
+        // fallback if a malformed JSON ingested via WASM produces one.)
+        // Fall back to Rewrite — re-serialize the
         // unchanged block through the qmd writer. Lossy at the byte level
         // (whitespace, formatting may shuffle) but preserves content. The
         // earlier draft routed these to Omit; that path was data-loss-shaped
@@ -416,8 +444,17 @@ the `.diagnostics-banner` for unlocated.
 
 #### Diagnostic codes
 
-Two codes, registered in
+Three codes, per the Q-3 conventions in
 `crates/quarto-error-reporting/error_catalog.json`:
+
+- **`Q-3-41` — "Edit dropped — render not ready yet".** Emitted
+  when the user makes an edit before the first successful render
+  has produced a baseline AST (`ast === ''` on hub-client,
+  `astJson === null` on the SPA). Body: imperative — "Your edit
+  was dropped because the document hasn't finished rendering. Try
+  again in a moment." Warning severity. No source range (the
+  edit is pre-render, so there's no rendered DOM to point at).
+  Suppress-after-3 still applies by code rather than range.
 
 - **`Q-3-42` — "Shortcode edit dropped".** Emitted when an
   inline-level edit to shortcode-resolved (or other atomic-Generated)
@@ -475,8 +512,13 @@ pub fn is_atomic_custom_node(type_name: &str) -> bool;
 
 Plan 7 ships the Rust side. The TypeScript hand-mirror at
 `ts-packages/preview-renderer/src/utils/atomicCustomNodes.ts`
-already exists (Plan 2A shipped it with `CrossrefResolvedRef`).
-Plan 8 adds `IncludeExpansion` to both sides.
+already exists (Plan 2A shipped it with `CrossrefResolvedRef`,
+ahead of the Rust source-of-truth). From Plan 7 onward, the
+lockstep convention applies: when one side changes, the other
+must too — same discipline as `By::is_atomic_kind()` ↔
+`ATOMIC_KINDS` (`ts-packages/preview-renderer/src/utils/sourceInfo.ts:54`)
+and `DiagnosticMessage` ↔ `types/diagnostic.ts`. Plan 8 adds
+`IncludeExpansion` to both sides.
 
 Extensions that need to contribute atomic types use a future
 registration mechanism (see §Open questions); the const set
@@ -500,26 +542,91 @@ includes) without further work.
 
 - Lift the `handleSetAst` read-only guard in `ReactPreview.tsx:429-440`
   introduced in Plan 1. Wire `setLocalAst` through with the current
-  `ast` state as the baseline:
+  `ast` state as the baseline; merge the returned warnings into the
+  diagnostics flow.
+
+  Concrete shape:
   ```ts
+  const writeBackWarningsRef = useRef<Diagnostic[]>([]);
+  const lastRenderDiagnosticsRef = useRef<Diagnostic[]>([]);
+
   const handleSetAst = useCallback((newAst) => {
-    const { qmd, warnings } = incrementalWriteQmd(content, ast, JSON.stringify(newAst));
-    // process warnings (Q-3-42, Q-3-43) into allDiagnostics
+    if (ast === '') {
+      // First-edit-before-render — see §Plan-7-specific decisions
+      writeBackWarningsRef.current = applySuppressByRange([
+        ...writeBackWarningsRef.current,
+        diagnosticQ3_41(),
+      ]);
+      onDiagnosticsChange([
+        ...lastRenderDiagnosticsRef.current,
+        ...writeBackWarningsRef.current,
+      ]);
+      return;
+    }
+    const { qmd, warnings } = incrementalWriteQmd(
+      content, ast, JSON.stringify(newAst),
+    );
+    writeBackWarningsRef.current = applySuppressByRange([
+      ...writeBackWarningsRef.current,
+      ...warnings,
+    ]);
+    onDiagnosticsChange([
+      ...lastRenderDiagnosticsRef.current,
+      ...writeBackWarningsRef.current,
+    ]);
     onContentRewrite(qmd);
-  }, [content, ast, onContentRewrite]);
+  }, [content, ast, onContentRewrite, onDiagnosticsChange]);
   ```
-  The `ast` state already holds the previously-rendered post-pipeline
-  AST (set by the regular render effect on every successful render).
-  No new caching mechanism is required; React's `useState` is the
-  cache.
+
+  Lifecycle. `lastRenderDiagnosticsRef.current` is set inside
+  `doRenderWithStateManagement` (the existing render-result callback
+  at `ReactPreview.tsx:354`) on every render completion. On the
+  **success** branch, `writeBackWarningsRef.current = []` — the
+  regenerated AST replaces the stale baseline, so warnings about
+  edits against the previous baseline are no longer current. On
+  the **failure** branch, the previous write-back warnings persist
+  (the user's edit was real; the render error doesn't invalidate
+  the warning).
+
+  Suppress-after-3-by-source-range (`applySuppressByRange`) runs at
+  the merge site, not in the writer — the writer is policy-free.
+  Monaco squiggles remain as the persistent signal for repeated
+  edits over the same range.
+
+  The `ast` state already holds the previously-rendered
+  post-pipeline AST (set by the regular render effect on every
+  successful render). No new caching mechanism is required; React's
+  `useState` is the cache.
 
 #### q2 preview SPA integration
 
 - Replace `noopSetAst` at `q2-preview-spa/src/PreviewApp.tsx:241`
-  with a real handler that calls `incrementalWriteQmd(content,
-  baselineAst, newAst)` and then `syncClient.updateFileContent(path,
-  newQmd)`. The baseline AST is the SPA's currently-displayed AST
-  (mirror of ReactPreview's `ast` state).
+  with a real handler. The baseline AST is the SPA's
+  currently-displayed AST — `state.astJson` in `PreviewAppState`,
+  set on every successful render at `PreviewApp.tsx:530`. The
+  `content` argument is read via `getFileContent(state.activeFile)`
+  from `@quarto/preview-runtime/automergeSync` (verified to exist
+  at `ts-packages/preview-runtime/src/automergeSync.ts:177`) — the
+  SPA holds no local `content` state because automerge is the
+  source-of-truth. Skeleton:
+  ```ts
+  const handleSetAst = useCallback(async (newAst) => {
+    if (!state.activeFile || state.astJson === null) {
+      // First-edit-before-render — emit Q-3-41 into DiagnosticStrip
+      pushDiagnostics([diagnosticQ3_41()]);
+      return;
+    }
+    const content = getFileContent(state.activeFile);
+    if (content === null) return; // file gone / binary; defensive
+    const { qmd, warnings } = incrementalWriteQmd(
+      content, state.astJson, JSON.stringify(newAst),
+    );
+    const hash = await computeHash(qmd);
+    echoHashRef.current = { path: state.activeFile, hash };
+    syncClient.updateFileContent(state.activeFile, qmd);
+    pushDiagnostics(warnings);
+  }, [state.activeFile, state.astJson]);
+  ```
 - Add **content-match echo-prevention** in the SPA's
   `onFileContent` handler. Just before calling
   `updateFileContent`, hash the qmd being emitted (e.g. SHA-256 or
@@ -587,14 +694,16 @@ users in fullscreen-preview mode rely on the Monaco squiggles
   into a shared `@quarto/preview-renderer` component.** Filed as a
   follow-up against the hub-client decomposition epic (bd-hfjj); not
   on Plan 7's critical path.
-- **Plan 7 `preimage_in` role-asymmetry unit test and
-  appendix-license end-to-end round-trip test.** These exercise the
-  `Invocation`-only walking behavior of `preimage_in` and the
-  end-to-end correctness of soft-dropping a metadata-derived edit.
-  Both depend on Plan 9 having stamped ValueSource anchors on a
-  real consumer (the appendix synthesizer); both land in Plan 9's
-  Phase 5. Plan 7's test plan retains the structural-only unit
-  tests that don't depend on a real ValueSource consumer.
+- **Appendix-license end-to-end round-trip test.** Exercises
+  end-to-end correctness of soft-dropping a metadata-derived edit
+  against the appendix synthesizer's ValueSource-stamped output.
+  Depends on Plan 9 stamping ValueSource on a real consumer; lands
+  in Plan 9 Phase 5. (The **structural unit test** for
+  non-Invocation-role-skipping is in Plan 7's Phase 1 — it
+  hand-builds anchors with generic `By` plus
+  `Anchor::value_source()` / `AnchorRole::Other(...)`, no consumer
+  dependency. Plan 9 Phase 5 also carries an appendix-specific
+  version using `By::appendix(...)` once that constructor exists.)
 
 ## Design decisions (settled)
 
@@ -666,30 +775,61 @@ users in fullscreen-preview mode rely on the Monaco squiggles
 
 ## Multi-inline shortcode dedupe
 
-When `{{< meta foo >}}` resolves to multiple inlines (e.g. metadata
-is markdown like `**Bold** Title` → `[Strong[Str], Space, Str]`),
-each resolved inline has the same `Generated { by: shortcode("meta"),
-from: [Invocation -> Original{shortcode_range}] }` source_info.
+See `claude-notes/designs/incremental-writer-contract.md` §"Multi-inline
+dedupe" for the full rule and rationale. Brief: when `{{< meta foo >}}`
+resolves to multiple inlines all sharing the same `Invocation` anchor,
+inline-level reconciliation groups consecutive `KeepBefore` entries
+with `PartialEq`-equal anchors and emits Verbatim once for the group.
 
-**Block-level:** if both reconciliation inputs produce the same
-multi-inline output, the surrounding Para is structurally identical
-→ KeepBefore at block level → Verbatim copy of the WHOLE Para's
-bytes (including the shortcode token). One copy. ✓
+## Plan-7-specific decisions
 
-**Inline-level recursion** (when the user edits something else in
-the same Para): the reconciler picks `RecurseIntoContainer` with an
-inline plan. Each shortcode-derived inline is `KeepBefore`
-individually. Without dedupe, each one's Verbatim would emit the
-shortcode token → N copies in output.
-
-**Dedupe rule:** when iterating inline alignments in
-`assemble_inline_content`, group consecutive `KeepBefore` entries
-whose inlines' `Invocation` anchors are `PartialEq`-equal. Emit
-Verbatim *once* for the group, using the anchor's preimage byte
-range.
-
-This applies only at the inline level (where multi-inline shortcode
-resolutions occur). Block-level rarely sees this case.
+- **First-edit / no-baseline behavior — drop + warn.** When the
+  WASM entry receives an empty / null / unparseable
+  `baseline_ast_json`, it returns `success: false` with a clear
+  error message rather than falling back to parsing `original_qmd`
+  internally (which would silently misbehave for q2-preview-tier
+  callers). Callers gate `incrementalWriteQmd` on having a
+  successfully-rendered baseline cached AND emit `Q-3-41` to the
+  active diagnostic surface when the gate trips:
+  - ReactPreview gates on `ast !== ''`; on a tripped gate,
+    push `diagnosticQ3_41()` into `writeBackWarningsRef.current`
+    and flush via `onDiagnosticsChange` (see §Hub-client integration).
+  - SPA gates on `astJson !== null` AND `activeFile !== null`; on
+    a tripped gate, push `Q-3-41` into `DiagnosticStrip`.
+  Pre-Plan-7 today the edit is silently dropped — no DOM affordance,
+  no console signal. Plan 7 makes the drop visible so users whose
+  interaction model beats the first render (e.g. paste-on-boot)
+  learn what happened.
+- **Inline-level UseAfter substitution targets `before_idx`.** The
+  alignment from the reconciler already carries the original-side
+  index being replaced; the writer uses that directly. An earlier
+  draft suggested matching the *new* inline's `Invocation` anchor
+  against original-side anchors — but user-edit inlines don't
+  carry `Invocation` anchors, so there is nothing to match.
+- **Programmer-error surface.** No `WriterError` enum. Invariant
+  violations panic inline (`debug_assert!()` / `unreachable!()` /
+  `panic!()` — idiomatic q2; see §"Writer return type after Plan 7"
+  for the citation set). User-genuine failures keep flowing
+  through the existing `Result::Err(Vec<DiagnosticMessage>)` arm —
+  same shape today's writer uses for inline-splice qmd-writer
+  errors. The WASM bridge's `Err` arm is unchanged.
+- **Anchor-role doc-comment placement.** The "non-`Invocation`
+  roles are not walked" policy is doc-commented in three places
+  with the canonical statement on `SourceInfo::preimage_in`:
+  - `SourceInfo::preimage_in` (canonical) — full policy.
+  - `AnchorRole::Other` — points back: "see `preimage_in` for the
+    walking policy; `Other` is among the non-walked roles."
+  - `AnchorRole` enum doc — one-liner: "Only `Invocation` is walked
+    by the writer's `preimage_in`; see `preimage_in` doc for the
+    full policy and rationale."
+  Plan 10 adds an equivalent pointer on `AnchorRole::Dispatch`
+  when it lands.
+- **Tier-mismatch sanity check at WASM bridge.** No runtime
+  verifier in Plan 7 — the caller-contract documentation suffices.
+  Future hardening (`assert that all FileIds referenced by
+  `new_ast_json` also appear in `baseline_ast_json`, or similar)
+  is a follow-up if real bugs surface; do not add speculative
+  guards now.
 
 ## `preimage_in` semantics
 
@@ -745,7 +885,50 @@ range; the writer Verbatim-copies the shortcode token from source.
 
 ## Migration plan
 
-### Rust signature
+### Rust function signatures (`pampa::writers::incremental`)
+
+```rust
+// Before:
+pub fn incremental_write(
+    original_qmd: &str,
+    original_ast: &Pandoc,
+    new_ast: &Pandoc,
+    plan: &ReconciliationPlan,
+) -> Result<String, Vec<DiagnosticMessage>>;
+
+pub fn compute_incremental_edits(
+    original_qmd: &str,
+    original_ast: &Pandoc,
+    new_ast: &Pandoc,
+    plan: &ReconciliationPlan,
+) -> Result<Vec<TextEdit>, Vec<DiagnosticMessage>>;
+
+// After (both gain a warnings channel in the Ok variant; Err
+// keeps its existing meaning — qmd-writer failures bubbling up
+// via `?` from the underlying serializer):
+pub fn incremental_write(
+    original_qmd: &str,
+    original_ast: &Pandoc,
+    new_ast: &Pandoc,
+    plan: &ReconciliationPlan,
+) -> Result<(String, Vec<DiagnosticMessage>), Vec<DiagnosticMessage>>;
+
+pub fn compute_incremental_edits(
+    original_qmd: &str,
+    original_ast: &Pandoc,
+    new_ast: &Pandoc,
+    plan: &ReconciliationPlan,
+) -> Result<(Vec<TextEdit>, Vec<DiagnosticMessage>), Vec<DiagnosticMessage>>;
+```
+
+`coarsen` (private) gains a `&mut Vec<DiagnosticMessage>` warning
+sink parameter and keeps its existing `Result<Vec<CoarsenedEntry>,
+Vec<DiagnosticMessage>>` return shape — the `Err` arm still
+surfaces hard errors from inline-splice assembly via `?`.
+Programmer errors (Plan-6 stamper bugs, structurally impossible
+states) `panic!()` / `unreachable!()` / `debug_assert!()` inline.
+
+### WASM entry signature (`incremental_write_qmd`)
 
 ```rust
 // Before:
@@ -1226,10 +1409,67 @@ checker catches every call site automatically.
 | Tests (unit + end-to-end round-trip + soft-drop interactions, both surfaces) | ~500 |
 | **Total** | **~1390** |
 
-Two focused sessions likely. Flagged as one of the highest-complexity
-plans; extend the budget if the InlineSplice + Transparent
-composition or the soft-drop catalog expansion surfaces unexpected
-interactions.
+## Session split
+
+Two agent sessions, one plan document, two PRs against the
+`feature/provenance` integration branch. The boundary is the WASM
+ABI: Session 1 settles the Rust API surface; Session 2 propagates
+it across the WASM bridge into TS callers and the SPA.
+
+**Session 1 — Rust core (Phases 1-3 + writer-lossless baseline
+test).** Branch `beads/<id>-plan7-rust-core` off
+`feature/provenance`. Lands:
+
+- `quarto-source-map`: `preimage_in` accessor + doc-comment
+- `quarto-core`: `ATOMIC_CUSTOM_NODES`, `is_atomic_custom_node`,
+  `editability::is_editable_inside`
+- `quarto-error-reporting`: Q-3-41 / Q-3-42 / Q-3-43 catalog
+  entries + builder helpers
+- `pampa::writers::incremental`: `CoarsenedEntry::{Transparent, Omit}`
+  variants, rewritten `coarsen` logic, soft-drop substitutions,
+  multi-inline dedupe, return-type change, debug-assert
+- `quarto-ast-reconcile`: source-info-blindness foundation test
+- Full unit + integration test corpus for the above
+- Writer-lossless baseline test
+
+The WASM bridge stays **externally identical** in Session 1 — the
+internal Rust signature changes, but `incremental_write_qmd` in
+`wasm-quarto-hub-client/src/lib.rs:2947` keeps its two-argument
+form and discards the new warnings channel temporarily (the WASM
+arm calls `incremental_write(...)` and `let (qmd, _warnings) = ...`).
+Browser callers see no change; existing tests still pass.
+`cargo xtask verify` green at end of Session 1.
+
+**Session 2 — WASM bridge + consumers + SPA + e2e (Phases 4-9).**
+Fresh agent, fresh context. Branch
+`beads/<id>-plan7-wasm-and-consumers` off the new
+`feature/provenance` tip (after Session 1's `--no-ff` merge). Lands:
+
+- WASM signature change (three-arg `incremental_write_qmd`,
+  warnings surfaced in `AstResponse.warnings`)
+- TS wrapper signature change in `wasmRenderer.ts`
+- Hand-maintained `.d.ts` files (two locations)
+- Sync-client interface + call-site update
+- ReactPreview guard lift + `writeBackWarningsRef` plumbing +
+  Q-3-41 first-edit emission
+- Two demo migrations (kanban, hub-react-todo)
+- TS-side `hasPreimageIn` / `isEditableInside` / `dispatch.tsx`
+  update (closes the partial React gate from Plan 2A)
+- `pipelineKindForFormat` move to `ts-packages/preview-runtime`
+- SPA `handleSetAst` + `getFileContent` wiring +
+  content-match echo-prevention + `DiagnosticStrip` + Q-3-41
+  first-edit emission
+- All Phase 8 end-to-end tests
+- All Phase 9 verification + cleanup
+
+`cargo xtask verify` (full chain, no skip) green at end, plus
+manual browser smoke per CLAUDE.md's "End-to-end verification
+before declaring success".
+
+Flagged as one of the highest-complexity plans; extend either
+session's budget if the InlineSplice + Transparent composition
+(Session 1) or the soft-drop catalog + SPA echo-prevention
+(Session 2) surfaces unexpected interactions.
 
 ## Implementation checklist
 
@@ -1322,6 +1562,122 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 - [x] `Q-3-43` entry in `error_catalog.json`: title "Generated content edit dropped"; severity Warning. (Single generic `message_template`; the three emission paths supply distinct body text via the builder — per Plan 7 §"Catalog mechanics".)
 - [x] Diagnostic builder helpers `diagnostic_q3_42_inline(inline)` and `diagnostic_q3_43_block(block)` used by `coarsen`'s soft-drop sites; live in `pampa::writers::incremental` (not `quarto-error-reporting`, which doesn't depend on `quarto-pandoc-types`)
 - [x] Unit tests: each soft-drop unit test asserts the correct Q-3-42 / Q-3-43 code is emitted
+
+### Session 1 → Session 2 handoff
+
+Session 1 ends here. Before Session 1's PR merges to
+`feature/provenance`, Agent 1 must complete the obligations below.
+Agent 2 starts cold and uses the prompt at the end of this section
+verbatim.
+
+#### Obligations on Agent 1
+
+- [ ] Mark every Phase 1-3 checklist item above as `[x]`. If an item
+  was descoped or split, edit it in place to reflect what actually
+  shipped (do not silently skip).
+- [ ] Fill in the **Deltas observed during Session 1** subsection
+  below. This is the most important handoff artifact — Session 2's
+  code reads against Session 1's API surface, and any drift from
+  the sketched design needs to land here. Specifically capture:
+  - Names that ended up different from the plan (function names,
+    module paths, type names, helper names).
+  - Signature changes (e.g. `is_editable_inside` ended up taking
+    `&AstContext` for the pool lookup, or `coarsen`'s warning
+    sink ended up wrapped in a struct, or the diagnostic builders
+    take different arguments).
+  - Surprises that materially change Session 2's scope (e.g. a
+    Plan 6 stamper bug surfaced that needs fixing before
+    Session 2 can proceed; a test in the existing 351-test corpus
+    needed an update that should be cross-linked).
+  - Files that moved or were created in unexpected locations.
+  - Anything in the `claude-notes/designs/incremental-writer-contract.md`
+    that needed updating.
+  - Empty is OK: if Session 1 shipped exactly per the plan, write
+    "No deltas — implementation matched the plan as written."
+- [ ] Run `cargo xtask verify` (full chain). Green is required for
+  merge.
+- [ ] Commit per the project's git workflow. Open a PR against
+  `feature/provenance` with `--no-ff` merge once approved.
+- [ ] After the merge, produce the Agent 2 launch prompt below
+  verbatim (filling in the two `<placeholder>` slots), and hand
+  it to the user.
+
+#### Deltas observed during Session 1
+
+> Agent 1: replace this block with the deltas you observed. Leave
+> the heading; replace the prose. If there were no deltas, say so
+> explicitly so Agent 2 doesn't have to wonder whether the section
+> is incomplete.
+>
+> _Placeholder — Agent 1 fills this in at end of Session 1._
+
+#### Agent 2 launch prompt
+
+Paste the following into a fresh session (different agent, fresh
+context window). Replace `<session-1-merge-commit>` with the
+short SHA of Session 1's merge commit on `feature/provenance`,
+and `<plan-file-path>` with the absolute path to this plan file.
+
+```
+You are starting Session 2 of Plan 7 (incremental writer) in the
+q2 Rust monorepo. Session 1 — the Rust core (preimage_in,
+is_editable_inside, CoarsenedEntry::{Transparent,Omit}, soft-drop
+substitutions, multi-inline dedupe, diagnostic catalog entries) —
+has landed on `feature/provenance` at commit
+<session-1-merge-commit>. You are picking up the WASM bridge +
+consumer migrations + SPA edit-back wiring + end-to-end tests
+(Phases 4-9 in the plan).
+
+First, read these in order:
+1. <plan-file-path> — the full plan. Phases 1-3 are checked off;
+   the §"Deltas observed during Session 1" subsection records
+   anything that shipped differently from the planned design.
+   Read that subsection carefully — your code reads against
+   Session 1's actual API, not the plan's sketch.
+2. claude-notes/designs/incremental-writer-contract.md — the
+   contract Session 1 implemented. The rules in this doc are
+   load-bearing for Session 2's diagnostic and edit-back paths.
+
+Skim what Session 1 shipped:
+
+    git log --oneline main..feature/provenance
+    git diff <session-1-merge-commit>~1..<session-1-merge-commit> --stat
+
+Create or switch into a worktree for Session 2 work. Per plan
+§Session split, branch `beads/<id>-plan7-wasm-and-consumers` off
+`feature/provenance`. If a beads issue does not yet exist, create
+one ("Plan 7 Session 2 — WASM bridge + consumers + SPA edit-back",
+priority 1, depends on Session 1's issue) and use its id. If
+hub-client work is in scope (it is — Phases 5-9 touch it), run
+`npm install` from the new worktree root.
+
+Work through Phases 4-9 in order. The phases are sequential by
+design — Phase 4 (WASM signature) must land before Phase 5 (TS
+wrapper); the demos in Phase 6 depend on Phase 5; the SPA in
+Phase 7 depends on Phase 5 and Phase 6; e2e tests in Phase 8
+depend on everything before. Within a phase, items can run in
+any order.
+
+Verification before claiming done:
+- `cargo xtask verify` (full chain, no skip flags) green.
+- Manual browser smoke per CLAUDE.md's "End-to-end verification
+  before declaring success" — exercise q2 preview SPA's edit-back
+  path against a real fixture, observe the rendered DOM round-trip
+  back to qmd through automerge, confirm Q-3-42 / Q-3-43 surface
+  in DiagnosticStrip. Record the invocation and the observed
+  output per the CLAUDE.md gate.
+- Hub-client manual smoke — edit a sectionized doc in
+  ReactPreview, confirm the qmd round-trips with section
+  structure preserved, confirm warnings ride
+  `onDiagnosticsChange` into the diagnostics banner.
+
+If anything in the merged Rust code from Session 1 doesn't match
+what the plan says, **trust the code and update the plan in your
+PR**. The plan is a living document; the code is authoritative.
+
+Open a PR against `feature/provenance` when verify is green;
+request review.
+```
 
 ### Phase 4 — WASM bridge signature change (`wasm-quarto-hub-client`)
 
