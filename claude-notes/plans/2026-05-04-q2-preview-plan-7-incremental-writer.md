@@ -276,7 +276,15 @@ if alignment is KeepBefore(orig_idx):
         // (whitespace, formatting may shuffle) but preserves content. The
         // earlier draft routed these to Omit; that path was data-loss-shaped
         // and should never reach the writer.
-        CoarsenedEntry::Rewrite { orig_idx }
+        //
+        // The reconciler's KeepBefore alignment ties orig_idx to a specific
+        // new-side block (they were classified structurally equal). The
+        // catch-all serializes that aligned new-side block — equivalently
+        // the original-side block, since they compare equal — so the
+        // existing `Rewrite { new_idx }` variant fits without modification.
+        // Coarsen looks up the aligned new_idx from the plan; no separate
+        // variant or field is needed.
+        CoarsenedEntry::Rewrite { new_idx: aligned_new_idx }
     }
 
 if alignment is UseAfter(new_idx):
@@ -700,6 +708,11 @@ impl SourceInfo {
             }
             SourceInfo::Concat { pieces } => {
                 // All pieces must resolve into target file AND be contiguous.
+                // Note: `SourceInfo::concat()` computes each piece's
+                // `offset_in_concat` cumulatively (sum of prior lengths), so
+                // gaps are structurally impossible in any Concat produced by
+                // the in-repo constructors. This branch is defensive against
+                // malformed JSON deserialization, not against in-repo callers.
                 let ranges: Vec<_> = pieces.iter()
                     .map(|p| p.source_info.preimage_in(target))
                     .collect::<Option<Vec<_>>>()?;
@@ -707,7 +720,9 @@ impl SourceInfo {
                 if ranges.windows(2).all(|w| w[0].end == w[1].start) {
                     Some(ranges.first()?.start .. ranges.last()?.end)
                 } else {
-                    None  // gappy concat — can't Verbatim-copy
+                    None  // defensive: gaps shouldn't arise from in-repo
+                          // constructors; if they do, fall through to the
+                          // catch-all Rewrite branch below.
                 }
             }
             SourceInfo::Generated { .. } => {
@@ -818,42 +833,56 @@ checker catches every call site automatically.
 
 ## Open questions for implementation
 
-- **Inline-level Transparent.** Today the writer has `InlineSplice`
-  for inline-level changes within a block. Does the `Transparent`
-  variant apply to inlines too (e.g., a `Span` with Generated
-  source_info containing source-bearing inlines)? Probably yes —
-  extend the same pattern. Confirm during implementation.
+- **Inline-level Transparent — settled: not needed.** A worktree
+  scan of `crates/quarto-core/src/transforms/` and
+  `crates/pampa/src/` finds zero inline-level synthesizers that
+  produce `Generated { from: [] }` with non-atomic kind and
+  source-bearing children. All four Plan-6 synthesizers
+  (Sectionize, TitleBlock, Footnotes, Appendix) emit *block*-level
+  wrappers; the inlines that synthesizers do touch (e.g. the
+  Footnotes `<sup>` inline stack — Span / Superscript / Link / Str)
+  carry `Original` source_info cloned from the `Note`'s range, not
+  `Generated`. They hit `Verbatim` via `preimage_in`, not
+  Transparent. The inline-assembly path's three variants
+  (`KeepBefore` / `UseAfter` / `RecurseIntoContainer`) handle every
+  shape that reaches it today; the third already preserves
+  delimiters and recurses, which is what an inline Transparent
+  would amount to. If a future transform begins emitting inline
+  Generated-empty-from wrappers, reopen this question — the
+  case is structurally absent in Plan-6-stamped output.
 
-- **Concat-with-gaps semantics.** A gappy Concat's `preimage_in`
-  returns None per the algorithm above. Coarsen falls through to
-  Rewrite. Confirm this is the right semantics for the rare cases
-  where gappy Concats reach the block level.
+- **Concat-with-gaps semantics — settled: structurally
+  impossible.** `SourceInfo::concat()` computes each piece's
+  `offset_in_concat` as the cumulative sum of prior lengths, so a
+  gap would corrupt the Concat invariant. All in-repo
+  constructors (`qmd::write_with_source_info`, postprocess
+  coalescing, YAML scalar combining, attribute combining, inline
+  combining) feed adjacent pieces; the existing
+  `concat_piece_lengths_sum_to_buffer_length` and
+  `concat_covers_output_with_frontmatter` tests
+  (`crates/pampa/tests/qmd_writer_source_info.rs`) lock the
+  tile-the-buffer-with-no-gaps property. The `preimage_in`
+  gap branch is defensive paranoia against malformed JSON
+  deserialization, not against in-repo callers, and the
+  catch-all Rewrite fallback is a safe graceful-degradation
+  endpoint that should never fire on well-formed input.
 
-- **`is_atomic_custom_node` lookup — extension forward-compat.**
-  Today's hardcoded `pub const ATOMIC_CUSTOM_NODES: &[&str]` works
-  for built-in atomic types. Future extensions will need to
-  register their own atomic types without modifying `quarto-core`.
-
-  The forward-compat design (deferred to a follow-up plan; commits
-  the shape now without implementation code):
-  - YAML schema in `_extension.yml`:
-    ```yaml
-    contributes:
-      custom-nodes:
-        - { type: MyCustomBlock, atomic: true }
-        - { type: AnotherWidget }              # atomic defaults to false
-    ```
-  - Rust runtime aggregation mirroring `resolve_filters()`'s pattern.
-  - Function signature evolution: `is_atomic_custom_node(name,
-    &registry: &HashSet<String>)`. The writer in `pampa` gets the
-    registry from `StageContext` at coarsen time.
-  - Rust→JS sync via a `wasm_bindgen` export called once per render;
-    populates a React context. The hand-mirrored TS const remains
-    the fallback for the no-extensions case.
-
-  Plan 7 ships the const-based registry; the runtime aggregation,
-  schema parsing, and `wasm_bindgen` lookup land in a follow-up
-  when an extension actually registers an atomic type.
+- **`is_atomic_custom_node` extension forward-compat — out of
+  scope for Plan 7.** The two atomic types today
+  (`CrossrefResolvedRef`, `IncludeExpansion`) are both
+  Quarto-2-internal; no extension has asked for atomic-type
+  registration. Quarto 1 has no public extension-author-facing
+  mechanism for custom AST node types either (verified against
+  `~/src/quarto-cli` and deepwiki) — its internal registration
+  is via `_quarto.ast.add_handler()` (imperative Lua call),
+  not declarative YAML, and `_extension.yml` has no
+  `custom-nodes:` key. If a future extension genuinely needs to
+  contribute an atomic CustomNode type, a separate plan picks
+  the registration shape with the right review (mirroring
+  Quarto 1's imperative Lua surface, or designing a YAML
+  surface, or both). Plan 7 ships the const-set with no
+  extension-side coupling; the const-set's lack of an
+  extension hook is intentional, not provisional.
 
 - **Runtime user-filter idempotence detection** — split out to
   Plan 7a. See `claude-notes/plans/2026-05-04-q2-preview-plan-7a-
