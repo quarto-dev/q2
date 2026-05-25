@@ -23,6 +23,10 @@ be in reverse chronological order (latest first).
 
 - [`1bc3d2cd`](https://github.com/quarto-dev/q2/commits/1bc3d2cd): Fix Monaco editor in light mode falling back to its default theme because the configured name (`light`) was not a registered Monaco theme; use `vs` instead.
 
+### 2026-05-24
+
+- [`9da9f14a`](https://github.com/quarto-dev/q2/commits/9da9f14a): q2-preview edits now write back to the document. The read-only guard is gone; component-driven edits (kanban drag, future comment buttons) flow through the incremental writer using the live preview AST as the baseline, and soft-drop warnings (Q-3-42 / Q-3-43) surface in the existing diagnostics panel when an edit hits an atomic region.
+
 ### 2026-05-21
 
 - [`6c84696d`](https://github.com/quarto-dev/q2/commits/6c84696d): Login screen and post-logout view now respect the saved `colorScheme` preference (and system `prefers-color-scheme`) instead of always rendering light on first visit and inheriting the previous session's class after logout.
