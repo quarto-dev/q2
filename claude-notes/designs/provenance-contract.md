@@ -15,6 +15,10 @@
 [Plan 8](../plans/2026-05-04-q2-preview-plan-8-include-wrapper.md)
 (include wrapper).
 **Audit report:** [`claude-notes/research/2026-05-22-plan-6-audit.md`](../research/2026-05-22-plan-6-audit.md).
+**Companion doc:** [`incremental-writer-contract.md`](incremental-writer-contract.md)
+covers the *consumer* side — what the writer does with the `SourceInfo`
+shapes this doc tells producers to emit. The two are designed in pairs:
+if you change either contract, check the other.
 
 ## Summary
 
@@ -35,7 +39,8 @@ from how it was constructed.** Four branches:
 | Corresponds to source bytes             | `Original` — `ctx.source_info.clone()`, or clone the input node's `source_info` field. Never construct an `Original` by hand.  |
 | Pure synthesis with no preimage         | `Generated { by: By::<kind>(), from: smallvec![] }`                                                                            |
 | Resolution of a user-written construct  | `Generated { by: By::<kind>(name), from: smallvec![Anchor::invocation(Arc::new(token_si))] }`                                  |
-| Constructed inside a user Lua filter    | Leave it alone — `filter_source_info` ([`crates/pampa/src/lua/types.rs:1813`](../../crates/pampa/src/lua/types.rs)) auto-attaches the right shape on the way out. |
+| **Mutation** of a node a filter received (e.g. `Str.text = upper(...)`) | Leave the input node's `Original` source_info untouched. Filter *mutations* are not classified atomic; do **not** rewrite to `Generated`. See [`incremental-writer-contract.md`](incremental-writer-contract.md) §"Filter mutations versus constructions" for the round-trip implications. |
+| **Construction** inside a user Lua filter (e.g. `pandoc.Str("...")`) | Leave it alone — `filter_source_info` ([`crates/pampa/src/lua/types.rs:1813`](../../crates/pampa/src/lua/types.rs)) auto-attaches `Generated { by: filter, ... }` on the way out. |
 
 If two branches feel equally applicable, pick the one with the longer
 chain to source: the writer (Plan 7) and attribution
@@ -121,6 +126,25 @@ file registration in `SourceContext`): once Lua files have a
 `by.data` for `filter`-kind nodes shrinks to per-kind config only.
 Treat that as the worked example whenever you're tempted to put a
 path-or-range pair in `by.data`.
+
+### Role-asymmetry — only `Invocation` drives byte-copy
+
+**The writer walks `Invocation` only.** `ValueSource`, `Dispatch`
+(when it lands), and `Other(...)` are diagnostic-only: attribution
+machinery may consult them, but the writer's `preimage_in` skips
+past them and they never produce verbatim-copy bytes. See
+[`incremental-writer-contract.md`](incremental-writer-contract.md)
+§"The role-asymmetry contract on `Generated.from`" for the rule
+and rationale.
+
+The producer-side implication: attaching `ValueSource` to a synthesized
+node is fine for diagnostic richness (attribution will surface the
+metadata range), but it will **not** make the writer copy bytes from
+that range into the output. If you want a node's bytes to come from
+a specific source range on round-trip, that range must be reachable
+through `Invocation`. Extension authors writing custom attribution
+via `Other("…")` get the same forward-compat guarantee: whatever they
+point at will never be turned into rendered bytes by accident.
 
 ## 5. Enrichment-via-post-walk pattern
 
@@ -224,21 +248,22 @@ this footgun if they copy the wrong form from a draft plan.
 ## 7. Atomic-kind set and consumer impact
 
 **`is_atomic_kind()` controls how downstream consumers treat the
-node, not whether the node carries an anchor.** Two consumers consult
-it today:
+node, not whether the node carries an anchor.** The §2 catalog
+above marks which kinds are currently atomic; the canonical
+enumeration plus the shortcode-only debug-assert table lives in
+[`incremental-writer-contract.md`](incremental-writer-contract.md)
+§"Atomic-kind `Generated` and the shortcode-only invariant."
 
-- **Plan 7's incremental writer.** Atomic nodes round-trip as
-  Verbatim-copy of the source token; direct edits to atomic content
-  trigger the soft-drop / Q-3-42 path. Non-atomic synthesized nodes
-  re-serialize from their AST contents.
-- **Plan 2A's React framework gate.** The hub-client preview reads
-  `isAtomicSourceInfo` to gate which DOM regions are non-editable.
+For producer authors: the rule is "new kinds default to **non-atomic**."
+Promote to atomic only when the round-trip rule for nodes you emit
+is "the entire subtree is one inseparable unit the user can't edit
+in-place." Extension kinds (`ext/<extension>/<kind>`) are never atomic
+in v1 — `is_atomic_kind` matches builtin kebab-case names only.
 
-New kinds default to **non-atomic** (the `is_atomic_kind` match arm
-does not include extension kinds). Promote to atomic only when the
-round-trip rule is "the entire subtree is one inseparable unit the
-user can't edit in-place." See Plan 7 for the consumer behavior;
-this contract does not duplicate it.
+Two consumers consult `is_atomic_kind` today: Plan 7's writer (round-
+trip / soft-drop) and Plan 2A's React framework gate (read-only DOM
+regions). The writer doc covers both behaviors; this contract just
+says "make the decision deliberately, default no."
 
 **Where the writer's internal shape is pinned:**
 [`incremental-writer-internals.md`](./incremental-writer-internals.md)
@@ -252,17 +277,23 @@ children) at coarsen time.
 ## 8. Required-anchor invariants
 
 **`by.kind == "shortcode"` always carries at least one `Invocation`
-anchor.** The producer (the stamper in §5) enforces this; Plan 7
+anchor.** The producer (the stamper in §5) enforces this; the writer
 adds a consumer-side `debug_assert!` so an extension that calls
-`By::raw("shortcode", …)` without the required anchor is caught.
+`By::raw("shortcode", …)` without the required anchor is caught. The
+writer-side table that distinguishes "missing `Invocation` is a bug"
+(shortcode) from "missing `Invocation` is the normal shape"
+(filter / title-block / tree-sitter-postprocess) lives in
+[`incremental-writer-contract.md`](incremental-writer-contract.md)
+§"Atomic-kind `Generated` and the shortcode-only invariant."
 
 The pattern generalizes: when a new kind always has a source-side
 preimage (e.g. a hypothetical `By::macro_expansion(name)`), declare
-the invariant here, enforce it at the producer, and assert it at the
-consumer. Kinds that *sometimes* have a preimage (sectionize wraps
-existing content; the inner `Header` carries the original
-`source_info`, but the wrapper `Div` doesn't) are not in this set —
-they emit `from: smallvec![]` and don't require any anchor.
+the invariant here, enforce it at the producer, and add the
+corresponding consumer-side assert in the writer doc. Kinds that
+*sometimes* have a preimage (sectionize wraps existing content; the
+inner `Header` carries the original `source_info`, but the wrapper
+`Div` doesn't) are not in this set — they emit `from: smallvec![]`
+and don't require any anchor.
 
 **Sibling contract for these "no source token of its own" wrappers:**
 see [`transparent-wrappers.md`](./transparent-wrappers.md). It names
@@ -355,3 +386,14 @@ shape onto content the user can edit directly.
   outlier call-site threading, and a do-not list. Plan-6 audit
   report lives separately at
   [`claude-notes/research/2026-05-22-plan-6-audit.md`](../research/2026-05-22-plan-6-audit.md).
+- **2026-05-25 — v1.1.** Cross-linked the consumer-side
+  [`incremental-writer-contract.md`](incremental-writer-contract.md)
+  that landed in parallel on Plan 7's review branch. Three
+  substantive edits: §1 decision tree gains a row distinguishing
+  filter *mutations* (keep input's `Original`) from filter
+  *constructions* (auto-attached `Generated{by:filter}`); §4
+  documents the role-asymmetry — only `Invocation` drives the
+  writer's byte-copy, `ValueSource` / `Dispatch` / `Other` are
+  diagnostic-only; §7 / §8 now defer the canonical atomic-kind
+  enumeration and shortcode-only debug-assert table to the
+  writer-contract doc rather than duplicating them.

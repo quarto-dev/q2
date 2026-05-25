@@ -13,6 +13,14 @@ to make the guarantees hold. It is the contract; implementation
 specifics, file paths, and migration plans live in plans that
 modify the writer.
 
+**Companion doc:** [`provenance-contract.md`](provenance-contract.md)
+covers the *producer* side — how transforms pick the right `SourceInfo`
+shapes that this doc tells the writer how to consume. The two are
+designed in pairs: if you change either contract, check the other.
+The provenance doc also carries the `By::` constructor catalog with
+atomicity flags that the §"Atomic-kind `Generated`" section below
+draws on.
+
 ## The four primitives
 
 The writer is one node in a four-primitive grammar:
