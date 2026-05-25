@@ -1279,13 +1279,13 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 - [x] ~~Remove `AtomicViolation` variant~~ — variant never existed in the codebase; checklist item was stale (see implementation note above)
 - [x] Change `incremental_write` return type: `Result<(String, Vec<DiagnosticMessage>), Vec<DiagnosticMessage>>` (same for `compute_incremental_edits`); WASM bridge + all test callers migrated
 - [x] `debug_assert!` for the shortcode-Generated-with-empty-from regression case (Plan 6 stamper invariant) — in `coarsen_keep_before_block`
-- [ ] Writer-lossless baseline test (Plan 7 first-commit prerequisite): for each Generated / CustomNode shape, assert `parse(write(ast))` hash equals input via `compute_blocks_hash_fresh` + `compute_meta_hash_fresh_excluding_rendered` — **deferred**; existing integration tests cover the common Original-SI shapes; the Plan-6/Plan-7 shapes don't appear from raw qmd parse so they need crafted fixtures (separate follow-up issue)
+- [ ] Writer-lossless baseline test (Plan 7 first-commit prerequisite): for each Generated / CustomNode shape, assert `parse(write(ast))` hash equals input via `compute_blocks_hash_fresh` + `compute_meta_hash_fresh_excluding_rendered` — **deferred to Plan 7b Phase 1** (`claude-notes/plans/2026-05-24-q2-preview-plan-7b-test-orama.md`)
 - [x] Coarsen unit tests: Verbatim, Transparent (sectionize wrapper with source-bearing children), Omit (atomic-kind filter construction), Rewrite-catch-all (cross-file Original), Rewrite (UseAfter editable)
 - [x] Coarsen soft-drop unit tests: inline UseAfter on atomic-Generated (Q-3-42); block RecurseIntoContainer on atomic CustomNode (Q-3-43, Verbatim path); block RecurseIntoContainer on no-preimage Generated (Q-3-43, Omit path); block UseAfter on no-preimage Generated (Q-3-43, Omit path)
 - [x] Let-user-win unit test: block UseAfter on atomic CustomNode → Rewrite; no warning
 - [x] Multi-inline dedupe unit tests: positive (anchors PartialEq-equal → one Verbatim); negative (anchors differ → individual emits); ValueSource cross-talk (Plan 9 forward-compat — anchors match on Invocation but differ on ValueSource → still dedupes)
-- [ ] Soft-drop interaction test: shortcode edit + non-atomic edit in same Para — **deferred** (compound interaction test; the individual mechanisms are unit-tested)
-- [ ] Filter-construction soft-drop test — **deferred** (the KeepBefore→Omit path is unit-tested; the soft-drop-on-edit path would need a constructed reconciliation plan with a UseAfter into a filter-constructed inline)
+- [ ] Soft-drop interaction test: shortcode edit + non-atomic edit in same Para — **deferred to Plan 7b Phase 1**
+- [ ] Filter-construction soft-drop test (UseAfter into a filter-constructed inline) — **deferred to Plan 7b Phase 1**
 
 ### Phase 3 — Diagnostic catalog (`quarto-error-reporting`)
 
@@ -1354,7 +1354,7 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 
 - [x] Hub-client: WASM-level wrapper contract test (`hub-client/src/services/incrementalWrite.wasm.test.ts`) — pins the 3-arg API, identity round-trip, paragraph-edit preservation, structured error on malformed baseline JSON. Run via `npm run test:wasm`; 3/3 passing.
 - [x] Plan 3's idempotence test re-run — passes within `cargo xtask verify` (9535/9535 Rust tests, includes `crates/quarto-core/tests/idempotence.rs`).
-- [ ] **Deferred to `bd-3izo3`** — the broader Playwright scenario matrix (sectionized round-trip in a real hub session, single/multi-inline shortcode preservation, Q-3-42 byte-equal-no-op, Q-3-43 footnotes regeneration, SPA edit-paragraph round-trip in both project and single-file modes, SPA Q-3-42 DiagnosticStrip, mixed atomic + non-atomic, echo-prevention fixture). Each spec needs ~60 LOC of fixture/server setup and runs only under `cargo xtask verify --e2e`. The Rust-side soft-drop matrix is already exhaustively covered in `crates/pampa/src/writers/incremental.rs`; the deferred work is end-to-end *delivery* coverage, not new correctness coverage.
+- [ ] **Deferred to Plan 7b Phases 2 + 3** (`claude-notes/plans/2026-05-24-q2-preview-plan-7b-test-orama.md`; consolidates `bd-3izo3`) — the broader Playwright scenario matrix (sectionized round-trip in a real hub session, single/multi-inline shortcode preservation, Q-3-42 byte-equal-no-op, Q-3-43 footnotes regeneration, SPA edit-paragraph round-trip in both project and single-file modes, SPA Q-3-42 DiagnosticStrip, mixed atomic + non-atomic, echo-prevention fixture). Each spec needs ~60 LOC of fixture/server setup and runs only under `cargo xtask verify --e2e`. The Rust-side soft-drop matrix is already exhaustively covered in `crates/pampa/src/writers/incremental.rs`; the deferred work is end-to-end *delivery* coverage, not new correctness coverage.
 
 ### Phase 9 — Verification + cleanup
 
@@ -1364,7 +1364,7 @@ lockstep with `CROSSREF_RESOLVED_REF`.
     - [x] `cargo xtask build-q2-preview-spa` — bundle WASM into `q2-preview-spa/dist/`
     - [x] `cargo build --bin q2` — re-embed `dist/` via `include_dir!`
 - [x] q2 preview boot smoke: `cargo run --bin q2 -- preview /tmp/plan7-smoke` rendered correctly; user confirmed the preview in their browser (2026-05-24 session). The full edit round-trip (drag-to-trigger-handleSetAst → observe DiagnosticStrip on atomic edit) is part of the deferred Playwright matrix above.
-- [ ] **Deferred** — hub-client manual smoke (edit sectionized doc, observe section structure in saved qmd) and SPA manual smoke with echo-prevention assertion. Covered by the Phase 8 follow-up beads.
+- [ ] **Deferred to the user** — hub-client manual smoke (edit sectionized doc, observe section structure in saved qmd) and SPA manual smoke with echo-prevention assertion. The user is doing these by hand; the e2e equivalents land via Plan 7b Phases 2 + 3.
 - [x] Plan 7 marked complete (Phases 1-7 + 9 done; Phase 8 partially landed, remainder tracked separately).
 - [x] Bump `hub-client/changelog.md` with a one-line entry per the two-commit workflow (commit `b5d6d08a`).
 - [x] Plan 9's `preimage_in` role-asymmetry e2e test reference is in Plan 9 Phase 5 (added a "Plan 7 shipped 2026-05-24" status note so the deferral state is unambiguous when Plan 9 lands).
