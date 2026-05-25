@@ -524,6 +524,20 @@
     "docs_url": "https://quarto.org/docs/errors/writer/Q-3-40",
     "since_version": "99.9.9"
   },
+  "Q-3-42": {
+    "subsystem": "writer",
+    "title": "Shortcode edit dropped",
+    "message_template": "An edit to shortcode-resolved (or other atomic-Generated) content was reverted. The resolved text is read-only; edit the invocation token in source instead.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-42",
+    "since_version": "99.9.9"
+  },
+  "Q-3-43": {
+    "subsystem": "writer",
+    "title": "Generated content edit dropped",
+    "message_template": "An edit to pipeline-generated content was reverted. The content has no editable source position in this file; edit its upstream definition (an include, metadata key, or other source) instead.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-43",
+    "since_version": "99.9.9"
+  },
   "Q-3-50": {
     "subsystem": "writer",
     "title": "LineBlock Not Supported in ANSI Format",

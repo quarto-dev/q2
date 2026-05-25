@@ -169,7 +169,8 @@ fn assert_inline_roundtrip(original_qmd: &str, new_ast: &Pandoc) {
 
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     // Round-trip: parse result, write both to QMD, compare
     let result_ast = parse_qmd(&result);
@@ -192,7 +193,8 @@ fn assert_splice_equivalent_to_full_writer(original_qmd: &str, new_ast: &Pandoc)
 
     let incremental_result =
         writers::incremental::incremental_write(original_qmd, &original_ast, new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     let full_result = write_qmd(new_ast);
 
@@ -235,7 +237,8 @@ fn assert_inline_locality(original_qmd: &str, new_ast: &Pandoc, changed_block_id
 
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     // For each unchanged block, verify its text appears in the result.
     for (i, block) in original_ast.blocks.iter().enumerate() {
@@ -546,7 +549,9 @@ fn prop7_idempotent_paragraph_with_emphasis() {
     let qmd = "*Hello* world.\n";
     let ast = parse_qmd(qmd);
     let plan = compute_reconciliation(&ast, &ast);
-    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan)
+        .unwrap()
+        .0;
     assert_eq!(result, qmd);
 }
 
@@ -555,7 +560,9 @@ fn prop7_idempotent_paragraph_with_strong() {
     let qmd = "**Hello** world.\n";
     let ast = parse_qmd(qmd);
     let plan = compute_reconciliation(&ast, &ast);
-    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan)
+        .unwrap()
+        .0;
     assert_eq!(result, qmd);
 }
 
@@ -564,7 +571,9 @@ fn prop7_idempotent_paragraph_with_code() {
     let qmd = "Use `code` here.\n";
     let ast = parse_qmd(qmd);
     let plan = compute_reconciliation(&ast, &ast);
-    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan)
+        .unwrap()
+        .0;
     assert_eq!(result, qmd);
 }
 
@@ -573,7 +582,9 @@ fn prop7_idempotent_mixed_inline_formatting() {
     let qmd = "Normal *emph* **strong** `code` end.\n";
     let ast = parse_qmd(qmd);
     let plan = compute_reconciliation(&ast, &ast);
-    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan)
+        .unwrap()
+        .0;
     assert_eq!(result, qmd);
 }
 
@@ -582,7 +593,9 @@ fn prop7_idempotent_multiline_blockquote_with_emphasis() {
     let qmd = "> *Hello*\n> world.\n";
     let ast = parse_qmd(qmd);
     let plan = compute_reconciliation(&ast, &ast);
-    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &ast, &ast, &plan)
+        .unwrap()
+        .0;
     assert_eq!(result, qmd);
 }
 
@@ -592,7 +605,7 @@ proptest! {
         let ast = parse_qmd(&qmd);
         let plan = compute_reconciliation(&ast, &ast);
         let result =
-            writers::incremental::incremental_write(&qmd, &ast, &ast, &plan).unwrap();
+            writers::incremental::incremental_write(&qmd, &ast, &ast, &plan).unwrap().0;
         prop_assert_eq!(result, qmd);
     }
 }
@@ -688,8 +701,9 @@ fn prop9_no_newlines_in_splice_simple() {
     );
 
     // Verify the incremental write result
-    let result =
-        writers::incremental::incremental_write(qmd, &original_ast, &new_ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &original_ast, &new_ast, &plan)
+        .unwrap()
+        .0;
 
     // The result should be correct
     assert_eq!(result, "Goodbye world.\n");
@@ -711,8 +725,9 @@ fn prop9_no_newlines_in_blockquote_splice() {
     let original_ast = parse_qmd(qmd);
     let plan = compute_reconciliation(&original_ast, &new_ast);
 
-    let result =
-        writers::incremental::incremental_write(qmd, &original_ast, &new_ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &original_ast, &new_ast, &plan)
+        .unwrap()
+        .0;
 
     // Verify the result parses correctly (critical for indentation contexts)
     assert_inline_roundtrip(qmd, &new_ast);
@@ -736,8 +751,9 @@ fn prop9_no_newlines_in_multiline_blockquote_splice() {
     let original_ast = parse_qmd(qmd);
     let plan = compute_reconciliation(&original_ast, &new_ast);
 
-    let result =
-        writers::incremental::incremental_write(qmd, &original_ast, &new_ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(qmd, &original_ast, &new_ast, &plan)
+        .unwrap()
+        .0;
 
     // The > prefix after the SoftBreak must be preserved
     assert_eq!(result, "> Goodbye\n> world.\n");
@@ -896,7 +912,7 @@ fn stress_many_blocks_single_change() {
         // Verify the edits are small (Property 8 / locality)
         let original_ast = parse_qmd(&qmd);
         let plan = compute_reconciliation(&original_ast, &new_ast);
-        let edits =
+        let (edits, _warnings) =
             writers::incremental::compute_incremental_edits(&qmd, &original_ast, &new_ast, &plan)
                 .unwrap();
 
@@ -997,7 +1013,7 @@ proptest! {
 
         let original_ast = parse_qmd(&qmd);
         let plan = compute_reconciliation(&original_ast, &new_ast);
-        let edits = writers::incremental::compute_incremental_edits(
+        let (edits, _warnings) = writers::incremental::compute_incremental_edits(
             &qmd,
             &original_ast,
             &new_ast,

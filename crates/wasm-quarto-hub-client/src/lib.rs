@@ -2782,7 +2782,7 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
     use quarto_ast_reconcile::compute_reconciliation;
 
     // Step 1: Parse original QMD to get AST with accurate source spans
-    let (original_ast, _original_context) = match qmd_to_pandoc(original_qmd.as_bytes()) {
+    let (original_ast, original_context) = match qmd_to_pandoc(original_qmd.as_bytes()) {
         Ok(result) => result,
         Err(error_strings) => {
             let error_msg = error_strings.join("\n");
@@ -2820,15 +2820,28 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
 
     // Step 4: Incremental write
     match incremental_write(original_qmd, &original_ast, &new_ast, &plan) {
-        Ok(result_qmd) => serde_json::to_string(&AstResponse {
-            success: true,
-            ast: None,
-            qmd: Some(result_qmd),
-            error: None,
-            diagnostics: None,
-            warnings: None,
-        })
-        .unwrap(),
+        Ok((result_qmd, warnings)) => {
+            // Plan 7: soft-drop warnings (Q-3-42 / Q-3-43) ride alongside
+            // a successful write. The TS wrapper surfaces them via the
+            // existing `warnings` channel on `AstResponse`.
+            let warnings_json = if warnings.is_empty() {
+                None
+            } else {
+                Some(diagnostics_to_json(
+                    &warnings,
+                    &original_context.source_context,
+                ))
+            };
+            serde_json::to_string(&AstResponse {
+                success: true,
+                ast: None,
+                qmd: Some(result_qmd),
+                error: None,
+                diagnostics: None,
+                warnings: warnings_json,
+            })
+            .unwrap()
+        }
         Err(diags) => {
             let error_msg = diags
                 .iter()

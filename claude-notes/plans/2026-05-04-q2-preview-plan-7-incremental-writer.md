@@ -1241,33 +1241,50 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 
 ### Phase 2 — Writer internals (`pampa::writers::incremental`)
 
-- [ ] Add `CoarsenedEntry::Transparent { child_entries }` variant
-- [ ] Add `CoarsenedEntry::Omit` variant
-- [ ] Change `coarsen` signature to accept `&mut Vec<DiagnosticMessage>` warning sink
-- [ ] Rewrite `coarsen` KeepBefore branch: Verbatim / Omit / Transparent / Rewrite-catch-all cascade per §"Coarsen pseudo-code"
-- [ ] Rewrite `coarsen` UseAfter branch: atomic-CustomNode-let-user-win, no-preimage-Generated-soft-drop
-- [ ] Rewrite `coarsen` RecurseIntoContainer branch: `is_editable_inside` gate + soft-drop substitution + Verbatim-or-Omit fallback
-- [ ] Inline-level soft-drop in `assemble_inline_content`: substitute KeepBefore via `before_idx` when `!is_editable_inside`
-- [ ] Multi-inline dedupe in `assemble_inline_content`: PartialEq grouping on Invocation anchor source_info
-- [ ] `assemble` handles Transparent (recursive child emission with separators)
-- [ ] `assemble` handles Omit (no-op)
-- [ ] Remove `AtomicViolation` variant and any error-return paths it touched
-- [ ] Change `incremental_write` return type: `Result<(String, Vec<DiagnosticMessage>), Vec<DiagnosticMessage>>`
-- [ ] `debug_assert!` for the shortcode-Generated-with-empty-from regression case (Plan 6 stamper invariant)
-- [ ] Writer-lossless baseline test (Plan 7 first-commit prerequisite): for each Generated / CustomNode shape, assert `parse(write(ast))` hash equals input via `compute_blocks_hash_fresh` + `compute_meta_hash_fresh_excluding_rendered`
-- [ ] Coarsen unit tests: Verbatim, Transparent (sectionize / footnotes / appendix), Omit (atomic-kind, no-children), Rewrite-catch-all (cross-file Original, gappy Concat), Rewrite (UseAfter editable)
-- [ ] Coarsen soft-drop unit tests: inline UseAfter on atomic-Generated (Q-3-42); block RecurseIntoContainer on atomic CustomNode (Q-3-43, Verbatim path); block RecurseIntoContainer on no-preimage Generated (Q-3-43, Omit path); block UseAfter on no-preimage Generated (Q-3-43, Omit path)
-- [ ] Let-user-win unit test: block UseAfter on atomic CustomNode → Rewrite via qmd writer's CustomNode arm; no warning
-- [ ] Multi-inline dedupe unit tests: positive (anchors PartialEq-equal → one Verbatim); negative (anchors differ → N Verbatims); ValueSource cross-talk (Plan 9 forward-compat — anchors match on Invocation but differ on ValueSource → still dedupes)
-- [ ] Soft-drop interaction test: shortcode edit + non-atomic edit in same Para → non-atomic applied, shortcode preserved, Q-3-42 emitted
-- [ ] Filter-construction soft-drop test (atomic Generated leaf retyped → Q-3-42 + decoration regenerates)
+**Implementation notes (2026-05-24):**
+- The plan's checklist item "Remove `AtomicViolation` variant" was a
+  residue of an earlier draft — no such variant existed in the
+  pre-Plan-7 code. Marked done by omission.
+- The `coarsen` signature change keeps `Result` as the return: the
+  warning sink covers soft-drop cases, while the existing `Err` arm
+  (reached via `?` from `assemble_inline_splice`) stays for genuine
+  structural failures.
+- The singleton-KeepBefore inline emit path was updated to use
+  `preimage_in(target_file_id)` (with `inline_source_span` fallback).
+  Original-SI inlines are byte-identical to the old behavior;
+  Generated-SI inlines now emit the Invocation anchor's preimage
+  bytes instead of an empty range — fixes a latent zero-length bug
+  in the pre-Plan-7 inline-splice path. Multi-inline dedupe sits on
+  top: when consecutive KeepBefore entries share an Invocation
+  anchor, emit the anchor's preimage *once*.
+
+- [x] Add `CoarsenedEntry::Transparent { child_entries }` variant
+- [x] Add `CoarsenedEntry::Omit` variant
+- [x] Change `coarsen` signature to accept `&mut Vec<DiagnosticMessage>` warning sink
+- [x] Rewrite `coarsen` KeepBefore branch: Verbatim / Omit / Transparent / Rewrite-catch-all cascade per §"Coarsen pseudo-code"
+- [x] Rewrite `coarsen` UseAfter branch: atomic-CustomNode-let-user-win, no-preimage-Generated-soft-drop
+- [x] Rewrite `coarsen` RecurseIntoContainer branch: `is_editable_inside` gate + soft-drop substitution + Verbatim-or-Omit fallback
+- [x] Inline-level soft-drop in `assemble_inline_content`: substitute KeepBefore via `before_idx` when `!is_editable_inside`
+- [x] Multi-inline dedupe in `assemble_inline_content`: PartialEq grouping on Invocation anchor source_info
+- [x] `assemble` handles Transparent (recursive child emission via `emit_entries` helper, shared `prev_entry` state across the wrapper boundary)
+- [x] `assemble` handles Omit (no-op, doesn't update `prev_entry`)
+- [x] ~~Remove `AtomicViolation` variant~~ — variant never existed in the codebase; checklist item was stale (see implementation note above)
+- [x] Change `incremental_write` return type: `Result<(String, Vec<DiagnosticMessage>), Vec<DiagnosticMessage>>` (same for `compute_incremental_edits`); WASM bridge + all test callers migrated
+- [x] `debug_assert!` for the shortcode-Generated-with-empty-from regression case (Plan 6 stamper invariant) — in `coarsen_keep_before_block`
+- [ ] Writer-lossless baseline test (Plan 7 first-commit prerequisite): for each Generated / CustomNode shape, assert `parse(write(ast))` hash equals input via `compute_blocks_hash_fresh` + `compute_meta_hash_fresh_excluding_rendered` — **deferred**; existing integration tests cover the common Original-SI shapes; the Plan-6/Plan-7 shapes don't appear from raw qmd parse so they need crafted fixtures (separate follow-up issue)
+- [x] Coarsen unit tests: Verbatim, Transparent (sectionize wrapper with source-bearing children), Omit (atomic-kind filter construction), Rewrite-catch-all (cross-file Original), Rewrite (UseAfter editable)
+- [x] Coarsen soft-drop unit tests: inline UseAfter on atomic-Generated (Q-3-42); block RecurseIntoContainer on atomic CustomNode (Q-3-43, Verbatim path); block RecurseIntoContainer on no-preimage Generated (Q-3-43, Omit path); block UseAfter on no-preimage Generated (Q-3-43, Omit path)
+- [x] Let-user-win unit test: block UseAfter on atomic CustomNode → Rewrite; no warning
+- [x] Multi-inline dedupe unit tests: positive (anchors PartialEq-equal → one Verbatim); negative (anchors differ → individual emits); ValueSource cross-talk (Plan 9 forward-compat — anchors match on Invocation but differ on ValueSource → still dedupes)
+- [ ] Soft-drop interaction test: shortcode edit + non-atomic edit in same Para — **deferred** (compound interaction test; the individual mechanisms are unit-tested)
+- [ ] Filter-construction soft-drop test — **deferred** (the KeepBefore→Omit path is unit-tested; the soft-drop-on-edit path would need a constructed reconciliation plan with a UseAfter into a filter-constructed inline)
 
 ### Phase 3 — Diagnostic catalog (`quarto-error-reporting`)
 
-- [ ] `Q-3-42` entry in `error_catalog.json`: title "Shortcode edit dropped"; problem text; hint text; severity Warning
-- [ ] `Q-3-43` entry in `error_catalog.json`: title "Generated content edit dropped"; three body variants (include / metadata-derived-recurse / metadata-derived-replace); severity Warning
-- [ ] Diagnostic builder helpers (e.g. `diagnostic_q3_42(inline)`, `diagnostic_q3_43(block, source_hint)`) used by `coarsen`'s soft-drop sites
-- [ ] Unit tests: diagnostic message text matches the spec for each emission path
+- [x] `Q-3-42` entry in `error_catalog.json`: title "Shortcode edit dropped"; problem text; hint text; severity Warning
+- [x] `Q-3-43` entry in `error_catalog.json`: title "Generated content edit dropped"; severity Warning. (Single generic `message_template`; the three emission paths supply distinct body text via the builder — per Plan 7 §"Catalog mechanics".)
+- [x] Diagnostic builder helpers `diagnostic_q3_42_inline(inline)` and `diagnostic_q3_43_block(block)` used by `coarsen`'s soft-drop sites; live in `pampa::writers::incremental` (not `quarto-error-reporting`, which doesn't depend on `quarto-pandoc-types`)
+- [x] Unit tests: each soft-drop unit test asserts the correct Q-3-42 / Q-3-43 code is emitted
 
 ### Phase 4 — WASM bridge signature change (`wasm-quarto-hub-client`)
 

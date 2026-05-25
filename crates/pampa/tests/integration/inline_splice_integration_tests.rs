@@ -102,7 +102,8 @@ fn assert_incremental_write_correct(original_qmd: &str, new_ast: &Pandoc) {
 
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     // Verify round-trip: parsing the result should produce an AST structurally
     // equivalent to new_ast
@@ -137,7 +138,8 @@ fn splice_str_change_in_paragraph() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     assert_eq!(result, "Goodbye world.\n");
 }
 
@@ -154,7 +156,8 @@ fn splice_str_change_preserves_surrounding_text() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     assert_eq!(result, "The slow brown fox.\n");
 }
 
@@ -179,7 +182,8 @@ fn splice_str_change_in_header() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     // The header prefix "## " should be preserved
     assert_eq!(result, "## Goodbye World\n");
 }
@@ -202,7 +206,8 @@ fn splice_str_change_in_multiline_paragraph() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     assert_eq!(result, "Goodbye\nworld\n");
 }
 
@@ -242,7 +247,8 @@ fn splice_str_change_in_multiline_blockquote() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     assert_eq!(result, "> Goodbye\n> world\n");
 }
 
@@ -280,7 +286,8 @@ fn splice_str_change_in_multiline_bulletlist() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     // The list continuation indent should be preserved
     assert_eq!(result, "* Goodbye\n  world\n");
 }
@@ -302,7 +309,8 @@ fn splice_preserves_other_blocks() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     assert_eq!(
         result,
         "First paragraph.\n\nModified paragraph.\n\nThird paragraph.\n"
@@ -367,7 +375,8 @@ fn splice_str_change_inside_emphasis() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     // The emphasis delimiters should be preserved from original source
     assert_eq!(result, "*Goodbye* world.\n");
 }
@@ -392,7 +401,8 @@ fn splice_str_change_inside_strong() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .unwrap();
+            .unwrap()
+            .0;
     assert_eq!(result, "**Goodbye** world.\n");
 }
 
@@ -405,7 +415,9 @@ fn splice_idempotent_simple_paragraph() {
     let original_qmd = "Hello world.\n";
     let ast = parse_qmd(original_qmd);
     let plan = compute_reconciliation(&ast, &ast);
-    let result = writers::incremental::incremental_write(original_qmd, &ast, &ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(original_qmd, &ast, &ast, &plan)
+        .unwrap()
+        .0;
     assert_eq!(result, original_qmd);
 }
 
@@ -414,6 +426,8 @@ fn splice_idempotent_blockquote_multiline() {
     let original_qmd = "> Hello\n> world\n";
     let ast = parse_qmd(original_qmd);
     let plan = compute_reconciliation(&ast, &ast);
-    let result = writers::incremental::incremental_write(original_qmd, &ast, &ast, &plan).unwrap();
+    let result = writers::incremental::incremental_write(original_qmd, &ast, &ast, &plan)
+        .unwrap()
+        .0;
     assert_eq!(result, original_qmd);
 }

@@ -35,15 +35,22 @@ pub struct TextEdit {
     pub replacement: String,
 }
 
-/// An entry in the coarsened plan: either copy verbatim, rewrite, or inline-splice.
+/// An entry in the coarsened plan.
+///
+/// Plan 7 adds `Transparent` and `Omit` to the original three variants
+/// (`Verbatim`, `Rewrite`, `InlineSplice`).
 #[derive(Debug)]
 enum CoarsenedEntry {
     /// Copy this byte range verbatim from original_qmd.
     /// The text includes the block content + trailing \n.
     Verbatim {
         byte_range: Range<usize>,
-        /// Index of this block in original_ast.blocks (for gap computation)
-        orig_idx: usize,
+        /// Index of this block in original_ast.blocks (for gap computation).
+        /// `None` for entries that came from a `Transparent` recursion — those
+        /// children aren't top-level blocks so they have no top-level index;
+        /// `compute_separator`'s original-gap optimization falls back to the
+        /// standard separator for them.
+        orig_idx: Option<usize>,
     },
     /// Rewrite this block using the standard writer.
     Rewrite {
@@ -56,9 +63,22 @@ enum CoarsenedEntry {
     InlineSplice {
         /// Pre-computed block text: original block with inline content replaced.
         block_text: String,
-        /// Index of this block in original_ast.blocks (for gap computation)
-        orig_idx: usize,
+        /// Index of this block in original_ast.blocks (for gap computation).
+        /// Same `Option` semantics as `Verbatim::orig_idx`.
+        orig_idx: Option<usize>,
     },
+    /// Plan 7: a non-atomic `Generated` wrapper with empty anchors AND
+    /// source-bearing children. The wrapper contributes no bytes; its
+    /// children produce the output. Used for sectionize wrappers,
+    /// footnotes container, appendix container — synthesizers whose
+    /// container shell has no preimage but whose inner content does.
+    Transparent { child_entries: Vec<CoarsenedEntry> },
+    /// Plan 7: drop this node from output entirely. The next pipeline run
+    /// regenerates it from baseline content. Used for atomic-kind
+    /// `Generated` nodes with no Invocation anchor (filter constructions,
+    /// title-block synthesis, tree-sitter postprocess space) and for
+    /// no-preimage `Generated` containers replaced via React.
+    Omit,
 }
 
 // =============================================================================
@@ -153,24 +173,36 @@ fn is_editable_inside_source_info(si: &SourceInfo, target_file_id: FileId) -> bo
 /// * `plan` - A reconciliation plan describing alignment between original_ast and new_ast
 ///
 /// # Returns
-/// A new QMD string where:
-/// - Unchanged blocks are preserved verbatim from `original_qmd`
-/// - Changed blocks are rewritten using the standard writer
-/// - The result round-trips: `read(result) ≡ new_ast` (structural equality)
+///
+/// On success: `(new_qmd, warnings)`. The qmd preserves unchanged blocks
+/// verbatim from `original_qmd`, rewrites changed blocks via the standard
+/// writer, and soft-drops bad edits to non-editable regions (atomic
+/// CustomNodes, atomic-kind Generated, no-preimage Generated containers).
+/// Each soft-drop pushes a Q-3-42 / Q-3-43 warning into the returned vec;
+/// the overall write still succeeds.
+///
+/// On failure: `Err(fatal_errors)` — genuine structural failure (UTF-8
+/// error, inline-splice impossibility, etc.). Soft-drop substitutions
+/// never reach this arm.
 pub fn incremental_write(
     original_qmd: &str,
     original_ast: &Pandoc,
     new_ast: &Pandoc,
     plan: &ReconciliationPlan,
-) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+) -> Result<
+    (String, Vec<quarto_error_reporting::DiagnosticMessage>),
+    Vec<quarto_error_reporting::DiagnosticMessage>,
+> {
     // The QMD reader internally pads input with '\n' when it doesn't end with
     // one, producing source spans relative to the padded input. We must use the
     // same padded string so that block source spans are valid byte indices.
     let mut padded_storage = None;
     let (qmd, did_pad) = ensure_trailing_newline(original_qmd, &mut padded_storage);
 
-    // Step 1: Coarsen the reconciliation plan
-    let coarsened = coarsen(qmd, original_ast, new_ast, plan)?;
+    // Step 1: Coarsen the reconciliation plan. Soft-drop warnings collect
+    // into this sink; coarsen never returns Err for soft-drop cases.
+    let mut warnings: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
+    let coarsened = coarsen(qmd, original_ast, new_ast, plan, &mut warnings)?;
 
     // Step 2: Assemble the result string
     let mut result = assemble(qmd, original_ast, new_ast, &coarsened)?;
@@ -181,24 +213,34 @@ pub fn incremental_write(
         result.pop();
     }
 
-    Ok(result)
+    Ok((result, warnings))
 }
 
 /// Compute minimal text edits to transform `original_qmd` into the incremental write result.
 ///
 /// Each TextEdit describes a byte range in `original_qmd` to replace and the replacement text.
 /// Edits are sorted by range.start and non-overlapping.
+///
+/// Like [`incremental_write`], returns a tuple `(edits, warnings)` on
+/// success; soft-drop warnings (Q-3-42 / Q-3-43) ride alongside.
 pub fn compute_incremental_edits(
     original_qmd: &str,
     original_ast: &Pandoc,
     new_ast: &Pandoc,
     plan: &ReconciliationPlan,
-) -> Result<Vec<TextEdit>, Vec<quarto_error_reporting::DiagnosticMessage>> {
+) -> Result<
+    (
+        Vec<TextEdit>,
+        Vec<quarto_error_reporting::DiagnosticMessage>,
+    ),
+    Vec<quarto_error_reporting::DiagnosticMessage>,
+> {
     // Same trailing-newline normalization as incremental_write (see comment there).
     let mut padded_storage = None;
     let (qmd, did_pad) = ensure_trailing_newline(original_qmd, &mut padded_storage);
 
-    let coarsened = coarsen(qmd, original_ast, new_ast, plan)?;
+    let mut warnings: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
+    let coarsened = coarsen(qmd, original_ast, new_ast, plan, &mut warnings)?;
     let mut edits = compute_edits_from_coarsened(qmd, original_ast, new_ast, &coarsened)?;
 
     if did_pad {
@@ -214,7 +256,7 @@ pub fn compute_incremental_edits(
         }
     }
 
-    Ok(edits)
+    Ok((edits, warnings))
 }
 
 // =============================================================================
@@ -226,68 +268,124 @@ pub fn compute_incremental_edits(
 /// Phase 5 strategy: for RecurseIntoContainer blocks that are inline-content blocks
 /// (Paragraph, Plain, Header) with inline plans that pass the safety check,
 /// produce InlineSplice entries. All other RecurseIntoContainer become Rewrite.
+///
+/// Plan 7: soft-drop warnings push into `warnings`. Bad-edit cases
+/// (atomic-CustomNode interior edit, atomic-Generated edit, no-preimage
+/// Generated edit) substitute a safe alignment AND record a Q-3-42 /
+/// Q-3-43 warning; coarsen never returns `Err` for these cases. `Err` is
+/// reserved for genuine structural failures (UTF-8 errors, inline-splice
+/// impossibility from assemble_inline_splice).
 fn coarsen(
     original_qmd: &str,
     original_ast: &Pandoc,
     new_ast: &Pandoc,
     plan: &ReconciliationPlan,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<Vec<CoarsenedEntry>, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    // The "target file" for editability decisions is the file `original_qmd`
+    // was parsed from. We derive it from the first block's root file_id;
+    // FileId(0) is the safe default for empty documents (won't match any
+    // real source bytes).
+    let target_file_id = original_ast
+        .blocks
+        .first()
+        .and_then(|b| b.source_info().root_file_id())
+        .unwrap_or(quarto_source_map::FileId(0));
+
     let mut entries = Vec::with_capacity(plan.block_alignments.len());
 
     for (result_idx, alignment) in plan.block_alignments.iter().enumerate() {
         let entry = match alignment {
-            BlockAlignment::KeepBefore(orig_idx) => {
-                let span = block_source_span(&original_ast.blocks[*orig_idx]);
-                CoarsenedEntry::Verbatim {
-                    byte_range: span,
-                    orig_idx: *orig_idx,
+            BlockAlignment::KeepBefore(orig_idx) => coarsen_keep_before_block(
+                &original_ast.blocks[*orig_idx],
+                target_file_id,
+                Some(*orig_idx),
+                result_idx,
+            ),
+            BlockAlignment::UseAfter(after_idx) => {
+                let new_block = &new_ast.blocks[*after_idx];
+                let is_atomic_cn = matches!(new_block, Block::Custom(cn)
+                    if is_atomic_custom_node(&cn.type_name));
+                let no_preimage_generated =
+                    matches!(new_block.source_info(), SourceInfo::Generated { .. })
+                        && new_block
+                            .source_info()
+                            .preimage_in(target_file_id)
+                            .is_none();
+
+                if !is_atomic_cn && no_preimage_generated {
+                    // User replaced a synthesized-from-metadata container
+                    // wholesale via React. No source position to anchor a
+                    // Rewrite at; soft-drop with Q-3-43.
+                    warnings.push(diagnostic_q3_43_block(new_block));
+                    CoarsenedEntry::Omit
+                } else {
+                    // Let-user-win — including for atomic CustomNodes (the
+                    // user replaced an include / CrossrefResolvedRef via a
+                    // component menu; the qmd writer's CustomNode arm
+                    // serializes the fresh plain_data).
+                    CoarsenedEntry::Rewrite {
+                        new_idx: result_idx,
+                    }
                 }
             }
-            BlockAlignment::UseAfter(_after_idx) => CoarsenedEntry::Rewrite {
-                new_idx: result_idx,
-            },
             BlockAlignment::RecurseIntoContainer {
                 before_idx,
                 after_idx,
             } => {
-                // Check if this block has an inline plan and is safe to splice
+                let orig_block = &original_ast.blocks[*before_idx];
+
+                // Plan 7: if the original container is not editable inside,
+                // soft-drop the inner edit. Substitutions:
+                //   - atomic CustomNode with preimage → Verbatim wrapper bytes
+                //   - everything else (no-preimage Generated container) → Omit
+                if !is_editable_inside_block(orig_block, target_file_id) {
+                    if let Some(range) = orig_block.source_info().preimage_in(target_file_id) {
+                        warnings.push(diagnostic_q3_43_block(orig_block));
+                        entries.push(CoarsenedEntry::Verbatim {
+                            byte_range: range,
+                            orig_idx: Some(*before_idx),
+                        });
+                    } else {
+                        warnings.push(diagnostic_q3_43_block(orig_block));
+                        entries.push(CoarsenedEntry::Omit);
+                    }
+                    continue;
+                }
+
+                // Existing recurse logic: try inline-splice if the block has
+                // an inline plan and is safe to splice; else Rewrite.
                 if let Some(inline_plan) = plan.inline_plans.get(&result_idx) {
-                    let orig_block = &original_ast.blocks[*before_idx];
                     let new_block = &new_ast.blocks[*after_idx];
 
                     if let (Some(orig_inlines), Some(new_inlines)) =
                         (block_inlines(orig_block), block_inlines(new_block))
+                        && !orig_inlines.is_empty()
+                        && is_inline_splice_safe(new_inlines, inline_plan)
+                        && block_attrs_eq(orig_block, new_block)
                     {
-                        if !orig_inlines.is_empty()
-                            && is_inline_splice_safe(new_inlines, inline_plan)
-                            && block_attrs_eq(orig_block, new_block)
-                        {
-                            // Safe to splice — assemble the patched block text
-                            let block_text = assemble_inline_splice(
-                                original_qmd,
-                                orig_block,
-                                orig_inlines,
-                                new_inlines,
-                                inline_plan,
-                            )?;
-                            CoarsenedEntry::InlineSplice {
-                                block_text,
-                                orig_idx: *before_idx,
-                            }
-                        } else {
-                            CoarsenedEntry::Rewrite {
-                                new_idx: result_idx,
-                            }
+                        // Safe to splice — assemble the patched block text
+                        let block_text = assemble_inline_splice(
+                            original_qmd,
+                            orig_block,
+                            orig_inlines,
+                            new_inlines,
+                            inline_plan,
+                            target_file_id,
+                            warnings,
+                        )?;
+                        CoarsenedEntry::InlineSplice {
+                            block_text,
+                            orig_idx: Some(*before_idx),
                         }
                     } else {
-                        // Not an inline-content block — fall back to Rewrite
                         CoarsenedEntry::Rewrite {
                             new_idx: result_idx,
                         }
                     }
                 } else {
-                    // No inline plan — this is a block container (Div, BlockQuote, etc.)
-                    // Fall back to Rewrite
+                    // No inline plan — this is a block container (Div,
+                    // BlockQuote, etc.). Fall back to Rewrite.
                     CoarsenedEntry::Rewrite {
                         new_idx: result_idx,
                     }
@@ -298,6 +396,170 @@ fn coarsen(
     }
 
     Ok(entries)
+}
+
+/// Classify a single `KeepBefore` block per Plan 7's cascade:
+///
+/// 1. **Verbatim** if `preimage_in(target)` returns `Some(range)` — covers
+///    `Original`/`Substring`/contiguous-`Concat`/`Generated`-via-Invocation.
+///    The atomic-kind shortcode case lands here too (its Invocation anchor
+///    resolves to the token bytes).
+/// 2. **Omit** if the source_info is `Generated` with `is_atomic_kind()`
+///    and no Invocation anchor — filter constructions, title-block
+///    synthesis, tree-sitter-postprocess space. Belt-and-suspenders
+///    `debug_assert!` against shortcode-with-empty-from (Plan 6 stamper
+///    invariant: every shortcode resolution must carry an Invocation).
+/// 3. **Transparent** if the source_info is a non-atomic `Generated`
+///    wrapper with source-bearing children (sectionize wrapper,
+///    footnotes-container, appendix-container). Recurses into the
+///    children.
+/// 4. **Rewrite** catch-all — re-serializes the unchanged block through
+///    the qmd writer. Lossy at the byte level but preserves content.
+///    Handles cross-file Original chains (no Plan-8 wrapper yet),
+///    Substring rooted outside target, gappy Concat.
+///
+/// `top_level_orig_idx` is `Some(idx)` for top-level blocks (used by
+/// `compute_separator`'s original-gap optimization) and `None` for
+/// children of a `Transparent` (whose indices don't reference
+/// `original_ast.blocks` directly).
+///
+/// `result_idx` is the position in the result block sequence; used as
+/// `new_idx` if we fall through to Rewrite. For KeepBefore, `result_idx`
+/// indexes the same structural block in `new_ast` (KeepBefore implies
+/// structural equality).
+fn coarsen_keep_before_block(
+    block: &Block,
+    target_file_id: quarto_source_map::FileId,
+    top_level_orig_idx: Option<usize>,
+    result_idx: usize,
+) -> CoarsenedEntry {
+    let si = block.source_info();
+
+    if let Some(range) = si.preimage_in(target_file_id) {
+        return CoarsenedEntry::Verbatim {
+            byte_range: range,
+            orig_idx: top_level_orig_idx,
+        };
+    }
+
+    if let SourceInfo::Generated { by, .. } = si {
+        if by.is_atomic_kind() {
+            // Atomic-kind Generated with no Invocation anchor.
+            debug_assert!(
+                !by.is_kind("shortcode"),
+                "Generated {{ by: shortcode, from: [] }} reached the writer — \
+                 Plan 6's stamper must always attach an Invocation anchor for \
+                 shortcode resolutions. \
+                 Block: {:?}",
+                block,
+            );
+            return CoarsenedEntry::Omit;
+        }
+
+        // Non-atomic Generated wrapper. If it has source-bearing children,
+        // recurse Transparent. Else fall through to Rewrite.
+        if let Some(children) = block_block_children(block)
+            && children
+                .iter()
+                .any(|c| c.source_info().preimage_in(target_file_id).is_some())
+        {
+            let child_entries = children
+                .iter()
+                .map(|child| {
+                    // Children of a Transparent wrapper aren't top-level
+                    // blocks — pass orig_idx=None so compute_separator
+                    // doesn't try the original-gap optimization on them.
+                    // result_idx is unused for child Rewrites (a child
+                    // Rewrite would need a different lookup mechanism;
+                    // not exercised by today's synthesizers).
+                    coarsen_keep_before_block(child, target_file_id, None, result_idx)
+                })
+                .collect();
+            return CoarsenedEntry::Transparent { child_entries };
+        }
+    }
+
+    // Catch-all: cross-file Original, Substring rooted outside target,
+    // gappy Concat, Generated wrapper without source-bearing children.
+    CoarsenedEntry::Rewrite {
+        new_idx: result_idx,
+    }
+}
+
+/// Return the inner block children of a block, if the block is a
+/// recognized block container.
+///
+/// Today's Plan-6 synthesizers produce `Div`-shaped wrappers (sectionize,
+/// footnotes-container, appendix-container). Other block containers
+/// (BlockQuote, Figure, NoteDefinitionFencedBlock) round out the set so
+/// the Transparent cascade applies uniformly when those carry Generated
+/// source_info. List-shaped containers (BulletList, OrderedList,
+/// DefinitionList) return `None` — their `content` is `Vec<Blocks>`
+/// (lists of lists), which isn't the Transparent shape.
+fn block_block_children(block: &Block) -> Option<&[Block]> {
+    match block {
+        Block::Div(d) => Some(&d.content),
+        Block::BlockQuote(b) => Some(&b.content),
+        Block::Figure(f) => Some(&f.content),
+        Block::NoteDefinitionFencedBlock(n) => Some(&n.content),
+        _ => None,
+    }
+}
+
+// =============================================================================
+// Soft-drop diagnostic builders (Plan 7)
+// =============================================================================
+
+/// Build a `Q-3-42` warning for an inline-level edit that targeted
+/// atomic-Generated content (typically a shortcode resolution). The
+/// source location is the inline's `Invocation` anchor when available
+/// (the token bytes), falling back to the inline's own source_info.
+fn diagnostic_q3_42_inline(inline: &Inline) -> quarto_error_reporting::DiagnosticMessage {
+    let location = inline
+        .source_info()
+        .invocation_anchor()
+        .map(|arc| arc.as_ref().clone())
+        .unwrap_or_else(|| inline.source_info().clone());
+
+    quarto_error_reporting::DiagnosticMessageBuilder::warning("Shortcode edit dropped")
+        .with_code("Q-3-42")
+        .with_location(location)
+        .problem(
+            "An edit to shortcode-resolved (or other atomic-Generated) \
+             content was reverted.",
+        )
+        .add_hint(
+            "The resolved text is read-only; edit the invocation token \
+             (e.g. `{{< meta foo >}}`) in source instead.",
+        )
+        .build()
+}
+
+/// Build a `Q-3-43` warning for a block-level edit dropped because the
+/// container is not editable inside.
+///
+/// Three emission paths share this builder (per Plan 7
+/// §"Diagnostic codes"):
+/// - Block RecurseIntoContainer on an atomic CustomNode — wrapper's
+///   source_info is `Original` pointing at the token bytes;
+///   `with_location` highlights the include / crossref in Monaco.
+/// - Block RecurseIntoContainer on a no-preimage Generated container —
+///   the wrapper's source_info is `Generated` with no Invocation; the
+///   diagnostic lands without a Monaco squiggle and surfaces via the
+///   diagnostics banner.
+/// - Block UseAfter on a no-preimage Generated container — same as
+///   the previous case.
+fn diagnostic_q3_43_block(block: &Block) -> quarto_error_reporting::DiagnosticMessage {
+    quarto_error_reporting::DiagnosticMessageBuilder::warning("Generated content edit dropped")
+        .with_code("Q-3-43")
+        .with_location(block.source_info().clone())
+        .problem("An edit to pipeline-generated content was reverted.")
+        .add_hint(
+            "This content has no editable source position in this file; \
+             edit its upstream definition (an include, a metadata key, \
+             or other source) instead.",
+        )
+        .build()
 }
 
 // =============================================================================
@@ -317,20 +579,75 @@ fn assemble(
     let _has_meta_prefix =
         emit_metadata_prefix(&mut result, original_qmd, original_ast, new_ast, coarsened)?;
 
-    // 2b. Walk coarsened entries and assemble blocks with separators
+    // 2b. Walk coarsened entries and assemble blocks with separators.
+    // Transparent entries recursively re-enter this loop on their children;
+    // Omit entries contribute nothing.
     let mut prev_entry: Option<&CoarsenedEntry> = None;
     let mut prev_block_text: Option<String> = None;
+    emit_entries(
+        &mut result,
+        original_qmd,
+        original_ast,
+        new_ast,
+        coarsened,
+        &mut prev_entry,
+        &mut prev_block_text,
+    )?;
 
-    for entry in coarsened {
-        // 2c. Separator between blocks
-        // Note: we only add a separator when there's a previous block.
+    Ok(result)
+}
+
+/// Recursive helper that walks a slice of `CoarsenedEntry` and emits each
+/// one's bytes into `result`, threading `prev_entry` / `prev_block_text`
+/// across siblings.
+///
+/// `Transparent` re-enters this loop with its children, sharing the same
+/// `prev_entry` / `prev_block_text` state so separators compose across the
+/// wrapper boundary as if the wrapper weren't there. `Omit` is a no-op —
+/// no bytes, no separator update; the next sibling's separator is computed
+/// against the entry before the `Omit`.
+fn emit_entries<'e>(
+    result: &mut String,
+    original_qmd: &str,
+    original_ast: &Pandoc,
+    new_ast: &Pandoc,
+    entries: &'e [CoarsenedEntry],
+    prev_entry: &mut Option<&'e CoarsenedEntry>,
+    prev_block_text: &mut Option<String>,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    for entry in entries {
+        match entry {
+            CoarsenedEntry::Omit => {
+                // Contributes nothing; leave prev_entry / prev_block_text alone
+                // so the next sibling's separator is computed against the
+                // entry before this Omit.
+                continue;
+            }
+            CoarsenedEntry::Transparent { child_entries } => {
+                // Recurse into children with shared prev_* state so separator
+                // semantics compose through the wrapper.
+                emit_entries(
+                    result,
+                    original_qmd,
+                    original_ast,
+                    new_ast,
+                    child_entries,
+                    prev_entry,
+                    prev_block_text,
+                )?;
+                continue;
+            }
+            _ => {}
+        }
+
+        // Separator between blocks (only if there's a previous emitting entry).
         // The metadata prefix already includes the gap to the first block,
         // so we must NOT add an extra separator after it.
         if prev_entry.is_some() {
             let separator = compute_separator(
                 original_qmd,
                 original_ast,
-                prev_entry,
+                *prev_entry,
                 entry,
                 prev_block_text.as_deref(),
             );
@@ -346,14 +663,16 @@ fn assemble(
                 write_block_to_string(&new_ast.blocks[*new_idx])?
             }
             CoarsenedEntry::InlineSplice { block_text, .. } => block_text.clone(),
+            // Transparent + Omit were handled above; coarsen never emits
+            // any other variant.
+            CoarsenedEntry::Transparent { .. } | CoarsenedEntry::Omit => unreachable!(),
         };
 
         result.push_str(&block_text);
-        prev_block_text = Some(block_text);
-        prev_entry = Some(entry);
+        *prev_block_text = Some(block_text);
+        *prev_entry = Some(entry);
     }
-
-    Ok(result)
+    Ok(())
 }
 
 /// Emit the metadata prefix (YAML front matter region).
@@ -438,24 +757,26 @@ fn compute_separator<'a>(
     curr_entry: &CoarsenedEntry,
     prev_block_text: Option<&str>,
 ) -> &'a str {
-    // Try to use original gap for consecutive blocks that preserve original positions
-    let prev_orig_idx = match prev_entry {
-        Some(CoarsenedEntry::Verbatim { orig_idx, .. }) => Some(*orig_idx),
-        Some(CoarsenedEntry::InlineSplice { orig_idx, .. }) => Some(*orig_idx),
+    // Try to use original gap for consecutive blocks that preserve original
+    // positions. Transparent/Omit entries don't carry a top-level orig_idx —
+    // they fall through to the standard separator.
+    let prev_orig_idx: Option<usize> = match prev_entry {
+        Some(CoarsenedEntry::Verbatim { orig_idx, .. }) => *orig_idx,
+        Some(CoarsenedEntry::InlineSplice { orig_idx, .. }) => *orig_idx,
         _ => None,
     };
-    let curr_orig_idx = match curr_entry {
-        CoarsenedEntry::Verbatim { orig_idx, .. } => Some(*orig_idx),
-        CoarsenedEntry::InlineSplice { orig_idx, .. } => Some(*orig_idx),
+    let curr_orig_idx: Option<usize> = match curr_entry {
+        CoarsenedEntry::Verbatim { orig_idx, .. } => *orig_idx,
+        CoarsenedEntry::InlineSplice { orig_idx, .. } => *orig_idx,
         _ => None,
     };
-    if let (Some(prev_idx), Some(curr_idx)) = (prev_orig_idx, curr_orig_idx) {
-        if curr_idx == prev_idx + 1 {
-            // Consecutive in original — use original gap
-            let prev_span = block_source_span(&original_ast.blocks[prev_idx]);
-            let curr_span = block_source_span(&original_ast.blocks[curr_idx]);
-            return &original_qmd[prev_span.end..curr_span.start];
-        }
+    if let (Some(prev_idx), Some(curr_idx)) = (prev_orig_idx, curr_orig_idx)
+        && curr_idx == prev_idx + 1
+    {
+        // Consecutive in original — use original gap
+        let prev_span = block_source_span(&original_ast.blocks[prev_idx]);
+        let curr_span = block_source_span(&original_ast.blocks[curr_idx]);
+        return &original_qmd[prev_span.end..curr_span.start];
     }
 
     // Standard separator — but check if previous block already ends with \n\n
@@ -685,6 +1006,8 @@ fn assemble_inline_splice(
     orig_inlines: &[Inline],
     new_inlines: &[Inline],
     plan: &InlineReconciliationPlan,
+    target_file_id: quarto_source_map::FileId,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let block_span = block_source_span(orig_block);
 
@@ -698,7 +1021,14 @@ fn assemble_inline_splice(
     let suffix = &original_qmd[inline_end..block_span.end];
 
     // Assemble the new inline content
-    let inline_content = assemble_inline_content(original_qmd, orig_inlines, new_inlines, plan)?;
+    let inline_content = assemble_inline_content(
+        original_qmd,
+        orig_inlines,
+        new_inlines,
+        plan,
+        target_file_id,
+        warnings,
+    )?;
 
     Ok(format!("{}{}{}", prefix, inline_content, suffix))
 }
@@ -709,19 +1039,127 @@ fn assemble_inline_splice(
 /// - KeepBefore: copying the original inline's bytes verbatim
 /// - UseAfter: writing the new inline to a string
 /// - RecurseIntoContainer: preserving delimiters, recursing into children
+///
+/// Plan 7: inline-level soft-drop substitutes `KeepBefore` for `UseAfter`
+/// / `RecurseIntoContainer` alignments that target a non-editable original
+/// inline (atomic-CustomNode, atomic-kind Generated, no-preimage
+/// Generated). Each substitution pushes a `Q-3-42` warning. The
+/// substitution uses the *new-side* index as the positional proxy for the
+/// "original inline at the same position" — exact for in-place retypings
+/// (the common shortcode-edit case), approximate for arbitrary
+/// insertions/deletions.
+///
+/// Plan 7 also adds multi-inline dedupe: consecutive `KeepBefore` entries
+/// whose original inlines' `Invocation` anchors are `PartialEq`-equal
+/// emit a single combined byte range, so a multi-inline shortcode
+/// resolution (`{{< meta footer >}}` → `[Strong[Str], Space, Str]`)
+/// emits the shortcode token bytes once.
 fn assemble_inline_content(
     original_qmd: &str,
     orig_inlines: &[Inline],
     new_inlines: &[Inline],
     plan: &InlineReconciliationPlan,
+    target_file_id: quarto_source_map::FileId,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
-    let mut result = String::new();
-
+    // Phase 1: apply soft-drop substitutions. Walk alignments and rewrite
+    // UseAfter/RecurseIntoContainer that target non-editable original
+    // inlines into KeepBefore(original-position).
+    let mut effective: Vec<InlineAlignment> = Vec::with_capacity(plan.inline_alignments.len());
     for (result_idx, alignment) in plan.inline_alignments.iter().enumerate() {
         match alignment {
+            InlineAlignment::UseAfter(_) => {
+                // Use result_idx (positional proxy) to find the
+                // corresponding original inline.
+                if let Some(orig) = orig_inlines.get(result_idx)
+                    && !is_editable_inside_inline(orig, target_file_id)
+                {
+                    warnings.push(diagnostic_q3_42_inline(orig));
+                    effective.push(InlineAlignment::KeepBefore(result_idx));
+                    continue;
+                }
+                effective.push(alignment.clone());
+            }
+            InlineAlignment::RecurseIntoContainer { before_idx, .. } => {
+                let orig = &orig_inlines[*before_idx];
+                if !is_editable_inside_inline(orig, target_file_id) {
+                    warnings.push(diagnostic_q3_42_inline(orig));
+                    effective.push(InlineAlignment::KeepBefore(*before_idx));
+                    continue;
+                }
+                effective.push(alignment.clone());
+            }
+            InlineAlignment::KeepBefore(_) => effective.push(alignment.clone()),
+        }
+    }
+
+    // Phase 2: emit, with multi-inline dedupe for consecutive
+    // KeepBefore entries whose Invocation anchors are PartialEq-equal.
+    let mut result = String::new();
+    let mut i = 0;
+    while i < effective.len() {
+        match &effective[i] {
             InlineAlignment::KeepBefore(orig_idx) => {
-                let span = inline_source_span(&orig_inlines[*orig_idx]);
-                result.push_str(&original_qmd[span]);
+                let first_si = orig_inlines[*orig_idx].source_info();
+                let first_invocation = first_si.invocation_anchor().cloned();
+
+                // Try to extend the run: gather all consecutive KeepBefore
+                // entries whose invocation_anchor() is PartialEq-equal to
+                // first_invocation. Only consider runs of length >= 2 for
+                // dedupe; a single inline emits via the normal path.
+                let mut j = i + 1;
+                if first_invocation.is_some() {
+                    while j < effective.len() {
+                        let InlineAlignment::KeepBefore(next_orig_idx) = &effective[j] else {
+                            break;
+                        };
+                        let next_invocation = orig_inlines[*next_orig_idx]
+                            .source_info()
+                            .invocation_anchor()
+                            .cloned();
+                        if next_invocation != first_invocation {
+                            break;
+                        }
+                        j += 1;
+                    }
+                }
+
+                if j > i + 1 {
+                    // Dedupe: the whole group shares one Invocation anchor.
+                    // Emit the Invocation source's preimage bytes once,
+                    // not the individual inlines' ranges. Use the anchor
+                    // source_info's preimage in the target file when
+                    // available; fall back to the first inline's range.
+                    let anchor_arc = first_invocation.unwrap();
+                    if let Some(range) = anchor_arc.preimage_in(target_file_id) {
+                        result.push_str(&original_qmd[range]);
+                    } else {
+                        // Fall back: emit each inline's bytes individually.
+                        // Shouldn't happen — KeepBefore implies preimage_in
+                        // succeeded for the surrounding block. Keep
+                        // structurally safe behavior just in case.
+                        for k in i..j {
+                            let InlineAlignment::KeepBefore(idx) = &effective[k] else {
+                                unreachable!()
+                            };
+                            let span = inline_source_span(&orig_inlines[*idx]);
+                            result.push_str(&original_qmd[span]);
+                        }
+                    }
+                    i = j;
+                    continue;
+                }
+
+                // Singleton KeepBefore — emit the inline's preimage in
+                // the target file when available (covers Generated inlines
+                // whose Invocation anchor resolves into target), falling
+                // back to the inline's literal source span for Original
+                // inlines (the common case; identical bytes either way).
+                let range = orig_inlines[*orig_idx]
+                    .source_info()
+                    .preimage_in(target_file_id)
+                    .unwrap_or_else(|| inline_source_span(&orig_inlines[*orig_idx]));
+                result.push_str(&original_qmd[range]);
             }
             InlineAlignment::UseAfter(after_idx) => {
                 let text = write_inline_to_string(&new_inlines[*after_idx])?;
@@ -735,11 +1173,14 @@ fn assemble_inline_content(
                     original_qmd,
                     &orig_inlines[*before_idx],
                     &new_inlines[*after_idx],
-                    plan.inline_container_plans.get(&result_idx),
+                    plan.inline_container_plans.get(&i),
+                    target_file_id,
+                    warnings,
                 )?;
                 result.push_str(&text);
             }
         }
+        i += 1;
     }
 
     Ok(result)
@@ -754,6 +1195,8 @@ fn assemble_recursed_container(
     orig_inline: &Inline,
     new_inline: &Inline,
     nested_plan: Option<&InlineReconciliationPlan>,
+    target_file_id: quarto_source_map::FileId,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let orig_span = inline_source_span(orig_inline);
 
@@ -780,7 +1223,14 @@ fn assemble_recursed_container(
     let closing = &original_qmd[last_child_end..orig_span.end];
 
     // Recursively assemble children
-    let children_text = assemble_inline_content(original_qmd, orig_children, new_children, plan)?;
+    let children_text = assemble_inline_content(
+        original_qmd,
+        orig_children,
+        new_children,
+        plan,
+        target_file_id,
+        warnings,
+    )?;
 
     Ok(format!("{}{}{}", opening, children_text, closing))
 }
@@ -1069,5 +1519,542 @@ mod editability_tests {
             source_info: SourceInfo::original(TARGET, 0, 2),
         });
         assert!(is_editable_inside_block(&block, TARGET));
+    }
+}
+
+#[cfg(test)]
+mod coarsen_plan7_tests {
+    //! Plan 7: coarsen behavior under the new soft-drop + cascade rules.
+    //!
+    //! These tests construct `Pandoc` + `ReconciliationPlan` fixtures by
+    //! hand to exercise the new code paths directly. The existing
+    //! `incremental_writer_tests.rs` integration tests cover the
+    //! end-to-end (parse → reconcile → write) flow; these tests pin
+    //! coarsen's specific classification + soft-drop behavior.
+
+    use super::*;
+    use quarto_ast_reconcile::types::{
+        BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
+    };
+    use quarto_pandoc_types::{Block, CustomNode, Div, Inline, Paragraph, Str, attr::empty_attr};
+    use quarto_source_map::source_info::{AnchorRole, By};
+    use std::sync::Arc;
+
+    const TARGET: FileId = FileId(0);
+    const OTHER: FileId = FileId(1);
+
+    fn make_str(text: &str, si: SourceInfo) -> Inline {
+        Inline::Str(Str {
+            text: text.into(),
+            source_info: si,
+        })
+    }
+
+    fn para(content: Vec<Inline>, si: SourceInfo) -> Block {
+        Block::Paragraph(Paragraph {
+            content,
+            source_info: si,
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // KeepBefore cascade
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn keep_before_with_original_in_target_emits_verbatim() {
+        let block = para(vec![], SourceInfo::original(TARGET, 10, 25));
+        let ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![block],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::KeepBefore(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let qmd = "0123456789012345678901234567890";
+        let entries = coarsen(qmd, &ast, &ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            CoarsenedEntry::Verbatim { byte_range, .. } => {
+                assert_eq!(byte_range, &(10..25));
+            }
+            other => panic!("expected Verbatim, got {:?}", other),
+        }
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn keep_before_with_atomic_kind_generated_no_anchor_emits_omit() {
+        // Filter construction: Generated { by: filter, from: [] }.
+        // Atomic-kind, no Invocation → Omit (next pipeline run
+        // regenerates the decoration).
+        let block = para(vec![], SourceInfo::generated(By::filter("upper.lua", 14)));
+        let ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![block],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::KeepBefore(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let entries = coarsen("", &ast, &ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert!(matches!(entries[0], CoarsenedEntry::Omit));
+        // KeepBefore branch doesn't emit warnings.
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn keep_before_with_atomic_kind_generated_with_invocation_emits_verbatim() {
+        // Shortcode resolution: atomic-kind, Invocation in target → Verbatim.
+        let token = SourceInfo::original(TARGET, 100, 120);
+        let mut gen_info = SourceInfo::generated(By::shortcode("meta"));
+        gen_info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        let block = para(vec![], gen_info);
+        let ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![block],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::KeepBefore(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let qmd = "0".repeat(200);
+        let entries = coarsen(&qmd, &ast, &ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            CoarsenedEntry::Verbatim { byte_range, .. } => {
+                assert_eq!(byte_range, &(100..120));
+            }
+            other => panic!("expected Verbatim, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn keep_before_with_nonatomic_generated_wrapper_emits_transparent() {
+        // Sectionize wrapper: Div with Generated { by: sectionize, from: [] }
+        // and source-bearing children (one Para in target).
+        let child = para(
+            vec![make_str("hi", SourceInfo::original(TARGET, 10, 12))],
+            SourceInfo::original(TARGET, 10, 12),
+        );
+        let div = Block::Div(Div {
+            attr: empty_attr(),
+            content: vec![child],
+            source_info: SourceInfo::generated(By::sectionize()),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+        });
+        let ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![div],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::KeepBefore(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let qmd = "0".repeat(30);
+        let entries = coarsen(&qmd, &ast, &ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            CoarsenedEntry::Transparent { child_entries } => {
+                assert_eq!(child_entries.len(), 1);
+                match &child_entries[0] {
+                    CoarsenedEntry::Verbatim {
+                        byte_range,
+                        orig_idx,
+                    } => {
+                        assert_eq!(byte_range, &(10..12));
+                        // Children of Transparent get None for orig_idx.
+                        assert_eq!(orig_idx, &None);
+                    }
+                    other => panic!("expected Verbatim child, got {:?}", other),
+                }
+            }
+            other => panic!("expected Transparent, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn keep_before_cross_file_original_falls_back_to_rewrite() {
+        // Block whose source_info points at a different file (no preimage
+        // in target) AND isn't Generated → Rewrite (catch-all).
+        let block = para(vec![], SourceInfo::original(OTHER, 0, 10));
+        let ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![block],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::KeepBefore(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        // Note: target_file_id is derived from the first block's
+        // root_file_id, which for this AST is OTHER (FileId 1) — so
+        // preimage_in(OTHER) succeeds. To exercise the catch-all path
+        // we need a block whose source_info doesn't resolve in *its
+        // own* root file_id. Use a separate AST whose first-block
+        // file-id sets target = TARGET, but this block points at OTHER.
+        let target_setter = para(vec![], SourceInfo::original(TARGET, 0, 5));
+        let block_cross = para(vec![], SourceInfo::original(OTHER, 0, 10));
+        let ast2 = quarto_pandoc_types::Pandoc {
+            blocks: vec![target_setter, block_cross],
+            meta: ConfigValue::default(),
+        };
+        let plan2 = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::KeepBefore(0), BlockAlignment::KeepBefore(1)],
+            ..Default::default()
+        };
+        let qmd = "0".repeat(30);
+        let entries = coarsen(&qmd, &ast2, &ast2, &plan2, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 2);
+        // First entry resolves in target via preimage_in.
+        assert!(matches!(entries[0], CoarsenedEntry::Verbatim { .. }));
+        // Second entry doesn't resolve in target → Rewrite catch-all.
+        assert!(matches!(entries[1], CoarsenedEntry::Rewrite { .. }));
+        assert!(warnings.is_empty());
+        // Silence unused: plan was for the single-block AST scenario above.
+        let _ = (ast, plan);
+    }
+
+    // -------------------------------------------------------------------------
+    // UseAfter soft-drop / let-user-win
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn use_after_on_atomic_custom_node_is_let_user_win_rewrite() {
+        // User replaced a CrossrefResolvedRef wholesale via a component
+        // menu. The new-side block IS the atomic CustomNode; we let the
+        // user win and Rewrite (no warning).
+        let new_cn = CustomNode::new(
+            "CrossrefResolvedRef",
+            empty_attr(),
+            SourceInfo::original(TARGET, 0, 10),
+        );
+        let new_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![Block::Custom(new_cn)],
+            meta: ConfigValue::default(),
+        };
+        let orig_block = para(vec![], SourceInfo::original(TARGET, 0, 0));
+        let original_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![orig_block],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::UseAfter(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let qmd = "0".repeat(20);
+        let entries = coarsen(&qmd, &original_ast, &new_ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert!(matches!(entries[0], CoarsenedEntry::Rewrite { .. }));
+        assert!(
+            warnings.is_empty(),
+            "let-user-win on atomic CustomNode must not emit a warning"
+        );
+    }
+
+    #[test]
+    fn use_after_on_no_preimage_generated_soft_drops_to_omit() {
+        // User replaced a synthesized-from-metadata container wholesale.
+        // The new-side block is Generated with no Invocation anchor
+        // → no source position to anchor a Rewrite → Omit + Q-3-43.
+        let new_block = Block::Div(Div {
+            attr: empty_attr(),
+            content: vec![],
+            source_info: SourceInfo::generated(By::appendix()),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+        });
+        let new_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![new_block],
+            meta: ConfigValue::default(),
+        };
+        let orig_block = para(vec![], SourceInfo::original(TARGET, 0, 0));
+        let original_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![orig_block],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::UseAfter(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let qmd = "0".repeat(20);
+        let entries = coarsen(&qmd, &original_ast, &new_ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert!(matches!(entries[0], CoarsenedEntry::Omit));
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].code.as_deref(), Some("Q-3-43"));
+    }
+
+    // -------------------------------------------------------------------------
+    // RecurseIntoContainer soft-drop on non-editable original block
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn recurse_into_atomic_custom_node_soft_drops_to_verbatim() {
+        // User typed inside a CrossrefResolvedRef. Substitute Verbatim
+        // (wrapper's preimage bytes) + Q-3-43.
+        let orig_cn = CustomNode::new(
+            "CrossrefResolvedRef",
+            empty_attr(),
+            SourceInfo::original(TARGET, 5, 25),
+        );
+        let new_cn = CustomNode::new(
+            "CrossrefResolvedRef",
+            empty_attr(),
+            SourceInfo::original(TARGET, 5, 25),
+        );
+        let original_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![Block::Custom(orig_cn)],
+            meta: ConfigValue::default(),
+        };
+        let new_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![Block::Custom(new_cn)],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::RecurseIntoContainer {
+                before_idx: 0,
+                after_idx: 0,
+            }],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let qmd = "0".repeat(30);
+        let entries = coarsen(&qmd, &original_ast, &new_ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            CoarsenedEntry::Verbatim { byte_range, .. } => {
+                assert_eq!(byte_range, &(5..25));
+            }
+            other => panic!("expected Verbatim, got {:?}", other),
+        }
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].code.as_deref(), Some("Q-3-43"));
+    }
+
+    #[test]
+    fn recurse_into_no_preimage_generated_soft_drops_to_omit() {
+        // User typed inside a synthesized appendix container (Generated
+        // with no Invocation anchor, no preimage in target).
+        let orig_div = Block::Div(Div {
+            attr: empty_attr(),
+            content: vec![para(vec![], SourceInfo::original(TARGET, 0, 5))],
+            source_info: SourceInfo::generated(By::appendix()),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+        });
+        let new_div = Block::Div(Div {
+            attr: empty_attr(),
+            content: vec![para(vec![], SourceInfo::original(TARGET, 0, 5))],
+            source_info: SourceInfo::generated(By::appendix()),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+        });
+        // Force target_file_id to TARGET by giving the AST another block
+        // whose source_info is Original in TARGET.
+        let target_setter = para(vec![], SourceInfo::original(TARGET, 0, 5));
+        let original_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![target_setter.clone(), orig_div],
+            meta: ConfigValue::default(),
+        };
+        let new_ast = quarto_pandoc_types::Pandoc {
+            blocks: vec![target_setter, new_div],
+            meta: ConfigValue::default(),
+        };
+        let plan = ReconciliationPlan {
+            block_alignments: vec![
+                BlockAlignment::KeepBefore(0),
+                BlockAlignment::RecurseIntoContainer {
+                    before_idx: 1,
+                    after_idx: 1,
+                },
+            ],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let qmd = "0".repeat(30);
+        let entries = coarsen(&qmd, &original_ast, &new_ast, &plan, &mut warnings).unwrap();
+
+        assert_eq!(entries.len(), 2);
+        assert!(matches!(entries[0], CoarsenedEntry::Verbatim { .. }));
+        assert!(matches!(entries[1], CoarsenedEntry::Omit));
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].code.as_deref(), Some("Q-3-43"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Inline-level multi-inline dedupe + soft-drop
+    // -------------------------------------------------------------------------
+
+    fn shortcode_inline(text: &str, token_si: SourceInfo) -> Inline {
+        let mut gen_info = SourceInfo::generated(By::shortcode("meta"));
+        gen_info.append_anchor(AnchorRole::Invocation, Arc::new(token_si));
+        make_str(text, gen_info)
+    }
+
+    #[test]
+    fn multi_inline_dedupe_emits_token_once_when_invocation_shared() {
+        // Three inlines sharing the same Invocation anchor (a multi-inline
+        // shortcode resolution). The original qmd has the shortcode token
+        // at bytes 0..18. Expected output: those 18 bytes once.
+        let qmd = "{{< meta footer >}}";
+        assert_eq!(qmd.len(), 19);
+        let token_si = SourceInfo::original(TARGET, 0, 19);
+
+        let orig_inlines = vec![
+            shortcode_inline("Hello", token_si.clone()),
+            shortcode_inline(" ", token_si.clone()),
+            shortcode_inline("World", token_si.clone()),
+        ];
+        let new_inlines = orig_inlines.clone();
+        let plan = InlineReconciliationPlan {
+            inline_alignments: vec![
+                InlineAlignment::KeepBefore(0),
+                InlineAlignment::KeepBefore(1),
+                InlineAlignment::KeepBefore(2),
+            ],
+            ..Default::default()
+        };
+
+        let mut warnings = Vec::new();
+        let out = assemble_inline_content(
+            qmd,
+            &orig_inlines,
+            &new_inlines,
+            &plan,
+            TARGET,
+            &mut warnings,
+        )
+        .unwrap();
+
+        assert_eq!(
+            out, qmd,
+            "Three shared-Invocation inlines must emit the token bytes once"
+        );
+    }
+
+    #[test]
+    fn multi_inline_no_dedupe_when_invocations_differ() {
+        // Two inlines, each pointing at a *different* token range — no
+        // dedupe; each emits its own range.
+        let qmd = "AB";
+        let orig_inlines = vec![
+            shortcode_inline("A", SourceInfo::original(TARGET, 0, 1)),
+            shortcode_inline("B", SourceInfo::original(TARGET, 1, 2)),
+        ];
+        let new_inlines = orig_inlines.clone();
+        let plan = InlineReconciliationPlan {
+            inline_alignments: vec![
+                InlineAlignment::KeepBefore(0),
+                InlineAlignment::KeepBefore(1),
+            ],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let out = assemble_inline_content(
+            qmd,
+            &orig_inlines,
+            &new_inlines,
+            &plan,
+            TARGET,
+            &mut warnings,
+        )
+        .unwrap();
+
+        // No dedupe: each inline's bytes emit.
+        assert_eq!(out, "AB");
+    }
+
+    #[test]
+    fn multi_inline_dedupe_with_value_source_difference_still_dedupes() {
+        // Forward-compat with Plan 9: two inlines whose Invocation anchors
+        // are PartialEq-equal but whose ValueSource anchors differ — still
+        // dedupes (dedupe consults Invocation only).
+        let qmd = "{{< meta foo >}}";
+        let token_si = SourceInfo::original(TARGET, 0, qmd.len());
+
+        let mut si_a = SourceInfo::generated(By::shortcode("meta"));
+        si_a.append_anchor(AnchorRole::Invocation, Arc::new(token_si.clone()));
+        si_a.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(TARGET, 100, 110)),
+        );
+
+        let mut si_b = SourceInfo::generated(By::shortcode("meta"));
+        si_b.append_anchor(AnchorRole::Invocation, Arc::new(token_si));
+        si_b.append_anchor(
+            AnchorRole::ValueSource,
+            Arc::new(SourceInfo::original(TARGET, 200, 215)),
+        );
+
+        let orig_inlines = vec![make_str("a", si_a), make_str("b", si_b)];
+        let new_inlines = orig_inlines.clone();
+        let plan = InlineReconciliationPlan {
+            inline_alignments: vec![
+                InlineAlignment::KeepBefore(0),
+                InlineAlignment::KeepBefore(1),
+            ],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let out = assemble_inline_content(
+            qmd,
+            &orig_inlines,
+            &new_inlines,
+            &plan,
+            TARGET,
+            &mut warnings,
+        )
+        .unwrap();
+
+        // Still dedupes — emit the token once.
+        assert_eq!(out, qmd);
+    }
+
+    #[test]
+    fn inline_use_after_on_atomic_generated_soft_drops_to_keep_before_with_q3_42() {
+        // User retyped over a shortcode-resolved inline. UseAfter
+        // → KeepBefore(0) (the positional proxy) + Q-3-42.
+        let qmd = "{{< meta foo >}}";
+        let token_si = SourceInfo::original(TARGET, 0, qmd.len());
+        let mut gen_info = SourceInfo::generated(By::shortcode("meta"));
+        gen_info.append_anchor(AnchorRole::Invocation, Arc::new(token_si));
+
+        let orig_inlines = vec![make_str("Resolved", gen_info)];
+        // New-side inline: a plain user edit (no Invocation anchor).
+        let new_inlines = vec![make_str("Retyped", SourceInfo::default())];
+        let plan = InlineReconciliationPlan {
+            inline_alignments: vec![InlineAlignment::UseAfter(0)],
+            ..Default::default()
+        };
+        let mut warnings = Vec::new();
+        let out = assemble_inline_content(
+            qmd,
+            &orig_inlines,
+            &new_inlines,
+            &plan,
+            TARGET,
+            &mut warnings,
+        )
+        .unwrap();
+
+        // Soft-drop: emit the original inline's bytes (its preimage maps
+        // to the whole shortcode token).
+        assert_eq!(out, qmd);
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].code.as_deref(), Some("Q-3-42"));
     }
 }

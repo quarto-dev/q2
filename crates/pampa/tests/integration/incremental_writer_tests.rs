@@ -64,6 +64,7 @@ fn incremental_write_via_json_roundtrip(original_qmd: &str, new_ast: &Pandoc) ->
     let plan = compute_reconciliation(&original_ast, &new_ast_from_json);
     writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast_from_json, &plan)
         .expect("incremental_write failed")
+        .0
 }
 
 // =============================================================================
@@ -89,7 +90,8 @@ fn assert_idempotent(input: &str) {
     }
 
     let result = writers::incremental::incremental_write(input, &ast, &ast, &plan)
-        .expect("incremental_write failed");
+        .expect("incremental_write failed")
+        .0;
 
     assert_eq!(
         result, input,
@@ -358,7 +360,8 @@ fn assert_roundtrip(original_qmd: &str, new_qmd: &str) {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     // Verify the result round-trips: read(result) should match new_ast structurally
     let result_ast = parse_qmd(&result);
@@ -574,7 +577,8 @@ fn roundtrip_auto_id_change_no_explicit_id_in_output() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     // Should NOT contain an explicit ID attribute — auto-generated IDs stay implicit
     assert!(
@@ -599,7 +603,8 @@ fn verbatim_preservation_unchanged_blocks() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     // The first and third paragraphs should be byte-for-byte identical
     assert!(
@@ -977,7 +982,8 @@ fn assert_equivalent_to_full_writer(original_qmd: &str, new_qmd: &str) {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let incremental_result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     let full_result = write_qmd(&new_ast);
 
@@ -1045,7 +1051,8 @@ fn assert_verbatim_preservation(blocks: &[String], mutate_idx: usize, new_block:
 
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result = writers::incremental::incremental_write(&original, &original_ast, &new_ast, &plan)
-        .expect("incremental_write failed");
+        .expect("incremental_write failed")
+        .0;
 
     // For each unchanged block, verify its text appears verbatim in the result.
     // We check by finding the original block text in the result string.
@@ -1092,7 +1099,7 @@ fn assert_edits_monotonic(original_qmd: &str, new_qmd: &str) {
     let new_ast = parse_qmd(new_qmd);
 
     let plan = compute_reconciliation(&original_ast, &new_ast);
-    let edits = writers::incremental::compute_incremental_edits(
+    let (edits, _warnings) = writers::incremental::compute_incremental_edits(
         original_qmd,
         &original_ast,
         &new_ast,
@@ -1144,7 +1151,7 @@ proptest! {
         // Identity case: should produce zero edits
         let ast = parse_qmd(&qmd);
         let plan = compute_reconciliation(&ast, &ast);
-        let edits =
+        let (edits, _warnings) =
             writers::incremental::compute_incremental_edits(&qmd, &ast, &ast, &plan)
                 .expect("compute_incremental_edits failed");
         prop_assert!(
@@ -1327,7 +1334,8 @@ fn comment_preserved_when_adjacent_block_changes() {
 
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     assert!(
         result.contains("<!-- a comment -->"),
@@ -1363,7 +1371,8 @@ fn comment_preserved_when_containing_paragraph_rewritten() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     assert!(
         result.contains("<!-- comment -->"),
@@ -1384,7 +1393,8 @@ fn comment_inside_blockquote_preserved_on_rewrite() {
 
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     assert!(
         result.contains("<!-- comment -->"),
@@ -1405,7 +1415,8 @@ fn comment_block_preserved_when_blocks_added() {
 
     let result =
         writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
-            .expect("incremental_write failed");
+            .expect("incremental_write failed")
+            .0;
 
     assert!(
         result.contains("<!-- a comment -->"),
@@ -1478,7 +1489,8 @@ fn multiline_comment_preserved_on_rewrite() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
 
     let result = writers::incremental::incremental_write(original, &original_ast, &new_ast, &plan)
-        .expect("incremental_write failed");
+        .expect("incremental_write failed")
+        .0;
 
     assert!(
         result.contains("<!-- multi\nline\ncomment -->"),
@@ -1498,7 +1510,8 @@ fn multiline_block_comment_preserved_on_adjacent_change() {
     let plan = compute_reconciliation(&original_ast, &new_ast);
 
     let result = writers::incremental::incremental_write(original, &original_ast, &new_ast, &plan)
-        .expect("incremental_write failed");
+        .expect("incremental_write failed")
+        .0;
 
     assert!(
         result.contains("<!--\nmulti\nline\n-->"),
