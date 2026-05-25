@@ -25,6 +25,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-25
 
+- [`5f2bbab0`](https://github.com/quarto-dev/q2/commits/5f2bbab0): Soft-drop warnings (Q-3-42, Q-3-43) now surface in the diagnostic panel even when the rewrite produces byte-identical output. Before, clicking +react inside a shortcode-resolved region (e.g. `{{< lipsum 3 >}}`) silently declined the edit with no visible feedback; the warning was queued for the next render but no re-render fired because nothing changed.
 - [`bdcfdc53`](https://github.com/quarto-dev/q2/commits/bdcfdc53): Fix q2-preview edits silently failing with "Incremental write failed: undefined" on documents where the render pipeline produced a single top-level sectionize wrapper around the user content. The writer now recurses into non-atomic Generated wrappers (sectionize, footnotes-container, appendix-container) instead of soft-dropping the whole document.
 
 ### 2026-05-24
