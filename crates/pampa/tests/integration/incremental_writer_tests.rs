@@ -407,6 +407,76 @@ fn sectionize_wrapper_with_inner_para_edit_produces_nonempty_output() {
     );
 }
 
+#[test]
+fn sectionize_wrapper_preserves_frontmatter_after_inner_edit() {
+    // Reproduce the second-order bug: when the post-pipeline AST wraps
+    // the user content in a top-level sectionize Div, the writer's
+    // `emit_metadata_prefix` reads `blocks[0].start_offset()` to decide
+    // where the metadata region ends. The wrapper's start_offset is 0
+    // (Generated, no preimage), so the function concludes "no metadata"
+    // and deletes the YAML frontmatter from the output.
+    let original_qmd = "\
+---
+format: q2-preview
+render-components:
+  - comment.tsx
+---
+
+# Heading
+
+A paragraph that the user will edit.
+";
+
+    let baseline_ast = wrap_in_sectionize_div(parse_qmd(original_qmd));
+
+    let mut new_ast = baseline_ast.clone();
+    {
+        let pampa::pandoc::Block::Div(ref mut div) = new_ast.blocks[0] else {
+            panic!("expected wrapper Div at blocks[0]");
+        };
+        let para_idx = div
+            .content
+            .iter()
+            .rposition(|b| matches!(b, pampa::pandoc::Block::Paragraph(_)))
+            .expect("paragraph inside wrapper");
+        if let pampa::pandoc::Block::Paragraph(ref mut p) = div.content[para_idx] {
+            let attr = (
+                String::new(),
+                vec!["quarto-edit-comment".to_string()],
+                hashlink::LinkedHashMap::new(),
+            );
+            p.content
+                .push(pampa::pandoc::Inline::Span(pampa::pandoc::Span {
+                    attr,
+                    content: vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
+                        text: "🎉".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    })],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                    attr_source: pampa::pandoc::attr::AttrSourceInfo::empty(),
+                }));
+        }
+    }
+
+    let plan = compute_reconciliation(&baseline_ast, &new_ast);
+    let (result_qmd, _warnings) =
+        writers::incremental::incremental_write(original_qmd, &baseline_ast, &new_ast, &plan)
+            .expect("incremental_write Ok arm");
+
+    assert!(
+        result_qmd
+            .starts_with("---\nformat: q2-preview\nrender-components:\n  - comment.tsx\n---\n"),
+        "frontmatter deleted from output. result:\n{}",
+        result_qmd,
+    );
+    // And the edit still lands inside the wrapper's child.
+    assert!(
+        result_qmd.contains("[>> 🎉]"),
+        "expected reaction span in result; got:\n{}",
+        result_qmd
+    );
+}
+
 // --- target_file_id derivation skips no-root_file_id first blocks ---
 //
 // Plan 7c Phase 8 — `coarsen`'s `target_file_id` is derived from the

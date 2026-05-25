@@ -653,6 +653,35 @@ fn derive_target_file_id(blocks: &[Block]) -> quarto_source_map::FileId {
     walk(blocks).unwrap_or(quarto_source_map::FileId(0))
 }
 
+/// Find the start offset (in `target` bytes) of the first block in
+/// `blocks` whose `source_info().preimage_in(target)` is `Some`,
+/// descending through `block_block_children` for blocks that have no
+/// preimage of their own. Returns `None` only when no descendant has
+/// a preimage anywhere in `target`.
+///
+/// Used by `emit_metadata_prefix` to locate the boundary between the
+/// YAML frontmatter region and the first source-anchored user block.
+/// Without descent, a post-pipeline AST whose `blocks[0]` is a
+/// synthesized container (sectionize wrapper, title-block,
+/// footnotes / appendix container) reports `start == 0`, which would
+/// silently delete the frontmatter from the output.
+fn first_target_anchored_start_in(
+    blocks: &[Block],
+    target: quarto_source_map::FileId,
+) -> Option<usize> {
+    for block in blocks {
+        if let Some(range) = block.source_info().preimage_in(target) {
+            return Some(range.start);
+        }
+        if let Some(children) = block_block_children(block)
+            && let Some(start) = first_target_anchored_start_in(children, target)
+        {
+            return Some(start);
+        }
+    }
+    None
+}
+
 // =============================================================================
 // Soft-drop diagnostic builders (Plan 7)
 // =============================================================================
@@ -832,16 +861,23 @@ fn emit_metadata_prefix(
     new_ast: &Pandoc,
     _coarsened: &[CoarsenedEntry],
 ) -> Result<bool, Vec<quarto_error_reporting::DiagnosticMessage>> {
-    // Determine where the metadata region ends by looking at the first
-    // ORIGINAL block's start offset. We must NOT use the first coarsened
-    // entry's offset — when blocks are removed from the beginning, the
-    // first coarsened block may reference a later original block whose
-    // start > 0, falsely triggering the metadata prefix logic.
-    let first_block_start = if !original_ast.blocks.is_empty() {
-        Some(block_source_span(&original_ast.blocks[0]).start)
-    } else {
-        None
-    };
+    // Determine where the metadata region ends by finding the start
+    // offset of the first source-anchored ORIGINAL block in the target
+    // file. We must NOT use the first coarsened entry's offset — when
+    // blocks are removed from the beginning, the first coarsened block
+    // may reference a later original block whose start > 0, falsely
+    // triggering the metadata prefix logic.
+    //
+    // We must also NOT use `original_ast.blocks[0]`'s offset directly:
+    // when the post-pipeline AST wraps user content in a synthesized
+    // top-level container (sectionize Div, title-block, footnotes /
+    // appendix wrappers), `blocks[0].start_offset()` is 0 (Generated,
+    // no preimage), which would falsely conclude "no metadata region"
+    // and silently delete the YAML frontmatter. Descend through
+    // `block_block_children` of any such wrapper to find the first
+    // block with real preimage in the target file.
+    let target_file_id = derive_target_file_id(&original_ast.blocks);
+    let first_block_start = first_target_anchored_start_in(&original_ast.blocks, target_file_id);
 
     // Check if there's a metadata region before the first block
     if let Some(start) = first_block_start {
