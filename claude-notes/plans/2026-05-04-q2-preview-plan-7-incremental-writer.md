@@ -1367,7 +1367,7 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 - [ ] **Deferred** — hub-client manual smoke (edit sectionized doc, observe section structure in saved qmd) and SPA manual smoke with echo-prevention assertion. Covered by the Phase 8 follow-up beads.
 - [x] Plan 7 marked complete (Phases 1-7 + 9 done; Phase 8 partially landed, remainder tracked separately).
 - [x] Bump `hub-client/changelog.md` with a one-line entry per the two-commit workflow (commit `b5d6d08a`).
-- [ ] Move Plan 9's `preimage_in` role-asymmetry e2e test reference into Plan 9 Phase 5 — defer to Plan 9 owner.
+- [x] Plan 9's `preimage_in` role-asymmetry e2e test reference is in Plan 9 Phase 5 (added a "Plan 7 shipped 2026-05-24" status note so the deferral state is unambiguous when Plan 9 lands).
 
 ## Notes
 

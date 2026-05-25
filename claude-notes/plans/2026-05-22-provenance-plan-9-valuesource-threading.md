@@ -164,6 +164,17 @@ writer changes.
 
 #### Phase 5 — Plan-7 invariant tests (deferred from Plan 7)
 
+Status: Plan 7 shipped on `feature/provenance` 2026-05-24 (phases
+1-7 + 9; Playwright e2e matrix carried separately in `bd-3izo3`).
+These tests are now unblocked — they need a real `ValueSource`
+consumer (Phase 4's appendix synthesizer) to exercise the
+`Invocation`-vs-`ValueSource` asymmetry that Plan 7's writer
+implements. Until Phase 4 stamps `ValueSource` anchors on the
+appendix synthesizer, the structural-only versions of these tests
+remain in Plan 7's `quarto-source-map` test module (the `preimage_in
+skips non-Invocation roles` unit test, lines 982-986 of Plan 7).
+
+
 - **`preimage_in` role-asymmetry unit test**: build
   `Generated { by: By::appendix(AppendixSection::License), from: [ValueSource(meta_si)] }`
   where `meta_si` is `Original { file_id: 0, start: 10, end: 25 }`.
