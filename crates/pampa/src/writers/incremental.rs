@@ -620,66 +620,117 @@ fn block_block_children(block: &Block) -> Option<&[Block]> {
     }
 }
 
+// =============================================================================
+// Transparent wrappers
+// =============================================================================
+//
+// A *transparent wrapper* is a block that's structurally part of the
+// AST but has no source bytes of its own — the user's actual content
+// lives in its children. Sectionize Divs, footnotes containers, and
+// appendix containers (from `pampa::pandoc::sugar::SectionizeTransform`
+// and friends) are the canonical examples. A Lua filter that wraps
+// user content in a Div is another: the wrapper has `Generated`
+// source_info, but the children preserve their original positions.
+//
+// Code that asks "where do the user's source bytes live?" must
+// **descend through transparent wrappers** rather than reading
+// `blocks[0]` directly. The `first_in_user_tree` walker below is the
+// reference implementation; `derive_target_file_id` /
+// `first_target_anchored_start_in` are thin specializations.
+//
+// See `claude-notes/designs/transparent-wrappers.md` for the full
+// contract and the rationale (why the predicate is structural rather
+// than opt-in: filter authors don't have to register anything — the
+// AST shape they emit *is* the declaration).
+
+/// Walk `blocks` depth-first, applying `extract` to each block. On a
+/// `Some` result, stop and return it. On `None`, descend through
+/// `block_block_children` and try again. This is how we see through
+/// transparent wrappers: a wrapper has no source position of its
+/// own, so `extract` returns `None` for it; the walker then looks
+/// inside.
+///
+/// Used by `derive_target_file_id` and `first_target_anchored_start_in`,
+/// and intended as the building block for any future code that needs
+/// to find "the first user block matching X" without having to
+/// re-derive the descent.
+fn first_in_user_tree<T>(blocks: &[Block], extract: &impl Fn(&Block) -> Option<T>) -> Option<T> {
+    for block in blocks {
+        if let Some(v) = extract(block) {
+            return Some(v);
+        }
+        if let Some(children) = block_block_children(block)
+            && let Some(v) = first_in_user_tree(children, extract)
+        {
+            return Some(v);
+        }
+    }
+    None
+}
+
+/// Returns `true` iff `block` is a transparent wrapper with respect
+/// to `target_file_id`:
+///
+/// 1. its `SourceInfo` is `Generated` with no `Invocation` anchor (so
+///    it has no source token of its own), AND
+/// 2. it has block-children (`block_block_children` recognises it as
+///    a container — Div, BlockQuote, Figure, NoteDefinitionFencedBlock), AND
+/// 3. at least one descendant has real `preimage_in(target_file_id)`
+///    (so there's actual user content under it).
+///
+/// Condition (3) is what makes this *structural* rather than opt-in:
+/// a Lua filter that wraps existing user content in a Div produces a
+/// Generated wrapper whose children carry their original preimage —
+/// transparent. A filter that constructs a fresh Div from metadata
+/// has no source-bearing children — atomic. Authors don't have to
+/// declare anything; the AST shape declares it for them.
+///
+/// Available to callers that need to make an explicit decision
+/// (e.g. a future Q-3-44 diagnostic that hints "your filter walked
+/// into the sectionize wrapper"). Routine source-position lookups
+/// should use `first_in_user_tree` directly.
+#[allow(dead_code)]
+fn is_transparent_wrapper(block: &Block, target_file_id: quarto_source_map::FileId) -> bool {
+    if !matches!(block.source_info(), SourceInfo::Generated { .. }) {
+        return false;
+    }
+    if block.source_info().invocation_anchor().is_some() {
+        return false;
+    }
+    let Some(children) = block_block_children(block) else {
+        return false;
+    };
+    first_in_user_tree(children, &|b| b.source_info().preimage_in(target_file_id)).is_some()
+}
+
 /// Derive the "target file" — the file that `original_qmd` was parsed
 /// from, used for editability and preimage checks throughout the
 /// writer.
 ///
-/// Walks `blocks` depth-first descending through `block_block_children`
-/// until it finds a block whose `root_file_id()` is `Some`. This skips
-/// synthesized first blocks (title-block, sectionize wrappers,
-/// footnotes / appendix containers) whose own `source_info` has no
-/// `Invocation` anchor, so the qmd's real `FileId` is used rather than
-/// the `FileId(0)` fallback by accident.
-///
-/// Falls back to `FileId(0)` only when every block (and every
-/// descended child) is a no-`root_file_id` Generated — the
-/// genuinely-empty-document case.
+/// Descends through transparent wrappers via `first_in_user_tree`,
+/// so a synthesized first block (title-block, sectionize wrapper,
+/// footnotes / appendix container) is skipped and the user's real
+/// qmd `FileId` is returned. Falls back to `FileId(0)` only for the
+/// genuinely-empty document.
 ///
 /// Closes Plan 7c Phase 8.
 fn derive_target_file_id(blocks: &[Block]) -> quarto_source_map::FileId {
-    fn walk(blocks: &[Block]) -> Option<quarto_source_map::FileId> {
-        for block in blocks {
-            if let Some(id) = block.source_info().root_file_id() {
-                return Some(id);
-            }
-            if let Some(children) = block_block_children(block)
-                && let Some(id) = walk(children)
-            {
-                return Some(id);
-            }
-        }
-        None
-    }
-    walk(blocks).unwrap_or(quarto_source_map::FileId(0))
+    first_in_user_tree(blocks, &|b| b.source_info().root_file_id())
+        .unwrap_or(quarto_source_map::FileId(0))
 }
 
 /// Find the start offset (in `target` bytes) of the first block in
 /// `blocks` whose `source_info().preimage_in(target)` is `Some`,
-/// descending through `block_block_children` for blocks that have no
-/// preimage of their own. Returns `None` only when no descendant has
-/// a preimage anywhere in `target`.
-///
-/// Used by `emit_metadata_prefix` to locate the boundary between the
-/// YAML frontmatter region and the first source-anchored user block.
-/// Without descent, a post-pipeline AST whose `blocks[0]` is a
-/// synthesized container (sectionize wrapper, title-block,
-/// footnotes / appendix container) reports `start == 0`, which would
-/// silently delete the frontmatter from the output.
+/// descending through transparent wrappers. Used by
+/// `emit_metadata_prefix` to locate the boundary between the YAML
+/// frontmatter region and the first source-anchored user block.
 fn first_target_anchored_start_in(
     blocks: &[Block],
     target: quarto_source_map::FileId,
 ) -> Option<usize> {
-    for block in blocks {
-        if let Some(range) = block.source_info().preimage_in(target) {
-            return Some(range.start);
-        }
-        if let Some(children) = block_block_children(block)
-            && let Some(start) = first_target_anchored_start_in(children, target)
-        {
-            return Some(start);
-        }
-    }
-    None
+    first_in_user_tree(blocks, &|b| {
+        b.source_info().preimage_in(target).map(|r| r.start)
+    })
 }
 
 // =============================================================================

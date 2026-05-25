@@ -114,6 +114,20 @@ by any current plan — see §"Notes" for the rationale.
   - Hint: `Fix the filter to produce stable output, or add idempotent: false to its config in _quarto.yml to silence this check.`
   - Location: filter file path; no document-side range (the warning
     is about the filter, not a place in the active doc).
+  - **Sectionize-wrapper-aware hint (optional, follow-up).** A
+    common Lua-author error is `pandoc.walk_block(doc.blocks[1], …)`
+    intending to touch the user's first paragraph — but after
+    `SectionizeTransform` runs, `doc.blocks[1]` is the synthesized
+    sectionize Div and the walk operates on the wrapper, not the
+    user content. Idempotence detection sees the divergence and
+    fires Q-3-44 correctly, but the hint doesn't help the author
+    diagnose. When the AST diff is concentrated under a
+    `is_transparent_wrapper(doc.blocks[0])` (see
+    [`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md)),
+    extend the hint with: "Note: your filter may be walking into a
+    sectionize wrapper. Use `doc.blocks[1].content[0]` to reach
+    the first user block, or iterate `doc.blocks` recursively
+    skipping wrapper Divs."
 - **`Q-3-45` diagnostic** (Info severity), three-variant body:
   - Title (all variants): `Filter <path> exempted from idempotence checking`
   - Problem (UserConfig source): `idempotent: false set in <config_path>. Edits may cause unintended changes elsewhere in the document.`
@@ -384,6 +398,47 @@ whole-set check, two per filter for attribution). For 5 filters,
   Q-3-45 variants match their respective bodies; hint text mentions
   the opt-out path.
 
+- **Filter-mutation round-trip behavior test** (added 2026-05-25
+  from code-review pass on Plan 7). The writer contract
+  (`claude-notes/designs/incremental-writer-contract.md`,
+  §"Filter mutations versus constructions") admits this corner:
+  a filter that *mutates* an existing node (rather than
+  *constructs* a new one) leaves the input's `Original`
+  source_info untouched, so the editability gate treats the
+  resulting text as editable. When the filter is non-idempotent
+  (`x => upper(x) + "!"`), the user's typed text round-trips as
+  `TYPED!` on the first save, `TYPED!!` on the next, etc.
+
+  The Plan-7a runtime warning catches this — but the contract
+  doc doesn't pin *when* the warning fires:
+  - Does it fire on the first save (writer detects the filter
+    is non-idempotent at the AST level)?
+  - Does it fire only after a second save shows divergence
+    between consecutive pipeline runs?
+  - Does it suppress on subsequent saves to avoid flooding?
+
+  Test plan (one fixture, three assertions):
+
+  1. Build a single-file doc with a non-idempotent user filter
+     (the canonical `f(x) = upper(x) + "!"` shape).
+  2. Render once. Assert Q-3-44 fires with `filter_path =
+     "f.lua"`. Capture the warning ID.
+  3. Simulate a user edit on a filter-mutated `Str`. Round-trip
+     through `incremental_write`. Re-render. Assert *either* the
+     same Q-3-44 fires again, *or* it's suppressed (whichever
+     the implementation picks) — but the test pins the choice.
+  4. Repeat step 3 with no user edit (re-render of the same
+     content). Assert the warning behaviour matches step 3 — the
+     existence of a user edit doesn't change the diagnostic
+     surface; the filter's non-idempotence does.
+
+  Output: the test pins behaviour and the assertion comments
+  document the contract. If the implementation prefers "fire
+  on every render" (loud, recoverable), the test asserts that.
+  If it prefers "fire once per cache key" (quiet, requires the
+  cache), the test asserts that. Either way, future contributors
+  read the test and know what behaviour is contracted.
+
 ## Dependencies
 
 - **Depends on**: Plan 7 (the q2-preview transform pipeline + qmd writer
@@ -437,7 +492,8 @@ whole-set check, two per filter for attribution). For 5 filters,
 | Q-3-44 / Q-3-45 catalog entries + builders | ~50 |
 | Session cache integration | ~40 |
 | Tests (unit + integration) | ~250 |
-| **Total** | **~600** |
+| Filter-mutation round-trip behavior test (added 2026-05-25) | ~60 |
+| **Total** | **~660** |
 
 Single focused session. Risk: per-filter attribution may surface
 unexpected interactions; budget a second session if attribution proves

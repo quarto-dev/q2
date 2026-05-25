@@ -47,6 +47,46 @@ When this plan lands, source-pointing diagnostics from Lua land
 machinery as qmd / YAML diagnostics. Attribution tooling can chase
 the `Dispatch` anchor back to the Lua function that produced a node.
 
+### Lua filters that wrap user content
+
+A Lua filter that **wraps existing user content** in a Div (e.g.
+the canonical "page-shell" filter, or a Lua reimplementation of
+`.callout` wrapping) does not need any registration or opt-in to
+participate in the visual editor. If the filter emits a block
+container (Div / BlockQuote / Figure / NoteDefinitionFencedBlock)
+whose `source_info` is `Generated { by: filter(), from: [Dispatch
+-> lua_si] }` (no Invocation anchor) and whose children preserve
+their original source positions, the wrapper meets the structural
+definition of a *transparent wrapper* in
+[`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md):
+
+1. Generated, no Invocation anchor — ✓ (Dispatch is anchor-only
+   for diagnostics; doesn't count as a source token).
+2. Block-container kind — ✓.
+3. Children carry `preimage_in(target)` — ✓ by construction
+   (the filter mutates rather than constructs).
+
+The writer's `first_in_user_tree` walker sees through it
+automatically; the React dispatcher's editability gate (Plan 7c
+Phase 2 — `isEditableInside`) treats its children as editable;
+edits inside the wrapped content round-trip cleanly. The filter
+author writes idiomatic Lua and gets working visual-editor
+support — no contract to satisfy beyond "don't strip
+source_info from the children you wrap."
+
+A Lua filter that **constructs** a fresh block container from
+metadata (no source-bearing children) is implicitly atomic via
+condition (3) — `first_in_user_tree` doesn't descend into it,
+editor treats it as a unit, edits inside soft-drop with Q-3-43.
+That's also the right behaviour: there are no source bytes to
+edit.
+
+This works regardless of Plan 10's `Dispatch` migration: the
+predicate looks at the shape of the AST, not at the kind of
+filter. Plan 10 makes filter diagnostics *better*; the transparent-
+wrapper machinery makes the **editing contract** that filter
+authors can rely on.
+
 ## Scope
 
 ### In scope

@@ -1303,6 +1303,12 @@ it too — pre-empting that discovery is the value here.
 - `claude-notes/designs/provenance-contract.md` — producer-side
   contract; §4 "Role-asymmetry" and §7 "Atomic-kind set"
   cross-reference the editability work.
+- `claude-notes/designs/transparent-wrappers.md` — sibling
+  contract introduced 2026-05-25 alongside Phase 8's fix. Names
+  the descent pattern that `derive_target_file_id` implements
+  and lifts it into a reusable primitive (`first_in_user_tree`)
+  that future plans (8/9/10/replay) can cite without
+  rediscovering.
 - `claude-notes/plans/2026-05-04-q2-preview-plan-7-incremental-writer.md`
   — Phase 1 implementation note documents the
   `pampa::writers::incremental` placement (the deliberate

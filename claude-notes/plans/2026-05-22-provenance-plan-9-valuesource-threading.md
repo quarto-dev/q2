@@ -89,6 +89,17 @@ writer changes.
   default; per document-profile-contract §"Serialization and
   versioning"). Update the contract's §Change log.
 
+  **Transparent-wrapper invariant.** `DocumentProfile::extract`
+  runs at the pre-sugar checkpoint, so it never sees the
+  sectionize wrapper — `blocks[0]` here is the user's real first
+  block. If the extractor is later moved past
+  `SectionizeTransform`, or extended with a "fall back to the
+  first H1" rule, it MUST descend through transparent wrappers
+  via `first_in_user_tree`
+  (`crates/pampa/src/writers/incremental.rs`). See
+  [`claude-notes/designs/transparent-wrappers.md`](../designs/transparent-wrappers.md)
+  for the contract.
+
 - New typed enum `AppendixSection { License, Copyright, Citation }`
   in `crates/quarto-source-map/src/source_info.rs`, with serde
   derive. Discriminator for `By::appendix` (see Phase 4).

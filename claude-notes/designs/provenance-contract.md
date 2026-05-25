@@ -255,6 +255,18 @@ existing content; the inner `Header` carries the original
 `source_info`, but the wrapper `Div` doesn't) are not in this set —
 they emit `from: smallvec![]` and don't require any anchor.
 
+**Sibling contract for these "no source token of its own" wrappers:**
+see [`transparent-wrappers.md`](./transparent-wrappers.md). It names
+the shape (Generated, no Invocation, block-container with
+source-bearing children) and pins the *consumer* rule: any code
+that asks "where do the user's source bytes live?" must descend
+through transparent wrappers via `first_in_user_tree`, not read
+`blocks[0]` directly. The producer side of that — what wrapper
+kinds emit `from: []` — lives here in §2's catalog (`sectionize`,
+`appendix`, footnotes container, …); the descent invariant lives
+there. Adding a new `By::` kind that produces a block-container
+wrapper should cross-reference both docs.
+
 ## 9. Outliers — call-site threading vs. the stamper
 
 **Two shortcode-related sites bypass the stamper because they don't
