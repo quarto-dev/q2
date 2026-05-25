@@ -1258,6 +1258,14 @@ lockstep with `CROSSREF_RESOLVED_REF`.
   top: when consecutive KeepBefore entries share an Invocation
   anchor, emit the anchor's preimage *once*.
 
+**Repo facts that bite when constructing test fixtures:**
+- `AttrSourceInfo` does **not** implement `Default`. Use
+  `quarto_pandoc_types::AttrSourceInfo::empty()` for `Div`/`Header`/
+  `Figure`/etc. `attr_source` fields in hand-built fixtures.
+- `gen` is a reserved keyword in Rust 2024 edition. Don't name a
+  variable `gen` (e.g. for a `SourceInfo::Generated` fixture);
+  `gen_info` works.
+
 - [x] Add `CoarsenedEntry::Transparent { child_entries }` variant
 - [x] Add `CoarsenedEntry::Omit` variant
 - [x] Change `coarsen` signature to accept `&mut Vec<DiagnosticMessage>` warning sink
@@ -1288,9 +1296,23 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 
 ### Phase 4 — WASM bridge signature change (`wasm-quarto-hub-client`)
 
+**Repo facts the implementer needs:**
+
+- **The `wasm-quarto-hub-client` crate is NOT in the cargo workspace.**
+  `cargo build -p wasm-quarto-hub-client` fails with "did not match
+  any packages". Build via `cd hub-client && npm run build:wasm` or
+  implicitly via `cargo xtask verify` step 6.
+- **`AstResponse.warnings` is `Option<Vec<JsonDiagnostic>>`, not raw
+  serde Value.** Convert via `diagnostics_to_json(&warnings, ctx)`,
+  where `ctx: &SourceContext`. In the post-Phase-4 body, the
+  baseline AST's `ASTContext` carries this — access via
+  `baseline_context.source_context` (the field that `ASTContext`
+  exposes). Phase 2 wired this via the old `original_context`
+  variable; the equivalent post-Phase-4 binding is the baseline AST's.
+
 - [ ] Change `incremental_write_qmd` Rust signature: add `baseline_ast_json: &str` as second positional argument
 - [ ] WASM body: deserialize `baseline_ast_json` via `pampa::readers::json::read` (parallel to existing `new_ast_json` deserialization); drop the qmd-parse step
-- [ ] Populate `AstResponse.warnings` field from `incremental_write`'s warning vec
+- [ ] Populate `AstResponse.warnings` field from `incremental_write`'s warning vec via `diagnostics_to_json(&warnings, &baseline_context.source_context)`
 - [ ] Doc-comment specifies the baseline-tier contract (caller responsibility to match tier of `new_ast_json`)
 
 ### Phase 5 — TypeScript wrapper + sync-client interface
