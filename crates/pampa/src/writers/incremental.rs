@@ -292,18 +292,92 @@ fn coarsen(
         .and_then(|b| b.source_info().root_file_id())
         .unwrap_or(quarto_source_map::FileId(0));
 
+    coarsen_blocks(
+        original_qmd,
+        &original_ast.blocks,
+        &new_ast.blocks,
+        plan,
+        target_file_id,
+        warnings,
+    )
+}
+
+/// Recurse into the children of a non-atomic Generated wrapper whose
+/// own bytes are synthesized but whose children carry real source
+/// preimage. Used by the RecurseIntoContainer arm of `coarsen_blocks`
+/// when soft-dropping the wrapper would silently delete real user
+/// content. The wrapper's index resolves the nested
+/// `block_container_plans` entry; that plan describes alignment
+/// between the wrapper's `orig` and `new` children.
+///
+/// Per the `Verbatim`/`InlineSplice::orig_idx` contract (see the
+/// `CoarsenedEntry` doc comments), child entries returned to a
+/// `Transparent` wrapper must carry `orig_idx: None` — their indices
+/// are children-relative, not top-level, so `compute_separator`'s
+/// "consecutive in original" optimization can't use them.
+fn coarsen_children(
+    original_qmd: &str,
+    orig_children: &[Block],
+    new_children: &[Block],
+    child_plan: &ReconciliationPlan,
+    target_file_id: quarto_source_map::FileId,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> Result<Vec<CoarsenedEntry>, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut entries = coarsen_blocks(
+        original_qmd,
+        orig_children,
+        new_children,
+        child_plan,
+        target_file_id,
+        warnings,
+    )?;
+    for entry in &mut entries {
+        clear_orig_idx_for_transparent_child(entry);
+    }
+    Ok(entries)
+}
+
+/// Walk a `CoarsenedEntry` tree and set `orig_idx` to `None` on every
+/// `Verbatim` / `InlineSplice`. Used when promoting entries into a
+/// `Transparent` wrapper, where the indices no longer refer to
+/// top-level positions.
+fn clear_orig_idx_for_transparent_child(entry: &mut CoarsenedEntry) {
+    match entry {
+        CoarsenedEntry::Verbatim { orig_idx, .. } => *orig_idx = None,
+        CoarsenedEntry::InlineSplice { orig_idx, .. } => *orig_idx = None,
+        CoarsenedEntry::Transparent { child_entries } => {
+            for child in child_entries {
+                clear_orig_idx_for_transparent_child(child);
+            }
+        }
+        CoarsenedEntry::Rewrite { .. } | CoarsenedEntry::Omit => {}
+    }
+}
+
+/// Coarsen a block-alignment plan against the given original/new
+/// block slices. Extracted from `coarsen` so the RecurseIntoContainer
+/// path can recurse into a non-atomic Generated wrapper's children
+/// using the nested `block_container_plans` plan.
+fn coarsen_blocks(
+    original_qmd: &str,
+    original_blocks: &[Block],
+    new_blocks: &[Block],
+    plan: &ReconciliationPlan,
+    target_file_id: quarto_source_map::FileId,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> Result<Vec<CoarsenedEntry>, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut entries = Vec::with_capacity(plan.block_alignments.len());
 
     for (result_idx, alignment) in plan.block_alignments.iter().enumerate() {
         let entry = match alignment {
             BlockAlignment::KeepBefore(orig_idx) => coarsen_keep_before_block(
-                &original_ast.blocks[*orig_idx],
+                &original_blocks[*orig_idx],
                 target_file_id,
                 Some(*orig_idx),
                 result_idx,
             ),
             BlockAlignment::UseAfter(after_idx) => {
-                let new_block = &new_ast.blocks[*after_idx];
+                let new_block = &new_blocks[*after_idx];
                 let is_atomic_cn = matches!(new_block, Block::Custom(cn)
                     if is_atomic_custom_node(&cn.type_name));
                 let no_preimage_generated =
@@ -333,30 +407,72 @@ fn coarsen(
                 before_idx,
                 after_idx,
             } => {
-                let orig_block = &original_ast.blocks[*before_idx];
+                let orig_block = &original_blocks[*before_idx];
 
                 // Plan 7: if the original container is not editable inside,
                 // soft-drop the inner edit. Substitutions:
                 //   - atomic CustomNode with preimage → Verbatim wrapper bytes
-                //   - everything else (no-preimage Generated container) → Omit
+                //   - non-atomic Generated wrapper with source-bearing
+                //     children → recurse Transparent into the children (the
+                //     wrapper's bytes are synthesized but the children carry
+                //     real preimage; mirrors the unchanged-wrapper Transparent
+                //     path in `coarsen_keep_before_block` at line ~459)
+                //   - everything else (no-preimage Generated container with
+                //     no source-bearing children, etc.) → Omit
                 if !is_editable_inside_block(orig_block, target_file_id) {
+                    // First: atomic CustomNode with preimage → keep the
+                    // wrapper bytes verbatim (the user-side edit is lost,
+                    // but the wrapper text survives).
                     if let Some(range) = orig_block.source_info().preimage_in(target_file_id) {
                         warnings.push(diagnostic_q3_43_block(orig_block));
                         entries.push(CoarsenedEntry::Verbatim {
                             byte_range: range,
                             orig_idx: Some(*before_idx),
                         });
-                    } else {
-                        warnings.push(diagnostic_q3_43_block(orig_block));
-                        entries.push(CoarsenedEntry::Omit);
+                        continue;
                     }
+
+                    // Second: non-atomic Generated wrapper (sectionize,
+                    // footnotes-container, appendix-container, ...). If it
+                    // has source-bearing children AND the reconciler built a
+                    // container plan for this index, recurse coarsen on the
+                    // children. The user's edit is *inside* the wrapper —
+                    // soft-dropping the wrapper would silently delete real
+                    // user content.
+                    if let SourceInfo::Generated { by, .. } = orig_block.source_info()
+                        && !by.is_atomic_kind()
+                        && let (Some(orig_children), Some(new_children)) = (
+                            block_block_children(orig_block),
+                            block_block_children(&new_blocks[*after_idx]),
+                        )
+                        && orig_children
+                            .iter()
+                            .any(|c| c.source_info().preimage_in(target_file_id).is_some())
+                        && let Some(child_plan) = plan.block_container_plans.get(&result_idx)
+                    {
+                        let child_entries = coarsen_children(
+                            original_qmd,
+                            orig_children,
+                            new_children,
+                            child_plan,
+                            target_file_id,
+                            warnings,
+                        )?;
+                        entries.push(CoarsenedEntry::Transparent { child_entries });
+                        continue;
+                    }
+
+                    // Last resort: no preimage, no recursable children →
+                    // soft-drop with Q-3-43.
+                    warnings.push(diagnostic_q3_43_block(orig_block));
+                    entries.push(CoarsenedEntry::Omit);
                     continue;
                 }
 
                 // Existing recurse logic: try inline-splice if the block has
                 // an inline plan and is safe to splice; else Rewrite.
                 if let Some(inline_plan) = plan.inline_plans.get(&result_idx) {
-                    let new_block = &new_ast.blocks[*after_idx];
+                    let new_block = &new_blocks[*after_idx];
 
                     if let (Some(orig_inlines), Some(new_inlines)) =
                         (block_inlines(orig_block), block_inlines(new_block))

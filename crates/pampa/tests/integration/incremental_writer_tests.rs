@@ -297,6 +297,109 @@ A paragraph.
     );
 }
 
+// =============================================================================
+// Sectionize wrapper soft-drop (incremental.rs RecurseIntoContainer regression)
+// =============================================================================
+//
+// The post-q2-preview-pipeline AST wraps all user content in a single
+// top-level `Block::Div` with `SourceInfo::Generated { by: sectionize }`
+// (no Invocation anchor). When the React side mutates a child Para and
+// posts the new AST, the reconciler aligns "1 Div : 1 Div" as a
+// `RecurseIntoContainer`. The Plan 7 soft-drop guard in coarsen
+// (`incremental.rs:342`) trips because `is_editable_inside_block` on a
+// no-preimage Generated wrapper returns false — and since the *whole*
+// document is the wrapper, the resulting `CoarsenedEntry::Omit`
+// produces an empty document.
+//
+// The correct behavior: recurse Transparent into the wrapper's
+// source-bearing children using `block_container_plans[result_idx]`,
+// the same way `coarsen_keep_before_block` handles unchanged
+// non-atomic Generated wrappers (`incremental.rs:459-479`).
+
+/// Construct a `Pandoc` whose first (and only) top-level block is a
+/// `Generated { by: sectionize }` Div wrapping the parsed AST of the
+/// supplied qmd. The inner blocks retain their original Source positions.
+fn wrap_in_sectionize_div(parsed: pampa::pandoc::Pandoc) -> pampa::pandoc::Pandoc {
+    use pampa::pandoc::Block;
+    let wrapper_si = quarto_source_map::SourceInfo::generated(quarto_source_map::By::sectionize());
+    let wrapper = Block::Div(pampa::pandoc::Div {
+        attr: (
+            String::new(),
+            vec!["section".to_string()],
+            hashlink::LinkedHashMap::new(),
+        ),
+        content: parsed.blocks,
+        source_info: wrapper_si,
+        attr_source: pampa::pandoc::attr::AttrSourceInfo::empty(),
+    });
+    pampa::pandoc::Pandoc {
+        blocks: vec![wrapper],
+        ..parsed
+    }
+}
+
+#[test]
+fn sectionize_wrapper_with_inner_para_edit_produces_nonempty_output() {
+    // Original qmd: a header followed by a paragraph.
+    let original_qmd = "# Heading\n\nA paragraph that the user will edit.\n";
+
+    // Baseline AST mirrors the post-pipeline shape: the whole document
+    // wrapped in a sectionize Div.
+    let baseline_ast = wrap_in_sectionize_div(parse_qmd(original_qmd));
+
+    // New AST: copy baseline, dive into the Div's content, append a
+    // reaction Span to the inner Paragraph (mirrors comment.tsx's
+    // addReaction path).
+    let mut new_ast = baseline_ast.clone();
+    {
+        let pampa::pandoc::Block::Div(ref mut div) = new_ast.blocks[0] else {
+            panic!("expected wrapper Div at blocks[0]");
+        };
+        let last_idx = div
+            .content
+            .iter()
+            .rposition(|b| matches!(b, pampa::pandoc::Block::Paragraph(_)))
+            .expect("paragraph inside wrapper");
+        if let pampa::pandoc::Block::Paragraph(ref mut p) = div.content[last_idx] {
+            let attr = (
+                String::new(),
+                vec!["quarto-edit-comment".to_string()],
+                hashlink::LinkedHashMap::new(),
+            );
+            p.content
+                .push(pampa::pandoc::Inline::Span(pampa::pandoc::Span {
+                    attr,
+                    content: vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
+                        text: "🎉".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    })],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                    attr_source: pampa::pandoc::attr::AttrSourceInfo::empty(),
+                }));
+        }
+    }
+
+    let plan = compute_reconciliation(&baseline_ast, &new_ast);
+    let (result_qmd, warnings) =
+        writers::incremental::incremental_write(original_qmd, &baseline_ast, &new_ast, &plan)
+            .expect("incremental_write Ok arm");
+
+    assert!(
+        !result_qmd.is_empty(),
+        "sectionize-wrapper with inner Para edit yielded empty qmd \
+         (warnings: {})",
+        warnings.len()
+    );
+
+    // The user's appended reaction should land in the inner Para; the
+    // wrapper itself should not re-emit any synthetic bytes.
+    assert!(
+        result_qmd.contains("[>> 🎉]"),
+        "expected reaction span [>> 🎉] in result; got:\n{}",
+        result_qmd
+    );
+}
+
 // --- Mixed documents ---
 
 #[test]

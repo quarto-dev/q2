@@ -756,7 +756,18 @@ export function incrementalWriteQmd(
   const response: AstResponse = JSON.parse(responseJson)
 
   if (!response.success || !response.qmd) {
-    throw new Error(`Incremental write failed: ${response.error}`)
+    // Distinguish the two failure modes — pre-fix this read "undefined":
+    //   - response.success === false → real writer Err (response.error set)
+    //   - response.success === true && response.qmd === "" → writer
+    //     returned Ok with an empty document (every block soft-dropped
+    //     via Q-3-43; bridge omits `error` in this case)
+    const reason = response.error
+      ?? (response.qmd === ''
+        ? 'writer returned empty qmd (warnings: ' +
+          (response.warnings?.length ?? 0) +
+          ')'
+        : 'no qmd field in response')
+    throw new Error(`Incremental write failed: ${reason}`)
   }
 
   return {
