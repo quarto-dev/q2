@@ -319,6 +319,14 @@ export default function ReactPreview({
   // the content-driven re-render fires.
   const pendingWriteWarningsRef = useRef<Diagnostic[]>([]);
 
+  // Tracks the most recent set of render-side diagnostics we sent
+  // upward. `handleSetAst` reads this when surfacing soft-drop
+  // warnings *immediately* (without waiting for the next render):
+  // the immediate push must include the current render's
+  // diagnostics so it doesn't accidentally clear them. Updated on
+  // every `onDiagnosticsChange` call.
+  const lastRenderDiagnosticsRef = useRef<Diagnostic[]>([]);
+
   // Handler for cross-document navigation
   const handleNavigateToDocument = useCallback(
     (targetPath: string, anchor: string | null) => {
@@ -363,6 +371,12 @@ export default function ReactPreview({
     const mergedDiagnostics = pendingWriteWarnings.length > 0
       ? [...result.diagnostics, ...pendingWriteWarnings]
       : result.diagnostics;
+    // Remember just the render-side portion so a follow-up immediate
+    // push from `handleSetAst` (when the writer returns warnings
+    // alongside byte-identical output and no re-render fires) can
+    // merge new warnings *with* the current render diagnostics rather
+    // than clobbering them.
+    lastRenderDiagnosticsRef.current = result.diagnostics;
     onDiagnosticsChange(mergedDiagnostics);
     setCurrentError(result.success ? null : {
       message: result.error!,
@@ -432,12 +446,32 @@ export default function ReactPreview({
   //
   // Plan 7 lifted the v1 read-only guard. The bridge now takes the
   // displayed AST as the **baseline** (its source spans line up with
-  // `content`) and the new edited AST. Soft-drop warnings (Q-3-42 /
-  // Q-3-43) are merged into the next diagnostics push so the user
-  // sees them in the existing diagnostic surface until the
-  // content-driven re-render replaces them. Phase 7 adds a proper
-  // DiagnosticStrip in the q2-preview SPA; hub-client reuses its
-  // diagnostics panel for now.
+  // `content`) and the new edited AST.
+  //
+  // Soft-drop warnings (Q-3-42 / Q-3-43) reach the diagnostic surface
+  // via two paths, both load-bearing:
+  //
+  //   1. **Immediate push.** If the writer returns warnings, surface
+  //      them right away by calling `onDiagnosticsChange` here. This
+  //      is the path that matters when the rewrite produces
+  //      byte-identical output (the common soft-drop case — the
+  //      writer faithfully preserves the original bytes when the
+  //      edit was rejected). With identical bytes, no Monaco edit
+  //      fires, no automerge update, no re-render — so without an
+  //      immediate push the warnings would never surface.
+  //
+  //   2. **Ride-along on next render.** If the rewrite *did* change
+  //      content, the re-render fires and `doRenderWithStateManagement`
+  //      drains `pendingWriteWarningsRef` into its merged diagnostics
+  //      push. This keeps the warning temporally associated with the
+  //      render of the *edited* document, which is the cleanest UX
+  //      for the "edit applied + warning fired" case (rare today —
+  //      most warnings imply soft-drop, i.e. no content change — but
+  //      kept as a safety net).
+  //
+  // The immediate push merges with `lastRenderDiagnosticsRef` so we
+  // don't accidentally clear the current render-side diagnostics
+  // when we add write warnings to them.
   const handleSetAst = useCallback((newAst: any) => {
     try {
       const baseline = ast ? JSON.parse(ast) : null;
@@ -447,13 +481,17 @@ export default function ReactPreview({
       }
       const { qmd: newQmd, warnings } = incrementalWriteQmd(content, baseline, newAst);
       if (warnings && warnings.length > 0) {
+        // (1) Immediate push for the byte-identical (no re-render) case.
+        onDiagnosticsChange([...lastRenderDiagnosticsRef.current, ...warnings]);
+        // (2) Queue for ride-along on the next render (no-op when no
+        //     re-render fires, which is the typical soft-drop path).
         pendingWriteWarningsRef.current = warnings;
       }
       onContentRewrite(newQmd);
     } catch (err) {
       console.error('Failed to write AST back to QMD:', err);
     }
-  }, [ast, content, onContentRewrite]);
+  }, [ast, content, onContentRewrite, onDiagnosticsChange]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
