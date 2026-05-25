@@ -975,8 +975,15 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     const cached = astCache.get(path);
 
     if (astOptions.incrementalWriteQmd && cached) {
-      // Use incremental writer with cached original source
-      qmdText = astOptions.incrementalWriteQmd(cached.source, ast);
+      // Plan 7: pass the cached parsed AST as the baseline so the
+      // bridge does not have to re-parse `cached.source` (which would
+      // discard any host-side provenance attached after parse).
+      // `cached.ast` IS the baseline whose spans match `cached.source`.
+      // Warnings are surfaced but discarded here — the sync client is
+      // policy-free; demos / hub-client consume them via their own
+      // wrappers.
+      const result = astOptions.incrementalWriteQmd(cached.source, cached.ast, ast);
+      qmdText = result.qmd;
     } else {
       // Fallback to full rewrite
       qmdText = astOptions.writeQmd(ast);

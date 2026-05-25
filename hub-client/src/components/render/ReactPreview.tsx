@@ -9,7 +9,7 @@ import {
   isWasmReady,
   incrementalWriteQmd,
 } from '@quarto/preview-runtime';
-import { pipelineKindForFormat } from '../../utils/pipelineKind';
+import { pipelineKindForFormat } from '@quarto/preview-runtime';
 import { useAttribution } from '../../hooks/useAttribution';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
@@ -314,6 +314,11 @@ export default function ReactPreview({
   const renderTimeoutRef = useRef<number | null>(null);
   const lastContentRef = useRef<string>('');
 
+  // Plan 7: soft-drop warnings from the most recent incremental write,
+  // pending injection into the next render's diagnostics. Drained when
+  // the content-driven re-render fires.
+  const pendingWriteWarningsRef = useRef<Diagnostic[]>([]);
+
   // Handler for cross-document navigation
   const handleNavigateToDocument = useCallback(
     (targetPath: string, anchor: string | null) => {
@@ -350,11 +355,18 @@ export default function ReactPreview({
     });
     if (qmdContent !== lastContentRef.current) return;
 
-    // Update diagnostics
-    onDiagnosticsChange(result.diagnostics);
+    // Update diagnostics. Plan 7: drain any soft-drop warnings from
+    // the most recent incremental write into this push so they reach
+    // the diagnostics surface alongside render-side diagnostics.
+    const pendingWriteWarnings = pendingWriteWarningsRef.current;
+    pendingWriteWarningsRef.current = [];
+    const mergedDiagnostics = pendingWriteWarnings.length > 0
+      ? [...result.diagnostics, ...pendingWriteWarnings]
+      : result.diagnostics;
+    onDiagnosticsChange(mergedDiagnostics);
     setCurrentError(result.success ? null : {
       message: result.error!,
-      diagnostics: result.diagnostics,
+      diagnostics: mergedDiagnostics,
     });
 
     if (result.success) {
@@ -415,29 +427,33 @@ export default function ReactPreview({
     setCurrentError(null);
   }, [currentFile?.path]);
 
-  // Handler for AST modifications - converts AST back to QMD and updates content.
+  // Handler for AST modifications — converts AST back to QMD and
+  // updates content.
   //
-  // q2-preview is **read-only in v1** (Plan 1 §"Multi-plan contract:
-  // read-only mode lifts at Plan 7"). The post-pipeline AST diverges
-  // from source enough that a naive incrementalWriteQmd would
-  // corrupt the qmd; Plan 7 lifts this guard once the writer's
-  // round-trip machinery understands q2-preview's transform shapes
-  // (Synthetic / Derived / atomic CustomNodes). Component-driven
-  // edits (kanban drag, comment buttons in Plan 2) call this and
-  // silently no-op with a console.warn — that is the accepted
-  // post-Plan-2 UX gap until Plan 7 ships.
+  // Plan 7 lifted the v1 read-only guard. The bridge now takes the
+  // displayed AST as the **baseline** (its source spans line up with
+  // `content`) and the new edited AST. Soft-drop warnings (Q-3-42 /
+  // Q-3-43) are merged into the next diagnostics push so the user
+  // sees them in the existing diagnostic surface until the
+  // content-driven re-render replaces them. Phase 7 adds a proper
+  // DiagnosticStrip in the q2-preview SPA; hub-client reuses its
+  // diagnostics panel for now.
   const handleSetAst = useCallback((newAst: any) => {
-    if (pipelineKindForFormat(format) === 'preview') {
-      console.warn('q2-preview is read-only in v1; AST edit dropped (Plan 7 lifts this guard)');
-      return;
-    }
     try {
-      const newQmd = incrementalWriteQmd(content, newAst);
+      const baseline = ast ? JSON.parse(ast) : null;
+      if (!baseline) {
+        console.warn('Cannot write AST: no baseline render available yet');
+        return;
+      }
+      const { qmd: newQmd, warnings } = incrementalWriteQmd(content, baseline, newAst);
+      if (warnings && warnings.length > 0) {
+        pendingWriteWarningsRef.current = warnings;
+      }
       onContentRewrite(newQmd);
     } catch (err) {
       console.error('Failed to write AST back to QMD:', err);
     }
-  }, [content, onContentRewrite, format]);
+  }, [ast, content, onContentRewrite]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>

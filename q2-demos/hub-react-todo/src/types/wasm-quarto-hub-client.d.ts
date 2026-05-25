@@ -5,13 +5,18 @@
 declare module 'wasm-quarto-hub-client' {
   export function parse_qmd_content(content: string): string;
   export function ast_to_qmd(ast_json: string): string;
-  export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
+  export function incremental_write_qmd(
+    original_qmd: string,
+    baseline_ast_json: string,
+    new_ast_json: string,
+  ): string;
 
   export interface AstResponse {
     success: boolean;
     ast?: string;
     qmd?: string;
     error?: string;
+    warnings?: unknown[];
   }
 
   export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;

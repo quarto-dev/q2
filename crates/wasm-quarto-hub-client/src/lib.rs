@@ -2763,34 +2763,49 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
 /// Incrementally write a modified AST back to QMD, preserving unchanged
 /// portions of the original source text verbatim.
 ///
-/// Re-parses `original_qmd` internally to obtain an AST with accurate source
-/// spans, then computes a reconciliation plan against the new AST and applies
-/// the incremental writer.
+/// Deserializes the caller-supplied **baseline** AST (the AST whose
+/// source spans line up byte-for-byte with `original_qmd`) and computes
+/// a reconciliation plan against the new AST. Plan 7 removed the
+/// internal re-parse: previously the bridge re-parsed `original_qmd`
+/// to recover spans, which lost any provenance the host had already
+/// attached to the baseline (e.g. `preimage_in` after a prior
+/// incremental edit). Now the caller is responsible for the
+/// baseline-tier contract.
 ///
 /// # Arguments
 /// * `original_qmd` - The original QMD source text
-/// * `new_ast_json` - JSON-serialized Pandoc AST representing the modified document
+/// * `baseline_ast_json` - JSON-serialized Pandoc AST whose source
+///   spans correspond to `original_qmd`. **Must be the same tier as
+///   `new_ast_json`** (e.g. both `parse`-tier or both
+///   `parse+sugar`-tier). Mixing tiers will mis-anchor reconciliation
+///   and corrupt the write.
+/// * `new_ast_json` - JSON-serialized Pandoc AST representing the
+///   modified document, in the same tier as `baseline_ast_json`.
 ///
 /// # Returns
 /// JSON: `{ "success": true, "qmd": "<result-qmd-text>" }`
 /// or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
-pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
+pub fn incremental_write_qmd(
+    original_qmd: &str,
+    baseline_ast_json: &str,
+    new_ast_json: &str,
+) -> String {
     use pampa::readers::json::read as json_read;
-    use pampa::wasm_entry_points::qmd_to_pandoc;
     use pampa::writers::incremental::incremental_write;
     use quarto_ast_reconcile::compute_reconciliation;
 
-    // Step 1: Parse original QMD to get AST with accurate source spans
-    let (original_ast, original_context) = match qmd_to_pandoc(original_qmd.as_bytes()) {
+    // Step 1: Deserialize baseline AST from JSON (carries source spans
+    // anchored to `original_qmd` and any host-side provenance).
+    let mut baseline_cursor = std::io::Cursor::new(baseline_ast_json.as_bytes());
+    let (baseline_ast, baseline_context) = match json_read(&mut baseline_cursor) {
         Ok(result) => result,
-        Err(error_strings) => {
-            let error_msg = error_strings.join("\n");
+        Err(e) => {
             return serde_json::to_string(&AstResponse {
                 success: false,
                 ast: None,
                 qmd: None,
-                error: Some(format!("Failed to parse original QMD: {}", error_msg)),
+                error: Some(format!("Failed to parse baseline AST JSON: {}", e)),
                 diagnostics: None,
                 warnings: None,
             })
@@ -2799,8 +2814,8 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
     };
 
     // Step 2: Deserialize new AST from JSON
-    let mut cursor = std::io::Cursor::new(new_ast_json.as_bytes());
-    let (new_ast, _new_context) = match json_read(&mut cursor) {
+    let mut new_cursor = std::io::Cursor::new(new_ast_json.as_bytes());
+    let (new_ast, _new_context) = match json_read(&mut new_cursor) {
         Ok(result) => result,
         Err(e) => {
             return serde_json::to_string(&AstResponse {
@@ -2816,10 +2831,10 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
     };
 
     // Step 3: Compute reconciliation plan
-    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let plan = compute_reconciliation(&baseline_ast, &new_ast);
 
     // Step 4: Incremental write
-    match incremental_write(original_qmd, &original_ast, &new_ast, &plan) {
+    match incremental_write(original_qmd, &baseline_ast, &new_ast, &plan) {
         Ok((result_qmd, warnings)) => {
             // Plan 7: soft-drop warnings (Q-3-42 / Q-3-43) ride alongside
             // a successful write. The TS wrapper surfaces them via the
@@ -2829,7 +2844,7 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
             } else {
                 Some(diagnostics_to_json(
                     &warnings,
-                    &original_context.source_context,
+                    &baseline_context.source_context,
                 ))
             };
             serde_json::to_string(&AstResponse {

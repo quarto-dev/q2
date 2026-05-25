@@ -74,20 +74,35 @@ export function writeQmdFromAst(ast: RustQmdJson): string {
  * Incrementally write a modified AST back to QMD, preserving unchanged
  * portions of the original source text verbatim.
  *
+ * Plan 7 contract: caller must pass the **baseline** AST (whose
+ * source spans line up with `originalQmd`); the bridge does not
+ * re-parse `originalQmd`. `baselineAst` may be a parsed object or a
+ * pre-serialized JSON string.
+ *
  * Must call initWasm() before first use.
  */
-export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): string {
+export function incrementalWriteQmd(
+  originalQmd: string,
+  baselineAst: RustQmdJson | string,
+  newAst: RustQmdJson,
+): { qmd: string; warnings?: unknown[] } {
   if (!wasmModule) {
     throw new Error('WASM not initialized. Call initWasm() first.')
   }
 
+  const baselineAstJson =
+    typeof baselineAst === 'string' ? baselineAst : JSON.stringify(baselineAst)
   const newAstJson = JSON.stringify(newAst)
-  const responseJson = wasmModule.incremental_write_qmd(originalQmd, newAstJson)
+  const responseJson = wasmModule.incremental_write_qmd(
+    originalQmd,
+    baselineAstJson,
+    newAstJson,
+  )
   const response: AstResponse = JSON.parse(responseJson)
 
   if (!response.success || !response.qmd) {
     throw new Error(`Incremental write failed: ${response.error}`)
   }
 
-  return response.qmd
+  return { qmd: response.qmd, warnings: response.warnings }
 }

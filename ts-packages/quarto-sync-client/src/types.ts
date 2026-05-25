@@ -162,11 +162,28 @@ export interface ASTOptions {
    * portions of the original source text verbatim. Falls back to `writeQmd`
    * if not provided or if the original source is not cached.
    *
+   * Per Plan 7, the caller must supply the **baseline** AST (the one
+   * whose source spans match `originalQmd`); the sync client passes
+   * the cached parsed AST for that file. The returned `warnings` are
+   * structured soft-drop diagnostics (`Q-3-42` / `Q-3-43`) that the
+   * sync client itself ignores — it stays policy-free. Wrapper code
+   * in demos / hub-client consumes them.
+   *
+   * The diagnostic shape is intentionally `unknown[]` here so the
+   * sync-client does not pull a render-side type dependency; callers
+   * typically narrow it to the wasm-bridge `AstDiagnostic` shape.
+   *
    * @param originalQmd - The original QMD source text
+   * @param baselineAst - The cached parsed AST whose spans match `originalQmd`
    * @param newAst - The modified AST to write
-   * @returns The new QMD text with unchanged portions preserved
+   * @returns Object with `qmd` (rewritten source) and optional
+   *   `warnings` (soft-drop diagnostics)
    */
-  incrementalWriteQmd?: (originalQmd: string, newAst: unknown) => string;
+  incrementalWriteQmd?: (
+    originalQmd: string,
+    baselineAst: unknown,
+    newAst: unknown,
+  ) => { qmd: string; warnings?: unknown[] };
 
   /**
    * Filter which files should be parsed.

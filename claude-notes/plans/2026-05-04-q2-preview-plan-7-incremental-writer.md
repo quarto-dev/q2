@@ -1310,34 +1310,34 @@ lockstep with `CROSSREF_RESOLVED_REF`.
   exposes). Phase 2 wired this via the old `original_context`
   variable; the equivalent post-Phase-4 binding is the baseline AST's.
 
-- [ ] Change `incremental_write_qmd` Rust signature: add `baseline_ast_json: &str` as second positional argument
-- [ ] WASM body: deserialize `baseline_ast_json` via `pampa::readers::json::read` (parallel to existing `new_ast_json` deserialization); drop the qmd-parse step
-- [ ] Populate `AstResponse.warnings` field from `incremental_write`'s warning vec via `diagnostics_to_json(&warnings, &baseline_context.source_context)`
-- [ ] Doc-comment specifies the baseline-tier contract (caller responsibility to match tier of `new_ast_json`)
+- [x] Change `incremental_write_qmd` Rust signature: add `baseline_ast_json: &str` as second positional argument
+- [x] WASM body: deserialize `baseline_ast_json` via `pampa::readers::json::read` (parallel to existing `new_ast_json` deserialization); drop the qmd-parse step
+- [x] Populate `AstResponse.warnings` field from `incremental_write`'s warning vec via `diagnostics_to_json(&warnings, &baseline_context.source_context)`
+- [x] Doc-comment specifies the baseline-tier contract (caller responsibility to match tier of `new_ast_json`)
 
 ### Phase 5 — TypeScript wrapper + sync-client interface
 
-- [ ] `ts-packages/preview-runtime/src/wasmRenderer.ts:712` — `incrementalWriteQmd(originalQmd, baselineAst, newAst): { qmd, warnings }`
-- [ ] Accept `baselineAst` as `RustQmdJson | string` for ergonomics; stringify internally
-- [ ] `ts-packages/preview-runtime/src/wasm-quarto-hub-client.d.ts:78` — new signature in WASM type declaration
-- [ ] `hub-client/src/types/wasm-quarto-hub-client.d.ts:69` — new signature in hub-client's WASM type declaration
-- [ ] `ts-packages/quarto-sync-client/src/types.ts:169` — `astOptions.incrementalWriteQmd` interface signature change
-- [ ] `ts-packages/quarto-sync-client/src/client.ts:957` — pass `cached.ast` as baseline; surface `result.qmd` to `updateFileContent`; warnings ignored at sync-client level (policy-free; demos consume them via wrapper)
-- [ ] Move `hub-client/src/utils/pipelineKind.ts` → `ts-packages/preview-runtime/src/pipelineKind.ts`; update imports in hub-client and SPA
+- [x] `ts-packages/preview-runtime/src/wasmRenderer.ts:712` — `incrementalWriteQmd(originalQmd, baselineAst, newAst): { qmd, warnings }`
+- [x] Accept `baselineAst` as `RustQmdJson | string` for ergonomics; stringify internally
+- [x] `ts-packages/preview-runtime/src/wasm-quarto-hub-client.d.ts:78` — new signature in WASM type declaration
+- [x] `hub-client/src/types/wasm-quarto-hub-client.d.ts:69` — new signature in hub-client's WASM type declaration
+- [x] `ts-packages/quarto-sync-client/src/types.ts:169` — `astOptions.incrementalWriteQmd` interface signature change
+- [x] `ts-packages/quarto-sync-client/src/client.ts:957` — pass `cached.ast` as baseline; surface `result.qmd` to `updateFileContent`; warnings ignored at sync-client level (policy-free; demos consume them via wrapper)
+- [x] Move `hub-client/src/utils/pipelineKind.ts` → `ts-packages/preview-runtime/src/pipelineKind.ts`; update imports in hub-client and SPA (SPA had no import yet — Phase 7)
 
 ### Phase 6 — Consumer migrations
 
-- [ ] `hub-client/src/components/render/ReactPreview.tsx:429-440` — `handleSetAst` updated: delete read-only guard, pass `ast` state as baseline, ingest warnings into `allDiagnostics`
-- [ ] `hub-client/src/types/wasm-quarto-hub-client.d.ts:69` — type declaration updated
-- [ ] `q2-demos/kanban/src/wasm.ts:79` — wrapper accepts baselineAst, forwards to WASM
-- [ ] `q2-demos/kanban/src/useSyncedAst.ts:93` — astOptions lambda accepts third positional argument
-- [ ] `q2-demos/kanban/src/types/wasm-quarto-hub-client.d.ts:8` — type declaration updated
-- [ ] `q2-demos/hub-react-todo/src/wasm.ts:79` — wrapper signature update
-- [ ] `q2-demos/hub-react-todo/src/useSyncedAst.ts:93` — astOptions lambda update
-- [ ] `q2-demos/hub-react-todo/src/types/wasm-quarto-hub-client.d.ts:8` — type declaration update
-- [ ] Workspace `cargo build --workspace` + `cargo nextest run --workspace` green
-- [ ] `cd hub-client && npm run build:all` green (WASM type alignment)
-- [ ] `cd hub-client && npm run test:ci` green
+- [x] `hub-client/src/components/render/ReactPreview.tsx:429-440` — `handleSetAst` updated: delete read-only guard, pass `ast` state as baseline, ingest warnings into next diagnostics push via `pendingWriteWarningsRef`
+- [x] `hub-client/src/types/wasm-quarto-hub-client.d.ts:69` — type declaration updated
+- [x] `q2-demos/kanban/src/wasm.ts:79` — wrapper accepts baselineAst, forwards to WASM
+- [x] `q2-demos/kanban/src/useSyncedAst.ts:93` — astOptions lambda accepts third positional argument
+- [x] `q2-demos/kanban/src/types/wasm-quarto-hub-client.d.ts:8` — type declaration updated
+- [x] `q2-demos/hub-react-todo/src/wasm.ts:79` — wrapper signature update
+- [x] `q2-demos/hub-react-todo/src/useSyncedAst.ts:93` — astOptions lambda update
+- [x] `q2-demos/hub-react-todo/src/types/wasm-quarto-hub-client.d.ts:8` — type declaration update
+- [x] Workspace `cargo build --workspace` + `cargo nextest run --workspace` green
+- [x] `cd hub-client && npm run build:all` green (WASM type alignment)
+- [x] `cd hub-client && npm run test:ci` green
 
 ### Phase 7 — q2-preview SPA integration
 

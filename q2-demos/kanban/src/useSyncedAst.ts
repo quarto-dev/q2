@@ -90,8 +90,16 @@ export function useSyncedAst(params: SyncedAstParams | null): SyncedAstState {
         {
           parseQmd: (content: string) => parseQmdContent(content),
           writeQmd: (astValue: unknown) => writeQmdFromAst(astValue as RustQmdJson),
-          incrementalWriteQmd: (originalQmd: string, newAst: unknown) =>
-            incrementalWriteQmd(originalQmd, newAst as RustQmdJson),
+          incrementalWriteQmd: (
+            originalQmd: string,
+            baselineAst: unknown,
+            newAst: unknown,
+          ) =>
+            incrementalWriteQmd(
+              originalQmd,
+              baselineAst as RustQmdJson,
+              newAst as RustQmdJson,
+            ),
           fileFilter: (path: string) => path === filePath,
         },
       )

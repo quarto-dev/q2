@@ -74,8 +74,20 @@ declare module 'wasm-quarto-hub-client' {
   // QMD parsing and AST conversion functions
   export function parse_qmd_content(content: string): string;
   export function ast_to_qmd(ast_json: string): string;
-  /** Incrementally write a modified AST back to QMD, preserving unchanged source text. */
-  export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
+  /**
+   * Incrementally write a modified AST back to QMD, preserving unchanged
+   * source text.
+   *
+   * Per Plan 7: the caller is responsible for passing a **baseline** AST
+   * (`baseline_ast_json`) whose source spans match `original_qmd` and
+   * whose tier matches `new_ast_json`. The bridge does not re-parse
+   * `original_qmd`; mixing tiers will corrupt the write.
+   */
+  export function incremental_write_qmd(
+    original_qmd: string,
+    baseline_ast_json: string,
+    new_ast_json: string,
+  ): string;
 
   // Response type for parse/write operations
   export interface AstResponse {
@@ -86,6 +98,11 @@ declare module 'wasm-quarto-hub-client' {
     qmd?: string;
     error?: string;
     diagnostics?: AstDiagnostic[];
+    /**
+     * Soft-drop warnings (Plan 7 Q-3-42 / Q-3-43) that rode alongside
+     * a successful incremental write.
+     */
+    warnings?: AstDiagnostic[];
   }
 
   export interface AstDiagnostic {

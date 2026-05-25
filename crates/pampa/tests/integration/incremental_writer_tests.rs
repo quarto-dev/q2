@@ -53,8 +53,10 @@ fn read_json(json: &str) -> Pandoc {
         .0
 }
 
-/// Simulate the WASM incremental_write_qmd path:
-/// 1. Parse original_qmd to get original_ast with accurate source spans
+/// Simulate the WASM incremental_write_qmd path (Plan 7 contract):
+/// 1. Parse original_qmd to get the baseline AST with accurate source spans
+///    (in the real bridge the caller supplies this; here we synthesize it
+///    from the qmd to keep the helper self-contained)
 /// 2. JSON round-trip the new_ast (simulates client serialization/deserialization)
 /// 3. Compute reconciliation plan and run incremental_write
 fn incremental_write_via_json_roundtrip(original_qmd: &str, new_ast: &Pandoc) -> String {

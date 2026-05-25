@@ -85,7 +85,11 @@ interface WasmModuleExtended {
     attribution_json: string | undefined,
   ) => Promise<string>;
   write_qmd: (astJson: string) => Promise<string>;
-  incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
+  incremental_write_qmd(
+    original_qmd: string,
+    baseline_ast_json: string,
+    new_ast_json: string,
+  ): string;
   convert: (document: string, inputFormat: string, outputFormat: string) => Promise<string>;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
@@ -704,25 +708,61 @@ export async function writeQmd(astJson: string): Promise<WriteQmdResult> {
 }
 
 /**
+ * Result of `incrementalWriteQmd`: the rewritten QMD plus any
+ * soft-drop warnings (Q-3-42 / Q-3-43) that surfaced during
+ * reconciliation. Warnings ride alongside a *successful* write — the
+ * substituted edit reached source — and are the caller's
+ * responsibility to surface (or ignore) per its UX policy.
+ */
+export interface IncrementalWriteQmdResult {
+  qmd: string;
+  warnings?: Diagnostic[];
+}
+
+/**
  * Incrementally write a modified AST back to QMD, preserving unchanged
  * portions of the original source text verbatim.
  *
+ * Per Plan 7, the caller must pass the **baseline** AST — the AST
+ * whose source spans correspond to `originalQmd` — so the bridge can
+ * reconcile without re-parsing (which would discard provenance the
+ * host has already attached). The baseline AST and the new AST must
+ * be the same tier (e.g. both post-`parseQmdContent`).
+ *
+ * `baselineAst` is accepted as either a parsed AST object
+ * (`RustQmdJson`) or a pre-serialized JSON string — convenient for
+ * sync-client callers that already have a stringified cache. The
+ * bridge serializes the AST object branch internally.
+ *
  * Must call initWasm() before first use.
  */
-export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): string {
+export function incrementalWriteQmd(
+  originalQmd: string,
+  baselineAst: RustQmdJson | string,
+  newAst: RustQmdJson,
+): IncrementalWriteQmdResult {
   if (!wasmModule) {
     throw new Error('WASM not initialized. Call initWasm() first.')
   }
 
+  const baselineAstJson =
+    typeof baselineAst === 'string' ? baselineAst : JSON.stringify(baselineAst)
   const newAstJson = JSON.stringify(newAst)
-  const responseJson = wasmModule.incremental_write_qmd(originalQmd, newAstJson)
+  const responseJson = wasmModule.incremental_write_qmd(
+    originalQmd,
+    baselineAstJson,
+    newAstJson,
+  )
   const response: AstResponse = JSON.parse(responseJson)
 
   if (!response.success || !response.qmd) {
     throw new Error(`Incremental write failed: ${response.error}`)
   }
 
-  return response.qmd
+  return {
+    qmd: response.qmd,
+    warnings: response.warnings as Diagnostic[] | undefined,
+  }
 }
 
 /**
