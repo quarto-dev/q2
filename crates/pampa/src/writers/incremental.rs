@@ -282,15 +282,13 @@ fn coarsen(
     plan: &ReconciliationPlan,
     warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<Vec<CoarsenedEntry>, Vec<quarto_error_reporting::DiagnosticMessage>> {
-    // The "target file" for editability decisions is the file `original_qmd`
-    // was parsed from. We derive it from the first block's root file_id;
-    // FileId(0) is the safe default for empty documents (won't match any
-    // real source bytes).
-    let target_file_id = original_ast
-        .blocks
-        .first()
-        .and_then(|b| b.source_info().root_file_id())
-        .unwrap_or(quarto_source_map::FileId(0));
+    // The "target file" for editability decisions is the file
+    // `original_qmd` was parsed from. Derived by descending past any
+    // synthesized first blocks (title-block, sectionize wrappers,
+    // footnotes / appendix containers) so we get the user's real
+    // qmd FileId rather than the FileId(0) fallback by accident.
+    // Closes Plan 7c Phase 8.
+    let target_file_id = derive_target_file_id(&original_ast.blocks);
 
     coarsen_blocks(
         original_qmd,
@@ -620,6 +618,39 @@ fn block_block_children(block: &Block) -> Option<&[Block]> {
         Block::NoteDefinitionFencedBlock(n) => Some(&n.content),
         _ => None,
     }
+}
+
+/// Derive the "target file" — the file that `original_qmd` was parsed
+/// from, used for editability and preimage checks throughout the
+/// writer.
+///
+/// Walks `blocks` depth-first descending through `block_block_children`
+/// until it finds a block whose `root_file_id()` is `Some`. This skips
+/// synthesized first blocks (title-block, sectionize wrappers,
+/// footnotes / appendix containers) whose own `source_info` has no
+/// `Invocation` anchor, so the qmd's real `FileId` is used rather than
+/// the `FileId(0)` fallback by accident.
+///
+/// Falls back to `FileId(0)` only when every block (and every
+/// descended child) is a no-`root_file_id` Generated — the
+/// genuinely-empty-document case.
+///
+/// Closes Plan 7c Phase 8.
+fn derive_target_file_id(blocks: &[Block]) -> quarto_source_map::FileId {
+    fn walk(blocks: &[Block]) -> Option<quarto_source_map::FileId> {
+        for block in blocks {
+            if let Some(id) = block.source_info().root_file_id() {
+                return Some(id);
+            }
+            if let Some(children) = block_block_children(block)
+                && let Some(id) = walk(children)
+            {
+                return Some(id);
+            }
+        }
+        None
+    }
+    walk(blocks).unwrap_or(quarto_source_map::FileId(0))
 }
 
 // =============================================================================

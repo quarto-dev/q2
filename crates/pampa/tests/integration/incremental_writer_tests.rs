@@ -398,6 +398,128 @@ fn sectionize_wrapper_with_inner_para_edit_produces_nonempty_output() {
         "expected reaction span [>> 🎉] in result; got:\n{}",
         result_qmd
     );
+    // Unchanged Header (the orig blocks[0] inside the wrapper) should
+    // also be preserved.
+    assert!(
+        result_qmd.contains("# Heading"),
+        "expected '# Heading' (unchanged sibling inside wrapper) in result; got:\n{:?}",
+        result_qmd
+    );
+}
+
+// --- target_file_id derivation skips no-root_file_id first blocks ---
+//
+// Plan 7c Phase 8 — `coarsen`'s `target_file_id` is derived from the
+// first block whose `root_file_id()` resolves to `Some`. A synthesized
+// title-block (or sectionize wrapper) at `blocks[0]` with no
+// `Invocation` anchor returns `None`, so the writer needs to skip past
+// it and look at later blocks. Pre-fix, the fallback to `FileId(0)`
+// would make `preimage_in(target)` return `None` for every real block
+// at `FileId(N != 0)` — i.e. all editability checks fail and edits
+// silently soft-drop.
+
+#[test]
+fn target_file_id_skips_synthesized_first_block() {
+    use pampa::pandoc::{Block, Header, Pandoc, Paragraph, Str};
+    use quarto_pandoc_types::{AttrSourceInfo, ConfigValue};
+    use quarto_source_map::{By, FileId, SourceInfo};
+
+    // blocks[0] = synthesized title-block Header (Generated, no
+    // Invocation). blocks[1] = real Paragraph at FileId(7).
+    const REAL_FILE: FileId = FileId(7);
+    let title_block = Block::Header(Header {
+        level: 1,
+        attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+        content: vec![pampa::pandoc::Inline::Str(Str {
+            text: "Synthesized title".to_string(),
+            source_info: SourceInfo::default(),
+        })],
+        source_info: SourceInfo::generated(By::title_block()),
+        attr_source: AttrSourceInfo::empty(),
+    });
+    // Real Para holds two Strs, both at FileId(7). The user edit
+    // mutates the second Str so the reconciler emits a
+    // RecurseIntoContainer with an inline plan. That path checks
+    // `is_editable_inside_block` on the orig Para, which in turn
+    // calls `preimage_in(target_file_id)` — and that's where a wrong
+    // `target_file_id` (FileId(0) fallback) makes the editability
+    // check return false and the writer soft-drops with Q-3-43.
+    let original_qmd = "Real text";
+    let real_para_orig = Block::Paragraph(Paragraph {
+        content: vec![
+            pampa::pandoc::Inline::Str(Str {
+                text: "Real".to_string(),
+                source_info: SourceInfo::original(REAL_FILE, 0, 4),
+            }),
+            pampa::pandoc::Inline::Space(pampa::pandoc::Space {
+                source_info: SourceInfo::original(REAL_FILE, 4, 5),
+            }),
+            pampa::pandoc::Inline::Str(Str {
+                text: "text".to_string(),
+                source_info: SourceInfo::original(REAL_FILE, 5, 9),
+            }),
+        ],
+        source_info: SourceInfo::original(REAL_FILE, 0, 9),
+    });
+    // Mutated Para: replace the second Str with a new (no-source) Str.
+    let real_para_mut = Block::Paragraph(Paragraph {
+        content: vec![
+            pampa::pandoc::Inline::Str(Str {
+                text: "Real".to_string(),
+                source_info: SourceInfo::original(REAL_FILE, 0, 4),
+            }),
+            pampa::pandoc::Inline::Space(pampa::pandoc::Space {
+                source_info: SourceInfo::original(REAL_FILE, 4, 5),
+            }),
+            pampa::pandoc::Inline::Str(Str {
+                text: "edited".to_string(),
+                source_info: SourceInfo::default(),
+            }),
+        ],
+        source_info: SourceInfo::original(REAL_FILE, 0, 9),
+    });
+    let orig = Pandoc {
+        blocks: vec![title_block.clone(), real_para_orig],
+        meta: ConfigValue::default(),
+    };
+    let new = Pandoc {
+        blocks: vec![title_block, real_para_mut],
+        meta: ConfigValue::default(),
+    };
+
+    let plan = compute_reconciliation(&orig, &new);
+    let (_qmd, warnings) =
+        writers::incremental::incremental_write(original_qmd, &orig, &new, &plan)
+            .expect("incremental_write Ok arm");
+
+    // Pre-fix target_file_id falls back to FileId(0); preimage_in(0)
+    // on REAL_FILE-Original Para returns None; coarsen's
+    // RecurseIntoContainer arm soft-drops with Q-3-43 ("Generated
+    // content edit dropped"). Post-fix target_file_id resolves to
+    // REAL_FILE and the inline edit proceeds without a warning.
+    assert!(
+        warnings.is_empty(),
+        "expected no soft-drop warnings; got: {:?}",
+        warnings.iter().map(|w| &w.title).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn target_file_id_defaults_to_zero_for_empty_document() {
+    // Empty `blocks` — the fallback to `FileId(0)` should fire.
+    // Driving an identity reconcile on an empty AST should produce a
+    // no-op write without warnings or panics.
+    use pampa::pandoc::Pandoc;
+    use quarto_pandoc_types::ConfigValue;
+    let ast = Pandoc {
+        blocks: vec![],
+        meta: ConfigValue::default(),
+    };
+    let plan = compute_reconciliation(&ast, &ast);
+    let (result, warnings) = writers::incremental::incremental_write("", &ast, &ast, &plan)
+        .expect("incremental_write Ok arm on empty document");
+    assert_eq!(result, "");
+    assert!(warnings.is_empty());
 }
 
 // --- Mixed documents ---
