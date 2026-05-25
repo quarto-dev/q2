@@ -25,7 +25,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-24
 
-- [`9da9f14a`](https://github.com/quarto-dev/q2/commits/9da9f14a): q2-preview edits now write back to the document. The read-only guard is gone; component-driven edits (kanban drag, future comment buttons) flow through the incremental writer using the live preview AST as the baseline, and soft-drop warnings (Q-3-42 / Q-3-43) surface in the existing diagnostics panel when an edit hits an atomic region.
+- [`a0a4c7c8`](https://github.com/quarto-dev/q2/commits/a0a4c7c8): q2-preview edits now write back to the document. The read-only guard is gone; component-driven edits (kanban drag, future comment buttons) flow through the incremental writer using the live preview AST as the baseline, and soft-drop warnings (Q-3-42 / Q-3-43) surface in the existing diagnostics panel when an edit hits an atomic region.
 
 ### 2026-05-21
 
