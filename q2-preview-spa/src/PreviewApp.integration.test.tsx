@@ -107,9 +107,10 @@ describe('PreviewApp boot path', () => {
     const props = capturedIframeProps[capturedIframeProps.length - 1];
     expect(props.currentFilePath).toBe('index.qmd');
     expect(props.astJson).toBe('{"blocks":[]}');
-    // setAst is required by Q2PreviewIframe; Phase A's no-op is fine but
-    // it must at least be a function so the iframe doesn't crash on
-    // first DOM-stable edit.
+    // setAst is required by Q2PreviewIframe; Plan 7 Phase 7 wired the
+    // real `handleSetAst` (incrementalWriteQmd + echo-prevention).
+    // The shape check here is the integration-level contract; the
+    // write path itself is covered by Phase 8's round-trip tests.
     expect(typeof props.setAst).toBe('function');
   });
 

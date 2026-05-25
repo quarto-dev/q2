@@ -14,11 +14,15 @@
  *
  * Decisions worth surfacing here:
  *
- * - `setAst` on Q2PreviewIframe is a no-op for now. The iframe takes
- *   it as a required prop because Phase 2 of q2-preview anticipated a
- *   WYSIWYG round-trip (the iframe asks the parent to update the
- *   AST). The SPA doesn't have an editor to round-trip into yet, so a
- *   no-op is correct.
+ * - `setAst` on Q2PreviewIframe is wired through `incrementalWriteQmd`
+ *   (Plan 7 Phase 7). Component-driven edits in the iframe (e.g.
+ *   kanban drag, future comment buttons) call back with the modified
+ *   AST; we use the current `astJson` as the baseline, write the
+ *   reconciled qmd to the active file via the sync client, and stash
+ *   the FNV-1a hash so the resulting `onFileContent` echo gets
+ *   suppressed (otherwise the SPA would re-render unnecessarily and,
+ *   in races, blow away an in-flight edit). Soft-drop warnings
+ *   (Q-3-42 / Q-3-43) ride into the DiagnosticStrip.
  *
  * - `wsUrl` is derived from `window.location` rather than read from
  *   a server endpoint. The CLI always opens the SPA on the same
@@ -37,13 +41,16 @@
  *   round-trip on boot, no new server-side patterns introduced.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   initWasm,
   connect,
   setSyncHandlers,
   renderPageForPreview,
   getBinaryDocById,
+  getFileContent,
+  updateFileContent,
+  incrementalWriteQmd,
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { extractMetaString } from '@quarto/preview-renderer/framework';
@@ -52,7 +59,32 @@ import type { CaptureRef, FileEntry } from '@quarto/quarto-automerge-schema';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
 import { PreviewDiagnosticsOverlay } from './components/PreviewDiagnosticsOverlay';
 import { StaleCaptureOverlay } from './components/StaleCaptureOverlay';
+import { DiagnosticStrip } from './components/DiagnosticStrip';
 import { pickInitialPage } from './pickInitialPage';
+
+/**
+ * FNV-1a 32-bit hash, hex-encoded. Used for content-match
+ * echo-prevention in `handleSetAst` (Plan 7 Phase 7): we hash the qmd
+ * we're about to emit, stash `(path, hash)` in a ref, and suppress the
+ * matching incoming `onFileContent` so the SPA doesn't re-render off
+ * its own write.
+ *
+ * Why FNV-1a and not SHA-256 or xxHash: this is an in-process
+ * equality check across a single round-trip (write → samod → echo
+ * back). Cryptographic strength is irrelevant; the collision domain
+ * is one file's last-emitted qmd, so 32 bits is comfortable. FNV-1a
+ * is zero-dependency, fast on short-to-medium strings, and the
+ * codebase already uses it for the actor-color hash. Single source
+ * of truth: this function in this file.
+ */
+function fnv1aHex(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
 
 /**
  * Suffix appended to the document's title in the browser tab so a
@@ -352,13 +384,21 @@ function deriveWsUrl(loc: Location = window.location): string {
   return `${wsScheme}//${loc.host}/ws`;
 }
 
-/** No-op `setAst` until WYSIWYG mode is wired (post-Phase-A). */
-const noopSetAst = () => {
-  /* deliberately empty */
-};
-
 export default function PreviewApp() {
   const [state, setState] = useState<PreviewAppState>(INITIAL_STATE);
+  // Plan 7 Phase 7: soft-drop warnings to surface in DiagnosticStrip.
+  // Accumulated across edits within a session; dismissed by the
+  // strip's close button.
+  const [writeWarnings, setWriteWarnings] = useState<Diagnostic[]>([]);
+
+  // Plan 7 Phase 7: content-match echo-prevention. `handleSetAst`
+  // writes qmd via `updateFileContent`, which round-trips through
+  // samod and fires `onFileContent` back at us. Without this ref the
+  // SPA would re-render off its own write, and in pathological races
+  // could overwrite an in-flight follow-up edit. We stash the FNV-1a
+  // hash of the emitted qmd here; the next `onFileContent` for the
+  // same path that hashes equal is silently dropped.
+  const lastEmittedRef = useRef<{ path: string; hash: string } | null>(null);
 
   // Force-refresh trigger (bd-b5hf): bumping `contentTick` re-fires
   // the render useEffect. Reuses the same channel `onFileContent`
@@ -368,6 +408,59 @@ export default function PreviewApp() {
   // update.
   const handleRefresh = useCallback(() => {
     setState((s) => ({ ...s, contentTick: s.contentTick + 1 }));
+  }, []);
+
+  // Plan 7 Phase 7: handleSetAst reads `activeFile` + `astJson` via
+  // refs so the callback keeps a stable identity for Q2PreviewIframe.
+  // (The iframe's effect deps include `setAst`; re-binding on every
+  // astJson change would re-register the postMessage listener.)
+  const activeFileRef = useRef<string | null>(null);
+  const astJsonRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeFileRef.current = state.activeFile;
+  }, [state.activeFile]);
+  useEffect(() => {
+    astJsonRef.current = state.astJson;
+  }, [state.astJson]);
+
+  // Plan 7 Phase 7: WYSIWYG round-trip. Component-driven edits in the
+  // iframe (kanban drag, comment buttons, …) call this with the
+  // modified AST. We use the current `astJson` as the baseline (its
+  // source spans line up with the qmd in samod), reconcile via
+  // `incrementalWriteQmd`, and write the result back through
+  // `updateFileContent`. Soft-drop warnings (Q-3-42 / Q-3-43) flow
+  // into the DiagnosticStrip. The emitted-qmd hash is stashed in
+  // `lastEmittedRef` so the echoed `onFileContent` is suppressed.
+  const handleSetAst = useCallback((newAst: unknown) => {
+    const path = activeFileRef.current;
+    const baselineJson = astJsonRef.current;
+    if (!path || !baselineJson) {
+      console.warn('q2-preview setAst: no active page or baseline yet');
+      return;
+    }
+    const originalQmd = getFileContent(path);
+    if (originalQmd === null) {
+      console.warn(`q2-preview setAst: no content cached for ${path}`);
+      return;
+    }
+    try {
+      const { qmd, warnings } = incrementalWriteQmd(
+        originalQmd,
+        baselineJson,
+        newAst as never,
+      );
+      lastEmittedRef.current = { path, hash: fnv1aHex(qmd) };
+      updateFileContent(path, qmd);
+      if (warnings && warnings.length > 0) {
+        setWriteWarnings((prev) => [...prev, ...warnings]);
+      }
+    } catch (err) {
+      console.error('q2-preview setAst: incremental write failed', err);
+    }
+  }, []);
+
+  const handleDismissWarnings = useCallback(() => {
+    setWriteWarnings([]);
   }, []);
 
   // Phase F.1 (bd-kw93.14): the iframe posts NAVIGATE_TO_DOCUMENT
@@ -455,6 +548,20 @@ export default function PreviewApp() {
           },
           onFileContent: (path: string) => {
             if (cancelled) return;
+            // Plan 7 Phase 7: echo-prevention. If the incoming
+            // content is exactly the qmd we just emitted, drop it —
+            // re-rendering off our own write wastes a tick and can
+            // race a follow-up edit. The ref carries (path, hash)
+            // for the last emission; consume it (set to null) so a
+            // *second* identical write would still re-render.
+            const last = lastEmittedRef.current;
+            if (last && last.path === path) {
+              const incoming = getFileContent(path);
+              if (incoming !== null && fnv1aHex(incoming) === last.hash) {
+                lastEmittedRef.current = null;
+                return;
+              }
+            }
             // Phase D.6 filter: read `activeFile` + `deps` via the
             // setState callback so the filter sees the *latest*
             // values (the closure was set up at boot time and would
@@ -856,7 +963,7 @@ export default function PreviewApp() {
         pendingAnchor={state.pendingAnchor}
         pendingAnchorEpoch={state.pendingAnchorEpoch}
         onNavigateToDocument={handleNavigate}
-        setAst={noopSetAst}
+        setAst={handleSetAst}
       />
       {showStaleOverlay && (
         <StaleCaptureOverlay
@@ -865,6 +972,17 @@ export default function PreviewApp() {
           lastError={activeCapture?.lastError}
         />
       )}
+      {/* Plan 7 Phase 7: write-side soft-drop warnings (Q-3-42 /
+          Q-3-43) from `incrementalWriteQmd`. Distinct surface from
+          the bd-b9kzg render-diagnostics overlay below: those carry
+          server-side + WASM render diagnostics; this carries
+          user-edit-rejection signals. Keeping them separate avoids
+          conflating "your edit was discarded" with "the render
+          itself complained." */}
+      <DiagnosticStrip
+        warnings={writeWarnings}
+        onDismiss={handleDismissWarnings}
+      />
       {/* bd-b9kzg (extends Phase D.4): non-terminal diagnostics
           overlay. The overlay defaults to its own internal
           collapsed state (true) when the `collapsed` prop is

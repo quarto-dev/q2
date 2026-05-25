@@ -1341,14 +1341,14 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 
 ### Phase 7 — q2-preview SPA integration
 
-- [ ] `q2-preview-spa/src/PreviewApp.tsx`: maintain `currentAst` state mirroring ReactPreview's `ast` (set on every successful display render)
-- [ ] Replace `noopSetAst` at line 241 with real `handleSetAst` that calls `incrementalWriteQmd(content, currentAst, newAst)`
-- [ ] Content-match echo-prevention: hash emitted qmd before calling `updateFileContent`; stash `(path, hash)` in a ref; suppress matching incoming `onFileContent`
-- [ ] Hash algorithm decision (SHA-256 vs xxHash vs FNV-1a) recorded in code comment
-- [ ] `q2-preview-spa/src/components/DiagnosticStrip.tsx` component (~50 LOC TSX + ~20 LOC CSS)
-- [ ] DiagnosticStrip ingest from `incrementalWriteQmd` result's warnings field
-- [ ] Suppress-after-3-by-source-range mitigation in DiagnosticStrip
-- [ ] Imperative message text for Q-3-42 / Q-3-43 (verb-form instructions; see §"Autosave-context spam mitigation")
+- [x] `q2-preview-spa/src/PreviewApp.tsx`: baseline read via `astJsonRef` mirroring `state.astJson` (avoided new state — the ref keeps `handleSetAst`'s identity stable across re-renders, which the iframe's effect-deps care about)
+- [x] Replace `noopSetAst` with real `handleSetAst` that calls `incrementalWriteQmd(content, baselineJson, newAst)`
+- [x] Content-match echo-prevention: hash emitted qmd via FNV-1a, stash `(path, hash)` in `lastEmittedRef`; matching incoming `onFileContent` consumes the ref and returns early
+- [x] Hash algorithm decision recorded in `fnv1aHex` docstring (FNV-1a: in-process equality, 32 bits sufficient, zero-dependency, matches existing actor-color hash pattern)
+- [x] `q2-preview-spa/src/components/DiagnosticStrip.tsx` component (inline styles per existing SPA convention; ~120 LOC TSX, no separate CSS file)
+- [x] DiagnosticStrip ingest from `incrementalWriteQmd` result's warnings field via `writeWarnings` state
+- [x] Suppress-after-3-by-source-range mitigation in DiagnosticStrip (`suppressAfterThree` helper)
+- [x] Imperative message text for Q-3-42 / Q-3-43 — catalog entries already imperative from Phase 3 (`"edit the invocation token in source instead"`); DiagnosticStrip surfaces title + problem verbatim
 
 ### Phase 8 — End-to-end tests
 
