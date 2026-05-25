@@ -16,6 +16,8 @@ use quarto_ast_reconcile::types::{
 };
 use quarto_ast_reconcile::{structural_eq_blocks, structural_eq_inlines};
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValueKind};
+use quarto_pandoc_types::is_atomic_custom_node;
+use quarto_source_map::{FileId, SourceInfo};
 use std::ops::Range;
 
 use super::qmd;
@@ -57,6 +59,84 @@ enum CoarsenedEntry {
         /// Index of this block in original_ast.blocks (for gap computation)
         orig_idx: usize,
     },
+}
+
+// =============================================================================
+// Editability gate (Plan 7)
+// =============================================================================
+
+/// Decide whether the *interior* of `block` is editable, with respect to the
+/// active document `target_file_id`.
+///
+/// "Editable inside" means: the user can type into this node's content and
+/// have their edit round-trip back to source bytes. Three reasons content is
+/// **not** editable inside:
+///
+/// 1. The block is an atomic `CustomNode` (per
+///    [`quarto_pandoc_types::is_atomic_custom_node`]). Atomic nodes are
+///    replaceable wholesale via a React-side component menu but have no
+///    editable text region. Today: `"CrossrefResolvedRef"`.
+/// 2. The block carries `SourceInfo::Generated` with an atomic-kind `by`
+///    (shortcode / filter / title-block / tree-sitter-postprocess).
+///    Content is the resolved value of an invocation token; the user's
+///    source-side knob is the token, not the resolved bytes.
+/// 3. The block's source_info has no preimage in `target_file_id`
+///    (synthesized-from-metadata containers, cross-file Original chains).
+///    There are no bytes in the target file to map an inner edit back to.
+///
+/// **Returns `true` for everything else.** Used by `coarsen`'s soft-drop
+/// logic; the React-side hand-mirror lives at
+/// `ts-packages/preview-renderer/src/utils/atomicCustomNodes.ts` plus a
+/// parallel `is_editable_inside` predicate to be added in a follow-up.
+///
+/// See Plan 7 §"Unified editability predicate".
+pub fn is_editable_inside_block(block: &Block, target_file_id: FileId) -> bool {
+    if let Block::Custom(cn) = block
+        && is_atomic_custom_node(&cn.type_name)
+    {
+        return false;
+    }
+    is_editable_inside_source_info(block.source_info(), target_file_id)
+}
+
+/// Inline-side counterpart of [`is_editable_inside_block`].
+///
+/// Same three reasons content is not editable inside; for `Inline::Custom`
+/// the atomic-CustomNode check applies (some atomic types live in the
+/// inline arm — `CrossrefResolvedRef` is one).
+pub fn is_editable_inside_inline(inline: &Inline, target_file_id: FileId) -> bool {
+    if let Inline::Custom(cn) = inline
+        && is_atomic_custom_node(&cn.type_name)
+    {
+        return false;
+    }
+    is_editable_inside_source_info(inline.source_info(), target_file_id)
+}
+
+/// Shared editability rules driven by `SourceInfo` alone (the
+/// atomic-CustomNode gate is applied by the block / inline callers above).
+fn is_editable_inside_source_info(si: &SourceInfo, target_file_id: FileId) -> bool {
+    // Atomic-kind Generated (shortcode, filter, title-block,
+    // tree-sitter-postprocess): the content is pipeline-resolved; the
+    // user's source-side knob is the invocation token, not the bytes
+    // inside.
+    if let SourceInfo::Generated { by, .. } = si
+        && by.is_atomic_kind()
+    {
+        return false;
+    }
+    // Catch-all: editable iff the region has byte-traceable preimage in
+    // the target file. Covers:
+    //   - Original in target → editable. ✓
+    //   - Substring chain resolving in target → editable. ✓
+    //   - Original/Substring rooted outside target → not editable.
+    //   - Generated with empty anchors (sectionize, footnotes,
+    //     appendix containers) → preimage_in returns None → not editable.
+    //   - Generated with only ValueSource/Dispatch/Other anchors → not
+    //     editable (preimage_in walks Invocation only).
+    //   - Non-atomic Generated with Invocation anchor in target →
+    //     editable.
+    si.preimage_in(target_file_id).is_some()
 }
 
 // =============================================================================
@@ -829,4 +909,165 @@ pub fn write_inline_to_string(
         result,
     );
     Ok(result)
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod editability_tests {
+    use super::*;
+    use quarto_pandoc_types::{Block, CustomNode, Inline, Paragraph, Plain, Str, attr::empty_attr};
+    use quarto_source_map::source_info::{AnchorRole, By};
+    use std::sync::Arc;
+
+    const TARGET: FileId = FileId(0);
+    const OTHER: FileId = FileId(1);
+
+    fn make_str(text: &str, si: SourceInfo) -> Inline {
+        Inline::Str(Str {
+            text: text.into(),
+            source_info: si,
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // is_editable_inside_block
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn editable_block_with_original_in_target() {
+        let block = Block::Paragraph(Paragraph {
+            content: vec![make_str("hello", SourceInfo::original(TARGET, 0, 5))],
+            source_info: SourceInfo::original(TARGET, 0, 5),
+        });
+        assert!(is_editable_inside_block(&block, TARGET));
+    }
+
+    #[test]
+    fn not_editable_block_with_original_outside_target() {
+        // Original points at a different file (cross-file reference, no
+        // wrapper). preimage_in(TARGET) returns None.
+        let block = Block::Paragraph(Paragraph {
+            content: vec![make_str("hi", SourceInfo::original(OTHER, 0, 2))],
+            source_info: SourceInfo::original(OTHER, 0, 2),
+        });
+        assert!(!is_editable_inside_block(&block, TARGET));
+    }
+
+    #[test]
+    fn not_editable_atomic_custom_node_block() {
+        // CrossrefResolvedRef is in ATOMIC_CUSTOM_NODES even though its
+        // source_info Original is in the target file.
+        let cn = CustomNode::new(
+            "CrossrefResolvedRef",
+            empty_attr(),
+            SourceInfo::original(TARGET, 0, 10),
+        );
+        let block = Block::Custom(cn);
+        assert!(!is_editable_inside_block(&block, TARGET));
+    }
+
+    #[test]
+    fn editable_non_atomic_custom_node_block() {
+        // Non-atomic CustomNode (e.g., Callout) with source_info in target
+        // → editable.
+        let cn = CustomNode::new("Callout", empty_attr(), SourceInfo::original(TARGET, 0, 20));
+        let block = Block::Custom(cn);
+        assert!(is_editable_inside_block(&block, TARGET));
+    }
+
+    #[test]
+    fn not_editable_atomic_kind_generated_block() {
+        // Shortcode-resolved Para: Generated{by: shortcode, from: [Invocation]}.
+        // Even though Invocation resolves to a token in TARGET (so
+        // preimage_in returns Some), is_atomic_kind() shortcode means the
+        // user can't edit the *resolved content* — only the token.
+        let token = SourceInfo::original(TARGET, 100, 120);
+        let mut gen_info = SourceInfo::generated(By::shortcode("meta"));
+        gen_info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        let block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: gen_info,
+        });
+        assert!(!is_editable_inside_block(&block, TARGET));
+    }
+
+    #[test]
+    fn not_editable_no_preimage_generated_block() {
+        // Synthesized-from-metadata container: Generated with empty
+        // anchors (sectionize / footnotes / appendix container shape).
+        // preimage_in returns None → not editable.
+        let block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: SourceInfo::generated(By::sectionize()),
+        });
+        assert!(!is_editable_inside_block(&block, TARGET));
+    }
+
+    #[test]
+    fn not_editable_value_source_only_generated_block() {
+        // Plan 9 shape: Generated with only ValueSource anchor (no
+        // Invocation). The ValueSource points into the target file's
+        // YAML metadata range, but the writer must NOT treat the
+        // interior as editable — those bytes are YAML, not body.
+        let meta_si = SourceInfo::original(TARGET, 10, 25);
+        let mut gen_info = SourceInfo::generated(By::appendix());
+        gen_info.append_anchor(AnchorRole::ValueSource, Arc::new(meta_si));
+        let block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: gen_info,
+        });
+        assert!(!is_editable_inside_block(&block, TARGET));
+    }
+
+    // -------------------------------------------------------------------------
+    // is_editable_inside_inline
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn editable_inline_with_original_in_target() {
+        let inline = make_str("hi", SourceInfo::original(TARGET, 0, 2));
+        assert!(is_editable_inside_inline(&inline, TARGET));
+    }
+
+    #[test]
+    fn not_editable_atomic_custom_node_inline() {
+        let cn = CustomNode::new(
+            "CrossrefResolvedRef",
+            empty_attr(),
+            SourceInfo::original(TARGET, 0, 8),
+        );
+        let inline = Inline::Custom(cn);
+        assert!(!is_editable_inside_inline(&inline, TARGET));
+    }
+
+    #[test]
+    fn not_editable_atomic_kind_generated_inline() {
+        let token = SourceInfo::original(TARGET, 100, 120);
+        let mut gen_info = SourceInfo::generated(By::shortcode("meta"));
+        gen_info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        let inline = make_str("resolved", gen_info);
+        assert!(!is_editable_inside_inline(&inline, TARGET));
+    }
+
+    #[test]
+    fn not_editable_inline_with_original_outside_target() {
+        let inline = make_str("hi", SourceInfo::original(OTHER, 0, 2));
+        assert!(!is_editable_inside_inline(&inline, TARGET));
+    }
+
+    // -------------------------------------------------------------------------
+    // Sanity: Plain (non-Para) block carries the same predicate behaviour.
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn editable_plain_block_with_original_in_target() {
+        let block = Block::Plain(Plain {
+            content: vec![make_str("hi", SourceInfo::original(TARGET, 0, 2))],
+            source_info: SourceInfo::original(TARGET, 0, 2),
+        });
+        assert!(is_editable_inside_block(&block, TARGET));
+    }
 }

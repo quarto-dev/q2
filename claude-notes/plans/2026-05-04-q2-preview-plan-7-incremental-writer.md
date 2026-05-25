@@ -1216,18 +1216,28 @@ beads only for items that surface during implementation and are
 genuinely out of scope (e.g. preexisting bugs found in adjacent
 code; future-plan-bound features).
 
-### Phase 1 — Foundation primitives (`quarto-source-map`, `quarto-core`)
+### Phase 1 — Foundation primitives (`quarto-source-map`, `quarto-pandoc-types`, `pampa`)
 
-- [ ] `SourceInfo::preimage_in(target: FileId) -> Option<Range<usize>>` accessor with full match (Original, Substring, Concat, Generated)
-- [ ] Doc-comment on `preimage_in` stating the `Invocation`-only walking policy + asymmetry rationale
-- [ ] Doc-comment on `AnchorRole::Other` reiterating the policy (future roles default to non-walked)
-- [ ] `pub const ATOMIC_CUSTOM_NODES: &[&str] = &["CrossrefResolvedRef"]` in `quarto-core`
-- [ ] `pub fn is_atomic_custom_node(type_name: &str) -> bool` in `quarto-core`
-- [ ] `is_editable_inside(node, target_file_id) -> bool` helper (location TBD during implementation — likely `pampa::writers::incremental` since it's the writer's primary consumer; React side imports an equivalent TS predicate)
-- [ ] `preimage_in` unit tests: Original same / different file; Substring chain; Concat contiguous / gappy; Generated with no anchors; Generated with Invocation anchor resolving in / out of target
-- [ ] `preimage_in` role-asymmetry unit test: Generated with only ValueSource / Dispatch / Other anchors returns None
-- [ ] `is_editable_inside` unit tests covering all three uneditable reasons (atomic CustomNode, atomic-kind Generated, no-preimage Generated)
-- [ ] Reconciler source-info-blindness foundation test in `quarto-ast-reconcile` (asserts `structural_eq_blocks` / `structural_eq_inlines` return true for source-info-only differences)
+**Implementation note (2026-05-24):** Plan originally placed
+`ATOMIC_CUSTOM_NODES` / `is_atomic_custom_node` in `quarto-core`, but
+`quarto-core` depends on `pampa` and the writer (in `pampa`) is the
+primary consumer — that direction would cycle. Moved the registry
+down to `quarto-pandoc-types` (the home of `CustomNode` itself). A
+cross-check test in `quarto-core::crossref` pins the literal in
+lockstep with `CROSSREF_RESOLVED_REF`.
+
+- [x] `SourceInfo::preimage_in(target: FileId) -> Option<Range<usize>>` accessor with full match (Original, Substring, Concat, Generated)
+- [x] Doc-comment on `preimage_in` stating the `Invocation`-only walking policy + asymmetry rationale
+- [x] Doc-comment on `AnchorRole::Other` reiterating the policy (future roles default to non-walked)
+- [x] `pub const ATOMIC_CUSTOM_NODES: &[&str] = &["CrossrefResolvedRef"]` in `quarto-pandoc-types` (not `quarto-core` — see implementation note)
+- [x] `pub fn is_atomic_custom_node(type_name: &str) -> bool` in `quarto-pandoc-types`
+- [x] `is_editable_inside_block` / `is_editable_inside_inline` helpers in `pampa::writers::incremental` (two functions sharing a private `is_editable_inside_source_info` core; React side will import an equivalent TS predicate in a future Phase)
+- [x] `preimage_in` unit tests: Original same / different file; Substring chain; Concat contiguous / gappy / overlapping / mixed-files; Generated with no anchors; Generated with Invocation anchor resolving in / out of target; Generated with Invocation through Substring chain
+- [x] `preimage_in` role-asymmetry unit test: Generated with only ValueSource / Other anchors returns None; mixed Invocation + ValueSource walks Invocation only
+- [x] `is_editable_inside` unit tests covering all three uneditable reasons (atomic CustomNode, atomic-kind Generated, no-preimage Generated, value-source-only Generated) plus positive cases
+- [x] Reconciler source-info-blindness foundation test in `quarto-ast-reconcile` (Generated-with-different-By, Generated-with-different-anchor-lists, CustomNode wrapper and slot-child blindness)
+- [x] `cargo nextest run --workspace` green (9509 tests)
+- [x] `cargo xtask verify` green (full 12-step chain including WASM build + hub-client tests)
 
 ### Phase 2 — Writer internals (`pampa::writers::incremental`)
 

@@ -105,6 +105,15 @@ pub enum AnchorRole {
 
     /// Extension-defined or future role we haven't enumerated.
     /// String is kebab-case, namespaced (`ext/<name>/<role>`).
+    ///
+    /// **`preimage_in` does not walk this role.** Future anchor roles
+    /// default to non-walked unless explicitly added to
+    /// [`SourceInfo::preimage_in`]'s `Generated` arm. Extensions adding
+    /// `Other("…")` should treat this as a feature: attribution data
+    /// attached via `Other` is not accidentally consulted by the writer's
+    /// byte-copying path. If a role *does* contribute to body-text
+    /// preimage in `target`, it must be explicitly enumerated in
+    /// `preimage_in`.
     Other(String),
 }
 
@@ -361,6 +370,74 @@ impl SourceInfo {
             SourceInfo::Generated { .. } => self
                 .invocation_anchor()
                 .and_then(|si| si.resolve_byte_range()),
+        }
+    }
+
+    /// Byte range in `target` that this `SourceInfo`'s preimage covers, if any.
+    ///
+    /// This is the writer's "can I Verbatim-copy bytes from `target` for the
+    /// node carrying this source_info?" check.
+    ///
+    /// Semantics by variant:
+    /// - `Original` → `Some(start..end)` iff the file matches `target`, else `None`.
+    /// - `Substring` → recurse the parent; offsets compose additively.
+    /// - `Concat` → every piece must resolve into `target` AND the resolved
+    ///   ranges must be byte-contiguous (no gaps, no overlaps). A gappy Concat
+    ///   returns `None` — the writer can't Verbatim-copy a non-contiguous span.
+    /// - `Generated` → walk the `Invocation` anchor only via
+    ///   [`invocation_anchor`](Self::invocation_anchor). **No other anchor
+    ///   role is consulted** — not `ValueSource` (Plan 9), not future
+    ///   `Dispatch` (Plan 10), not `AnchorRole::Other`. See the
+    ///   role-asymmetry section below.
+    ///
+    /// # Role asymmetry
+    ///
+    /// `preimage_in` only walks `AnchorRole::Invocation`. This is load-bearing:
+    /// copying bytes from a `ValueSource` source range would emit raw YAML
+    /// metadata (or whatever the value lived in) into the body — a hard
+    /// correctness bug. The same applies to `Dispatch` (which points at Lua
+    /// source) and to any extension-defined `Other` role.
+    ///
+    /// **Future anchor roles default to non-walked.** Extensions introducing
+    /// `AnchorRole::Other("…")` should treat this as a feature: their
+    /// attribution metadata is not accidentally consulted by the writer's
+    /// byte-copying path. If a role *does* contribute to body-text preimage,
+    /// it must be explicitly added to this function's `Generated` arm.
+    pub fn preimage_in(&self, target: FileId) -> Option<std::ops::Range<usize>> {
+        match self {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } if *file_id == target => Some(*start_offset..*end_offset),
+            SourceInfo::Original { .. } => None,
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                end_offset,
+            } => {
+                let parent_range = parent.preimage_in(target)?;
+                Some(parent_range.start + start_offset..parent_range.start + end_offset)
+            }
+            SourceInfo::Concat { pieces } => {
+                let ranges: Vec<std::ops::Range<usize>> = pieces
+                    .iter()
+                    .map(|p| p.source_info.preimage_in(target))
+                    .collect::<Option<Vec<_>>>()?;
+                if ranges.is_empty() {
+                    return None;
+                }
+                if ranges.windows(2).all(|w| w[0].end == w[1].start) {
+                    let first = ranges.first().unwrap().start;
+                    let last = ranges.last().unwrap().end;
+                    Some(first..last)
+                } else {
+                    None
+                }
+            }
+            SourceInfo::Generated { .. } => self
+                .invocation_anchor()
+                .and_then(|si| si.preimage_in(target)),
         }
     }
 
@@ -1531,5 +1608,167 @@ mod tests {
         // Verify round-trip
         let deserialized: SourceInfo = serde_json::from_value(json).unwrap();
         assert_eq!(combined, deserialized);
+    }
+
+    // -------------------------------------------------------------------------
+    // Plan 7 — preimage_in accessor
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_preimage_in_original_same_file() {
+        let info = SourceInfo::original(FileId(0), 10, 25);
+        assert_eq!(info.preimage_in(FileId(0)), Some(10..25));
+    }
+
+    #[test]
+    fn test_preimage_in_original_different_file_returns_none() {
+        let info = SourceInfo::original(FileId(0), 10, 25);
+        assert_eq!(info.preimage_in(FileId(1)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_substring_composes_offsets() {
+        // Parent points at bytes 100..200 in file 0.
+        // Substring takes bytes 5..15 *relative to parent*.
+        // Preimage in file 0 should be 105..115.
+        let parent = SourceInfo::original(FileId(0), 100, 200);
+        let info = SourceInfo::substring(parent, 5, 15);
+        assert_eq!(info.preimage_in(FileId(0)), Some(105..115));
+    }
+
+    #[test]
+    fn test_preimage_in_substring_different_file_returns_none() {
+        let parent = SourceInfo::original(FileId(0), 100, 200);
+        let info = SourceInfo::substring(parent, 5, 15);
+        assert_eq!(info.preimage_in(FileId(7)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_substring_chain() {
+        // Original 1000..2000 in file 0; Substring 100..500 relative; Substring 10..50 relative.
+        // Expected preimage in file 0: 1100 + 10 .. 1100 + 50 = 1110..1150.
+        let root = SourceInfo::original(FileId(0), 1000, 2000);
+        let mid = SourceInfo::substring(root, 100, 500);
+        let leaf = SourceInfo::substring(mid, 10, 50);
+        assert_eq!(leaf.preimage_in(FileId(0)), Some(1110..1150));
+    }
+
+    #[test]
+    fn test_preimage_in_concat_contiguous() {
+        // Two adjacent pieces of file 0: 10..15 and 15..25 → contiguous → 10..25.
+        let a = SourceInfo::original(FileId(0), 10, 15);
+        let b = SourceInfo::original(FileId(0), 15, 25);
+        let info = SourceInfo::concat(vec![(a, 5), (b, 10)]);
+        assert_eq!(info.preimage_in(FileId(0)), Some(10..25));
+    }
+
+    #[test]
+    fn test_preimage_in_concat_gappy_returns_none() {
+        // 10..15 then 20..25 → gap between 15 and 20 → None.
+        let a = SourceInfo::original(FileId(0), 10, 15);
+        let b = SourceInfo::original(FileId(0), 20, 25);
+        let info = SourceInfo::concat(vec![(a, 5), (b, 5)]);
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_concat_overlapping_returns_none() {
+        // 10..20 then 15..25 → overlap → not byte-contiguous → None.
+        let a = SourceInfo::original(FileId(0), 10, 20);
+        let b = SourceInfo::original(FileId(0), 15, 25);
+        let info = SourceInfo::concat(vec![(a, 10), (b, 10)]);
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_concat_mixed_files_returns_none() {
+        // One piece in file 0, another in file 1 → resolving in file 0 fails
+        // because the file-1 piece can't be resolved.
+        let a = SourceInfo::original(FileId(0), 10, 15);
+        let b = SourceInfo::original(FileId(1), 15, 25);
+        let info = SourceInfo::concat(vec![(a, 5), (b, 10)]);
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_no_anchors_returns_none() {
+        // Sectionize-style wrapper, footnotes-container, etc.: Generated with
+        // empty `from`. No Invocation anchor → no preimage.
+        let info = SourceInfo::generated(By::sectionize());
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_with_invocation_in_target() {
+        // Shortcode resolution: Generated with an Invocation anchor pointing
+        // at the {{< meta foo >}} token bytes.
+        let token = SourceInfo::original(FileId(0), 50, 70);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        assert_eq!(info.preimage_in(FileId(0)), Some(50..70));
+    }
+
+    #[test]
+    fn test_preimage_in_generated_with_invocation_outside_target() {
+        // Invocation anchor points at file 0; query asks about file 1 → None.
+        let token = SourceInfo::original(FileId(0), 50, 70);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        assert_eq!(info.preimage_in(FileId(1)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_walks_through_substring_in_invocation() {
+        // Invocation anchor is itself a Substring chain. preimage_in must
+        // walk through it correctly.
+        let root = SourceInfo::original(FileId(0), 100, 200);
+        let token = SourceInfo::substring(root, 10, 30);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        assert_eq!(info.preimage_in(FileId(0)), Some(110..130));
+    }
+
+    // -------------------------------------------------------------------------
+    // Plan 7 — preimage_in role-asymmetry: only Invocation is walked.
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_preimage_in_generated_value_source_only_returns_none() {
+        // Plan 9-shape: Generated whose only anchor is ValueSource (points at
+        // YAML metadata bytes). The writer must NOT copy those bytes into the
+        // body — preimage_in returns None.
+        let meta_si = SourceInfo::original(FileId(0), 10, 25);
+        let mut info = SourceInfo::generated(By::appendix());
+        info.append_anchor(AnchorRole::ValueSource, Arc::new(meta_si));
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_other_only_returns_none() {
+        // Extension-defined Other role. preimage_in must not walk it.
+        let lua_si = SourceInfo::original(FileId(0), 10, 25);
+        let mut info = SourceInfo::generated(By::filter("upper.lua", 14));
+        info.append_anchor(
+            AnchorRole::Other("ext/my-ext/dispatch".to_string()),
+            Arc::new(lua_si),
+        );
+        assert_eq!(info.preimage_in(FileId(0)), None);
+    }
+
+    #[test]
+    fn test_preimage_in_generated_invocation_plus_value_source_walks_invocation_only() {
+        // Plan 2/Plan 9 mixed shape: Invocation in file 0 + ValueSource in
+        // file 1. Query file 0 → Invocation resolves → Some(token range).
+        // Query file 1 → Invocation resolves to file 0 (not 1) → None.
+        // (The writer must not see the value-source range when asked about
+        // any file, even the file the ValueSource points into.)
+        let token = SourceInfo::original(FileId(0), 50, 70);
+        let value = SourceInfo::original(FileId(1), 200, 215);
+        let mut info = SourceInfo::generated(By::shortcode("meta"));
+        info.append_anchor(AnchorRole::Invocation, Arc::new(token));
+        info.append_anchor(AnchorRole::ValueSource, Arc::new(value));
+
+        assert_eq!(info.preimage_in(FileId(0)), Some(50..70));
+        assert_eq!(info.preimage_in(FileId(1)), None);
     }
 }
