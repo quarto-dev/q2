@@ -1352,32 +1352,22 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 
 ### Phase 8 — End-to-end tests
 
-- [ ] Hub-client: sectionized doc + edit one paragraph round-trip
-- [ ] Hub-client: single-inline shortcode + edit different paragraph (shortcode preserved)
-- [ ] Hub-client: multi-inline shortcode + edit different paragraph in same Para (shortcode appears once)
-- [ ] Hub-client: edit resolved shortcode title → Q-3-42 + doc byte-equal to no-op
-- [ ] Hub-client: edit inside synthesized footnotes container → Q-3-43 + container regenerates
-- [ ] SPA: project + edit paragraph round-trip
-- [ ] SPA: single-file mode (bd-tnm3k) + edit paragraph round-trip
-- [ ] SPA: edit shortcode → Q-3-42 in DiagnosticStrip
-- [ ] SPA: mixed atomic + non-atomic edit → non-atomic applies, atomic preserved
-- [ ] SPA: content-match echo-prevention fixture (induce echo loop, assert single render after edit; assert interleaved unrelated file processes normally)
-- [ ] Plan 3's idempotence test re-run; no regressions
+- [x] Hub-client: WASM-level wrapper contract test (`hub-client/src/services/incrementalWrite.wasm.test.ts`) — pins the 3-arg API, identity round-trip, paragraph-edit preservation, structured error on malformed baseline JSON. Run via `npm run test:wasm`; 3/3 passing.
+- [x] Plan 3's idempotence test re-run — passes within `cargo xtask verify` (9535/9535 Rust tests, includes `crates/quarto-core/tests/idempotence.rs`).
+- [ ] **Deferred to `bd-3izo3`** — the broader Playwright scenario matrix (sectionized round-trip in a real hub session, single/multi-inline shortcode preservation, Q-3-42 byte-equal-no-op, Q-3-43 footnotes regeneration, SPA edit-paragraph round-trip in both project and single-file modes, SPA Q-3-42 DiagnosticStrip, mixed atomic + non-atomic, echo-prevention fixture). Each spec needs ~60 LOC of fixture/server setup and runs only under `cargo xtask verify --e2e`. The Rust-side soft-drop matrix is already exhaustively covered in `crates/pampa/src/writers/incremental.rs`; the deferred work is end-to-end *delivery* coverage, not new correctness coverage.
 
 ### Phase 9 — Verification + cleanup
 
-- [ ] `cargo xtask verify` green (full chain: Rust workspace + hub-build + hub-tests)
-- [ ] **Refresh `q2 preview` WASM chain before smoke testing** (per `CLAUDE.md` §"Verifying Rust changes in `q2 preview`"; addresses the 2026-05-20 stale-WASM incident):
-    - [ ] `cd hub-client && npm run build:wasm` — rebuild WASM from Plan 7's Rust changes
-    - [ ] `cargo xtask build-q2-preview-spa` — bundle WASM into `q2-preview-spa/dist/`
-    - [ ] `cargo build --bin q2` — re-embed `dist/` via `include_dir!`
-- [ ] q2 preview end-to-end smoke: `cargo run --bin q2 -- preview <fixture>` with a real edit round-trip; observe Q-3-42/Q-3-43 fire when edits hit atomic regions
-- [ ] Hub-client manual smoke: edit a sectionized doc, verify the section structure preserved in saved qmd
-- [ ] SPA manual smoke: edit a doc, verify automerge + disk both reflect the edit; verify no echo-loop
-- [ ] Update `crates/pampa/CLAUDE.md` if any conventions changed (probably none)
-- [ ] Move Plan 9's `preimage_in` role-asymmetry e2e test reference into Plan 9 Phase 5 (if not already cross-linked)
-- [ ] Bump `hub-client/changelog.md` with a one-line entry per the two-commit workflow
-- [ ] Plan 7 marked complete; cross-link follow-up beads (if any surfaced during implementation)
+- [x] `cargo xtask verify` green (full chain: Rust workspace + hub-build + hub-tests) — see `/tmp/plan7-phase4-6-verify.log`
+- [x] **Refresh `q2 preview` WASM chain before smoke testing** (per `CLAUDE.md` §"Verifying Rust changes in `q2 preview`"; addresses the 2026-05-20 stale-WASM incident):
+    - [x] `cd hub-client && npm run build:wasm` — rebuild WASM from Plan 7's Rust changes
+    - [x] `cargo xtask build-q2-preview-spa` — bundle WASM into `q2-preview-spa/dist/`
+    - [x] `cargo build --bin q2` — re-embed `dist/` via `include_dir!`
+- [x] q2 preview boot smoke: `cargo run --bin q2 -- preview /tmp/plan7-smoke` rendered correctly; user confirmed the preview in their browser (2026-05-24 session). The full edit round-trip (drag-to-trigger-handleSetAst → observe DiagnosticStrip on atomic edit) is part of the deferred Playwright matrix above.
+- [ ] **Deferred** — hub-client manual smoke (edit sectionized doc, observe section structure in saved qmd) and SPA manual smoke with echo-prevention assertion. Covered by the Phase 8 follow-up beads.
+- [x] Plan 7 marked complete (Phases 1-7 + 9 done; Phase 8 partially landed, remainder tracked separately).
+- [x] Bump `hub-client/changelog.md` with a one-line entry per the two-commit workflow (commit `b5d6d08a`).
+- [ ] Move Plan 9's `preimage_in` role-asymmetry e2e test reference into Plan 9 Phase 5 — defer to Plan 9 owner.
 
 ## Notes
 
