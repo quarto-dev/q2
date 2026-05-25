@@ -23,6 +23,10 @@ be in reverse chronological order (latest first).
 
 - [`1bc3d2cd`](https://github.com/quarto-dev/q2/commits/1bc3d2cd): Fix Monaco editor in light mode falling back to its default theme because the configured name (`light`) was not a registered Monaco theme; use `vs` instead.
 
+### 2026-05-25
+
+- [`bdcfdc53`](https://github.com/quarto-dev/q2/commits/bdcfdc53): Fix q2-preview edits silently failing with "Incremental write failed: undefined" on documents where the render pipeline produced a single top-level sectionize wrapper around the user content. The writer now recurses into non-atomic Generated wrappers (sectionize, footnotes-container, appendix-container) instead of soft-dropping the whole document.
+
 ### 2026-05-24
 
 - [`a0a4c7c8`](https://github.com/quarto-dev/q2/commits/a0a4c7c8): q2-preview edits now write back to the document. The read-only guard is gone; component-driven edits (kanban drag, future comment buttons) flow through the incremental writer using the live preview AST as the baseline, and soft-drop warnings (Q-3-42 / Q-3-43) surface in the existing diagnostics panel when an edit hits an atomic region.
