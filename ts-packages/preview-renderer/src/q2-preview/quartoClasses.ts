@@ -87,3 +87,9 @@ export const PROOF = 'proof';
 
 // CrossrefResolvedRef — crates/quarto-core/src/transforms/crossref_render.rs:707
 export const QUARTO_XREF = 'quarto-xref';
+
+// Accessibility — TS Quarto prepends a `<span class="screen-reader-only">`
+// to a titled callout's title inlines so screen readers announce the
+// callout type ("Note", "Warning", …) even though the visible title is
+// user-supplied. callouts.lua:271-275 / callout_resolve.rs (mirror).
+export const SCREEN_READER_ONLY = 'screen-reader-only';

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type {
     CustomBlockNode,
     NodeArgs,
@@ -22,6 +23,7 @@ import {
     CALLOUT_TITLED,
     CALLOUT_TYPE_PREFIX,
     NO_ICON,
+    SCREEN_READER_ONLY,
 } from '../quartoClasses';
 import { makeSlotSetter, renderSlot } from '../utils';
 
@@ -71,6 +73,11 @@ interface CalloutPlainData {
     collapse?: boolean;
     collapse_starts_collapsed?: boolean;
     icon?: boolean;
+    // Set by CalloutTransform when the user's id (e.g. `tip-foo`)
+    // classifies as a crossref-eligible callout (`callout.rs:236-241`).
+    // Presence suppresses the screen-reader callout-type span — the
+    // crossref-rendered prefix announces the type on its own.
+    ref_type?: string;
 }
 
 const DEFAULT_TITLES: Record<string, string> = {
@@ -101,6 +108,17 @@ function hasUserTitle(titleSlot: Slot | undefined): boolean {
 }
 
 export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<CustomBlockNode>) => {
+    // Q1-parity collapse-wrapper id naming (callouts.lua:281, 307,
+    // 310, 316-317): the wrapper's `id` attribute is `callout-N`
+    // (the bare counter); its `callout-N-contents` class is what
+    // Bootstrap's `bs-target` references via the class selector.
+    // `useId()` gives us a stable unique id per component instance.
+    // We strip the React-internal punctuation so the resulting id
+    // looks like `callout-r0-contents` rather than `callout-:r0:-contents`.
+    const reactId = useId().replace(/[^a-z0-9]/gi, '');
+    const calloutId = `callout-${reactId}`;
+    const contentsClass = `${calloutId}-contents`;
+
     const plain = (node.plain_data ?? {}) as CalloutPlainData;
     const calloutType = plain.type ?? 'note';
     const rawAppearance = plain.appearance ?? 'default';
@@ -135,18 +153,37 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
     const setSlot = makeSlotSetter(node, setLocalAst);
     const ctx = { onNavigateToDocument };
 
-    const iconContainer = icon ? (
+    // Q1-parity (callouts.lua:254-262): icon container is ALWAYS
+    // emitted. When `icon=false`, the inner <i> carries an
+    // additional `no-icon` co-class which CSS uses to hide it
+    // visually via `.callout.no-icon`. Keeps DOM counts of
+    // `.callout-icon-container` stable across icon/no-icon callouts.
+    const iconContainer = (
         <div className={CALLOUT_ICON_CONTAINER}>
-            <i className={CALLOUT_ICON}></i>
+            <i className={icon ? CALLOUT_ICON : `${CALLOUT_ICON} ${NO_ICON}`}></i>
         </div>
-    ) : null;
+    );
 
     const bodyContents = renderSlot(contentSlot, setSlot('content'), ctx);
 
     if (isTitled) {
-        const titleNode = userTitled
+        // Accessibility (callouts.lua:271-275): when the title is
+        // user-supplied AND the callout isn't crossref-eligible,
+        // prepend a screen-reader-only Span carrying the type's
+        // display name so screen readers announce e.g. "Warning:
+        // Watch Out" instead of just "Watch Out". Default-injected
+        // titles already ARE the display name; crossref-rendered
+        // titles already announce the type via the rendered prefix.
+        const isCrossref = !!plain.ref_type;
+        const userTitleNode = userTitled
             ? renderSlot(titleSlot, setSlot('title'), ctx)
             : defaultTitle(calloutType);
+        const titleNode = (userTitled && !isCrossref) ? (
+            <>
+                <span className={SCREEN_READER_ONLY}>{defaultTitle(calloutType)}</span>
+                {userTitleNode}
+            </>
+        ) : userTitleNode;
 
         const headerClass = [CALLOUT_HEADER, BS_D_FLEX, BS_ALIGN_CONTENT_CENTER].join(' ');
         const bodyContainerClass = [CALLOUT_BODY_CONTAINER, CALLOUT_BODY].join(' ');
@@ -160,8 +197,11 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
             </div>
         );
         const wrappedBody = collapse ? (
+            // id="callout-N" + class="callout-N-contents callout-collapse
+            // collapse [show]" — mirrors Rust resolver and TS Quarto.
             <div
-                className={[CALLOUT_COLLAPSE, BS_COLLAPSE, !startsCollapsed ? BS_SHOW : null]
+                id={calloutId}
+                className={[contentsClass, CALLOUT_COLLAPSE, BS_COLLAPSE, !startsCollapsed ? BS_SHOW : null]
                     .filter(Boolean)
                     .join(' ')}
             >

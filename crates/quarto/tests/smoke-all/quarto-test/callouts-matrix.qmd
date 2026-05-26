@@ -25,6 +25,9 @@ _quarto:
           - "callout-header"
           - "d-flex"
           - "align-content-center"
+          # Accessibility: screen-reader-only span carrying the
+          # type's display name (callouts.lua:271-275).
+          - "screen-reader-only"
         # Legacy q2-only vocabulary must NOT appear.
         - - "callout-appearance-default"
           - "callout-appearance-simple"

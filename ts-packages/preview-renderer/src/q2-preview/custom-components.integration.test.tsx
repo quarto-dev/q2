@@ -41,6 +41,7 @@ import {
     NO_ICON,
     PROOF,
     QUARTO_XREF,
+    SCREEN_READER_ONLY,
     THEOREM,
     THEOREM_TITLE,
 } from './quartoClasses';
@@ -252,9 +253,26 @@ describe('Callout', () => {
         expect(icon).not.toBeNull();
     });
 
-    it('omits the icon container when icon=false', () => {
-        const { container } = mount([calloutAst({ icon: false })]);
-        expect(container.querySelector(`.${CALLOUT_ICON_CONTAINER}`)).toBeNull();
+    // Q1-parity (callouts.lua:254-262): icon container is ALWAYS
+    // emitted; icon=false adds `no-icon` to the inner <i> (and to
+    // the outer div). CSS hides it via `.callout.no-icon`. This
+    // keeps DOM counts of `.callout-icon-container` stable across
+    // icon/no-icon callouts for downstream tooling.
+    it('emits the icon container even when icon=false, adding `no-icon` to the <i>', () => {
+        const { container } = mount([calloutAst({ icon: false, title: [STR('T')] })]);
+        const iconContainer = container.querySelector(`.${CALLOUT_ICON_CONTAINER}`);
+        expect(iconContainer, 'icon container always present (Q1-parity)').not.toBeNull();
+        const i = iconContainer!.querySelector('i');
+        expect(i).not.toBeNull();
+        expect(i!.classList.contains(CALLOUT_ICON)).toBe(true);
+        expect(i!.classList.contains(NO_ICON)).toBe(true);
+    });
+
+    it('omits the `no-icon` class from <i> when icon=true', () => {
+        const { container } = mount([calloutAst({ icon: true, title: [STR('T')] })]);
+        const i = container.querySelector(`.${CALLOUT_ICON_CONTAINER} i`);
+        expect(i).not.toBeNull();
+        expect(i!.classList.contains(NO_ICON)).toBe(false);
     });
 
     it('falls back to the capitalized type as default title when title slot is absent', () => {
@@ -276,7 +294,16 @@ describe('Callout', () => {
         // Whitespace-only authored title still wins over the default.
         // Asserts the title rendering went through the user slot path,
         // not the default branch which would output "Note".
-        expect(titleContainer!.textContent).not.toContain('Note');
+        //
+        // The screen-reader span DOES carry the literal "Note" text
+        // (intentional — `callouts.lua:271-275` parity), so check the
+        // post-SR-span portion of textContent.
+        const srSpan = titleContainer!.querySelector(`span.${SCREEN_READER_ONLY}`);
+        const userText = titleContainer!.textContent!.replace(srSpan?.textContent ?? '', '');
+        expect(userText).not.toContain('Note');
+        // And the SR span itself proves we took the user path: only
+        // user-supplied (non-default-injected) titles get one.
+        expect(srSpan, 'whitespace-only title still routes through the user slot').not.toBeNull();
     });
 
     it('always emits callout-style-{appearance} on the outer div (default)', () => {
@@ -296,7 +323,10 @@ describe('Callout', () => {
         const callout = container.querySelector('div.callout');
         expect(callout!.classList.contains('callout-style-simple')).toBe(true);
         expect(callout!.classList.contains(NO_ICON)).toBe(true);
-        expect(container.querySelector(`.${CALLOUT_ICON_CONTAINER}`)).toBeNull();
+        // Q1-parity: icon container still present, inner <i> carries no-icon.
+        const iconContainer = container.querySelector(`.${CALLOUT_ICON_CONTAINER}`);
+        expect(iconContainer).not.toBeNull();
+        expect(iconContainer!.querySelector('i')!.classList.contains(NO_ICON)).toBe(true);
     });
 
     it('emits no legacy callout-appearance-* classes', () => {
@@ -337,11 +367,14 @@ describe('Callout', () => {
         expect(innerContainer!.classList.contains(CALLOUT_BODY)).toBe(false);
     });
 
-    it('adds no-icon class when icon=false', () => {
+    it('adds no-icon class when icon=false (outer + <i>; icon container still emitted)', () => {
         const { container } = mount([calloutAst({ icon: false, title: [STR('T')] })]);
         const callout = container.querySelector('div.callout');
         expect(callout!.classList.contains(NO_ICON)).toBe(true);
-        expect(container.querySelector(`.${CALLOUT_ICON_CONTAINER}`)).toBeNull();
+        // Container present; `no-icon` on the <i> too.
+        const iconContainer = container.querySelector(`.${CALLOUT_ICON_CONTAINER}`);
+        expect(iconContainer).not.toBeNull();
+        expect(iconContainer!.querySelector('i')!.classList.contains(NO_ICON)).toBe(true);
     });
 
     it('adds callout-empty-content when content slot is empty', () => {
@@ -386,6 +419,29 @@ describe('Callout', () => {
         expect(wrapper!.classList.contains(BS_SHOW)).toBe(true);
     });
 
+    // Q1-parity id naming (callouts.lua:281, 307, 310, 316-317):
+    // wrapper id is the bare `callout-N`; class includes a matching
+    // `callout-N-contents` token. (Rust uses N=1,2,…; React uses
+    // useId()-derived ids so the suffix is opaque — both follow the
+    // `<id>` + `<id>-contents` pattern.)
+    it('collapse wrapper has an id and a co-class with the `-contents` suffix matching it', () => {
+        const { container } = mount([
+            calloutAst({
+                title: [STR('T')],
+                collapse: true,
+                collapseStartsCollapsed: true,
+            }),
+        ]);
+        const wrapper = container.querySelector(`.${CALLOUT_COLLAPSE}`);
+        expect(wrapper).not.toBeNull();
+        const wrapperId = wrapper!.id;
+        expect(wrapperId).toMatch(/^callout-/);
+        expect(
+            wrapper!.classList.contains(`${wrapperId}-contents`),
+            `wrapper must carry a class \`${wrapperId}-contents\` matching its id; got classes [${Array.from(wrapper!.classList).join(', ')}]`,
+        ).toBe(true);
+    });
+
     it('omits id attribute when attr id is empty', () => {
         const { container } = mount([calloutAst({ id: '' })]);
         const callout = container.querySelector('div.callout');
@@ -396,6 +452,50 @@ describe('Callout', () => {
         const { container } = mount([calloutAst({ id: 'cal-1' })]);
         const callout = container.querySelector('div.callout');
         expect(callout!.id).toBe('cal-1');
+    });
+
+    // Accessibility parity with TS Quarto (callouts.lua:271-275).
+    it('prepends a screen-reader-only Span containing the type display name for a user-titled callout', () => {
+        const { container } = mount([
+            calloutAst({ type: 'warning', title: [STR('Watch Out')] }),
+        ]);
+        const titleContainer = container.querySelector(`.${CALLOUT_TITLE_CONTAINER}`);
+        expect(titleContainer).not.toBeNull();
+        const srSpan = titleContainer!.querySelector(`span.${SCREEN_READER_ONLY}`);
+        expect(srSpan, 'screen-reader span must be present').not.toBeNull();
+        expect(srSpan!.textContent).toBe('Warning');
+        // Must be the FIRST child of the title container so screen
+        // readers announce the type before the user title.
+        expect(titleContainer!.firstElementChild).toBe(srSpan);
+    });
+
+    it('omits the screen-reader span when the title is default-injected (default appearance, no user title)', () => {
+        const { container } = mount([
+            calloutAst({ type: 'tip', title: undefined }),
+        ]);
+        const titleContainer = container.querySelector(`.${CALLOUT_TITLE_CONTAINER}`);
+        expect(titleContainer).not.toBeNull();
+        expect(titleContainer!.querySelector(`span.${SCREEN_READER_ONLY}`)).toBeNull();
+    });
+
+    it('omits the screen-reader span when the callout is crossref-eligible (ref_type set)', () => {
+        // Mirror what CalloutTransform writes when an id like
+        // `tip-foo` classifies as a crossref-eligible callout
+        // (`callout.rs:236-241`).
+        const ast = calloutAst({
+            type: 'tip',
+            title: [STR('Custom Title')],
+            id: 'tip-foo',
+        });
+        ast.plain_data = {
+            ...ast.plain_data,
+            ref_type: 'tip',
+            kind: 'Tip',
+            identifier: 'tip-foo',
+        };
+        const { container } = mount([ast]);
+        const titleContainer = container.querySelector(`.${CALLOUT_TITLE_CONTAINER}`);
+        expect(titleContainer!.querySelector(`span.${SCREEN_READER_ONLY}`)).toBeNull();
     });
 });
 

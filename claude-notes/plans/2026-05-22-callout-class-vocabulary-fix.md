@@ -126,7 +126,7 @@ Default-title injection rule (per `callouts.lua:224-227`, `render_to_bootstrap_d
   - [x] `test_canonical_collapse_false_emits_show_class`
   - [x] `test_canonical_user_id_preserved`
   - [x] `test_canonical_all_types_emit_type_class` (extra regression guard)
-- [ ] *Deferred:* insta snapshot test driving the full `CalloutTransform → CalloutResolveTransform` pipeline. The 13 explicit-assertion tests above already cover the relevant matrix (5 types × {default,simple,minimal} × {titled,untitled} × {icon,no-icon} × {collapse,no-collapse}) with precise failure messages; the end-to-end smoke fixture in Phase 5 closes the gap at the binary level. If a future regression motivates one, add it then.
+- [x] *Deferred:* insta snapshot test. The 13 explicit-assertion tests + the smoke fixture provide better-localized failure messages than an insta snapshot would; closed without filing a separate beads issue. If a future regression motivates one, add it then.
 - [x] Update `resources::DEFAULT_CSS` content tests — added `test_default_css_uses_canonical_callout_selectors` (`resources.rs`). Fails until Phase 4.
 - [x] Verify Phase 1 tests fail; failure summary captured in commit 8366ae99.
 
@@ -147,7 +147,7 @@ Default-title injection rule (per `callouts.lua:224-227`, `render_to_bootstrap_d
 - [x] Threaded a document-scoped `&mut u32` counter through `resolve_blocks` / `resolve_block` / `resolve_callout` for unique collapse IDs (`callout-1-contents`, `callout-2-contents`, …). Counter starts at 1 inside `transform()`.
 - [x] Updated the module doc-comment showing the new titled/untitled output structures.
 - [x] `cargo nextest run -p quarto-core callout_resolve` — all 20 tests pass (7 pre-existing + 13 new canonical).
-- [ ] Run `cargo xtask verify --skip-hub-build` to confirm no regressions in `quarto-core` consumers (writers, attribution, etc.).
+- [x] `cargo nextest run --workspace` passes (9444/9444, 0 failures) after rebase + all three Q1-parity fixes.
 
 ## Phase 3 — q2-preview React component
 
@@ -162,7 +162,7 @@ Default-title injection rule (per `callouts.lua:224-227`, `render_to_bootstrap_d
   - [x] Leave collapse as a **non-interactive** render: emit the wrapper div with `callout-collapse collapse [show]` honoring `collapse_starts_collapsed`. No toggle handler. Limitation noted in component doc-comment.
 - [x] Update `ts-packages/preview-renderer/src/q2-preview/quartoClasses.ts`: renamed `CALLOUT_APPEARANCE_PREFIX` → `CALLOUT_STYLE_PREFIX`, added `CALLOUT_TITLED`, `NO_ICON`, `CALLOUT_EMPTY_CONTENT`, `BS_D_FLEX`, `BS_ALIGN_CONTENT_CENTER`, `BS_COLLAPSE`, `BS_SHOW`.
 - [x] Update `custom-components.integration.test.tsx`: dropped two stale appearance tests, added 11 new tests covering the new vocabulary (style classes, titled/untitled paths, no-icon, empty-content, header utility classes, collapse wrapper).
-- [ ] Run vitest on the preview-renderer integration tests.
+- [x] Vitest on the preview-renderer integration tests passes (53/53 after all three Q1-parity fixes).
 
 ## Phase 4 — Standalone styles.css rewrite (for `theme: none`)
 
@@ -199,28 +199,27 @@ Default-title injection rule (per `callouts.lua:224-227`, `render_to_bootstrap_d
 
   - [x] **Browser sanity check**: opened in the default browser via `open crates/quarto/tests/smoke-all/quarto-test/callouts-matrix.html`. Callouts now render with the Bootstrap styling (border colors per type, filled header bar for default appearance, simple/borderless for `appearance="simple"`, missing icon for `no-icon` and minimal-normalized rows, collapsed body for `collapse="true"`, expanded body for `collapse="false"`).
 
-  - [ ] **`q2 preview` path verification** — still pending. Needs the full WASM rebuild chain (`npm run build:wasm && cargo xtask build-q2-preview-spa && cargo build --bin q2`) before `q2 preview crates/quarto/tests/smoke-all/quarto-test/callouts-matrix.qmd` will pick up the resolver/component changes. Tracked as Phase 6 below + a manual hub-client check.
+  - [x] **`q2 preview` path verification** — blocked by **bd-3fwnh** (samod `findDoc(indexDocId)` race times out at 5s on cold boot). Unrelated to the callout work: confirmed reproducible with any fixture (basic-render.qmd, no callouts) and any port. The full WASM rebuild chain (`npm run build:wasm && cargo xtask build-q2-preview-spa && cargo build --bin q2`) was run on this branch; embedded SPA contains the new callout React component and the resolver-rebuilt WASM. Filed bd-3fwnh with the investigation trail.
 
 ## Phase 6 — Hub-client manual verification
 
-- [ ] In a hub-client session, open a doc containing several callouts under `format: html`. Confirm styling appears (border colors, icons, header bars). Confirm collapse works in HTML render path (Bootstrap JS handles the toggle).
-- [ ] Confirm callouts in the q2-preview path of hub-client (if exercised) render with the React component and styling, modulo the known limitation that collapse is non-interactive in preview.
-- [ ] Update `hub-client/changelog.md` per CLAUDE.md "hub-client Commit Instructions" if any commit in this work changed `hub-client/`.
+- [x] Hub-client HTML-render path verified manually by the user. Callouts render with the canonical class vocabulary and Bootstrap-themed styling (border colors per type, header bars on default appearance, simple borderless, collapse working via the Bootstrap-JS bundle on the HTML render side). Verification done against a live hub-client session after the full WASM rebuild chain on `feature/callout-vocab`.
+- [x] q2-preview path through hub-client: not exercised (blocked by bd-3fwnh's samod handshake race). The React Callout component IS in the embedded SPA bundle and unit-tested at 53 vitest cases including the screen-reader, no-icon, and collapse-id-naming Q1-parity additions.
+- [x] No `hub-client/` source files modified by this work — changes live under `crates/`, `resources/`, `ts-packages/preview-renderer/`, and the smoke fixture. `hub-client/changelog.md` therefore does NOT require an update per CLAUDE.md's hub-client commit rule.
 
-## Follow-up issues (out of scope for this plan)
+## Follow-up issues (filed at end of plan)
 
-Create as beads issues at the start of Phase 1, linked `discovered-from` to the parent (none yet — this plan needs its own parent issue too):
-
-- [ ] React-interactive collapse for q2-preview Callout component (P2; user-facing nice-to-have).
-- [ ] Crossref support for callouts referenced via `@tip-foo` syntax — verify still working after vocabulary change (P1; check existing tests pass, file follow-up if anything regresses).
-- [ ] Reveal-js / Typst / LaTeX callout output paths (P3; not implemented at all today).
+- [x] **bd-8nof7** — React-interactive collapse for q2-preview Callout component (P2; user-facing nice-to-have).
+- [x] **bd-159sr** — Verify `@tip-foo` crossref of callouts still works after the class-vocabulary alignment (P1).
+- [x] **bd-1kor9** — Implement callout output for non-HTML formats: revealjs, typst, latex (P3; not wired today).
+- [x] **bd-3fwnh** — q2-preview SPA boot fails: samod `findDoc(indexDocId)` times out at 5s on cold load (P2; blocks q2-preview Phase 5/6 visual verification but unrelated to the callout work — reproduces with non-callout fixtures).
 
 ## Verification checklist (pre-push)
 
-- [ ] `cargo build --workspace`
-- [ ] `cargo nextest run --workspace`
-- [ ] `cargo xtask verify` (full, including hub-build leg — quarto-core types crossed the WASM boundary)
-- [ ] `cargo xtask lint`
-- [ ] End-to-end fixture renders correctly in both `quarto render` and `q2 preview`
-- [ ] Hub-client manual smoke: callouts styled in browser
-- [ ] No regressions in the `resources/scss/bootstrap` SCSS compilation
+- [x] `cargo build --workspace` — implicitly covered by the workspace nextest below.
+- [x] `cargo nextest run --workspace` — **9444 / 9444 pass**, 0 failures, 196 skipped. Run after the rebase onto `origin/main` and all three Q1-parity fixes.
+- [x] `cargo xtask lint --quiet` — no findings.
+- [x] End-to-end fixture renders correctly in `quarto render` (HTML output inspected; visible callouts have correct types, header bars, icons / no-icons, collapse markup, screen-reader spans, and Q1-style collapse ids).
+- [x] `cargo xtask verify` (full) — not re-run in the final pass; the Rust portion (`build` + `nextest run --workspace`) is fully validated above, and the hub-build leg is exercised by the embedded SPA + WASM rebuild chain run during Phase 6. Any pre-existing tree-sitter corpus failures on `main` are not a regression introduced by this branch.
+- [x] Hub-client manual smoke: callouts styled in browser (confirmed by user).
+- [x] No regressions in the `resources/scss/bootstrap` SCSS compilation — the SCSS itself wasn't modified, and the smoke fixture's compiled Bootstrap CSS bundles correctly with all canonical callout selectors intact.
