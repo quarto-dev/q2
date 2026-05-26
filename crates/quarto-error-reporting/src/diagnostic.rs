@@ -653,14 +653,17 @@ impl DiagnosticMessage {
 
         let file = ctx.get_file(file_id)?;
 
-        // Get file content: use stored content for ephemeral files, or read from disk
+        // Get file content: use stored content for ephemeral files, or read from disk.
+        // In WASM (and any host with no real filesystem) the disk read fails with
+        // "operation not supported on this platform"; the only graceful response is
+        // to drop the source-context snippet. The diagnostic's code, message, and
+        // hints still surface — only the Ariadne visual is unavailable.
         let content = match &file.content {
-            Some(c) => c.clone(), // Ephemeral file: use stored content
-            None => {
-                // Disk-backed file: read from disk
-                std::fs::read_to_string(&file.path)
-                    .unwrap_or_else(|e| panic!("Failed to read file '{}': {}", file.path, e))
-            }
+            Some(c) => c.clone(),
+            None => match std::fs::read_to_string(&file.path) {
+                Ok(s) => s,
+                Err(_) => return None,
+            },
         };
 
         // Map the location offsets back to original file positions
