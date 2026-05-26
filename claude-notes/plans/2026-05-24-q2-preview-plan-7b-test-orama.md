@@ -186,7 +186,19 @@ file. Each is self-contained, no fixtures outside the test module.
   (`incremental.rs:1687`) exercises the catch-all minimally — a
   hand-constructed `Original` pointing at a different file, no
   children. Add richer fixtures so the catch-all path that Plan 8
-  will land on top of has explicit pre-Plan-8 coverage:
+  will land on top of has explicit pre-Plan-8 coverage.
+
+  **Why this matters structurally** (added 2026-05-25): the
+  catch-all is now the only producer of `Rewrite` entries reached
+  via `coarsen_keep_before_block`. After the
+  [`CoarsenedEntry` self-contained refactor](./2026-05-25-coarsened-entry-self-contained.md)
+  it pre-computes block text at coarsen time — that change closed
+  a latent panic in the Transparent-recursion path, so the
+  writer-lossless baseline below should include at least one
+  fixture that fires this catch-all *inside* a Transparent wrapper
+  (e.g. a sectionize Div containing a cross-file `Original` child).
+  Without that fixture, regressions in the self-contained invariant
+  pass tests but break q2-preview.
 
   1. **Substring rooted outside target.** `Substring` whose
      `parent` is `Original` in a non-target file. `preimage_in`

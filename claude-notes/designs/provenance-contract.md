@@ -240,6 +240,15 @@ round-trip rule is "the entire subtree is one inseparable unit the
 user can't edit in-place." See Plan 7 for the consumer behavior;
 this contract does not duplicate it.
 
+**Where the writer's internal shape is pinned:**
+[`incremental-writer-internals.md`](./incremental-writer-internals.md)
+documents the `CoarsenedEntry` contract — the rule that every
+emitted entry must be self-contained, and how the atomic-kind
+decision flows into the choice of `Verbatim` (atomic with preimage)
+vs `Omit` (atomic without preimage) vs `Rewrite` (non-atomic
+catch-all) vs `Transparent` (non-atomic wrapper with source-bearing
+children) at coarsen time.
+
 ## 8. Required-anchor invariants
 
 **`by.kind == "shortcode"` always carries at least one `Invocation`

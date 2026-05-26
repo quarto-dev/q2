@@ -477,6 +477,273 @@ A paragraph that the user will edit.
     );
 }
 
+#[test]
+fn sectionize_wrapper_with_shortcode_child_edit_does_not_panic() {
+    // Discovered 2026-05-25 during the TS-gate-bypass UX experiment.
+    // When the framework's atomic-aware NOOP gate is disabled,
+    // edits to shortcode-resolved content (e.g. inside
+    // `{{< lipsum 3 >}}`) reach the writer. The writer's
+    // RecurseIntoContainer arm for the top-level sectionize wrapper
+    // descends via the Transparent recursion (commit bdcfdc53),
+    // which calls coarsen_blocks on the wrapper's children with a
+    // CHILD-RELATIVE plan. Inside that recursion, the existing
+    // `coarsen_keep_before_block` catch-all (~line 484) emits
+    // `Rewrite { new_idx: result_idx }` — but result_idx is the
+    // child-relative index, not the top-level index. `emit_entries`
+    // later does `new_ast.blocks[*new_idx]` (top-level) and panics
+    // with "index out of bounds".
+    //
+    // The doc-comment on coarsen_keep_before_block explicitly notes
+    // this is "not exercised by today's synthesizers" — true before
+    // the Transparent recursion was added, no longer true now.
+    //
+    // This test pins the panic so the architectural fix (carry the
+    // text on the Rewrite entry instead of an index, mirroring
+    // InlineSplice's pattern) has a regression target.
+    use pampa::pandoc::{Block, Header, Inline, Pandoc, Paragraph, Span, Str};
+    use quarto_pandoc_types::{AttrSourceInfo, ConfigValue};
+    use quarto_source_map::{AnchorRole, By, FileId, SourceInfo};
+    use std::sync::Arc;
+
+    const TARGET: FileId = FileId(0);
+    // Original qmd byte ranges are illustrative; the source text is
+    // long enough to contain all the byte ranges referenced below.
+    let original_qmd = "# Heading\n\n{{< lipsum 3 >}}\n\nMore text.\n";
+
+    // Build the lipsum shortcode token's anchor (Original in target).
+    let token_si = SourceInfo::original(TARGET, 11, 27); // "{{< lipsum 3 >}}"
+
+    // Construct a Generated{shortcode} Para representing one of
+    // lipsum's resolved paragraphs.
+    let mut lipsum_si = SourceInfo::generated(By::shortcode("lipsum"));
+    lipsum_si.append_anchor(AnchorRole::Invocation, Arc::new(token_si.clone()));
+
+    // Also construct a child Para that has NEITHER preimage in
+    // target NOR a recognized Generated kind: an Original Para from
+    // a DIFFERENT file. This is the cross-file-Original case that
+    // coarsen_keep_before_block's catch-all falls through to.
+    // (Pre-Plan-8 the AST didn't carry these; the panic the user
+    // observed must hit a different shape — but the structural
+    // failure is the same: a Rewrite emitted inside a Transparent
+    // wrapper.)
+    let other_file_para_si = SourceInfo::original(FileId(1), 0, 10);
+
+    fn make_header(level: usize, text: &str, si: SourceInfo) -> Block {
+        Block::Header(Header {
+            level,
+            attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::default(),
+            })],
+            source_info: si,
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+    fn make_para(text: &str, si: SourceInfo) -> Block {
+        Block::Paragraph(Paragraph {
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::default(),
+            })],
+            source_info: si,
+        })
+    }
+
+    // Wrapper children: Header + cross-file Para + lipsum Para.
+    let header = make_header(1, "Heading", SourceInfo::original(TARGET, 0, 9));
+    let other_file_para = make_para("Cross", other_file_para_si);
+    let lipsum_para = make_para("Lorem ipsum…", lipsum_si.clone());
+    let original = wrap_in_sectionize_div(Pandoc {
+        blocks: vec![header.clone(), other_file_para.clone(), lipsum_para],
+        meta: ConfigValue::default(),
+    });
+
+    // User clicks +react on the lipsum Para — append a Span to its
+    // inlines. The cross-file Para and Header are unchanged.
+    let mut lipsum_para_new = make_para("Lorem ipsum…", lipsum_si);
+    if let Block::Paragraph(ref mut p) = lipsum_para_new {
+        p.content.push(Inline::Span(Span {
+            attr: (
+                String::new(),
+                vec!["quarto-edit-comment".to_string()],
+                hashlink::LinkedHashMap::new(),
+            ),
+            content: vec![Inline::Str(Str {
+                text: "🎉".to_string(),
+                source_info: SourceInfo::default(),
+            })],
+            source_info: SourceInfo::default(),
+            attr_source: AttrSourceInfo::empty(),
+        }));
+    }
+    let new = wrap_in_sectionize_div(Pandoc {
+        blocks: vec![header, other_file_para, lipsum_para_new],
+        meta: ConfigValue::default(),
+    });
+
+    let plan = compute_reconciliation(&original, &new);
+
+    // Before the architectural fix: panics with
+    // "index out of bounds: the len is 1 but the index is N".
+    // After the fix: returns Ok. (This test does NOT assert on
+    // output bytes — see `sectionize_wrapper_shortcode_child_edit_soft_drops`
+    // for the byte-level expectation.)
+    let result = writers::incremental::incremental_write(original_qmd, &original, &new, &plan);
+    assert!(
+        result.is_ok(),
+        "incremental_write should not panic on a sectionize wrapper containing \
+         a cross-file child + a shortcode child + an inline edit; got {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn sectionize_wrapper_shortcode_child_edit_soft_drops() {
+    // The user clicks +react on a paragraph inside `{{< lipsum 3 >}}`
+    // with the framework's atomic-aware NOOP gate bypassed. The
+    // shortcode resolution is atomic-kind Generated; the inline edit
+    // has no source-side knob (the user's source is the token, not
+    // the resolved bytes). The writer must:
+    //
+    //   (a) preserve the `{{< lipsum 3 >}}` token bytes in the qmd
+    //   (b) NOT emit the resolved bytes / the reactji
+    //   (c) surface a Q-3-42 or Q-3-43 warning so the UI can show
+    //       a Monaco squiggle on the token line
+    //
+    // Two alignment shapes can reach the lipsum Para at child level
+    // of a Transparent (sectionize) recursion:
+    //
+    //   1. `RecurseIntoContainer { lipsum_idx, lipsum_idx }` —
+    //      reconciler matches the original and the new structurally.
+    //      Hits the existing soft-drop cascade priority 1
+    //      (preimage_in → Verbatim of token bytes). Works today.
+    //
+    //   2. `UseAfter(lipsum_idx)` (paired with a KeepBefore on the
+    //      previous original) — reconciler can't pair the original
+    //      and the new and treats it as a wholesale replacement.
+    //      Falls through to let-user-win Rewrite (the writer emits
+    //      the new block's resolved bytes verbatim). That's wrong
+    //      for atomic-Generated with preimage.
+    //
+    // This test exercises shape #2 by giving the new Para a
+    // SourceInfo::default() (simulating a React-side wholesale
+    // replacement that loses provenance), then asserts the soft-drop
+    // outcome. Pre-fix: the resolved bytes leak into the qmd. Post-
+    // fix: the token is preserved + Q-3-42/43 fires.
+    use pampa::pandoc::{Block, Header, Inline, Pandoc, Paragraph, Span, Str};
+    use quarto_pandoc_types::{AttrSourceInfo, ConfigValue};
+    use quarto_source_map::{AnchorRole, By, FileId, SourceInfo};
+    use std::sync::Arc;
+
+    const TARGET: FileId = FileId(0);
+    let original_qmd = "# Heading\n\n{{< lipsum 3 >}}\n";
+
+    let token_si = SourceInfo::original(TARGET, 11, 27);
+    let mut lipsum_si = SourceInfo::generated(By::shortcode("lipsum"));
+    lipsum_si.append_anchor(AnchorRole::Invocation, Arc::new(token_si));
+
+    fn make_header(level: usize, text: &str, si: SourceInfo) -> Block {
+        Block::Header(Header {
+            level,
+            attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::default(),
+            })],
+            source_info: si,
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+    fn make_para_with_text(text: &str, si: SourceInfo) -> Block {
+        Block::Paragraph(Paragraph {
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::default(),
+            })],
+            source_info: si,
+        })
+    }
+
+    let header = make_header(1, "Heading", SourceInfo::original(TARGET, 0, 9));
+
+    // Original lipsum paragraph carries the shortcode anchor.
+    let lipsum_orig = make_para_with_text(
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+        lipsum_si.clone(),
+    );
+    let original = wrap_in_sectionize_div(Pandoc {
+        blocks: vec![header.clone(), lipsum_orig],
+        meta: ConfigValue::default(),
+    });
+
+    // New lipsum paragraph: different inline content + reactji Span,
+    // but source_info IS preserved (matches what the React framework
+    // does when constructing the post-edit AST — block source_info
+    // is inherited from the original).
+    let mut lipsum_new = make_para_with_text("Etiam maximus accumsan gravida.", lipsum_si.clone());
+    if let Block::Paragraph(ref mut p) = lipsum_new {
+        p.content.push(Inline::Span(Span {
+            attr: (
+                String::new(),
+                vec!["quarto-edit-comment".to_string()],
+                hashlink::LinkedHashMap::new(),
+            ),
+            content: vec![Inline::Str(Str {
+                text: "🎉".to_string(),
+                source_info: SourceInfo::default(),
+            })],
+            source_info: SourceInfo::default(),
+            attr_source: AttrSourceInfo::empty(),
+        }));
+    }
+    let new = wrap_in_sectionize_div(Pandoc {
+        blocks: vec![header, lipsum_new],
+        meta: ConfigValue::default(),
+    });
+
+    let plan = compute_reconciliation(&original, &new);
+    eprintln!("plan = {:#?}", plan);
+
+    let (qmd, warnings) =
+        writers::incremental::incremental_write(original_qmd, &original, &new, &plan)
+            .expect("write should succeed");
+    eprintln!("--- qmd ---\n{}\n--- end ---", qmd);
+    eprintln!("--- warnings ({}) ---", warnings.len());
+    for w in &warnings {
+        eprintln!("  code={:?} title={:?}", w.code, w.title);
+    }
+
+    // (a) token bytes preserved.
+    assert!(
+        qmd.contains("{{< lipsum 3 >}}"),
+        "qmd should preserve the lipsum token bytes; got: {:?}",
+        qmd
+    );
+    // (b) reactji NOT emitted.
+    assert!(
+        !qmd.contains("🎉"),
+        "qmd should NOT contain the user's reactji; got: {:?}",
+        qmd
+    );
+    // (b cont.) resolved bytes (the new Para's text) NOT emitted.
+    assert!(
+        !qmd.contains("Etiam maximus accumsan"),
+        "qmd should NOT contain the new Para's resolved-shortcode bytes; \
+         got: {:?}",
+        qmd
+    );
+    // (c) Q-3-42 or Q-3-43 warning fired.
+    let saw_soft_drop = warnings
+        .iter()
+        .any(|w| matches!(w.code.as_deref(), Some("Q-3-42") | Some("Q-3-43")));
+    assert!(
+        saw_soft_drop,
+        "expected a Q-3-42 or Q-3-43 soft-drop warning; got: {:?}",
+        warnings.iter().map(|w| &w.code).collect::<Vec<_>>()
+    );
+}
+
 // --- target_file_id derivation skips no-root_file_id first blocks ---
 //
 // Plan 7c Phase 8 — `coarsen`'s `target_file_id` is derived from the

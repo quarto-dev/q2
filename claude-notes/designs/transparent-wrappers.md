@@ -87,6 +87,27 @@ that meets the three conditions above (Plan 10).
   resolved title as read-only; the user's source-side knob is the
   YAML `title:` key. (Not block-container shape either.)
 
+## Sibling primitive on the emission side
+
+`first_in_user_tree` (below) is the *traversal* primitive — how a
+caller descends past transparent wrappers when looking up source
+positions. The *emission* primitive is `CoarsenedEntry::Transparent`
+in the incremental writer: same wrapper shape, but the question is
+"how do I emit bytes through this wrapper?" rather than "where do
+the user's source bytes live?"
+
+Both rely on the same descent rule (skip the wrapper, look at the
+children) and the same invariant (a `Generated` block-container
+with no Invocation anchor and source-bearing children is
+transparent). They diverge in what they do with the descent:
+traversal stops at the first match; emission walks all children
+and concatenates their bytes.
+
+See [`incremental-writer-internals.md`](./incremental-writer-internals.md)
+for the writer-side contract — in particular the rule that every
+`CoarsenedEntry` variant must be self-contained, which is what
+makes child entries safe to inline through a `Transparent`.
+
 ## Reference primitive: `first_in_user_tree`
 
 ```rust

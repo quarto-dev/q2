@@ -53,9 +53,19 @@ enum CoarsenedEntry {
         orig_idx: Option<usize>,
     },
     /// Rewrite this block using the standard writer.
+    ///
+    /// `block_text` is pre-computed at coarsen time so the entry stays
+    /// self-contained regardless of nesting depth. (Earlier the variant
+    /// carried `new_idx: usize` and looked up the block at emit time,
+    /// but that indexed `new_ast.blocks` top-level — wrong for entries
+    /// produced inside a `Transparent` recursion, where the relevant
+    /// block lives in a child slice. See
+    /// `claude-notes/designs/incremental-writer-internals.md` for the
+    /// "every variant is self-contained" contract.)
     Rewrite {
-        /// Index into new_ast.blocks
-        new_idx: usize,
+        /// Pre-computed block text — same bytes `write_block_to_string`
+        /// would produce on the corresponding block.
+        block_text: String,
     },
     /// Splice inlines within a block without rewriting the entire block.
     /// The block structure (prefix, suffix) is preserved from the original;
@@ -372,20 +382,47 @@ fn coarsen_blocks(
                 &original_blocks[*orig_idx],
                 target_file_id,
                 Some(*orig_idx),
-                result_idx,
-            ),
+            )?,
             BlockAlignment::UseAfter(after_idx) => {
                 let new_block = &new_blocks[*after_idx];
+                let new_si = new_block.source_info();
+
                 let is_atomic_cn = matches!(new_block, Block::Custom(cn)
                     if is_atomic_custom_node(&cn.type_name));
-                let no_preimage_generated =
-                    matches!(new_block.source_info(), SourceInfo::Generated { .. })
-                        && new_block
-                            .source_info()
-                            .preimage_in(target_file_id)
-                            .is_none();
+                let atomic_generated_preimage = match new_si {
+                    SourceInfo::Generated { by, .. } if by.is_atomic_kind() => {
+                        new_si.preimage_in(target_file_id)
+                    }
+                    _ => None,
+                };
+                let no_preimage_generated = matches!(new_si, SourceInfo::Generated { .. })
+                    && new_si.preimage_in(target_file_id).is_none();
 
-                if !is_atomic_cn && no_preimage_generated {
+                if let Some(range) = atomic_generated_preimage {
+                    // User edited inside an atomic-kind Generated block
+                    // (shortcode / filter / title-block / tree-sitter-
+                    // postprocess). The reconciler split the edit into
+                    // a deleted-original + new-block; the new block
+                    // still carries the token's Invocation anchor, so
+                    // its preimage IS the source-side knob. Emit the
+                    // token bytes verbatim and soft-drop the edit;
+                    // without this branch the let-user-win Rewrite
+                    // below would write the resolved bytes (the edit
+                    // applied to the generated content) back into qmd,
+                    // poisoning the source. See
+                    // `claude-notes/designs/incremental-writer-internals.md`
+                    // for why this lives at the writer, not the gate.
+                    warnings.push(diagnostic_q3_43_block(new_block));
+                    CoarsenedEntry::Verbatim {
+                        byte_range: range,
+                        // No original block paired with this entry —
+                        // the UseAfter alignment implicitly deleted
+                        // the original; compute_separator's
+                        // consecutive-in-original optimization can't
+                        // use a top-level orig_idx here.
+                        orig_idx: None,
+                    }
+                } else if !is_atomic_cn && no_preimage_generated {
                     // User replaced a synthesized-from-metadata container
                     // wholesale via React. No source position to anchor a
                     // Rewrite at; soft-drop with Q-3-43.
@@ -397,7 +434,7 @@ fn coarsen_blocks(
                     // component menu; the qmd writer's CustomNode arm
                     // serializes the fresh plain_data).
                     CoarsenedEntry::Rewrite {
-                        new_idx: result_idx,
+                        block_text: write_block_to_string(new_block)?,
                     }
                 }
             }
@@ -494,14 +531,14 @@ fn coarsen_blocks(
                         }
                     } else {
                         CoarsenedEntry::Rewrite {
-                            new_idx: result_idx,
+                            block_text: write_block_to_string(new_block)?,
                         }
                     }
                 } else {
                     // No inline plan — this is a block container (Div,
                     // BlockQuote, etc.). Fall back to Rewrite.
                     CoarsenedEntry::Rewrite {
-                        new_idx: result_idx,
+                        block_text: write_block_to_string(&new_blocks[*after_idx])?,
                     }
                 }
             }
@@ -537,23 +574,25 @@ fn coarsen_blocks(
 /// children of a `Transparent` (whose indices don't reference
 /// `original_ast.blocks` directly).
 ///
-/// `result_idx` is the position in the result block sequence; used as
-/// `new_idx` if we fall through to Rewrite. For KeepBefore, `result_idx`
-/// indexes the same structural block in `new_ast` (KeepBefore implies
-/// structural equality).
+/// KeepBefore implies the original block at this position and the new
+/// block at the same position are structurally equivalent (that's what
+/// the reconciler's KeepBefore alignment *means*). So when we fall
+/// through to Rewrite, serializing the original `block` yields the
+/// same bytes as serializing the new one — by referential transparency
+/// of `write_block_to_string`. We pick the original to avoid threading
+/// the new slice down here.
 fn coarsen_keep_before_block(
     block: &Block,
     target_file_id: quarto_source_map::FileId,
     top_level_orig_idx: Option<usize>,
-    result_idx: usize,
-) -> CoarsenedEntry {
+) -> Result<CoarsenedEntry, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let si = block.source_info();
 
     if let Some(range) = si.preimage_in(target_file_id) {
-        return CoarsenedEntry::Verbatim {
+        return Ok(CoarsenedEntry::Verbatim {
             byte_range: range,
             orig_idx: top_level_orig_idx,
-        };
+        });
     }
 
     if let SourceInfo::Generated { by, .. } = si {
@@ -567,7 +606,7 @@ fn coarsen_keep_before_block(
                  Block: {:?}",
                 block,
             );
-            return CoarsenedEntry::Omit;
+            return Ok(CoarsenedEntry::Omit);
         }
 
         // Non-atomic Generated wrapper. If it has source-bearing children,
@@ -583,21 +622,18 @@ fn coarsen_keep_before_block(
                     // Children of a Transparent wrapper aren't top-level
                     // blocks — pass orig_idx=None so compute_separator
                     // doesn't try the original-gap optimization on them.
-                    // result_idx is unused for child Rewrites (a child
-                    // Rewrite would need a different lookup mechanism;
-                    // not exercised by today's synthesizers).
-                    coarsen_keep_before_block(child, target_file_id, None, result_idx)
+                    coarsen_keep_before_block(child, target_file_id, None)
                 })
-                .collect();
-            return CoarsenedEntry::Transparent { child_entries };
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(CoarsenedEntry::Transparent { child_entries });
         }
     }
 
     // Catch-all: cross-file Original, Substring rooted outside target,
     // gappy Concat, Generated wrapper without source-bearing children.
-    CoarsenedEntry::Rewrite {
-        new_idx: result_idx,
-    }
+    Ok(CoarsenedEntry::Rewrite {
+        block_text: write_block_to_string(block)?,
+    })
 }
 
 /// Return the inner block children of a block, if the block is a
@@ -886,9 +922,7 @@ fn emit_entries<'e>(
             CoarsenedEntry::Verbatim { byte_range, .. } => {
                 original_qmd[byte_range.clone()].to_string()
             }
-            CoarsenedEntry::Rewrite { new_idx } => {
-                write_block_to_string(&new_ast.blocks[*new_idx])?
-            }
+            CoarsenedEntry::Rewrite { block_text } => block_text.clone(),
             CoarsenedEntry::InlineSplice { block_text, .. } => block_text.clone(),
             // Transparent + Omit were handled above; coarsen never emits
             // any other variant.

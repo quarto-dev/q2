@@ -1490,3 +1490,19 @@ This decomposition makes future pipeline kinds free: the writer
 doesn't need a new parameter for each new kind, because it doesn't
 know what a pipeline is. The caller picks which render function to
 call; the writer just diffs.
+
+## Follow-ups closed
+
+- **`CoarsenedEntry::Rewrite` carried `new_idx` instead of
+  pre-computed text** (Phase 2 design vestige).
+  Closed 2026-05-25 by
+  [`coarsened-entry-self-contained`](./2026-05-25-coarsened-entry-self-contained.md).
+  The `result_idx is unused for child Rewrites (...not exercised by
+  today's synthesizers)` comment introduced in commit `9a473fe9` was
+  accurate at the time, but became reachable once Plan 7c Phase 8
+  (`bdcfdc53`) added a Transparent-recursion path in `coarsen_blocks`
+  for changed wrappers. The fix lifts `Rewrite` to carry
+  `block_text: String` (matching `InlineSplice`'s precedent), making
+  every `CoarsenedEntry` variant self-contained. The contract is
+  documented in
+  [`incremental-writer-internals.md`](../designs/incremental-writer-internals.md).
