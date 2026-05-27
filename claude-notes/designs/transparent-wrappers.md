@@ -103,7 +103,7 @@ transparent). They diverge in what they do with the descent:
 traversal stops at the first match; emission walks all children
 and concatenates their bytes.
 
-See [`incremental-writer-internals.md`](./incremental-writer-internals.md)
+See [`incremental-writer-contract.md`](./incremental-writer-contract.md)
 for the writer-side contract — in particular the rule that every
 `CoarsenedEntry` variant must be self-contained, which is what
 makes child entries safe to inline through a `Transparent`.

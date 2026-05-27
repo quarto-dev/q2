@@ -1,9 +1,17 @@
 # Plan 7 — Incremental writer: preimage walk, Transparent / Omit, atomic soft-drop, multi-inline dedupe
 
-**Date:** 2026-05-04 (revised 2026-05-24)
+**Date:** 2026-05-04 (revised 2026-05-24; closed 2026-05-26)
 **Branch:** feature/provenance
-**Status:** Implementation plan (API surface settled)
+**Status:** **Shipped** — Phases 1-7 + 9 landed on `feature/provenance`.
+Phase 8's broader Playwright matrix deferred to Plan 7b. Q-3-41 +
+TS-side editability predicate deferred to Plan 7c. Algebraic
+soundness refactor of the coarsen/write path tracked under Plan 7d.
 **Milestone:** M3 (edit-back works for non-include, non-pure-synthesis edits)
+
+> **Reading this plan in 2026-05-26+:** the `[x]` checkboxes reflect
+> what shipped. A handful of `[ ]` items remain — all of them are
+> explicitly deferred with a pointer to the follow-up plan that owns
+> them. Plan 7 itself is closed; no remaining work lives here.
 
 ## Epic context
 
@@ -455,6 +463,10 @@ Three codes, per the Q-3 conventions in
   again in a moment." Warning severity. No source range (the
   edit is pre-render, so there's no rendered DOM to point at).
   Suppress-after-3 still applies by code rather than range.
+  **Implementation deferred to Plan 7c** (Phases 1 + 3) — the
+  catalog entry and TS-side emission did not ship with Plan 7's
+  Rust work; the writer code path Plan 7 shipped never reaches the
+  no-baseline case (the bridge intercepts before invocation).
 
 - **`Q-3-42` — "Shortcode edit dropped".** Emitted when an
   inline-level edit to shortcode-resolved (or other atomic-Generated)
@@ -1563,121 +1575,20 @@ lockstep with `CROSSREF_RESOLVED_REF`.
 - [x] Diagnostic builder helpers `diagnostic_q3_42_inline(inline)` and `diagnostic_q3_43_block(block)` used by `coarsen`'s soft-drop sites; live in `pampa::writers::incremental` (not `quarto-error-reporting`, which doesn't depend on `quarto-pandoc-types`)
 - [x] Unit tests: each soft-drop unit test asserts the correct Q-3-42 / Q-3-43 code is emitted
 
-### Session 1 → Session 2 handoff
+### Session 1 → Session 2 handoff (retrospective — superseded)
 
-Session 1 ends here. Before Session 1's PR merges to
-`feature/provenance`, Agent 1 must complete the obligations below.
-Agent 2 starts cold and uses the prompt at the end of this section
-verbatim.
+This section originally scoped Plan 7 across two agent sessions
+split at the WASM ABI boundary. In practice the work shipped in a
+single session on `feature/provenance` (Phases 1-7 + 9 done;
+Phase 8's broader e2e matrix deferred to Plan 7b; Q-3-41 + TS-side
+editability predicate deferred to Plan 7c).
 
-#### Obligations on Agent 1
-
-- [ ] Mark every Phase 1-3 checklist item above as `[x]`. If an item
-  was descoped or split, edit it in place to reflect what actually
-  shipped (do not silently skip).
-- [ ] Fill in the **Deltas observed during Session 1** subsection
-  below. This is the most important handoff artifact — Session 2's
-  code reads against Session 1's API surface, and any drift from
-  the sketched design needs to land here. Specifically capture:
-  - Names that ended up different from the plan (function names,
-    module paths, type names, helper names).
-  - Signature changes (e.g. `is_editable_inside` ended up taking
-    `&AstContext` for the pool lookup, or `coarsen`'s warning
-    sink ended up wrapped in a struct, or the diagnostic builders
-    take different arguments).
-  - Surprises that materially change Session 2's scope (e.g. a
-    Plan 6 stamper bug surfaced that needs fixing before
-    Session 2 can proceed; a test in the existing 351-test corpus
-    needed an update that should be cross-linked).
-  - Files that moved or were created in unexpected locations.
-  - Anything in the `claude-notes/designs/incremental-writer-contract.md`
-    that needed updating.
-  - Empty is OK: if Session 1 shipped exactly per the plan, write
-    "No deltas — implementation matched the plan as written."
-- [ ] Run `cargo xtask verify` (full chain). Green is required for
-  merge.
-- [ ] Commit per the project's git workflow. Open a PR against
-  `feature/provenance` with `--no-ff` merge once approved.
-- [ ] After the merge, produce the Agent 2 launch prompt below
-  verbatim (filling in the two `<placeholder>` slots), and hand
-  it to the user.
-
-#### Deltas observed during Session 1
-
-> Agent 1: replace this block with the deltas you observed. Leave
-> the heading; replace the prose. If there were no deltas, say so
-> explicitly so Agent 2 doesn't have to wonder whether the section
-> is incomplete.
->
-> _Placeholder — Agent 1 fills this in at end of Session 1._
-
-#### Agent 2 launch prompt
-
-Paste the following into a fresh session (different agent, fresh
-context window). Replace `<session-1-merge-commit>` with the
-short SHA of Session 1's merge commit on `feature/provenance`,
-and `<plan-file-path>` with the absolute path to this plan file.
-
-```
-You are starting Session 2 of Plan 7 (incremental writer) in the
-q2 Rust monorepo. Session 1 — the Rust core (preimage_in,
-is_editable_inside, CoarsenedEntry::{Transparent,Omit}, soft-drop
-substitutions, multi-inline dedupe, diagnostic catalog entries) —
-has landed on `feature/provenance` at commit
-<session-1-merge-commit>. You are picking up the WASM bridge +
-consumer migrations + SPA edit-back wiring + end-to-end tests
-(Phases 4-9 in the plan).
-
-First, read these in order:
-1. <plan-file-path> — the full plan. Phases 1-3 are checked off;
-   the §"Deltas observed during Session 1" subsection records
-   anything that shipped differently from the planned design.
-   Read that subsection carefully — your code reads against
-   Session 1's actual API, not the plan's sketch.
-2. claude-notes/designs/incremental-writer-contract.md — the
-   contract Session 1 implemented. The rules in this doc are
-   load-bearing for Session 2's diagnostic and edit-back paths.
-
-Skim what Session 1 shipped:
-
-    git log --oneline main..feature/provenance
-    git diff <session-1-merge-commit>~1..<session-1-merge-commit> --stat
-
-Create or switch into a worktree for Session 2 work. Per plan
-§Session split, branch `beads/<id>-plan7-wasm-and-consumers` off
-`feature/provenance`. If a beads issue does not yet exist, create
-one ("Plan 7 Session 2 — WASM bridge + consumers + SPA edit-back",
-priority 1, depends on Session 1's issue) and use its id. If
-hub-client work is in scope (it is — Phases 5-9 touch it), run
-`npm install` from the new worktree root.
-
-Work through Phases 4-9 in order. The phases are sequential by
-design — Phase 4 (WASM signature) must land before Phase 5 (TS
-wrapper); the demos in Phase 6 depend on Phase 5; the SPA in
-Phase 7 depends on Phase 5 and Phase 6; e2e tests in Phase 8
-depend on everything before. Within a phase, items can run in
-any order.
-
-Verification before claiming done:
-- `cargo xtask verify` (full chain, no skip flags) green.
-- Manual browser smoke per CLAUDE.md's "End-to-end verification
-  before declaring success" — exercise q2 preview SPA's edit-back
-  path against a real fixture, observe the rendered DOM round-trip
-  back to qmd through automerge, confirm Q-3-42 / Q-3-43 surface
-  in DiagnosticStrip. Record the invocation and the observed
-  output per the CLAUDE.md gate.
-- Hub-client manual smoke — edit a sectionized doc in
-  ReactPreview, confirm the qmd round-trips with section
-  structure preserved, confirm warnings ride
-  `onDiagnosticsChange` into the diagnostics banner.
-
-If anything in the merged Rust code from Session 1 doesn't match
-what the plan says, **trust the code and update the plan in your
-PR**. The plan is a living document; the code is authoritative.
-
-Open a PR against `feature/provenance` when verify is green;
-request review.
-```
+The session-split scaffold, the Deltas placeholder, and the Agent 2
+launch prompt have been retired — they assumed a two-PR workflow
+that never materialized. The full reshape lives in git history
+(commit `561eefa0` on the `review/provenance-plan-7` branch, which
+landed on `feature/provenance` via the 2026-05-26 rebase) for
+anyone who wants to see the original handoff design.
 
 ### Phase 4 — WASM bridge signature change (`wasm-quarto-hub-client`)
 
@@ -1890,4 +1801,5 @@ call; the writer just diffs.
   `block_text: String` (matching `InlineSplice`'s precedent), making
   every `CoarsenedEntry` variant self-contained. The contract is
   documented in
-  [`incremental-writer-internals.md`](../designs/incremental-writer-internals.md).
+  [`incremental-writer-contract.md`](../designs/incremental-writer-contract.md)
+  §"`CoarsenedEntry` self-containment".

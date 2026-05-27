@@ -1123,6 +1123,82 @@ inside WASM and never crosses the boundary as JSON. Confirm with
 `#[serde(default)]` semantics apply on the parsing side (new
 field absent ⇒ `null`/`undefined` ⇒ "don't soft-drop").
 
+#### Phase 7b — Inline `UseAfter` soft-drop checks the new-side inline's atomicity
+
+**Discovered 2026-05-26** during the algebraic-soundness research
+that produced today's block-level UseAfter fix (commit
+`e584428d`). The block-level cascade in `coarsen_blocks` had a gap
+for `BlockAlignment::UseAfter(j)` where `new_blocks[j]` was
+atomic-Generated *with preimage* — the let-user-win Rewrite
+fell through and emitted the resolved bytes back into source. The
+fix added a branch that detects atomic-Generated-with-preimage on
+the *new* block and substitutes `Verbatim` of preimage + Q-3-43.
+
+The inline cascade in `assemble_inline_content`
+(`crates/pampa/src/writers/incremental.rs:1325-1362`) has the
+exact analogue gap. Today's Phase 1 of `assemble_inline_content`
+only checks the **original-side** inline's editability (via the
+positional proxy that Phase 7 above fixes). It does not check
+whether the *new* inline at `after_idx` is atomic-Generated with
+preimage. If a reconciler emits `InlineAlignment::UseAfter(j)`
+where `new_inlines[j]` carries `Generated{by:shortcode, from:
+[Invocation -> token_si in target]}`, the cascade lets it through
+to splice/rewrite and the resolved bytes leak.
+
+**The fix mirrors the block-level fix shipped today.** Add a new
+check at the head of the `InlineAlignment::UseAfter` arm:
+
+```rust
+InlineAlignment::UseAfter { after_idx, displaced_before_idx } => {
+    let new_inline = &new_inlines[*after_idx];
+    let new_si = new_inline.source_info();
+    let atomic_generated_preimage = match new_si {
+        SourceInfo::Generated { by, .. } if by.is_atomic_kind() =>
+            new_si.preimage_in(target_file_id),
+        _ => None,
+    };
+    if let Some(_range) = atomic_generated_preimage {
+        // User edited inside an atomic-kind Generated inline
+        // (typically a shortcode-resolved Str). The new inline
+        // still carries the token's Invocation anchor; emit the
+        // token bytes verbatim by substituting KeepBefore of the
+        // displaced original (if known) or the positional proxy.
+        let orig_idx = displaced_before_idx
+            .or_else(|| Some(*after_idx).filter(|i| *i < orig_inlines.len()))?;
+        warnings.push(diagnostic_q3_42_inline(&orig_inlines[orig_idx]));
+        effective.push(InlineAlignment::KeepBefore(orig_idx));
+        continue;
+    }
+    // ... existing original-side check follows.
+}
+```
+
+This fix and Phase 7's `displaced_before_idx` enrichment compose
+naturally: Phase 7 gives us the precise original-side index;
+Phase 7b uses it (or falls back to the positional proxy) when
+emitting `KeepBefore`. The two phases can land in either order;
+Phase 7 lands first if it's already scoped as drafted, then
+Phase 7b layers on top.
+
+**Why this is a separate phase, not folded into Phase 7.** Phase 7
+fixes an *accuracy* bug in the existing original-side check (the
+positional proxy misfires on inserts/deletes). Phase 7b adds a
+*new branch* (new-side atomicity) that doesn't exist in any form
+today. Both are denylist tightenings; both become moot once Plan
+7d's algebraic refactor lands.
+
+- [ ] Add the atomic-Generated-with-preimage check at the head of
+      `InlineAlignment::UseAfter` in `assemble_inline_content`.
+- [ ] Regression test:
+      `inline_use_after_on_atomic_generated_shortcode_with_preimage_soft_drops`.
+      Construct an inline plan with `UseAfter` targeting a Span
+      whose `source_info` is `Generated{by:shortcode, from:
+      [Invocation -> token_si]}` and whose content differs from the
+      original. Assert the qmd output preserves the token bytes
+      verbatim and one Q-3-42 warning fires. Mirrors today's
+      block-level `sectionize_wrapper_shortcode_child_edit_soft_drops`.
+- [ ] `cargo xtask verify --skip-hub-build --skip-hub-tests` green.
+
 #### Phase 8 — `target_file_id` derivation skips no-`root_file_id` first blocks
 
 **Repo facts the implementer needs:**

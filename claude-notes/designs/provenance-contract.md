@@ -266,9 +266,9 @@ regions). The writer doc covers both behaviors; this contract just
 says "make the decision deliberately, default no."
 
 **Where the writer's internal shape is pinned:**
-[`incremental-writer-internals.md`](./incremental-writer-internals.md)
-documents the `CoarsenedEntry` contract — the rule that every
-emitted entry must be self-contained, and how the atomic-kind
+[`incremental-writer-contract.md`](./incremental-writer-contract.md)
+§"`CoarsenedEntry` self-containment" documents the rule that
+every emitted entry must be self-contained, and how the atomic-kind
 decision flows into the choice of `Verbatim` (atomic with preimage)
 vs `Omit` (atomic without preimage) vs `Rewrite` (non-atomic
 catch-all) vs `Transparent` (non-atomic wrapper with source-bearing

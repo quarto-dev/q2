@@ -191,7 +191,7 @@ When a reconciliation alignment would target a non-editable region,
 warning sink. The write succeeds; the rejected edit is the only
 casualty.
 
-Five cases:
+Six cases:
 
 - **Inline-level UseAfter on a region where `is_editable_inside`
   returns false** (typically: user retyped resolved shortcode
@@ -217,6 +217,17 @@ Five cases:
   atomic CustomNode through an explicit affordance (e.g. a
   component menu picker), the intent is unambiguous.
 
+- **Block-level UseAfter on an atomic-kind `Generated` *with*
+  preimage in target** — the user edited inside a shortcode-
+  resolved or filter-output block, and the reconciler split the
+  edit into a deleted-original + new-block. The new block still
+  carries the token's `Invocation` anchor; substitute `Verbatim`
+  of the preimage range and discard the new block. Emits `Q-3-43`.
+  (Added 2026-05-26; see commit `e584428d` for the implementation
+  and the lipsum-paragraph repro that motivated it. Without this
+  branch the let-user-win below would emit the resolved bytes
+  back into source qmd.)
+
 - **Block-level UseAfter on a no-preimage Generated container**
   — substitute `Omit`; the original container regenerates next
   run. There is no source position to anchor a `Rewrite` at, so
@@ -229,6 +240,102 @@ Five cases:
   involved; this case is normal Coarsen flow, not a soft-drop in
   the user-facing sense. The only exception is the shortcode
   sub-case discussed below.
+
+### Non-soft-drop branches in the same cascade
+
+Two cascade branches share the predicate but do not emit
+warnings — they exist alongside the soft-drop cases and are
+mentioned here for completeness:
+
+- **Block-level RecurseIntoContainer on a non-atomic Generated
+  wrapper with source-bearing children + a `block_container_plans`
+  entry** — substitute `Transparent`, recursing into the wrapper's
+  children. No warning emitted at the wrapper level; warnings emerge
+  from per-child cascades. This is the sectionize / footnotes-
+  container / appendix-container case.
+
+- **KeepBefore catch-all** — cross-file `Original`, gappy `Concat`,
+  Generated wrapper without source-bearing children, etc. — fall
+  through to `Rewrite` of the original block. No warning. This is
+  the cascade's silent serialization fallback for shapes the other
+  rules don't classify; it is also where the algebra is currently
+  weakest (the serializer walks the entire subtree, so atomic
+  descendants hidden inside an editable-by-source_info container
+  could leak resolved bytes). Plan 7d (algebraic-soundness
+  refactor) names this as the explicit departure from the
+  byte-provenance contract above.
+
+## `CoarsenedEntry` self-containment
+
+The cascade above produces a flat list of `CoarsenedEntry` values
+that `emit_entries` walks to produce the output bytes. The
+variants — `Verbatim`, `InlineSplice`, `Rewrite`, `Transparent`,
+`Omit` — share a structural property worth pinning explicitly:
+
+> Every variant of `CoarsenedEntry` carries enough information
+> to produce its emit bytes **without further context**. No
+> deferred index lookups against an ambient slice. No "look this
+> up at emit time" handoffs. Each entry is self-describing.
+
+| Variant | Self-contained because |
+|---|---|
+| `Verbatim` | `byte_range` is absolute into `original_qmd`. |
+| `InlineSplice` | Pre-computed `block_text: String` set at coarsen time. |
+| `Rewrite` | Pre-computed `block_text: String` set at coarsen time (the same write the emit path used to perform — moved earlier so the entry can travel through `Transparent` recursion intact). |
+| `Transparent` | List of self-contained child entries. |
+| `Omit` | No bytes. |
+
+Two `Option<usize>` indices appear on `Verbatim` and `InlineSplice`
+(`orig_idx`) — these are hints to `compute_separator`'s
+"consecutive-in-original" optimization, **not** byte-production
+context. They are always `Option`: `None` for children inside a
+`Transparent` wrapper, where any index would be ambiguous between
+top-level and child-level slices.
+
+Why this matters: `Transparent` recursion is the writer's
+compositional escape from the alignment-kind dispatch. A
+`Transparent` entry inlines its children into the emit stream as
+if the wrapper weren't there. The composition is sound only if
+each child can produce its bytes without depending on its position
+in some ambient slice. Pre-2026-05-25, `Rewrite` carried
+`new_idx: usize` that `emit_entries` looked up against
+`new_ast.blocks` top-level; inside a `Transparent` recursion, the
+index pointed at a child-relative position and the lookup
+panicked. The refactor on `e584428d` lifted `Rewrite` to carry
+pre-computed text, matching the shape `InlineSplice` had carried
+since `ab10f37b`.
+
+The self-containment property is *necessary* for the algebra to
+be sound, but it is not *sufficient* on its own. The cascade
+above still has a "Rewrite as subtree-serializing fallback" arm
+(see "Non-soft-drop branches" above and the KeepBefore catch-all)
+whose semantics depend on the input subtree not containing
+unauthorable descendants. Plan 7d takes the next step: replace
+the subtree-serializing fallback with structural recursion all
+the way down to leaves where source_info attests user-authored
+content. Self-containment is the substrate that recursion can
+land on safely.
+
+### Anti-patterns for new variants
+
+Don't add a `CoarsenedEntry` variant that:
+
+- Defers to a named slice ("index N into `new_ast.blocks`,"
+  "child M of original block at index K"). The moment a future
+  refactor produces the variant in a different context (recursion,
+  reuse from a sibling crate, a test fixture), the index points at
+  the wrong slice and the failure is silent until the panic.
+- Depends on context not encoded in the variant itself.
+- Requires specific timing of side effects. The current variants'
+  byte-producing operations are referentially transparent —
+  `write_block_to_string` depends only on its `Block` argument.
+  A variant whose correctness depends on emit-time vs coarsen-time
+  ordering is a sign the entry shape is wrong.
+
+When in doubt, look at `InlineSplice` — the first variant to carry
+pre-computed `block_text` (introduced when partial inline rewrites
+made deferral impossible). It is the structural blueprint the
+other variants should match.
 
 ### Why soft-drop replaces hard-abort
 

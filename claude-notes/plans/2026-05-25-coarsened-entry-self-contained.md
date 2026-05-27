@@ -253,7 +253,11 @@ new bytes).
 ### Phase 4 — Design doc
 
 - [x] Write `claude-notes/designs/incremental-writer-internals.md`
-      (new file). Sections:
+      (new file). **Note (2026-05-26):** the file was later absorbed
+      into `incremental-writer-contract.md` (Task 3 of the rebase
+      reconciliation) and deleted — the self-containment material
+      now lives in the contract doc's "`CoarsenedEntry` self-
+      containment" section. Sections originally:
       - *Purpose*. The incremental writer takes `(original_qmd,
         original_ast, new_ast, plan)` and produces `(new_qmd,
         warnings)`. It does so by *coarsening* the hierarchical
