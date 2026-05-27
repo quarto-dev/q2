@@ -442,10 +442,16 @@ doc-keyed invalidation already covers it.
 > the user approves this plan.
 
 ### Phase 0 — Test scaffolding
-- [ ] Design + land the **file-backed test engine** (`fixture`) with unit
-      tests (reads results file, splices per-cell outputs in order;
-      surplus/missing-result diagnostics). **Test-registry-only** — never
-      wired into the default registry.
+- [x] Design + land the **file-backed test engine** (`FixtureEngine`,
+      `crates/quarto-core/src/engine/fixture.rs`) with 15 unit tests:
+      splices per-cell results in order; in-memory + JSON-file-backed
+      results; ignores other engines' cells / display blocks; skips
+      content inside non-matching fences; engine→engine handoff
+      (result introduces the next engine's cell); surplus/missing/
+      unterminated diagnostics; longer-fence round-trip. Gated to
+      non-WASM; **never** wired into the default registry. Verified the
+      cell form against pampa: executable cells serialize as
+      ```` ```{<name>} ```` (braces kept inside the class name).
 - [x] Duplicate-handling policy: **dedup keeping first occurrence +
       diagnostic** (resolved with user; only fires for array+array
       repeated engine).
