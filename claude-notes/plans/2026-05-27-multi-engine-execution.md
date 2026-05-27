@@ -600,6 +600,25 @@ Revised after the CaptureSpliceStage discovery (see §4):
       one-element vec identically to the prior single-capture behavior.
 
 ### Phase 6 — Commit (await explicit push approval per CLAUDE.md)
+- [x] All work committed on `feature/multi-engine` (8 commits).
+- [ ] **Push gated on explicit user approval** (CLAUDE.md GIT PUSH POLICY).
+
+## Follow-ups filed (discovered-from bd-5yff4)
+- **bd-iq0hp** — Multi-engine preview: browser E2E + composing test
+  engines (the verification gap).
+- **bd-r8n4r** — CaptureSplice fold: handle engine-handoff cells nested
+  in cell wrappers (top-level-only splice limitation).
+- **bd-8h3sn** — Precise cross-engine source attribution in
+  EngineExecutionStage (engine 2+ error mapping is best-effort).
+
+## Status: Phases 0–5 complete
+
+Implemented and verified: ordered `engine:` array config + merge,
+sequential N-engine threading with per-engine FileId provenance, per-engine
+trace captures + snapshots, sequence replay, and multi-engine `q2 preview`
+(capture-sequence fold). Full `cargo xtask verify` green; real-binary E2E
+of the array config confirmed with knitr. Remaining: the browser-E2E gap
+(bd-iq0hp) and two minor limitations (bd-r8n4r, bd-8h3sn), all tracked.
 
 ## Resolved with the user (2026-05-27)
 
