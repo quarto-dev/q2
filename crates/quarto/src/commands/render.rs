@@ -485,17 +485,20 @@ pub fn render_summary_line(
 /// Returns a hard error (no fallback) if:
 /// - The trace file cannot be read (missing path, permission denied,
 ///   malformed JSON).
-/// - The trace lacks an `engine_capture` block — replaying a trace
-///   that was recorded without engine capture would silently behave
-///   like the markdown engine, which is exactly the kind of "silent
-///   degradation" the hard-fail policy guards against.
-fn load_replay_capture(cli_replay: Option<&str>) -> Result<Option<quarto_trace::EngineCapture>> {
+/// - The trace lacks any `engine_captures` — replaying a trace that was
+///   recorded without engine capture would silently behave like the
+///   markdown engine, which is exactly the kind of "silent degradation"
+///   the hard-fail policy guards against.
+///
+/// Returns the captures in execution order (one per engine that ran);
+/// an empty vec means replay is inactive (no `--replay` / `QUARTO_REPLAY`).
+fn load_replay_captures(cli_replay: Option<&str>) -> Result<Vec<quarto_trace::EngineCapture>> {
     let path_str = match cli_replay {
         Some(p) => Some(p.to_string()),
         None => std::env::var("QUARTO_REPLAY").ok(),
     };
     let Some(path_str) = path_str else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
 
     let path = PathBuf::from(&path_str);
@@ -507,15 +510,15 @@ fn load_replay_capture(cli_replay: Option<&str>) -> Result<Option<quarto_trace::
         )
     })?;
 
-    let capture = trace.engine_capture.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Trace file {} has no `engine_capture` block. \
+    if trace.engine_captures.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Trace file {} has no `engine_captures`. \
              Re-record the trace from a real engine run with `trace: true` set.",
             path.display()
-        )
-    })?;
+        ));
+    }
 
-    Ok(Some(capture))
+    Ok(trace.engine_captures)
 }
 
 /// Execute the render command.
@@ -558,14 +561,14 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     // QUARTO_REPLAY=<path> is set. Hard-fail on read errors and on
     // traces missing engine_capture so investigators don't waste
     // time on a silently-degraded replay.
-    let replay_capture = load_replay_capture(args.replay.as_deref())?;
+    let replay_captures = load_replay_captures(args.replay.as_deref())?;
 
     // Set up render options
     let options = RenderToFileOptions {
         output_path: args.output.as_ref().map(PathBuf::from),
         output_dir: args.output_dir.as_ref().map(PathBuf::from),
         quiet: args.quiet,
-        replay_capture,
+        replay_captures,
         engine_registry_override: None,
         // Phase 3c: CLI override-only for v1 (YAML reading is deferred
         // until project YAML schema work; the resolver matrix is still

@@ -39,10 +39,10 @@ use crate::trace_event;
 /// Stable [`PipelineObserver::on_auxiliary_data`] kind tag for the
 /// engine capture emitted by this stage (bd-45yw).
 ///
-/// `JsonTraceObserver` recognizes this kind and routes the payload to
-/// `TraceDocument.engine_capture` (the typed slot) instead of to the
-/// generic pipeline aux channel. The payload's JSON shape matches
-/// [`quarto_trace::EngineCapture`].
+/// `JsonTraceObserver` recognizes this kind and appends the payload to
+/// `TraceDocument.engine_captures` (the typed slot — one per engine, in
+/// execution order) instead of to the generic pipeline aux channel. The
+/// payload's JSON shape matches [`quarto_trace::EngineCapture`].
 pub const ENGINE_CAPTURE_KIND: &str = "EngineCapture";
 
 /// Pipeline stage that executes code cells via the appropriate engine.
@@ -416,6 +416,12 @@ impl PipelineStage for EngineExecutionStage {
                 reconciliation_plan.stats.blocks_replaced,
                 reconciliation_plan.stats.blocks_recursed
             );
+
+            // bd-5yff4: record one AST snapshot per engine so a trace can
+            // show the sequence step by step (`engine:<name>`). The
+            // observer ignores this unless trace recording is active.
+            ctx.observer
+                .on_engine_data(engine.name(), run_index, &ast, &merged_context);
         }
 
         Ok(PipelineData::DocumentAst(DocumentAst {
@@ -1151,6 +1157,169 @@ mod tests {
         );
     }
 
+    /// bd-5yff4 Phase 3: a multi-engine run records one `EngineCapture`
+    /// per engine (in order) AND one `engine:<name>` AST snapshot per
+    /// engine in the trace pipeline. Round-trips through a real gzipped
+    /// trace on disk.
+    #[tokio::test]
+    async fn test_multi_engine_trace_records_per_engine_snapshots_and_captures() {
+        use crate::engine::FixtureEngine;
+        use crate::stage::JsonTraceObserver;
+        use quarto_trace::RenderInfo;
+
+        let dir = std::env::temp_dir().join(format!(
+            "quarto-trace-multi-engine-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let trace_path = dir.join("latest.json.gz");
+
+        let observer = Arc::new(JsonTraceObserver::new(
+            trace_path.clone(),
+            RenderInfo {
+                input_path: Some("/project/test.qmd".into()),
+                format_target: Some("html".into()),
+                git_hash: Some(quarto_trace::BUILD_GIT_HASH.to_string()),
+                ..Default::default()
+            },
+        ));
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-a",
+            vec!["```{fixture-b}\nfrom-a\n```".to_string()],
+        )));
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-b",
+            vec!["Final B".to_string()],
+        )));
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+        ctx.observer = observer.clone();
+
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+
+        observer.write_trace().unwrap();
+        let read_back = quarto_trace::read::read_trace(&trace_path).unwrap();
+
+        // One capture per engine, in execution order.
+        assert_eq!(
+            read_back
+                .engine_captures
+                .iter()
+                .map(|c| c.engine_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["fixture-a", "fixture-b"]
+        );
+
+        // One AST snapshot per engine, in order.
+        let engine_entries: Vec<_> = read_back
+            .pipeline
+            .iter()
+            .filter(|e| e.stage.starts_with("engine:"))
+            .map(|e| e.stage.as_str())
+            .collect();
+        assert_eq!(engine_entries, vec!["engine:fixture-a", "engine:fixture-b"]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// bd-5yff4 Phase 3: record the captures from a two-engine run, then
+    /// replay them via `with_replay_many` against the same document. The
+    /// replay must be byte-clean — engine N+1's input is engine N's
+    /// reconciled-then-reserialized output, so this is the determinism
+    /// invariant the sequence relies on — and produce identical output.
+    #[tokio::test]
+    async fn test_multi_engine_record_then_replay_is_byte_clean() {
+        use crate::engine::{EngineRegistry, FixtureEngine, ReplayEngine};
+        use crate::stage::JsonTraceObserver;
+        use quarto_trace::RenderInfo;
+
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n";
+
+        // --- Record pass: real fixture engines + trace observer. ---
+        let dir = std::env::temp_dir().join(format!(
+            "quarto-replay-multi-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let trace_path = dir.join("latest.json.gz");
+        let observer = Arc::new(JsonTraceObserver::new(
+            trace_path.clone(),
+            RenderInfo::default(),
+        ));
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-a",
+            vec!["```{fixture-b}\nfrom-a\n```".to_string()],
+        )));
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-b",
+            vec!["Final B".to_string()],
+        )));
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+        ctx.observer = observer.clone();
+
+        let output_recorded = stage
+            .run(
+                PipelineData::DocumentAst(parse_qmd_to_ast(content, "/project/test.qmd")),
+                &mut ctx,
+            )
+            .await
+            .unwrap()
+            .into_document_ast()
+            .unwrap();
+        let recorded_qmd = serialize_ast_to_qmd(&output_recorded.ast).unwrap().0;
+
+        observer.write_trace().unwrap();
+        let captures = quarto_trace::read::read_trace(&trace_path)
+            .unwrap()
+            .engine_captures;
+        assert_eq!(captures.len(), 2);
+
+        // --- Replay pass: substitute a ReplayEngine per recorded engine. ---
+        let mut replay_registry = EngineRegistry::new();
+        for capture in captures {
+            replay_registry.register(Arc::new(ReplayEngine::new(capture)));
+        }
+        let replay_stage = EngineExecutionStage::with_registry(replay_registry);
+        let mut replay_ctx = make_test_context();
+
+        let output_replayed = replay_stage
+            .run(
+                PipelineData::DocumentAst(parse_qmd_to_ast(content, "/project/test.qmd")),
+                &mut replay_ctx,
+            )
+            .await
+            .expect("replay of a recorded two-engine sequence must succeed byte-clean")
+            .into_document_ast()
+            .unwrap();
+        let replayed_qmd = serialize_ast_to_qmd(&output_replayed.ast).unwrap().0;
+
+        assert_eq!(
+            replayed_qmd, recorded_qmd,
+            "replay output must match the recorded run exactly"
+        );
+        assert!(replayed_qmd.contains("Final B"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// After engine execution, the merged `ASTContext` must carry BOTH the
     /// original `.qmd` filename and the intermediate `<stem>.rmarkdown`
     /// filename the engine saw. Regression test for bd-b0f2 Phase 2.
@@ -1534,10 +1703,12 @@ mod tests {
         observer.write_trace().unwrap();
         let read_back = quarto_trace::read::read_trace(&trace_path).unwrap();
 
-        let capture = read_back
-            .engine_capture
-            .as_ref()
-            .expect("engine_capture must be populated");
+        assert_eq!(
+            read_back.engine_captures.len(),
+            1,
+            "exactly one engine capture must be recorded"
+        );
+        let capture = &read_back.engine_captures[0];
         assert_eq!(capture.engine_name, "mock-includes");
         assert!(
             !capture.input_qmd.is_empty(),
@@ -1653,16 +1824,21 @@ mod tests {
         let asts = raw_json["asts"]
             .as_object()
             .expect("v2 unified artifact must have an `asts` map");
+        // The three identical pre-populated DocumentAst snapshots collapse
+        // to one stored entry; the per-engine `on_engine_data` snapshot
+        // (bd-5yff4) is a distinct post-reconcile AST, so two are stored.
+        // The key invariant is that dedup happened — without it the three
+        // identical snapshots alone would store three entries.
         assert_eq!(
             asts.len(),
-            1,
-            "three identical AST snapshots must collapse to one stored entry"
+            2,
+            "3 identical snapshots collapse to 1; the per-engine snapshot adds 1"
         );
-        assert!(
-            !raw_json["engine_capture"].is_null(),
-            "v2 unified artifact must have an `engine_capture` field for non-markdown engines"
+        let captures = raw_json["engine_captures"].as_array().expect(
+            "v2 unified artifact must have an `engine_captures` array for non-markdown engines",
         );
-        assert_eq!(raw_json["engine_capture"]["engine_name"], "mock-includes");
+        assert_eq!(captures.len(), 1, "one engine ran → one capture");
+        assert_eq!(captures[0]["engine_name"], "mock-includes");
 
         // 2. read_trace round-trip: rehydrated doc has both deduped
         //    ASTs (folded back inline; `asts` empty) and the engine
@@ -1672,10 +1848,12 @@ mod tests {
             read_back.asts.is_empty(),
             "reader must clear `asts` after rehydration"
         );
-        let capture = read_back
-            .engine_capture
-            .as_ref()
-            .expect("engine_capture must round-trip through gzipped trace");
+        assert_eq!(
+            read_back.engine_captures.len(),
+            1,
+            "engine capture must round-trip through gzipped trace"
+        );
+        let capture = &read_back.engine_captures[0];
         assert_eq!(capture.engine_name, "mock-includes");
         let parsed: crate::engine::ExecuteResult = serde_json::from_value(capture.result.clone())
             .expect("result must round-trip back to ExecuteResult");

@@ -157,6 +157,33 @@ pub trait PipelineObserver: Send + Sync {
     ) {
     }
 
+    /// Called after each engine runs within `EngineExecutionStage`
+    /// (bd-5yff4), giving finer-grained tracing of a multi-engine
+    /// sequence: one AST snapshot per engine, in execution order.
+    ///
+    /// Mirrors [`Self::on_transform_data`] — trace observers record an
+    /// `engine:<name>` entry so a debugger can step through the sequence
+    /// (e.g. `engine:knitr`, then `engine:mermaidjs`). The single-engine
+    /// case emits exactly one such entry, just before the stage's own
+    /// final snapshot.
+    ///
+    /// # Arguments
+    ///
+    /// * `engine_name` - Name of the engine that just ran (e.g. `"knitr"`).
+    /// * `index` - Zero-based position of the engine in the executed
+    ///   sequence (markdown no-ops are not counted).
+    /// * `ast` - The reconciled AST after this engine's output was merged.
+    /// * `ast_context` - The AST context (multi-slot after the first
+    ///   engine), carrying filename attribution and the source-info pool.
+    fn on_engine_data(
+        &self,
+        _engine_name: &str,
+        _index: usize,
+        _ast: &quarto_pandoc_types::pandoc::Pandoc,
+        _ast_context: &pampa::pandoc::ASTContext,
+    ) {
+    }
+
     /// Called by transforms that want to publish auxiliary structured data
     /// alongside the AST trace.
     ///

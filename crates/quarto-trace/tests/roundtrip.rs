@@ -353,19 +353,17 @@ fn test_engine_capture_roundtrip_through_disk() {
     });
 
     let mut doc = TraceDocument::new(RenderInfo::default());
-    doc.engine_capture = Some(EngineCapture {
+    doc.engine_captures = vec![EngineCapture {
         engine_name: "jupyter".into(),
         input_qmd: "---\nengine: jupyter\n---\n\n# Hello\n".into(),
         result: result_json.clone(),
-    });
+    }];
 
     write_trace(&doc, &path).unwrap();
     let read_back = read_trace(&path).unwrap();
 
-    let capture = read_back
-        .engine_capture
-        .as_ref()
-        .expect("engine_capture should round-trip");
+    assert_eq!(read_back.engine_captures.len(), 1);
+    let capture = &read_back.engine_captures[0];
     assert_eq!(capture.engine_name, "jupyter");
     assert_eq!(capture.input_qmd, "---\nengine: jupyter\n---\n\n# Hello\n");
     assert_eq!(capture.result, result_json);
@@ -373,15 +371,36 @@ fn test_engine_capture_roundtrip_through_disk() {
 
 #[test]
 fn test_engine_capture_absent_by_default() {
-    // Existing traces without an engine_capture field should still
-    // deserialize cleanly.
+    // Existing traces without engine captures should still deserialize
+    // cleanly (empty vector).
     let json_text = r#"{
       "schema_version": 1,
       "render": {},
       "pipeline": []
     }"#;
     let doc: TraceDocument = serde_json::from_str(json_text).unwrap();
-    assert!(doc.engine_capture.is_none());
+    assert!(doc.engine_captures.is_empty());
+}
+
+#[test]
+fn test_legacy_single_engine_capture_folds_into_vec() {
+    // A pre-bd-5yff4 trace with a single `engine_capture` object must
+    // fold into the one-element `engine_captures` vector on read.
+    let json_text = r#"{
+      "schema_version": 2,
+      "render": {},
+      "pipeline": [],
+      "engine_capture": {
+        "engine_name": "knitr",
+        "input_qmd": "---\nengine: knitr\n---\n",
+        "result": {"markdown": "out\n", "supporting_files": [], "filters": [],
+                   "includes": {"header_includes": [], "include_before": [], "include_after": []},
+                   "needs_postprocess": false}
+      }
+    }"#;
+    let doc: TraceDocument = serde_json::from_str(json_text).unwrap();
+    assert_eq!(doc.engine_captures.len(), 1);
+    assert_eq!(doc.engine_captures[0].engine_name, "knitr");
 }
 
 #[test]

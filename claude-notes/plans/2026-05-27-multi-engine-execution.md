@@ -497,14 +497,29 @@ doc-keyed invalidation already covers it.
       with an available engine; the multi-engine *threading* is verified
       end-to-end through the real HTML pipeline with a fixture registry.
 
-### Phase 3 — Trace / replay redesign
-- [ ] `quarto-trace`: `engine_captures: Vec<EngineCapture>`, schema bump
-      to 3, reader back-compat (fold legacy single → vec). Round-trip
-      tests (v2 read, v3 read/write).
-- [ ] Per-engine `engine:<name>` AST snapshot via the transform-style
-      hook; trace shows one entry per engine.
-- [ ] `with_replay_many`; two-engine record→replay byte-clean regression
-      test (the determinism invariant from §2).
+### Phase 3 — Trace / replay redesign ✅
+- [x] `quarto-trace`: `engine_capture: Option` → `engine_captures: Vec`.
+      **Kept `SCHEMA_VERSION = 2`** per the project rule (bump only on
+      pipeline-entry-shape changes; this is an additive top-level field).
+      Back-compat: a `TraceDocumentDe` deserialization mirror folds a
+      legacy single `engine_capture` object into the vec on read (covers
+      every read path, not just `read_trace`). Round-trip + legacy-fold
+      tests in `roundtrip.rs`.
+- [x] Per-engine `engine:<name>` AST snapshot via a new
+      `PipelineObserver::on_engine_data` hook (mirrors `on_transform_data`
+      → `transform:<name>`); `JsonTraceObserver` records one entry per
+      engine. The stage calls it after each reconcile.
+- [x] `on_auxiliary_data` pushes captures onto the vec (one per engine,
+      run_index order). `EngineRegistry::with_replay_many(Vec)`;
+      `with_replay` kept as a single-capture shim. CLI/`render_to_file`
+      replay path generalized (`load_replay_captures`,
+      `replay_captures: Vec`).
+- [x] Tests: `test_multi_engine_trace_records_per_engine_snapshots_and_captures`
+      (two ordered captures + `engine:fixture-a`/`engine:fixture-b`
+      snapshots, gzipped round-trip) and
+      `test_multi_engine_record_then_replay_is_byte_clean` (the
+      determinism invariant: record two-engine run, replay via
+      `with_replay_many`, output identical). Full workspace: 9482 pass.
 
 ### Phase 4 — Preview integration (`q2 preview`, in scope)
 - [ ] `record_capture` → `Vec<EngineCapture>`; collector keeps order.

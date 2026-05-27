@@ -155,8 +155,28 @@ impl EngineRegistry {
     /// Activation lives at the orchestrator/CLI layer (`q2 render
     /// --replay <trace>`); this constructor is the seam.
     pub fn with_replay(capture: quarto_trace::EngineCapture) -> Self {
+        Self::with_replay_many(vec![capture])
+    }
+
+    /// Build a registry that substitutes a [`super::ReplayEngine`] for
+    /// each recorded engine in a sequence (bd-5yff4).
+    ///
+    /// Starts from a default registry, then registers one replay engine
+    /// per capture, each keyed by its recorded `engine_name`. Because the
+    /// engines in a sequence are distinct (the trace records one capture
+    /// per engine, in order), the name-keyed registry holds them all
+    /// without collision, and `EngineExecutionStage` drives them in the
+    /// order the document's `engine:` sequence declares — which must match
+    /// the recording. Each replay engine validates its own `input_qmd`.
+    ///
+    /// Captures whose `engine_name` is not also in the document's engine
+    /// sequence simply never run; extra real engines (those without a
+    /// matching capture) keep their default implementations.
+    pub fn with_replay_many(captures: Vec<quarto_trace::EngineCapture>) -> Self {
         let mut registry = Self::new();
-        registry.register(Arc::new(super::ReplayEngine::new(capture)));
+        for capture in captures {
+            registry.register(Arc::new(super::ReplayEngine::new(capture)));
+        }
         registry
     }
 }

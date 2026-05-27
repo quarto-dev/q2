@@ -89,6 +89,7 @@ pub const SCHEMA_VERSION: u32 = 2;
 /// and ad-hoc serialization, but the on-disk artifact will not have
 /// the v2 size benefits.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "TraceDocumentDe")]
 pub struct TraceDocument {
     pub schema_version: u32,
     pub render: RenderInfo,
@@ -99,16 +100,64 @@ pub struct TraceDocument {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub asts: BTreeMap<String, serde_json::Value>,
     pub pipeline: Vec<TraceEntry>,
-    /// Engine execution capture for replay (bd-45yw).
+    /// Ordered engine execution captures for replay (bd-45yw, extended to
+    /// a sequence by bd-5yff4).
     ///
-    /// When `trace: true` is set, the pipeline records the
-    /// `ExecutionEngine`'s output here so the trace can later drive
-    /// the in-Rust replay engine for deterministic regression tests
-    /// without R/Python/Jupyter installs. Absent for traces produced
-    /// before bd-45yw landed and for renders where the markdown
+    /// When `trace: true` is set, the pipeline records each
+    /// `ExecutionEngine`'s output here — **one capture per engine that
+    /// ran, in execution order** — so the trace can later drive the
+    /// in-Rust replay engine(s) for deterministic regression tests
+    /// without R/Python/Jupyter installs. Empty for traces produced
+    /// before bd-45yw landed and for renders where only the markdown
     /// engine ran (no execution to record).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub engine_capture: Option<EngineCapture>,
+    ///
+    /// On-disk back-compat: a legacy single `engine_capture` object
+    /// (schema written before bd-5yff4) is folded into a one-element
+    /// vector on read (see `TraceDocumentDe`). Writers always emit the
+    /// `engine_captures` array.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub engine_captures: Vec<EngineCapture>,
+}
+
+/// Deserialization mirror for [`TraceDocument`].
+///
+/// Exists solely to accept the **legacy** single `engine_capture` field
+/// (written before bd-5yff4) and fold it into the `engine_captures`
+/// vector, so old on-disk traces keep loading. `TraceDocument` itself
+/// deserializes through this via `#[serde(from = "TraceDocumentDe")]`;
+/// serialization is unaffected (the writer emits only `engine_captures`).
+#[derive(Deserialize)]
+struct TraceDocumentDe {
+    schema_version: u32,
+    render: RenderInfo,
+    #[serde(default)]
+    asts: BTreeMap<String, serde_json::Value>,
+    pipeline: Vec<TraceEntry>,
+    #[serde(default)]
+    engine_captures: Vec<EngineCapture>,
+    /// Legacy single-capture field (pre-bd-5yff4). Read-only.
+    #[serde(default)]
+    engine_capture: Option<EngineCapture>,
+}
+
+impl From<TraceDocumentDe> for TraceDocument {
+    fn from(de: TraceDocumentDe) -> Self {
+        let mut engine_captures = de.engine_captures;
+        // Fold the legacy single capture in when the new field is absent.
+        // (If both are somehow present, the new field wins.)
+        if engine_captures.is_empty() {
+            if let Some(capture) = de.engine_capture {
+                engine_captures.push(capture);
+            }
+        }
+        TraceDocument {
+            schema_version: de.schema_version,
+            render: de.render,
+            asts: de.asts,
+            pipeline: de.pipeline,
+            engine_captures,
+        }
+    }
 }
 
 impl TraceDocument {
@@ -120,7 +169,7 @@ impl TraceDocument {
             render,
             asts: BTreeMap::new(),
             pipeline: Vec::new(),
-            engine_capture: None,
+            engine_captures: Vec::new(),
         }
     }
 }

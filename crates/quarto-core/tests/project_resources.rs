@@ -671,7 +671,7 @@ mod orchestrator_engine_channel {
             quarto_core::project::ProjectContext::discover(&project_dir, runtime.as_ref()).unwrap();
 
         let options = RenderToFileOptions {
-            replay_capture: Some(capture),
+            replay_captures: vec![capture],
             ..Default::default()
         };
 

@@ -206,6 +206,34 @@ impl PipelineObserver for JsonTraceObserver {
         );
     }
 
+    fn on_engine_data(
+        &self,
+        engine_name: &str,
+        index: usize,
+        ast: &quarto_pandoc_types::pandoc::Pandoc,
+        ast_context: &pampa::pandoc::ASTContext,
+    ) {
+        // bd-5yff4: one AST snapshot per engine in a multi-engine
+        // sequence, recorded as an `engine:<name>` entry — mirrors the
+        // `transform:<name>` sub-entries. The dedup pass collapses
+        // snapshots that are byte-identical to a neighbor, so the size
+        // cost is bounded.
+        let data_json = serialize_pandoc_ast(ast, ast_context);
+        let mut state = self.state.lock().unwrap();
+        Self::push_entry(
+            &mut state,
+            TraceEntry {
+                stage: format!("engine:{}", engine_name),
+                index,
+                data_kind: Some(PipelineDataKind::DocumentAst.to_string()),
+                data: Some(data_json),
+                duration_ms: None,
+                status: StageStatus::Ok,
+                error: None,
+            },
+        );
+    }
+
     fn on_auxiliary_data(&self, stage: &str, index: usize, kind: &str, data: &serde_json::Value) {
         let mut state = self.state.lock().unwrap();
         // bd-45yw: route the typed engine capture to the dedicated
@@ -215,7 +243,10 @@ impl PipelineObserver for JsonTraceObserver {
         if kind == ENGINE_CAPTURE_KIND {
             match serde_json::from_value::<quarto_trace::EngineCapture>(data.clone()) {
                 Ok(capture) => {
-                    state.doc.engine_capture = Some(capture);
+                    // bd-5yff4: one capture per engine, in execution order.
+                    // The stage emits these sequentially (run_index order),
+                    // so push preserves order.
+                    state.doc.engine_captures.push(capture);
                     return;
                 }
                 Err(e) => {
@@ -639,7 +670,7 @@ mod tests {
     }
 
     /// bd-45yw: an `on_auxiliary_data` event with kind
-    /// `"EngineCapture"` must land on `TraceDocument.engine_capture`
+    /// `"EngineCapture"` must land on `TraceDocument.engine_captures`
     /// (the typed slot), not as a generic pipeline aux entry. Recording
     /// the engine output is what makes a trace double as a replay
     /// fixture.
@@ -674,14 +705,15 @@ mod tests {
                 .pipeline
                 .iter()
                 .any(|e| e.stage == "aux:engine-execution"),
-            "EngineCapture should be routed to engine_capture, not pipeline aux"
+            "EngineCapture should be routed to engine_captures, not pipeline aux"
         );
         // The typed slot must hold the capture.
-        let cap = state
-            .doc
-            .engine_capture
-            .as_ref()
-            .expect("engine_capture should be populated");
+        assert_eq!(
+            state.doc.engine_captures.len(),
+            1,
+            "exactly one capture should be recorded"
+        );
+        let cap = &state.doc.engine_captures[0];
         assert_eq!(cap.engine_name, "jupyter");
         assert_eq!(cap.input_qmd, "---\nengine: jupyter\n---\n");
         assert_eq!(cap.result["markdown"], "out\n");
@@ -702,7 +734,7 @@ mod tests {
         );
 
         let state = observer.state.lock().unwrap();
-        assert!(state.doc.engine_capture.is_none());
+        assert!(state.doc.engine_captures.is_empty());
         assert_eq!(state.doc.pipeline.len(), 1);
         assert_eq!(state.doc.pipeline[0].stage, "aux:crossref-index");
         assert_eq!(

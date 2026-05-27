@@ -160,7 +160,7 @@ fn replay_capture_in_options_overrides_engine_through_render_to_file() {
     };
 
     let options = RenderToFileOptions {
-        replay_capture: Some(capture),
+        replay_captures: vec![capture],
         ..Default::default()
     };
 
@@ -220,7 +220,7 @@ fn replay_capture_miss_surfaces_as_render_error() {
     };
 
     let options = RenderToFileOptions {
-        replay_capture: Some(capture),
+        replay_captures: vec![capture],
         ..Default::default()
     };
 
@@ -249,7 +249,7 @@ fn replay_capture_absent_uses_default_registry() {
     write_file(&qmd_path, "---\ntitle: Test\n---\n\n# Hello\n\nWorld\n");
 
     let options = RenderToFileOptions {
-        replay_capture: None,
+        replay_captures: Vec::new(),
         ..Default::default()
     };
 
