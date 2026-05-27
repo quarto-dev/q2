@@ -123,9 +123,11 @@ async fn eager_capture_populates_index_sidecar() {
     // EngineCapture with the expected fields. This exercises the
     // same path Phase C.4 will use in the browser: read the binary
     // doc, ungzip, parse JSON.
-    let capture = capture_driver::read_capture_from_doc(&ctx, &entry.capture_doc_id)
+    let captures = capture_driver::read_capture_from_doc(&ctx, &entry.capture_doc_id)
         .await
         .expect("capture doc round-trips");
+    assert_eq!(captures.len(), 1);
+    let capture = &captures[0];
 
     assert_eq!(capture.engine_name, "test-passthrough");
     assert!(

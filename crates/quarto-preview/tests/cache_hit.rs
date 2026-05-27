@@ -129,9 +129,11 @@ async fn second_eager_run_with_same_cache_dir_hits_cache_skips_engine() {
         .get_capture("doc.qmd")
         .expect("sidecar repopulated");
     assert!(!sidecar.capture_doc_id.is_empty());
-    let capture = capture_driver::read_capture_from_doc(&ctx, &sidecar.capture_doc_id)
+    let captures = capture_driver::read_capture_from_doc(&ctx, &sidecar.capture_doc_id)
         .await
         .expect("binary doc round-trips");
+    assert_eq!(captures.len(), 1);
+    let capture = &captures[0];
     assert_eq!(capture.engine_name, "test-passthrough");
     assert!(capture.input_qmd.contains("IDENT"));
     let markdown = capture

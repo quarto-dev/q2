@@ -543,27 +543,36 @@ doc-keyed invalidation already covers it.
       determinism invariant: record two-engine run, replay via
       `with_replay_many`, output identical). Full workspace: 9482 pass.
 
-### Phase 4 — Preview integration (`q2 preview`) — NOT STARTED
-Revised after the CaptureSpliceStage discovery (see §4). Larger and more
-cross-cutting than originally scoped; broken into sub-steps:
-- [ ] `CaptureSpliceStage` folds a `&[EngineCapture]` in order
-      (`apply_capture_splices`); unit tests incl. two-engine fold + the
-      top-level-only limitation. **Pure Rust, fully testable.**
-- [ ] `record_capture` / `record_capture_cached` → `Vec<EngineCapture>`;
-      `CaptureCollector` keeps all in order.
-- [ ] Capture binary-doc payload → JSON array; `capture_driver.rs` /
-      `re_execute.rs` / cache read-write updated; staleness check.
-- [ ] WASM `parse_capture_from` → `Vec<EngineCapture>`; preview render
-      entry points thread the vec into the splice fold.
-- [ ] hub-client TS: confirm no change needed (opaque bytes), else update.
-- [ ] **Verification gap (be explicit):** the preview server uses the
-      default registry (real engines); the test-only `FixtureEngine`
-      isn't available there, and no two real engines compose without
-      runtimes. So a *browser* E2E of multi-engine preview can't be run
-      here. Plan: unit-test the splice fold + the Rust transport, and
-      drive a browser session for the *single-engine* path (regression)
-      + a hand-constructed two-capture sidecar if feasible. State clearly
-      what was and wasn't browser-verified.
+### Phase 4 — Preview integration (`q2 preview`) ✅
+Revised after the CaptureSpliceStage discovery (see §4):
+- [x] `CaptureSpliceStage` holds `Vec<EngineCapture>` and **folds** them
+      in order (`apply_capture_splices`); the stage parses + applies each
+      capture in sequence, fail-soft per capture. Unit tests: two-engine
+      fold (`{r}`→R1 then `{python}`→P1), empty-sequence identity, + the
+      documented top-level-only limitation.
+- [x] `record_capture` / `record_capture_cached` → `Vec<EngineCapture>`;
+      `CaptureCollector` collects all in execution order.
+- [x] Capture binary-doc payload → JSON **array** (`capture_driver.rs`
+      `write_capture_doc` / `read_capture_from_doc`); per-doc cache file
+      → array (`cache.rs`); both with a lenient single-object fallback
+      for stale docs. `re_execute.rs` updated. Staleness keys on the
+      **first** engine's `input_qmd` (deterministic-derivation argument).
+- [x] WASM `parse_capture_from` → `Vec<EngineCapture>` (array + single
+      fallback); `RenderToPreviewAstRenderer::with_captures`;
+      `build_q2_preview_pipeline_stages` / `render_qmd_to_preview_ast`
+      thread the vec; all WASM call sites updated.
+- [x] hub-client TS / q2-preview SPA: **no change needed** — confirmed
+      `PreviewApp.tsx` passes `binaryDoc.content` as opaque bytes; the
+      `CaptureRef` sidecar (one doc per file) is unchanged.
+- [x] Full `cargo xtask verify` (WASM rebuild + SPA bundle + hub-client
+      build + Rust/hub tests) — **green**. Workspace: 9484 tests pass.
+- [ ] **Verification gap (explicit):** a *browser* E2E of multi-engine
+      preview was not run — the preview server uses real engines, the
+      test-only `FixtureEngine` isn't available there, and knitr/jupyter
+      don't compose cleanly. The single-engine preview path is unchanged
+      in behavior (folding a one-element vec ≡ the old single-capture
+      splice) and the fold is unit-tested; the transport round-trips are
+      covered by `quarto-preview` integration tests.
 
 ### Phase 5 — End-to-end verification
 - [x] **Real-binary E2E of the array config (2026-05-27).** Through the
@@ -585,8 +594,10 @@ cross-cutting than originally scoped; broken into sub-steps:
         cell ownership precisely.
 - [x] `cargo xtask verify` (full, incl. WASM + hub-client build) — green
       after Phases 1–3.
-- [ ] Re-run full `cargo xtask verify` after Phase 4.
-- [ ] Re-confirm trace/replay/preview parity with the single-engine path.
+- [x] Re-run full `cargo xtask verify` after Phase 4 — green.
+- [x] Single-engine trace/replay/preview parity preserved: all existing
+      single-capture tests pass unchanged; the splice/replay paths fold a
+      one-element vec identically to the prior single-capture behavior.
 
 ### Phase 6 — Commit (await explicit push approval per CLAUDE.md)
 

@@ -379,21 +379,20 @@ const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &["math-js", "render-html-body", "app
 /// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
 pub fn build_q2_preview_pipeline_stages(
     engine_registry: Option<crate::engine::EngineRegistry>,
-    capture: Option<quarto_trace::EngineCapture>,
+    captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None, engine_registry);
     stages.retain(|s| !Q2_PREVIEW_STAGE_EXCLUDED.contains(&s.name()));
 
     // Insert the splice stage immediately *before* EngineExecutionStage.
     // bd-lucp: this is the q2-preview-specific consumer of recorded
-    // captures. The HTML pipeline doesn't include it — `q2 render`
-    // either runs the real engine natively or uses `--replay` (which
-    // goes through `EngineRegistry::with_replay`, an entirely
-    // different code path).
-    let splice_stage: Box<dyn PipelineStage> = match capture {
-        Some(c) => Box::new(crate::stage::CaptureSpliceStage::new().with_capture(c)),
-        None => Box::new(crate::stage::CaptureSpliceStage::new()),
-    };
+    // captures. bd-5yff4: the captures are an ordered sequence (one per
+    // engine); the splice folds them. The HTML pipeline doesn't include
+    // it — `q2 render` either runs the real engine natively or uses
+    // `--replay` (which goes through `EngineRegistry::with_replay_many`,
+    // an entirely different code path).
+    let splice_stage: Box<dyn PipelineStage> =
+        Box::new(crate::stage::CaptureSpliceStage::new().with_captures(captures));
     let engine_idx = stages
         .iter()
         .position(|s| s.name() == "engine-execution")
@@ -867,7 +866,7 @@ pub async fn render_qmd_to_preview_ast(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
     engine_registry: Option<crate::engine::EngineRegistry>,
-    capture: Option<quarto_trace::EngineCapture>,
+    captures: Vec<quarto_trace::EngineCapture>,
 ) -> Result<PreviewAstOutput> {
     // The q2-preview stage list excludes `CodeHighlightStage` /
     // `RenderHtmlBodyStage` / `ApplyTemplateStage`, so the
@@ -883,7 +882,7 @@ pub async fn render_qmd_to_preview_ast(
     // `EngineExecutionStage` runs (which then no-ops via the WASM
     // markdown fallback). See
     // `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
-    let stages = build_q2_preview_pipeline_stages(engine_registry, capture);
+    let stages = build_q2_preview_pipeline_stages(engine_registry, captures);
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     let ast = output.into_document_ast().ok_or_else(|| {
@@ -2207,7 +2206,12 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime, None, None,
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
         ))
         .expect("q2-preview render");
 
@@ -2261,7 +2265,12 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime, None, None,
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
         ))
         .expect("q2-preview render");
 
@@ -2299,7 +2308,12 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime, None, None,
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
         ))
         .expect("q2-preview render");
 
@@ -2368,7 +2382,7 @@ mod tests {
     /// Python / etc. cells; `q2 render` keeps highlighting.
     #[test]
     fn q2_preview_pipeline_includes_code_highlight() {
-        let stages = build_q2_preview_pipeline_stages(None, None);
+        let stages = build_q2_preview_pipeline_stages(None, Vec::new());
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
         assert!(
             names.contains(&"code-highlight"),
@@ -2484,7 +2498,12 @@ mod tests {
 
             let runtime = make_test_runtime();
             pollster::block_on(render_qmd_to_preview_ast(
-                content, "test.qmd", &mut ctx, runtime, None, None,
+                content,
+                "test.qmd",
+                &mut ctx,
+                runtime,
+                None,
+                Vec::new(),
             ))
             .expect("baseline q2-preview render")
         };
@@ -2522,7 +2541,12 @@ mod tests {
 
         let runtime = make_test_runtime();
         let output = pollster::block_on(render_qmd_to_preview_ast(
-            content, "test.qmd", &mut ctx, runtime, None, None,
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
         ))
         .expect("attributed q2-preview render");
 

@@ -55,27 +55,38 @@ use crate::trace_event;
 ///
 /// [`with_capture`]: CaptureSpliceStage::with_capture
 pub struct CaptureSpliceStage {
-    capture: Option<EngineCapture>,
+    /// Recorded engine captures, in execution order (bd-5yff4). One per
+    /// engine that ran server-side. Empty = clean pass-through.
+    captures: Vec<EngineCapture>,
 }
 
 impl CaptureSpliceStage {
-    /// Build a splice stage with no capture attached. The stage runs
+    /// Build a splice stage with no captures attached. The stage runs
     /// as a clean pass-through. Used when the q2-preview pipeline is
     /// built without a recorded capture (no server-side execution
     /// happened yet, or the user has not opened a project with
     /// engine cells).
     pub fn new() -> Self {
-        Self { capture: None }
+        Self {
+            captures: Vec::new(),
+        }
     }
 
-    /// Attach a recorded capture. On every per-doc run, the stage
-    /// re-parses `capture.input_qmd` and the markdown field of
-    /// `capture.result`, derives a cell-output map, and splices it
-    /// onto the current AST. The capture is held by value because
-    /// the stage may run on multiple pipeline executions (e.g. the
-    /// q2-preview project pipeline runs once per active page).
-    pub fn with_capture(mut self, capture: EngineCapture) -> Self {
-        self.capture = Some(capture);
+    /// Attach a single recorded capture. Convenience for the
+    /// single-engine case; equivalent to `with_captures(vec![capture])`.
+    pub fn with_capture(self, capture: EngineCapture) -> Self {
+        self.with_captures(vec![capture])
+    }
+
+    /// Attach the recorded capture sequence (bd-5yff4). On every per-doc
+    /// run, the stage folds the captures in order: for each, it re-parses
+    /// `capture.input_qmd` and the markdown field of `capture.result`,
+    /// derives a cell-output map, and splices it onto the current AST —
+    /// so engine N+1's splice runs on engine N's spliced output. Held by
+    /// value because the stage may run on multiple pipeline executions
+    /// (e.g. the q2-preview project pipeline runs once per active page).
+    pub fn with_captures(mut self, captures: Vec<EngineCapture>) -> Self {
+        self.captures = captures;
         self
     }
 }
@@ -113,78 +124,77 @@ impl PipelineStage for CaptureSpliceStage {
             ));
         };
 
-        let Some(capture) = self.capture.as_ref() else {
-            trace_event!(ctx, EventLevel::Debug, "no capture attached; pass-through");
+        if self.captures.is_empty() {
+            trace_event!(ctx, EventLevel::Debug, "no captures attached; pass-through");
             return Ok(PipelineData::DocumentAst(doc_ast));
-        };
+        }
 
-        // Extract result.markdown from the opaque JSON. We don't need
-        // the rest of the ExecuteResult shape here (filters, includes,
-        // supporting_files) — those are engine-side concerns the
-        // splice doesn't reproduce in the AST. Future work could
-        // surface them through StageContext if a real splice consumer
-        // needs them.
-        let result_markdown = capture
-            .result
-            .get("markdown")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        // bd-5yff4: fold the captures in order. Engine N+1's splice runs
+        // on engine N's spliced output, mirroring the server-side
+        // sequence. Each capture is fail-soft: a parse failure or an
+        // unmatched cell leaves that engine's cells as raw source without
+        // taking the preview down.
+        for capture in &self.captures {
+            // Extract result.markdown from the opaque JSON. We don't need
+            // the rest of the ExecuteResult shape here (filters, includes,
+            // supporting_files) — those are engine-side concerns the
+            // splice doesn't reproduce in the AST.
+            let result_markdown = capture
+                .result
+                .get("markdown")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
 
-        // Parse both QMD strings via the same pampa reader the rest
-        // of the pipeline uses. Slot in throwaway names — the parsed
-        // ASTs are immediately consumed by the splice, so source-
-        // attribution doesn't escape this stage.
-        let (a1, _, _a1_warnings) = match pampa::readers::qmd::read(
-            capture.input_qmd.as_bytes(),
-            false,
-            "capture-input.rmarkdown",
-            &mut std::io::sink(),
-            false, // don't track source locations — splice ignores them
-            None,
-        ) {
-            Ok(t) => t,
-            Err(_) => {
-                // Parse failure: degrade to pass-through so a corrupt
-                // capture can't take the preview down.
+            // Parse both QMD strings via the same pampa reader the rest
+            // of the pipeline uses. Slot in throwaway names — the parsed
+            // ASTs are immediately consumed by the splice, so source-
+            // attribution doesn't escape this stage.
+            let Ok((a1, _, _)) = pampa::readers::qmd::read(
+                capture.input_qmd.as_bytes(),
+                false,
+                "capture-input.rmarkdown",
+                &mut std::io::sink(),
+                false, // don't track source locations — splice ignores them
+                None,
+            ) else {
                 trace_event!(
                     ctx,
                     EventLevel::Warn,
-                    "failed to parse capture.input_qmd; falling through"
+                    "failed to parse capture.input_qmd for engine={}; skipping this capture",
+                    capture.engine_name
                 );
-                return Ok(PipelineData::DocumentAst(doc_ast));
-            }
-        };
-        let (b1, _, _b1_warnings) = match pampa::readers::qmd::read(
-            result_markdown.as_bytes(),
-            false,
-            "capture-result.md",
-            &mut std::io::sink(),
-            false,
-            None,
-        ) {
-            Ok(t) => t,
-            Err(_) => {
+                continue;
+            };
+            let Ok((b1, _, _)) = pampa::readers::qmd::read(
+                result_markdown.as_bytes(),
+                false,
+                "capture-result.md",
+                &mut std::io::sink(),
+                false,
+                None,
+            ) else {
                 trace_event!(
                     ctx,
                     EventLevel::Warn,
-                    "failed to parse capture.result.markdown; falling through"
+                    "failed to parse capture.result.markdown for engine={}; skipping this capture",
+                    capture.engine_name
                 );
-                return Ok(PipelineData::DocumentAst(doc_ast));
-            }
-        };
+                continue;
+            };
 
-        let before_blocks = doc_ast.ast.blocks.len();
-        doc_ast.ast = apply_capture_splice(doc_ast.ast, &a1, &b1, &capture.engine_name);
-        let after_blocks = doc_ast.ast.blocks.len();
+            let before_blocks = doc_ast.ast.blocks.len();
+            doc_ast.ast = apply_capture_splice(doc_ast.ast, &a1, &b1, &capture.engine_name);
+            let after_blocks = doc_ast.ast.blocks.len();
 
-        trace_event!(
-            ctx,
-            EventLevel::Debug,
-            "capture-splice: engine={}, blocks {}→{}",
-            capture.engine_name,
-            before_blocks,
-            after_blocks
-        );
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "capture-splice: engine={}, blocks {}→{}",
+                capture.engine_name,
+                before_blocks,
+                after_blocks
+            );
+        }
 
         Ok(PipelineData::DocumentAst(doc_ast))
     }

@@ -305,12 +305,14 @@ async fn perform_re_execute(
     let project = ProjectContext::discover(&abs_path, runtime.as_ref())
         .map_err(|e| format!("project discovery failed: {e}"))?;
 
-    let capture = record_capture_cached(cache_dir, &abs_path, &project, runtime.clone(), registry)
+    let captures = record_capture_cached(cache_dir, &abs_path, &project, runtime.clone(), registry)
         .await
-        .map_err(|e| format!("engine pipeline failed: {e}"))?
-        .ok_or_else(|| "engine produced no capture (no code cells?)".to_string())?;
+        .map_err(|e| format!("engine pipeline failed: {e}"))?;
+    if captures.is_empty() {
+        return Err("engine produced no capture (no code cells?)".to_string());
+    }
 
-    let new_doc_id = write_capture_doc(&ctx, &capture)
+    let new_doc_id = write_capture_doc(&ctx, &captures)
         .await
         .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
@@ -333,9 +335,9 @@ async fn perform_re_execute(
 /// shared `CAPTURE_MIME_TYPE` constant.
 async fn write_capture_doc(
     ctx: &Arc<HubContext>,
-    capture: &EngineCapture,
+    captures: &[EngineCapture],
 ) -> Result<String, String> {
-    let json = serde_json::to_vec(capture).map_err(|e| format!("serialize: {e}"))?;
+    let json = serde_json::to_vec(captures).map_err(|e| format!("serialize: {e}"))?;
     let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     enc.write_all(&json)
         .map_err(|e| format!("gzip write: {e}"))?;

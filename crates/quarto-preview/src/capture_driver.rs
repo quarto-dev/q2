@@ -167,7 +167,7 @@ async fn record_one(
     // C.7: route through the cache-aware wrapper so identical content
     // across (re-)opens hits the filesystem cache instead of re-running
     // the engine.
-    let capture = record_capture_cached(
+    let captures = record_capture_cached(
         cache_dir,
         abs_path,
         &project,
@@ -177,11 +177,11 @@ async fn record_one(
     .await
     .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
 
-    let Some(capture) = capture else {
+    if captures.is_empty() {
         return Ok(false);
-    };
+    }
 
-    let capture_doc_id = write_capture_doc(ctx, &capture).await?;
+    let capture_doc_id = write_capture_doc(ctx, &captures).await?;
 
     let capture_ref = CaptureRef {
         capture_doc_id,
@@ -193,10 +193,15 @@ async fn record_one(
         .set_capture(rel_path, &capture_ref)
         .map_err(|e| RecordError::SidecarFailed(format!("{}", e)))?;
 
+    let engines = captures
+        .iter()
+        .map(|c| c.engine_name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
     tracing::info!(
         rel_path = %rel_path,
-        engine = %capture.engine_name,
-        "recorded engine capture",
+        engines = %engines,
+        "recorded engine capture(s)",
     );
     Ok(true)
 }
@@ -239,10 +244,24 @@ pub async fn recompute_staleness(
         return Ok(false);
     };
 
-    // Load and decode the existing capture so we can compare its
-    // input_qmd to what the file would produce now.
+    // Load and decode the existing capture sequence so we can compare
+    // its input_qmd to what the file would produce now. bd-5yff4: the
+    // staleness key is the *first* engine's input_qmd — the document's
+    // canonical pre-engine QMD. Each later engine's input is a
+    // deterministic function of the prior engine's output, so an
+    // unchanged first input means the whole recorded sequence is still
+    // valid.
     let recorded_input_qmd = match read_capture_from_doc(&ctx, &existing.capture_doc_id).await {
-        Ok(cap) => cap.input_qmd,
+        Ok(captures) => match captures.into_iter().next() {
+            Some(first) => first.input_qmd,
+            None => {
+                tracing::warn!(
+                    rel_path = %rel_path,
+                    "recorded capture doc was empty; skipping staleness check",
+                );
+                return Ok(false);
+            }
+        },
         Err(e) => {
             tracing::warn!(
                 rel_path = %rel_path,
@@ -301,14 +320,15 @@ pub async fn recompute_staleness(
     Ok(true)
 }
 
-/// Serialize + gzip + store the EngineCapture as a samod binary doc.
-/// Returns the new doc's stringified DocumentId for use in the sidecar
-/// `captureDocId` field.
+/// Serialize + gzip + store the EngineCapture sequence as a samod binary
+/// doc (bd-5yff4: a JSON array, one per engine). Returns the new doc's
+/// stringified DocumentId for use in the sidecar `captureDocId` field.
 async fn write_capture_doc(
     ctx: &Arc<HubContext>,
-    capture: &EngineCapture,
+    captures: &[EngineCapture],
 ) -> Result<String, RecordError> {
-    let json = serde_json::to_vec(capture).map_err(|e| RecordError::Serialize(format!("{}", e)))?;
+    let json =
+        serde_json::to_vec(captures).map_err(|e| RecordError::Serialize(format!("{}", e)))?;
     let gzipped = gzip_bytes(&json).map_err(|e| RecordError::Gzip(format!("{}", e)))?;
 
     let automerge_doc = create_binary_document(&gzipped, CAPTURE_MIME_TYPE)
@@ -353,16 +373,18 @@ pub enum RecordError {
     SidecarFailed(String),
 }
 
-/// Resolve the captured EngineCapture out of a binary doc by its
-/// document ID. The on-the-wire format (gzipped JSON of
-/// [`EngineCapture`] inside a `quarto_hub::resource::create_binary_document`
-/// envelope) is shared with Phase C.4's WASM/SPA reader, so keeping
-/// the Rust reader public lets test code and any future server-side
-/// inspector use the same path.
+/// Resolve the captured EngineCapture sequence out of a binary doc by
+/// its document ID (bd-5yff4: a JSON array, one per engine). The
+/// on-the-wire format (gzipped JSON inside a
+/// `quarto_hub::resource::create_binary_document` envelope) is shared
+/// with Phase C.4's WASM/SPA reader, so keeping the Rust reader public
+/// lets test code and any future server-side inspector use the same path.
+///
+/// Tolerates a stale single-object capture doc by wrapping it in a vec.
 pub async fn read_capture_from_doc(
     ctx: &Arc<HubContext>,
     capture_doc_id: &str,
-) -> Result<EngineCapture, String> {
+) -> Result<Vec<EngineCapture>, String> {
     use std::io::Read;
     use std::str::FromStr;
 
@@ -391,7 +413,13 @@ pub async fn read_capture_from_doc(
     decoder
         .read_to_end(&mut json_bytes)
         .map_err(|e| format!("gunzip failed: {}", e))?;
-    serde_json::from_slice(&json_bytes).map_err(|e| format!("JSON parse failed: {}", e))
+    match serde_json::from_slice::<Vec<EngineCapture>>(&json_bytes) {
+        Ok(captures) => Ok(captures),
+        Err(array_err) => match serde_json::from_slice::<EngineCapture>(&json_bytes) {
+            Ok(single) => Ok(vec![single]),
+            Err(_) => Err(format!("JSON parse failed: {}", array_err)),
+        },
+    }
 }
 
 #[cfg(test)]
@@ -617,9 +645,11 @@ mod tests {
         assert_eq!(count, 1);
 
         let entry = ctx.index().get_capture("doc.qmd").unwrap();
-        let capture = read_capture_from_doc(&ctx, &entry.capture_doc_id)
+        let captures = read_capture_from_doc(&ctx, &entry.capture_doc_id)
             .await
             .expect("capture doc round-trips");
+        assert_eq!(captures.len(), 1);
+        let capture = &captures[0];
 
         assert_eq!(capture.engine_name, "test-passthrough");
         assert!(

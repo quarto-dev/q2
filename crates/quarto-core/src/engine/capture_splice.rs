@@ -302,6 +302,28 @@ pub fn apply_capture_splice(a2: Pandoc, a1: &Pandoc, b1: &Pandoc, engine_name: &
     splice_cells(a2, &map, engine_name)
 }
 
+/// Fold a **sequence** of capture splices onto `a2`, in order (bd-5yff4).
+///
+/// Multi-engine preview: engine 1's recorded output is spliced first,
+/// then engine 2's splice runs on the *result* of engine 1's splice, and
+/// so on — mirroring how the engines ran server-side, each consuming the
+/// previous engine's output. Each tuple is `(A1, B1, engine_name)` for
+/// one engine (the parsed `capture.input_qmd`, `capture.result.markdown`,
+/// and `capture.engine_name`).
+///
+/// Like a single splice, this is fail-soft per engine: a capture whose
+/// cells don't match leaves those cells as raw source. **Limitation:**
+/// `splice_cells` walks top-level blocks only, so if engine 1 emits
+/// engine 2's cell *inside* a `Div.cell` wrapper, engine 2's splice
+/// won't reach it (the cell renders as raw source). The common case —
+/// each engine's cells at top level — folds correctly.
+pub fn apply_capture_splices(mut a2: Pandoc, splices: &[(Pandoc, Pandoc, String)]) -> Pandoc {
+    for (a1, b1, engine_name) in splices {
+        a2 = apply_capture_splice(a2, a1, b1, engine_name);
+    }
+    a2
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -529,6 +551,47 @@ mod tests {
         );
         let out = splice_cells(a2, &map, "knitr");
         // Cell is preserved as raw source (CodeBlock, not Div).
+        assert!(matches!(out.blocks[1], Block::CodeBlock(_)));
+    }
+
+    #[test]
+    fn two_engine_fold_splices_both_engines_cells() {
+        // bd-5yff4: A2 has an `{r}` cell and a `{python}` cell. Capture 1
+        // (knitr) maps the `{r}` cell → R1; capture 2 (jupyter) maps the
+        // `{python}` cell → P1. Folding both splices must replace both
+        // cells with their respective wrappers.
+        let r_cell = code_cell("r", "cat('hi')");
+        let py_cell = code_cell("python", "print('yo')");
+        let a2 = pandoc_of(vec![r_cell.clone(), py_cell.clone()]);
+
+        // Capture 1: knitr ran first. Its A1 is the original (both cells);
+        // its B1 turned the `{r}` cell into R1 but left `{python}` as a
+        // code cell (knitr doesn't own it here).
+        let cap1_a1 = pandoc_of(vec![r_cell.clone(), py_cell.clone()]);
+        let cap1_b1 = pandoc_of(vec![cell_wrapper("R1"), py_cell.clone()]);
+
+        // Capture 2: jupyter ran second, on knitr's output. Its A1 has the
+        // `{python}` cell (R1 wrapper is prose-like to it); its B1 turned
+        // the `{python}` cell into P1.
+        let cap2_a1 = pandoc_of(vec![cell_wrapper("R1"), py_cell.clone()]);
+        let cap2_b1 = pandoc_of(vec![cell_wrapper("R1"), cell_wrapper("P1")]);
+
+        let splices = vec![
+            (cap1_a1, cap1_b1, "knitr".to_string()),
+            (cap2_a1, cap2_b1, "jupyter".to_string()),
+        ];
+        let out = apply_capture_splices(a2, &splices);
+
+        assert_eq!(out.blocks.len(), 2);
+        assert_eq!(first_div_marker(&out.blocks[0]), Some("R1"));
+        assert_eq!(first_div_marker(&out.blocks[1]), Some("P1"));
+    }
+
+    #[test]
+    fn empty_splice_sequence_is_identity() {
+        let a2 = pandoc_of(vec![prose("hi"), code_cell("r", "x")]);
+        let out = apply_capture_splices(a2.clone(), &[]);
+        assert_eq!(out.blocks.len(), 2);
         assert!(matches!(out.blocks[1], Block::CodeBlock(_)));
     }
 

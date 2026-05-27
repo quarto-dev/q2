@@ -65,12 +65,17 @@ pub fn cache_file_path(cache_dir: &Path, key: &str) -> PathBuf {
     cache_dir.join(format!("{key}.{CACHE_FILE_EXT}"))
 }
 
-/// Look up a cached capture. Returns `Ok(None)` for a clean miss
-/// (no file at that path); `Ok(Some(_))` on hit; `Err` if the file
-/// is present but unreadable or unparseable. Callers in the driver
-/// downgrade `Err` to a miss + a `tracing::warn!` so a corrupt
-/// cache entry doesn't take the preview server down.
-pub fn read_cached(cache_dir: &Path, key: &str) -> std::io::Result<Option<EngineCapture>> {
+/// Look up a cached capture sequence (bd-5yff4 — one per engine, in
+/// order). Returns `Ok(None)` for a clean miss (no file at that path);
+/// `Ok(Some(vec))` on hit; `Err` if the file is present but unreadable
+/// or unparseable. Callers in the driver downgrade `Err` to a miss + a
+/// `tracing::warn!` so a corrupt cache entry doesn't take the preview
+/// server down.
+///
+/// For robustness against a stale pre-bd-5yff4 entry (a single capture
+/// object), a failed array parse falls back to a single-object parse
+/// wrapped in a vec.
+pub fn read_cached(cache_dir: &Path, key: &str) -> std::io::Result<Option<Vec<EngineCapture>>> {
     let path = cache_file_path(cache_dir, key);
     let file = match std::fs::File::open(&path) {
         Ok(f) => f,
@@ -80,20 +85,32 @@ pub fn read_cached(cache_dir: &Path, key: &str) -> std::io::Result<Option<Engine
     let mut decoder = flate2::read::GzDecoder::new(file);
     let mut json_bytes = Vec::new();
     decoder.read_to_end(&mut json_bytes)?;
-    let capture: EngineCapture = serde_json::from_slice(&json_bytes)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    Ok(Some(capture))
+    match serde_json::from_slice::<Vec<EngineCapture>>(&json_bytes) {
+        Ok(captures) => Ok(Some(captures)),
+        Err(array_err) => match serde_json::from_slice::<EngineCapture>(&json_bytes) {
+            Ok(single) => Ok(Some(vec![single])),
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                array_err,
+            )),
+        },
+    }
 }
 
-/// Persist a capture to the cache. Creates `cache_dir` (and parents)
-/// if necessary. The write is atomic: temp file → fsync → rename.
-pub fn write_cached(cache_dir: &Path, key: &str, capture: &EngineCapture) -> std::io::Result<()> {
+/// Persist a capture sequence to the cache. Creates `cache_dir` (and
+/// parents) if necessary. The write is atomic: temp file → fsync →
+/// rename. The payload is a gzipped JSON **array** of captures.
+pub fn write_cached(
+    cache_dir: &Path,
+    key: &str,
+    captures: &[EngineCapture],
+) -> std::io::Result<()> {
     std::fs::create_dir_all(cache_dir)?;
 
     let tmp_path = cache_dir.join(format!("{key}.{CACHE_FILE_EXT}.tmp"));
     let final_path = cache_file_path(cache_dir, key);
 
-    let json = serde_json::to_vec(capture)
+    let json = serde_json::to_vec(captures)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
     // Wrap the file in a scope so the encoder + file close before
@@ -127,8 +144,8 @@ pub fn write_cached(cache_dir: &Path, key: &str, capture: &EngineCapture) -> std
 /// authoritative capture is still emitted to the caller, and a future
 /// invocation simply re-runs the engine.
 ///
-/// Returns `Ok(None)` exactly when `record_capture` would (no engine
-/// in play for this doc); `Ok(Some(_))` on either path; `Err` on
+/// Returns an empty vec exactly when `record_capture` would (no engine
+/// in play for this doc); the recorded sequence on either path; `Err` on
 /// pipeline failures (cache read failures are downgraded to a miss).
 pub async fn record_capture_cached(
     cache_dir: &Path,
@@ -136,7 +153,7 @@ pub async fn record_capture_cached(
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<EngineRegistry>,
-) -> Result<Option<EngineCapture>, PipelineError> {
+) -> Result<Vec<EngineCapture>, PipelineError> {
     // Compute the same input_qmd the engine would receive — this
     // doubles as the cache key derivation and as the source of truth
     // for what we hash. compute_input_qmd already runs the pre-engine
@@ -146,9 +163,9 @@ pub async fn record_capture_cached(
     let key = compute_key(&input_qmd);
 
     match read_cached(cache_dir, &key) {
-        Ok(Some(capture)) => {
+        Ok(Some(captures)) => {
             tracing::debug!(path = %path.display(), key = %key, "engine capture cache hit");
-            return Ok(Some(capture));
+            return Ok(captures);
         }
         Ok(None) => {}
         Err(e) => {
@@ -161,9 +178,9 @@ pub async fn record_capture_cached(
         }
     }
 
-    let capture = record_capture(path, project, runtime, engine_registry).await?;
-    if let Some(ref c) = capture {
-        if let Err(e) = write_cached(cache_dir, &key, c) {
+    let captures = record_capture(path, project, runtime, engine_registry).await?;
+    if !captures.is_empty() {
+        if let Err(e) = write_cached(cache_dir, &key, &captures) {
             tracing::warn!(
                 path = %path.display(),
                 key = %key,
@@ -172,7 +189,7 @@ pub async fn record_capture_cached(
             );
         }
     }
-    Ok(capture)
+    Ok(captures)
 }
 
 #[cfg(test)]
@@ -272,15 +289,16 @@ mod tests {
         let capture = sample_capture();
         let key = compute_key(capture.input_qmd.as_bytes());
 
-        write_cached(&cache_dir, &key, &capture).expect("write succeeds");
+        write_cached(&cache_dir, &key, std::slice::from_ref(&capture)).expect("write succeeds");
 
         let read = read_cached(&cache_dir, &key)
             .expect("read succeeds")
             .expect("entry exists");
 
-        assert_eq!(read.engine_name, capture.engine_name);
-        assert_eq!(read.input_qmd, capture.input_qmd);
-        assert_eq!(read.result, capture.result);
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].engine_name, capture.engine_name);
+        assert_eq!(read[0].input_qmd, capture.input_qmd);
+        assert_eq!(read[0].result, capture.result);
     }
 
     #[test]
@@ -310,7 +328,8 @@ mod tests {
         let cache_dir = tmp.path().join("nested").join("captures");
         let capture = sample_capture();
         let key = compute_key(capture.input_qmd.as_bytes());
-        write_cached(&cache_dir, &key, &capture).expect("write creates parent");
+        write_cached(&cache_dir, &key, std::slice::from_ref(&capture))
+            .expect("write creates parent");
         assert!(cache_dir.exists());
         assert!(cache_file_path(&cache_dir, &key).exists());
     }
@@ -325,15 +344,16 @@ mod tests {
 
         let mut first = sample_capture();
         first.result = json!({"markdown": "first\n"});
-        write_cached(&cache_dir, key, &first).unwrap();
+        write_cached(&cache_dir, key, std::slice::from_ref(&first)).unwrap();
 
         let mut second = sample_capture();
         second.result = json!({"markdown": "second\n"});
-        write_cached(&cache_dir, key, &second).unwrap();
+        write_cached(&cache_dir, key, std::slice::from_ref(&second)).unwrap();
 
         let read = read_cached(&cache_dir, key).unwrap().unwrap();
+        assert_eq!(read.len(), 1);
         assert_eq!(
-            read.result.get("markdown").unwrap().as_str(),
+            read[0].result.get("markdown").unwrap().as_str(),
             Some("second\n"),
             "second write must win"
         );
@@ -380,8 +400,8 @@ mod tests {
         let first =
             record_capture_cached(&cache_dir, &path, &project, runtime.clone(), Some(registry))
                 .await
-                .expect("first call records a capture")
-                .expect("capture present (passthrough engine)");
+                .expect("first call records a capture");
+        assert_eq!(first.len(), 1, "passthrough engine → one capture");
         assert_eq!(calls.load(Ordering::SeqCst), 1, "engine should run once");
 
         // Second call against unchanged content — cache hit, no engine
@@ -389,8 +409,8 @@ mod tests {
         let (registry2, calls2) = counting_registry();
         let second = record_capture_cached(&cache_dir, &path, &project, runtime, Some(registry2))
             .await
-            .expect("second call succeeds")
-            .expect("capture present from cache");
+            .expect("second call succeeds");
+        assert_eq!(second.len(), 1, "cache hit → one capture");
         assert_eq!(
             calls2.load(Ordering::SeqCst),
             0,
@@ -398,9 +418,9 @@ mod tests {
         );
 
         // Sanity: both captures carry the same payload.
-        assert_eq!(first.engine_name, second.engine_name);
-        assert_eq!(first.input_qmd, second.input_qmd);
-        assert_eq!(first.result, second.result);
+        assert_eq!(first[0].engine_name, second[0].engine_name);
+        assert_eq!(first[0].input_qmd, second[0].input_qmd);
+        assert_eq!(first[0].result, second[0].result);
     }
 
     #[tokio::test]
@@ -422,8 +442,7 @@ mod tests {
         let (registry, calls) = counting_registry();
         let _ = record_capture_cached(&cache_dir, &path, &project, runtime.clone(), Some(registry))
             .await
-            .expect("first run")
-            .expect("capture");
+            .expect("first run");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         // Edit on disk.
@@ -437,15 +456,14 @@ mod tests {
         let capture2 =
             record_capture_cached(&cache_dir, &path, &project2, runtime, Some(registry2))
                 .await
-                .expect("second run")
-                .expect("capture");
+                .expect("second run");
         assert_eq!(
             calls2.load(Ordering::SeqCst),
             1,
             "different content must miss the cache and invoke the engine"
         );
         assert!(
-            capture2.input_qmd.contains("SECOND"),
+            capture2[0].input_qmd.contains("SECOND"),
             "second capture should reflect the edit"
         );
     }
@@ -474,25 +492,24 @@ mod tests {
         let (registry, calls) = counting_registry();
         let capture = record_capture_cached(&cache_dir, &path, &project, runtime, Some(registry))
             .await
-            .expect("wrapper recovers")
-            .expect("capture present");
+            .expect("wrapper recovers");
         assert_eq!(
             calls.load(Ordering::SeqCst),
             1,
             "corrupt cache should force a real engine run"
         );
-        assert!(capture.input_qmd.contains("FOO"));
+        assert!(capture[0].input_qmd.contains("FOO"));
 
         // And the corrupt entry should now be replaced by a valid one.
         let re_read = read_cached(&cache_dir, &key)
             .expect("cache file is now valid")
             .expect("entry present");
-        assert_eq!(re_read.engine_name, "test-passthrough");
+        assert_eq!(re_read[0].engine_name, "test-passthrough");
     }
 
     #[tokio::test]
-    async fn cached_wrapper_returns_none_for_prose_only_doc() {
-        // No engine in play → record_capture returns None →
+    async fn cached_wrapper_returns_empty_for_prose_only_doc() {
+        // No engine in play → record_capture returns an empty vec →
         // record_capture_cached must do the same and NOT write a
         // bogus cache entry.
         let tmp = TempDir::with_prefix("c7-cached-prose-").unwrap();
@@ -502,14 +519,14 @@ mod tests {
         let result = record_capture_cached(&cache_dir, &path, &project, runtime, None)
             .await
             .expect("wrapper succeeds");
-        assert!(result.is_none(), "prose-only doc yields no capture");
+        assert!(result.is_empty(), "prose-only doc yields no captures");
 
         // The cache_dir may not even exist; if it does, nothing in it.
         if cache_dir.exists() {
             let entries: Vec<_> = std::fs::read_dir(&cache_dir).unwrap().collect();
             assert!(
                 entries.is_empty(),
-                "no cache entry should be written for None captures; got {:?}",
+                "no cache entry should be written for empty captures; got {:?}",
                 entries
                     .into_iter()
                     .map(|e| e.unwrap().file_name())

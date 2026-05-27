@@ -51,17 +51,17 @@ use super::EngineRegistry;
 /// delegate to [`NoopObserver`] — we don't care about stage events,
 /// only the capture payload.
 struct CaptureCollector {
-    captured: Arc<Mutex<Option<EngineCapture>>>,
+    captured: Arc<Mutex<Vec<EngineCapture>>>,
 }
 
 impl CaptureCollector {
     fn new() -> Self {
         Self {
-            captured: Arc::new(Mutex::new(None)),
+            captured: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
-    fn handle(&self) -> Arc<Mutex<Option<EngineCapture>>> {
+    fn handle(&self) -> Arc<Mutex<Vec<EngineCapture>>> {
         Arc::clone(&self.captured)
     }
 }
@@ -73,13 +73,13 @@ impl PipelineObserver for CaptureCollector {
         }
         match serde_json::from_value::<EngineCapture>(data.clone()) {
             Ok(capture) => {
-                // First-write-wins. EngineExecutionStage runs once per
-                // pipeline, so this realistically only fires once;
-                // guarding anyway keeps the type honest.
-                let mut slot = self.captured.lock().expect("capture mutex poisoned");
-                if slot.is_none() {
-                    *slot = Some(capture);
-                }
+                // bd-5yff4: collect one capture per engine, in execution
+                // order. `EngineExecutionStage` emits these sequentially
+                // as it threads the engine sequence.
+                self.captured
+                    .lock()
+                    .expect("capture mutex poisoned")
+                    .push(capture);
             }
             Err(e) => {
                 // Should not happen — the producer in
@@ -119,10 +119,10 @@ fn build_capture_pipeline_stages(
 /// Record the engine capture for `path` by running the q2-preview
 /// pipeline up through engine execution.
 ///
-/// Returns `Ok(Some(capture))` when an engine fired and emitted its
-/// `EngineCapture` aux event, `Ok(None)` when no engine ran (default
-/// markdown engine short-circuits without emitting). Pipeline errors
-/// propagate.
+/// Returns the captures in execution order — one per engine that fired
+/// and emitted its `EngineCapture` aux event (bd-5yff4). An empty vec
+/// means no engine ran (e.g. the default markdown engine short-circuits
+/// without emitting). Pipeline errors propagate.
 ///
 /// `engine_registry` lets callers substitute a custom registry for
 /// tests (passthrough engine standing in for jupyter, etc.); production
@@ -132,7 +132,7 @@ pub async fn record_capture(
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<EngineRegistry>,
-) -> Result<Option<EngineCapture>, PipelineError> {
+) -> Result<Vec<EngineCapture>, PipelineError> {
     let content = runtime
         .file_read(path)
         .map_err(|e| PipelineError::other(format!("Failed to read {}: {}", path.display(), e)))?;
@@ -157,7 +157,7 @@ pub async fn record_capture(
     let _final_data = pipeline.run(input, &mut ctx).await?;
 
     let mut slot = captured.lock().expect("capture mutex poisoned");
-    Ok(slot.take())
+    Ok(std::mem::take(&mut *slot))
 }
 
 /// Build the staleness-check sub-pipeline: everything up to (and
@@ -287,8 +287,8 @@ mod tests {
             .expect("pipeline runs cleanly for prose");
 
         assert!(
-            result.is_none(),
-            "expected None for prose-only doc with default (markdown) engine"
+            result.is_empty(),
+            "expected no captures for prose-only doc with default (markdown) engine"
         );
     }
 
@@ -306,7 +306,12 @@ mod tests {
             .await
             .expect("pipeline runs cleanly with test engine");
 
-        let capture = result.expect("expected Some(capture) for doc with test-passthrough engine");
+        assert_eq!(
+            result.len(),
+            1,
+            "expected one capture for doc with test-passthrough engine"
+        );
+        let capture = &result[0];
         assert_eq!(capture.engine_name, "test-passthrough");
         assert!(
             !capture.input_qmd.is_empty(),
@@ -349,7 +354,7 @@ mod tests {
         let result = record_capture(&path, &project, runtime, Some(registry))
             .await
             .expect("pipeline runs");
-        let capture = result.expect("capture present");
+        let capture = result.first().expect("capture present");
 
         assert!(
             capture.input_qmd.contains("SENTINEL"),
@@ -369,7 +374,7 @@ mod tests {
         let result = record_capture(&path, &project, runtime, None)
             .await
             .expect("pipeline runs");
-        assert!(result.is_none());
+        assert!(result.is_empty());
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -388,10 +393,10 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(PassthroughTestEngine));
 
-        let capture = record_capture(&path, &project, runtime.clone(), Some(registry))
+        let captures = record_capture(&path, &project, runtime.clone(), Some(registry))
             .await
-            .expect("record_capture")
-            .expect("capture present");
+            .expect("record_capture");
+        let capture = captures.first().expect("capture present");
 
         let computed = compute_input_qmd(&path, &project, runtime)
             .await

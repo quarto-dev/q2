@@ -967,7 +967,16 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
     };
 
-    render_single_doc_to_response(path, &content, &project, user_grammars, false, None, None).await
+    render_single_doc_to_response(
+        path,
+        &content,
+        &project,
+        user_grammars,
+        false,
+        Vec::new(),
+        None,
+    )
+    .await
 }
 
 /// Render QMD content directly (without reading from VFS).
@@ -996,7 +1005,7 @@ pub async fn render_qmd_content(
         &project,
         user_grammars,
         false,
-        None,
+        Vec::new(),
         None,
     )
     .await
@@ -1104,7 +1113,7 @@ pub async fn render_page_in_project_with_attribution(
             &project,
             user_grammars,
             false,
-            None,
+            Vec::new(),
             attribution_json,
         )
         .await;
@@ -1128,7 +1137,7 @@ pub async fn render_page_in_project_with_attribution(
         project,
         user_grammars,
         false,
-        None,
+        Vec::new(),
         attribution_json,
     )
     .await
@@ -1176,8 +1185,8 @@ pub async fn render_page_for_preview(
     // `CaptureSpliceStage` rather than constructing a
     // `ReplayEngine`-bearing registry; `ReplayEngine` remains the
     // bd-45yw regression-testing tool and is not on this path.
-    let capture = match parse_capture_from(capture_gz_json) {
-        Ok(cap) => cap,
+    let captures = match parse_capture_from(capture_gz_json) {
+        Ok(caps) => caps,
         Err(e) => {
             return error_response(format!("Failed to parse capture: {}", e));
         }
@@ -1197,7 +1206,7 @@ pub async fn render_page_for_preview(
             &project,
             user_grammars,
             true,
-            capture,
+            captures,
             None,
         )
         .await;
@@ -1215,32 +1224,35 @@ pub async fn render_page_for_preview(
         project,
         user_grammars,
         true,
-        capture,
+        captures,
         None,
     )
     .await
 }
 
-/// Ungzip + JSON-deserialize a capture payload into a typed
-/// [`EngineCapture`](quarto_trace::EngineCapture). `None` input →
-/// `None` output; an empty `Vec` is treated the same as `None` for
-/// symmetry with WASM/JS callers that may pass an empty `Uint8Array`
-/// to mean "no capture."
+/// Ungzip + JSON-deserialize a capture payload into the ordered
+/// sequence of [`EngineCapture`](quarto_trace::EngineCapture)s (one per
+/// engine that ran server-side; bd-5yff4). `None`/empty input → empty
+/// vec, for symmetry with WASM/JS callers that may pass an empty
+/// `Uint8Array` to mean "no capture."
 ///
-/// bd-lucp: this used to construct an
-/// `EngineRegistry::with_replay(capture)`, but the preview path no
-/// longer routes through `ReplayEngine` — see
+/// The payload is a gzipped JSON **array** of captures. For robustness
+/// against a stale pre-bd-5yff4 doc (a single capture object), a failed
+/// array parse falls back to a single-object parse wrapped in a vec.
+///
+/// bd-lucp: the preview path consumes these via `CaptureSpliceStage`,
+/// not `ReplayEngine` — see
 /// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
 fn parse_capture_from(
     capture_gz_json: Option<Vec<u8>>,
-) -> Result<Option<quarto_trace::EngineCapture>, String> {
+) -> Result<Vec<quarto_trace::EngineCapture>, String> {
     use std::io::Read;
 
     let Some(bytes) = capture_gz_json else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     if bytes.is_empty() {
-        return Ok(None);
+        return Ok(Vec::new());
     }
 
     let mut decoder = flate2::read::GzDecoder::new(&bytes[..]);
@@ -1248,9 +1260,17 @@ fn parse_capture_from(
     decoder
         .read_to_end(&mut json)
         .map_err(|e| format!("ungzip failed: {}", e))?;
-    let capture: quarto_trace::EngineCapture =
-        serde_json::from_slice(&json).map_err(|e| format!("JSON parse failed: {}", e))?;
-    Ok(Some(capture))
+
+    match serde_json::from_slice::<Vec<quarto_trace::EngineCapture>>(&json) {
+        Ok(captures) => Ok(captures),
+        Err(array_err) => {
+            // Lenient fallback: a stale single-object capture doc.
+            match serde_json::from_slice::<quarto_trace::EngineCapture>(&json) {
+                Ok(single) => Ok(vec![single]),
+                Err(_) => Err(format!("JSON parse failed: {}", array_err)),
+            }
+        }
+    }
 }
 
 /// Single-doc render path — used by `render_qmd` directly and by
@@ -1275,12 +1295,13 @@ async fn render_single_doc_to_response(
     project: &ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
-    // bd-lucp: recorded engine capture for the preview-time AST-splice
-    // path. Forwarded to `render_qmd_to_preview_ast` (which threads it
-    // into `CaptureSpliceStage`) on the preview branch. The HTML
-    // branch ignores it (HTML renders don't consume captures in the
-    // WASM today — `q2 render` natively runs engines instead).
-    capture: Option<quarto_trace::EngineCapture>,
+    // bd-lucp / bd-5yff4: recorded engine capture sequence for the
+    // preview-time AST-splice path (one per engine, in order). Forwarded
+    // to `render_qmd_to_preview_ast` (which folds them through
+    // `CaptureSpliceStage`) on the preview branch. The HTML branch
+    // ignores it (HTML renders don't consume captures in the WASM today —
+    // `q2 render` natively runs engines instead).
+    captures: Vec<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
@@ -1339,7 +1360,7 @@ async fn render_single_doc_to_response(
                 &mut ctx,
                 runtime_arc,
                 None,
-                capture,
+                captures,
             )
             .await
             {
@@ -1440,12 +1461,13 @@ async fn render_project_active_page_to_response(
     mut project: ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
-    // bd-lucp: recorded engine capture attached to the q2-preview
-    // pass-2 renderer. `RenderToPreviewAstRenderer::with_capture`
-    // threads it into every per-doc `render_qmd_to_preview_ast` call;
-    // [`CaptureSpliceStage`] inside the q2-preview pipeline applies the
-    // splice. The non-preview branch ignores it.
-    capture: Option<quarto_trace::EngineCapture>,
+    // bd-lucp / bd-5yff4: recorded engine capture sequence attached to
+    // the q2-preview pass-2 renderer (one per engine, in order).
+    // `RenderToPreviewAstRenderer::with_captures` threads them into every
+    // per-doc `render_qmd_to_preview_ast` call; [`CaptureSpliceStage`]
+    // inside the q2-preview pipeline folds the splices. The non-preview
+    // branch ignores it.
+    captures: Vec<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
@@ -1503,12 +1525,12 @@ async fn render_project_active_page_to_response(
     let summary = match kind {
         Some("preview") => {
             let mut renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
-            // bd-lucp: when a capture is present, attach it to the
-            // renderer so `CaptureSpliceStage` (inserted by
-            // `build_q2_preview_pipeline_stages`) can splice recorded
+            // bd-lucp / bd-5yff4: when captures are present, attach the
+            // sequence to the renderer so `CaptureSpliceStage` (inserted
+            // by `build_q2_preview_pipeline_stages`) can fold the recorded
             // engine output blocks into each per-doc AST.
-            if let Some(cap) = capture {
-                renderer = renderer.with_capture(cap);
+            if !captures.is_empty() {
+                renderer = renderer.with_captures(captures);
             }
             if let Some(json) = attribution_json {
                 renderer = renderer.with_attribution(json);
