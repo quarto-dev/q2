@@ -482,12 +482,20 @@ doc-keyed invalidation already covers it.
 - [x] Updated two existing single-engine tests for the new per-engine
       intermediate label (no snapshots pinned `.rmarkdown`).
 
-### Phase 2 — YAML merge integration
-- [ ] Tests: `engine:` array merges via `!concat` default across
-      project/dir/doc layers; `!prefer` replaces; duplicates deduped.
-- [ ] End-to-end: a fixture project with layered `_quarto.yml` /
-      `_metadata.yml` / front-matter engine arrays renders with the
-      expected resolved sequence.
+### Phase 2 — YAML merge integration ✅
+- [x] Tests (`crates/quarto-core/tests/engine_merge.rs`, 7 cases):
+      `engine:` array merges via `!concat` default across project/dir/doc
+      layers (2- and 3-layer); `!prefer` replaces; scalar-over-array and
+      array-over-scalar kind resolution; cross-layer duplicate dedup +
+      reported drop; lone-scalar back-compat. Exercises the production
+      `MergedConfig::materialize()` → `detect_engine_sequence` path — the
+      executable form of the plan's verified-behavior table. **No
+      merge-engine code change was needed** (arrays already concat).
+- [ ] Full-render E2E with layered config → folded into **Phase 5**.
+      Note: the `q2` binary cannot use the test-only `FixtureEngine`, so
+      binary-level E2E uses a single-element array (`engine: [<real>]`)
+      with an available engine; the multi-engine *threading* is verified
+      end-to-end through the real HTML pipeline with a fixture registry.
 
 ### Phase 3 — Trace / replay redesign
 - [ ] `quarto-trace`: `engine_captures: Vec<EngineCapture>`, schema bump
