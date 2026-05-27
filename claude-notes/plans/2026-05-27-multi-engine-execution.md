@@ -566,12 +566,26 @@ cross-cutting than originally scoped; broken into sub-steps:
       what was and wasn't browser-verified.
 
 ### Phase 5 — End-to-end verification
-- [ ] `cargo run --bin q2 -- render <multi-engine fixture>.qmd` with the
-      file-backed engines; inspect output; record the invocation +
-      observed markup in this plan (per CLAUDE.md E2E policy).
-- [ ] `cargo nextest run --workspace`; `cargo xtask verify` (full,
-      since `quarto-core` / `quarto-trace` / `quarto-pandoc-types` feed
-      the WASM leg).
+- [x] **Real-binary E2E of the array config (2026-05-27).** Through the
+      actual `q2` CLI with R/knitr installed:
+      - `cargo run --bin q2 -- render mengine-e2e/array-engine.qmd` with
+        `engine:\n  - knitr` and an `{r}` cell `1 + 41` → output HTML
+        contains `<code>[1] 42</code>`, prose preserved. Proves the
+        **array** `engine:` form flows through real CLI arg parsing,
+        metadata merge, detection, and a real engine — inspected the HTML
+        directly.
+      - Scalar back-compat: `engine: knitr` with `2 * 21` → `[1] 42`.
+      - Two real engines (`engine: [knitr, jupyter]`, `{r}` + `{python}`)
+        is confounded by **knitr claiming `{python}` cells** (errors
+        without reticulate; with `python.reticulate: false` knitr runs
+        python itself and jupyter sees no cell). This is engine
+        cell-ownership — the "non-intuitive multi-engine behavior" we
+        anticipated — **not** a threading bug. Clean N-engine threading
+        is proven by the fixture-engine integration tests, which control
+        cell ownership precisely.
+- [x] `cargo xtask verify` (full, incl. WASM + hub-client build) — green
+      after Phases 1–3.
+- [ ] Re-run full `cargo xtask verify` after Phase 4.
 - [ ] Re-confirm trace/replay/preview parity with the single-engine path.
 
 ### Phase 6 — Commit (await explicit push approval per CLAUDE.md)
