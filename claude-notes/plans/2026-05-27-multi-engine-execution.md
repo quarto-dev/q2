@@ -397,17 +397,39 @@ Python / Jupyter.
 
 ### Preview (`q2 preview`) — in scope
 
+> **Design correction (2026-05-27, discovered during Phase 3→4):** the
+> WASM preview path does **not** use `ReplayEngine`/`with_replay`. Per
+> bd-lucp (`claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`),
+> the browser threads the capture into **`CaptureSpliceStage`**
+> (`crates/quarto-core/src/engine/capture_splice.rs`), which treats the
+> capture as a recipe — `derive_cell_outputs(A1, B1)` then `splice_cells`
+> match engine cells by `(content-hash, occurrence)` and replace them
+> with the recorded `Div.cell` output. `EngineExecutionStage` is bypassed
+> in preview. So the Phase-4 plan below is revised accordingly.
+
 `q2 preview` support ships **with** this feature, not after it. The
 preview flow has two parts; both are in scope:
 
-1. **Capture the sequence + replay in the browser** (the part that makes
-   preview *correct* for multi-engine docs):
+1. **Capture the sequence + splice it in the browser** (the part that
+   makes preview *correct* for multi-engine docs):
    - `record_capture` (`preview_record.rs:130`) returns
      `Vec<EngineCapture>`; `CaptureCollector` collects **all** captures
      in order instead of first-write-wins (`preview_record.rs:79`).
-   - The WASM hub-client registers the ordered captures via
-     `with_replay_many` and replays the sequence so the browser render
-     matches the server render.
+   - `CaptureSpliceStage` **folds** the captures in order:
+     `a = a2; for cap in captures { a = apply_capture_splice(a,
+     parse(cap.input_qmd), parse(cap.result.markdown), cap.engine_name) }`.
+     Splice 1 turns engine-A cells into A's output; splice 2 turns
+     engine-B cells (authored, or produced by A) into B's output.
+   - **Known edge (follow-up):** `splice_cells` walks *top-level* blocks
+     only. If engine A emits engine-B's cell *inside* a `Div.cell`
+     wrapper, the fold won't reach it. The common case (each engine's
+     cells at top level) works. Document as a v1 limitation.
+   - Transport: the capture binary doc
+     (`capture_driver.rs` / `CAPTURE_MIME_TYPE`) payload becomes a JSON
+     **array** of captures (was a single object); the sidecar still
+     references one doc per file. WASM `parse_capture_from` deserializes
+     a `Vec<EngineCapture>`. hub-client TS likely needs no change (it
+     ships opaque bytes; only the WASM parse shape changes) — confirm.
 
 2. **Incremental capture cache** (the part that makes preview *fast*
    across edits — `quarto-preview/src/cache.rs`'s `record_capture_cached`
@@ -521,16 +543,27 @@ doc-keyed invalidation already covers it.
       determinism invariant: record two-engine run, replay via
       `with_replay_many`, output identical). Full workspace: 9482 pass.
 
-### Phase 4 — Preview integration (`q2 preview`, in scope)
-- [ ] `record_capture` → `Vec<EngineCapture>`; collector keeps order.
-- [ ] hub-client WASM registers the ordered captures (`with_replay_many`)
-      and replays the sequence; browser render matches server render.
-- [ ] Incremental capture cache stores/serves the ordered vec; confirm
-      doc-keyed staleness invalidates the whole sequence (deterministic
-      derivation argument, §4).
-- [ ] Verify in a real browser session per CLAUDE.md end-to-end policy;
-      if a browser isn't available, say so explicitly rather than
-      inferring success.
+### Phase 4 — Preview integration (`q2 preview`) — NOT STARTED
+Revised after the CaptureSpliceStage discovery (see §4). Larger and more
+cross-cutting than originally scoped; broken into sub-steps:
+- [ ] `CaptureSpliceStage` folds a `&[EngineCapture]` in order
+      (`apply_capture_splices`); unit tests incl. two-engine fold + the
+      top-level-only limitation. **Pure Rust, fully testable.**
+- [ ] `record_capture` / `record_capture_cached` → `Vec<EngineCapture>`;
+      `CaptureCollector` keeps all in order.
+- [ ] Capture binary-doc payload → JSON array; `capture_driver.rs` /
+      `re_execute.rs` / cache read-write updated; staleness check.
+- [ ] WASM `parse_capture_from` → `Vec<EngineCapture>`; preview render
+      entry points thread the vec into the splice fold.
+- [ ] hub-client TS: confirm no change needed (opaque bytes), else update.
+- [ ] **Verification gap (be explicit):** the preview server uses the
+      default registry (real engines); the test-only `FixtureEngine`
+      isn't available there, and no two real engines compose without
+      runtimes. So a *browser* E2E of multi-engine preview can't be run
+      here. Plan: unit-test the splice fold + the Rust transport, and
+      drive a browser session for the *single-engine* path (regression)
+      + a hand-constructed two-capture sidecar if feasible. State clearly
+      what was and wasn't browser-verified.
 
 ### Phase 5 — End-to-end verification
 - [ ] `cargo run --bin q2 -- render <multi-engine fixture>.qmd` with the
