@@ -148,32 +148,89 @@ fn extract_string_value(value: &ConfigValue) -> Option<&str> {
 /// assert_eq!(detected.name, "markdown");
 /// ```
 pub fn detect_engine(metadata: &ConfigValue) -> DetectedEngine {
-    // Case 1: Look for explicit "engine" key
-    if let Some(engine_value) = metadata.get("engine") {
-        // Case 1a: engine: markdown|knitr|jupyter (string value)
-        if let Some(name) = extract_string_value(engine_value) {
-            // Return the engine name even if unknown - the pipeline stage
-            // will handle fallback and warning for unknown engines
-            return DetectedEngine::new(name);
+    // Back-compat shim: the first engine of the detected sequence (or the
+    // default markdown engine). Single-engine call sites that predate
+    // multi-engine support (bd-5yff4) keep their exact behavior because
+    // the string/map/top-level forms each yield a one-element sequence.
+    detect_engines(metadata)
+        .into_iter()
+        .next()
+        .unwrap_or_default()
+}
+
+/// Interpret a single engine specifier — either the whole `engine:`
+/// value or one element of an `engine:` array — as a [`DetectedEngine`].
+///
+/// - A bare string is the engine name (`engine: knitr`, or `- knitr`).
+/// - A single-key map is `name: config`
+///   (`engine: { jupyter: { kernel: python3 } }`, or
+///   `- mermaidjs: { theme: dark }`). The first key wins, matching the
+///   long-standing single-engine behavior.
+///
+/// Returns `None` for shapes that name no engine (e.g. an empty map),
+/// so callers can skip them.
+fn detected_from_value(value: &ConfigValue) -> Option<DetectedEngine> {
+    // String form first (also covers Path/Glob/Expr and single-Str
+    // PandocInlines via `extract_string_value`).
+    if let Some(name) = extract_string_value(value) {
+        return Some(DetectedEngine::new(name));
+    }
+    // Single-key map form: `name: config`.
+    if let Some(entries) = value.as_map_entries() {
+        if let Some(first_entry) = entries.first() {
+            return Some(DetectedEngine::with_config(
+                first_entry.key.clone(),
+                first_entry.value.clone(),
+            ));
         }
+    }
+    None
+}
 
-        // Case 1b: engine: { knitr: ... } or engine: { jupyter: ... }
-        if let Some(entries) = engine_value.as_map_entries() {
-            // The first key should be the engine name
-            if let Some(first_entry) = entries.first() {
-                let engine_name = &first_entry.key;
-
-                // Return even if unknown - the pipeline stage will
-                // handle fallback and warning for unknown engines
-                return DetectedEngine::with_config(engine_name.clone(), first_entry.value.clone());
+/// Detect the **ordered** execution-engine sequence from document
+/// metadata (bd-5yff4).
+///
+/// Accepted `engine:` shapes, in addition to the single-engine forms
+/// [`detect_engine`] documents:
+///
+/// ```yaml
+/// engine: [knitr, mermaidjs]          # ordered array of names
+/// engine:
+///   - knitr
+///   - mermaidjs: { theme: dark }       # array elements may carry config
+/// ```
+///
+/// Order is significant — engine N may emit code cells that engine N+1
+/// consumes. The returned sequence may contain **duplicates**; callers
+/// that require distinct engines should go through
+/// [`detect_engine_sequence`], which de-duplicates and reports the drops.
+///
+/// Unknown engine names are returned as-is; the pipeline stage handles
+/// fallback and warnings. An `engine:` array that names no engines (empty
+/// or all-unparseable) falls through to the same default as no `engine:`
+/// key at all.
+pub fn detect_engines(metadata: &ConfigValue) -> Vec<DetectedEngine> {
+    // Explicit `engine:` key.
+    if let Some(engine_value) = metadata.get("engine") {
+        // Array form: ordered, may mix bare names and single-key maps.
+        if let Some(items) = engine_value.as_array() {
+            let engines: Vec<DetectedEngine> =
+                items.iter().filter_map(detected_from_value).collect();
+            if !engines.is_empty() {
+                return engines;
             }
+            // Array named no engines: fall through to the default below
+            // (mirrors the pre-array behavior for a non-string,
+            // non-map `engine:` value).
+        } else if let Some(detected) = detected_from_value(engine_value) {
+            // Scalar string or single-key map: a one-element sequence.
+            return vec![detected];
         }
     }
 
-    // Case 2: Look for engine-specific top-level keys
-    // This handles cases like:
-    //   jupyter:
-    //     kernel: python3
+    // Engine-specific top-level keys (e.g. `jupyter:` / `knitr:` with no
+    // `engine:` key). Single engine only — this shorthand has no array
+    // form.
     for engine_name in KNOWN_ENGINES {
         // Skip "markdown" - it doesn't have a top-level config key
         if *engine_name == "markdown" {
@@ -181,12 +238,56 @@ pub fn detect_engine(metadata: &ConfigValue) -> DetectedEngine {
         }
 
         if let Some(config) = metadata.get(engine_name) {
-            return DetectedEngine::with_config(engine_name.to_string(), config.clone());
+            return vec![DetectedEngine::with_config(
+                engine_name.to_string(),
+                config.clone(),
+            )];
         }
     }
 
     // Default: markdown engine (no execution)
-    DetectedEngine::default()
+    vec![DetectedEngine::default()]
+}
+
+/// An ordered, de-duplicated engine sequence plus the names of any
+/// duplicate engines that were dropped.
+///
+/// Engines in a sequence must be **distinct** (decision in the
+/// multi-engine plan): order is significant, so a repeated engine is
+/// ambiguous. Duplicates arise most often from the `!concat` array-merge
+/// default when two config layers each name the same engine (e.g. a
+/// project `engine: [jupyter]` and a document that restates
+/// `engine: [jupyter]`). We keep the **first** occurrence and record the
+/// rest in [`dropped_duplicates`](EngineSequence::dropped_duplicates) so
+/// the stage can emit a diagnostic. To intentionally replace a sequence
+/// (including reordering) across layers, use the `!prefer` merge tag.
+#[derive(Debug, Clone)]
+pub struct EngineSequence {
+    /// The engines to run, in order, de-duplicated (first occurrence
+    /// kept).
+    pub engines: Vec<DetectedEngine>,
+    /// Names of duplicate engines that were dropped, in the order they
+    /// were encountered. Empty in the common case.
+    pub dropped_duplicates: Vec<String>,
+}
+
+/// Detect the engine sequence and de-duplicate it (keeping the first
+/// occurrence of each engine name). See [`EngineSequence`].
+pub fn detect_engine_sequence(metadata: &ConfigValue) -> EngineSequence {
+    let mut seen = std::collections::HashSet::new();
+    let mut engines = Vec::new();
+    let mut dropped_duplicates = Vec::new();
+    for detected in detect_engines(metadata) {
+        if seen.insert(detected.name.clone()) {
+            engines.push(detected);
+        } else {
+            dropped_duplicates.push(detected.name);
+        }
+    }
+    EngineSequence {
+        engines,
+        dropped_duplicates,
+    }
 }
 
 #[cfg(test)]
@@ -402,5 +503,123 @@ mod tests {
 
         let detected = detect_engine(&meta);
         assert_eq!(detected.name, "markdown");
+    }
+
+    // === bd-5yff4: multi-engine detection (detect_engines) ===
+
+    fn array_config(items: Vec<ConfigValue>) -> ConfigValue {
+        ConfigValue::new_array(items, SourceInfo::default())
+    }
+
+    #[test]
+    fn test_detect_engines_single_string_backcompat() {
+        // engine: knitr → one-element sequence
+        let meta = map_config(vec![("engine", string_config("knitr"))]);
+        let engines = detect_engines(&meta);
+        assert_eq!(engines.len(), 1);
+        assert_eq!(engines[0].name, "knitr");
+    }
+
+    #[test]
+    fn test_detect_engines_array_of_strings_preserves_order() {
+        // engine: [knitr, mermaidjs]
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![string_config("knitr"), string_config("mermaidjs")]),
+        )]);
+        let engines = detect_engines(&meta);
+        let names: Vec<_> = engines.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["knitr", "mermaidjs"]);
+        assert!(engines.iter().all(|e| e.config.is_none()));
+    }
+
+    #[test]
+    fn test_detect_engines_array_element_with_config() {
+        // engine:
+        //   - knitr
+        //   - mermaidjs: { theme: dark }
+        let mermaid_cfg = map_config(vec![("theme", string_config("dark"))]);
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![
+                string_config("knitr"),
+                map_config(vec![("mermaidjs", mermaid_cfg)]),
+            ]),
+        )]);
+        let engines = detect_engines(&meta);
+        let names: Vec<_> = engines.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["knitr", "mermaidjs"]);
+        assert!(engines[0].config.is_none());
+        assert!(engines[1].config.is_some());
+        assert!(engines[1].config.as_ref().unwrap().get("theme").is_some());
+    }
+
+    #[test]
+    fn test_detect_engines_empty_array_defaults_to_markdown() {
+        let meta = map_config(vec![("engine", array_config(vec![]))]);
+        let engines = detect_engines(&meta);
+        assert_eq!(engines.len(), 1);
+        assert_eq!(engines[0].name, "markdown");
+    }
+
+    #[test]
+    fn test_detect_engines_map_form_still_single() {
+        // engine: { jupyter: { kernel: python3 } } stays one engine
+        let jupyter_cfg = map_config(vec![("kernel", string_config("python3"))]);
+        let meta = map_config(vec![("engine", map_config(vec![("jupyter", jupyter_cfg)]))]);
+        let engines = detect_engines(&meta);
+        assert_eq!(engines.len(), 1);
+        assert_eq!(engines[0].name, "jupyter");
+        assert!(engines[0].config.is_some());
+    }
+
+    #[test]
+    fn test_detect_engine_backcompat_returns_first_of_array() {
+        // The singular shim returns the first engine of the sequence.
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![string_config("knitr"), string_config("mermaidjs")]),
+        )]);
+        assert_eq!(detect_engine(&meta).name, "knitr");
+    }
+
+    // === bd-5yff4: de-duplication (detect_engine_sequence) ===
+
+    #[test]
+    fn test_detect_engine_sequence_distinct_passes_through() {
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![string_config("knitr"), string_config("mermaidjs")]),
+        )]);
+        let seq = detect_engine_sequence(&meta);
+        let names: Vec<_> = seq.engines.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["knitr", "mermaidjs"]);
+        assert!(seq.dropped_duplicates.is_empty());
+    }
+
+    #[test]
+    fn test_detect_engine_sequence_dedups_keeping_first() {
+        // [jupyter, knitr, jupyter] → [jupyter, knitr], dropped [jupyter]
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![
+                string_config("jupyter"),
+                string_config("knitr"),
+                string_config("jupyter"),
+            ]),
+        )]);
+        let seq = detect_engine_sequence(&meta);
+        let names: Vec<_> = seq.engines.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["jupyter", "knitr"]);
+        assert_eq!(seq.dropped_duplicates, vec!["jupyter".to_string()]);
+    }
+
+    #[test]
+    fn test_detect_engine_sequence_single_engine_no_drops() {
+        let meta = map_config(vec![("engine", string_config("knitr"))]);
+        let seq = detect_engine_sequence(&meta);
+        assert_eq!(seq.engines.len(), 1);
+        assert_eq!(seq.engines[0].name, "knitr");
+        assert!(seq.dropped_duplicates.is_empty());
     }
 }

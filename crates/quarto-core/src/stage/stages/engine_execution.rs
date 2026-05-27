@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
 
-use crate::engine::{EngineRegistry, ExecutionContext, ExecutionEngine, detect_engine};
+use crate::engine::{EngineRegistry, ExecutionContext, ExecutionEngine, detect_engine_sequence};
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
     StageContext,
@@ -160,255 +160,291 @@ impl PipelineStage for EngineExecutionStage {
             ));
         };
 
-        // Step 1: Detect engine from metadata
-        let detected = detect_engine(&doc_ast.ast.meta);
+        // Step 1: Detect the (ordered, de-duplicated) engine sequence.
+        // bd-5yff4: `engine:` may be an array; engines run in declared
+        // order, each consuming the AST the previous engine produced.
+        let sequence = detect_engine_sequence(&doc_ast.ast.meta);
+
+        // Distinct engines are required; report any duplicates the merge
+        // produced (first occurrence kept). See `EngineSequence`.
+        for dropped in &sequence.dropped_duplicates {
+            ctx.add_diagnostics(vec![DiagnosticMessage::warning(format!(
+                "Duplicate engine '{dropped}' in engine sequence ignored \
+                 (engines must be distinct; the first occurrence is kept — \
+                 use the !prefer merge tag to replace the list)"
+            ))]);
+        }
 
         trace_event!(
             ctx,
             EventLevel::Debug,
-            "detected engine: {} (config: {})",
-            detected.name,
-            if detected.config.is_some() {
-                "yes"
-            } else {
-                "no"
-            }
+            "detected engine sequence: [{}]",
+            sequence
+                .engines
+                .iter()
+                .map(|e| e.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         );
 
-        // Step 2: Get the engine implementation (with fallback)
+        // Step 2: Resolve each detected engine to an implementation (with
+        // fallback), dropping markdown — it's a no-op, so a markdown
+        // engine anywhere in the sequence is skipped (this also covers
+        // unavailable engines that fall back to markdown).
         let mut engine_warnings = Vec::new();
-        let engine = self.get_engine_with_fallback(&detected.name, &mut engine_warnings);
-
-        // Add any engine lookup diagnostics to context
+        let mut to_run: Vec<(
+            Arc<dyn ExecutionEngine>,
+            Option<quarto_pandoc_types::ConfigValue>,
+        )> = Vec::new();
+        for detected in &sequence.engines {
+            let engine = self.get_engine_with_fallback(&detected.name, &mut engine_warnings);
+            if engine.name() == "markdown" {
+                trace_event!(
+                    ctx,
+                    EventLevel::Debug,
+                    "engine '{}' resolved to markdown (no-op) — skipping",
+                    detected.name
+                );
+                continue;
+            }
+            to_run.push((engine, detected.config.clone()));
+        }
         if !engine_warnings.is_empty() {
             ctx.add_diagnostics(engine_warnings);
         }
 
-        trace_event!(ctx, EventLevel::Debug, "using engine: {}", engine.name());
-
-        // Step 3: For markdown engine, skip execution (optimization)
-        // The markdown engine is a no-op, so we can avoid the serialize/parse round-trip
-        if engine.name() == "markdown" {
+        // Step 3: Fast path — nothing to execute (all markdown / no
+        // engines). Pass the AST through unchanged, exactly as the single
+        // markdown-engine optimization did.
+        if to_run.is_empty() {
             trace_event!(
                 ctx,
                 EventLevel::Debug,
-                "markdown engine - passing through unchanged"
+                "no executable engines — passing through unchanged"
             );
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
-        // Step 4: Serialize AST to QMD for engine execution
-        let (qmd, qmd_source_info) = serialize_ast_to_qmd(&doc_ast.ast)?;
+        // Thread the AST, the merged (multi-slot) ASTContext, and warnings
+        // through the sequence. Slot 0 is the original `.qmd`; each engine
+        // appends one intermediate slot. `merged_context.filenames.len()`
+        // is the next FileId (files are added in lock-step with filenames).
+        let DocumentAst {
+            path,
+            ast,
+            ast_context,
+            source_context,
+            warnings,
+            recorded_includes,
+        } = doc_ast;
+        let mut ast = ast;
+        let mut merged_context = ast_context;
+        let mut warnings = warnings;
+        // Source context for engine error attribution. Constant across the
+        // sequence: it resolves the original document's FileIds exactly
+        // (as in the single-engine path). Offsets into content produced by
+        // an *earlier* engine don't resolve here (their FileIds live only
+        // in `merged_context`); engine error mapping is best-effort and
+        // treats an unresolved offset as "no precise location", so this is
+        // adequate. Precise cross-engine attribution is a possible
+        // follow-up.
+        let source_context_arc = std::sync::Arc::new(source_context.clone());
 
-        trace_event!(
-            ctx,
-            EventLevel::Debug,
-            "serialized AST to {} bytes of QMD",
-            qmd.len()
-        );
+        for (run_index, (engine, engine_config)) in to_run.into_iter().enumerate() {
+            // Serialize the current AST to QMD for this engine.
+            let (qmd, qmd_source_info) = serialize_ast_to_qmd(&ast)?;
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "[{}] serialized AST to {} bytes of QMD",
+                engine.name(),
+                qmd.len()
+            );
 
-        // Step 5: Prepare execution context
-        // Clone source_context into Arc — it's finalized after include expansion.
-        let source_context = std::sync::Arc::new(doc_ast.source_context.clone());
-        let exec_context = ExecutionContext::new(
-            ctx.temp_dir.clone(),
-            ctx.project.dir.clone(),
-            doc_ast.path.clone(),
-            &ctx.format.identifier.to_string(),
-        )
-        .with_project_dir(if ctx.project.is_single_file {
-            None
-        } else {
-            Some(ctx.project.dir.clone())
-        })
-        .with_engine_config(detected.config.clone())
-        .with_source_info(qmd_source_info, source_context);
+            let exec_context = ExecutionContext::new(
+                ctx.temp_dir.clone(),
+                ctx.project.dir.clone(),
+                path.clone(),
+                &ctx.format.identifier.to_string(),
+            )
+            .with_project_dir(if ctx.project.is_single_file {
+                None
+            } else {
+                Some(ctx.project.dir.clone())
+            })
+            .with_engine_config(engine_config)
+            .with_source_info(qmd_source_info, source_context_arc.clone());
 
-        // Step 6: Execute the engine
-        trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
+            trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
+            let mut result = engine
+                .execute(&qmd, &exec_context)
+                .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "[{}] engine produced {} bytes of markdown",
+                engine.name(),
+                result.markdown.len()
+            );
 
-        let mut result = engine
-            .execute(&qmd, &exec_context)
-            .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
-
-        trace_event!(
-            ctx,
-            EventLevel::Debug,
-            "engine produced {} bytes of markdown",
-            result.markdown.len()
-        );
-
-        // bd-45yw: emit the engine capture for trace recording.
-        // Must happen before the rest of the stage mutates `result`
-        // (draining `includes`, taking `supporting_files`) so the
-        // capture reflects the engine's full output. JsonTraceObserver
-        // recognizes ENGINE_CAPTURE_KIND and routes the payload to
-        // TraceDocument.engine_capture; other observers (CLI, WASM
-        // callbacks, NoopObserver) ignore the kind and stay quiet.
-        match serde_json::to_value(&result) {
-            Ok(result_json) => {
-                let payload = serde_json::json!({
-                    "engine_name": engine.name(),
-                    "input_qmd": qmd,
-                    "result": result_json,
-                });
-                ctx.observer
-                    .on_auxiliary_data(self.name(), 0, ENGINE_CAPTURE_KIND, &payload);
+            // bd-45yw / bd-5yff4: emit one engine capture per engine, with
+            // `run_index` distinguishing engines within this stage so the
+            // trace can carry an ordered capture per engine. Emitted before
+            // `result` is drained so the capture reflects the full output.
+            // JsonTraceObserver routes ENGINE_CAPTURE_KIND to the trace's
+            // engine capture(s); other observers ignore the kind.
+            match serde_json::to_value(&result) {
+                Ok(result_json) => {
+                    let payload = serde_json::json!({
+                        "engine_name": engine.name(),
+                        "input_qmd": qmd,
+                        "result": result_json,
+                    });
+                    ctx.observer.on_auxiliary_data(
+                        self.name(),
+                        run_index,
+                        ENGINE_CAPTURE_KIND,
+                        &payload,
+                    );
+                }
+                Err(e) => {
+                    // Should not happen — ExecuteResult is fully
+                    // serializable — but if it ever does we surface it
+                    // without breaking the render path: the capture is a
+                    // recording-time concern, not a correctness concern.
+                    trace_event!(
+                        ctx,
+                        EventLevel::Warn,
+                        "failed to serialize ExecuteResult for trace capture: {}",
+                        e
+                    );
+                }
             }
-            Err(e) => {
-                // Should not happen — ExecuteResult is fully serializable —
-                // but if it ever does we surface it without breaking the
-                // render path: the capture is a recording-time concern,
-                // not a correctness-of-output concern.
-                trace_event!(
-                    ctx,
-                    EventLevel::Warn,
-                    "failed to serialize ExecuteResult for trace capture: {}",
-                    e
+
+            // Accumulate engine-produced includes and supporting files
+            // (append-only; later engines add to earlier ones). See
+            // bd-o8pr for the supporting-files / resource-report contract.
+            ctx.includes
+                .header_includes
+                .extend(result.includes.header_includes);
+            ctx.includes
+                .include_before
+                .extend(result.includes.include_before);
+            ctx.includes
+                .include_after
+                .extend(result.includes.include_after);
+            if !result.supporting_files.is_empty() {
+                ctx.resource_report.add_engine_files(
+                    engine.name(),
+                    &path,
+                    std::mem::take(&mut result.supporting_files),
                 );
             }
-        }
 
-        // Save engine-produced includes (e.g., from knitr/jupyter) onto context
-        ctx.includes
-            .header_includes
-            .extend(result.includes.header_includes);
-        ctx.includes
-            .include_before
-            .extend(result.includes.include_before);
-        ctx.includes
-            .include_after
-            .extend(result.includes.include_after);
+            // Parse the executed markdown back to AST against a per-engine
+            // intermediate filename (`<stem>.<engine>.rmarkdown`) so
+            // engine-produced blocks attribute to a distinct slot. The
+            // SourceInfo offsets index into the engine's output buffer; for
+            // the current use (filename attribution in the trace) this is
+            // adequate.
+            let intermediate_name = intermediate_filename(&path, engine.name());
+            let (mut executed_ast, executed_ast_context, parse_warnings) =
+                pampa::readers::qmd::read(
+                    result.markdown.as_bytes(),
+                    false, // loose mode
+                    &intermediate_name,
+                    &mut std::io::sink(),
+                    true, // track source locations
+                    None, // file_id
+                )
+                .map_err(|diagnostics| {
+                    PipelineError::stage_error_with_diagnostics(self.name(), diagnostics)
+                })?;
 
-        // bd-o8pr Phase 2: route engine-emitted supporting files
-        // into the per-document resource report. The orchestrator
-        // drains this after Pass-2 and copies the entries into the
-        // output dir alongside static-channel resources. Engine
-        // contributions are append-only — there's no
-        // ResourceReportStage::remove. The report carries the doc
-        // source on each entry so it stays attributable after the
-        // per-doc reports are merged into the project-wide list.
-        if !result.supporting_files.is_empty() {
-            ctx.resource_report.add_engine_files(
-                engine.name(),
-                &doc_ast.path,
-                std::mem::take(&mut result.supporting_files),
-            );
-        }
-
-        // Step 7: Parse the executed markdown back to AST.
-        //
-        // The engine runs against an intermediate `<stem>.rmarkdown` file
-        // (knitr's convention — see `knitr::postprocess_markdown`). We parse
-        // with that name so `SourceInfo` attribution on new (engine-produced)
-        // blocks points at the intermediate file rather than the original.
-        // Blocks kept from the original AST keep their original attribution
-        // after the FileId merge below.
-        //
-        // Note: `result.markdown` is the engine's *output* buffer, so the
-        // SourceInfo byte offsets technically index into that buffer rather
-        // than the on-disk `.rmarkdown`. For the current use (filename
-        // attribution in the trace), this is adequate; a future refinement
-        // could expose the on-disk intermediate via the engine interface.
-        let intermediate_name = intermediate_filename(&doc_ast.path);
-        let (mut executed_ast, executed_ast_context, parse_warnings) = pampa::readers::qmd::read(
-            result.markdown.as_bytes(),
-            false,              // loose mode
-            &intermediate_name, // filename for error messages
-            &mut std::io::sink(),
-            true, // track source locations
-            None, // file_id
-        )
-        .map_err(|diagnostics| {
-            PipelineError::stage_error_with_diagnostics(self.name(), diagnostics)
-        })?;
-
-        // Step 7a: Build the merged ASTContext that covers BOTH files.
-        //
-        // Slot 0 = original `.qmd` (FileId(0) in original AST). Slot 1 =
-        // intermediate `.rmarkdown` (FileId(0) in executed AST — remapped
-        // to FileId(1) below). This keeps the reconcile contract intact:
-        // FileId in the reconciled AST identifies provenance.
-        let mut merged_ast_context = doc_ast.ast_context.clone();
-        // `executed_ast_context` has the intermediate file as FileId(0) with
-        // the right FileInformation (line breaks, total length) — carry that
-        // into the merged context at slot 1.
-        if let Some(intermediate_file) = executed_ast_context
-            .source_context
-            .get_file(quarto_source_map::FileId(0))
-            .cloned()
-        {
-            if let Some(info) = intermediate_file.file_info {
-                merged_ast_context
-                    .source_context
-                    .add_file_with_info(intermediate_name.clone(), info);
+            // Register this engine's intermediate as a new file slot. The
+            // next FileId is the current file count; `filenames` grows in
+            // lock-step with the source context.
+            let new_slot = quarto_source_map::FileId(merged_context.filenames.len());
+            if let Some(intermediate_file) = executed_ast_context
+                .source_context
+                .get_file(quarto_source_map::FileId(0))
+                .cloned()
+            {
+                if let Some(info) = intermediate_file.file_info {
+                    merged_context
+                        .source_context
+                        .add_file_with_info(intermediate_name.clone(), info);
+                } else {
+                    merged_context
+                        .source_context
+                        .add_file(intermediate_name.clone(), None);
+                }
             } else {
-                merged_ast_context
+                merged_context
                     .source_context
                     .add_file(intermediate_name.clone(), None);
             }
-        } else {
-            merged_ast_context
-                .source_context
-                .add_file(intermediate_name.clone(), None);
+            merged_context.filenames.push(intermediate_name);
+            // Carry the executed parse's example-list counter forward; the
+            // last engine's value wins so downstream numbering is coherent.
+            merged_context
+                .example_list_counter
+                .set(executed_ast_context.example_list_counter.get());
+
+            // Remap the executed AST's `FileId(0)` to this engine's slot.
+            // Kept original blocks keep their (lower) FileIds; new blocks
+            // reference `new_slot`.
+            quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
+                quarto_source_map::FileId(id.0 + new_slot.0)
+            });
+
+            // Reconcile: keep unchanged content's source locations, take
+            // new content from the executed AST. The "original" side may
+            // already carry FileIds from earlier engines; reconcile decides
+            // keep/replace by content, so mixed provenance is fine.
+            let (reconciled_ast, reconciliation_plan) =
+                quarto_ast_reconcile::reconcile(ast, executed_ast);
+            ast = reconciled_ast;
+            warnings.extend(parse_warnings);
+
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "[{}] reconciliation: {} kept, {} replaced, {} recursed",
+                engine.name(),
+                reconciliation_plan.stats.blocks_kept,
+                reconciliation_plan.stats.blocks_replaced,
+                reconciliation_plan.stats.blocks_recursed
+            );
         }
-        merged_ast_context.filenames.push(intermediate_name);
-        // Example-list counter is cell-ordering state tied to the executed
-        // AST. Preserve the executed parse's final value so subsequent
-        // example-list numbering stays coherent.
-        merged_ast_context
-            .example_list_counter
-            .set(executed_ast_context.example_list_counter.get());
 
-        // Step 7b: Pre-remap the executed AST so its `FileId(0)` references
-        // become `FileId(1)` (the intermediate file's slot in the merged
-        // context). After this, kept original blocks still reference
-        // `FileId(0)` (the `.qmd`) and new executed blocks reference
-        // `FileId(1)` (the intermediate).
-        quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
-            quarto_source_map::FileId(id.0 + 1)
-        });
-
-        // Step 8: Reconcile source locations
-        // For content that hasn't changed, preserve original source locations.
-        // For new content (execution outputs), use locations from executed AST.
-        // Uses the three-phase reconciliation algorithm from quarto-ast-reconcile.
-        let (reconciled_ast, reconciliation_plan) =
-            quarto_ast_reconcile::reconcile(doc_ast.ast, executed_ast);
-
-        trace_event!(
-            ctx,
-            EventLevel::Debug,
-            "reconciliation: {} kept, {} replaced, {} recursed",
-            reconciliation_plan.stats.blocks_kept,
-            reconciliation_plan.stats.blocks_replaced,
-            reconciliation_plan.stats.blocks_recursed
-        );
-
-        // Step 9: Collect warnings
-        let mut warnings = doc_ast.warnings;
-        warnings.extend(parse_warnings);
-
-        // Step 10: Return updated DocumentAst
         Ok(PipelineData::DocumentAst(DocumentAst {
-            path: doc_ast.path,
-            ast: reconciled_ast,
-            ast_context: merged_ast_context,
-            source_context: doc_ast.source_context,
+            path,
+            ast,
+            ast_context: merged_context,
+            source_context,
             warnings,
-            recorded_includes: doc_ast.recorded_includes,
+            recorded_includes,
         }))
     }
 }
 
-/// Derive the intermediate filename engines see from the source path.
+/// Derive the per-engine intermediate filename from the source path.
 ///
-/// Mirrors knitr's convention: `foo.qmd` → `foo.rmarkdown`. Used only as a
-/// filename label for source attribution; no file needs to exist on disk.
-fn intermediate_filename(source_path: &std::path::Path) -> String {
-    let mut with_ext = source_path.to_path_buf();
-    with_ext.set_extension("rmarkdown");
-    with_ext.display().to_string()
+/// `foo.qmd` + engine `knitr` → `foo.knitr.rmarkdown`. Echoes knitr's
+/// `.rmarkdown` convention but tags the label with the engine name so a
+/// multi-engine sequence (bd-5yff4) gives each engine's produced blocks a
+/// distinct provenance slot. Used only as a filename label for source
+/// attribution; no file needs to exist on disk.
+fn intermediate_filename(source_path: &std::path::Path, engine_name: &str) -> String {
+    let stem = source_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    source_path
+        .with_file_name(format!("{stem}.{engine_name}.rmarkdown"))
+        .display()
+        .to_string()
 }
 
 /// Serialize a Pandoc AST to QMD text.
@@ -904,12 +940,12 @@ mod tests {
         let output = stage.run(input, &mut ctx).await.unwrap();
         let result = output.into_document_ast().expect("Should be DocumentAst");
 
-        // Filenames are the two-slot merged context.
+        // Filenames are the two-slot merged context (per-engine label).
         assert_eq!(
             result.ast_context.filenames,
             vec![
                 "/project/test.qmd".to_string(),
-                "/project/test.rmarkdown".to_string(),
+                "/project/test.mock-appending.rmarkdown".to_string(),
             ]
         );
 
@@ -934,6 +970,185 @@ mod tests {
                 id
             );
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // bd-5yff4 Phase 1: sequential multi-engine execution
+    // ──────────────────────────────────────────────────────────────
+
+    /// Two engines run in declared order, and the first engine's output
+    /// feeds the second: `fixture-a` fills its cell with a `{fixture-b}`
+    /// cell, which `fixture-b` (next in the sequence) then fills. The
+    /// final AST must contain only the second engine's output, with both
+    /// engines' source cells consumed.
+    #[tokio::test]
+    async fn test_two_engines_run_in_sequence_with_handoff() {
+        use crate::engine::FixtureEngine;
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-a",
+            vec!["```{fixture-b}\nhanded-off\n```".to_string()],
+        )));
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-b",
+            vec!["Final output from B.".to_string()],
+        )));
+
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("DocumentAst");
+
+        let qmd = serialize_ast_to_qmd(&result.ast).unwrap().0;
+        assert!(
+            qmd.contains("Final output from B."),
+            "second engine's output should be present; got:\n{qmd}"
+        );
+        assert!(
+            !qmd.contains("{fixture-a}"),
+            "fixture-a cell should be consumed; got:\n{qmd}"
+        );
+        assert!(
+            !qmd.contains("{fixture-b}"),
+            "fixture-b cell should be consumed; got:\n{qmd}"
+        );
+    }
+
+    /// FileId coherence across a two-engine sequence: kept original blocks
+    /// keep `FileId(0)` (the `.qmd`), blocks produced by the first engine
+    /// get `FileId(1)` (its intermediate), and blocks produced by the
+    /// second get `FileId(2)` (its intermediate). No stray FileIds.
+    #[tokio::test]
+    async fn test_two_engines_assign_distinct_file_ids() {
+        use crate::engine::FixtureEngine;
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-a",
+            vec!["Para from A.".to_string()],
+        )));
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-b",
+            vec!["Para from B.".to_string()],
+        )));
+
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+
+        // One kept prose block + one cell per engine (both present from
+        // the start; fixture-a leaves fixture-b's cell untouched).
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\nOriginal prose.\n\n```{fixture-a}\na\n```\n\n```{fixture-b}\nb\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("DocumentAst");
+
+        // Three slots: .qmd, fixture-a intermediate, fixture-b intermediate.
+        assert_eq!(
+            result.ast_context.filenames,
+            vec![
+                "/project/test.qmd".to_string(),
+                "/project/test.fixture-a.rmarkdown".to_string(),
+                "/project/test.fixture-b.rmarkdown".to_string(),
+            ],
+            "expected three file slots (original + one per engine)"
+        );
+
+        let ids = collect_file_ids(&result.ast);
+        assert!(
+            ids.contains(&quarto_source_map::FileId(0)),
+            "FileId(0): {ids:?}"
+        );
+        assert!(
+            ids.contains(&quarto_source_map::FileId(1)),
+            "FileId(1): {ids:?}"
+        );
+        assert!(
+            ids.contains(&quarto_source_map::FileId(2)),
+            "FileId(2): {ids:?}"
+        );
+        for id in &ids {
+            assert!(id.0 < 3, "unexpected FileId {id:?} (3 slots): {ids:?}");
+        }
+    }
+
+    /// A duplicate engine in the sequence is de-duplicated (run once) and
+    /// produces a "Duplicate engine" diagnostic.
+    #[tokio::test]
+    async fn test_duplicate_engine_dedups_and_warns() {
+        use crate::engine::FixtureEngine;
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-a",
+            vec!["spliced once".to_string()],
+        )));
+
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+
+        // engine declared twice; one fixture-a cell. If dedup failed,
+        // fixture-a would run twice and the second run's count check
+        // (0 cells vs 1 result) would error.
+        let content = b"---\nengine: [fixture-a, fixture-a]\n---\n\n```{fixture-a}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("DocumentAst");
+
+        let qmd = serialize_ast_to_qmd(&result.ast).unwrap().0;
+        assert!(qmd.contains("spliced once"), "got:\n{qmd}");
+        // Only one intermediate slot — the engine ran exactly once.
+        assert_eq!(result.ast_context.filenames.len(), 2);
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.title.contains("Duplicate engine 'fixture-a'")),
+            "expected a duplicate-engine diagnostic; got: {:?}",
+            ctx.diagnostics
+        );
+    }
+
+    /// A markdown engine anywhere in the sequence is skipped (no-op),
+    /// while the other engines still run.
+    #[tokio::test]
+    async fn test_markdown_in_sequence_is_skipped() {
+        use crate::engine::FixtureEngine;
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(FixtureEngine::with_results(
+            "fixture-a",
+            vec!["from A".to_string()],
+        )));
+
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+
+        let content = b"---\nengine: [markdown, fixture-a]\n---\n\n```{fixture-a}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("DocumentAst");
+
+        let qmd = serialize_ast_to_qmd(&result.ast).unwrap().0;
+        assert!(qmd.contains("from A"), "got:\n{qmd}");
+        // Only fixture-a added a slot; markdown was skipped.
+        assert_eq!(
+            result.ast_context.filenames,
+            vec![
+                "/project/test.qmd".to_string(),
+                "/project/test.fixture-a.rmarkdown".to_string(),
+            ]
+        );
     }
 
     /// After engine execution, the merged `ASTContext` must carry BOTH the
@@ -963,7 +1178,7 @@ mod tests {
             filenames
         );
         assert_eq!(filenames[0], "/project/test.qmd");
-        assert_eq!(filenames[1], "/project/test.rmarkdown");
+        assert_eq!(filenames[1], "/project/test.mock-includes.rmarkdown");
     }
 
     #[tokio::test]

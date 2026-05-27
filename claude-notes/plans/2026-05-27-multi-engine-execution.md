@@ -458,18 +458,29 @@ doc-keyed invalidation already covers it.
 - [x] Test-engine registration scope: **test-registry-only** (resolved
       with user; Q2 freeze will use trace-replay, not this engine).
 
-### Phase 1 — Pipeline threading (single → N engines)
-- [ ] **Failing test first:** two-engine fixture (`fixture-a` emits a
-      `{fixture-b}` cell that `fixture-b` fills); assert final AST
-      contains both engines' outputs in order.
-- [ ] `detect_engines() -> Vec<DetectedEngine>` with the array branch +
-      back-compat for string/map/top-level forms. Unit tests per shape.
-- [ ] Generalize `EngineExecutionStage::run` to loop; generalize the
-      merged `ASTContext` to N+1 slots and the FileId remap offset.
-- [ ] **FileId coherence test:** two appending engines ⇒ three distinct,
-      non-colliding FileIds with correct provenance.
-- [ ] Post-merge duplicate dedup + diagnostic (per Phase 0 decision).
-- [ ] Markdown-in-sequence skip; all-markdown fast path preserved.
+### Phase 1 — Pipeline threading (single → N engines) ✅
+- [x] **Failing test first:** `test_two_engines_run_in_sequence_with_handoff`
+      (`fixture-a` emits a `{fixture-b}` cell that `fixture-b` fills).
+      Confirmed it failed pre-implementation (array detected as markdown).
+- [x] `detect_engines() -> Vec<DetectedEngine>` + `detect_engine_sequence()
+      -> EngineSequence` with the array branch (bare names and single-key
+      maps) + back-compat for string/map/top-level forms. `detect_engine`
+      is now a first-of-sequence shim. 13 detection unit tests.
+- [x] Generalized `EngineExecutionStage::run` to loop over the sequence;
+      merged `ASTContext` grows one intermediate slot per engine; FileId
+      remap offset is the running file count (`merged_context.filenames.
+      len()`), strictly safer than the old hardcoded `+1`. Per-engine
+      intermediate label `<stem>.<engine>.rmarkdown`.
+- [x] **FileId coherence test:** `test_two_engines_assign_distinct_file_ids`
+      — three distinct FileIds (0=.qmd, 1=engine-a, 2=engine-b), no strays.
+- [x] Post-merge duplicate dedup + diagnostic:
+      `test_duplicate_engine_dedups_and_warns` (and detection-level dedup
+      tests).
+- [x] Markdown-in-sequence skip + all-markdown fast path:
+      `test_markdown_in_sequence_is_skipped` (+ existing markdown
+      passthrough tests still green). Full `quarto-core` suite: 2147 pass.
+- [x] Updated two existing single-engine tests for the new per-engine
+      intermediate label (no snapshots pinned `.rmarkdown`).
 
 ### Phase 2 — YAML merge integration
 - [ ] Tests: `engine:` array merges via `!concat` default across
