@@ -1,0 +1,8 @@
+---
+title: q2-debug reactji heart
+format: q2-debug
+render-components:
+  - reactji.tsx
+---
+
+A paragraph with a single heart reaction. [❤️]{.quarto-edit-comment}

@@ -10,6 +10,7 @@ import {
   incrementalWriteQmd,
   applyNodeEdit,
   parseQmdContentSync,
+  getActorId,
 } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '@quarto/preview-runtime';
 import { useAttribution } from '../../hooks/useAttribution';
@@ -513,6 +514,7 @@ export default function ReactPreview({
             themeFingerprint={themeFingerprint}
             renderedContent={rendered.renderedContent}
             untransformedAstJson={rendered.untransformedAstJson}
+            currentActor={getActorId()}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

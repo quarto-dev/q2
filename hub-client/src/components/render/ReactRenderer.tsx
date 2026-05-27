@@ -101,6 +101,13 @@ interface ReactRendererProps {
    * gate (Plan 2a).
    */
   untransformedAstJson?: string | null;
+  /**
+   * Reactji-authorship demo (2026-05-25 plan): current viewer's
+   * Automerge actor id, forwarded only to `Q2PreviewIframe` so user
+   * TSX can do `actor === me` checks. `null` is a valid "unknown"
+   * value. Sourced from `getActorId()` in `ReactPreview`.
+   */
+  currentActor?: string | null;
 }
 
 /**
@@ -122,6 +129,7 @@ function ReactRenderer({
   themeFingerprint,
   renderedContent,
   untransformedAstJson,
+  currentActor,
 }: ReactRendererProps) {
   // Stable wrappers for Q2PreviewIframe props that are useEffect dependencies.
   //
@@ -272,6 +280,7 @@ function ReactRenderer({
             themeFingerprint={themeFingerprint}
             renderedContent={renderedContent}
             untransformedAstJson={untransformedAstJson}
+            currentActor={currentActor}
           />
         </div>
       </ErrorBoundary>

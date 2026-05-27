@@ -64,6 +64,10 @@ import {
     extractMetaStringList,
     inlinesToPlainText,
     blocksToPlainText,
+    AttributionLookupContext,
+    useNodeAttribution,
+    CurrentActorContext,
+    useCurrentActor,
 } from '../framework';
 import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import type { BlockNode } from '../framework/types';
@@ -99,6 +103,13 @@ import { installLinkHandlers } from '../utils/iframeLinkHandlers';
 // Plan 2D (7.3.1) exposes `PreviewTitleBlock` so a user override
 // can compose the built-in chrome (e.g. wrap it and add a DOI line)
 // instead of re-implementing it from scratch.
+//
+// Reactji-authorship demo (2026-05-25) exposes `useNodeAttribution`
+// + `AttributionLookupContext` (Plan 5 wire surfaces) so user TSX can
+// resolve per-node authorship from the attribution lookup map that
+// `framework/Ast.tsx` provides. `useCurrentActor` is added below in
+// the `CurrentActorContext` block once the iframe payload carries the
+// actor id.
 (window as any).__Q2_PREVIEW_RENDERER__ = {
     renderChildren,
     renderNode,
@@ -114,6 +125,10 @@ import { installLinkHandlers } from '../utils/iframeLinkHandlers';
     blocksToPlainText,
     PreviewTitleBlock,
     usePreviewEdit,
+    useNodeAttribution,
+    AttributionLookupContext,
+    useCurrentActor,
+    CurrentActorContext,
 };
 
 let root: ReturnType<typeof createRoot> | null = null;
@@ -159,6 +174,12 @@ interface UpdateAstPayload {
     pendingAnchor?: string | null;
     pendingAnchorEpoch?: number;
     renderedContent?: string;
+    /**
+     * Reactji-authorship demo (2026-05-25 plan): current viewer's
+     * Automerge actor id. Provided via `CurrentActorContext` to user
+     * TSX so `useCurrentActor()` can drive `actor === me` checks.
+     */
+    currentActor?: string | null;
 }
 
 // Module-top message handler. Registered before `IFRAME_READY` is
@@ -275,6 +296,11 @@ interface PreviewRootProps {
     pendingAnchor?: string | null;
     /** Phase F.1: monotonic epoch — scroll fires when this advances. */
     pendingAnchorEpoch?: number;
+    /**
+     * Reactji-authorship demo (2026-05-25 plan): viewer's Automerge
+     * actor id, provided via `CurrentActorContext` to user TSX.
+     */
+    currentActor?: string | null;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
     setAst: (newAst: PandocAST) => void;
     renderedContent?: string;
@@ -504,16 +530,17 @@ function PreviewRoot(props: PreviewRootProps) {
                 resolveSource,
             }}
         >
-            <AssetManifestContext.Provider value={props.assetManifest}>
-                <NoteNumberingContext.Provider value={noteNumbers}>
-                    {isSlides && parsed ? (
-                        <RevealDeck
-                            ast={parsed}
-                            registry={mergedPreviewRegistry}
-                            currentFilePath={props.currentFilePath}
-                            onNavigateToDocument={props.onNavigateToDocument}
-                        />
-                    ) : (
+            <CurrentActorContext.Provider value={props.currentActor ?? null}>
+                <AssetManifestContext.Provider value={props.assetManifest}>
+                    <NoteNumberingContext.Provider value={noteNumbers}>
+                        {isSlides && parsed ? (
+                            <RevealDeck
+                                ast={parsed}
+                                registry={mergedPreviewRegistry}
+                                currentFilePath={props.currentFilePath}
+                                onNavigateToDocument={props.onNavigateToDocument}
+                            />
+                        ) : (
                         <Ast
                             {...astProps}
                             currentFilePath={props.currentFilePath}
@@ -521,9 +548,10 @@ function PreviewRoot(props: PreviewRootProps) {
                             setAst={props.setAst}
                             registry={mergedPreviewRegistry}
                         />
-                    )}
-                </NoteNumberingContext.Provider>
-            </AssetManifestContext.Provider>
+                        )}
+                    </NoteNumberingContext.Provider>
+                </AssetManifestContext.Provider>
+            </CurrentActorContext.Provider>
         </PreviewContext.Provider>
     );
 }
@@ -538,6 +566,7 @@ function updateAst(payload: UpdateAstPayload) {
         pendingAnchorEpoch,
         renderedContent,
         untransformedAstJson,
+        currentActor,
     } = payload;
     const rootElement = document.getElementById('root');
     if (!rootElement) {
@@ -559,6 +588,7 @@ function updateAst(payload: UpdateAstPayload) {
                 pendingAnchorEpoch={pendingAnchorEpoch}
                 renderedContent={renderedContent}
                 untransformedAstJson={untransformedAstJson}
+                currentActor={currentActor ?? null}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
                         { type: 'NAVIGATE_TO_DOCUMENT', path, anchor },

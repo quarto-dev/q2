@@ -6,6 +6,10 @@ export {
     type NodeAttributionIdentity,
 } from './AttributionLookupContext';
 export {
+    CurrentActorContext,
+    useCurrentActor,
+} from './CurrentActorContext';
+export {
     AttributionBadge,
     AttributionWrap,
     attributionStyles,

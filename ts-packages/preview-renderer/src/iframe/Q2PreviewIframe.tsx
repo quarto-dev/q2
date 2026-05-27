@@ -60,6 +60,17 @@ interface Q2PreviewIframeProps {
    * Forwarded to the iframe for the structural editability gate (Plan 2a).
    */
   untransformedAstJson?: string | null;
+  /**
+   * Reactji-authorship demo (2026-05-25 plan): current viewer's
+   * Automerge actor id, forwarded into the iframe so user TSX can
+   * compare `actor === me` against `useNodeAttribution(node).actor`.
+   * `null` when the producer has no actor yet (project initialising,
+   * non-Automerge document). Piggybacks on the `UPDATE_AST` payload
+   * because the value is stable per device — coupling to AST cadence
+   * is fine. Long-term home is `astContext.currentActor` (Plan 5
+   * follow-up).
+   */
+  currentActor?: string | null;
 }
 
 /**
@@ -92,6 +103,7 @@ export function Q2PreviewIframe({
   pendingAnchorEpoch,
   renderedContent,
   untransformedAstJson,
+  currentActor,
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
@@ -206,6 +218,9 @@ export function Q2PreviewIframe({
           // gate. Shipped in lockstep with astJson + renderedContent
           // (same compound-state generation) so they can never skew.
           untransformedAstJson,
+          // Reactji-authorship demo (2026-05-25 plan): viewer's
+          // Automerge actor id, threaded through to user TSX.
+          currentActor,
         },
       },
       '*',
@@ -220,6 +235,7 @@ export function Q2PreviewIframe({
     pendingAnchorEpoch,
     renderedContent,
     untransformedAstJson,
+    currentActor,
   ]);
 
   // Send theme CSS when iframe is ready and fingerprint is known.

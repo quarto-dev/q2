@@ -45,6 +45,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-05-27
 
+- [`75a136bc`](https://github.com/quarto-dev/q2/commits/75a136bc): Expose `useNodeAttribution` and `useCurrentActor` on `__Q2_PREVIEW_RENDERER__` so user TSX render-components overrides can drive authorship-aware UI (e.g. reactji "remove mine" toggling and per-actor accent colours). Behaviour is opt-in: requires auth + Attribution toggle on. See the reactji-authorship demo at `crates/quarto/tests/smoke-all/q2-preview/render-components-comment/`.
 - [`9aa29ee1`](https://github.com/quarto-dev/q2/commits/9aa29ee1): View toggle buttons now order markup-left / preview-right (matching the editor-left / preview-right layout) instead of preview-left / markup-right.
 
 ### 2026-05-26

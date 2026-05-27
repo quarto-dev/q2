@@ -1,13 +1,14 @@
 /**
  * E2E test for q2-debug render-components dynamic import + interactivity.
  *
- * Sister test to the static smoke-all fixture under
- * `crates/quarto/tests/smoke-all/q2-debug/render-components-reactji.qmd`.
- * That fixture verifies the button rendered with "❤️ 1" through the
- * declarative smoke-all assertion pipeline. This spec loads the same
- * qmd + tsx and exercises the click — going from "❤️ 1" to "❤️ 2" — using
- * imperative Playwright APIs, the established pattern for interactivity
- * elsewhere in this repo (see share-link-project-set.spec.ts).
+ * Fixture: `crates/quarto/tests/playwright-fixtures/q2-debug/`. Moved
+ * out of `smoke-all/` once it became clear the smoke-all assertion
+ * (data-testid presence) was strictly subsumed by this spec's
+ * `.toBeVisible()` check. The whole test surface for this fixture now
+ * lives in this script — see also `q2-preview-render-components-comment`
+ * and `q2-preview-render-components-write` for the sibling pattern,
+ * and `claude-notes/instructions/testing.md` for the
+ * smoke-all vs playwright-fixtures distinction.
  */
 
 import { readFileSync } from 'node:fs';
@@ -22,7 +23,7 @@ import {
 
 const FIXTURE_DIR = resolve(
   import.meta.dirname,
-  '../../crates/quarto/tests/smoke-all/q2-debug',
+  '../../crates/quarto/tests/playwright-fixtures/q2-debug',
 );
 
 const qmdContent = readFileSync(
