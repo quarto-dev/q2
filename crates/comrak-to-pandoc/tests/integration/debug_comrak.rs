@@ -3,8 +3,6 @@
  * Debug test to understand comrak's AST structure for whitespace handling.
  */
 
-fn main() {}
-
 #[cfg(test)]
 mod tests {
     use comrak::nodes::NodeValue;

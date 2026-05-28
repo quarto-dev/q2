@@ -1,5 +1,3 @@
-fn main() {}
-
 #[cfg(test)]
 mod tests {
     use comrak::{Arena, Options, parse_document};

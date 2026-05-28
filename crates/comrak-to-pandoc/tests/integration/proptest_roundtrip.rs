@@ -19,9 +19,9 @@ use comrak::{Arena, Options, parse_document};
 use comrak_to_pandoc::{ast_eq_ignore_source, convert_document, normalize};
 use proptest::prelude::*;
 
-// Import generators as a local module
-mod generators;
-use generators::*;
+// `generators` is a sibling module of `proptest_roundtrip` within
+// the consolidated integration test binary; pull it in via `super`.
+use super::generators::*;
 
 /// Parse markdown with comrak and convert to Pandoc AST
 fn parse_with_comrak(markdown: &str) -> quarto_pandoc_types::Pandoc {
