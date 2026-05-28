@@ -29,7 +29,7 @@ struct Fixture {
 }
 
 fn load_fixtures() -> Vec<Fixture> {
-    const RAW: &str = include_str!("fixtures/builtin-snippets.json");
+    const RAW: &str = include_str!("../fixtures/builtin-snippets.json");
     serde_json::from_str(RAW).expect("builtin-snippets.json is valid JSON")
 }
 
