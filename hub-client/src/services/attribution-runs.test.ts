@@ -4,7 +4,7 @@
  * Focused on the bits that are new for the implementation branch
  * (char→byte translation, payload shape). The run-list invariants
  * proper are covered exhaustively on `feat/node-attribution` and pinned
- * cross-implementation by `crates/quarto-core/tests/attribution_types.rs`
+ * cross-implementation by `crates/quarto-core/tests/integration/attribution_types.rs`
  * (`query_byte_range` invariants — Phase 0 test #2).
  *
  * @vitest-environment jsdom

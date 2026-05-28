@@ -612,8 +612,9 @@ Third body.
 // emit byte-for-byte while staying robust against unrelated changes
 // (theme tweaks, navbar updates, code-highlight CSS, etc.).
 //
-// Snapshots live at `crates/quarto-core/tests/snapshots/` per
-// insta's default convention.
+// Snapshots live at `crates/quarto-core/tests/integration/snapshots/`
+// per insta's default convention (the binary name `integration`
+// becomes part of the snapshot filename prefix).
 
 /// Extract every `<div class="listing-categories">…</div>` block
 /// from the rendered HTML in document order, joined by blank lines.

@@ -34,16 +34,29 @@ re-evaluated against the new location. The pampa pilot migration
 burned several iterations on insta `set_snapshot_path` calls that
 silently resolved to the wrong directory.
 
-Audit grep before declaring a move done:
+Audit grep before declaring a move done — including **cross-language
+references** (the bd-xvdop PR shipped without this audit and broke
+a TypeScript test that hardcoded a Rust snapshot path):
 
 ```bash
+# Rust side — source-file-relative paths inside the moved files
 grep -nE 'include_str!|include_bytes!|include_dir!|#\[path|set_snapshot_path|"\.\./' \
   crates/<crate>/tests/integration/*.rs
+
+# Cross-language side — anything in hub-client / ts-packages /
+# scripts / CI config that references the old paths
+grep -rn 'crates/<crate>/tests/' \
+  --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
+  --include='*.json' --include='*.toml' --include='*.yml' --include='*.yaml' \
+  hub-client/ ts-packages/ scripts/ .github/ .config/
 ```
 
 Each `../` needs to be re-checked: moving from `tests/foo.rs` to
 `tests/integration/foo.rs` adds one directory level, so any
-relative path inside the file usually needs one more `../`.
+relative path inside the file usually needs one more `../`. And
+any hardcoded `crates/<X>/tests/<Y>` path elsewhere in the repo —
+typically a TS test that reads a Rust snapshot or fixture — needs
+the new `tests/integration/<Y>` location.
 
 Insta `.snap` files also live in a snapshot directory adjacent to
 the test source by default. If you move a test that uses default

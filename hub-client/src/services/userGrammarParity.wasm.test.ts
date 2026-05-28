@@ -3,9 +3,11 @@
  * `claude-notes/plans/2026-04-21-syntax-highlighting-phase-4.md`.
  *
  * Runs the JS-side user-grammar highlighter on the same TOML fixture
- * the native golden (`crates/quarto-highlight/tests/snapshots/
- * golden__user_grammar_toml.snap`) covers, and validates that each
- * side's spans cover the semantically-equivalent parts of the source.
+ * the native golden
+ * (`crates/quarto-highlight/tests/integration/snapshots/
+ * integration__golden__user_grammar_toml.snap`) covers, and validates
+ * that each side's spans cover the semantically-equivalent parts of
+ * the source.
  *
  * ## Why bit-equality is not the assertion
  *
@@ -59,7 +61,7 @@ import { loadUserGrammar, type UserGrammarHighlighter } from '@quarto/preview-ru
 
 type SpanTriple = [number, number, string];
 
-/** The exact source used in `crates/quarto-highlight/tests/golden.rs:73`. */
+/** The exact source used in `crates/quarto-highlight/tests/integration/golden.rs:73`. */
 const TOML_SOURCE = 'name = "value"\ncount = 42\n';
 
 let highlighter: UserGrammarHighlighter;
@@ -94,7 +96,7 @@ beforeAll(async () => {
 
   const snapPath = join(
     repoRoot,
-    'crates/quarto-highlight/tests/snapshots/golden__user_grammar_toml.snap',
+    'crates/quarto-highlight/tests/integration/snapshots/integration__golden__user_grammar_toml.snap',
   );
   nativeGolden = parseInstaSnap(await readFile(snapPath, 'utf-8'));
 });
@@ -108,7 +110,7 @@ const identitySet = (spans: SpanTriple[]): Set<CaptureIdentity> =>
 describe('native-vs-browser parity on the TOML fixture', () => {
   it('the parity fixtures cover the same source', () => {
     // Sanity: if this constant ever drifts from the one in
-    // `crates/quarto-highlight/tests/golden.rs`, the comparison is
+    // `crates/quarto-highlight/tests/integration/golden.rs`, the comparison is
     // meaningless.
     expect(TOML_SOURCE).toBe('name = "value"\ncount = 42\n');
     expect(nativeGolden.length).toBeGreaterThan(0);
