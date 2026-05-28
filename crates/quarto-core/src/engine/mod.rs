@@ -20,6 +20,8 @@
 //! - [`detect_engine`] - Detection of engine from document metadata
 //! - Concrete engines:
 //!   - [`MarkdownEngine`] - No-op engine (always available)
+//!   - [`MermaidEngine`] - Diagram engine for `{mermaid}` cells
+//!     (always available — text-only, no subprocess)
 //!   - [`KnitrEngine`] - R code execution (native only)
 //!   - [`JupyterEngine`] - Python/Julia execution (native only)
 //!
@@ -28,6 +30,7 @@
 //! | Engine | Native | WASM |
 //! |--------|--------|------|
 //! | markdown | ✓ | ✓ |
+//! | mermaidjs | ✓ | ✓ |
 //! | knitr | ✓ | ✗ |
 //! | jupyter | ✓ | ✗ |
 //!
@@ -58,6 +61,7 @@ mod context;
 mod detection;
 mod error;
 mod markdown;
+mod mermaid;
 pub mod preview_record;
 mod registry;
 mod replay;
@@ -85,6 +89,7 @@ pub use error::ExecutionError;
 #[cfg(not(target_arch = "wasm32"))]
 pub use fixture::FixtureEngine;
 pub use markdown::MarkdownEngine;
+pub use mermaid::MermaidEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;
 pub use traits::ExecutionEngine;
