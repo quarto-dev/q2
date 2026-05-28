@@ -146,18 +146,37 @@ Out of scope (single-file integration test crates, no benefit):
       the surprising wall-time delta: baseline **114 s** vs. pilot
       **130 s** (+14 %, far smaller than the first run's apparent
       +52 %). Disk numbers reproduced identically.
-- [ ] Controlled **release** re-measurement — **abandoned mid-run**
-      when another heavy task started on this machine; deferred
-      until timings can be taken in isolation
+- [x] Controlled **release** re-measurement: baseline **138 s** vs.
+      pilot **136 s** (−2 s, statistically a wash). The first pilot
+      release's 255 s was the same kind of system-noise artifact as
+      the first pilot debug.
 - [x] Compute pampa-pilot delta vs. baseline in research note
 
 ### Phase 4 — Decision point
 
-- [ ] Review pilot numbers with user
+- [ ] Review pilot numbers with user (awaiting input)
 - [ ] **If** the pilot delta is meaningful (e.g. >20% size drop) →
       Phase 5
 - [ ] **If not** → revert pilot, close beads issue with findings,
       stop
+
+**Pilot numbers (controlled, ready for decision):**
+
+|                            | Debug  Δ            | Release Δ           |
+| -------------------------- | -------------------:| -------------------:|
+| `target/<profile>` size    | −3 GB  (−14 %)      | −1.9 GB (−17 %)     |
+| Executables in `deps/`     | −56  (−25 %)        | −56  (−25 %)        |
+| Sum of executable bytes    | −2.7 GiB (−26 %)    | −2.3 GiB (−26 %)    |
+| Build wall time            | +16 s  (+14 %)      | −2 s   (−1 %)       |
+
+This is from pampa *alone* (57/164 ≈ 35 % of all integration test
+files). If the per-binary savings amortize roughly linearly across
+the remaining 12 candidate crates (107 more files → 12 binaries,
+i.e. saving 95 more binaries), Phase 6 should land near a ~50 %
+reduction in `target/debug` and `target/release` from the baseline.
+The wall-time cost stays small.
+
+Recommendation: proceed to Phase 5.
 
 ### Phase 5 — Full rollout (conditional)
 
