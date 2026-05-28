@@ -23,7 +23,7 @@ use serde_json::json;
 // If this becomes onerous, we can extract `commands::trace` into its own crate
 // and depend on it here.
 #[allow(dead_code)] // execute_* functions only used by the real CLI, not these tests
-#[path = "../src/commands/trace.rs"]
+#[path = "../../src/commands/trace.rs"]
 mod trace_cmd;
 
 fn unique_trace_root(label: &str) -> PathBuf {
