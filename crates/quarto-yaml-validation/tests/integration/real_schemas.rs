@@ -85,7 +85,7 @@ schema: string
 /// Test parsing document-text.yml which contains many schema wrapper patterns
 #[test]
 fn test_parse_document_text_yml() {
-    let yaml_content = include_str!("../test-fixtures/schemas/document-text.yml");
+    let yaml_content = include_str!("../../test-fixtures/schemas/document-text.yml");
     let yaml = quarto_yaml::parse(yaml_content).expect("Failed to parse YAML");
 
     // The file is an array of field definitions

@@ -48,7 +48,7 @@ fn parse_field_schemas(content: &str, file_name: &str) -> (usize, usize, Vec<(St
 
 #[test]
 fn test_parse_all_document_execute_schemas() {
-    let content = include_str!("../test-fixtures/schemas/document-execute.yml");
+    let content = include_str!("../../test-fixtures/schemas/document-execute.yml");
     let (success, total, failures) = parse_field_schemas(content, "document-execute.yml");
 
     // We expect high success rate now that P0/P1 features are implemented
@@ -63,7 +63,7 @@ fn test_parse_all_document_execute_schemas() {
 
 #[test]
 fn test_parse_all_document_text_schemas() {
-    let content = include_str!("../test-fixtures/schemas/document-text.yml");
+    let content = include_str!("../../test-fixtures/schemas/document-text.yml");
     let (success, total, failures) = parse_field_schemas(content, "document-text.yml");
 
     assert!(
@@ -77,7 +77,7 @@ fn test_parse_all_document_text_schemas() {
 
 #[test]
 fn test_parse_all_document_website_schemas() {
-    let content = include_str!("../test-fixtures/schemas/document-website.yml");
+    let content = include_str!("../../test-fixtures/schemas/document-website.yml");
     let (success, total, failures) = parse_field_schemas(content, "document-website.yml");
 
     assert!(
@@ -159,15 +159,15 @@ fn test_comprehensive_statistics() {
     let files = vec![
         (
             "document-execute.yml",
-            include_str!("../test-fixtures/schemas/document-execute.yml"),
+            include_str!("../../test-fixtures/schemas/document-execute.yml"),
         ),
         (
             "document-text.yml",
-            include_str!("../test-fixtures/schemas/document-text.yml"),
+            include_str!("../../test-fixtures/schemas/document-text.yml"),
         ),
         (
             "document-website.yml",
-            include_str!("../test-fixtures/schemas/document-website.yml"),
+            include_str!("../../test-fixtures/schemas/document-website.yml"),
         ),
     ];
 
