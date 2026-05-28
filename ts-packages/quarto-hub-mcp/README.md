@@ -40,7 +40,7 @@ Add hub-mcp to your MCP client config. For Claude Code the file is
       "args": [
         "@quarto/hub-mcp",
         "--server",
-        "wss://hub.example.com/ws"
+        "wss://quarto-hub.com/ws"
       ],
       "env": {
         "QUARTO_HUB_MCP_CLIENT_ID":     "<operator-supplied>.apps.googleusercontent.com",
@@ -147,7 +147,7 @@ browser to receive it, so use one of:
 
   ```bash
   # on the remote host (via your MCP client's args)
-  quarto-hub-mcp --server wss://hub.example.com/ws --redirect-port N
+  quarto-hub-mcp --server wss://quarto-hub.com/ws --redirect-port N
   # on your local workstation
   ssh -L N:127.0.0.1:N <remote>
   ```

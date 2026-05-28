@@ -8,8 +8,8 @@
  * files in collaborative projects without filesystem access.
  *
  * Usage:
- *   quarto-hub-mcp --server https://hub.example.com
- *   quarto-hub-mcp --server https://hub.example.com --read-only
+ *   quarto-hub-mcp --server wss://quarto-hub.com/ws
+ *   quarto-hub-mcp --server wss://quarto-hub.com/ws --read-only
  *
  * Environment variables:
  *   QUARTO_HUB_SERVER              - Sync server URL (overridden by --server)
