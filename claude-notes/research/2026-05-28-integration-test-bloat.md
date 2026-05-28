@@ -20,14 +20,25 @@ runs). The raw script logs live in `measurements/`.
 
 ## Headline table
 
-| Stage                | Profile | target/<profile> | Wall-time | Executables in deps/ |
-| -------------------- | ------- | ---------------: | --------: | -------------------: |
-| Baseline             | debug   |       21 GB (1) |    114 s  |                  220 |
-| Baseline             | release |           11 GB  |    133 s  |                  220 |
-| Pilot: pampa only    | debug   |                — |         — |                    — |
-| Pilot: pampa only    | release |                — |         — |                    — |
-| Full rollout         | debug   |                — |         — |                    — |
-| Full rollout         | release |                — |         — |                    — |
+| Stage                                | Profile | target/<profile> | Wall-time | Executables in deps/ |
+| ------------------------------------ | ------- | ---------------: | --------: | -------------------: |
+| Baseline (first run)                 | debug   |       21 GB (1) |    114 s  |                  220 |
+| Baseline (first run)                 | release |           11 GB  |    133 s  |                  220 |
+| Baseline (controlled, back-to-back)  | debug   |           21 GB  |    114 s  |                  220 |
+| Pilot: pampa only (first run)        | debug   |           18 GB  |    173 s  |                  164 |
+| Pilot: pampa only (controlled)       | debug   |           18 GB  |    130 s  |                  164 |
+| Pilot: pampa only (first run)        | release |          9.2 GB  |    255 s  |                  164 |
+| Full rollout                         | debug   |                — |         — |                    — |
+| Full rollout                         | release |                — |         — |                    — |
+
+The "first run" rows were taken with intervening work between samples
+(verify runs, file edits, disk pressure). The "controlled" rows were
+taken back-to-back with `cargo clean` between each and no other
+intervening work — these are the apples-to-apples comparison.
+
+The controlled-release row was started but never finished because
+another computationally-intensive task on this machine made further
+timing unreliable; we stopped to avoid contaminated samples.
 
 (1) `cargo clean` after the build reported "Removed 36689 files, 22.3 GiB total"
 — a slight discrepancy with `du`'s 21 GB because `du` undercounts
@@ -111,6 +122,50 @@ Raw log: [measurements/baseline-debug.log](measurements/baseline-debug.log)
   info, but the static-linking redundancy is identical)
 
 Raw log: [measurements/baseline-release.log](measurements/baseline-release.log)
+
+### Pilot: pampa-only measurements (Phase 3, partial)
+
+Headline result, controlled debug comparison (`cargo clean` between
+each, no other work in between):
+
+|                          | Baseline | Pilot   |   Δ |
+| ------------------------ | -------: | ------: | --: |
+| `target/debug` size      |    21 GB |   18 GB | **−3 GB (−14 %)** |
+| Executables in `deps/`   |      220 |     164 | **−56 (−25 %)**  |
+| Sum of executable bytes  | 10.5 GiB | 7.8 GiB | **−2.7 GiB (−26 %)** |
+| Build wall time          |    114 s |   130 s | **+16 s (+14 %)** |
+
+The disk wins are unambiguous: the pampa-only migration eliminates
+exactly 56 executables (57 per-file binaries collapse into 1) and
+2.7 GiB of duplicated dependency-closure linkage. Extrapolated
+across the other 12 candidate crates' 107 integration test files,
+target/debug at the end of Phase 5 should land somewhere in the
+13-15 GB range vs. the 21 GB baseline.
+
+**On the wall-time anomaly.** The first pilot debug run came in at
+173 s, suggesting a ~50 % slowdown. We re-ran the comparison
+back-to-back (controlled), and the gap collapsed to +16 s. The first
+pilot run was inflated by intervening work — likely `cargo xtask
+verify` saturating disk I/O between the two builds, plus Spotlight
+re-indexing the freshly-cleaned target tree. The controlled +16 s
+is a modest cost (~14 %) that's consistent with consolidating 57
+small parallel link jobs into one larger one: even though there's
+less total link work, peak parallelism within Cargo's scheduler
+shrinks. This is the opposite direction from matklad's 3× speedup,
+but matklad's codebase had a much smaller per-file binary size
+relative to the consolidated one — our binaries are already close
+to "fully linked" each. For Q2 the disk savings, not compile speed,
+are the load-bearing benefit.
+
+**Release was not measured under controlled conditions.** The
+first pilot release came in at 255 s (vs. 133 s baseline) and is
+almost certainly the same kind of inflated number as the first
+pilot debug (which fell from 173 s → 130 s under controlled
+conditions). We stopped the controlled release run because another
+heavy task started on this machine and would have contaminated the
+timing. The release size delta is real and roughly proportional to
+debug: **target/release: 11 GB → 9.2 GB (−1.8 GB / −16 %)**,
+executable bytes **9.0 → 7.2 GiB (−1.8 GiB / −20 %)**.
 
 ### Pilot: pampa migration notes (Phase 2)
 

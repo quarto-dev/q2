@@ -137,11 +137,19 @@ Out of scope (single-file integration test crates, no benefit):
 
 ### Phase 3 — Pilot measurement
 
-- [ ] `cargo clean`
-- [ ] `scripts/measure-test-build.sh debug` (pampa-pilot)
-- [ ] `cargo clean`
-- [ ] `scripts/measure-test-build.sh release` (pampa-pilot)
-- [ ] Compute pampa-pilot delta vs. baseline in research note
+- [x] `cargo clean` between each measurement
+- [x] `scripts/measure-test-build.sh debug` (pampa-pilot, first run):
+      **18 GB / 173 s / 164 exes / 7.8 GiB exec-bytes**
+- [x] `scripts/measure-test-build.sh release` (pampa-pilot, first run):
+      **9.2 GB / 255 s / 164 exes / 7.2 GiB exec-bytes**
+- [x] Controlled back-to-back **debug** re-measurement to validate
+      the surprising wall-time delta: baseline **114 s** vs. pilot
+      **130 s** (+14 %, far smaller than the first run's apparent
+      +52 %). Disk numbers reproduced identically.
+- [ ] Controlled **release** re-measurement — **abandoned mid-run**
+      when another heavy task started on this machine; deferred
+      until timings can be taken in isolation
+- [x] Compute pampa-pilot delta vs. baseline in research note
 
 ### Phase 4 — Decision point
 
@@ -187,25 +195,35 @@ Audit findings (pre-cached during Phase 0 / Phase 2 to make rollout
 fast): all remaining crates are **clean pure-rename migrations**
 *except* the specific files called out below.
 
-- [ ] quarto-core (33 files) — clean rename; one inline `mod
-      orchestrator_engine_channel {…}` in `project_resources.rs`
-      stays inline, no path resolution
+- [ ] quarto-core (33 files) — rename **plus** edit
+      `tests/integration/attribution_gitblame.rs`: 4 occurrences of
+      `include_str!("fixtures/attribution-blame/…")` → prefix each
+      with `../` to navigate from `tests/integration/` up to
+      `tests/fixtures/`. One inline `mod orchestrator_engine_channel
+      {…}` in `project_resources.rs` stays inline, no path resolution
 - [ ] qmd-syntax-helper (20 files) — clean rename
 - [ ] quarto-preview (7 files) — clean rename
 - [ ] quarto-sass (7 files) — clean rename
-- [ ] quarto (7 files) — clean rename **plus** edit
+- [ ] quarto (7 files) — rename **plus** edit
       `tests/integration/trace_cli.rs`: change
       `#[path = "../src/commands/trace.rs"]` →
       `#[path = "../../src/commands/trace.rs"]` to account for the
       extra directory level
-- [ ] quarto-highlight (6 files) — clean rename
+- [ ] quarto-highlight (6 files) — rename **plus** edit
+      `tests/integration/golden.rs`: `include_str!(
+      "fixtures/builtin-snippets.json")` → prefix with `../`
 - [ ] comrak-to-pandoc (5 files) — clean rename; `debug.rs` and
       `debug_comrak.rs` have file-root `fn main() {}` that will
       become unused inner functions inside their modules — add
       `#[allow(dead_code)]` if rustc warns, or simply drop the
       `fn main()` lines (they were only there to satisfy the
       per-file harness in the old layout)
-- [ ] quarto-yaml-validation (5 files) — clean rename
+- [ ] quarto-yaml-validation (5 files) — rename **plus** edit
+      6 `include_str!("../test-fixtures/schemas/…")` calls across
+      `tests/integration/real_schemas.rs` (1 occurrence) and
+      `tests/integration/comprehensive_schemas.rs` (5 occurrences):
+      add one more `../` to each so they keep pointing at
+      `crates/quarto-yaml-validation/test-fixtures/schemas/…`
 - [ ] quarto-brand (4 files) — clean rename
 - [ ] quarto-citeproc (2 files) — clean rename
 - [ ] quarto-csl (2 files) — clean rename
