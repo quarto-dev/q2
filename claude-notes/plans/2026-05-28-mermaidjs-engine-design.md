@@ -330,54 +330,212 @@ Test matrix:
 - [x] Decisions locked: A1 (engine impl), B1 (direct RawBlock HTML
       emission with bd-mqk49 follow-up TODO), C1 (inline script
       RawBlock), D=bd-iq0hp closure
+- [x] User ratified plan v2.1 (2026-05-28); bd-c6h96 closed
 
 ### Phase 1 — multi-engine current-state audit
 
-- [ ] Read `claude-notes/plans/2026-05-27-multi-engine-execution.md`
+- [x] Read `claude-notes/plans/2026-05-27-multi-engine-execution.md`
       (on `feature/multi-engine`) and confirm:
-  - Where `MermaidEngine` would register in
-    `EngineRegistry::register_default`-equivalent (native + WASM
-    builds both need it — mermaid is pure-Rust, no subprocess, so
-    the WASM build can register it too).
-  - The per-engine FileId provenance scheme (`<stem>.<engine>.rmarkdown`)
-    and what mermaid's intermediate name should be.
-  - That `result.markdown` is the QMD-text re-parsed for the next
-    engine — i.e. the mermaid engine should emit QMD, not Pandoc-JSON.
-- [ ] Verify the new `capture_splice.rs` actually drops aux fields
-      (re-confirm bd-cp3em is post-PR-#238 relevant) — already done
-      in v2 revision, but spot-check at impl time.
+  - [x] Where `MermaidEngine` would register
+  - [x] The per-engine FileId provenance scheme and mermaid's
+        intermediate name
+  - [x] That `result.markdown` is QMD-text re-parsed for the next
+        engine
+- [x] Re-verify `capture_splice.rs` drops aux fields — confirmed
+      against `feature/multi-engine` (bd-cp3em remains valid)
 - [ ] If PR #238's review surfaces design changes that affect mermaid,
-      reflect them here.
+      reflect them here (deferred until #238 merges or stabilizes)
+
+#### Phase 1 findings (2026-05-28)
+
+Pulled from `feature/multi-engine` (PR #238 head `ed9cbbfe`) and the
+multi-engine plan `claude-notes/plans/2026-05-27-multi-engine-execution.md`.
+
+**F1. Registration site is `EngineRegistry::new`
+(`crates/quarto-core/src/engine/registry.rs:48-66`).** The current
+shape is "always-register markdown; native-only register knitr +
+jupyter":
+
+```rust
+registry.register(Arc::new(MarkdownEngine::new()));
+
+#[cfg(not(target_arch = "wasm32"))]
+{
+    registry.register(Arc::new(KnitrEngine::new()));
+    registry.register(Arc::new(JupyterEngine::new()));
+}
+```
+
+**Mermaid registers in the always-block alongside `MarkdownEngine`.**
+Mermaid is text-only (no subprocess, no R/Python runtime), so the
+same code can run in native + WASM. This is **strictly better than
+the trace-replay route** for q2 preview: the WASM build executes
+mermaid live in-browser, no recorded capture needed, and bd-cp3em's
+aux-field-drop never bites mermaid because mermaid never executes
+on the native side to need replaying. (Native render still uses the
+local engine the same way; both paths converge on the same engine
+code.)
+
+**F2. `KNOWN_ENGINES` const
+(`crates/quarto-core/src/engine/detection.rs:31`)** is
+`&["markdown", "knitr", "jupyter"]`. Used to gate the top-level
+config shortcut (`jupyter: { kernel: python3 }` instead of
+`engine: jupyter`). **Add `"mermaidjs"` to this list** so a
+top-level `mermaidjs: { ... }` is recognized when no `engine:` is
+declared. The `engine: [..., mermaidjs, ...]` path works regardless;
+this is the nice-to-have for the bare top-level form.
+
+**F3. Per-engine FileId provenance is per-loop-iteration in the
+stage, not per-engine.** `EngineExecutionStage::run` walks each
+engine in `to_run` and appends one intermediate slot per executed
+engine to `merged_context`. The intermediate filename is
+`<stem>.<engine>.rmarkdown` (per the multi-engine plan §2). **Mermaid
+gets `<stem>.mermaidjs.rmarkdown` automatically** — no engine-side
+participation required. `MermaidEngine::execute` only needs to
+return `ExecuteResult { markdown, ..Default }`; the loop does the
+rest.
+
+**F4. `result.markdown` is QMD text re-parsed for the next engine.**
+Confirmed at `engine_execution.rs:255` (multi-engine version):
+
+```rust
+let (qmd, qmd_source_info) = serialize_ast_to_qmd(&ast)?;
+// ...
+let mut result = engine.execute(&qmd, &exec_context)?;
+// later: parse result.markdown as the next iteration's input
+```
+
+So mermaid emits QMD text. Literal HTML in QMD (e.g.
+`<pre class="mermaid">…</pre>` on its own lines, blank-separated)
+parses as `RawBlock(HTML, …)` via pampa's QMD reader (Pandoc
+convention). No need to emit `\`\`\`{=html}` raw-block fences
+unless we hit an edge case during impl.
+
+**F5. In-process engine convention is *text-level* fence scanning,
+not AST parse-walk-serialize.** The biggest finding of the audit.
+`FixtureEngine` (`crates/quarto-core/src/engine/fixture.rs:120-250`,
+new in PR #238) is the only pure-Rust engine on the multi-engine
+branch and it works text-level: a hand-rolled fence scanner finds
+`{name}` cells and splices replacement text in. **Mermaid should
+mirror this** rather than go through pampa's parser:
+
+- Simpler. ~100 lines of text-walking vs. AST manipulation +
+  `serialize_ast_to_qmd` (which is private to `engine_execution.rs`).
+- Cheaper. No round-trip through the parser, no AST allocation.
+- Less coupled. The mermaid engine never touches pampa internals or
+  Pandoc AST types; only `ExecuteResult`/`ExecutionContext`/`ExecutionError`.
+- Matches the multi-engine plan's design pattern. Future graphviz/
+  plantuml/dot engines would all follow the same template.
+
+The cell shape mermaid matches is exactly the FixtureEngine pattern:
+opening fence `` ```{mermaid} `` ... source text ... closing fence
+`` ``` ``. Replacement text is the literal HTML for the `<pre class="mermaid">`
+wrapper, plus (once per document) the jsdelivr `<script>` block
+appended after the document body.
+
+**F6. The script-tag include is emitted in the engine's `markdown`
+output, NOT via `ExecuteResult.includes`.** This is the C1 decision
+from the plan, but F5 makes it natural: mermaid is text-level so it
+can simply append the `<script>` block to its returned markdown.
+Survives capture-splice (which preserves `result.markdown`),
+survives the engine sequence (HTML in QMD round-trips through
+parse-and-reserialize), and reaches the HTML writer as a literal
+`RawBlock(HTML)`.
+
+**F7. `EngineExecutionStage` resolves engines via
+`get_engine_with_fallback`** (multi-engine version). Unknown names
+fall back to markdown with a warning. So even before mermaid lands,
+`engine: [knitr, mermaidjs]` doesn't crash — it just warns and
+no-ops on mermaidjs. This means landing the mermaid engine is
+**purely additive**: it changes the behavior of `mermaidjs` from
+"warn + skip" to "actually transform mermaid cells."
+
+**F8. Capture-splice path drops aux fields per-iteration in the
+fold.** Re-verified: `feature/multi-engine`'s
+`crates/quarto-core/src/stage/stages/capture_splice.rs` still reads
+`result.markdown` only and comments "filters, includes,
+supporting_files — those are engine-side concerns the splice
+doesn't reproduce in the AST." So bd-cp3em is post-PR-#238 valid.
+Mermaid's C1 strategy (in-markdown script tag) doesn't depend on
+this; but note that **the WASM build registers MermaidEngine
+directly** (F1), so the splice path never replays mermaid anyway —
+mermaid just runs live in-browser.
+
+#### Phase 1 → Phase 2 implications
+
+- Phase 2 step 1 ("mirror `markdown.rs` shape") refines to "mirror
+  `fixture.rs` shape" — both are pure-Rust in-process engines, but
+  fixture is the closer template for cell-scanning behavior.
+- Phase 2 should add `"mermaidjs"` to `KNOWN_ENGINES`
+  (`detection.rs:31`) for the top-level-shortcut form.
+- Phase 2 should register `MermaidEngine` in the always-block of
+  `EngineRegistry::new` so it's available in both native and WASM.
+- Phase 2 does NOT need to publicize `serialize_ast_to_qmd` or
+  touch pampa — text-level scanner is sufficient.
 
 ### Phase 2 — `MermaidEngine` implementation (Q-B → B1, Q-C → C1)
 
-- [ ] Add `MermaidEngine` implementing `ExecutionEngine` in
-      `crates/quarto-core/src/engine/mermaid/` (mirror the
-      `markdown.rs` shape — it's the closest precedent for a
-      no-subprocess engine).
-  - `name() == "mermaidjs"`.
-  - `execute(input, ctx)`: parse `input` as QMD, walk for code cells
-    with class `mermaid`, replace each cell with a
-    `RawBlock(HTML, "<pre class=\"mermaid\">…</pre>")` (B1 —
-    direct HTML emission), and append a once-per-doc
-    `<script type="module">…</script>` `RawBlock` at end of body
-    (C1). Serialize back to QMD and return as
+Refined after Phase 1 audit: mirror `fixture.rs` (text-level fence
+scanner), register in always-block (native + WASM), add `"mermaidjs"`
+to `KNOWN_ENGINES`.
+
+- [ ] Add `MermaidEngine` in
+      `crates/quarto-core/src/engine/mermaid.rs` (single file like
+      `markdown.rs` / `fixture.rs`; a directory is overkill).
+  - `name() == "mermaidjs"`. Always available
+    (`is_available() == true`).
+  - `execute(input, ctx)`: scan `input` line-by-line for opening
+    fences of the form `` ```{mermaid} ``; for each, find the
+    matching closing fence; replace the entire fenced block with a
+    literal HTML `<pre class="mermaid">…source…</pre>`
+    (HTML-escape the source). If any cell matched, append the
+    once-per-doc jsdelivr `<script type="module">…</script>` block
+    at end of output. Return as
     `ExecuteResult { markdown, ..Default }`.
-  - **Add a source-code comment** at the RawBlock-emission site:
-    `// bd-mqk49: when engines can declare per-format AST passes,
-    // route this through a format-conditional transform instead of
-    // emitting HTML inline. Today, Quarto 2 only renders HTML, so
-    // the format-locked emission is acceptable.`
-  - Register in native + WASM `EngineRegistry`s.
-- [ ] Tests:
-  - Unit: mermaid engine on a fixture qmd containing `{mermaid}` and
-    non-mermaid blocks — only `{mermaid}` cells touched; script tag
-    appended.
-  - Pipeline: render a fixture qmd through the full HTML pipeline;
-    HTML contains `<pre class="mermaid">…</pre>` and the script tag.
-  - **End-to-end per CLAUDE.md**: `cargo run --bin q2 -- render fixture.qmd`,
-    grep the actual output, record invocation + observed output in
-    this plan before claiming done.
+  - **Source-code comment** at the HTML-emission site, pointing at
+    bd-mqk49: when engines can declare per-format AST passes, route
+    through a format-conditional transform instead. Today Q2 is
+    HTML-only so format-locked emission is acceptable.
+  - Reuse `fixture.rs`'s `parse_opening_fence` / `is_closing_fence`
+    helpers if they get factored out, or inline the same logic
+    (small enough).
+- [ ] Register in `EngineRegistry::new`
+      (`crates/quarto-core/src/engine/registry.rs:48-66`) in the
+      always-block:
+      `registry.register(Arc::new(MermaidEngine::new()));`
+- [ ] Add `"mermaidjs"` to `KNOWN_ENGINES`
+      (`crates/quarto-core/src/engine/detection.rs:31`) so the
+      top-level `mermaidjs:` shortcut is recognized.
+- [ ] Module wiring: export `MermaidEngine` from
+      `crates/quarto-core/src/engine/mod.rs` (mirror how
+      `MarkdownEngine` is re-exported).
+- [ ] Tests in `crates/quarto-core/src/engine/mermaid.rs`:
+  - Single-cell case: input with one `{mermaid}` cell produces the
+    `<pre class="mermaid">` wrapper + the script tag.
+  - Multi-cell case: two cells, both wrapped; script tag emitted
+    once.
+  - No-cell case: input passes through unchanged; **no script tag**
+    emitted (only when at least one cell was matched).
+  - Mixed engines: input containing `{r}`, `{python}`, and
+    `{mermaid}` cells — only `{mermaid}` cells touched; others
+    pass through.
+  - HTML-escaping: source containing `<`, `>`, `&` in the diagram
+    is escaped in the output.
+- [ ] Integration test in `crates/quarto-core/tests/`:
+      render a fixture qmd with `engine: mermaidjs` (or
+      `engine: [mermaidjs]`) through the full HTML pipeline;
+      assert the rendered HTML contains `<pre class="mermaid">`
+      and the script tag.
+- [ ] Multi-engine integration: a fixture with `engine: [knitr,
+      mermaidjs]` containing one `{r}` cell and one `{mermaid}`
+      cell — both render correctly (gated on the knitr R runtime
+      being available, or use the FixtureEngine pattern from PR #238
+      to substitute).
+- [ ] **End-to-end per CLAUDE.md**:
+      `cargo run --bin q2 -- render fixture.qmd`, grep the actual
+      output for `<pre class="mermaid">` and the script tag,
+      record invocation + observed output in this plan before
+      claiming done.
 
 ### Phase 3 — q2-preview verification (closes bd-iq0hp)
 
