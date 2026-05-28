@@ -325,7 +325,9 @@ where
 
     // Configure insta settings for this format
     let mut settings = insta::Settings::clone_current();
-    settings.set_snapshot_path(format!("../snapshots/{}", format));
+    // Path is relative to this file's directory (tests/integration/),
+    // so up two levels reaches the crate root, where snapshots/ lives.
+    settings.set_snapshot_path(format!("../../snapshots/{}", format));
     settings.set_prepend_module_to_snapshot(false);
 
     let _guard = settings.bind_to_scope();

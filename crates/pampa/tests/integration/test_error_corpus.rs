@@ -255,7 +255,7 @@ fn test_error_corpus_json_locations() {
 fn test_error_corpus_text_snapshots() {
     // Configure insta settings for error corpus
     let mut settings = insta::Settings::clone_current();
-    settings.set_snapshot_path("../snapshots/error-corpus/text");
+    settings.set_snapshot_path("../../snapshots/error-corpus/text");
     settings.set_prepend_module_to_snapshot(false);
     let _guard = settings.bind_to_scope();
 
@@ -332,7 +332,7 @@ fn test_error_corpus_text_snapshots() {
 fn test_error_corpus_json_snapshots() {
     // Configure insta settings for error corpus
     let mut settings = insta::Settings::clone_current();
-    settings.set_snapshot_path("../snapshots/error-corpus/json");
+    settings.set_snapshot_path("../../snapshots/error-corpus/json");
     settings.set_prepend_module_to_snapshot(false);
     let _guard = settings.bind_to_scope();
 
