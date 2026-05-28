@@ -26,6 +26,7 @@ import {
   decodeChange,
   getAllChanges,
   getChanges,
+  getHeads,
   init,
 } from '@automerge/automerge';
 import type { Change, Doc, Patch } from '@automerge/automerge';
@@ -350,44 +351,35 @@ export function updateRunListAttribution(
   textFieldName: string,
 ): RunListAttribution {
   const viewable = handle as unknown as ViewableHandle;
-  const history = viewable.history();
-  if (!history) throw new HistoryCompactedError();
-  if (state.processedHistoryIndex > history.length) throw new HistoryCompactedError();
   if (!state._workDoc) throw new HistoryCompactedError();
 
-  if (state.processedHistoryIndex === history.length) {
-    return state;
-  }
-
-  // Pull just the new changes (since workDoc's heads), index by hash.
   const doc = viewable.doc() as Doc<unknown>;
-  const newChanges = getChanges(state._workDoc, doc);
-  const changeByHash = new Map<string, Change>();
-  for (const c of newChanges) {
-    changeByHash.set(decodeChange(c).hash, c);
+  let newChanges: Change[];
+  try {
+    newChanges = getChanges(state._workDoc, doc);
+  } catch {
+    // `getChanges` throws if `oldState` has changes not in `newState`.
+    // Production state machine never hits that — `_workDoc` only ever
+    // advances by applying changes from `doc` — but guard against
+    // hand-constructed state in tests and surface as a cold-rebuild signal.
+    throw new HistoryCompactedError();
   }
+  if (newChanges.length === 0) return state;
 
   const runs = state.runs.map(r => ({ ...r }));
-  let prevHeads = decodeHeads(state.processedHeads as Parameters<typeof decodeHeads>[0]);
-  let lastHeads: unknown[] = state.processedHeads;
   let workDoc: Doc<unknown> = state._workDoc;
-
-  for (let i = state.processedHistoryIndex; i < history.length; i++) {
-    const currHeads = history[i];
-    const decodedCurr = decodeHeads(currHeads as Parameters<typeof decodeHeads>[0]);
-    const newHash = newChangeHashAt(prevHeads, decodedCurr);
-    const change = newHash ? changeByHash.get(newHash) : undefined;
-    if (change) {
-      workDoc = replayChange(workDoc, change, textFieldName, runs);
-    }
-    prevHeads = decodedCurr;
-    lastHeads = Array.isArray(currHeads) ? currHeads : [currHeads];
+  for (const change of newChanges) {
+    workDoc = replayChange(workDoc, change, textFieldName, runs);
   }
 
+  // `processedHeads` / `processedHistoryIndex` are bookkeeping in the
+  // incremental path — neither is read here. Updating them keeps the state
+  // truthful for the cold-start path and for any future consumer.
+  const history = viewable.history();
   return {
     runs,
-    processedHeads: lastHeads as unknown[],
-    processedHistoryIndex: history.length,
+    processedHeads: getHeads(workDoc),
+    processedHistoryIndex: history?.length ?? state.processedHistoryIndex,
     _workDoc: workDoc,
   };
 }
