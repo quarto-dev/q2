@@ -1,8 +1,9 @@
 ---
 date: 2026-05-28
 branch: TBD (no implementation work yet — design phase)
-status: v2 — Q-A resolved by PR #238 (engine sequence); Q-B/Q-C/Q-D
-        still open. Implementation gated on PR #238 merging.
+status: >
+  v2 — Q-A resolved by PR #238 (engine sequence); Q-B/Q-C/Q-D still
+  open. Implementation gated on PR #238 merging.
 beads: bd-je48v (epic); see § Beads issues below.
 ---
 
@@ -270,10 +271,21 @@ approach:
     the right shape if we expect more engines like this
     (graphviz, plantuml, dot, …).
 
-**Recommendation for the first ship:** B2c. It preserves the
-format-agnostic-engine-output invariant the user values, doesn't
-block on bd-mqk49, and is straightforward to refactor into B2e once
-that mechanism lands.
+**Recommendation for the first ship (decided 2026-05-28):** **B1 —
+the hack.** The engine emits `RawBlock(HTML, …)` directly and we
+ship. The architectural correctness lives in two follow-up signals:
+
+- A comment in the mermaid engine source pointing at **bd-mqk49**
+  ("when the engine→stage extension API lands, route this through a
+  per-format pass instead of emitting HTML directly").
+- A note on **bd-mqk49** itself that the mermaid engine is a known
+  beneficiary of the API and should be refactored when bd-mqk49
+  ships.
+
+This is the honest small-scope move — Quarto 2 only ships HTML today
+anyway, so B2c's format-agnostic invariant is being maintained
+hypothetically against a future cost. B1 + linked TODO captures the
+intent without blocking shipping.
 
 ### Q-C. How does the script include reach the document?
 
@@ -315,9 +327,9 @@ Test matrix:
 
 - [x] v1 plan written
 - [x] PR #238 surfaced; v2 revision applied
-- [x] Decisions locked: A1 (engine impl), B2c (dedicated HTML-emit
-      stage), C1 (inline script RawBlock), D=bd-iq0hp closure
-- [ ] User confirms Q-B recommendation (B2c) before impl
+- [x] Decisions locked: A1 (engine impl), B1 (direct RawBlock HTML
+      emission with bd-mqk49 follow-up TODO), C1 (inline script
+      RawBlock), D=bd-iq0hp closure
 
 ### Phase 1 — multi-engine current-state audit
 
@@ -337,7 +349,7 @@ Test matrix:
 - [ ] If PR #238's review surfaces design changes that affect mermaid,
       reflect them here.
 
-### Phase 2 — `MermaidEngine` implementation (assumes Q-B → B2c, Q-C → C1)
+### Phase 2 — `MermaidEngine` implementation (Q-B → B1, Q-C → C1)
 
 - [ ] Add `MermaidEngine` implementing `ExecutionEngine` in
       `crates/quarto-core/src/engine/mermaid/` (mirror the
@@ -345,17 +357,18 @@ Test matrix:
       no-subprocess engine).
   - `name() == "mermaidjs"`.
   - `execute(input, ctx)`: parse `input` as QMD, walk for code cells
-    with class `mermaid`, replace each cell with a `Div.mermaid`
-    wrapping the original source as a code block (B2), and append a
-    once-per-doc `<script type="module">…</script>` `RawBlock` at
-    end of body (C1). Serialize back to QMD and return as
+    with class `mermaid`, replace each cell with a
+    `RawBlock(HTML, "<pre class=\"mermaid\">…</pre>")` (B1 —
+    direct HTML emission), and append a once-per-doc
+    `<script type="module">…</script>` `RawBlock` at end of body
+    (C1). Serialize back to QMD and return as
     `ExecuteResult { markdown, ..Default }`.
+  - **Add a source-code comment** at the RawBlock-emission site:
+    `// bd-mqk49: when engines can declare per-format AST passes,
+    // route this through a format-conditional transform instead of
+    // emitting HTML inline. Today, Quarto 2 only renders HTML, so
+    // the format-locked emission is acceptable.`
   - Register in native + WASM `EngineRegistry`s.
-- [ ] Add `MermaidHtmlEmitStage` between `AstTransformsStage` and
-      `RenderHtmlBodyStage` (or between user-filters-post and
-      code-highlight — confirm exact slot during impl). The stage
-      walks for `Div.mermaid` and rewrites to
-      `RawBlock(HTML, "<pre class=\"mermaid\">…</pre>")`.
 - [ ] Tests:
   - Unit: mermaid engine on a fixture qmd containing `{mermaid}` and
     non-mermaid blocks — only `{mermaid}` cells touched; script tag
@@ -418,9 +431,11 @@ Created 2026-05-28 (v1), revised 2026-05-28 (v2 after PR #238 review):
   current multi-engine state." v2: retargeted at PR #238's plan +
   code instead of a generic multi-engine investigation.
 - **`bd-gwfdo`** (task, P2, child of epic, blocked-by `bd-c6h96` +
-  `bd-fztki`, gated on PR #238 merge) — "Implement `MermaidEngine` +
-  `MermaidHtmlEmitStage`." v2: revised from "AST transform" to
-  "ExecutionEngine impl + dedicated HTML-emit stage."
+  `bd-fztki`, gated on PR #238 merge) — "Implement `MermaidEngine`."
+  v2: revised from "AST transform" to "ExecutionEngine impl emitting
+  RawBlock HTML directly (B1)." A bd-mqk49 follow-up will refactor
+  to format-conditional emission once the engine→stage extension
+  API exists.
 - **`bd-my0o5`** (task, P2, child of epic, blocked-by `bd-gwfdo`) —
   "q2 preview end-to-end verification for mermaid blocks." v2:
   explicitly closes PR #238's bd-iq0hp.
@@ -433,7 +448,11 @@ Follow-up issues (discovered-from `bd-c6h96`):
 - **`bd-s8llm`** (feature, P3) — VFS publication API.
 - **`bd-mqk49`** (feature, P3) — Engine→stage extension. **More
   relevant after PR #238**; the natural mechanism for Q-B's full
-  B2e form.
+  B2e form. The mermaid engine ships under B1 (direct
+  `RawBlock(HTML, …)` emission); when bd-mqk49 lands, the mermaid
+  engine should be refactored to declare a per-format AST pass
+  instead. A source-code comment in `engine/mermaid/` flags the
+  TODO.
 - **`bd-cp3em`** (bug, P2) — Capture-splice aux-field drop;
   verified still present in `feature/multi-engine`.
 
