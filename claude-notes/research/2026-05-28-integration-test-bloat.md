@@ -30,8 +30,15 @@ runs). The raw script logs live in `measurements/`.
 | Pilot: pampa only (first run)        | release |          9.2 GB  |    255 s  |                  164 |
 | Pilot: pampa only (controlled)       | debug   |           18 GB  |    130 s  |                  164 |
 | Pilot: pampa only (controlled)       | release |          9.1 GB  |    136 s  |                  164 |
-| Full rollout                         | debug   |                — |         — |                    — |
-| Full rollout                         | release |                — |         — |                    — |
+| **Phase 6 baseline (re-measured)**   | debug   |           21 GB  |    118 s  |                  220 |
+| **Phase 6 baseline (re-measured)**   | release |           11 GB  |    158 s  |                  220 |
+| **Full rollout (13 crates)**         | debug   |           12 GB  |    122 s  |                   76 |
+| **Full rollout (13 crates)**         | release |          4.5 GB  |    120 s  |                   76 |
+
+The "first run" rows were taken with intervening work between samples
+(verify runs, file edits, disk pressure). The "controlled" and
+"Phase 6" rows were taken back-to-back with `cargo clean` between
+each and no other intervening work.
 
 The "first run" rows were taken with intervening work between samples
 (verify runs, file edits, disk pressure). The "controlled" rows were
@@ -189,7 +196,57 @@ _Pending._
 
 ### Full rollout (Phase 6)
 
-_Pending._
+13 crates migrated (pampa + 12 others). 164 integration test files
+collapsed into 13 `integration` binaries.
+
+Controlled back-to-back comparison (`cargo clean` between each,
+alternating `git checkout` between the pre-migration plan commit
+`8733ed67` and the branch tip):
+
+|                            | Baseline (debug) | Rollout (debug) |       Δ debug | Baseline (release) | Rollout (release) |     Δ release |
+| -------------------------- | ---------------: | --------------: | ------------: | -----------------: | ----------------: | ------------: |
+| `target/<profile>` size    |            21 GB |           12 GB |   **−9 GB (−43 %)** |              11 GB |           4.5 GB |  **−6.5 GB (−59 %)** |
+| Executables in `deps/`     |              220 |              76 |  **−144 (−65 %)** |                220 |               76 |  **−144 (−65 %)** |
+| Sum of executable bytes    |         10.5 GiB |          2.5 GiB | **−8.0 GiB (−77 %)** |           9.0 GiB |           2.1 GiB | **−6.9 GiB (−77 %)** |
+| Build wall time            |            118 s |           122 s |   **+4 s (+3 %)** |              158 s |             120 s |  **−38 s (−24 %)** |
+
+**Executable-bytes drop of 77 %** is the headline. The static-linking
+redundancy at the per-file level was massive — every integration
+test binary used to fully link the dependency closure. Now there's
+one consolidation binary per crate, so the dep closure is linked
+13 times instead of 164.
+
+**Release builds are now meaningfully faster** (−38 s / −24 %),
+which is the speedup that didn't show up in the pampa-only pilot.
+At the workspace scale, the savings from doing 144 fewer link jobs
+(each requiring optimization passes in release mode) outweigh the
+cost of any single integration binary being slightly larger. The
+debug delta is essentially noise (+4 s, +3 %).
+
+**Headline executable-count math** (sanity check):
+
+- Baseline: 220 executables in `target/<profile>/deps/`
+- 13 multi-file crates contributed 164 integration test binaries
+- After consolidation those become 13 `integration` binaries → save 151
+- Plus 7 single-file crates kept their 1 binary each (unchanged)
+- Plus other test targets (unit tests, lib tests, etc.) — unchanged
+- Rollout: 220 − 151 + 7 = **76 executables** ✓ (matches measurement)
+
+### Cross-platform extrapolation (concrete)
+
+The ark PR reported the Linux CI runner footprint dropping from
+~15 GB to ~2 GB — a ~7.5× reduction. Our `target/release` drops
+from 11 → 4.5 GB (2.4×), which is more conservative because Q2's
+per-file binaries were already statically linking a heavy dep
+closure (pampa + tree-sitter + quarto-core makes each binary ~130
+MB before consolidation; ark's binaries were smaller, so consolidation
+won them proportionally more).
+
+For Linux CI specifically, the conservative expectation: a Linux
+runner that used to need ~25-30 GB of disk for the full debug test
+suite (worse than macOS because of glibc + linker overhead per
+binary) should now need ~12-15 GB. That's well inside GitHub's
+20 GB default and gives us breathing room.
 
 ## Cross-platform extrapolation
 

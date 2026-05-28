@@ -214,52 +214,57 @@ Audit findings (pre-cached during Phase 0 / Phase 2 to make rollout
 fast): all remaining crates are **clean pure-rename migrations**
 *except* the specific files called out below.
 
-- [ ] quarto-core (33 files) — rename **plus** edit
-      `tests/integration/attribution_gitblame.rs`: 4 occurrences of
-      `include_str!("fixtures/attribution-blame/…")` → prefix each
-      with `../` to navigate from `tests/integration/` up to
-      `tests/fixtures/`. One inline `mod orchestrator_engine_channel
-      {…}` in `project_resources.rs` stays inline, no path resolution
-- [ ] qmd-syntax-helper (20 files) — clean rename
-- [ ] quarto-preview (7 files) — clean rename
-- [ ] quarto-sass (7 files) — clean rename
-- [ ] quarto (7 files) — rename **plus** edit
-      `tests/integration/trace_cli.rs`: change
-      `#[path = "../src/commands/trace.rs"]` →
-      `#[path = "../../src/commands/trace.rs"]` to account for the
-      extra directory level
-- [ ] quarto-highlight (6 files) — rename **plus** edit
-      `tests/integration/golden.rs`: `include_str!(
-      "fixtures/builtin-snippets.json")` → prefix with `../`
-- [ ] comrak-to-pandoc (5 files) — clean rename; `debug.rs` and
-      `debug_comrak.rs` have file-root `fn main() {}` that will
-      become unused inner functions inside their modules — add
-      `#[allow(dead_code)]` if rustc warns, or simply drop the
-      `fn main()` lines (they were only there to satisfy the
-      per-file harness in the old layout)
-- [ ] quarto-yaml-validation (5 files) — rename **plus** edit
-      6 `include_str!("../test-fixtures/schemas/…")` calls across
-      `tests/integration/real_schemas.rs` (1 occurrence) and
-      `tests/integration/comprehensive_schemas.rs` (5 occurrences):
-      add one more `../` to each so they keep pointing at
-      `crates/quarto-yaml-validation/test-fixtures/schemas/…`
-- [ ] quarto-brand (4 files) — clean rename
-- [ ] quarto-citeproc (2 files) — clean rename
-- [ ] quarto-csl (2 files) — clean rename
-- [ ] quarto-doctemplate (2 files) — clean rename
-- [ ] `cargo xtask verify --skip-hub-build` → expect green
+- [x] quarto-core (33 files, commit `0ad8a40d`) — 4 `include_str!`
+      `fixtures/...` paths got a `../` prefix
+- [x] qmd-syntax-helper (20 files, commit `0d345c7c`) — clean rename
+- [x] quarto-preview (7 files, commit `86dcd0c1`) — clean rename
+- [x] quarto-sass (7 files, commit `1ad8b116`) — clean rename
+- [x] quarto (7 files, commit `6651b1da`) — `#[path]` edit
+- [x] quarto-highlight (6 files, commit `8dc679ef`) — `include_str!`
+      prefix edit
+- [x] comrak-to-pandoc (5 files, commit `6f8b1507`) — surgical edits:
+      `proptest_roundtrip.rs` had `mod generators;` referring to the
+      sibling top-level file; replaced with `use super::generators::*;`
+      since `generators` is now a sibling module of
+      `proptest_roundtrip` in the same binary. Also dropped the
+      vestigial `fn main() {}` lines from `debug.rs` and `debug_comrak.rs`.
+- [x] quarto-yaml-validation (5 files, commit `ce214672`) — 7
+      `include_str!("../test-fixtures/...")` paths got an extra `../`
+- [x] quarto-brand (4 files, commit `91cd5b71`) — clean rename
+- [x] quarto-citeproc (2 files, commit `e8a9d075`) — clean rename
+- [x] quarto-csl (2 files, commit `1d03f3f9`) — clean rename
+- [x] quarto-doctemplate (2 files, commit `136a5c87`) — clean rename
+- [x] `cargo nextest run --workspace` → 9444 passed, 196 skipped
+      (same count as pre-migration baseline)
+- [x] `cargo xtask verify --skip-hub-build` → Rust steps 1-7 green
+      (warnings denied build pass, 9444/9444 tests). JS/TS legs
+      remain environmentally blocked in this fresh worktree.
+- [x] Snapshot relocations: 20 `.snap` files in quarto-core and
+      quarto-highlight needed to move from `tests/snapshots/` to
+      `tests/integration/snapshots/` and gain an `integration__`
+      prefix to match insta's new file resolution
+- [x] `.config/nextest.toml`: bd-u3ze override filter updated from
+      `binary(staleness) | binary(eager_capture) | binary(boot)`
+      to `package(quarto-preview) & binary(integration) &
+      test(/^(staleness|eager_capture|boot)::/)`
 
 ### Phase 6 — Final measurement
 
-- [ ] `cargo clean`
-- [ ] `scripts/measure-test-build.sh debug` (full-rollout)
-- [ ] `cargo clean`
-- [ ] `scripts/measure-test-build.sh release` (full-rollout)
-- [ ] Compute final delta vs. baseline and vs. pilot
+- [x] Controlled back-to-back comparison via `git checkout`
+      alternation between baseline (`8733ed67`) and branch tip:
+
+|                            | Baseline (debug) | Rollout (debug) |       Δ debug | Baseline (release) | Rollout (release) |     Δ release |
+| -------------------------- | ---------------: | --------------: | ------------: | -----------------: | ----------------: | ------------: |
+| `target/<profile>` size    |            21 GB |           12 GB |  **−9 GB (−43 %)** |              11 GB |           4.5 GB |  **−6.5 GB (−59 %)** |
+| Executables in `deps/`     |              220 |              76 | **−144 (−65 %)** |                220 |               76 | **−144 (−65 %)** |
+| Sum of executable bytes    |         10.5 GiB |          2.5 GiB | **−8.0 GiB (−77 %)** |           9.0 GiB |           2.1 GiB | **−6.9 GiB (−77 %)** |
+| Build wall time            |            118 s |           122 s |  **+4 s (+3 %)** |              158 s |             120 s | **−38 s (−24 %)** |
+
+- [x] Computed final delta vs. baseline; recorded in research note
 
 ### Phase 7 — Report and decide
 
-- [ ] Update research note with all numbers + extrapolated CI impact
+- [x] Update research note with all numbers + extrapolated CI impact
 - [ ] Discuss findings with user; ask for push permission
 - [ ] If pushed: update `CLAUDE.md` if any developer-facing test
       invocation conventions change (e.g. references to per-file
