@@ -18,8 +18,16 @@
 # at most, in exchange for deterministic results.
 #
 # If you're adding a new integration test under `crates/quarto-preview/
-# tests/` that calls `run_with_on_ready` or otherwise instantiates the
-# file watcher, add its binary name to the override filter below.
+# tests/integration/` that calls `run_with_on_ready` or otherwise
+# instantiates the file watcher, add its module name to the regex
+# in the override filter below.
+#
+# Layout note (2026-05-28, bd-xvdop): integration tests across the
+# workspace now live in `tests/integration/main.rs` + sibling modules
+# (matklad pattern), so each crate produces a single `integration`
+# test binary instead of one binary per file. Filters that used to
+# target per-file binary names now need `package(...) & test(...::)`
+# selectors instead.
 
 [test-groups]
 # Quarto-preview integration tests that arm a `notify-rs` FSEvents
@@ -27,5 +35,5 @@
 quarto-preview-fs-watcher = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = "binary(staleness) | binary(eager_capture) | binary(boot)"
+filter = "package(quarto-preview) & binary(integration) & test(/^(staleness|eager_capture|boot)::/)"
 test-group = "quarto-preview-fs-watcher"
