@@ -28,7 +28,7 @@
 use quarto_pandoc_types::ConfigValue;
 
 /// Known execution engine names.
-pub const KNOWN_ENGINES: &[&str] = &["markdown", "knitr", "jupyter"];
+pub const KNOWN_ENGINES: &[&str] = &["markdown", "mermaidjs", "knitr", "jupyter"];
 
 /// Result of engine detection.
 ///
