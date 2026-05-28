@@ -16,7 +16,7 @@
 
 import { AsyncEntry } from '@napi-rs/keyring';
 
-import { redactTokens } from './device-flow.js';
+import { redactTokens } from './redact.js';
 
 // ---------------------------------------------------------------------------
 // Public types

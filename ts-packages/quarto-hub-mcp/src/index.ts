@@ -19,6 +19,8 @@
  *                                        to non-loopback hosts (dev only)
  */
 
+import { pathToFileURL } from 'node:url';
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
@@ -28,17 +30,48 @@ import { AuthToolsState } from './auth/auth-tools.js';
 import { CredentialStore } from './auth/credential-store.js';
 import {
   discoverAuthorizationServer,
-  loadDeviceFlowConfigFromEnv,
-  MissingCredentialsConfigError,
-  redactTokens,
-} from './auth/device-flow.js';
+  loadOAuthConfigFromEnv,
+  MissingOAuthConfigError,
+} from './auth/oauth-config.js';
+import { redactTokens } from './auth/redact.js';
 import { RefreshManager } from './auth/refresh-manager.js';
 
 const GOOGLE_ISSUER = 'https://accounts.google.com';
 
-function parseArgs(argv: string[]): { serverUrl: string; readOnly: boolean } {
+interface ParsedArgs {
+  serverUrl: string;
+  readOnly: boolean;
+  /** Explicit loopback redirect port; undefined = kernel-picks. */
+  redirectPort?: number;
+}
+
+/**
+ * Validate a `--redirect-port` value. The kernel-pick default is reached
+ * by *omitting* the flag, not by passing `0`, so `0` (and the rest of
+ * the privileged range) is rejected — a stable loopback port for SSH
+ * tunnelling should be a non-privileged one.
+ */
+export function parseRedirectPort(raw: string): number {
+  if (!/^-?\d+$/.test(raw.trim())) {
+    throw new Error(`--redirect-port must be an integer, got "${raw}".`);
+  }
+  const port = Number.parseInt(raw, 10);
+  if (port < 1024) {
+    throw new Error(
+      `--redirect-port must be a non-privileged port (1024-65535); for SSH ` +
+        `tunnels pick one in the ephemeral range (e.g. 49152-65535). Got ${port}.`,
+    );
+  }
+  if (port > 65535) {
+    throw new Error(`--redirect-port must be 1024-65535, got ${port}.`);
+  }
+  return port;
+}
+
+function parseArgs(argv: string[]): ParsedArgs {
   let serverUrl = process.env['QUARTO_HUB_SERVER'] ?? '';
   let readOnly = false;
+  let redirectPort: number | undefined;
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
@@ -46,13 +79,24 @@ function parseArgs(argv: string[]): { serverUrl: string; readOnly: boolean } {
       serverUrl = argv[++i]!;
     } else if (arg === '--read-only') {
       readOnly = true;
+    } else if (arg === '--redirect-port' && i + 1 < argv.length) {
+      try {
+        redirectPort = parseRedirectPort(argv[++i]!);
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
     } else if (arg === '--help' || arg === '-h') {
-      console.error(`Usage: quarto-hub-mcp --server <url> [--read-only]
+      console.error(`Usage: quarto-hub-mcp --server <url> [--read-only] [--redirect-port <N>]
 
 Options:
-  --server <url>   Automerge sync server URL (or set QUARTO_HUB_SERVER)
-  --read-only      Only expose read tools (no write/create/delete)
-  --help, -h       Show this help message`);
+  --server <url>        Automerge sync server URL (or set QUARTO_HUB_SERVER)
+  --read-only           Only expose read tools (no write/create/delete)
+  --redirect-port <N>   Fixed loopback port for the sign-in redirect
+                        (1024-65535). Omit to let the OS pick one. Set a
+                        stable port when forwarding sign-in over SSH:
+                        ssh -L N:127.0.0.1:N <remote>
+  --help, -h            Show this help message`);
       process.exit(0);
     } else {
       console.error(`Unknown argument: ${arg}`);
@@ -65,7 +109,7 @@ Options:
     process.exit(1);
   }
 
-  return { serverUrl, readOnly };
+  return { serverUrl, readOnly, redirectPort };
 }
 
 /**
@@ -89,7 +133,7 @@ function installRedactingErrorHandlers(): void {
 
 async function main(): Promise<void> {
   installRedactingErrorHandlers();
-  const { serverUrl, readOnly } = parseArgs(process.argv);
+  const { serverUrl, readOnly, redirectPort } = parseArgs(process.argv);
 
   // Optional auth bootstrap: if both env vars are set we wire up the
   // credential store + refresh manager + auth tools; if not, we run
@@ -101,16 +145,16 @@ async function main(): Promise<void> {
 
   let credentialStore: CredentialStore | undefined;
   let refreshManager: RefreshManager | undefined;
-  let flowConfig: ReturnType<typeof loadDeviceFlowConfigFromEnv> | undefined;
+  let flowConfig: ReturnType<typeof loadOAuthConfigFromEnv> | undefined;
   let authorizationServer:
     | Awaited<ReturnType<typeof discoverAuthorizationServer>>
     | undefined;
 
   if (hasAuthEnv) {
     try {
-      flowConfig = loadDeviceFlowConfigFromEnv();
+      flowConfig = loadOAuthConfigFromEnv();
     } catch (err) {
-      if (err instanceof MissingCredentialsConfigError) {
+      if (err instanceof MissingOAuthConfigError) {
         console.error(`[hub-mcp] ${err.message}`);
         process.exit(1);
       }
@@ -160,6 +204,7 @@ async function main(): Promise<void> {
             clientId: flowConfig.clientId,
             clientSecret: flowConfig.clientSecret,
             issuer: GOOGLE_ISSUER,
+            redirectPort,
           },
           authorizationServer,
         })
@@ -179,8 +224,16 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
-main().catch((err) => {
-  const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
-  console.error('Fatal error:', redactTokens(msg));
-  process.exit(1);
-});
+// Run only when executed as the binary, not when imported (e.g. by
+// unit tests exercising `parseRedirectPort`).
+const invokedDirectly =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    console.error('Fatal error:', redactTokens(msg));
+    process.exit(1);
+  });
+}

@@ -9,7 +9,7 @@
  *   3. On 401 + creds attached → forceRefresh, retry once.
  *      Still 401 → throw {@link ReauthRequired}.
  *   4. On 401 + no creds attached → throw {@link AuthRequiredError}
- *      naming `authenticate_start`. The trigger is the hub's 401, not
+ *      naming `authenticate`. The trigger is the hub's 401, not
  *      absence of creds, so hubs that don't require auth keep working.
  *
  * Insecure-transport gate: Bearer + `ws://` / `http://` + non-loopback
@@ -19,7 +19,7 @@
  *
  * `lastObservedAuthMode()` exposes the most recent auth observation
  * (`'no-auth'` / `'requires-auth'` / `'unknown'`) so Phase 7's
- * `authenticate_start` can short-circuit against a hub that's known to
+ * `authenticate` can short-circuit against a hub that's known to
  * not require auth.
  */
 
@@ -33,7 +33,7 @@ import {
 
 import type { CredentialStore } from './auth/credential-store.js';
 import { ReauthRequired, type RefreshManager } from './auth/refresh-manager.js';
-import { redactTokens } from './auth/device-flow.js';
+import { redactTokens } from './auth/redact.js';
 
 // ---------------------------------------------------------------------------
 // Public types / errors
@@ -41,7 +41,7 @@ import { redactTokens } from './auth/device-flow.js';
 
 /**
  * Observed hub auth-mode (process-local). Phase 7 consults this to
- * decide whether `authenticate_start` should short-circuit.
+ * decide whether `authenticate` should short-circuit.
  */
 export type ObservedAuthMode = 'no-auth' | 'requires-auth' | 'unknown';
 
@@ -49,7 +49,7 @@ export class AuthRequiredError extends Error {
   override readonly name = 'AuthRequiredError';
   constructor(
     message: string = 'This Quarto Hub requires authentication. ' +
-      'Ask me to call `authenticate_start` to begin the device-flow.',
+      'Ask me to call `authenticate` to sign in.',
   ) {
     super(message);
   }
@@ -314,7 +314,7 @@ export class ConnectionManager {
         this.recordObservation(401, true);
         // Hub rejects a freshly-refreshed token — local view and hub
         // view disagree on whether these credentials are usable. Clear
-        // the store so `authenticate_start`'s "already authenticated"
+        // the store so `authenticate`'s "already authenticated"
         // short-circuit cannot keep the agent trapped against a hub
         // that won't accept this identity. The next `getValidIdToken`
         // call raises ReauthRequired, falling through to the device

@@ -316,10 +316,10 @@ describe('ConnectionManager with creds', () => {
     expect(mgr.lastObservedAuthMode()).toBe('requires-auth');
   });
 
-  it('clears the credential store on persistent 401 so authenticate_start starts a fresh flow', async () => {
+  it('clears the credential store on persistent 401 so authenticate starts a fresh flow', async () => {
     // Regression: before this, ConnectionManager threw ReauthRequired
     // but left a freshly-refreshed id_token in the store. The next
-    // `authenticate_start` would then short-circuit on
+    // `authenticate` would then short-circuit on
     // `RefreshManager.getValidIdToken()` and reply "Already
     // authenticated as …", trapping the agent in a state mismatch
     // between local view (token works) and hub view (token rejected).

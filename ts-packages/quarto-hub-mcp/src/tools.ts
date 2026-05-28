@@ -18,9 +18,10 @@ import { ConnectionManager } from './connection-manager.js';
 import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
+  extractAuthContext,
   type AuthToolName,
 } from './auth/auth-tools.js';
-import { redactTokens } from './auth/device-flow.js';
+import { redactTokens } from './auth/redact.js';
 
 function text(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }] };
@@ -43,7 +44,7 @@ function getReadTools(): Tool[] {
         'Returns the list of files in the project. ' +
         'If the hub requires authentication and no valid credentials are cached, ' +
         'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
-        '`authenticate_start` to begin the device-flow.',
+        '`authenticate` to sign in.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -380,16 +381,14 @@ export function registerTools(
     return { tools: allTools };
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name, arguments: args } = request.params;
 
     if (
       authToolsState &&
-      (name === 'authenticate_start' ||
-        name === 'authenticate_finish' ||
-        name === 'authenticate_clear')
+      (name === 'authenticate' || name === 'authenticate_clear')
     ) {
-      return authToolsState.handle(name as AuthToolName);
+      return authToolsState.handle(name as AuthToolName, extractAuthContext(extra));
     }
 
     const tool = dataTools.find(t => t.name === name);

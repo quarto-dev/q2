@@ -16,13 +16,18 @@
  * coalesce onto a single `/token` request and observe the same new
  * id_token.
  *
- * **Refresh-token persistence rule** — empirically (2026-05-19, see
- * the plan's Verification log) Google does not rotate refresh tokens
- * for the Limited-Input-Devices client type. We follow OAuth's
- * defensive rule: if the response carries a `refresh_token` field we
- * persist it (handles a future IdP that *does* rotate); otherwise we
- * keep the prior value. Discarding on missing field would force a
- * re-auth on every refresh against today's live Google.
+ * **Refresh-token persistence rule** — we follow OAuth's defensive
+ * rule: if the response carries a `refresh_token` field we persist it
+ * (handles an IdP that rotates on every grant); otherwise we keep the
+ * prior value (handles an IdP that issues the refresh token once and
+ * omits it thereafter). The rule is correct under both behaviours, so
+ * it does not depend on which Google client type is in use. The earlier
+ * empirical note about the Limited-Input-Devices client's no-rotation
+ * behaviour was removed when hub-mcp switched to the loopback+PKCE flow
+ * on the Desktop-app client (see the loopback+PKCE plan); the
+ * Desktop-app client's steady-state rotation behaviour is pending
+ * confirmation by that plan's Spike A, but this defensive rule holds
+ * either way.
  *
  * `invalid_grant` is the one terminal error the manager handles
  * itself: it clears the credential store (so subsequent
