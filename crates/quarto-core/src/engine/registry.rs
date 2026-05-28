@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::markdown::MarkdownEngine;
+use super::mermaid::MermaidEngine;
 use super::traits::ExecutionEngine;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -47,6 +48,7 @@ impl EngineRegistry {
     ///
     /// Registers all engines available for the current platform:
     /// - markdown: Always available
+    /// - mermaidjs: Always available (text-only, no subprocess)
     /// - knitr: Native builds only
     /// - jupyter: Native builds only
     pub fn new() -> Self {
@@ -54,8 +56,10 @@ impl EngineRegistry {
             engines: HashMap::new(),
         };
 
-        // Always register markdown engine
+        // Always-available engines (no subprocess, no platform deps —
+        // safe to register in both native and WASM builds).
         registry.register(Arc::new(MarkdownEngine::new()));
+        registry.register(Arc::new(MermaidEngine::new()));
 
         // Register native-only engines
         #[cfg(not(target_arch = "wasm32"))]

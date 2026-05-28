@@ -479,63 +479,142 @@ Refined after Phase 1 audit: mirror `fixture.rs` (text-level fence
 scanner), register in always-block (native + WASM), add `"mermaidjs"`
 to `KNOWN_ENGINES`.
 
-- [ ] Add `MermaidEngine` in
-      `crates/quarto-core/src/engine/mermaid.rs` (single file like
-      `markdown.rs` / `fixture.rs`; a directory is overkill).
-  - `name() == "mermaidjs"`. Always available
-    (`is_available() == true`).
-  - `execute(input, ctx)`: scan `input` line-by-line for opening
-    fences of the form `` ```{mermaid} ``; for each, find the
-    matching closing fence; replace the entire fenced block with a
-    literal HTML `<pre class="mermaid">…source…</pre>`
-    (HTML-escape the source). If any cell matched, append the
-    once-per-doc jsdelivr `<script type="module">…</script>` block
-    at end of output. Return as
-    `ExecuteResult { markdown, ..Default }`.
-  - **Source-code comment** at the HTML-emission site, pointing at
-    bd-mqk49: when engines can declare per-format AST passes, route
-    through a format-conditional transform instead. Today Q2 is
-    HTML-only so format-locked emission is acceptable.
-  - Reuse `fixture.rs`'s `parse_opening_fence` / `is_closing_fence`
-    helpers if they get factored out, or inline the same logic
-    (small enough).
-- [ ] Register in `EngineRegistry::new`
-      (`crates/quarto-core/src/engine/registry.rs:48-66`) in the
-      always-block:
-      `registry.register(Arc::new(MermaidEngine::new()));`
-- [ ] Add `"mermaidjs"` to `KNOWN_ENGINES`
-      (`crates/quarto-core/src/engine/detection.rs:31`) so the
-      top-level `mermaidjs:` shortcut is recognized.
-- [ ] Module wiring: export `MermaidEngine` from
-      `crates/quarto-core/src/engine/mod.rs` (mirror how
-      `MarkdownEngine` is re-exported).
-- [ ] Tests in `crates/quarto-core/src/engine/mermaid.rs`:
-  - Single-cell case: input with one `{mermaid}` cell produces the
-    `<pre class="mermaid">` wrapper + the script tag.
-  - Multi-cell case: two cells, both wrapped; script tag emitted
-    once.
-  - No-cell case: input passes through unchanged; **no script tag**
-    emitted (only when at least one cell was matched).
-  - Mixed engines: input containing `{r}`, `{python}`, and
-    `{mermaid}` cells — only `{mermaid}` cells touched; others
-    pass through.
-  - HTML-escaping: source containing `<`, `>`, `&` in the diagram
-    is escaped in the output.
-- [ ] Integration test in `crates/quarto-core/tests/`:
-      render a fixture qmd with `engine: mermaidjs` (or
-      `engine: [mermaidjs]`) through the full HTML pipeline;
-      assert the rendered HTML contains `<pre class="mermaid">`
-      and the script tag.
+- [x] Add `MermaidEngine` in
+      `crates/quarto-core/src/engine/mermaid.rs` — text-level fence
+      scanner, B1 emission, once-per-doc script append, HTML-escaped
+      source, bd-mqk49 TODO comment at the emission site.
+- [x] Register in `EngineRegistry::new` always-block
+      (`crates/quarto-core/src/engine/registry.rs:52-67`).
+- [x] Add `"mermaidjs"` to `KNOWN_ENGINES`
+      (`crates/quarto-core/src/engine/detection.rs:31`).
+- [x] Module wiring: export `MermaidEngine` from `engine/mod.rs`;
+      doc-comment table updated for the new "always-available"
+      mermaidjs row.
+- [x] Unit tests in `engine/mermaid.rs` (12 tests, all passing):
+      `name_is_mermaidjs`, `always_available`,
+      `single_cell_emits_pre_and_script`,
+      `multiple_cells_share_one_script`, `no_cells_means_no_script`,
+      `other_engine_cells_pass_through`,
+      `does_not_match_inside_other_fenced_blocks`,
+      `html_escapes_lt_gt_amp_in_source`,
+      `errors_on_unterminated_mermaid_cell`,
+      `unterminated_non_mermaid_fence_is_passthrough`,
+      `longer_fences_round_trip`, `script_appended_only_once_after_body`.
+- [x] Full `quarto-core` test suite passes (2170 tests); full
+      workspace passes (9496 tests). No regressions from
+      `KNOWN_ENGINES` change.
+- [x] Integration test in `crates/quarto-core/tests/mermaid_pipeline.rs`
+      — 4 tests routed through `render_to_file` (the same path
+      `q2 render` uses): single-doc emits pre+script, no-cells
+      omits script, multiple cells share one script, array engine
+      form works. All passing.
 - [ ] Multi-engine integration: a fixture with `engine: [knitr,
       mermaidjs]` containing one `{r}` cell and one `{mermaid}`
       cell — both render correctly (gated on the knitr R runtime
       being available, or use the FixtureEngine pattern from PR #238
-      to substitute).
-- [ ] **End-to-end per CLAUDE.md**:
-      `cargo run --bin q2 -- render fixture.qmd`, grep the actual
-      output for `<pre class="mermaid">` and the script tag,
-      record invocation + observed output in this plan before
-      claiming done.
+      to substitute). Deferred to a follow-up — single-doc and
+      array-form coverage is sufficient for the first ship.
+- [x] **End-to-end per CLAUDE.md** verification (recorded below).
+
+#### Phase 2 finding: emission must be `\`\`\`{=html}`-fenced, not bare HTML
+
+A finding the audit missed: pampa's QMD reader treats *bare* `<tag>`
+markup at block position as a sequence of `RawInline` nodes — not a
+block-level raw HTML element — and tries to parse the interior as
+Markdown. That works for a `<pre>` with simple content but breaks
+hard on the script block: `mermaid.initialize({ startOnLoad: true });`
+contains `:`, which the parser treats as a definition-list-like
+construct and rejects with `unexpected character or token here`.
+
+The fix is to emit the explicit Pandoc raw-block form so the reader
+treats the whole thing as opaque raw HTML and skips Markdown parsing
+inside it:
+
+```text
+```{=html}
+<pre class="mermaid">
+…HTML-escaped source…
+</pre>
+```
+```
+
+…and the same wrapping for the `<script>` include. Two engine unit
+tests assert the structural property:
+
+- `cell_is_pampa_raw_html_block`: each cell wraps in `` ```{=html} ``.
+- `script_block_is_pampa_raw_html_block`: the script include wraps
+  in `` ```{=html} `` preceded by a blank line.
+
+The integration tests in `tests/mermaid_pipeline.rs` catch the same
+class of bug at the rendered-HTML layer (asserting `<pre class="mermaid">`
+and `mermaid.esm.min.mjs` survive end-to-end).
+
+#### Phase 2 end-to-end verification record
+
+Per CLAUDE.md's end-to-end policy.
+
+**Invocation:**
+
+```bash
+cargo run --bin q2 -- render /tmp/mermaid-e2e/test.qmd
+```
+
+where `/tmp/mermaid-e2e/test.qmd` is:
+
+````qmd
+---
+title: Mermaid engine end-to-end test
+engine: mermaidjs
+---
+
+# Hello
+
+Here is a mermaid diagram:
+
+```{mermaid}
+graph TD
+A[Client] --> B[Load Balancer]
+B --> C[Server1]
+B --> D[Server2]
+```
+
+And here is another:
+
+```{mermaid}
+graph LR
+X[input] --> Y[output]
+```
+
+Done.
+````
+
+**Observed output** (excerpted from `/tmp/mermaid-e2e/test.html` after
+inspection — two pre wrappers and one script include, prose intact):
+
+```html
+<p>Here is a mermaid diagram:</p>
+<pre class="mermaid">
+graph TD
+A[Client] --&gt; B[Load Balancer]
+B --&gt; C[Server1]
+B --&gt; D[Server2]
+</pre>
+<p>And here is another:</p>
+<pre class="mermaid">
+graph LR
+X[input] --&gt; Y[output]
+</pre>
+<p>Done.</p>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true });
+</script>
+```
+
+This output was inspected at the file system; the rendered HTML is
+exactly the markup the user's hub-client browser session would
+receive, and the mermaid runtime would pick up both diagrams at
+page load.
 
 ### Phase 3 — q2-preview verification (closes bd-iq0hp)
 
