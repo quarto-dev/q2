@@ -19,7 +19,7 @@ use quarto_core::attribution::{
 
 #[test]
 fn parse_single_commit_single_line() {
-    let porcelain = include_str!("fixtures/attribution-blame/single-commit.porcelain");
+    let porcelain = include_str!("../fixtures/attribution-blame/single-commit.porcelain");
     let parsed = parse_blame_porcelain(porcelain);
     assert_eq!(parsed.len(), 1);
     assert_eq!(
@@ -79,7 +79,7 @@ fn parse_caches_commit_metadata_across_lines_from_same_commit() {
     // The fixture has commit `aaa...` emitting both line 1 and line 2;
     // the second line record has only `<hash> 2 2` and a `\t...` body,
     // with no author block — the parser must hydrate from cache.
-    let porcelain = include_str!("fixtures/attribution-blame/multi-commit.porcelain");
+    let porcelain = include_str!("../fixtures/attribution-blame/multi-commit.porcelain");
     let parsed = parse_blame_porcelain(porcelain);
     assert!(parsed.len() >= 2);
     assert_eq!(parsed[0].author_mail, "alice@example.com");
@@ -205,7 +205,7 @@ fn gitblame_provider_constructs_as_trait_object() {
 fn gitblame_single_author_fixture_satisfies_producer_invariant() {
     // `single-commit.porcelain` blames a one-line file (`hello\n`)
     // to alice@example.com.
-    let porcelain = include_str!("fixtures/attribution-blame/single-commit.porcelain");
+    let porcelain = include_str!("../fixtures/attribution-blame/single-commit.porcelain");
     let data = attribution_from_porcelain(porcelain, "hello\n").expect("assemble");
 
     let alice: Arc<str> = Arc::from("alice@example.com");
@@ -232,7 +232,7 @@ fn gitblame_multi_author_fixture_satisfies_producer_invariant() {
     //   世界\n             -> alice@example.com
     //   line3\n            -> bob@example.com
     //   line4\n            -> bob@example.com
-    let porcelain = include_str!("fixtures/attribution-blame/multi-commit.porcelain");
+    let porcelain = include_str!("../fixtures/attribution-blame/multi-commit.porcelain");
     let source = "line1\n世界\nline3\nline4\n";
     let data = attribution_from_porcelain(porcelain, source).expect("assemble");
 
