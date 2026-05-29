@@ -1,563 +1,111 @@
-# Incremental writer contract
-
-The incremental writer (`pampa::writers::incremental`) edits a qmd
-source file in place from a pair of ASTs: a baseline AST that
-matches what was last produced from the source, and a new AST that
-reflects the user's edits. It diffs the two structurally, copies
-unchanged bytes from the original source, and re-serializes the
-changed regions through the qmd writer.
-
-This document describes the rules the writer obeys — what it
-guarantees, what it forbids, and how callers must shape their inputs
-to make the guarantees hold. It is the contract; implementation
-specifics, file paths, and migration plans live in plans that
-modify the writer.
-
-**Companion doc:** [`provenance-contract.md`](provenance-contract.md)
-covers the *producer* side — how transforms pick the right `SourceInfo`
-shapes that this doc tells the writer how to consume. The two are
-designed in pairs: if you change either contract, check the other.
-The provenance doc also carries the `By::` constructor catalog with
-atomicity flags that the §"Atomic-kind `Generated`" section below
-draws on.
-
-## The four primitives
-
-The writer is one node in a four-primitive grammar:
-
-| Primitive | What it does |
-|---|---|
-| **parse** | Lex/parse qmd source bytes into a parse-only AST. No transforms. |
-| **transform** | Apply a pipeline's transform stages to an AST. Produces a same-shape AST at a different tier. |
-| **reconcile** | Diff two ASTs structurally, producing a plan of `KeepBefore` / `UseAfter` / `RecurseIntoContainer` alignments. |
-| **write** | Materialize the plan as qmd bytes — Verbatim-copy source bytes for `KeepBefore`, re-serialize through the qmd writer for `UseAfter` / `Rewrite`. |
-
-The primitives are orthogonal. The writer is pipeline-agnostic: it
-diffs the two ASTs it is given and writes accordingly, regardless
-of what pipeline produced them. The caller picks which transforms
-to apply (or none); the writer just diffs.
-
-### Pipeline-tier discipline
-
-The two ASTs handed to the writer must be at the **same pipeline
-tier**. Same-tier means: both ASTs were produced by the same
-sequence of transform stages, applied to inputs that were both
-parsed from the same kind of source. The reconciler is
-tier-agnostic — it diffs whatever it is given — but if the two
-inputs do not share a tier, every Generated wrapper looks like a
-new insertion and the output degrades to whole-document
-re-serialization.
-
-Two tiers are in use today:
-
-- **parse-only**: the output of `parse_qmd_to_ast(content)`. Used
-  by q2-debug, q2-slides, and the WASM demos.
-- **q2-preview**: the output of
-  `renderPageInProjectWithAttribution(path, …)`, i.e. post-q2-
-  preview-pipeline AST. Used by ReactPreview's q2-preview path and
-  the q2-preview SPA.
-
-Future pipeline kinds are admitted without writer changes. The
-caller composes parse and transform separately and hands the
-writer two ASTs; the tier is implicit in whichever baseline the
-caller passes.
-
-## The byte-provenance contract
-
-The writer materializes bytes constantly. Every Rewrite path emits
-new bytes through the qmd writer; even Verbatim copies are a form
-of materialization. The contract is not "no materialization" — that
-phrasing is too blunt. It is more precise:
-
-> The writer only emits bytes whose origin can be honestly traced
-> to either **existing source bytes in the target file** (Verbatim
-> copies, slot preimages via `preimage_in`) or **fresh AST the
-> user constructed** (Rewrite paths fed by user-supplied AST
-> nodes via the qmd writer's normal arms).
-
-The case the contract forbids is the one where the writer would
-emit bytes synthesized from a wrapper's slot children as flat
-content in the parent file. The canonical example is include
-expansion: an `IncludeExpansion` wrapper carries the included
-file's blocks in a content slot. Emitting those blocks as flat
-parent-file bytes would put bytes in `parent.qmd` whose provenance
-is `foo.qmd` — dishonest at the parent-file boundary.
-
-The writer's coarsen step prevents this case structurally rather
-than catching it at write time. When the reconciler asks the
-writer to recurse into a wrapper that is not editable inside (an
-atomic CustomNode, an atomic-kind Generated, or any node with no
-preimage in the target file), `coarsen` substitutes a safe
-alignment — usually KeepBefore — before the qmd writer ever sees
-the case. The qmd writer's arms for these wrappers thus become
-`unreachable!()` in a well-formed pipeline: a debug-assertion
-surface for coarsen bugs, not a user-facing failure mode.
-
-This is why `incremental_write` returns `Result<(qmd, warnings),
-Vec<DiagnosticMessage>>` — `Ok` is the normal path (write
-succeeded; warnings carry any soft-drops); `Err` keeps its
-pre-Plan-7 meaning, surfacing qmd-writer failures that bubble up
-via `?` from the underlying serializer. Programmer errors —
-invariant violations from coarsen bugs, structurally impossible
-reconciliation states — do **not** flow through `Result`; they
-`panic!()` / `unreachable!()` / `debug_assert!()` inline. This is
-the idiomatic q2 pattern (see existing uses across
-`pampa/src/writers/`) and the WASM-side surface is loud:
-`console_error_panic_hook` is installed at module init, so a panic
-becomes a JS exception with a full stack trace. Every user-facing
-bad-edit case is handled by soft-drop, not by returning `Err`.
-
-## The role-asymmetry contract on `Generated.from`
-
-A `Generated` node's `from` field is a list of `Anchor`s, each
-carrying a role and a `source_info` chain. Roles in use today:
-
-- **`Invocation`**: the source token whose pipeline-time
-  interpretation produced this node. E.g. the `{{< meta title >}}`
-  shortcode bytes that resolved into the inlines now appearing in
-  the rendered output.
-- **`ValueSource`** (Plan 9): the metadata range whose value the
-  node was synthesized from. E.g. the YAML byte range of
-  `meta.title` that the title-block synthesizer read to build the
-  rendered title block.
-- **`Other("…")`**: extension-defined attribution. Carries
-  whatever identity the extension wants; not interpreted by core.
-- **`Dispatch`** (Plan 10, future): the Lua source location of a
-  filter or shortcode handler that produced this node.
-
-`preimage_in` — the writer's byte-range lookup — walks **only the
-`Invocation` anchor**. All other roles, present and future, are
-diagnostic-only. The writer never copies bytes from a non-
-`Invocation` anchor's source range.
-
-This asymmetry is load-bearing. A `ValueSource` anchor points at
-YAML metadata bytes; copying those into a document body would
-emit raw YAML in the middle of prose. A `Dispatch` anchor points
-at Lua filter source; copying those bytes would emit Lua code as
-prose. Both are correctness bugs. The writer prevents them by
-never walking past the role discrimination.
-
-Extension authors using `AnchorRole::Other("…")` can rely on this:
-their attribution data will not be accidentally consulted by the
-writer's byte-copy path, regardless of what they choose to point
-it at. The role-asymmetry is the forward-compat guarantee.
-
-## The unified editability predicate
-
-`is_editable_inside(node, target_file_id) -> bool` decides whether
-inner edits to a node are accepted. The same predicate is consulted
-by two surfaces:
-
-- React's read-only gate (Plan 2A's framework atomic gate)
-  classifies regions in the rendered DOM and prevents the user
-  from typing into uneditable regions in the first place.
-- The writer's coarsen step uses it to decide whether to recurse
-  into a container or soft-drop edits aimed at its interior.
-
-Three structural reasons a node is not editable inside:
-
-1. **Atomic CustomNodes** — types listed in `ATOMIC_CUSTOM_NODES`
-   (`CrossrefResolvedRef`, `IncludeExpansion`). These represent
-   single replaceable units. The user can replace them wholesale
-   via a component menu; they cannot type inside them.
-
-2. **Atomic-kind `Generated`** — `Generated` nodes whose `by.kind`
-   is one of `"shortcode"`, `"filter"`, `"title-block"`,
-   `"tree-sitter-postprocess"`. Pipeline-emitted content whose
-   user-source is the invocation token (for shortcode) or whose
-   source identity is the pipeline stage that produced it (for
-   the others); not the resolved text the user sees.
-
-3. **No preimage in target** — nodes whose `preimage_in(target)`
-   returns `None`. This covers cross-file `Original` nodes
-   (without a wrapper that pulls them into the target's
-   provenance), synthesized containers like sectionize / footnotes
-   / appendix that have empty anchor lists, and gappy `Concat`
-   chains.
-
-A node is editable inside iff it has byte-traceable preimage in
-the target file AND is not an atomic CustomNode AND is not an
-atomic-kind `Generated`.
-
-The predicate is canonical on the Rust side; React consults an
-equivalent TypeScript predicate that reads the same AST shape.
-Keeping the two in lockstep is a discipline like the `ATOMIC_CUSTOM_NODES`
-const / TS hand-mirror pairing.
-
-## Soft-drop semantics
-
-When a reconciliation alignment would target a non-editable region,
-`coarsen` substitutes a safe alignment and emits a warning into a
-warning sink. The write succeeds; the rejected edit is the only
-casualty.
-
-Six cases:
-
-- **Inline-level UseAfter on a region where `is_editable_inside`
-  returns false** (typically: user retyped resolved shortcode
-  text). `coarsen` substitutes `KeepBefore` for the inline at the
-  original-side index; the surrounding inline plan continues.
-  Emits `Q-3-42`.
-
-- **Block-level RecurseIntoContainer on a non-editable region**
-  (user edited inside an include, or inside a synthesized-from-
-  metadata container). `coarsen` substitutes `KeepBefore` for the
-  wrapper. If the wrapper has preimage in target (atomic
-  CustomNode whose `source_info` is `Original` covering the
-  include token), the substitution lands in `Verbatim`. If it
-  does not (no-preimage Generated container), the substitution
-  lands in `Omit`; the container regenerates from baseline content
-  on the next pipeline run. Emits `Q-3-43`.
-
-- **Block-level UseAfter on an atomic CustomNode** — *let-user-
-  win*. Kept as `Rewrite`; the qmd writer's CustomNode arm reads
-  `plain_data` and emits the include syntax from a fresh user-
-  edit-tagged CustomNode. No warning. This is the deliberate
-  asymmetry: when the user explicitly destroys or replaces an
-  atomic CustomNode through an explicit affordance (e.g. a
-  component menu picker), the intent is unambiguous.
-
-- **Block-level UseAfter on an atomic-kind `Generated` *with*
-  preimage in target** — the user edited inside a shortcode-
-  resolved or filter-output block, and the reconciler split the
-  edit into a deleted-original + new-block. The new block still
-  carries the token's `Invocation` anchor; substitute `Verbatim`
-  of the preimage range and discard the new block. Emits `Q-3-43`.
-  (Added 2026-05-26; see commit `e584428d` for the implementation
-  and the lipsum-paragraph repro that motivated it. Without this
-  branch the let-user-win below would emit the resolved bytes
-  back into source qmd.)
-
-- **Block-level UseAfter on a no-preimage Generated container**
-  — substitute `Omit`; the original container regenerates next
-  run. There is no source position to anchor a `Rewrite` at, so
-  let-user-win is not available. Emits `Q-3-43`.
-
-- **KeepBefore on an atomic-kind `Generated` with empty `from`**
-  — substitute `Omit`. The original content regenerates from
-  baseline (the filter constructs it again, the title-block
-  synthesizer reads the metadata again, etc.). No user edit was
-  involved; this case is normal Coarsen flow, not a soft-drop in
-  the user-facing sense. The only exception is the shortcode
-  sub-case discussed below.
-
-### Non-soft-drop branches in the same cascade
-
-Two cascade branches share the predicate but do not emit
-warnings — they exist alongside the soft-drop cases and are
-mentioned here for completeness:
-
-- **Block-level RecurseIntoContainer on a non-atomic Generated
-  wrapper with source-bearing children + a `block_container_plans`
-  entry** — substitute `Transparent`, recursing into the wrapper's
-  children. No warning emitted at the wrapper level; warnings emerge
-  from per-child cascades. This is the sectionize / footnotes-
-  container / appendix-container case.
-
-- **KeepBefore catch-all** — cross-file `Original`, gappy `Concat`,
-  Generated wrapper without source-bearing children, etc. — fall
-  through to `Rewrite` of the original block. No warning. This is
-  the cascade's silent serialization fallback for shapes the other
-  rules don't classify; it is also where the algebra is currently
-  weakest (the serializer walks the entire subtree, so atomic
-  descendants hidden inside an editable-by-source_info container
-  could leak resolved bytes). Plan 7d (algebraic-soundness
-  refactor) names this as the explicit departure from the
-  byte-provenance contract above.
-
-## `CoarsenedEntry` self-containment
-
-The cascade above produces a flat list of `CoarsenedEntry` values
-that `emit_entries` walks to produce the output bytes. The
-variants — `Verbatim`, `InlineSplice`, `Rewrite`, `Transparent`,
-`Omit` — share a structural property worth pinning explicitly:
-
-> Every variant of `CoarsenedEntry` carries enough information
-> to produce its emit bytes **without further context**. No
-> deferred index lookups against an ambient slice. No "look this
-> up at emit time" handoffs. Each entry is self-describing.
-
-| Variant | Self-contained because |
-|---|---|
-| `Verbatim` | `byte_range` is absolute into `original_qmd`. |
-| `InlineSplice` | Pre-computed `block_text: String` set at coarsen time. |
-| `Rewrite` | Pre-computed `block_text: String` set at coarsen time (the same write the emit path used to perform — moved earlier so the entry can travel through `Transparent` recursion intact). |
-| `Transparent` | List of self-contained child entries. |
-| `Omit` | No bytes. |
-
-Two `Option<usize>` indices appear on `Verbatim` and `InlineSplice`
-(`orig_idx`) — these are hints to `compute_separator`'s
-"consecutive-in-original" optimization, **not** byte-production
-context. They are always `Option`: `None` for children inside a
-`Transparent` wrapper, where any index would be ambiguous between
-top-level and child-level slices.
-
-Why this matters: `Transparent` recursion is the writer's
-compositional escape from the alignment-kind dispatch. A
-`Transparent` entry inlines its children into the emit stream as
-if the wrapper weren't there. The composition is sound only if
-each child can produce its bytes without depending on its position
-in some ambient slice. Pre-2026-05-25, `Rewrite` carried
-`new_idx: usize` that `emit_entries` looked up against
-`new_ast.blocks` top-level; inside a `Transparent` recursion, the
-index pointed at a child-relative position and the lookup
-panicked. The refactor on `e584428d` lifted `Rewrite` to carry
-pre-computed text, matching the shape `InlineSplice` had carried
-since `ab10f37b`.
-
-The self-containment property is *necessary* for the algebra to
-be sound, but it is not *sufficient* on its own. The cascade
-above still has a "Rewrite as subtree-serializing fallback" arm
-(see "Non-soft-drop branches" above and the KeepBefore catch-all)
-whose semantics depend on the input subtree not containing
-unauthorable descendants. Plan 7d takes the next step: replace
-the subtree-serializing fallback with structural recursion all
-the way down to leaves where source_info attests user-authored
-content. Self-containment is the substrate that recursion can
-land on safely.
-
-### Anti-patterns for new variants
-
-Don't add a `CoarsenedEntry` variant that:
-
-- Defers to a named slice ("index N into `new_ast.blocks`,"
-  "child M of original block at index K"). The moment a future
-  refactor produces the variant in a different context (recursion,
-  reuse from a sibling crate, a test fixture), the index points at
-  the wrong slice and the failure is silent until the panic.
-- Depends on context not encoded in the variant itself.
-- Requires specific timing of side effects. The current variants'
-  byte-producing operations are referentially transparent —
-  `write_block_to_string` depends only on its `Block` argument.
-  A variant whose correctness depends on emit-time vs coarsen-time
-  ordering is a sign the entry shape is wrong.
-
-When in doubt, look at `InlineSplice` — the first variant to carry
-pre-computed `block_text` (introduced when partial inline rewrites
-made deferral impossible). It is the structural blueprint the
-other variants should match.
-
-### Why soft-drop replaces hard-abort
-
-The writer could have made every bad-edit case fatal: an
-`AtomicViolation` variant returned as `Err`, causing the entire
-save to fail until the user undoes the bad edit. Soft-drop is
-better because:
-
-- React (Plan 2A's read-only gate) is the primary safeguard. The
-  writer is the contract guarantor. If React has a hole, the
-  writer protects without losing the user's session.
-- The user's *other* edits in the same save are not held hostage
-  to the bad one. A user editing several paragraphs and
-  accidentally typing into a shortcode resolution loses the
-  shortcode edit, not the paragraph edits.
-- The user-facing failure mode "the entire save was rejected" is
-  not a recoverable state in an autosave context (hub-client and
-  the SPA both persist on every keystroke; there is no discrete
-  save the user can discard).
-
-### User-facing diagnostic surface
-
-Soft-drop emits warnings, not errors. Two codes:
-
-- **`Q-3-42` — Shortcode edit dropped.** Inline-level cases:
-  the user retyped over a shortcode-resolved, filter-decorated,
-  or title-block-generated inline. The diagnostic body names the
-  affected text and the source range of the invocation token.
-- **`Q-3-43` — Generated content edit dropped.** Block-level
-  cases: include-expansion recursion, synthesized-container
-  recursion, synthesized-container replacement. The diagnostic
-  body names the include `source_path` (for includes) or the
-  metadata key (for metadata-derived containers), and an
-  imperative instruction ("To edit this content, open `<path>`
-  directly." / "This content is generated from metadata; edit
-  `_quarto.yml` to change it.")
-
-Both warnings carry source ranges and surface in Monaco as
-squiggles. The autosave context makes both codes prone to
-repeating on every keystroke; the diagnostic-ingest layer applies
-suppress-after-3-by-source-range so the user is not flooded.
-
-## Atomic CustomNodes
-
-A CustomNode is *atomic* if it represents a single, indivisible
-unit at the editing layer. The user cannot type inside one; they
-can only replace it wholesale through an explicit affordance
-(component menu, palette command).
-
-The set of atomic CustomNode type names is declared in two places
-that must stay in sync:
-
-- **Rust**: `quarto_core::ATOMIC_CUSTOM_NODES: &[&str]` and the
-  predicate `quarto_core::is_atomic_custom_node(type_name: &str)`.
-- **TypeScript**: a hand-mirrored `ATOMIC_CUSTOM_NODES: ReadonlySet<string>`
-  in `ts-packages/preview-renderer/src/utils/atomicCustomNodes.ts`.
-
-Built-in atomic types as of this writing: `CrossrefResolvedRef`,
-`IncludeExpansion`. Extensions wanting to declare their own atomic
-types will eventually do so via `_extension.yml` schema; until
-that lands, the const set covers the cases.
-
-### Atomic CustomNodes do not block let-user-win
-
-The let-user-win Rewrite path for block-level UseAfter on an
-atomic CustomNode is provenance-honest. When the user constructs
-a fresh `IncludeExpansion` through React (with `plain_data =
-{ source_path: "bar.qmd" }`) and the writer materializes
-`{{< include bar.qmd >}}` into source, the bytes' origin is the
-user's edit. The qmd writer's `IncludeExpansion` arm reads
-`plain_data`, not `source_info`, and emits the include syntax —
-the same arm whether the wrapper came from `IncludeExpansionStage`
-(pipeline) or from React (user). That symmetry is what makes
-let-user-win clean.
-
-## Atomic-kind `Generated` and the shortcode-only invariant
-
-Four `By::kind` values are classified as atomic by
-`By::is_atomic_kind()`:
-
-- `"shortcode"` — resolution of a `{{< … >}}` token
-- `"filter"` — filter-emitted construction (e.g. `pandoc.Str(...)`)
-- `"title-block"` — title-block synthesizer output
-- `"tree-sitter-postprocess"` — tree-sitter postprocess synthesized
-  whitespace and similar
-
-These split into two structurally different cases at the writer's
-`KeepBefore` branch:
-
-| Kind | Source token in qmd? | Missing `Invocation` anchor means | Correct writer action |
-|---|---|---|---|
-| `shortcode` | Yes — `{{< … >}}` | Plan-6 stamper bug; the token bytes get lost in output | Debug-assert; `Omit` in release |
-| `filter` | No — filter constructed the node | Expected (no source token exists) | `Omit` — regenerates next run |
-| `title-block` | No — synthesized from metadata | Expected | `Omit` — regenerates next run |
-| `tree-sitter-postprocess` | No — synthesized space etc. | Expected | `Omit` — regenerates next run |
-
-Shortcode is the only kind that warrants a debug-assert on the
-empty-`from` case. For the other three, empty `from` is the
-normal shape — there is no source token to anchor at — and
-regenerating from baseline is the correct behavior. For
-shortcode, empty `from` means the stamper failed to attach the
-token's source range, and `Omit` would silently lose the
-`{{< … >}}` bytes the user wrote.
-
-The asymmetry is intentional. Tests covering Coarsen's `Omit`
-path must exercise all four kinds (filter / title-block /
-tree-sitter-postprocess hit the regular Omit path; shortcode hits
-the debug-asserted Omit path under `cfg(debug_assertions)`).
-
-## Multi-inline dedupe
-
-A single source token can resolve to multiple AST inlines. The
-canonical case is a shortcode whose metadata value parses as
-markdown:
-
-    {{< meta title >}}
-
-with `meta.title: "**Bold** Title"` resolves to three inlines:
-`Strong[Str("Bold")]`, `Space`, `Str("Title")`. Each inline
-carries the same `Generated { by: shortcode("meta"), from:
-[Invocation -> Original{shortcode_token_range}] }` shape.
-
-At the block level, both reconciliation inputs see the same
-three-inline output, the surrounding `Para` is structurally
-identical, and the alignment is `KeepBefore` over the whole Para
-— one `Verbatim` of the whole Para's bytes. Correct.
-
-At the inline level (when the user edits something else in the
-same Para), the reconciler picks `RecurseIntoContainer` and walks
-the inline plan. Without dedupe, each shortcode-derived inline's
-`KeepBefore` would Verbatim-copy the shortcode token, emitting
-the `{{< meta title >}}` bytes three times.
-
-The dedupe rule: when iterating inline alignments, group
-consecutive `KeepBefore` entries whose inlines' `Invocation`
-anchors are `PartialEq`-equal, and emit `Verbatim` once for the
-group using the anchor's preimage byte range.
-
-`SourceInfo` derives `PartialEq`, and `Anchor` carries
-`source_info: Arc<SourceInfo>`. `Arc<T>`'s `PartialEq` compares
-the inner value, not the pointer, so structurally-equal anchors
-in distinct `Arc`s still compare equal. This is what makes
-dedupe work without identity-tracking machinery.
-
-Dedupe consults `Invocation` only. Two inlines whose `Invocation`
-anchors match but whose `ValueSource` or `Dispatch` anchors
-differ still dedupe — the user is asking "which source token did
-these come from", not "which metadata value" or "which Lua
-file".
-
-## Filter mutations versus constructions
-
-Plan 4 distinguishes two kinds of filter activity:
-
-- **Filter construction** — a filter emits a new node from
-  scratch (`pandoc.Str("decoration")`). The result carries
-  `Generated { by: filter, from: [] }`, classified atomic.
-- **Filter mutation** — a filter modifies a node it received
-  (`Str.text = upper(Str.text)`). The result keeps the
-  `Original` source_info of the input node, *not* `Generated`.
-  Not classified atomic.
-
-A user edit through React on a filter-mutated `Str` produces an
-unusual round-trip. The user types "world" over the filter-output
-"HELLO"; the writer Rewrites "world" to source bytes; the next
-pipeline run filters "world" → "WORLD". For idempotent filters
-(like uppercase) this is fine — the typed text round-trips through
-the filter to itself. For non-idempotent filters
-(`x => upper(x) + "!"`) the typed text gets a `!` appended on
-every save, which is confusing.
-
-This corner is accepted, not fixed, because:
-
-- Revising Plan 4 to track filter mutations distinctly from
-  plain `Original` would be a notable type-system change.
-- Plan 7a's runtime user-filter idempotence detection catches the
-  AST-level non-idempotence that would actually corrupt
-  round-trip.
-- Plan 3's idempotence test enforces the contract for built-in
-  filters at CI time.
-
-Users who write non-idempotent filters get a runtime warning
-(Q-3-44 / Q-3-45) and can decide whether the trade-off is
-acceptable.
-
-## Design rationale & evolution
-
-This section captures the *why* behind decisions that read as
-arbitrary out of context.
-
-**Soft-drop replaces hard-abort.** Earlier sketches of the writer
-modeled bad-edit cases as a fatal `AtomicViolation` returned as
-`Err`. That variant was never implemented — soft-drop subsumes it
-before reaching code. The reason is the autosave context: there
-is no discrete "save" affordance the user could use to discard a
-bad edit, so a save-rejecting error trades one keystroke loss
-for an entire session's worth of edits held hostage. Soft-drop
-keeps the surface area of failure minimal — only the bad edit is
-lost — and gives the contract guarantor a way to protect honesty
-without punishing the user.
-
-**The writer is pipeline-agnostic by signature.** The WASM entry
-takes a baseline AST as an argument rather than parsing the
-original qmd internally to synthesize one. This makes the writer
-ignorant of which pipeline produced its inputs; future pipelines
-land without writer changes. The caller composes parse and
-transform; the writer just diffs. The change also removes the
-writer's dependency on `RenderContext`, `SystemRuntime`,
-`Format`, and pipeline construction machinery — its surface
-becomes three strings in and one JSON envelope out.
-
-**No `pipeline_kind` parameter.** The pipeline tier is implicit
-in the baseline AST the caller passes. A `pipeline_kind`
-parameter would be a redundant claim that the caller could get
-wrong; making it implicit removes one consistency requirement
-the writer would have to enforce.
-
-**`Invocation`-only walking is a forward-compat surface for
-extensions.** An extension author who attaches attribution via
-`AnchorRole::Other("their-thing")` can rely on the writer not
-walking their data. They get a free guarantee: whatever they
-point at, the writer will not turn it into rendered bytes by
-accident. This makes the role discrimination both a correctness
-mechanism (for `ValueSource`, `Dispatch`) and an extensibility
-mechanism (for `Other`).
+# Byte provenance for the incremental writer
+
+*A design document specifying the writer-side contract; depends on the producer-side contract in [`provenance-contract.md`](provenance-contract.md).*
+
+## Motivation
+
+The incremental writer takes a structural edit on a rendered AST and produces a new qmd file that, when parsed and run through the pipeline again, yields the AST the user intended. Three inputs go in: the user's qmd source (`Source`), the AST parsed from that source, and a new AST reflecting the edit. One output comes out: a new qmd file (`Source'`). The work between them is byte-level. Every byte in `Source'` must have a defensible origin.
+
+Producing `Source'` is harder than serializing the AST, because the pipeline that turned `Source` into the AST is non-injective in one direction. Sixteen bytes of `{{< lipsum 3 >}}` expand into three Paragraphs of lorem-ipsum text. A `{{< meta title >}}` shortcode resolves into inline content drawn from a YAML value. Synthesizers wrap content in containers that have no source bytes of their own. Filters construct new inlines and blocks whose source identity is the filter, not the user. The reconciler's `KeepBefore` / `UseAfter` / `RecurseIntoContainer` alignments tell the writer *which* AST nodes belong at each position, but they say nothing about *which bytes* to emit.
+
+The risk is a class of bugs, not a single bug. Many editor actions can drive the writer through a path that serializes a subtree as a unit: typing into a paragraph that contains a shortcode-resolved inline, wrapping content around a synthesized container, toggling a class on a Div whose interior holds filter output, adding an item to a list whose first entry came from a metadata-driven shortcode, pasting a block whose descendants carry pipeline source identity. Each such path treats every descendant as if it were user content. Each such subtree may have descendants whose source identity is the pipeline, not the user. The descendants' bytes leak into `Source'`, and the next pipeline run finds literal text where a shortcode used to resolve — or finds synthesized chrome that the synthesizer now re-produces alongside the literal copy. The document drifts away from anything the user intended.
+
+The canonical example is the user editing inside shortcode-resolved content. `Source` contains `{{< lipsum 3 >}}`; the pipeline expands it into three Paragraphs of lorem-ipsum text; the user types `world` into the second paragraph through the React editor; a naive writer emits `Lorem ipsum dolor world sit amet…` into qmd. The shortcode token is gone. The next pipeline run renders the literal text where the shortcode used to resolve, and the document is permanently broken. The wrong byte here is not `world` — the user authored that one. The wrong bytes are `Lorem ipsum dolor` and ` sit amet…`. Those came from the shortcode, not from the user, and they should never have entered source.
+
+The contract exists to forbid this entire class of failure.
+
+## The Byte Provenance Invariant
+
+The writer follows a single rule about every byte it emits. Every byte in `Source'` either was already a byte in `Source` (the writer copied it from a known source position) or is a byte the user is authoring right now through an editor affordance (the writer is serializing an AST node the user just constructed). No third category exists. Pipeline-resolved bytes — shortcode output, filter output, synthesized container chrome, cross-file include content — cannot appear in `Source'`, because they belong to neither category.
+
+This rule is the **Byte Provenance Invariant** (BP), and the rest of this document is concerned with stating it precisely, identifying the two contracts that together make it hold, and proving the construction sound.
+
+## The two contracts
+
+BP holds when two parties — the producer side of the pipeline and the writer side of the incremental update — each uphold their share of the discipline.
+
+The **producer-side contract** governs how AST nodes are stamped with source_info as they are constructed. Pipeline transforms whose output is not user-authored content (shortcode resolution, filter construction, title-block synthesis, tree-sitter postprocessing) stamp `Generated{by: <atomic kind>, …}` on every node they emit. The React framework, on the user's behalf, stamps `Generated{by: user_edit, …}` on every node a user-edit affordance creates. Preserved nodes carry their original source_info forward unchanged. The full set of producer rules lives in [`provenance-contract.md`](provenance-contract.md); this document treats them as a precondition.
+
+The **writer-side contract** — specified by the rest of this document — governs how source_info-stamped nodes turn into bytes. Every byte the writer emits is produced by visiting exactly one AST node, and the visit emits either a `Source`-copy at the node's preimage (satisfying BP clause P1, below) or a serialization of the node's node-local content (satisfying P2). Subtree serialization — emitting bytes derived from a node's descendants without independently visiting those descendants — is forbidden. Atomic-Generated nodes route to non-recursing rules, so their descendants are never visited and their resolved bytes never enter `Source'`.
+
+The two contracts compose. Producer hygiene makes the writer's classification meaningful; the writer's structural discipline makes producer hygiene consequential. Either contract violated alone breaks BP: a producer that lies about source_info defeats the writer's classification, and a writer that subtree-serializes defeats the producer's stamping.
+
+## From flat coarsen to recursive plan_user_writes
+
+`coarsen` on `main` is flat: it produces one entry per top-level block. Anything inside a top-level block collapses into a single `Rewrite` that serializes the entire new block in one pass, without consulting any individual descendant's source_info. BP cannot be enforced from this shape.
+
+The redesign makes `coarsen` recursive and renames it `plan_user_writes`. The recursive version produces one entry per AST node, descending through every container the reconciler descended through and consuming the tree of sub-plans (`block_container_plans`, `inline_plans`, `custom_node_plans`, `table_plans`, `list_item_plans`, and the inline analogues) that the flat coarsen ignored. Each visit classifies its node on the pair `(alignment_kind, source_info_shape)`, selects a dispatch rule, and emits a `UserWrite` whose shape encodes how the node contributes bytes to `Source'`. Containers emit a `Recurse` entry carrying the recursed children; leaves emit `Verbatim`, `Omit`, or `Leaf`. The result is a tree of entries mirroring the AST.
+
+Recursion is what makes BP enforceable. BP is a property each byte must satisfy individually, and individuality requires that each AST node be classified individually. The flat coarsen could not separate the user's `world` from the shortcode's `Lorem ipsum dolor` — both lived inside a Para that the flat coarsen handled as a single `Rewrite`. The recursive `plan_user_writes` visits the Para first, recognizes its atomic-Generated source_info, copies the shortcode token's preimage as a `Verbatim` entry, and never descends into the `Str` children underneath. The user's edit is soft-dropped with a `Q-3-43` warning; the shortcode token survives unchanged; the byte `L` of `Lorem` never enters `Source'`, because the algebra never visited a node from which `L` could come.
+
+## The Byte Provenance Invariant — formal statement
+
+Every AST node carries a `SourceInfo` value recording its byte-level origin. Four physical shapes encode that origin:
+
+- `Original{file, start, end}` — the node's bytes are `file[start..end]`.
+- `Substring{parent, start, end}` — a contiguous restriction of `parent`'s bytes.
+- `Concat[pieces]` — the concatenation of `pieces`, each itself a `SourceInfo`.
+- `Generated{by, from}` — bytes synthesized by an operation tagged `by`, with `from` a list of `Anchor` values recording diagnostically useful source positions.
+
+The function `preimage_in : (SourceInfo, FileId) → Option<Range<usize>>` lifts these shapes into a contiguous byte range in a target file, or returns `None` when no such range exists. The walk is recursive:
+
+- `Original{f, s, e}` returns `Some(s..e)` if `f == target` and `None` otherwise.
+- `Substring{parent, s, e}` walks `parent`, then restricts the returned range to `s..e`.
+- `Concat[pieces]` resolves every piece and returns the union of their ranges when the pieces are contiguous in `target`; it returns `None` otherwise.
+- `Generated{by, from}` walks the `Invocation` anchor only. `ValueSource`, `Dispatch`, and `Other` anchors are diagnostic-only and produce no bytes — a role-asymmetry the producer contract enforces.
+
+`preimage_in` is total and side-effect-free.
+
+Let `Source` be the user's qmd file at file identifier `target`, and let `Source'` be the qmd file the writer produces. The invariant binds every byte of `Source'`:
+
+> **(BP)** For every byte `b` in `Source'`, exactly one of the following holds.
+>
+> **(P1) Copied.** `b = Source[i]` for some position `i ∈ preimage_in(n, target)` for some AST node `n` in the new AST.
+>
+> **(P2) Authored.** `b` was produced by serializing the *node-local content* of a single AST node `n` — the part of `n`'s qmd serialization that does not include any of `n`'s descendants' bytes. For a leaf node, node-local content is the entire serialization. For a container node, it is the shell syntax: `> ` for a BlockQuote, `:::{.foo}\n` and `:::\n` for a Div, `- ` for a bullet item, the per-child separator. Children's bytes do not arrive through their parent's serialization; they arrive only when the algebra independently visits each child.
+
+The two clauses partition the bytes of `Source'`. The algebra never overlaps them; every byte traces to exactly one visited node.
+
+## The dispatch
+
+The recursive `plan_user_writes` selects one of five rules at each node, by the pair `(alignment_kind, source_info_shape)`. R1 emits a `Verbatim` of the node's preimage when the node has one. R2 emits an `Omit` when the node is atomic-Generated with no preimage. R3 and R4 emit a `Recurse` over a container's children, with shells from the qmd writer's syntax helpers (R3) or from the original block's prefix/suffix bytes (R4). R5 emits a `Leaf` carrying `serialize_leaf(n)` when `n` has no descendants that contribute bytes. The full dispatch table — every `(alignment_kind, source_info_shape)` pair and its rule — lives in the implementation plan ([Plan 7d](../plans/2026-05-26-q2-preview-plan-7d-algebraic-soundness.md)).
+
+The dispatch is total: every well-formed input lands at exactly one rule. No catch-all `Rewrite` arm exists; no path leaves a node uncategorized.
+
+## Soundness
+
+**Claim.** For every input `(Source, AST_old, AST_new, Plan)` produced by a q2 pipeline run that satisfies the producer contract, and for every node `n` in `AST_new` at alignment context `α`, the bytes produced by `assemble(plan_user_writes(n, target, α))` satisfy BP.
+
+**Proof.** By structural induction on `n`.
+
+*Base case R1.* The emission is `Source[range]`, where `range = preimage_in(n, target)`. For any position `i ∈ range`, the emitted byte is `Source[i]` — exactly the form (P1) requires. (P1) holds for every emitted byte.
+
+*Base case R2.* The emission is empty. BP holds vacuously.
+
+*Base case R5.* The emission is `serialize_leaf(n)`, which produces bytes from `n`'s own immediate content. R5's precondition — `n` has no descendants that contribute bytes — makes the "no descendants' bytes" clause of (P2) vacuously satisfied for every emitted byte. (P2) holds. The trust point sits here: `n`'s content is assumed to represent user-authored bytes. The producer contract is what guarantees this; it stamps atomic kinds on non-user-authored leaves, which route to R1' or R2' rather than R5, so any node that reaches R5 carries a source_info shape compatible with user authorship by construction.
+
+*Inductive case R3 / R4.* The emission is `shell_open ++ join(separator, [assemble(c) for c in children]) ++ shell_close`. By the inductive hypothesis, each `assemble(c)` produces bytes satisfying BP, and concatenation preserves BP per byte — every byte of every `assemble(c)` continues to satisfy whichever clause it satisfied before. The remaining bytes are the shells and the separators. Shell bytes satisfy either (P1) — when they come from the original block's prefix/suffix preimage (R4) — or (P2) — when they come from the qmd writer's syntax helper, which emits node-local syntax determined entirely by the container kind, with no reference to any descendant (R3). Separator bytes come from either the preserved gap's preimage (P1) or the qmd writer's separator helper (P2), by the same reasoning. Every byte of the full emission therefore satisfies BP.
+
+The induction proceeds on AST size, which is finite, so termination is guaranteed.
+
+The argument depends on the producer contract: a producer that stamps non-atomic source_info on a node whose content is pipeline output will route that node to R5 or R1, and the writer will emit pipeline bytes as if user-authored — satisfying BP's letter but not its spirit. Producer hygiene is the substrate; the writer's dispatch and recursion are the structure built on it. With both contracts in force, BP holds throughout `Source'`. ∎
+
+## What BP does not promise
+
+- **Position correctness.** BP says each byte has a defensible origin. It does not say each byte landed at the right place in `Source'`. That's the responsibility of `assemble`: separators between entries, shell composition in `Recurse`, gap preservation.
+
+- **Diagnostic fidelity.** Whether the right warnings (`Q-3-42`, `Q-3-43`, future codes) accompany each soft-drop is the diagnostic layer's job. BP is silent on warnings.
+
+- **Marker-character fidelity on lists and blockquotes.** q2's AST normalizes list-item markers (every bullet marker — `*`, `-`, `+` — collapses to `*`; ordered-list numbers regenerate sequentially from the first item's start, so `1. / 1. / 1.` becomes `1. / 2. / 3.` on round-trip) and consumes blockquote `>` prefixes during parsing. Round-tripping content that exercises these surface-level choices canonicalizes on every write. The fix requires a typed-AST extension carrying per-item source_info on list items, which is tracked as a separate work item and is out of scope for the writer-side contract.
+
+- **Engine-output boundary enforcement.** When the pipeline's engine-execution stage runs an engine (Knitr, Jupyter) on the AST, the engine returns a new AST that the reconciler treats as ground truth. q2 currently has no post-execute check that the engine modified only the code blocks of languages it claimed. Tracked separately; blocked on the `claims_language` extension to the engine trait.
+
+- **Producer-side hygiene.** BP inherits the producer contract as a precondition. If a producer attaches misleading source_info — a synthesized leaf with source_info pointing at someone else's bytes — BP will faithfully emit those bytes per (P1) and the result will be wrong. The trust point is narrow (only at R5, where the algebra trusts that a leaf reaching it represents user-authored content), but it is real, and it is the producer contract's job to honor it.
+
+## References
+
+- Producer-side contract: [`provenance-contract.md`](provenance-contract.md).
+- Implementation plan: [`plans/2026-05-26-q2-preview-plan-7d-algebraic-soundness.md`](../plans/2026-05-26-q2-preview-plan-7d-algebraic-soundness.md).
+- Prerequisite framework + test-hygiene work: [`plans/2026-05-29-q2-preview-plan-7f-prereqs.md`](../plans/2026-05-29-q2-preview-plan-7f-prereqs.md).
+- CustomNode qmd serialization (post-7d): [`plans/2026-05-29-q2-preview-plan-7e-customnode-qmd.md`](../plans/2026-05-29-q2-preview-plan-7e-customnode-qmd.md).
+- Sibling primitive: [`transparent-wrappers.md`](transparent-wrappers.md) — the traversal-side analogue of the writer's emission-side recursion.
