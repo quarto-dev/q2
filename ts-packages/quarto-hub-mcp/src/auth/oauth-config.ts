@@ -67,6 +67,14 @@ export function loadOAuthConfigFromEnv(
 // AuthorizationServer discovery (cached)
 // ---------------------------------------------------------------------------
 
+/**
+ * Lazily resolves the discovered {@link oauth.AuthorizationServer}. Lets
+ * consumers defer the OIDC discovery network call off the startup path —
+ * it fires on first auth operation, not at process boot. Memoized via the
+ * module-level discovery cache, so repeated calls are free.
+ */
+export type AuthServerProvider = () => Promise<oauth.AuthorizationServer>;
+
 let cachedAS: { readonly issuer: string; readonly as: oauth.AuthorizationServer } | undefined;
 
 export async function discoverAuthorizationServer(

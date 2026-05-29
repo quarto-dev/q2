@@ -146,9 +146,12 @@ async function main(): Promise<void> {
   let credentialStore: CredentialStore | undefined;
   let refreshManager: RefreshManager | undefined;
   let flowConfig: ReturnType<typeof loadOAuthConfigFromEnv> | undefined;
-  let authorizationServer:
-    | Awaited<ReturnType<typeof discoverAuthorizationServer>>
-    | undefined;
+
+  // Lazy, memoized discovery: defers the Google network call off the
+  // startup path so a slow/unreachable discovery endpoint can't stop the
+  // server from coming up (no-auth hubs and reads don't need it). Fires
+  // on the first refresh / sign-in that actually requires it.
+  const authServer = () => discoverAuthorizationServer(GOOGLE_ISSUER);
 
   if (hasAuthEnv) {
     try {
@@ -161,13 +164,12 @@ async function main(): Promise<void> {
       throw err;
     }
 
-    authorizationServer = await discoverAuthorizationServer(GOOGLE_ISSUER);
     credentialStore = new CredentialStore({
       issuer: GOOGLE_ISSUER,
       clientId: flowConfig.clientId,
     });
     refreshManager = new RefreshManager({
-      as: authorizationServer,
+      authServer,
       config: {
         clientId: flowConfig.clientId,
         clientSecret: flowConfig.clientSecret,
@@ -195,7 +197,7 @@ async function main(): Promise<void> {
   );
 
   const authToolsState =
-    flowConfig && authorizationServer && credentialStore && refreshManager
+    flowConfig && credentialStore && refreshManager
       ? new AuthToolsState({
           credentialStore,
           refreshManager,
@@ -206,7 +208,7 @@ async function main(): Promise<void> {
             issuer: GOOGLE_ISSUER,
             redirectPort,
           },
-          authorizationServer,
+          authServer,
         })
       : undefined;
 

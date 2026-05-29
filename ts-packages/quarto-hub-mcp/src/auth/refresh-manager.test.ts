@@ -216,10 +216,10 @@ async function seedStore(
 function makeRm(
   store: CredentialStore,
   fetchImpl: typeof fetch,
-  extra: Partial<Omit<RefreshManagerDeps, 'as' | 'config' | 'store' | 'fetch'>> = {},
+  extra: Partial<Omit<RefreshManagerDeps, 'authServer' | 'config' | 'store' | 'fetch'>> = {},
 ): RefreshManager {
   return new RefreshManager({
-    as: AS,
+    authServer: async () => AS,
     config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
     store,
     fetch: fetchImpl,
@@ -470,6 +470,72 @@ describe('RefreshManager.getValidIdToken', () => {
     const rm = makeRm(store, fetch);
     await expect(rm.getValidIdToken()).rejects.toBeInstanceOf(ReauthRequired);
     expect(requests).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// invalidate — best-effort grant wipe
+// ---------------------------------------------------------------------------
+
+describe('RefreshManager.invalidate', () => {
+  it('clears the stored grant', async () => {
+    const { store, state } = await seedStore(makeBundle());
+    expect(state.value).not.toBeNull();
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const rm = makeRm(store, fetch);
+    await rm.invalidate();
+    expect(state.value).toBeNull();
+    expect(await store.read()).toBeNull();
+  });
+
+  it('swallows a keyring failure (the caller surfaces ReauthRequired)', async () => {
+    const failing: KeyringBackend = {
+      async read() {
+        return null;
+      },
+      async write() {},
+      async clear() {
+        throw new Error('Secret Service unavailable');
+      },
+    };
+    const store = new CredentialStore(CFG, failing);
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const rm = makeRm(store, fetch);
+    await expect(rm.invalidate()).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lazy authorization-server discovery
+// ---------------------------------------------------------------------------
+
+describe('RefreshManager lazy discovery', () => {
+  it('does not resolve the authorization server on the cached-token fast path', async () => {
+    const { store } = await seedStore(makeBundle());
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const authServer = vi.fn(async () => AS);
+    const rm = new RefreshManager({
+      authServer,
+      config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
+      store,
+      fetch,
+    });
+    await rm.getValidIdToken();
+    expect(authServer).not.toHaveBeenCalled();
+  });
+
+  it('resolves the authorization server only when a refresh actually fires', async () => {
+    const { store } = await seedStore(makeBundle());
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const authServer = vi.fn(async () => AS);
+    const rm = new RefreshManager({
+      authServer,
+      config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
+      store,
+      fetch,
+    });
+    await rm.forceRefresh();
+    expect(authServer).toHaveBeenCalledOnce();
   });
 });
 

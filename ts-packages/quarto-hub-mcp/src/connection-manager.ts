@@ -132,6 +132,12 @@ export class ConnectionManager {
 
   private readonly projects = new Map<string, ProjectState>();
   private observedAuthMode: ObservedAuthMode = 'unknown';
+  // Set once a probe has returned 200 with our Bearer attached, i.e. the
+  // hub has confirmed these creds work. Subsequent connects then skip the
+  // redundant per-connect /health probe — `getValidIdToken` still refreshes
+  // proactively and the WS handshake is the backstop if the hub later
+  // rejects the token.
+  private authConfirmed = false;
 
   constructor(deps: ConnectionManagerDeps | string) {
     // Backwards-compat: the prior signature was `new ConnectionManager(url)`.
@@ -292,7 +298,11 @@ export class ConnectionManager {
       : null;
 
     if (bundle === null || this.refreshManager === undefined) {
-      // No creds (or no refresh manager wired) → probe without header.
+      // No creds (or no refresh manager wired). Reuse a prior observation
+      // to skip the probe once the hub's auth-mode is known.
+      if (this.observedAuthMode === 'no-auth') return undefined;
+      if (this.observedAuthMode === 'requires-auth') throw new AuthRequiredError();
+      // Mode still unknown → probe without header to learn it.
       const status = await this.probeAuth(undefined);
       this.recordObservation(status, false);
       if (status === 401) throw new AuthRequiredError();
@@ -302,41 +312,45 @@ export class ConnectionManager {
     // We have creds. Insecure-transport gate fires only when we'd
     // actually attach a Bearer.
     this.assertSecureTransport();
+    const rm = this.refreshManager;
+
+    // Creds already validated against this hub in this process → skip the
+    // redundant probe. We still pull a token now so a refresh failure
+    // (ReauthRequired / TokenRefreshError) surfaces before we open the WS;
+    // on the happy path that's a cached, network-free call.
+    if (this.authConfirmed) {
+      await rm.getValidIdToken();
+      return { getBearer: () => rm.getValidIdToken() };
+    }
 
     // Pull a valid id_token (refreshes proactively within the skew).
-    let token = await this.refreshManager.getValidIdToken();
+    let token = await rm.getValidIdToken();
     let status = await this.probeAuth(token);
     if (status === 401) {
       // Stale token or revoked grant. Force one refresh and retry.
-      token = await this.refreshManager.forceRefresh();
+      token = await rm.forceRefresh();
       status = await this.probeAuth(token);
       if (status === 401) {
         this.recordObservation(401, true);
         // Hub rejects a freshly-refreshed token — local view and hub
-        // view disagree on whether these credentials are usable. Clear
-        // the store so `authenticate`'s "already authenticated"
-        // short-circuit cannot keep the agent trapped against a hub
-        // that won't accept this identity. The next `getValidIdToken`
-        // call raises ReauthRequired, falling through to the device
-        // flow.
-        if (this.credentialStore) {
-          try {
-            await this.credentialStore.clear();
-          } catch {
-            // Don't mask the underlying auth failure with a keyring
-            // unavailability error — the user still needs to see
-            // ReauthRequired and decide what to do.
-          }
-        }
+        // view disagree on whether these credentials are usable. Wipe the
+        // grant (via the lifecycle owner) so `authenticate`'s "already
+        // authenticated" short-circuit cannot keep the agent trapped
+        // against a hub that won't accept this identity. The next
+        // `getValidIdToken` raises ReauthRequired, falling through to the
+        // sign-in flow. `invalidate` is best-effort and swallows keyring
+        // errors so we never mask this auth failure with a storage one.
+        await rm.invalidate();
         throw new ReauthRequired();
       }
     }
 
     this.recordObservation(status, true);
     if (status === 200) {
-      // Hand the sync client a getter so each attach + retry sees a
-      // freshly-refreshed token.
-      const rm = this.refreshManager;
+      // Hub accepted the Bearer — remember it so later connects skip the
+      // probe, and hand the sync client a getter so each attach + retry
+      // sees a freshly-refreshed token.
+      this.authConfirmed = true;
       return { getBearer: () => rm.getValidIdToken() };
     }
     throw new Error(

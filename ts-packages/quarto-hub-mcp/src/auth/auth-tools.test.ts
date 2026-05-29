@@ -253,11 +253,12 @@ interface MakeStateArgs {
   openBrowser?: typeof openBrowser;
   promptConsent?: boolean;
   logger?: (m: string) => void;
+  authServer?: () => Promise<oauth.AuthorizationServer>;
 }
 
 function makeState(args: MakeStateArgs): AuthToolsState {
   const refreshManager = new RefreshManager({
-    as: AS,
+    authServer: async () => AS,
     config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
     store: args.store,
     // Never used in the loopback path (store.read() short-circuits first).
@@ -270,7 +271,7 @@ function makeState(args: MakeStateArgs): AuthToolsState {
     refreshManager,
     connectionManager: authMode(args.mode ?? 'requires-auth'),
     flowConfig: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET, issuer: ISSUER },
-    authorizationServer: AS,
+    authServer: args.authServer ?? (async () => AS),
     fetch: args.fetch,
     startListener: args.startListener,
     openBrowser: args.openBrowser,
@@ -436,6 +437,17 @@ describe('authenticate', () => {
     expect(textOf(res)).toBe(`Already authenticated as ${FAKE_EMAIL}. No action needed.`);
     expect(listener.recorded.calls).toBe(0);
     expect(browser.calls).toHaveLength(0);
+  });
+
+  it('does not resolve the authorization server when already authenticated', async () => {
+    // Lazy discovery: the already-authenticated short-circuit must not
+    // trigger the OIDC discovery network call.
+    const { store } = await seededStore();
+    const authServer = vi.fn(async () => AS);
+    const auth = makeState({ store, authServer });
+
+    await auth.handleAuthenticate({});
+    expect(authServer).not.toHaveBeenCalled();
   });
 
   it('short-circuits when the hub does not require auth', async () => {
@@ -677,7 +689,7 @@ describe('authenticate pre-flight refresh failure', () => {
     openBrowser?: typeof openBrowser;
   }): AuthToolsState {
     const refreshManager = new RefreshManager({
-      as: AS,
+      authServer: async () => AS,
       config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
       store: args.store,
       fetch: args.refreshFetch,
@@ -687,7 +699,7 @@ describe('authenticate pre-flight refresh failure', () => {
       refreshManager,
       connectionManager: authMode('requires-auth'),
       flowConfig: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET, issuer: ISSUER },
-      authorizationServer: AS,
+      authServer: async () => AS,
       startListener: args.startListener,
       openBrowser: args.openBrowser,
       logger: () => undefined,
@@ -733,5 +745,55 @@ describe('authenticate pre-flight refresh failure', () => {
     // A config error is not fixable by a browser sign-in — none was attempted.
     expect(browser.calls).toHaveLength(0);
     expect(listener.recorded.calls).toBe(0);
+  });
+});
+
+// ===========================================================================
+// Lazy discovery failure handling
+// ===========================================================================
+
+describe('lazy discovery failure', () => {
+  it('authenticate returns a clean error (no listener, no browser) when discovery fails', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const auth = makeState({
+      store,
+      mode: 'requires-auth',
+      startListener: listener.start,
+      openBrowser: browser.open,
+      authServer: async () => {
+        throw new Error('getaddrinfo ENOTFOUND accounts.google.com');
+      },
+    });
+
+    const res = await auth.handleAuthenticate({});
+
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toMatch(/discovery endpoint/i);
+    // Discovery is resolved before the listener is bound, so a failure
+    // leaves nothing started.
+    expect(listener.recorded.calls).toBe(0);
+    expect(browser.calls).toHaveLength(0);
+  });
+
+  it('authenticate_clear still deletes the local keyring entry when discovery fails during revoke', async () => {
+    const { store, state } = await seededStore();
+    const auth = makeState({
+      store,
+      authServer: async () => {
+        throw new Error('getaddrinfo ENOTFOUND accounts.google.com');
+      },
+    });
+
+    const res = await auth.handleClear();
+
+    // The local delete is the invariant: a discovery failure on the
+    // best-effort revoke must not block it.
+    expect(res.isError).toBeFalsy();
+    expect(textOf(res)).toMatch(/cleared locally/i);
+    expect(textOf(res)).toMatch(/myaccount\.google\.com/);
+    expect(await store.read()).toBeNull();
+    expect(state.value).toBeNull();
   });
 });

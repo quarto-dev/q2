@@ -46,6 +46,7 @@ import {
   type LoopbackListener,
   type LoopbackResult,
 } from './loopback.js';
+import type { AuthServerProvider } from './oauth-config.js';
 import { generatePkceParams } from './pkce.js';
 import { redactTokens } from './redact.js';
 import {
@@ -109,7 +110,8 @@ export interface AuthToolsDeps {
   readonly refreshManager: RefreshManager;
   readonly connectionManager: LastObservedAuthModeSource;
   readonly flowConfig: AuthFlowConfig;
-  readonly authorizationServer: oauth.AuthorizationServer;
+  /** Lazily-resolved authorization server; called only when a sign-in or revoke fires. */
+  readonly authServer: AuthServerProvider;
   /** `fetch` override for tests (token exchange + revocation). */
   readonly fetch?: typeof fetch;
   /** Deadline override for tests; defaults to {@link AUTHENTICATE_TIMEOUT_MS}. */
@@ -235,10 +237,23 @@ export class AuthToolsState {
 
     if (ctx.signal?.aborted) return errorResult('Sign-in was cancelled.');
 
-    // 3. PKCE + state.
+    // 3. Resolve the authorization server lazily — discovery is deferred
+    // off the startup path, so the network call (and any failure) lands
+    // here, on the first sign-in that actually needs it.
+    let as: oauth.AuthorizationServer;
+    try {
+      as = await this.deps.authServer();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return errorResult(
+        `Failed to reach the identity provider's discovery endpoint: ${redactTokens(msg)}`,
+      );
+    }
+
+    // 4. PKCE + state.
     const pkce = await generatePkceParams();
 
-    // 4. Bind the loopback listener *before* opening the browser, so the
+    // 5. Bind the loopback listener *before* opening the browser, so the
     // callback can land regardless of how the user reaches the URL.
     let listener: LoopbackListener;
     try {
@@ -256,7 +271,7 @@ export class AuthToolsState {
     }
 
     try {
-      const authUrl = this.buildAuthorizationUrl({
+      const authUrl = this.buildAuthorizationUrl(as, {
         redirectUri: listener.redirectUri,
         codeChallenge: pkce.codeChallenge,
         state: pkce.state,
@@ -265,14 +280,14 @@ export class AuthToolsState {
       // Log the port so SSH-tunnel users don't need to guess it.
       this.log(`loopback listener bound on 127.0.0.1:${listener.port}`);
 
-      // 5. Surface the URL via MCP progress (if requested) and stderr,
+      // 6. Surface the URL via MCP progress (if requested) and stderr,
       // *before* launching the browser and regardless of its outcome —
       // a silent `xdg-open` exit-0 on a headless box must not leave the
       // user staring at a spinner for the whole deadline.
       await this.surfaceAuthUrl(ctx, authUrl);
       this.log(`open this URL to sign in: ${authUrl}`);
 
-      // 6. Launch the browser (best-effort; never changes control flow).
+      // 7. Launch the browser (best-effort; never changes control flow).
       let browserFailed = false;
       const child = (this.deps.openBrowser ?? defaultOpenBrowser)(authUrl, {
         signal: ctx.signal,
@@ -285,7 +300,7 @@ export class AuthToolsState {
         });
       }
 
-      // 7. Block on the callback.
+      // 8. Block on the callback.
       let callback: LoopbackResult;
       try {
         callback = await listener.result;
@@ -293,10 +308,11 @@ export class AuthToolsState {
         return this.loopbackErrorResult(err, authUrl);
       }
 
-      // 8. Exchange the code (PKCE verifier + client_secret).
+      // 9. Exchange the code (PKCE verifier + client_secret).
       let tokens: oauth.TokenEndpointResponse;
       try {
         tokens = await this.exchangeCode(
+          as,
           callback.params,
           listener.redirectUri,
           pkce.codeVerifier,
@@ -307,7 +323,7 @@ export class AuthToolsState {
         return errorResult(`Token exchange failed: ${redactTokens(msg)}`);
       }
 
-      // 9. Validate + store.
+      // 10. Validate + store.
       const stored = await this.storeTokens(tokens);
       if (!stored.ok) return errorResult(stored.message);
 
@@ -375,16 +391,15 @@ export class AuthToolsState {
   // Internals
   // -------------------------------------------------------------------------
 
-  private get as(): oauth.AuthorizationServer {
-    return this.deps.authorizationServer;
-  }
-
-  private buildAuthorizationUrl(p: {
-    redirectUri: string;
-    codeChallenge: string;
-    state: string;
-  }): string {
-    const endpoint = this.as.authorization_endpoint ?? GOOGLE_AUTHORIZATION_ENDPOINT;
+  private buildAuthorizationUrl(
+    as: oauth.AuthorizationServer,
+    p: {
+      redirectUri: string;
+      codeChallenge: string;
+      state: string;
+    },
+  ): string {
+    const endpoint = as.authorization_endpoint ?? GOOGLE_AUTHORIZATION_ENDPOINT;
     const scopes = this.deps.flowConfig.scopes ?? DEFAULT_SCOPES;
     const url = new URL(endpoint);
     url.searchParams.set('response_type', 'code');
@@ -422,6 +437,7 @@ export class AuthToolsState {
   }
 
   private async exchangeCode(
+    as: oauth.AuthorizationServer,
     callbackParams: URLSearchParams,
     redirectUri: string,
     codeVerifier: string,
@@ -433,7 +449,7 @@ export class AuthToolsState {
     // request and applies the RFC 9207 `iss` check on top of the
     // listener's own constant-time state check.
     const validated = oauth.validateAuthResponse(
-      this.as,
+      as,
       client,
       callbackParams,
       expectedState,
@@ -443,7 +459,7 @@ export class AuthToolsState {
       : undefined;
     const resp = requestOpts
       ? await oauth.authorizationCodeGrantRequest(
-          this.as,
+          as,
           client,
           clientAuth,
           validated,
@@ -452,14 +468,14 @@ export class AuthToolsState {
           requestOpts,
         )
       : await oauth.authorizationCodeGrantRequest(
-          this.as,
+          as,
           client,
           clientAuth,
           validated,
           redirectUri,
           codeVerifier,
         );
-    return await oauth.processAuthorizationCodeResponse(this.as, client, resp);
+    return await oauth.processAuthorizationCodeResponse(as, client, resp);
   }
 
   private async storeTokens(
@@ -501,7 +517,15 @@ export class AuthToolsState {
   private async revokeRefreshToken(
     refreshToken: string,
   ): Promise<'ok' | { failed: string }> {
-    const endpoint = this.as.revocation_endpoint;
+    // Resolve discovery best-effort: a discovery failure here must not
+    // block the local keyring delete that follows in `handleClear`.
+    let as: oauth.AuthorizationServer;
+    try {
+      as = await this.deps.authServer();
+    } catch (err) {
+      return { failed: redactTokens(err instanceof Error ? err.message : String(err)) };
+    }
+    const endpoint = as.revocation_endpoint;
     if (!endpoint) {
       return { failed: 'no revocation endpoint advertised by the issuer' };
     }

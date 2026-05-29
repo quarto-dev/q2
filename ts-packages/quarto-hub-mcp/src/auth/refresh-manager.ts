@@ -44,6 +44,7 @@ import {
   type CredentialBundle,
   type CredentialStore,
 } from './credential-store.js';
+import type { AuthServerProvider } from './oauth-config.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -55,7 +56,8 @@ export interface RefreshManagerConfig {
 }
 
 export interface RefreshManagerDeps {
-  readonly as: oauth.AuthorizationServer;
+  /** Lazily-resolved authorization server; called only when a refresh fires. */
+  readonly authServer: AuthServerProvider;
   readonly config: RefreshManagerConfig;
   readonly store: CredentialStore;
   /**
@@ -145,6 +147,17 @@ export class RefreshManager {
     this.deps = deps;
   }
 
+  /**
+   * Best-effort wipe of the stored grant. Both the IdP's `invalid_grant`
+   * (here) and the hub's persistent-401 (connection-manager) converge on
+   * this: forget the dead credential so the next `getValidIdToken` fails
+   * loud instead of spinning on it. Swallows keyring errors — the caller's
+   * `ReauthRequired` is the signal that matters.
+   */
+  async invalidate(): Promise<void> {
+    await this.deps.store.clear().catch(() => undefined);
+  }
+
   async getValidIdToken(): Promise<string> {
     const bundle = await this.deps.store.read();
     if (bundle === null) throw new ReauthRequired();
@@ -172,6 +185,9 @@ export class RefreshManager {
     const bundle = await this.deps.store.read();
     if (bundle === null) throw new ReauthRequired();
 
+    // Resolve discovery lazily — only reached when an actual refresh fires,
+    // never on the cached-token fast path.
+    const as = await this.deps.authServer();
     const client: oauth.Client = { client_id: this.deps.config.clientId };
     const clientAuth = oauth.ClientSecretPost(this.deps.config.clientSecret);
     const requestOpts = this.deps.fetch
@@ -182,26 +198,26 @@ export class RefreshManager {
     try {
       const resp = requestOpts
         ? await oauth.refreshTokenGrantRequest(
-            this.deps.as,
+            as,
             client,
             clientAuth,
             bundle.refreshToken,
             requestOpts,
           )
         : await oauth.refreshTokenGrantRequest(
-            this.deps.as,
+            as,
             client,
             clientAuth,
             bundle.refreshToken,
           );
-      tokens = await oauth.processRefreshTokenResponse(this.deps.as, client, resp);
+      tokens = await oauth.processRefreshTokenResponse(as, client, resp);
     } catch (err) {
       if (err instanceof oauth.ResponseBodyError) {
         if (err.error === 'invalid_grant') {
           // Stored refresh_token is rejected by Google: revoked, expired,
-          // or never valid. Clear so the next `getValidIdToken` fails
+          // or never valid. Wipe it so the next `getValidIdToken` fails
           // loud rather than spinning on the same bad token.
-          await this.deps.store.clear().catch(() => undefined);
+          await this.invalidate();
           throw new ReauthRequired(REAUTH_MESSAGE, err.error);
         }
         // Any other structured OAuth error: surface code + description,

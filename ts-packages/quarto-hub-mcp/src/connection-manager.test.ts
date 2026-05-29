@@ -66,6 +66,7 @@ interface SeededAuth {
   refresh: RefreshManager;
   getValid: ReturnType<typeof vi.fn>;
   forceRefresh: ReturnType<typeof vi.fn>;
+  invalidate: ReturnType<typeof vi.fn>;
 }
 
 function seededAuth(opts?: { initialToken?: string }): SeededAuth {
@@ -87,10 +88,16 @@ function seededAuth(opts?: { initialToken?: string }): SeededAuth {
   const refresh = Object.create(RefreshManager.prototype) as RefreshManager;
   const getValid = vi.fn().mockResolvedValue(initial.idToken);
   const forceRefresh = vi.fn().mockResolvedValue(initial.idToken);
+  // The real RefreshManager.invalidate clears its own store; the mock
+  // routes to the same real store so persistent-401 clear assertions hold.
+  const invalidate = vi.fn(async () => {
+    await store.clear();
+  });
   Object.defineProperty(refresh, 'getValidIdToken', { value: getValid });
   Object.defineProperty(refresh, 'forceRefresh', { value: forceRefresh });
+  Object.defineProperty(refresh, 'invalidate', { value: invalidate });
 
-  return { store, refresh, getValid, forceRefresh };
+  return { store, refresh, getValid, forceRefresh, invalidate };
 }
 
 // ---------------------------------------------------------------------------
@@ -360,6 +367,70 @@ describe('ConnectionManager with creds', () => {
     expect(sync.connectCalls).toHaveLength(1);
     // 200 + creds attached → 'requires-auth' (conservative).
     expect(mgr.lastObservedAuthMode()).toBe('requires-auth');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Probe-skip optimization (don't re-probe once auth-mode is established)
+// ---------------------------------------------------------------------------
+
+describe('ConnectionManager probe-skip', () => {
+  it('skips the /health probe on a later connect once creds are confirmed', async () => {
+    const auth = seededAuth();
+    // Only one scripted response: a second probe would throw "ran out of
+    // responses", so this asserts the probe is not re-issued.
+    const fetchSpy = scriptedFetch([200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+
+    await mgr.connect('idx-1');
+    await mgr.connect('idx-2');
+
+    expect(fetchSpy.calls).toHaveLength(1);
+    expect(sync.connectCalls).toHaveLength(2);
+    // Still resolves a token for the skipped connect (proactive refresh /
+    // early error surfacing).
+    expect(auth.getValid).toHaveBeenCalled();
+    expect(mgr.lastObservedAuthMode()).toBe('requires-auth');
+  });
+
+  it('skips the probe on a later connect to a known no-auth hub (no creds)', async () => {
+    const fetchSpy = scriptedFetch([200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+
+    await mgr.connect('idx-1');
+    await mgr.connect('idx-2');
+
+    expect(fetchSpy.calls).toHaveLength(1);
+    expect(sync.connectCalls).toHaveLength(2);
+    expect(sync.connectCalls.every((c) => c.auth === undefined)).toBe(true);
+  });
+
+  it('throws AuthRequired without re-probing once the hub is known to require auth (no creds)', async () => {
+    const fetchSpy = scriptedFetch([401]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+
+    await expect(mgr.connect('idx-1')).rejects.toBeInstanceOf(AuthRequiredError);
+    await expect(mgr.connect('idx-2')).rejects.toBeInstanceOf(AuthRequiredError);
+
+    expect(fetchSpy.calls).toHaveLength(1);
+    expect(sync.connectCalls).toHaveLength(0);
   });
 });
 
