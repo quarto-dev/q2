@@ -79,21 +79,38 @@ use super::traits::ExecutionEngine;
 /// Emitted at the end of the engine's output if (and only if) at least
 /// one `{mermaid}` cell was matched. A document containing no mermaid
 /// cells passes through without this include.
-/// Pandoc/pampa's QMD reader treats *bare* `<tag>` markup at block
-/// position as a sequence of `RawInline` nodes, not a block-level raw
-/// HTML element, and tries to parse the interior as Markdown. That
-/// breaks badly for a `<script>` block because `startOnLoad: true`
-/// reads as a definition-list-like construct.
 ///
-/// The fix is to emit the explicit pandoc raw-block form ```` ```{=html} ````
-/// around our HTML so the reader treats the whole thing as opaque raw
-/// HTML and skips Markdown parsing inside it. The fence is closed with
-/// matching `` ``` `` on its own line.
+/// # Two structural quirks that this block deliberately handles
+///
+/// **1. Pandoc raw-HTML block wrapping (`` ```{=html} ``).** pampa's
+/// QMD reader treats *bare* `<tag>` markup at block position as a
+/// sequence of `RawInline` nodes and tries to parse the interior as
+/// Markdown — which breaks on `startOnLoad: true` because the `:`
+/// reads as a definition-list-like construct. The explicit
+/// `` ```{=html} `` fence form tells the reader the contents are
+/// opaque raw HTML to leave alone. The fence closes with matching
+/// `` ``` `` on its own line.
+///
+/// **2. Explicit `mermaid.run()` instead of relying on
+/// `startOnLoad: true`.** The auto-run-on-load path only fires when
+/// `mermaid.initialize` is called *before* `DOMContentLoaded`. In
+/// static `q2 render`, the script ships in the initial document and
+/// that condition holds. But in `q2 preview` the script reaches the
+/// iframe long after the document has loaded — the preview's React
+/// renderer recreates the script element via
+/// `document.createElement('script')` so it executes; see
+/// [`RawBlock.tsx`](../../../../../ts-packages/preview-renderer/src/q2-preview/blocks/RawBlock.tsx)
+/// — and `startOnLoad` silently no-ops at that point. Calling
+/// `mermaid.run()` explicitly works regardless of when the script
+/// executes and is idempotent on already-processed elements (via
+/// mermaid's `data-processed` attribute), so it is safe in both
+/// paths.
 const MERMAID_SCRIPT_BLOCK: &str = "\
 ```{=html}
 <script type=\"module\">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-mermaid.initialize({ startOnLoad: true });
+mermaid.initialize({ startOnLoad: false });
+mermaid.run({ querySelector: 'pre.mermaid' });
 </script>
 ```";
 

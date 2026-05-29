@@ -81,8 +81,9 @@ fn single_doc_mermaid_emits_pre_and_script() {
          html:\n{html}"
     );
     assert!(
-        html.contains("startOnLoad: true"),
-        "expected initialize call in rendered HTML. html:\n{html}"
+        html.contains("mermaid.run({ querySelector: 'pre.mermaid' })"),
+        "expected explicit mermaid.run() call in rendered HTML. \
+         html:\n{html}"
     );
     // The diagram source survives HTML-escaped: `-->` becomes `--&gt;`.
     assert!(
