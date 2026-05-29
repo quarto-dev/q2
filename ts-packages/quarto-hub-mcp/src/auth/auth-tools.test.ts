@@ -654,3 +654,84 @@ describe('authenticate_clear', () => {
     expect(textOf(res)).toMatch(/revoked at Google/);
   });
 });
+
+// ===========================================================================
+// authenticate — pre-flight refresh failure (TokenRefreshError)
+// ===========================================================================
+
+describe('authenticate pre-flight refresh failure', () => {
+  // A bundle whose id_token is inside the 60s skew so the pre-flight
+  // getValidIdToken() forces a refresh (rather than returning the cache).
+  function nearExpiryBundle(): CredentialBundle {
+    const nearExp = Math.floor(Date.now() / 1000) + 30;
+    return makeBundle({
+      idToken: fakeIdToken({ exp: nearExp, email: FAKE_EMAIL }),
+      idTokenExpiresAt: new Date(nearExp * 1000),
+    });
+  }
+
+  function stateWithRefreshFetch(args: {
+    store: CredentialStore;
+    refreshFetch: typeof fetch;
+    startListener?: typeof startLoopbackListener;
+    openBrowser?: typeof openBrowser;
+  }): AuthToolsState {
+    const refreshManager = new RefreshManager({
+      as: AS,
+      config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
+      store: args.store,
+      fetch: args.refreshFetch,
+    });
+    return new AuthToolsState({
+      credentialStore: args.store,
+      refreshManager,
+      connectionManager: authMode('requires-auth'),
+      flowConfig: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET, issuer: ISSUER },
+      authorizationServer: AS,
+      startListener: args.startListener,
+      openBrowser: args.openBrowser,
+      logger: () => undefined,
+    });
+  }
+
+  it('returns an actionable error (not -32603) and does not open the browser on invalid_client', async () => {
+    const { store } = await seededStore(nearExpiryBundle());
+    const { fetch: refreshFetch } = makeFetch(() =>
+      jsonResponse(401, {
+        error: 'invalid_client',
+        error_description: 'The provided client secret is invalid.',
+      }),
+    );
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const auth = stateWithRefreshFetch({
+      store,
+      refreshFetch,
+      startListener: listener.start,
+      openBrowser: browser.open,
+    });
+
+    let res: CallToolResult;
+    try {
+      res = await auth.handleAuthenticate();
+    } catch (err) {
+      // Pre-fix behaviour: the raw oauth4webapi error escaped as a throw
+      // (surfacing as MCP -32603). The fix must turn it into a result.
+      throw new Error(
+        `handleAuthenticate threw instead of returning an error result: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    expect(res.isError).toBe(true);
+    const msg = textOf(res);
+    expect(msg).toContain('invalid_client');
+    expect(msg).toContain('The provided client secret is invalid.');
+    expect(msg).toMatch(/QUARTO_HUB_MCP_CLIENT_(ID|SECRET)/);
+    expect(msg).not.toBe('server responded with an error in the response body');
+    // A config error is not fixable by a browser sign-in — none was attempted.
+    expect(browser.calls).toHaveLength(0);
+    expect(listener.recorded.calls).toBe(0);
+  });
+});

@@ -19,6 +19,7 @@ import {
 import {
   ReauthRequired,
   RefreshManager,
+  TokenRefreshError,
   type RefreshManagerDeps,
 } from './refresh-manager.js';
 
@@ -360,6 +361,56 @@ describe('RefreshManager.forceRefresh failure handling', () => {
     const rm = makeRm(store, fetch);
     await expect(rm.forceRefresh()).rejects.toThrow();
     expect(state.value).toBe(beforeBlob);
+  });
+
+  it('throws an actionable TokenRefreshError on invalid_client (wrong client secret), store intact', async () => {
+    const { store, state } = await seedStore(makeBundle());
+    const beforeBlob = state.value;
+    const { fetch } = makeFetch(() =>
+      jsonResponse(401, {
+        error: 'invalid_client',
+        error_description: 'The provided client secret is invalid.',
+      }),
+    );
+    const rm = makeRm(store, fetch);
+    let err: unknown;
+    try {
+      await rm.forceRefresh();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TokenRefreshError);
+    const tre = err as TokenRefreshError;
+    expect(tre.oauthError).toBe('invalid_client');
+    expect(tre.oauthErrorDescription).toBe('The provided client secret is invalid.');
+    expect(tre.isConfigError).toBe(true);
+    // Message surfaces the code, the description, and the config remediation.
+    expect(tre.message).toContain('invalid_client');
+    expect(tre.message).toContain('The provided client secret is invalid.');
+    expect(tre.message).toMatch(/QUARTO_HUB_MCP_CLIENT_(ID|SECRET)/);
+    // Not the opaque oauth4webapi default.
+    expect(tre.message).not.toBe('server responded with an error in the response body');
+    // The stored credential is the user's grant, not the problem — keep it.
+    expect(state.value).toBe(beforeBlob);
+  });
+
+  it('wraps a 4xx non-config oauth error in a TokenRefreshError flagged non-config', async () => {
+    const { store } = await seedStore(makeBundle());
+    // oauth4webapi only parses an error *body* for 4xx; a non-config code
+    // like invalid_request becomes a ResponseBodyError we can wrap.
+    const { fetch } = makeFetch(() => jsonResponse(400, { error: 'invalid_request' }));
+    const rm = makeRm(store, fetch);
+    let err: unknown;
+    try {
+      await rm.forceRefresh();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TokenRefreshError);
+    const tre = err as TokenRefreshError;
+    expect(tre.oauthError).toBe('invalid_request');
+    expect(tre.isConfigError).toBe(false);
+    expect(tre.message).toMatch(/transient/i);
   });
 });
 

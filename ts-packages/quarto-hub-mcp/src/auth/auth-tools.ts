@@ -48,7 +48,11 @@ import {
 } from './loopback.js';
 import { generatePkceParams } from './pkce.js';
 import { redactTokens } from './redact.js';
-import { type RefreshManager, ReauthRequired } from './refresh-manager.js';
+import {
+  type RefreshManager,
+  ReauthRequired,
+  TokenRefreshError,
+} from './refresh-manager.js';
 
 // ---------------------------------------------------------------------------
 // Public constants / types
@@ -214,6 +218,9 @@ export class AuthToolsState {
           : 'Already authenticated. No action needed.',
       );
     } catch (err) {
+      // A structured refresh failure isn't fixable by a browser sign-in;
+      // surface the actionable message rather than running the loopback.
+      if (err instanceof TokenRefreshError) return errorResult(err.message);
       // Only ReauthRequired falls through to the loopback path; every
       // other failure (network blip, malformed JWT, etc.) propagates.
       if (!(err instanceof ReauthRequired)) throw err;
