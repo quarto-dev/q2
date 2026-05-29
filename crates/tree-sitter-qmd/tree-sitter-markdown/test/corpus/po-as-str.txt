@@ -1,0 +1,72 @@
+================================================================================
+po-as-str — bare section sign § is a Str (bd-6kewx)
+================================================================================
+§
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))))
+
+================================================================================
+po-as-str — § between words
+================================================================================
+a § b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+po-as-str — section reference §4 (no space)
+================================================================================
+see §4
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+po-as-str — other Po punctuation: bullet, middot, dagger, ddagger, pilcrow
+================================================================================
+• · † ‡ ¶
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+po-as-str — ascii emphasis/quote delimiters still reserved (regression)
+================================================================================
+*x* 'y'
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote)))))

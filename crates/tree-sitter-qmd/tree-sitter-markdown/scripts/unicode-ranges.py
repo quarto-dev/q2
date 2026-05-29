@@ -95,3 +95,16 @@ if __name__ == "__main__":
     print("So (Other Symbol) - no exclusions")
     print("=" * 60)
     so_result = generate_ranges_excluding('So', [])
+
+    # bd-6kewx: Po (Other Punctuation) and Pc (Connector Punctuation),
+    # NON-ASCII only. Pandoc folds these into Str; the grammar previously
+    # omitted them, so a bare § / ¶ / • etc. in prose produced a parse ERROR.
+    # ASCII chars in these categories are excluded because they are either
+    # already handled or reserved as qmd inline delimiters (* _ ~ ^ ' " @ \).
+    for cat in ('Po', 'Pc'):
+        print("\n" + "=" * 60)
+        print(f"{cat} (non-ASCII, codepoints >= U+0080) - for PANDOC_VALID_OTHER_PUNCTUATION")
+        print("=" * 60)
+        ascii_in_cat = [c for c in range(0x80)
+                        if unicodedata.category(chr(c)) == cat]
+        generate_ranges_excluding(cat, ascii_in_cat)
