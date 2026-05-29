@@ -15,6 +15,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-05-29
+
+- [`f7255ace`](https://github.com/quarto-dev/q2/commits/f7255ace): `RawBlock(html, ...)` now re-executes inline `<script>` tags after mount so engine-injected scripts (e.g. mermaid's jsdelivr import) run in q2 preview the same way they run in static q2 render. NOT in main yet; lives on the `feature/mermaid-engine` branch pending the hub-client JS security model design.
+
 ### 2026-05-27
 
 - [`9aa29ee1`](https://github.com/quarto-dev/q2/commits/9aa29ee1): View toggle buttons now order markup-left / preview-right (matching the editor-left / preview-right layout) instead of preview-left / markup-right.
