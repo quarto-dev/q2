@@ -618,9 +618,122 @@ page load.
 
 ### Phase 3 — q2-preview verification (closes bd-iq0hp)
 
-- [ ] Per the Q-D test matrix above. The fact that mermaid+knitr is
-      the first cleanly-composing real-engine pair makes this work
-      the canonical multi-engine browser preview E2E.
+- [x] Single-doc `engine: mermaidjs` fixture renders both diagrams as
+      `<svg>` in the preview iframe (2026-05-29 via Chrome DevTools
+      MCP). `data-processed="true"` on both `pre.mermaid`,
+      `svgInsidePre=2`, console clean. Screenshots:
+      - `claude-notes/plans/bd-my0o5-preview-no-render.png` (before
+        the fixes — diagrams appear as raw source text)
+      - `claude-notes/plans/bd-my0o5-preview-renders.png` (after the
+        fixes — diagrams render as SVG)
+- [ ] Multi-engine `engine: [knitr, mermaidjs]` in preview — deferred
+      (knitr requires R runtime; uses the same code path; the two
+      parity fixes below are sufficient for either engine's scripts).
+
+#### Phase 3 surprise: two compounding parity gaps
+
+The first browser run made the diagrams not render. Investigation
+surfaced two distinct gaps between static `q2 render` and `q2 preview`
+that both had to be fixed:
+
+**Gap P1 — React's `dangerouslySetInnerHTML` does not execute inline
+`<script>` tags.** The q2-preview format's `RawBlock(html)` component
+(`ts-packages/preview-renderer/src/q2-preview/blocks/RawBlock.tsx`)
+mounts engine-emitted raw HTML via `dangerouslySetInnerHTML`. The
+HTML spec only executes script elements that the parser sees in the
+*initial* document or that are created via `document.createElement`;
+React's innerHTML injection produces inert script nodes. So the
+jsdelivr `<script type="module">` the engine emits was reaching the
+DOM but never executing in preview, while it executed normally in
+static render. Confirmed and accepted with the user as a security
+posture change (Option A in the design discussion, 2026-05-29) —
+scripts inside `RawBlock(html)` now execute in the preview iframe,
+matching the static-render posture and the user's "v1 hack" framing
+on B1. **Hub-client branch is NOT to be merged to main** until the
+hub-client JS security model design lands; ratified on
+`feature/mermaid-engine` for the mermaid epic.
+
+**Fix:** the `RawBlock` component renders raw HTML inside a `useRef`
+container, then on mount walks `container.querySelectorAll('script')`
+and replaces each element with a freshly created one via
+`document.createElement('script')` carrying the same attributes and
+body. The replacement is a "script-created" element in HTML-spec
+terms and the browser executes it.
+
+**Gap P2 — `mermaid.initialize({ startOnLoad: true })` only fires
+its auto-render listener when called *before* `DOMContentLoaded`.**
+In static `q2 render`, the script ships in the initial document, so
+`DOMContentLoaded` arrives later and `startOnLoad`'s listener
+triggers `mermaid.contentLoaded()` on schedule. In preview, the
+script is injected into a fully-loaded document by the React shim
+above; `DOMContentLoaded` has long since fired; `startOnLoad`
+silently no-ops. The diagrams stay as raw source.
+
+**Fix:** the engine now emits an explicit
+`mermaid.run({ querySelector: 'pre.mermaid' })` call after
+`mermaid.initialize({ startOnLoad: false })`. `mermaid.run` works
+regardless of load timing and is idempotent on already-processed
+elements (mermaid tracks via `data-processed` attribute), so it is
+safe in both `q2 render` and `q2 preview`.
+
+#### Phase 3 verification record (real binary, real browser)
+
+**Fixture** (`/tmp/mermaid-preview/`):
+
+```yaml
+# _quarto.yml
+project:
+  type: website
+```
+
+````qmd
+# doc.qmd
+---
+title: Mermaid preview e2e
+engine: mermaidjs
+---
+
+# Mermaid in q2 preview
+
+Here is a flowchart:
+
+```{mermaid}
+graph TD
+A[Client] --> B[Load Balancer]
+B --> C[Server1]
+B --> D[Server2]
+```
+
+And here is a sequence diagram:
+
+```{mermaid}
+sequenceDiagram
+Alice->>Bob: Hello Bob
+Bob-->>Alice: Hi Alice
+```
+````
+
+**Invocation:**
+
+```bash
+q2 preview --no-browser --port 7780 /tmp/mermaid-preview/
+# → http://127.0.0.1:7780/
+```
+
+**Browser observation** (Chrome DevTools MCP, after waiting 5 s
+for the jsdelivr import + `mermaid.run` to complete):
+
+```js
+{
+  preCount: 2,
+  preProcessed: ['true', 'true'],   // mermaid marks rendered elements
+  svgInsidePre: 2,                  // both diagrams now SVG
+  recreatedScriptCount: 1,          // RawHtmlBlock shim swapped the inert <script>
+}
+```
+
+Console messages: only the expected WASM-init / peer-connect logs
+and the standard iframe sandbox warning. No errors.
 
 ### Phase 4 — documentation
 
