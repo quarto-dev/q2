@@ -1,0 +1,656 @@
+==========================================
+measure-test-build  profile=debug  label=baseline
+  date:      2026-05-28T17:01:01Z
+  host:      aarch64-apple-darwin
+  cargo:     /Users/cscheid/.cargo/bin/cargo (cargo 1.97.0-nightly (eb9b60f1f 2026-04-24))
+  rustc:     rustc 1.97.0-nightly (52b6e2c20 2026-04-27)
+==========================================
+
+--- build: cargo build --workspace --tests  ---
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling proc-macro2 v1.0.106
+   Compiling serde_core v1.0.228
+   Compiling cfg-if v1.0.4
+   Compiling libc v0.2.185
+   Compiling serde v1.0.228
+   Compiling memchr v2.8.0
+   Compiling equivalent v1.0.2
+   Compiling itoa v1.0.18
+   Compiling hashbrown v0.17.0
+   Compiling once_cell v1.21.4
+   Compiling shlex v1.3.0
+   Compiling zmij v1.0.21
+   Compiling thiserror v2.0.18
+   Compiling find-msvc-tools v0.1.9
+   Compiling log v0.4.29
+   Compiling serde_json v1.0.149
+   Compiling bitflags v2.11.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling pin-project-lite v0.2.17
+   Compiling version_check v0.9.5
+   Compiling writeable v0.6.3
+   Compiling libm v0.2.16
+   Compiling litemap v0.8.2
+   Compiling percent-encoding v2.3.2
+   Compiling zeroize v1.8.2
+   Compiling form_urlencoded v1.2.2
+   Compiling icu_normalizer_data v2.1.1
+   Compiling rustix v1.1.4
+   Compiling icu_properties_data v2.1.2
+   Compiling utf8_iter v1.0.4
+   Compiling subtle v2.6.1
+   Compiling crc32fast v1.5.0
+   Compiling getrandom v0.4.2
+   Compiling regex-syntax v0.8.10
+   Compiling tracing-core v0.1.36
+   Compiling aho-corasick v1.1.4
+   Compiling anyhow v1.0.102
+   Compiling rustc-hash v2.1.2
+   Compiling typenum v1.20.0
+   Compiling heck v0.5.0
+   Compiling bytes v1.11.1
+   Compiling parking_lot_core v0.9.12
+   Compiling scopeguard v1.2.0
+   Compiling allocator-api2 v0.2.21
+   Compiling zerocopy v0.8.48
+   Compiling lock_api v0.4.14
+   Compiling syn v2.0.117
+   Compiling errno v0.3.14
+   Compiling fastrand v2.4.1
+   Compiling foldhash v0.2.0
+   Compiling futures-core v0.3.32
+   Compiling encoding_rs v0.8.35
+   Compiling tree-sitter-language v0.1.7
+   Compiling jobserver v0.1.34
+   Compiling hashbrown v0.16.1
+   Compiling getrandom v0.2.17
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.0
+   Compiling cc v1.2.60
+   Compiling generic-array v0.14.9
+   Compiling futures-sink v0.3.32
+   Compiling futures-io v0.3.32
+   Compiling const-oid v0.9.6
+   Compiling socket2 v0.6.3
+   Compiling slab v0.4.12
+   Compiling futures-channel v0.3.32
+   Compiling futures-task v0.3.32
+   Compiling arraydeque v0.5.1
+   Compiling autocfg v1.5.0
+   Compiling core-foundation-sys v0.8.7
+   Compiling http v1.4.0
+   Compiling block-buffer v0.10.4
+   Compiling regex-automata v0.4.14
+   Compiling crypto-common v0.1.6
+   Compiling tempfile v3.27.0
+   Compiling digest v0.10.7
+   Compiling num-traits v0.2.19
+   Compiling indexmap v2.14.0
+   Compiling rand_core v0.6.4
+   Compiling unicode-width v0.2.2
+   Compiling httparse v1.10.1
+   Compiling ref-cast v1.0.25
+   Compiling siphasher v1.0.2
+   Compiling cranelift-srcgen v0.123.8
+   Compiling either v1.15.0
+   Compiling yansi v1.0.1
+   Compiling dyn-clone v1.0.20
+   Compiling cranelift-assembler-x64-meta v0.123.8
+   Compiling fnv v1.0.7
+   Compiling itertools v0.14.0
+   Compiling base64 v0.22.1
+   Compiling cranelift-bitset v0.123.8
+   Compiling ariadne v0.6.0
+   Compiling cranelift-isle v0.123.8
+   Compiling foldhash v0.1.5
+   Compiling cranelift-codegen-shared v0.123.8
+   Compiling tower-service v0.3.3
+   Compiling hashbrown v0.15.5
+   Compiling target-lexicon v0.13.5
+   Compiling http-body v1.0.1
+   Compiling cmake v0.1.58
+   Compiling cpufeatures v0.2.17
+   Compiling dunce v1.0.5
+   Compiling fs_extra v1.3.0
+   Compiling gimli v0.32.3
+   Compiling wasmtime-internal-math v36.0.8
+   Compiling synstructure v0.13.2
+   Compiling serde_derive_internals v0.29.1
+   Compiling aws-lc-sys v0.40.0
+   Compiling bumpalo v3.20.2
+   Compiling arbitrary v1.4.2
+   Compiling ppv-lite86 v0.2.21
+   Compiling system-configuration-sys v0.6.0
+   Compiling ring v0.17.14
+   Compiling tower-layer v0.3.3
+   Compiling cranelift-assembler-x64 v0.123.8
+   Compiling atomic-waker v1.1.2
+   Compiling glob v0.3.3
+   Compiling cranelift-control v0.123.8
+   Compiling wasmparser v0.236.1
+   Compiling data-encoding v2.10.0
+   Compiling try-lock v0.2.5
+   Compiling regex v1.12.3
+   Compiling httpdate v1.0.3
+   Compiling object v0.37.3
+   Compiling want v0.3.1
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling displaydoc v0.2.5
+   Compiling tracing-attributes v0.1.31
+   Compiling tokio-macros v2.7.0
+   Compiling futures-macro v0.3.32
+   Compiling ref-cast-impl v1.0.25
+   Compiling zerofrom v0.1.7
+   Compiling schemars_derive v1.2.1
+   Compiling yoke v0.8.2
+   Compiling pulley-macros v36.0.8
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling pulley-interpreter v36.0.8
+   Compiling futures-util v0.3.32
+   Compiling tracing v0.1.44
+   Compiling core-foundation v0.9.4
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling aws-lc-rs v1.16.3
+   Compiling icu_locale_core v2.2.0
+   Compiling icu_collections v2.1.1
+   Compiling wasm-encoder v0.236.1
+   Compiling semver v1.0.28
+   Compiling system-configuration v0.7.0
+   Compiling cranelift-codegen-meta v0.123.8
+   Compiling cobs v0.3.0
+   Compiling wasmtime-internal-versioned-export-macros v36.0.8
+   Compiling smallvec v1.15.1
+   Compiling quarto-source-map v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-source-map)
+   Compiling hashlink v0.11.0
+   Compiling schemars v1.2.1
+   Compiling regalloc2 v0.12.2
+   Compiling icu_provider v2.2.0
+   Compiling parking_lot v0.12.5
+   Compiling yaml-rust2 v0.11.0
+   Compiling cranelift-entity v0.123.8
+   Compiling tokio v1.52.1
+   Compiling icu_properties v2.1.2
+   Compiling icu_normalizer v2.1.1
+   Compiling quarto-pandoc-types v0.0.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-pandoc-types)
+   Compiling cranelift-bforest v0.123.8
+   Compiling idna_adapter v1.2.1
+   Compiling idna v1.1.0
+   Compiling rand_chacha v0.3.1
+   Compiling url v2.5.8
+   Compiling cranelift-codegen v0.123.8
+   Compiling core-foundation v0.10.1
+   Compiling security-framework-sys v2.17.0
+   Compiling quarto-error-reporting v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-error-reporting)
+   Compiling sync_wrapper v1.0.2
+   Compiling untrusted v0.9.0
+   Compiling wasmtime-c-api-impl v36.0.8
+   Compiling leb128fmt v0.1.0
+   Compiling ipnet v2.12.0
+   Compiling termcolor v1.4.1
+   Compiling sha1_smol v1.0.1
+   Compiling uuid v1.23.1
+   Compiling tokio-util v0.7.18
+   Compiling security-framework v3.7.0
+   Compiling rand v0.8.6
+   Compiling h2 v0.4.14
+   Compiling postcard v1.1.3
+   Compiling http-body-util v0.1.3
+   Compiling ahash v0.8.12
+   Compiling rustls-pki-types v1.14.0
+   Compiling wasmtime-internal-unwinder v36.0.8
+   Compiling tower v0.5.3
+   Compiling wasmtime v36.0.8
+   Compiling tree-sitter v0.26.8
+   Compiling wasmprinter v0.236.1
+   Compiling num-integer v0.1.46
+   Compiling rustls v0.23.38
+   Compiling wasmtime-internal-jit-icache-coherence v36.0.8
+   Compiling mach2 v0.4.3
+   Compiling wasmtime-internal-asm-macros v36.0.8
+   Compiling wasmtime-internal-slab v36.0.8
+   Compiling hashbrown v0.14.5
+   Compiling futures-executor v0.3.32
+   Compiling wasmtime-internal-c-api-macros v36.0.8
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling futures v0.3.32
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling iri-string v0.7.12
+   Compiling colorchoice v1.0.5
+   Compiling anstyle v1.0.14
+   Compiling anstyle-query v1.1.5
+   Compiling streaming-iterator v0.1.9
+   Compiling num-bigint v0.4.6
+   Compiling webpki-roots v1.0.7
+   Compiling anstream v1.0.0
+   Compiling clap_lex v1.1.0
+   Compiling wasmtime-environ v36.0.8
+   Compiling strsim v0.11.1
+   Compiling clap_derive v4.6.1
+   Compiling hyper v1.9.0
+   Compiling tower-http v0.6.8
+   Compiling clap_builder v4.6.0
+   Compiling clang-sys v1.8.1
+   Compiling hyper-util v0.1.20
+   Compiling sha2 v0.10.9
+   Compiling core_maths v0.1.1
+   Compiling prettyplease v0.2.37
+   Compiling icu_locale_data v2.1.2
+   Compiling calendrical_calculations v0.2.4
+   Compiling clap v4.6.1
+   Compiling minimal-lexical v0.2.1
+   Compiling icu_calendar_data v2.1.1
+   Compiling rustix v0.38.44
+   Compiling nom v7.1.3
+   Compiling resb v0.1.2
+   Compiling phf_shared v0.13.1
+   Compiling libloading v0.8.9
+   Compiling hybrid-array v0.4.10
+   Compiling bindgen v0.72.1
+   Compiling phf_generator v0.13.1
+   Compiling zoneinfo64 v0.2.1
+   Compiling icu_locale v2.1.1
+   Compiling itertools v0.13.0
+   Compiling cexpr v0.6.0
+   Compiling strck v1.0.0
+   Compiling cmov v0.5.3
+   Compiling home v0.5.12
+   Compiling adler2 v2.0.1
+   Compiling ctutils v0.4.2
+   Compiling which v6.0.3
+   Compiling diplomat_core v0.14.0
+   Compiling miniz_oxide v0.8.9
+   Compiling icu_calendar v2.1.1
+   Compiling timezone_provider v0.1.2
+   Compiling block-buffer v0.12.0
+   Compiling crypto-common v0.2.1
+   Compiling gzip-header v1.1.0
+   Compiling deno_error_macro v0.7.3
+   Compiling phf_shared v0.11.3
+   Compiling fslock v0.2.1
+   Compiling radium v0.7.0
+   Compiling const-oid v0.10.2
+   Compiling paste v1.0.15
+   Compiling same-file v1.0.6
+   Compiling ixdtf v0.6.5
+   Compiling walkdir v2.5.0
+   Compiling digest v0.11.2
+   Compiling temporal_rs v0.1.2
+   Compiling deno_error v0.7.3
+   Compiling phf_generator v0.11.3
+   Compiling pin-project-internal v1.1.11
+   Compiling async-trait v0.1.89
+   Compiling bit-vec v0.8.0
+   Compiling diplomat v0.14.0
+   Compiling diplomat-runtime v0.14.0
+   Compiling tap v1.0.1
+   Compiling wyz v0.5.1
+   Compiling bit-set v0.8.0
+   Compiling phf_macros v0.11.3
+   Compiling temporal_capi v0.1.2
+   Compiling sys_traits_macros v0.1.0
+   Compiling strum_macros v0.27.2
+   Compiling pin-project v1.1.11
+   Compiling cpufeatures v0.3.0
+   Compiling vsimd v0.8.0
+   Compiling funty v2.0.0
+   Compiling outref v0.5.2
+   Compiling sys_traits v0.1.27
+   Compiling phf v0.11.3
+   Compiling lasso v0.7.3
+   Compiling debugid v0.8.0
+   Compiling capacity_builder_macros v0.3.0
+   Compiling syn-match v0.3.1
+   Compiling base64-simd v0.8.0
+   Compiling bitvec v1.0.1
+   Compiling unicode-id-start v1.4.0
+   Compiling if_chain v1.0.3
+   Compiling stringcase v0.4.0
+   Compiling codemap v0.1.3
+   Compiling capacity_builder v0.5.0
+   Compiling deno_path_util v0.6.4
+   Compiling grass_compiler v0.13.4
+   Compiling wasm_dep_analyzer v0.4.0
+   Compiling phf_codegen v0.13.1
+   Compiling deno_unsync v0.4.4
+   Compiling bincode v1.3.3
+   Compiling boxed_error v0.2.3
+   Compiling tinyvec_macros v0.1.1
+   Compiling deno_core_icudata v0.74.0
+   Compiling az v1.3.0
+   Compiling cooked-waker v5.0.0
+   Compiling static_assertions v1.1.0
+   Compiling tinyvec v1.11.0
+   Compiling quarto-yaml v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-yaml)
+   Compiling which v8.0.2
+   Compiling quick-xml v0.39.3
+   Compiling strum v0.27.2
+   Compiling deno_ops v0.252.0
+   Compiling bstr v1.12.1
+   Compiling phf_macros v0.13.1
+   Compiling quarto-xml v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-xml)
+   Compiling globset v0.4.18
+   Compiling sourcemap v9.3.2
+   Compiling quarto-csl v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-csl)
+   Compiling rust-embed-utils v8.11.0
+   Compiling phf v0.13.1
+   Compiling v8 v142.2.0
+   Compiling quarto-highlight-encoding v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-highlight-encoding)
+   Compiling rustversion v1.0.22
+   Compiling rust-embed-impl v8.11.0
+   Compiling quarto-citeproc v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-citeproc)
+   Compiling tree-sitter-doctemplate v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/tree-sitter-doctemplate)
+   Compiling rust-embed v8.11.0
+   Compiling quarto-error-message-macros v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-parse-errors/error-message-macros)
+   Compiling unicode-segmentation v1.13.2
+   Compiling similar v3.1.0
+   Compiling tree-sitter-qmd v0.0.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/tree-sitter-qmd)
+   Compiling convert_case v0.10.0
+   Compiling luajit-src v210.6.6+707c12b
+   Compiling lua-src v550.0.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/lua-src-wasm)
+   Compiling pkg-config v0.3.33
+   Compiling signal-hook v0.3.18
+   Compiling derive_more-impl v2.1.1
+   Compiling jetscii v0.5.3
+   Compiling entities v1.0.1
+   Compiling typeid v1.0.3
+   Compiling comrak v0.52.0
+   Compiling mlua-sys v0.10.0
+   Compiling unicode-normalization v0.1.25
+   Compiling erased-serde v0.4.10
+   Compiling quarto-config v0.0.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-config)
+   Compiling ordered-float v2.10.1
+   Compiling caseless v0.2.2
+   Compiling finl_unicode v1.4.0
+   Compiling cranelift-frontend v0.123.8
+   Compiling cranelift-native v0.123.8
+   Compiling derive_more v2.1.1
+   Compiling typed-arena v2.0.2
+   Compiling litrs v1.0.0
+   Compiling wasmtime-internal-cranelift v36.0.8
+   Compiling serde-value v0.7.0
+   Compiling document-features v0.2.12
+   Compiling signal-hook-mio v0.2.5
+   Compiling crossterm v0.29.0
+   Compiling sha1 v0.11.0
+   Compiling quarto-ast-reconcile v0.0.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-ast-reconcile)
+   Compiling supports-hyperlinks v3.2.0
+   Compiling getrandom v0.3.4
+   Compiling comrak-to-pandoc v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/comrak-to-pandoc)
+   Compiling rand_core v0.9.5
+   Compiling ucd-trie v0.1.7
+   Compiling rand_chacha v0.9.0
+   Compiling pest v2.8.6
+   Compiling rand v0.9.4
+   Compiling pest_meta v2.8.6
+   Compiling pest_generator v2.8.6
+   Compiling quarto-util v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-util)
+   Compiling console v0.16.3
+   Compiling similar v2.7.0
+   Compiling include_dir_macros v0.7.4
+   Compiling pest_derive v2.8.6
+   Compiling include_dir v0.7.4
+   Compiling serde_v8 v0.285.0
+   Compiling insta v1.47.2
+   Compiling ryu v1.0.23
+   Compiling crossbeam-utils v0.8.21
+   Compiling deno_core v0.376.0
+   Compiling unsafe-libyaml v0.2.11
+   Compiling simd-adler32 v0.3.9
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling quarto-brand v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-brand)
+   Compiling flate2 v1.1.9
+   Compiling mlua v0.11.6
+   Compiling sha2 v0.11.0
+   Compiling powerfmt v0.2.0
+   Compiling num-conv v0.2.1
+   Compiling time-core v0.1.8
+   Compiling time-macros v0.2.27
+   Compiling deranged v0.5.8
+   Compiling quarto-treesitter-ast v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-treesitter-ast)
+   Compiling quarto-parse-errors v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-parse-errors)
+   Compiling utf-8 v0.7.6
+   Compiling quarto-doctemplate v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-doctemplate)
+   Compiling time v0.3.47
+   Compiling quarto-sass v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-sass)
+   Compiling tree-sitter-sequel v0.3.11
+   Compiling tree-sitter-julia v0.23.1
+   Compiling tree-sitter-css v0.25.0
+   Compiling tree-sitter-bash v0.25.1
+   Compiling tree-sitter-html v0.23.2
+   Compiling tree-sitter-r v1.2.0
+   Compiling tree-sitter-yaml v0.7.2
+   Compiling tree-sitter-python v0.25.0
+   Compiling tree-sitter-json v0.24.8
+   Compiling tree-sitter-javascript v0.25.0
+   Compiling tree-sitter-typescript v0.23.2
+   Compiling tree-sitter-lua v0.5.0
+   Compiling iana-time-zone v0.1.65
+   Compiling option-ext v0.2.0
+   Compiling dirs-sys v0.5.0
+   Compiling chrono v0.4.44
+   Compiling hex v0.4.3
+   Compiling dirs v6.0.0
+   Compiling new_debug_unreachable v1.0.6
+   Compiling string_cache_codegen v0.6.1
+   Compiling quarto-trace v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-trace)
+   Compiling precomputed-hash v0.1.1
+   Compiling wait-timeout v0.2.1
+   Compiling quick-error v1.2.3
+   Compiling web_atoms v0.2.4
+   Compiling rusty-fork v0.3.1
+   Compiling string_cache v0.9.0
+   Compiling rand_xorshift v0.4.0
+   Compiling dtoa v1.0.11
+   Compiling saa v5.5.1
+   Compiling thiserror v1.0.69
+   Compiling unarray v0.1.4
+   Compiling proptest v1.11.0
+   Compiling sdd v4.8.6
+   Compiling dtoa-short v0.3.5
+   Compiling tendril v0.5.0
+   Compiling crossbeam-epoch v0.9.18
+   Compiling selectors v0.36.1
+   Compiling thiserror-impl v1.0.69
+   Compiling cssparser-macros v0.6.1
+   Compiling rayon-core v1.13.0
+   Compiling crossbeam-deque v0.8.6
+   Compiling markup5ever v0.39.0
+   Compiling scc v3.7.0
+   Compiling cssparser v0.36.0
+   Compiling crossbeam-queue v0.3.12
+   Compiling asynchronous-codec v0.7.0
+   Compiling servo_arc v0.4.3
+   Compiling pollster v0.4.0
+   Compiling html5ever v0.39.0
+   Compiling jupyter-protocol v2.0.0 (https://github.com/cscheid/runtimed?rev=fc58eb48139a30cc559ac5973cb6debb00375b88#fc58eb48)
+   Compiling shellexpand v3.1.2
+   Compiling zeromq v0.6.0-pre.2
+   Compiling getopts v0.2.24
+   Compiling ego-tree v0.11.0
+   Compiling pathdiff v0.2.3
+   Compiling rayon v1.12.0
+   Compiling scraper v0.26.0
+   Compiling quarto-navigation v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-navigation)
+   Compiling quarto-analysis v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-analysis)
+   Compiling imagesize v0.13.0
+   Compiling base64ct v1.8.3
+   Compiling sha1 v0.10.6
+   Compiling runtimelib v2.0.0 (https://github.com/cscheid/runtimed?rev=fc58eb48139a30cc559ac5973cb6debb00375b88#fc58eb48)
+   Compiling pem-rfc7468 v0.7.0
+   Compiling der v0.7.10
+   Compiling spin v0.9.8
+   Compiling hmac v0.12.1
+   Compiling lazy_static v1.5.0
+   Compiling mime v0.3.17
+   Compiling native-tls v0.2.18
+   Compiling ff v0.13.1
+   Compiling signature v2.2.0
+   Compiling base16ct v0.2.0
+   Compiling spki v0.7.3
+   Compiling group v0.13.0
+   Compiling pkcs8 v0.10.2
+   Compiling hkdf v0.12.4
+   Compiling tungstenite v0.29.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling sec1 v0.7.3
+   Compiling crypto-bigint v0.5.5
+   Compiling tokio-tungstenite v0.29.0
+   Compiling axum-core v0.5.6
+   Compiling rustc_version v0.4.1
+   Compiling axum-macros v0.5.1
+   Compiling serde_path_to_error v0.1.20
+   Compiling matchit v0.8.4
+   Compiling elliptic-curve v0.13.8
+   Compiling curve25519-dalek v4.1.3
+   Compiling tokio-native-tls v0.3.1
+   Compiling sharded-slab v0.1.7
+   Compiling rfc6979 v0.4.0
+   Compiling matchers v0.2.0
+   Compiling tracing-log v0.2.0
+   Compiling axum v0.8.9
+   Compiling thread_local v1.1.9
+   Compiling nu-ansi-term v0.50.3
+   Compiling num-bigint-dig v0.8.6
+   Compiling ecdsa v0.16.9
+   Compiling primeorder v0.13.6
+   Compiling tracing-subscriber v0.3.23
+   Compiling concurrent-queue v2.5.0
+   Compiling num-iter v0.1.45
+   Compiling cookie v0.18.1
+   Compiling leb128 v0.2.6
+   Compiling parking v2.2.1
+   Compiling minicbor v1.1.0
+   Compiling event-listener v5.4.1
+   Compiling hexane v0.2.1
+   Compiling ed25519 v2.2.3
+   Compiling pkcs1 v0.7.5
+   Compiling headers-core v0.3.0
+   Compiling smol_str v0.3.6
+   Compiling rsa v0.9.10
+   Compiling automerge v0.8.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling headers v0.4.1
+   Compiling event-listener-strategy v0.5.4
+   Compiling p384 v0.13.1
+   Compiling p256 v0.13.2
+   Compiling hyper-tls v0.6.0
+   Compiling tungstenite v0.27.0
+   Compiling simple_asn1 v0.6.4
+   Compiling bs58 v0.5.1
+   Compiling pem v3.0.6
+   Compiling fsevent-sys v4.1.0
+   Compiling notify-types v2.1.0
+   Compiling byteorder v1.5.0
+   Compiling base64 v0.21.7
+   Compiling cfb v0.7.3
+   Compiling notify v8.2.0
+   Compiling tokio-tungstenite v0.27.0
+   Compiling jsonwebtoken v10.3.0
+   Compiling axum-extra v0.12.6
+   Compiling async-channel v2.5.0
+   Compiling dashmap v6.1.0
+   Compiling colored v3.1.1
+   Compiling futures-timer v3.0.3
+   Compiling infer v0.19.0
+   Compiling samod-core v0.9.0 (https://github.com/quarto-dev/samod.git?branch=q2#0b50c16c)
+   Compiling notify-debouncer-mini v0.7.0
+   Compiling hmac v0.13.0
+   Compiling fs2 v0.4.3
+   Compiling quarto-preview v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-preview)
+   Compiling serde_repr v0.1.20
+   Compiling bitflags v1.3.2
+   Compiling tower v0.4.13
+warning: quarto-preview@0.1.0: q2-preview-spa/dist/index.html not found; embedding placeholder. Run `cargo xtask build-q2-preview-spa` and rebuild to embed the real SPA.
+   Compiling dashmap v5.5.3
+   Compiling auto_impl v1.3.0
+   Compiling lsp-types v0.94.1
+   Compiling tower-lsp-macros v0.9.0
+   Compiling ureq-proto v0.6.0
+   Compiling utf8-zero v0.8.1
+   Compiling quarto-trace-server v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-trace-server)
+   Compiling wasm-bindgen-shared v0.2.108
+   Compiling open v5.3.5
+   Compiling quarto-yaml-validation v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-yaml-validation)
+warning: quarto-trace-server@0.1.0: trace-viewer/dist/index.html not found; embedding placeholder. Run `cargo xtask build-trace-viewer` and rebuild to embed the real SPA.
+   Compiling samod v0.9.0 (https://github.com/quarto-dev/samod.git?branch=q2#0b50c16c)
+   Compiling wasm-bindgen-macro-support v0.2.108
+   Compiling wasm-bindgen v0.2.108
+   Compiling diff v0.1.13
+   Compiling pretty_assertions v1.4.1
+   Compiling wasm-bindgen-macro v0.2.108
+   Compiling js-sys v0.3.85
+   Compiling tower-lsp v0.20.0
+   Compiling wasm-bindgen-futures v0.4.58 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/wasm-bindgen-futures-patch)
+   Compiling validate-yaml v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/validate-yaml)
+   Compiling grass v0.13.4
+   Compiling wasm-printf-fmt v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/wasm-printf-fmt)
+   Compiling xtask v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/xtask)
+   Compiling tree-sitter-highlight v0.26.8
+   Compiling quarto-highlight v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-highlight)
+   Compiling rustls-webpki v0.103.13
+   Compiling tokio-rustls v0.26.4
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling ureq v3.3.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.3
+   Compiling reqwest v0.12.28
+   Compiling quarto-system-runtime v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-system-runtime)
+   Compiling axum-jwt-auth v0.6.3
+   Compiling pampa v0.0.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/pampa)
+   Compiling quarto-hub v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-hub)
+   Compiling quarto-project-create v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-project-create)
+   Compiling quarto-core v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-core)
+   Compiling qmd-syntax-helper v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/qmd-syntax-helper)
+   Compiling quarto-lsp-core v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-lsp-core)
+   Compiling quarto-publish v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-publish)
+   Compiling quarto-test v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-test)
+   Compiling quarto-lsp v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto-lsp)
+   Compiling reconcile-viewer v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/experiments/reconcile-viewer)
+   Compiling quarto v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/quarto)
+   Compiling perf-harness v0.1.0 (/Users/cscheid/rooms/room-1/q2/.worktrees/bd-xvdop-experiment-consolidate-integration-tests/crates/perf-harness)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 1m 53s
+
+--- results ---
+build_wall_seconds: 114
+target_debug_size_human:  21G
+target_debug_size_bytes: 22757285888
+target_root_size_human:  21G
+
+--- top 25 binaries under target/debug/deps ---
+    155352 KB  target/debug/deps/q2-e2d876a7fcadf1ad
+    142324 KB  target/debug/deps/boot-f93d6059af68723b
+    142212 KB  target/debug/deps/eager_capture-13a7ecca1ac1e47a
+    142152 KB  target/debug/deps/diagnostics_endpoint-20af01d77069040d
+    142136 KB  target/debug/deps/diagnostics_capture_failure-b33c344fab7db23a
+    142112 KB  target/debug/deps/staleness-2aa89bb1300caece
+    136668 KB  target/debug/deps/quarto_core-65a0e30c4bea6278
+    135468 KB  target/debug/deps/quarto_preview-2f3c534b0803de01
+    134864 KB  target/debug/deps/cache_hit-d71b2f770fda75c4
+    130980 KB  target/debug/deps/listing_pipeline-75e564831298caaf
+    130316 KB  target/debug/deps/q2-2b75c34c8bc8fbd5
+    130056 KB  target/debug/deps/render_page_in_project-28ffe5859573fe0c
+    129996 KB  target/debug/deps/incremental_rebuild-d4d411fbb78c091e
+    129976 KB  target/debug/deps/project_resources-06805c9e8515ffa6
+    129968 KB  target/debug/deps/link_rewriting_pipeline-b25b69db1cb6a212
+    129964 KB  target/debug/deps/page_navigation_pipeline-edf9419810e6ef2c
+    129952 KB  target/debug/deps/website_post_render-018a5b3a0b238d69
+    129944 KB  target/debug/deps/project_pipeline-ee1d5e2c85e148b1
+    129940 KB  target/debug/deps/sidebar_pipeline-77220fc48e73cccc
+    129936 KB  target/debug/deps/navbar_footer_pipeline-a979df17277d9dd1
+    129936 KB  target/debug/deps/bootstrap_js_pipeline-24215c58dc1eab7c
+    129936 KB  target/debug/deps/artifact_scoping_pipeline-de761f1529baf0ad
+    129924 KB  target/debug/deps/metadata_path_resolution-7bca25d70dfceaef
+    129916 KB  target/debug/deps/math_mode_pipeline-ff8ac0b4028612ef
+    129812 KB  target/debug/deps/render_to_html_user_grammars-8b272d585933592e
+
+executable_count_in_deps: 220
+executable_bytes_total: 11312332800
+==========================================

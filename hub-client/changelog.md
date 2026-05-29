@@ -15,6 +15,14 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-05-27
+
+- [`9aa29ee1`](https://github.com/quarto-dev/q2/commits/9aa29ee1): View toggle buttons now order markup-left / preview-right (matching the editor-left / preview-right layout) instead of preview-left / markup-right.
+
+### 2026-05-26
+
+- [`1bc3d2cd`](https://github.com/quarto-dev/q2/commits/1bc3d2cd): Fix Monaco editor in light mode falling back to its default theme because the configured name (`light`) was not a registered Monaco theme; use `vs` instead.
+
 ### 2026-05-21
 
 - [`6c84696d`](https://github.com/quarto-dev/q2/commits/6c84696d): Login screen and post-logout view now respect the saved `colorScheme` preference (and system `prefers-color-scheme`) instead of always rendering light on first visit and inheriting the previous session's class after logout.

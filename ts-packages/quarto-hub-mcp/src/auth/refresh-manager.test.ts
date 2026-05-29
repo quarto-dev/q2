@@ -19,6 +19,7 @@ import {
 import {
   ReauthRequired,
   RefreshManager,
+  TokenRefreshError,
   type RefreshManagerDeps,
 } from './refresh-manager.js';
 
@@ -215,10 +216,10 @@ async function seedStore(
 function makeRm(
   store: CredentialStore,
   fetchImpl: typeof fetch,
-  extra: Partial<Omit<RefreshManagerDeps, 'as' | 'config' | 'store' | 'fetch'>> = {},
+  extra: Partial<Omit<RefreshManagerDeps, 'authServer' | 'config' | 'store' | 'fetch'>> = {},
 ): RefreshManager {
   return new RefreshManager({
-    as: AS,
+    authServer: async () => AS,
     config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
     store,
     fetch: fetchImpl,
@@ -361,6 +362,56 @@ describe('RefreshManager.forceRefresh failure handling', () => {
     await expect(rm.forceRefresh()).rejects.toThrow();
     expect(state.value).toBe(beforeBlob);
   });
+
+  it('throws an actionable TokenRefreshError on invalid_client (wrong client secret), store intact', async () => {
+    const { store, state } = await seedStore(makeBundle());
+    const beforeBlob = state.value;
+    const { fetch } = makeFetch(() =>
+      jsonResponse(401, {
+        error: 'invalid_client',
+        error_description: 'The provided client secret is invalid.',
+      }),
+    );
+    const rm = makeRm(store, fetch);
+    let err: unknown;
+    try {
+      await rm.forceRefresh();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TokenRefreshError);
+    const tre = err as TokenRefreshError;
+    expect(tre.oauthError).toBe('invalid_client');
+    expect(tre.oauthErrorDescription).toBe('The provided client secret is invalid.');
+    expect(tre.isConfigError).toBe(true);
+    // Message surfaces the code, the description, and the config remediation.
+    expect(tre.message).toContain('invalid_client');
+    expect(tre.message).toContain('The provided client secret is invalid.');
+    expect(tre.message).toMatch(/QUARTO_HUB_MCP_CLIENT_(ID|SECRET)/);
+    // Not the opaque oauth4webapi default.
+    expect(tre.message).not.toBe('server responded with an error in the response body');
+    // The stored credential is the user's grant, not the problem — keep it.
+    expect(state.value).toBe(beforeBlob);
+  });
+
+  it('wraps a 4xx non-config oauth error in a TokenRefreshError flagged non-config', async () => {
+    const { store } = await seedStore(makeBundle());
+    // oauth4webapi only parses an error *body* for 4xx; a non-config code
+    // like invalid_request becomes a ResponseBodyError we can wrap.
+    const { fetch } = makeFetch(() => jsonResponse(400, { error: 'invalid_request' }));
+    const rm = makeRm(store, fetch);
+    let err: unknown;
+    try {
+      await rm.forceRefresh();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TokenRefreshError);
+    const tre = err as TokenRefreshError;
+    expect(tre.oauthError).toBe('invalid_request');
+    expect(tre.isConfigError).toBe(false);
+    expect(tre.message).toMatch(/transient/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -419,6 +470,72 @@ describe('RefreshManager.getValidIdToken', () => {
     const rm = makeRm(store, fetch);
     await expect(rm.getValidIdToken()).rejects.toBeInstanceOf(ReauthRequired);
     expect(requests).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// invalidate — best-effort grant wipe
+// ---------------------------------------------------------------------------
+
+describe('RefreshManager.invalidate', () => {
+  it('clears the stored grant', async () => {
+    const { store, state } = await seedStore(makeBundle());
+    expect(state.value).not.toBeNull();
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const rm = makeRm(store, fetch);
+    await rm.invalidate();
+    expect(state.value).toBeNull();
+    expect(await store.read()).toBeNull();
+  });
+
+  it('swallows a keyring failure (the caller surfaces ReauthRequired)', async () => {
+    const failing: KeyringBackend = {
+      async read() {
+        return null;
+      },
+      async write() {},
+      async clear() {
+        throw new Error('Secret Service unavailable');
+      },
+    };
+    const store = new CredentialStore(CFG, failing);
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const rm = makeRm(store, fetch);
+    await expect(rm.invalidate()).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lazy authorization-server discovery
+// ---------------------------------------------------------------------------
+
+describe('RefreshManager lazy discovery', () => {
+  it('does not resolve the authorization server on the cached-token fast path', async () => {
+    const { store } = await seedStore(makeBundle());
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const authServer = vi.fn(async () => AS);
+    const rm = new RefreshManager({
+      authServer,
+      config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
+      store,
+      fetch,
+    });
+    await rm.getValidIdToken();
+    expect(authServer).not.toHaveBeenCalled();
+  });
+
+  it('resolves the authorization server only when a refresh actually fires', async () => {
+    const { store } = await seedStore(makeBundle());
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const authServer = vi.fn(async () => AS);
+    const rm = new RefreshManager({
+      authServer,
+      config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
+      store,
+      fetch,
+    });
+    await rm.forceRefresh();
+    expect(authServer).toHaveBeenCalledOnce();
   });
 });
 

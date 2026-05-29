@@ -3,14 +3,16 @@
 MCP server that lets an AI agent (Claude Code, Claude Desktop, Cursor,
 Continue, …) read and write Quarto Hub projects through Automerge.
 
-Authentication uses Google's OAuth 2.0 device-authorization grant
-(RFC 8628). The agent calls one MCP tool to start the flow, you
-approve in a browser, and the agent calls a second tool to finish.
-The resulting credentials are persisted in your OS keyring; the agent
-can use them indefinitely until you revoke them.
+Authentication uses Google's OAuth 2.0 Authorization Code grant with
+PKCE and a loopback redirect (RFC 8252) — the same pattern as `gcloud
+auth login`, `gh auth login`, and `aws sso login`. The agent calls a
+single `authenticate` MCP tool, your browser opens to Google's sign-in
+page, and the redirect lands back on a short-lived `127.0.0.1` listener
+the tool started. The resulting credentials are persisted in your OS
+keyring; the agent can use them indefinitely until you revoke them.
 
 The design lives in
-[`claude-notes/plans/2026-05-05-hub-mcp-device-flow-implementation.md`](../../claude-notes/plans/2026-05-05-hub-mcp-device-flow-implementation.md);
+[`claude-notes/plans/2026-05-28-hub-mcp-loopback-pkce.md`](../../claude-notes/plans/2026-05-28-hub-mcp-loopback-pkce.md);
 operators registering a hub for end-user use should consult
 [`claude-notes/instructions/hub-mcp-operator-runbook.md`](../../claude-notes/instructions/hub-mcp-operator-runbook.md).
 
@@ -38,7 +40,7 @@ Add hub-mcp to your MCP client config. For Claude Code the file is
       "args": [
         "@quarto/hub-mcp",
         "--server",
-        "wss://hub.example.com/ws"
+        "wss://quarto-hub.com/ws"
       ],
       "env": {
         "QUARTO_HUB_MCP_CLIENT_ID":     "<operator-supplied>.apps.googleusercontent.com",
@@ -57,22 +59,36 @@ Add hub-mcp to your MCP client config. For Claude Code the file is
 Restart the MCP client. The first agent action against the hub
 triggers the auth flow:
 
-1. Agent calls the `authenticate_start` MCP tool.
-2. Tool response shows `https://www.google.com/device` and a short
-   `user_code`. Google's response carries its own `verification_uri`
-   that is also shown — both URLs are valid; the canonical
-   `https://www.google.com/device` is hard-coded as a
-   phishing-resistance check.
-3. You open the URL, type the code, approve consent in your browser.
-4. Agent calls `authenticate_finish`. On success the response is
-   `"Authenticated as <your-email>."` and the agent retries the
-   original action.
+1. Agent calls the `authenticate` MCP tool. The tool binds a local
+   `127.0.0.1` listener and opens your browser to Google's sign-in
+   page. The authorization URL is also printed (to the tool's progress
+   output and to stderr) so you can open it manually if the browser
+   doesn't launch — useful on headless or SSH sessions.
+2. You sign in and approve consent in your browser. The redirect lands
+   on the local listener, which closes immediately after.
+3. The tool exchanges the authorization code (bound to a PKCE verifier
+   held only in this process) and stores the credentials. On success
+   the response is `"Authenticated as <your-email>."` and the agent
+   retries the original action.
 
 If the hub does **not** require authentication (operator-disabled
-auth) the agent just talks to the hub directly — no device flow.
+auth) the agent just talks to the hub directly — no sign-in flow.
 Asking the agent to authenticate against a known no-auth hub returns
 `"The configured hub does not require authentication; no action
 needed."`.
+
+## Upgrading from the device-flow version
+
+Earlier hub-mcp used Google's device-authorization flow with a "TV and
+Limited Input devices" OAuth client. The loopback+PKCE version uses a
+**Desktop app** client, so your operator will issue new `client_id` /
+`client_secret` values. After you switch them, the first agent action
+prompts you to sign in once: the credential store keys entries by
+`(issuer, client_id)`, so the old entry is simply invisible to the new
+lookup and a fresh `authenticate` runs automatically. The stranded old
+entry under the previous `client_id` is harmless and can be cleared at
+your leisure with the platform command in the **Clearing the entry**
+table (substituting the old `client_id`).
 
 ## Credential storage
 
@@ -114,27 +130,60 @@ no-auth hubs.)
 | Windows  | `cmdkey /delete:dev.quarto.hub-mcp:<issuer>:<client_id>`                      |
 
 Clearing the entry forces the next agent action to start a fresh
-device flow.
+sign-in. The `authenticate_clear` MCP tool does the same from inside
+the agent, and additionally best-effort revokes the stored refresh
+token at Google before deleting the local copy (see **Revoking
+access** below).
 
-### Headless Linux
+### Headless / SSH sessions
+
+The sign-in redirect lands on a `127.0.0.1` listener on the machine
+running hub-mcp. On a headless or remote machine there is no local
+browser to receive it, so use one of:
+
+- **SSH port-forward.** Pick a free non-privileged port `N`, start
+  hub-mcp with a fixed redirect port, and forward it from your
+  workstation:
+
+  ```bash
+  # on the remote host (via your MCP client's args)
+  quarto-hub-mcp --server wss://quarto-hub.com/ws --redirect-port N
+  # on your local workstation
+  ssh -L N:127.0.0.1:N <remote>
+  ```
+
+  Call `authenticate`; the printed authorization URL opens in your
+  local browser, and the redirect to `http://127.0.0.1:N/callback`
+  travels back through the tunnel. Omitting `--redirect-port` lets the
+  OS pick a port (logged to stderr on bind), which is fine for a local
+  desktop but awkward to forward.
+
+- **Hub SPA cookie path** from a graphical session on the same hub.
+
+### Headless Linux keyring
 
 Headless Linux machines without a running Secret Service / libsecret
-(`gnome-keyring-daemon`, `kwallet5`, or equivalent) cannot run
-hub-mcp. Either install one of those daemons or use the Hub SPA
+(`gnome-keyring-daemon`, `kwallet5`, or equivalent) cannot persist
+credentials. Either install one of those daemons or use the Hub SPA
 cookie path from a graphical session on the same hub.
 
 ## Revoking access
 
-To revoke the agent's access entirely:
+The quickest path is to ask the agent to call `authenticate_clear`.
+It best-effort revokes the stored refresh token at Google's revocation
+endpoint (which also invalidates any access tokens derived from it),
+then deletes the local keyring entry. If the revoke fails (offline, or
+the token was already invalid) the local delete still proceeds and the
+response tells you to finish the job manually.
+
+To revoke manually, or to be sure when the revoke step failed:
 
 1. Visit <https://myaccount.google.com/permissions>.
 2. **Third-party apps with account access** → the hub-mcp client →
    **Remove Access**.
 
 The agent's next action surfaces `ReauthRequired` with a message
-asking you to re-authenticate. Clear your local keyring entry too
-(see the table above) if you don't intend to authenticate again
-soon.
+asking you to re-authenticate.
 
 > **ID-token residual validity.** A stolen ID token authenticates to
 > the hub for up to **≤1 hour** after revocation, because JWTs are
@@ -149,12 +198,22 @@ soon.
 Symmetric with the SPA: the operator owns the Google project, the
 consent screen, the quota, the audit trail, and the revocation key.
 The Quarto team does **not** ship a baked-in client_id or
-client_secret — there is no shared default to compromise.
+client_secret — there is no shared default to compromise. The
+operator registers a **Desktop app** OAuth client (Google requires the
+`client_secret` on the token exchange even for installed-app clients,
+so both values are distributed to end users).
 
-Defence in depth: a leaked `client_secret` alone cannot redeem any
-user's approval. Each device flow is bound to a `device_code` that
-Google issues per-flow and that hub-mcp never persists; without a
-fresh approval against that `device_code` the secret is inert.
+Defence in depth: the loopback redirect collapses the remote-attack
+surface to a local one. After consent, tokens are delivered only to
+`http://127.0.0.1:<port>` on your own machine — unreachable from any
+remote network — and the authorization code is bound by PKCE to a
+`code_verifier` that never leaves this process. An attacker holding the
+`client_id`/`client_secret` cannot mint tokens under your identity
+without first achieving code execution on your machine (at which point
+the keyring is already exposed and OAuth is moot). This is the key
+improvement over the previous device-flow design, which an attacker
+could phish remotely with only the client credentials and a plausible
+cover story.
 
 ## Insecure transport (dev only)
 

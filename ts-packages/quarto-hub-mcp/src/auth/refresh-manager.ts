@@ -16,13 +16,18 @@
  * coalesce onto a single `/token` request and observe the same new
  * id_token.
  *
- * **Refresh-token persistence rule** — empirically (2026-05-19, see
- * the plan's Verification log) Google does not rotate refresh tokens
- * for the Limited-Input-Devices client type. We follow OAuth's
- * defensive rule: if the response carries a `refresh_token` field we
- * persist it (handles a future IdP that *does* rotate); otherwise we
- * keep the prior value. Discarding on missing field would force a
- * re-auth on every refresh against today's live Google.
+ * **Refresh-token persistence rule** — we follow OAuth's defensive
+ * rule: if the response carries a `refresh_token` field we persist it
+ * (handles an IdP that rotates on every grant); otherwise we keep the
+ * prior value (handles an IdP that issues the refresh token once and
+ * omits it thereafter). The rule is correct under both behaviours, so
+ * it does not depend on which Google client type is in use. The earlier
+ * empirical note about the Limited-Input-Devices client's no-rotation
+ * behaviour was removed when hub-mcp switched to the loopback+PKCE flow
+ * on the Desktop-app client (see the loopback+PKCE plan); the
+ * Desktop-app client's steady-state rotation behaviour is pending
+ * confirmation by that plan's Spike A, but this defensive rule holds
+ * either way.
  *
  * `invalid_grant` is the one terminal error the manager handles
  * itself: it clears the credential store (so subsequent
@@ -39,6 +44,7 @@ import {
   type CredentialBundle,
   type CredentialStore,
 } from './credential-store.js';
+import type { AuthServerProvider } from './oauth-config.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -50,7 +56,8 @@ export interface RefreshManagerConfig {
 }
 
 export interface RefreshManagerDeps {
-  readonly as: oauth.AuthorizationServer;
+  /** Lazily-resolved authorization server; called only when a refresh fires. */
+  readonly authServer: AuthServerProvider;
   readonly config: RefreshManagerConfig;
   readonly store: CredentialStore;
   /**
@@ -78,6 +85,50 @@ export class ReauthRequired extends Error {
   }
 }
 
+/** OAuth errors that point at the server's client config, not the user's grant. */
+const CONFIG_OAUTH_ERRORS = new Set(['invalid_client', 'unauthorized_client']);
+
+function buildTokenRefreshMessage(
+  oauthError: string,
+  oauthErrorDescription: string | undefined,
+): string {
+  const detail = oauthErrorDescription
+    ? `${oauthError}: ${oauthErrorDescription}`
+    : oauthError;
+  if (CONFIG_OAUTH_ERRORS.has(oauthError)) {
+    return (
+      `Token refresh was rejected by the identity provider (${detail}). ` +
+      `This points to the hub MCP server's OAuth client configuration, ` +
+      `not your stored credentials — re-authenticating will not fix it. ` +
+      `Check that QUARTO_HUB_MCP_CLIENT_ID and QUARTO_HUB_MCP_CLIENT_SECRET ` +
+      `name a valid OAuth client and matching secret.`
+    );
+  }
+  return (
+    `Token refresh failed (${detail}). This is usually transient — retry ` +
+    `shortly. If it persists, re-authenticate with the authenticate tool.`
+  );
+}
+
+/**
+ * Token refresh failed with a structured OAuth error other than
+ * `invalid_grant`. Carries the IdP's `error` / `error_description` so the
+ * failure is actionable instead of oauth4webapi's opaque default message.
+ */
+export class TokenRefreshError extends Error {
+  override readonly name = 'TokenRefreshError';
+  readonly oauthError: string;
+  readonly oauthErrorDescription: string | undefined;
+  /** True for operator/config problems, not the user's grant. */
+  readonly isConfigError: boolean;
+  constructor(oauthError: string, oauthErrorDescription?: string) {
+    super(buildTokenRefreshMessage(oauthError, oauthErrorDescription));
+    this.oauthError = oauthError;
+    this.oauthErrorDescription = oauthErrorDescription;
+    this.isConfigError = CONFIG_OAUTH_ERRORS.has(oauthError);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // RefreshManager
 // ---------------------------------------------------------------------------
@@ -94,6 +145,17 @@ export class RefreshManager {
 
   constructor(deps: RefreshManagerDeps) {
     this.deps = deps;
+  }
+
+  /**
+   * Best-effort wipe of the stored grant. Both the IdP's `invalid_grant`
+   * (here) and the hub's persistent-401 (connection-manager) converge on
+   * this: forget the dead credential so the next `getValidIdToken` fails
+   * loud instead of spinning on it. Swallows keyring errors — the caller's
+   * `ReauthRequired` is the signal that matters.
+   */
+  async invalidate(): Promise<void> {
+    await this.deps.store.clear().catch(() => undefined);
   }
 
   async getValidIdToken(): Promise<string> {
@@ -123,6 +185,9 @@ export class RefreshManager {
     const bundle = await this.deps.store.read();
     if (bundle === null) throw new ReauthRequired();
 
+    // Resolve discovery lazily — only reached when an actual refresh fires,
+    // never on the cached-token fast path.
+    const as = await this.deps.authServer();
     const client: oauth.Client = { client_id: this.deps.config.clientId };
     const clientAuth = oauth.ClientSecretPost(this.deps.config.clientSecret);
     const requestOpts = this.deps.fetch
@@ -133,26 +198,31 @@ export class RefreshManager {
     try {
       const resp = requestOpts
         ? await oauth.refreshTokenGrantRequest(
-            this.deps.as,
+            as,
             client,
             clientAuth,
             bundle.refreshToken,
             requestOpts,
           )
         : await oauth.refreshTokenGrantRequest(
-            this.deps.as,
+            as,
             client,
             clientAuth,
             bundle.refreshToken,
           );
-      tokens = await oauth.processRefreshTokenResponse(this.deps.as, client, resp);
+      tokens = await oauth.processRefreshTokenResponse(as, client, resp);
     } catch (err) {
-      if (err instanceof oauth.ResponseBodyError && err.error === 'invalid_grant') {
-        // Stored refresh_token is rejected by Google: revoked, expired,
-        // or never valid. Clear so the next `getValidIdToken` fails
-        // loud rather than spinning on the same bad token.
-        await this.deps.store.clear().catch(() => undefined);
-        throw new ReauthRequired(REAUTH_MESSAGE, err.error);
+      if (err instanceof oauth.ResponseBodyError) {
+        if (err.error === 'invalid_grant') {
+          // Stored refresh_token is rejected by Google: revoked, expired,
+          // or never valid. Wipe it so the next `getValidIdToken` fails
+          // loud rather than spinning on the same bad token.
+          await this.invalidate();
+          throw new ReauthRequired(REAUTH_MESSAGE, err.error);
+        }
+        // Any other structured OAuth error: surface code + description,
+        // leaving the store intact (the grant isn't what was rejected).
+        throw new TokenRefreshError(err.error, err.error_description);
       }
       throw err;
     }

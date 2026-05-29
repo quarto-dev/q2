@@ -4,7 +4,7 @@
  *
  * Loads the TOML grammar from the shared fixture in `crates/quarto-highlight`,
  * highlights TOML source, and asserts the same captures the native Rust
- * path verifies in `crates/quarto-highlight/tests/user_grammar_toml.rs`.
+ * path verifies in `crates/quarto-highlight/tests/integration/user_grammar_toml.rs`.
  *
  * Runs under `npm run test:wasm` because it needs real wasm I/O (the
  * web-tree-sitter runtime and the `toml.wasm` grammar bytes).

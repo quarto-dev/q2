@@ -4,18 +4,25 @@
  * Focused on the bits that are new for the implementation branch
  * (char→byte translation, payload shape). The run-list invariants
  * proper are covered exhaustively on `feat/node-attribution` and pinned
- * cross-implementation by `crates/quarto-core/tests/attribution_types.rs`
+ * cross-implementation by `crates/quarto-core/tests/integration/attribution_types.rs`
  * (`query_byte_range` invariants — Phase 0 test #2).
  *
  * @vitest-environment jsdom
  */
 
 import { describe, it, expect } from 'vitest';
+import { next as A } from '@automerge/automerge';
+import type { Doc } from '@automerge/automerge';
+import { encodeHeads } from '@automerge/automerge-repo';
+import type { DocHandle } from '@automerge/automerge-repo';
 
 import {
   buildCharToByteMap,
+  buildRunListAttribution,
   runsCharToByteOffsets,
+  updateRunListAttribution,
   type AttributionRun,
+  type ViewableHandle,
 } from './attribution-runs';
 
 describe('buildCharToByteMap', () => {
@@ -73,5 +80,93 @@ describe('runsCharToByteOffsets', () => {
     ];
     const out = runsCharToByteOffsets(runs, map);
     expect(out).toEqual(runs);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Incremental ≡ from-scratch invariant
+// ---------------------------------------------------------------------------
+
+// Anchor for the incremental path: whatever shortcut `updateRunListAttribution`
+// uses to skip work, the final run list must agree character-for-character with
+// what `buildRunListAttribution` produces from `init()` on the same final doc.
+// If a future refactor breaks this — including via something subtle at the
+// Automerge boundary (history-traversal ordering, getChanges semantics, etc.)
+// — this is the test that should catch it.
+
+interface TDoc { text: string }
+
+function fakeHandle(doc: Doc<TDoc>): DocHandle<unknown> {
+  const view: ViewableHandle = {
+    history: () => A.topoHistoryTraversal(doc).map(h => encodeHeads([h])),
+    metadata: () => undefined,
+    doc: () => doc,
+  };
+  return view as unknown as DocHandle<unknown>;
+}
+
+describe('updateRunListAttribution invariant', () => {
+  it('matches a from-scratch rebuild after a concurrent merge', async () => {
+    const aliceActor = 'f'.repeat(32);
+    const bobActor = '0'.repeat(32);
+
+    let alice = A.from<TDoc>({ text: '' }, { actor: aliceActor });
+    let bob = A.load<TDoc>(A.save(alice), { actor: bobActor });
+
+    alice = A.change(alice, d => A.splice(d, ['text'], 0, 0, 'Hello'));
+    alice = A.change(alice, d => A.splice(d, ['text'], 5, 0, ' World'));
+    alice = A.change(alice, d => A.splice(d, ['text'], 11, 0, '!'));
+
+    const stateBefore = await buildRunListAttribution(fakeHandle(alice), 'text');
+    expect(stateBefore).toBeTruthy();
+
+    bob = A.change(bob, d => A.splice(d, ['text'], 0, 0, 'X'));
+    bob = A.change(bob, d => A.splice(d, ['text'], 1, 0, 'Y'));
+    bob = A.change(bob, d => A.splice(d, ['text'], 2, 0, 'Z'));
+    alice = A.merge(alice, bob);
+
+    const incremental = updateRunListAttribution(stateBefore!, fakeHandle(alice), 'text');
+    const fromScratch = await buildRunListAttribution(fakeHandle(alice), 'text');
+
+    expect(fromScratch).toBeTruthy();
+    expect(incremental.runs).toEqual(fromScratch!.runs);
+  });
+
+  it('matches a from-scratch rebuild across interleaved local and merged remote edits', async () => {
+    const aliceActor = 'f'.repeat(32);
+    const bobActor = '0'.repeat(32);
+
+    let alice = A.from<TDoc>({ text: '' }, { actor: aliceActor });
+    let bob = A.load<TDoc>(A.save(alice), { actor: bobActor });
+
+    alice = A.change(alice, d => A.splice(d, ['text'], 0, 0, 'A1'));
+    const stateBefore = await buildRunListAttribution(fakeHandle(alice), 'text');
+    expect(stateBefore).toBeTruthy();
+
+    bob = A.change(bob, d => A.splice(d, ['text'], 0, 0, 'B1'));
+    bob = A.change(bob, d => A.splice(d, ['text'], 2, 0, 'B2'));
+    alice = A.merge(alice, bob);
+    alice = A.change(alice, d => A.splice(d, ['text'], 0, 0, 'A2'));
+    alice = A.change(alice, d => A.splice(d, ['text'], 0, 0, 'A3'));
+
+    const incremental = updateRunListAttribution(stateBefore!, fakeHandle(alice), 'text');
+    const fromScratch = await buildRunListAttribution(fakeHandle(alice), 'text');
+
+    expect(fromScratch).toBeTruthy();
+    expect(incremental.runs).toEqual(fromScratch!.runs);
+  });
+
+  it('returns state unchanged when no new changes are present', async () => {
+    const aliceActor = 'f'.repeat(32);
+    let alice = A.from<TDoc>({ text: '' }, { actor: aliceActor });
+    alice = A.change(alice, d => A.splice(d, ['text'], 0, 0, 'hello'));
+
+    const stateBefore = await buildRunListAttribution(fakeHandle(alice), 'text');
+    expect(stateBefore).toBeTruthy();
+
+    // No edits between build and update — the incremental path should
+    // short-circuit and return the same runs.
+    const incremental = updateRunListAttribution(stateBefore!, fakeHandle(alice), 'text');
+    expect(incremental.runs).toEqual(stateBefore!.runs);
   });
 });

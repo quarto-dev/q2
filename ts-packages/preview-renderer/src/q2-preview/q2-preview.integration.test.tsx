@@ -355,7 +355,7 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         // Raw `data-hl-spans` attribute must NOT leak through as a
         // DOM attribute. Matches the Rust HTML writer's behavior
         // (`!output.html().contains("data-hl-spans=")` in
-        // crates/quarto-core/tests/render_to_html_user_grammars.rs).
+        // crates/quarto-core/tests/integration/render_to_html_user_grammars.rs).
         expect(pre!.hasAttribute('data-hl-spans')).toBe(false);
         expect(code!.hasAttribute('data-hl-spans')).toBe(false);
     });

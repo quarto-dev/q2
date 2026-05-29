@@ -16,7 +16,7 @@
 
 import { AsyncEntry } from '@napi-rs/keyring';
 
-import { redactTokens } from './device-flow.js';
+import { redactTokens } from './redact.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -141,6 +141,14 @@ export class CredentialStore {
   // Tail of the in-process mutex chain. Every operation chains onto
   // this promise so reads and writes serialise in submission order.
   private tail: Promise<void> = Promise.resolve();
+  // In-memory memo of the last *definitive* keyring state, so repeated
+  // reads (every getBearer / connect probe) skip the OS-IPC round-trip.
+  // `undefined` = unknown (not yet observed); `{ value }` = known. Only
+  // definitive outcomes populate it — a successful read, a successful
+  // write, or a clear. A transient read failure leaves it untouched so
+  // the next read retries the backend. This process is the only writer
+  // of its keyring entry, so a cached value cannot go stale underneath us.
+  private cache: { value: CredentialBundle | null } | undefined;
 
   constructor(cfg: CredentialStoreConfig, backend?: KeyringBackend) {
     this.cfg = cfg;
@@ -150,17 +158,23 @@ export class CredentialStore {
 
   async read(): Promise<CredentialBundle | null> {
     return await this.enqueue(async () => {
+      // Cache check runs inside the mutex chain so a read submitted after
+      // a write still observes that write (ordering contract preserved);
+      // we only skip the keyring IPC, not the serialisation.
+      if (this.cache !== undefined) return this.cache.value;
       let raw: string | null;
       try {
         raw = await this.backend.read();
       } catch (err) {
         // Read is never fatal — try-without-creds-first depends on it.
+        // Don't cache a transient failure: the next read retries.
         const msg = redactTokens(errMessage(err));
         console.warn(`CredentialStore: keyring read failed (${msg})`);
         return null;
       }
-      if (raw === null) return null;
-      return parseBundle(raw);
+      const value = raw === null ? null : parseBundle(raw);
+      this.cache = { value };
+      return value;
     });
   }
 
@@ -174,6 +188,7 @@ export class CredentialStore {
           `Failed to write credentials to OS keyring (service '${SERVICE_NAME}'): ${redactTokens(errMessage(err))}`
         );
       }
+      this.cache = { value: bundle };
     });
   }
 
@@ -186,6 +201,7 @@ export class CredentialStore {
           `Failed to clear credentials from OS keyring (service '${SERVICE_NAME}'): ${redactTokens(errMessage(err))}`
         );
       }
+      this.cache = { value: null };
     });
   }
 

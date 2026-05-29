@@ -33,6 +33,19 @@ const SAMPLE: CredentialBundle = {
   scopes: ['openid', 'email', 'profile'],
 };
 
+/** The canonical on-disk blob for {@link SAMPLE}. */
+function serializeSample(): string {
+  return JSON.stringify({
+    schema_version: 1,
+    issuer: ISSUER,
+    client_id: CLIENT_ID,
+    id_token: SAMPLE.idToken,
+    refresh_token: SAMPLE.refreshToken,
+    id_token_expires_at: SAMPLE.idTokenExpiresAt.toISOString(),
+    scopes: SAMPLE.scopes,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // In-memory backends
 // ---------------------------------------------------------------------------
@@ -243,6 +256,70 @@ describe('CredentialStore.write / read round-trip', () => {
     await store.clear();
     expect(state.value).toBeNull();
     expect(log.clears).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// In-memory caching (skips OS-keyring IPC on the warm path)
+// ---------------------------------------------------------------------------
+
+describe('CredentialStore caching', () => {
+  it('serves a second read from the cache without re-hitting the backend', async () => {
+    const blob = serializeSample();
+    const { backend, log } = memoryBackend(blob);
+    const store = new CredentialStore(CFG, backend);
+    const first = await store.read();
+    const second = await store.read();
+    expect(first).not.toBeNull();
+    expect(second!.idToken).toBe(SAMPLE.idToken);
+    expect(log.reads).toBe(1);
+  });
+
+  it('caches a definitive miss so a second read does not re-hit the backend', async () => {
+    const { backend, log } = memoryBackend(null);
+    const store = new CredentialStore(CFG, backend);
+    expect(await store.read()).toBeNull();
+    expect(await store.read()).toBeNull();
+    expect(log.reads).toBe(1);
+  });
+
+  it('populates the cache on write so a subsequent read skips the backend', async () => {
+    const { backend, log } = memoryBackend();
+    const store = new CredentialStore(CFG, backend);
+    await store.write(SAMPLE);
+    const got = await store.read();
+    expect(got!.refreshToken).toBe(SAMPLE.refreshToken);
+    expect(log.reads).toBe(0);
+  });
+
+  it('invalidates the cache on clear so a subsequent read returns null without the backend', async () => {
+    const { backend, log } = memoryBackend(serializeSample());
+    const store = new CredentialStore(CFG, backend);
+    await store.read(); // warm the cache (reads === 1)
+    await store.clear();
+    expect(await store.read()).toBeNull();
+    expect(log.reads).toBe(1);
+  });
+
+  it('does not cache a transient read failure — the next read retries the backend', async () => {
+    let calls = 0;
+    const blob = serializeSample();
+    const backend: KeyringBackend = {
+      async read() {
+        calls += 1;
+        if (calls === 1) throw new Error('transient libsecret hiccup');
+        return blob;
+      },
+      async write() {},
+      async clear() {
+        return false;
+      },
+    };
+    const store = new CredentialStore(CFG, backend);
+    expect(await store.read()).toBeNull(); // transient failure → null, uncached
+    const recovered = await store.read(); // retries, succeeds
+    expect(recovered!.idToken).toBe(SAMPLE.idToken);
+    expect(calls).toBe(2);
   });
 });
 

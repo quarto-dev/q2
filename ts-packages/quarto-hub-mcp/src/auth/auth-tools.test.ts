@@ -1,21 +1,23 @@
 /**
- * Phase 7 — MCP auth-tool surface (`authenticate_start` / `authenticate_finish`).
+ * MCP auth-tool surface — Authorization Code + PKCE + loopback.
  *
- * Tests drive `AuthToolsState` directly: no MCP `Server` instance is
- * spun up. Time is injected via `deps.now`; HTTP via `deps.fetch`. The
- * `CredentialStore` is wired to an in-memory keyring backend so writes
- * are observable without touching the platform keyring.
+ * Tests drive `AuthToolsState` directly: no MCP `Server` is spun up. The
+ * loopback listener and the browser opener are injected seams; HTTP is
+ * injected via `deps.fetch`; the `CredentialStore` is wired to an
+ * in-memory keyring backend so writes are observable.
  */
 
+import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi } from 'vitest';
-import * as oauth from 'oauth4webapi';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type * as oauth from 'oauth4webapi';
 
 import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
-  CANONICAL_VERIFICATION_URL,
-  type AuthToolsDeps,
+  type AuthToolContext,
   type LastObservedAuthModeSource,
+  type ProgressNotification,
 } from './auth-tools.js';
 import {
   CredentialStore,
@@ -23,6 +25,14 @@ import {
   type CredentialStoreConfig,
   type KeyringBackend,
 } from './credential-store.js';
+import {
+  LoopbackAbortedError,
+  LoopbackTimeoutError,
+  type LoopbackListener,
+  type StartLoopbackOptions,
+  startLoopbackListener,
+} from './loopback.js';
+import { openBrowser } from './browser.js';
 import { RefreshManager } from './refresh-manager.js';
 
 // ---------------------------------------------------------------------------
@@ -36,8 +46,9 @@ const FAKE_EMAIL = 'tester@example.com';
 
 const AS: oauth.AuthorizationServer = {
   issuer: ISSUER,
-  device_authorization_endpoint: 'https://oauth2.googleapis.com/device/code',
+  authorization_endpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   token_endpoint: 'https://oauth2.googleapis.com/token',
+  revocation_endpoint: 'https://oauth2.googleapis.com/revoke',
 };
 
 const CFG: CredentialStoreConfig = { issuer: ISSUER, clientId: FAKE_CLIENT_ID };
@@ -48,13 +59,8 @@ function b64url(s: string): string {
 
 interface IdTokenClaims {
   readonly exp: number;
-  readonly iss?: string;
-  readonly aud?: string;
-  readonly azp?: string;
-  readonly sub?: string;
   readonly email?: string;
-  readonly email_verified?: boolean;
-  readonly iat?: number;
+  readonly [k: string]: unknown;
 }
 
 function fakeIdToken(claims: IdTokenClaims): string {
@@ -80,22 +86,19 @@ function farFutureExp(): number {
 }
 
 // ---------------------------------------------------------------------------
-// Backend / store helpers
+// In-memory keyring backend
 // ---------------------------------------------------------------------------
 
 function memoryBackend(initial: string | null = null): {
   backend: KeyringBackend;
   state: { value: string | null };
-  writes: number;
 } {
-  const counters = { writes: 0 };
   const state = { value: initial };
   const backend: KeyringBackend = {
     async read() {
       return state.value;
     },
     async write(v: string) {
-      counters.writes += 1;
       state.value = v;
     },
     async clear() {
@@ -104,19 +107,13 @@ function memoryBackend(initial: string | null = null): {
       return existed;
     },
   };
-  return {
-    backend,
-    state,
-    get writes() {
-      return counters.writes;
-    },
-  };
+  return { backend, state };
 }
 
 function makeBundle(overrides: Partial<CredentialBundle> = {}): CredentialBundle {
   const exp = farFutureExp();
   return {
-    idToken: fakeIdToken({ exp }),
+    idToken: fakeIdToken({ exp, email: FAKE_EMAIL }),
     refreshToken: '1//original-refresh-token',
     idTokenExpiresAt: new Date(exp * 1000),
     scopes: ['openid', 'email', 'profile'],
@@ -125,13 +122,14 @@ function makeBundle(overrides: Partial<CredentialBundle> = {}): CredentialBundle
 }
 
 // ---------------------------------------------------------------------------
-// Fetch stub
+// fetch recorder
 // ---------------------------------------------------------------------------
 
 interface RecordedRequest {
   url: string;
   method: string;
   body: URLSearchParams;
+  headers: Record<string, string>;
 }
 
 function makeFetch(
@@ -148,7 +146,13 @@ function makeFetch(
     } else {
       body = new URLSearchParams();
     }
-    requests.push({ url, method: init?.method ?? 'GET', body });
+    const headers: Record<string, string> = {};
+    if (init?.headers) {
+      for (const [k, v] of Object.entries(init.headers as Record<string, string>)) {
+        headers[k.toLowerCase()] = v;
+      }
+    }
+    requests.push({ url, method: init?.method ?? 'GET', body, headers });
     return responder(requests[requests.length - 1]!);
   };
   return { fetch: stub, requests };
@@ -161,681 +165,635 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-function deviceAuthBody(overrides: Partial<oauth.DeviceAuthorizationResponse> = {}): Record<string, unknown> {
-  return {
-    device_code: 'AH-1Ng-test',
-    user_code: 'FJZL-WTDR',
-    verification_uri: 'https://www.google.com/device',
-    expires_in: 1800,
-    interval: 5,
-    ...overrides,
-  };
-}
-
-function tokenSuccessBody(
-  overrides: { id_token?: string; refresh_token?: string; access_token?: string } = {},
+function tokenResponseBody(
+  overrides: { id_token?: string; refresh_token?: string | undefined } = {},
 ): Record<string, unknown> {
-  return {
-    access_token: overrides.access_token ?? 'ya29.fake-access-token',
+  const body: Record<string, unknown> = {
+    access_token: 'ya29.fresh-access',
     expires_in: 3599,
-    refresh_token: overrides.refresh_token ?? '1//fake-refresh-token',
-    scope: 'openid email profile',
     token_type: 'Bearer',
-    id_token:
-      overrides.id_token ??
-      fakeIdToken({
-        exp: farFutureExp(),
-        sub: 'fake-sub',
-        email: FAKE_EMAIL,
-      }),
+    scope: 'openid email profile',
+    id_token: overrides.id_token ?? fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL }),
+    refresh_token: '1//new-refresh-token',
   };
+  if ('refresh_token' in overrides) {
+    if (overrides.refresh_token === undefined) delete body.refresh_token;
+    else body.refresh_token = overrides.refresh_token;
+  }
+  return body;
 }
 
 // ---------------------------------------------------------------------------
-// Connection-manager stub
+// Injected seams: loopback listener + browser opener
 // ---------------------------------------------------------------------------
 
-function stubConnMgr(mode: 'no-auth' | 'requires-auth' | 'unknown'): LastObservedAuthModeSource {
+interface FakeListenerControl {
+  start: typeof startLoopbackListener;
+  recorded: { expectedState?: string; redirectUri?: string; calls: number; signal?: AbortSignal };
+}
+
+function fakeListener(opts: {
+  code?: string;
+  rejectWith?: Error;
+  port?: number;
+}): FakeListenerControl {
+  const recorded: FakeListenerControl['recorded'] = { calls: 0 };
+  const start: typeof startLoopbackListener = async (o: StartLoopbackOptions) => {
+    recorded.calls += 1;
+    recorded.expectedState = o.expectedState;
+    recorded.signal = o.signal;
+    const port = opts.port ?? 51234;
+    const redirectUri = `http://127.0.0.1:${port}/callback`;
+    recorded.redirectUri = redirectUri;
+    const code = opts.code ?? 'auth-code-xyz';
+    const result: Promise<{ code: string; state: string; params: URLSearchParams }> =
+      opts.rejectWith
+        ? Promise.reject(opts.rejectWith)
+        : Promise.resolve({
+            code,
+            state: o.expectedState,
+            params: new URLSearchParams({ code, state: o.expectedState }),
+          });
+    // Keep an unobserved rejection from surfacing before the handler awaits.
+    result.catch(() => undefined);
+    const listener: LoopbackListener = { port, redirectUri, result, close: () => undefined };
+    return listener;
+  };
+  return { start, recorded };
+}
+
+interface FakeBrowserControl {
+  open: typeof openBrowser;
+  calls: string[];
+}
+
+function fakeBrowser(opts: { fail?: boolean } = {}): FakeBrowserControl {
+  const calls: string[] = [];
+  const open: typeof openBrowser = (url: string) => {
+    calls.push(url);
+    if (opts.fail) return undefined;
+    return new EventEmitter() as unknown as ReturnType<typeof openBrowser>;
+  };
+  return { open, calls };
+}
+
+// ---------------------------------------------------------------------------
+// State construction
+// ---------------------------------------------------------------------------
+
+function authMode(mode: 'no-auth' | 'requires-auth' | 'unknown'): LastObservedAuthModeSource {
   return { lastObservedAuthMode: () => mode };
 }
 
-// ---------------------------------------------------------------------------
-// Deps assembly
-// ---------------------------------------------------------------------------
-
-interface Harness {
-  state: AuthToolsState;
+interface MakeStateArgs {
   store: CredentialStore;
-  storeState: { value: string | null };
-  storeWriteCount: () => number;
-  requests: RecordedRequest[];
-  now: () => Date;
-  setNow: (d: Date) => void;
+  mode?: 'no-auth' | 'requires-auth' | 'unknown';
+  fetch?: typeof fetch;
+  startListener?: typeof startLoopbackListener;
+  openBrowser?: typeof openBrowser;
+  promptConsent?: boolean;
+  logger?: (m: string) => void;
+  authServer?: () => Promise<oauth.AuthorizationServer>;
 }
 
-interface HarnessOpts {
-  readonly seedBundle?: CredentialBundle;
-  readonly responder: (req: RecordedRequest) => Response | Promise<Response>;
-  readonly authMode?: 'no-auth' | 'requires-auth' | 'unknown';
-  readonly initialNow?: Date;
-  readonly coalesceWindowMs?: number;
-}
-
-async function makeHarness(opts: HarnessOpts): Promise<Harness> {
-  const mb = memoryBackend(null);
-  const store = new CredentialStore(CFG, mb.backend);
-  if (opts.seedBundle) {
-    await store.write(opts.seedBundle);
-  }
-  const { fetch, requests } = makeFetch(opts.responder);
-  let nowRef = opts.initialNow ?? new Date();
-  const now = (): Date => new Date(nowRef.getTime());
+function makeState(args: MakeStateArgs): AuthToolsState {
   const refreshManager = new RefreshManager({
-    as: AS,
+    authServer: async () => AS,
     config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
-    store,
-    fetch,
+    store: args.store,
+    // Never used in the loopback path (store.read() short-circuits first).
+    fetch: (async () => {
+      throw new Error('RefreshManager fetch should not be called in these tests');
+    }) as unknown as typeof fetch,
   });
-  const deps: AuthToolsDeps = {
-    credentialStore: store,
+  return new AuthToolsState({
+    credentialStore: args.store,
     refreshManager,
-    connectionManager: stubConnMgr(opts.authMode ?? 'requires-auth'),
-    flowConfig: {
-      clientId: FAKE_CLIENT_ID,
-      clientSecret: FAKE_CLIENT_SECRET,
-      issuer: ISSUER,
-    },
-    authorizationServer: AS,
-    now,
-    fetch,
-    coalesceWindowMs: opts.coalesceWindowMs,
-  };
-  const state = new AuthToolsState(deps);
-  return {
-    state,
-    store,
-    storeState: mb.state,
-    storeWriteCount: () => mb.writes,
-    requests,
-    now,
-    setNow: (d: Date) => {
-      nowRef = new Date(d.getTime());
-    },
-  };
+    connectionManager: authMode(args.mode ?? 'requires-auth'),
+    flowConfig: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET, issuer: ISSUER },
+    authServer: args.authServer ?? (async () => AS),
+    fetch: args.fetch,
+    startListener: args.startListener,
+    openBrowser: args.openBrowser,
+    promptConsent: args.promptConsent,
+    logger: args.logger ?? (() => undefined),
+  });
 }
 
-function textOf(result: { content: ReadonlyArray<{ readonly type: string; readonly text?: string }> }): string {
-  return result.content.map((c) => c.text ?? '').join('');
+function emptyStore(): { store: CredentialStore; state: { value: string | null } } {
+  const { backend, state } = memoryBackend(null);
+  return { store: new CredentialStore(CFG, backend), state };
 }
 
-// ---------------------------------------------------------------------------
+async function seededStore(
+  bundle: CredentialBundle = makeBundle(),
+): Promise<{ store: CredentialStore; state: { value: string | null } }> {
+  const { backend, state } = memoryBackend(null);
+  const store = new CredentialStore(CFG, backend);
+  await store.write(bundle);
+  return { store, state };
+}
+
+function textOf(res: CallToolResult): string {
+  return res.content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n');
+}
+
+// ===========================================================================
 // Tool definitions
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 describe('AUTH_TOOL_DEFINITIONS', () => {
-  it('exposes authenticate_start, authenticate_finish, and authenticate_clear', () => {
+  it('exposes exactly authenticate and authenticate_clear', () => {
     const names = AUTH_TOOL_DEFINITIONS.map((t) => t.name).sort();
-    expect(names).toEqual([
-      'authenticate_clear',
-      'authenticate_finish',
-      'authenticate_start',
-    ]);
+    expect(names).toEqual(['authenticate', 'authenticate_clear']);
   });
 
-  it('marks authenticate_start and authenticate_finish as non-idempotent and non-destructive', () => {
-    for (const t of AUTH_TOOL_DEFINITIONS) {
-      if (t.name === 'authenticate_clear') continue;
-      expect(t.annotations).toEqual({
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-      });
-    }
+  it('marks authenticate non-idempotent / non-destructive and clear destructive / idempotent', () => {
+    const auth = AUTH_TOOL_DEFINITIONS.find((t) => t.name === 'authenticate')!;
+    const clear = AUTH_TOOL_DEFINITIONS.find((t) => t.name === 'authenticate_clear')!;
+    expect(auth.annotations?.idempotentHint).toBe(false);
+    expect(auth.annotations?.destructiveHint).toBe(false);
+    expect(clear.annotations?.destructiveHint).toBe(true);
+    expect(clear.annotations?.idempotentHint).toBe(true);
   });
 
-  it('marks authenticate_clear as destructive and idempotent', () => {
-    const t = AUTH_TOOL_DEFINITIONS.find((x) => x.name === 'authenticate_clear');
-    expect(t).toBeDefined();
-    expect(t!.annotations).toEqual({
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: true,
-    });
+  it('clear description names the best-effort revoke and drops the old disclaimer', () => {
+    const clear = AUTH_TOOL_DEFINITIONS.find((t) => t.name === 'authenticate_clear')!;
+    expect(clear.description).toMatch(/revoke/i);
+    expect(clear.description).toContain('myaccount.google.com');
+    expect(clear.description).not.toMatch(/Does not touch Google-side grants/i);
   });
 });
 
-// ---------------------------------------------------------------------------
-// authenticate_start
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// authenticate — happy path + token-exchange contract
+// ===========================================================================
 
-describe('authenticate_start', () => {
-  it('returns verification_uri, user_code and canonical_url', async () => {
-    const h = await makeHarness({
-      responder: () => jsonResponse(200, deviceAuthBody()),
+describe('authenticate', () => {
+  it('runs the loopback flow, exchanges the code, and stores the credentials', async () => {
+    const { store, state } = emptyStore();
+    const listener = fakeListener({ code: 'the-code' });
+    const browser = fakeBrowser();
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const auth = makeState({
+      store,
+      fetch,
+      startListener: listener.start,
+      openBrowser: browser.open,
     });
-    const res = await h.state.handleStart();
-    const txt = textOf(res);
-    expect(txt).toContain(CANONICAL_VERIFICATION_URL);
-    expect(txt).toContain('https://www.google.com/device'); // verification_uri
-    expect(txt).toContain('FJZL-WTDR'); // user_code
+
+    const res = await auth.handleAuthenticate({});
+    expect(textOf(res)).toBe(`Authenticated as ${FAKE_EMAIL}.`);
+    expect(res.isError).toBeUndefined();
+
+    const stored = await store.read();
+    expect(stored?.refreshToken).toBe('1//new-refresh-token');
+    expect(state.value).not.toBeNull();
   });
 
-  it('includes the expires-in seconds in the response', async () => {
-    const h = await makeHarness({
-      responder: () => jsonResponse(200, deviceAuthBody({ expires_in: 1234 })),
-    });
-    const res = await h.state.handleStart();
-    expect(textOf(res)).toContain('1234');
+  it('sends both code_verifier and client_secret on the token exchange', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({ code: 'the-code' });
+    const browser = fakeBrowser();
+    const { fetch, requests } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const auth = makeState({ store, fetch, startListener: listener.start, openBrowser: browser.open });
+
+    await auth.handleAuthenticate({});
+
+    const tokenReq = requests.find((r) => r.url === AS.token_endpoint)!;
+    expect(tokenReq.body.get('grant_type')).toBe('authorization_code');
+    expect(tokenReq.body.get('code')).toBe('the-code');
+    expect(tokenReq.body.get('code_verifier')).toBeTruthy();
+    expect(tokenReq.body.get('client_secret')).toBe(FAKE_CLIENT_SECRET);
+    expect(tokenReq.body.get('redirect_uri')).toBe(listener.recorded.redirectUri);
   });
 
-  it('canonical URL is a hard-coded constant, not from Google', async () => {
-    const h = await makeHarness({
-      responder: () =>
-        jsonResponse(
-          200,
-          deviceAuthBody({ verification_uri: 'https://malicious.example.com/oauth' }),
-        ),
-    });
-    const res = await h.state.handleStart();
-    const txt = textOf(res);
-    // The canonical URL must be the constant.
-    expect(txt).toContain(CANONICAL_VERIFICATION_URL);
-    // The attacker-controlled verification_uri must NOT appear as the
-    // canonical step-1 URL; it can still be listed as Google's value.
-    expect(CANONICAL_VERIFICATION_URL).toBe('https://www.google.com/device');
+  it('builds an authorization URL with PKCE, offline access, and prompt=consent', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const auth = makeState({ store, fetch, startListener: listener.start, openBrowser: browser.open });
+
+    await auth.handleAuthenticate({});
+
+    expect(browser.calls).toHaveLength(1);
+    const url = new URL(browser.calls[0]!);
+    expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+    expect(url.searchParams.get('response_type')).toBe('code');
+    expect(url.searchParams.get('client_id')).toBe(FAKE_CLIENT_ID);
+    expect(url.searchParams.get('redirect_uri')).toBe(listener.recorded.redirectUri);
+    expect(url.searchParams.get('scope')).toBe('openid email profile');
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(url.searchParams.get('code_challenge')).toBeTruthy();
+    expect(url.searchParams.get('state')).toBe(listener.recorded.expectedState);
+    expect(url.searchParams.get('access_type')).toBe('offline');
+    expect(url.searchParams.get('include_granted_scopes')).toBe('true');
+    expect(url.searchParams.get('prompt')).toBe('consent');
   });
 
-  it('does not write to the credential store (device_code is process-local)', async () => {
-    const h = await makeHarness({
-      responder: () => jsonResponse(200, deviceAuthBody()),
+  it('omits prompt=consent when promptConsent is false', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const auth = makeState({
+      store,
+      fetch,
+      startListener: listener.start,
+      openBrowser: browser.open,
+      promptConsent: false,
     });
-    await h.state.handleStart();
-    expect(h.storeWriteCount()).toBe(0);
+    await auth.handleAuthenticate({});
+    const url = new URL(browser.calls[0]!);
+    expect(url.searchParams.get('prompt')).toBeNull();
   });
 
-  it('short-circuits when already authenticated', async () => {
-    const seeded = makeBundle();
-    const h = await makeHarness({
-      seedBundle: seeded,
-      responder: () => {
-        throw new Error('should not be called — already authenticated');
-      },
-    });
-    const res = await h.state.handleStart();
-    expect(textOf(res)).toContain('Already authenticated');
-    expect(textOf(res)).toContain(FAKE_EMAIL);
-    expect(h.requests).toHaveLength(0);
+  it('appends a manual-sign-in note when the browser launch fails', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser({ fail: true });
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const auth = makeState({ store, fetch, startListener: listener.start, openBrowser: browser.open });
+
+    const res = await auth.handleAuthenticate({});
+    expect(textOf(res)).toContain('Browser launch failed; you signed in manually.');
   });
 
-  it('short-circuits when the hub is known to require no auth', async () => {
-    const h = await makeHarness({
-      authMode: 'no-auth',
-      responder: () => {
-        throw new Error('should not be called — hub is no-auth');
-      },
-    });
-    const res = await h.state.handleStart();
-    expect(textOf(res)).toMatch(/does not require authentication/i);
-    expect(h.requests).toHaveLength(0);
+  // -------------------------------------------------------------------------
+  // Pre-flight short-circuits
+  // -------------------------------------------------------------------------
+
+  it('short-circuits when already authenticated, without binding a listener', async () => {
+    const { store } = await seededStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const auth = makeState({ store, startListener: listener.start, openBrowser: browser.open });
+
+    const res = await auth.handleAuthenticate({});
+    expect(textOf(res)).toBe(`Already authenticated as ${FAKE_EMAIL}. No action needed.`);
+    expect(listener.recorded.calls).toBe(0);
+    expect(browser.calls).toHaveLength(0);
   });
 
-  it('initiates device flow when the hub is known to require auth', async () => {
-    const h = await makeHarness({
-      authMode: 'requires-auth',
-      responder: () => jsonResponse(200, deviceAuthBody()),
-    });
-    await h.state.handleStart();
-    expect(h.requests).toHaveLength(1);
-    expect(h.requests[0]!.url).toBe('https://oauth2.googleapis.com/device/code');
+  it('does not resolve the authorization server when already authenticated', async () => {
+    // Lazy discovery: the already-authenticated short-circuit must not
+    // trigger the OIDC discovery network call.
+    const { store } = await seededStore();
+    const authServer = vi.fn(async () => AS);
+    const auth = makeState({ store, authServer });
+
+    await auth.handleAuthenticate({});
+    expect(authServer).not.toHaveBeenCalled();
   });
 
-  it('initiates device flow when auth mode is unknown (positive observation required for short-circuit)', async () => {
-    const h = await makeHarness({
-      authMode: 'unknown',
-      responder: () => jsonResponse(200, deviceAuthBody()),
+  it('short-circuits when the hub does not require auth', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const auth = makeState({
+      store,
+      mode: 'no-auth',
+      startListener: listener.start,
+      openBrowser: browser.open,
     });
-    await h.state.handleStart();
-    expect(h.requests).toHaveLength(1);
+
+    const res = await auth.handleAuthenticate({});
+    expect(textOf(res)).toMatch(/does not require authentication/);
+    expect(listener.recorded.calls).toBe(0);
   });
 
-  it('coalesces repeated start calls within the configured window', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    const h = await makeHarness({
-      initialNow: t0,
-      coalesceWindowMs: 5000,
-      responder: () => jsonResponse(200, deviceAuthBody()),
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 2_000));
-    await h.state.handleStart();
-    expect(h.requests).toHaveLength(1);
+  // -------------------------------------------------------------------------
+  // Progress notifications
+  // -------------------------------------------------------------------------
+
+  it('sends exactly one bind-time progress notification when a token is supplied', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const sendNotification = vi.fn((_n: ProgressNotification) => Promise.resolve());
+    const ctx: AuthToolContext = { progressToken: 'p1', sendNotification };
+    const auth = makeState({ store, fetch, startListener: listener.start, openBrowser: browser.open });
+
+    await auth.handleAuthenticate(ctx);
+
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    const note = sendNotification.mock.calls[0]![0];
+    expect(note.method).toBe('notifications/progress');
+    expect(note.params.progressToken).toBe('p1');
+    expect(note.params.progress).toBe(0);
+    expect(note.params.total).toBe(1);
+    expect(note.params.message).toContain('https://accounts.google.com/o/oauth2/v2/auth');
   });
 
-  it('overwrites a prior unconsumed device_code when started outside the coalescing window', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let pass = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      coalesceWindowMs: 5000,
-      responder: () => {
-        pass += 1;
-        return jsonResponse(
-          200,
-          deviceAuthBody({
-            device_code: `device-${pass}`,
-            user_code: pass === 1 ? 'FIRST-CODE' : 'SECOND-CODE',
-          }),
-        );
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 10_000));
-    const second = await h.state.handleStart();
-    expect(h.requests).toHaveLength(2);
-    expect(textOf(second)).toContain('SECOND-CODE');
+  it('sends no progress notification when no token is supplied', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const sendNotification = vi.fn((_n: ProgressNotification) => Promise.resolve());
+    const ctx: AuthToolContext = { sendNotification };
+    const auth = makeState({ store, fetch, startListener: listener.start, openBrowser: browser.open });
+
+    const res = await auth.handleAuthenticate(ctx);
+    expect(textOf(res)).toBe(`Authenticated as ${FAKE_EMAIL}.`);
+    expect(sendNotification).not.toHaveBeenCalled();
   });
 
-  it('clears an expired cached device_code on the next start', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let pass = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      coalesceWindowMs: 60_000,
-      responder: () => {
-        pass += 1;
-        return jsonResponse(
-          200,
-          deviceAuthBody({
-            device_code: `device-${pass}`,
-            user_code: pass === 1 ? 'FIRST-CODE' : 'SECOND-CODE',
-            expires_in: 60, // expires in 60s
-          }),
-        );
-      },
+  // -------------------------------------------------------------------------
+  // Cancellation / errors / sequential reuse
+  // -------------------------------------------------------------------------
+
+  it('returns cancelled without binding a listener if the signal is already aborted', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const auth = makeState({ store, startListener: listener.start, openBrowser: fakeBrowser().open });
+    const ac = new AbortController();
+    ac.abort();
+
+    const res = await auth.handleAuthenticate({ signal: ac.signal });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toMatch(/cancelled/i);
+    expect(listener.recorded.calls).toBe(0);
+  });
+
+  it('maps a mid-flight abort (listener rejection) to a typed cancellation result', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({ rejectWith: new LoopbackAbortedError() });
+    const auth = makeState({ store, startListener: listener.start, openBrowser: fakeBrowser().open });
+
+    const res = await auth.handleAuthenticate({});
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe('Sign-in was cancelled.');
+  });
+
+  it('reports a timeout with the manual-paste URL', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({ rejectWith: new LoopbackTimeoutError() });
+    const browser = fakeBrowser();
+    const auth = makeState({ store, startListener: listener.start, openBrowser: browser.open });
+
+    const res = await auth.handleAuthenticate({});
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toMatch(/Timed out/);
+    expect(textOf(res)).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+  });
+
+  it('reports a listener bind failure', async () => {
+    const { store } = emptyStore();
+    const failingStart: typeof startLoopbackListener = async () => {
+      throw new Error('EADDRINUSE');
+    };
+    const auth = makeState({ store, startListener: failingStart, openBrowser: fakeBrowser().open });
+    const res = await auth.handleAuthenticate({});
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toMatch(/Failed to start the local sign-in listener/);
+  });
+
+  it('reports a token-exchange failure', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const { fetch } = makeFetch(() =>
+      jsonResponse(400, { error: 'invalid_grant', error_description: 'bad code' }),
+    );
+    const auth = makeState({ store, fetch, startListener: listener.start, openBrowser: browser.open });
+
+    const res = await auth.handleAuthenticate({});
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toMatch(/Token exchange failed/);
+  });
+
+  it('accepts a follow-up call after a failed one (no stale state)', async () => {
+    const { store } = emptyStore();
+    const browser = fakeBrowser();
+    const timeoutListener = fakeListener({ rejectWith: new LoopbackTimeoutError() });
+    const first = makeState({
+      store,
+      startListener: timeoutListener.start,
+      openBrowser: browser.open,
     });
-    await h.state.handleStart();
-    // Advance past expiry — far outside the 60s window means the
-    // cached code has expired and a fresh flow must initiate.
-    h.setNow(new Date(t0.getTime() + 120_000));
-    const second = await h.state.handleStart();
-    expect(h.requests).toHaveLength(2);
-    expect(textOf(second)).toContain('SECOND-CODE');
+    const r1 = await first.handleAuthenticate({});
+    expect(r1.isError).toBe(true);
+
+    const okListener = fakeListener({});
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const second = makeState({
+      store,
+      fetch,
+      startListener: okListener.start,
+      openBrowser: browser.open,
+    });
+    const r2 = await second.handleAuthenticate({});
+    expect(r2.isError).toBeUndefined();
+    expect(textOf(r2)).toBe(`Authenticated as ${FAKE_EMAIL}.`);
   });
 });
 
-// ---------------------------------------------------------------------------
-// authenticate_finish
-// ---------------------------------------------------------------------------
-
-describe('authenticate_finish', () => {
-  it('returns a typed error when called without a prior start', async () => {
-    const h = await makeHarness({
-      responder: () => {
-        throw new Error('should not be called');
-      },
-    });
-    const res = await h.state.handleFinish();
-    expect(res.isError).toBe(true);
-    expect(textOf(res)).toMatch(/authenticate_start/);
-    expect(h.requests).toHaveLength(0);
-  });
-
-  it('returns user-actionable text on authorization_pending', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        // First request → device_authorization. Second → token (pending).
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(400, { error: 'authorization_pending' });
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    const res = await h.state.handleFinish();
-    expect(res.isError).toBeFalsy();
-    expect(textOf(res)).toMatch(/waiting|pending/i);
-  });
-
-  it('returns user-actionable text with a wait hint on slow_down', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(400, { error: 'slow_down' });
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    const res = await h.state.handleFinish();
-    expect(textOf(res)).toMatch(/slow|wait/i);
-  });
-
-  it('persists the bundle via CredentialStore on success', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const idToken = fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL });
-    const refresh = '1//new-refresh-token';
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(200, tokenSuccessBody({ id_token: idToken, refresh_token: refresh }));
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    await h.state.handleFinish();
-    expect(h.storeState.value).not.toBeNull();
-    const blob = JSON.parse(h.storeState.value!);
-    expect(blob.id_token).toBe(idToken);
-    expect(blob.refresh_token).toBe(refresh);
-  });
-
-  it('clears the cached device_code on success', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(200, tokenSuccessBody());
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    await h.state.handleFinish();
-    // Now a second finish without a fresh start must report "no flow".
-    const res = await h.state.handleFinish();
-    expect(res.isError).toBe(true);
-    expect(textOf(res)).toMatch(/authenticate_start/);
-  });
-
-  it('clears the cached device_code on terminal access_denied', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(400, { error: 'access_denied' });
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    await h.state.handleFinish();
-    const res = await h.state.handleFinish();
-    expect(res.isError).toBe(true);
-    expect(textOf(res)).toMatch(/authenticate_start/);
-  });
-
-  it('clears the cached device_code on terminal expired_token', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(400, { error: 'expired_token' });
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    await h.state.handleFinish();
-    const res = await h.state.handleFinish();
-    expect(res.isError).toBe(true);
-    expect(textOf(res)).toMatch(/authenticate_start/);
-  });
-
-  it('returns "Authenticated as <email>" from the id_token email claim', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const idToken = fakeIdToken({ exp: farFutureExp(), email: 'someone@posit.co' });
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(200, tokenSuccessBody({ id_token: idToken }));
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    const res = await h.state.handleFinish();
-    expect(textOf(res)).toContain('someone@posit.co');
-    expect(textOf(res)).toMatch(/authenticated/i);
-  });
-
-  it('tool responses never contain id_token or refresh_token bytes', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const idToken = fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL });
-    const refresh = '1//super-secret-rt-XYZ';
-    const access = 'ya29.super-secret-access';
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(
-          200,
-          tokenSuccessBody({ id_token: idToken, refresh_token: refresh, access_token: access }),
-        );
-      },
-    });
-    const startRes = await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    const finishRes = await h.state.handleFinish();
-    const blob = textOf(startRes) + '\n' + textOf(finishRes);
-    expect(blob).not.toContain(idToken);
-    expect(blob).not.toContain(refresh);
-    expect(blob).not.toContain(access);
-  });
-
-  it('returns slow_down advice without polling Google when called before interval elapsed', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        // Anything beyond the device-auth request would be a violation.
-        throw new Error('Google should not have been polled before interval elapsed');
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 1_000)); // 1s — way before the 5s interval
-    const res = await h.state.handleFinish();
-    expect(textOf(res)).toMatch(/wait|pending/i);
-    expect(h.requests).toHaveLength(1); // only the device-auth call
-  });
-
-  it('polls Google once the device-auth interval has elapsed', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(400, { error: 'authorization_pending' });
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    await h.state.handleFinish();
-    expect(h.requests).toHaveLength(2); // device-auth + one token poll
-  });
-
-  it('increases the subsequent poll interval after slow_down (RFC 8628 §3.5)', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        if (phase === 2) return jsonResponse(400, { error: 'slow_down' });
-        throw new Error('Should not poll Google a second time before bumped interval elapses');
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    await h.state.handleFinish(); // slow_down → bump
-    // Advance by the original interval (5s) — must not poll because
-    // slow_down has bumped the next-allowed-at by an additional 5s.
-    h.setNow(new Date(t0.getTime() + 11_000));
-    await h.state.handleFinish();
-    expect(h.requests).toHaveLength(2); // device-auth + the one slow_down poll
-  });
-
-  it('serialises concurrent finish calls safely', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const idToken = fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL });
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: async () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        if (phase === 2) {
-          // Delay so a second concurrent finish overlaps with the first.
-          await new Promise((r) => setTimeout(r, 10));
-          return jsonResponse(200, tokenSuccessBody({ id_token: idToken }));
-        }
-        return jsonResponse(400, { error: 'authorization_pending' });
-      },
-    });
-    await h.state.handleStart();
-    h.setNow(new Date(t0.getTime() + 6_000));
-    const [a, b] = await Promise.all([h.state.handleFinish(), h.state.handleFinish()]);
-    // The first call should succeed; the second sees the cleared
-    // device_code and surfaces the "no flow in progress" tool error.
-    const aText = textOf(a);
-    const bText = textOf(b);
-    const successCount = [aText, bText].filter((t) => /authenticated as/i.test(t)).length;
-    expect(successCount).toBe(1);
-    const errorCount = [a, b].filter((r) => r.isError).length;
-    expect(errorCount).toBe(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// authenticate_clear
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// authenticate_clear — revocation contract
+// ===========================================================================
 
 describe('authenticate_clear', () => {
-  it('clears the credential store', async () => {
-    const t0 = new Date('2026-05-22T12:00:00Z');
-    const h = await makeHarness({
-      initialNow: t0,
-      seedBundle: {
-        idToken: fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL }),
-        refreshToken: '1//rt-seeded',
-        idTokenExpiresAt: new Date(t0.getTime() + 60 * 60 * 1000),
-        scopes: ['openid', 'email', 'profile'],
-      },
-      responder: () => new Response('', { status: 500 }),
-    });
-    expect(await h.store.read()).not.toBeNull();
+  it('revokes the refresh token at Google then clears the keyring (clean case)', async () => {
+    const { store, state } = await seededStore(makeBundle({ refreshToken: '1//to-revoke' }));
+    const { fetch, requests } = makeFetch(() => new Response('', { status: 200 }));
+    const auth = makeState({ store, fetch });
 
-    const res = await h.state.handle('authenticate_clear');
-    expect(res.isError).not.toBe(true);
-    expect(textOf(res).toLowerCase()).toContain('cleared');
-    expect(await h.store.read()).toBeNull();
+    const res = await auth.handleClear();
+
+    const revokeReq = requests.find((r) => r.url === AS.revocation_endpoint)!;
+    expect(revokeReq.method).toBe('POST');
+    expect(revokeReq.body.get('token')).toBe('1//to-revoke');
+    expect(revokeReq.body.get('token_type_hint')).toBe('refresh_token');
+    expect(revokeReq.body.get('client_id')).toBeNull();
+    expect(revokeReq.body.get('client_secret')).toBeNull();
+    expect(revokeReq.headers['content-type']).toBe('application/x-www-form-urlencoded');
+
+    expect(state.value).toBeNull();
+    expect(textOf(res)).toMatch(/cleared and revoked at Google/);
+    expect(res.isError).toBeUndefined();
   });
 
-  it('clears any in-progress device-flow cache', async () => {
-    const t0 = new Date('2026-05-22T12:00:00Z');
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => jsonResponse(200, deviceAuthBody({ interval: 5 })),
-    });
-    await h.state.handleStart();
-    expect(h.state.hasCachedDeviceCode()).toBe(true);
+  it('clears locally even when the revoke fails, without leaking the token', async () => {
+    const { store, state } = await seededStore(makeBundle({ refreshToken: '1//secret-rt' }));
+    const { fetch } = makeFetch(() => new Response('boom', { status: 500 }));
+    const auth = makeState({ store, fetch });
 
-    await h.state.handle('authenticate_clear');
-    expect(h.state.hasCachedDeviceCode()).toBe(false);
+    const res = await auth.handleClear();
+
+    expect(state.value).toBeNull();
+    expect(textOf(res)).toMatch(/cleared locally/);
+    expect(textOf(res)).toMatch(/revocation failed/);
+    expect(textOf(res)).toContain('myaccount.google.com');
+    expect(textOf(res)).not.toContain('1//secret-rt');
+    expect(res.isError).toBeUndefined();
   });
 
-  it('is safe when no credentials are present', async () => {
-    const h = await makeHarness({
-      responder: () => new Response('', { status: 500 }),
-    });
-    expect(await h.store.read()).toBeNull();
+  it('does not hit the revoke endpoint when there is nothing to clear', async () => {
+    const { store } = emptyStore();
+    const { fetch, requests } = makeFetch(() => new Response('', { status: 200 }));
+    const auth = makeState({ store, fetch });
 
-    const res = await h.state.handle('authenticate_clear');
-    expect(res.isError).not.toBe(true);
-    expect(await h.store.read()).toBeNull();
+    const res = await auth.handleClear();
+    expect(requests).toHaveLength(0);
+    expect(textOf(res)).toMatch(/cleared\. Call authenticate to sign in again/);
+    expect(res.isError).toBeUndefined();
   });
 
-  it('does not call Google', async () => {
-    const t0 = new Date('2026-05-22T12:00:00Z');
-    const h = await makeHarness({
-      initialNow: t0,
-      seedBundle: {
-        idToken: fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL }),
-        refreshToken: '1//rt-seeded',
-        idTokenExpiresAt: new Date(t0.getTime() + 60 * 60 * 1000),
-        scopes: ['openid', 'email', 'profile'],
-      },
-      responder: () => {
-        throw new Error('authenticate_clear should never hit Google');
+  it('uses the failure path and notes the revoke ran when the local delete fails', async () => {
+    // Backend that yields a bundle on read but throws on clear.
+    const seed = memoryBackend(null);
+    const store = new CredentialStore(CFG, {
+      read: seed.backend.read,
+      write: seed.backend.write,
+      async clear() {
+        throw new Error('keyring locked');
       },
     });
-    await h.state.handle('authenticate_clear');
-    expect(h.requests).toHaveLength(0);
+    await store.write(makeBundle({ refreshToken: '1//rt' }));
+
+    const { fetch } = makeFetch(() => new Response('', { status: 200 }));
+    const auth = makeState({ store, fetch });
+
+    const res = await auth.handleClear();
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toMatch(/Failed to clear the OS keyring entry/);
+    expect(textOf(res)).toMatch(/revoked at Google/);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Cross-cutting logging redaction
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// authenticate — pre-flight refresh failure (TokenRefreshError)
+// ===========================================================================
 
-describe('logging redaction', () => {
-  it('does not log id_token / refresh_token / access_token across any console sink', async () => {
-    const t0 = new Date('2026-05-21T12:00:00Z');
-    let phase = 0;
-    const idToken = fakeIdToken({ exp: farFutureExp(), email: FAKE_EMAIL });
-    const refresh = '1//secret-rt-XYZ';
-    const access = 'ya29.secret-access';
-    const h = await makeHarness({
-      initialNow: t0,
-      responder: () => {
-        phase += 1;
-        if (phase === 1) return jsonResponse(200, deviceAuthBody({ interval: 5 }));
-        return jsonResponse(
-          200,
-          tokenSuccessBody({ id_token: idToken, refresh_token: refresh, access_token: access }),
-        );
+describe('authenticate pre-flight refresh failure', () => {
+  // A bundle whose id_token is inside the 60s skew so the pre-flight
+  // getValidIdToken() forces a refresh (rather than returning the cache).
+  function nearExpiryBundle(): CredentialBundle {
+    const nearExp = Math.floor(Date.now() / 1000) + 30;
+    return makeBundle({
+      idToken: fakeIdToken({ exp: nearExp, email: FAKE_EMAIL }),
+      idTokenExpiresAt: new Date(nearExp * 1000),
+    });
+  }
+
+  function stateWithRefreshFetch(args: {
+    store: CredentialStore;
+    refreshFetch: typeof fetch;
+    startListener?: typeof startLoopbackListener;
+    openBrowser?: typeof openBrowser;
+  }): AuthToolsState {
+    const refreshManager = new RefreshManager({
+      authServer: async () => AS,
+      config: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET },
+      store: args.store,
+      fetch: args.refreshFetch,
+    });
+    return new AuthToolsState({
+      credentialStore: args.store,
+      refreshManager,
+      connectionManager: authMode('requires-auth'),
+      flowConfig: { clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET, issuer: ISSUER },
+      authServer: async () => AS,
+      startListener: args.startListener,
+      openBrowser: args.openBrowser,
+      logger: () => undefined,
+    });
+  }
+
+  it('returns an actionable error (not -32603) and does not open the browser on invalid_client', async () => {
+    const { store } = await seededStore(nearExpiryBundle());
+    const { fetch: refreshFetch } = makeFetch(() =>
+      jsonResponse(401, {
+        error: 'invalid_client',
+        error_description: 'The provided client secret is invalid.',
+      }),
+    );
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const auth = stateWithRefreshFetch({
+      store,
+      refreshFetch,
+      startListener: listener.start,
+      openBrowser: browser.open,
+    });
+
+    let res: CallToolResult;
+    try {
+      res = await auth.handleAuthenticate();
+    } catch (err) {
+      // Pre-fix behaviour: the raw oauth4webapi error escaped as a throw
+      // (surfacing as MCP -32603). The fix must turn it into a result.
+      throw new Error(
+        `handleAuthenticate threw instead of returning an error result: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    expect(res.isError).toBe(true);
+    const msg = textOf(res);
+    expect(msg).toContain('invalid_client');
+    expect(msg).toContain('The provided client secret is invalid.');
+    expect(msg).toMatch(/QUARTO_HUB_MCP_CLIENT_(ID|SECRET)/);
+    expect(msg).not.toBe('server responded with an error in the response body');
+    // A config error is not fixable by a browser sign-in — none was attempted.
+    expect(browser.calls).toHaveLength(0);
+    expect(listener.recorded.calls).toBe(0);
+  });
+});
+
+// ===========================================================================
+// Lazy discovery failure handling
+// ===========================================================================
+
+describe('lazy discovery failure', () => {
+  it('authenticate returns a clean error (no listener, no browser) when discovery fails', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const auth = makeState({
+      store,
+      mode: 'requires-auth',
+      startListener: listener.start,
+      openBrowser: browser.open,
+      authServer: async () => {
+        throw new Error('getaddrinfo ENOTFOUND accounts.google.com');
       },
     });
-    const sinks = (['debug', 'log', 'info', 'warn', 'error'] as const).map((m) =>
-      vi.spyOn(console, m).mockImplementation(() => undefined),
-    );
-    try {
-      await h.state.handleStart();
-      h.setNow(new Date(t0.getTime() + 6_000));
-      await h.state.handleFinish();
-      const blob = sinks
-        .flatMap((s) => s.mock.calls.flat())
-        .map((c) => (typeof c === 'string' ? c : JSON.stringify(c)))
-        .join(' ');
-      expect(blob).not.toContain(idToken);
-      expect(blob).not.toContain(refresh);
-      expect(blob).not.toContain(access);
-    } finally {
-      sinks.forEach((s) => s.mockRestore());
-    }
+
+    const res = await auth.handleAuthenticate({});
+
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toMatch(/discovery endpoint/i);
+    // Discovery is resolved before the listener is bound, so a failure
+    // leaves nothing started.
+    expect(listener.recorded.calls).toBe(0);
+    expect(browser.calls).toHaveLength(0);
+  });
+
+  it('authenticate_clear still deletes the local keyring entry when discovery fails during revoke', async () => {
+    const { store, state } = await seededStore();
+    const auth = makeState({
+      store,
+      authServer: async () => {
+        throw new Error('getaddrinfo ENOTFOUND accounts.google.com');
+      },
+    });
+
+    const res = await auth.handleClear();
+
+    // The local delete is the invariant: a discovery failure on the
+    // best-effort revoke must not block it.
+    expect(res.isError).toBeFalsy();
+    expect(textOf(res)).toMatch(/cleared locally/i);
+    expect(textOf(res)).toMatch(/myaccount\.google\.com/);
+    expect(await store.read()).toBeNull();
+    expect(state.value).toBeNull();
   });
 });

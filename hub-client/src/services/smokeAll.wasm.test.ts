@@ -2,7 +2,7 @@
  * WASM Smoke-All Test Runner
  *
  * Exercises the WASM rendering module against the same smoke-all test fixtures
- * used by the native Rust test runner (crates/quarto/tests/smoke_all.rs).
+ * used by the native Rust test runner (crates/quarto/tests/integration/smoke_all.rs).
  *
  * Run with: npm run test:wasm
  */
