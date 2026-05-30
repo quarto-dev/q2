@@ -8,11 +8,12 @@
 
 Plan 7d's algebraic refactor of `coarsen` → `plan_user_writes` depends on three pieces of producer-side hygiene that don't yet hold. Plan 7f lands them so that 7d's strict R5 trust point is meaningful and so that BP is not silently violated by upstream sloppiness.
 
-Three workstreams, none of which involve the writer itself:
+Four workstreams, none of which involve the writer itself:
 
 1. **Framework source_info preservation** — the React framework currently strips `s:` on rebuilt wrappers (Emph, Strong, Para, every passthrough except the top-level Ast). Fix the recursion to spread source_info forward.
-2. **User-edit stamping** — a single reserved pool slot for `Generated{by: user_edit, …}`; the framework stamps it on user-constructed nodes.
-3. **`SourceInfo::default()` deprecation** — replace test usages with explicit kinds; deprecate the `Default` impl; surface real provenance decisions in production residue.
+2. **User-edit stamping** — a single reserved pool slot for `Generated{by: user_edit, …}`; the framework stamps it on user-constructed nodes (including those nested inside CustomNode slots).
+3. **`SourceInfo::default()` audit** — replace test usages with explicit kinds; deprecate the `Default` impl.
+4. **Production-residue cleanup** — handful of non-test `SourceInfo::default()` sites in `quarto-pandoc-types` and `quarto-yaml-validation`. Each gets a deliberate `By::` kind (three new constructors). Refactors `InlineAttr::new` to require explicit source_info, eliminating the empty-AttrSourceInfo sentinel.
 
 Plus two minor cleanups bundled along for the ride: wire-format renames `attrS` → `a`, `sourceInfoPool` → `p`.
 
@@ -67,6 +68,8 @@ function stampUserEdits(node: BlockNode | InlineNode): BlockNode | InlineNode {
     const stamped = node.s === undefined
         ? { ...node, s: USER_EDIT_SOURCE_INFO_ID }
         : node;
+
+    // Recurse into `c:` children (standard inline/block wrapper shape).
     if ('c' in stamped && Array.isArray(stamped.c)) {
         return {
             ...stamped,
@@ -76,6 +79,26 @@ function stampUserEdits(node: BlockNode | InlineNode): BlockNode | InlineNode {
                     : child)
         };
     }
+
+    // Recurse into CustomNode `slots:` (Block::Custom / Inline::Custom shape).
+    // Slots carry typed nested AST: `Block | Inline | Block[] | Inline[]` per slot key.
+    if ('slots' in stamped && stamped.slots && typeof stamped.slots === 'object') {
+        const newSlots: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(stamped.slots)) {
+            if (Array.isArray(value)) {
+                newSlots[key] = value.map(v =>
+                    typeof v === 'object' && v !== null && 't' in v
+                        ? stampUserEdits(v as BlockNode | InlineNode)
+                        : v);
+            } else if (typeof value === 'object' && value !== null && 't' in value) {
+                newSlots[key] = stampUserEdits(value as BlockNode | InlineNode);
+            } else {
+                newSlots[key] = value;
+            }
+        }
+        return { ...stamped, slots: newSlots };
+    }
+
     return stamped;
 }
 ```
@@ -86,10 +109,11 @@ The constant `USER_EDIT_SOURCE_INFO_ID` is the reserved pool slot (Phase 4).
 
 Work items:
 
-- [ ] Implement `stampUserEdits` walker.
+- [ ] Implement `stampUserEdits` walker (both `c:` and `slots:` recursion).
 - [ ] Wire into `<Node>` component's `setLocalAst` propagation.
 - [ ] TS test: user component constructs a new Span via `setLocalAst({ t: 'Span', c: ... })`; assert the resulting node has `s: USER_EDIT_SOURCE_INFO_ID` after stamping.
 - [ ] TS test: preserved subtree (rebuilt-wrapper case) keeps original `s:` after stamping passes through it.
+- [ ] TS test: user component constructs a new CustomBlock via `setLocalAst({ t: 'CustomBlock', type_name: 'Callout', slots: {...}, ...})`; assert nested nodes inside slots are stamped recursively.
 
 ## Phase 4 — Reserved pool slot for user_edit
 
@@ -180,21 +204,129 @@ Files to audit (highest concentration first):
 - `crates/quarto-core/tests/*.rs` (jupyter_integration, navigation_e2e, navigation_merge) — integration tests with fixture bytes.
 - Test modules under `crates/pampa/`.
 
-**Production residue.** The non-test `SourceInfo::default()` usages — `crates/quarto-pandoc-types/src/config_value.rs`, `crates/quarto-yaml-validation/src/validator.rs`, `crates/quarto-yaml-validation/src/schema/*.rs`, `crates/quarto-doctemplate/src/*.rs` — are not test scaffolding. Each call site represents a real provenance decision that was deferred when Plan 6's audit went through library code but didn't cover ConfigValue / YAML / template helpers. The audit hands these to their respective module maintainers to decide:
-
-- ConfigValue synthesis during merge: likely `Generated{by: By::raw("config-merge", _), from: smallvec![]}` or similar.
-- YAML validator synthesized values: a similar `Generated` kind appropriate to the validator.
-- Doctemplate eval-context defaults: per-site judgment.
-
-The replacement target is **not** `user_edit`. `user_edit` applies only to React-constructed content. Every other caller decides their own provenance kind.
+**Production residue is handled in Phase 6.5** (below). The replacement target is **not** `user_edit`. `user_edit` applies only to React-constructed content. Every other caller decides their own provenance kind.
 
 Work items:
 
 - [ ] Add `By::test_scaffold()` constructor in `quarto-source-map`.
 - [ ] Add `SourceInfo::for_test()` convenience in `quarto-source-map`.
 - [ ] Audit test-file usages of `SourceInfo::default()`; replace with one of the four patterns above.
-- [ ] For production residue (~20 sites), file as individual review items routed to each module's maintainer. Do not block 7f on full production cleanup; the deprecation in Phase 7 surfaces remaining sites.
 - [ ] Verify: `cargo nextest run --workspace` passes after replacements.
+
+## Phase 6.5 — Production-residue fix sweep
+
+The non-test `SourceInfo::default()` usages turn out to be a small, well-characterized set after filtering out the `#[cfg(test)] mod tests` blocks. Per-site decisions follow; each gets a deliberate `By::` kind rather than the default sentinel. Add the three new `By::` constructors first, then apply each fix.
+
+### New `By::` constructors
+
+Add to `crates/quarto-source-map/src/source_info.rs`:
+
+```rust
+impl By {
+    /// Empty-Map sentinel ConfigValue used during metadata merging when
+    /// no value is present.
+    pub fn config_default() -> Self {
+        Self { kind: "config-default".to_string(), data: Value::Null }
+    }
+
+    /// Programmatic construction of ConfigValue via the WASM bridge
+    /// (`ConfigValue::from_path`) — no source bytes exist for these.
+    pub fn programmatic_config() -> Self {
+        Self { kind: "programmatic-config".to_string(), data: Value::Null }
+    }
+
+    /// AST nodes synthesized by the reconciler during apply_reconciliation
+    /// paths that don't correspond to either input AST.
+    pub fn reconcile_synthesize() -> Self {
+        Self { kind: "reconcile-synthesize".to_string(), data: Value::Null }
+    }
+}
+```
+
+All three are non-atomic (never match `is_atomic_kind`) and require no `Invocation` anchor.
+
+### Per-site fixes
+
+**`crates/quarto-pandoc-types/src/config_value.rs:415`** — `impl Default for ConfigValue`. The empty-Map sentinel used in metadata merging.
+
+```rust
+// Before
+source_info: SourceInfo::default(),
+
+// After
+source_info: SourceInfo::Generated {
+    by: By::config_default(),
+    from: smallvec![],
+},
+```
+
+**`crates/quarto-pandoc-types/src/config_value.rs:539`** — `ConfigValue::from_path`. WASM-bridge programmatic injection.
+
+```rust
+// Before
+let source_info = SourceInfo::default();
+
+// After
+let source_info = SourceInfo::Generated {
+    by: By::programmatic_config(),
+    from: smallvec![],
+};
+```
+
+**`crates/quarto-yaml-validation/src/schema/merge.rs:32, 51, 88`** and **`schema/mod.rs:256`** — `SchemaError::InvalidStructure { location }`. These describe bugs in the schema definition itself, not in the user's YAML. Change the variant's signature:
+
+```rust
+// In SchemaError enum
+InvalidStructure {
+    message: String,
+    location: Option<SourceInfo>,   // None for schema-structure errors
+}
+```
+
+Update the four call sites to use `location: None`. Update any pattern-matching consumers (probably diagnostic formatters) to handle `Option`. Single-crate change; no cross-crate ripple expected.
+
+**`crates/quarto-pandoc-types/src/inline.rs:304-311`** — `InlineAttr::new`. The current `attr_source.combine_all().unwrap_or_default()` fallback is the source of the empty-AttrSourceInfo sentinel. Refactor the signature to require explicit source_info:
+
+```rust
+// Before
+impl InlineAttr {
+    pub fn new(attr: Attr, attr_source: AttrSourceInfo) -> Self {
+        let source_info = attr_source.combine_all().unwrap_or_default();
+        Self { attr, attr_source, source_info }
+    }
+}
+
+// After
+impl InlineAttr {
+    pub fn new(attr: Attr, attr_source: AttrSourceInfo, source_info: SourceInfo) -> Self {
+        Self { attr, attr_source, source_info }
+    }
+
+    /// Convenience: derive source_info from non-empty AttrSourceInfo.
+    /// Panics if attr_source is empty (use new() with explicit source_info instead).
+    pub fn new_from_attr_source(attr: Attr, attr_source: AttrSourceInfo) -> Self {
+        let source_info = attr_source.combine_all()
+            .expect("InlineAttr requires non-empty AttrSourceInfo; use new() with explicit source_info");
+        Self { attr, attr_source, source_info }
+    }
+}
+```
+
+Then update every `InlineAttr::new` call site that uses `AttrSourceInfo::empty()` — `crates/quarto-ast-reconcile/src/lib.rs:107, 116, 132, 322, 1178` and `crates/quarto-pandoc-types/src/block.rs:222, 235, 247` — to provide explicit source_info. For reconciler synthesis paths, use `Generated{by: By::reconcile_synthesize(), from: smallvec![]}`. For block.rs sites, audit per-site (some may turn out to be test builders that should move to `mod tests`).
+
+**Delete the obsolete test.** The `source_info_attr_empty` test at `crates/quarto-pandoc-types/src/inline.rs:1452-1463` asserts the fallback behavior we just removed. Delete it. Commit message should note: "removes test for empty-AttrSourceInfo sentinel; case is now structurally impossible after InlineAttr::new signature change."
+
+### Work items
+
+- [ ] Add `By::config_default()`, `By::programmatic_config()`, `By::reconcile_synthesize()` to `quarto-source-map`.
+- [ ] Apply `config_value.rs:415` (Default impl) fix.
+- [ ] Apply `config_value.rs:539` (from_path) fix.
+- [ ] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update four call sites and any pattern-matching consumers.
+- [ ] Refactor `InlineAttr::new` signature; add `new_from_attr_source` convenience.
+- [ ] Update all `InlineAttr::new` + `AttrSourceInfo::empty()` call sites in `quarto-ast-reconcile` and `quarto-pandoc-types/block.rs` to provide explicit source_info.
+- [ ] Delete `source_info_attr_empty` test at `inline.rs:1452-1463`.
+- [ ] Audit `AttrSourceInfo::empty()` call sites; decide whether the constructor itself should be renamed (`empty()` → `test_scaffold()`) or kept as a clearly-documented test convenience.
+- [ ] Verify: `cargo xtask verify --skip-hub-build` clean after all sites are updated.
 
 ## Phase 7 — Deprecate `SourceInfo::default()`
 
@@ -216,13 +348,15 @@ impl Default for SourceInfo {
 }
 ```
 
-The `#[deprecated]` attribute surfaces remaining call sites at compile time with a clear message. CI's `-D warnings` would block the build, so 7f keeps deprecation but does not enforce removal. Each newly-flagged site gets a deliberate fix; the impl can be fully removed in a follow-up after the dust settles.
+The `#[deprecated]` attribute surfaces remaining call sites at compile time with a clear message. After Phases 6 and 6.5, every known production site has a deliberate replacement; the deprecation guards against new uses entering the codebase. CI's `-D warnings` strictness means the deprecation is effectively a hard ban on new callers; remaining test-side stragglers can be cleared during Phase 8 verification or, if any are truly load-bearing, get a clearly-commented `#[allow(deprecated)]`.
+
+Removing the `Default` impl entirely is a follow-up after the deprecation has had time to surface any forgotten sites. `#[derive(Default)]` consumers of types that include a `SourceInfo` field need separate audit before removal is safe.
 
 Work items:
 
 - [ ] Add `#[deprecated]` to `impl Default for SourceInfo`.
-- [ ] Suppress the warning at the few remaining production residue sites with `#[allow(deprecated)]` and a TODO pointing to the module-maintainer review.
-- [ ] Verify: `cargo xtask verify --skip-hub-build` (Rust-only) green with deprecation warnings tolerated; no fatal warnings break the build.
+- [ ] Verify: `cargo xtask verify --skip-hub-build` clean with no remaining `SourceInfo::default()` warnings.
+- [ ] If any `#[allow(deprecated)]` survives the audit, add an inline comment explaining why and pointing to the relevant follow-up.
 
 ## Phase 8 — Verification
 

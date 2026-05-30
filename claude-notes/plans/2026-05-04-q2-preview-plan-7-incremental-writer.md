@@ -1,5 +1,7 @@
 # Plan 7 — Incremental writer: preimage walk, Transparent / Omit, atomic soft-drop, multi-inline dedupe
 
+> **Superseded (in part):** Plan 7d (2026-05-26) renames `coarsen` to `plan_user_writes` and `CoarsenedEntry` to `UserWrite`, and replaces the per-arm cascade with an algebraic dispatch. The code samples and variant names below reflect the Plan-7-era shape; see [`incremental-writer-contract.md`](../designs/incremental-writer-contract.md) for the current shape after 7d lands. Plan 7's *shipped behavior* is preserved by 7d on all current inputs; the soundness story changes from per-arm enumeration to inductive proof.
+
 **Date:** 2026-05-04 (revised 2026-05-24; closed 2026-05-26)
 **Branch:** feature/provenance
 **Status:** **Shipped** — Phases 1-7 + 9 landed on `feature/provenance`.

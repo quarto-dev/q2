@@ -63,7 +63,13 @@ The known producer kinds, defined in
 | `By::footnotes()`            | 521  | `"footnotes"`             | Footnotes stage's container `Div` chrome.                                     | no      |
 | `By::appendix()`             | 529  | `"appendix"`              | Appendix-structure stage's wrapper `Div` and its helpers.                     | no      |
 | `By::tree_sitter_postprocess()` | 538 | `"tree-sitter-postprocess"` | Parser-side synthetic Spaces (e.g. citation/suffix separator).             | yes     |
+| `By::test_scaffold()`        | (7f) | `"test-scaffold"`         | Test fixtures that require a source_info but have no real provenance to record. Paired with `SourceInfo::for_test()`. | no      |
+| `By::config_default()`       | (7f) | `"config-default"`        | Empty-Map sentinel `ConfigValue` used in metadata merging when no value is present.                | no      |
+| `By::programmatic_config()`  | (7f) | `"programmatic-config"`   | WASM-bridge programmatic construction of nested `ConfigValue` (`ConfigValue::from_path`).         | no      |
+| `By::reconcile_synthesize()` | (7f) | `"reconcile-synthesize"`  | AST nodes the reconciler synthesizes during `apply_reconciliation` paths that don't correspond to either input. | no      |
 | `By::raw(kind, data)`        | 552  | open                      | Escape hatch for extension-defined kinds.                                     | no      |
+
+**On `By::user_edit`.** This is the **single** stamping kind for React-constructed content; q2 does not distinguish between different editor affordances (toggle-blockquote, add-list-item, wrap-in-callout, etc.) at the source_info level. The framework stamps `Generated{by: user_edit, …}` on every node a `setLocalAst` call creates, with no per-affordance specialization. This is intentional: Rust does not know about React render components, and a single kind keeps the producer contract simple and matches the framework's existing pattern.
 
 **Extension namespacing.** Third-party transforms going through
 `By::raw` must namespace their kind as `ext/<extension>/<kind>` (e.g.
