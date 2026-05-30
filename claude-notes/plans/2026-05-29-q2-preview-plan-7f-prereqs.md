@@ -130,17 +130,19 @@ The framework's stamping references this constant.
 
 The pool stays Rust-authoritative: the framework only ever *references* pool IDs; it never allocates. The user-edit slot exists in every JSON document the writer produces, regardless of whether any node references it.
 
-**Reader-side fallback.** After Phase 4, the JSON reader should treat a node with missing `s:` field as a reference to `USER_EDIT_SOURCE_INFO_ID` (pool index 0), not as `SourceInfo::default()`. This makes the framework's client-side stamping (Phase 3) belt-and-suspenders rather than load-bearing: even if a TS-side path misses a stamping point, the Rust reader catches the missing reference and routes it to user_edit. Specify this in `crates/pampa/src/readers/json.rs` and add a test that asserts a JSON document with bare nodes (no `s:` field) deserializes with the user_edit source_info attached.
+**Reader is strict, not forgiving.** After Phase 4, the JSON reader rejects nodes missing `s:` rather than synthesizing a fallback. Once 7f completes, every legitimate producer populates `s:` on every node — the Rust writer always emits it, the TS framework's Phase 3 stamping enforces it before any `setLocalAst` propagates to the WASM bridge, and Phase 6's audit removes test fixtures that rely on `SourceInfo::default()`. The only paths that produce bare nodes are producer bugs or adversarial inputs; in both cases, silently fabricating `user_edit` provenance would let pipeline-output bytes be written back to source as if user-authored — exactly the BP violation the contract is built to prevent. The strict reader keeps the contract honest by surfacing producer bugs at the boundary rather than at the writer.
+
+Update `crates/pampa/src/readers/json.rs` to return `Err(JsonReadError::ExpectedSourceInfoRef)` when a node lacks `s:`. The variant already exists for a related case.
 
 Work items:
 
 - [ ] Rust: `SourceInfoSerializer::new()` pre-pushes the user_edit entry at index 0.
 - [ ] Rust: adjust all `Vec<SerializableSourceInfo>` traversals that assume "pool starts empty" — they now start with one entry.
 - [ ] Rust: grep tests for hardcoded pool indices (`sourceInfoPool[0]`, `pool[1]`, etc.); shift expectations by +1 where appropriate.
-- [ ] Rust: JSON reader treats missing `s:` as reference to `USER_EDIT_SOURCE_INFO_ID`, not `SourceInfo::default()`.
+- [ ] Rust: JSON reader rejects missing `s:` with `Err(JsonReadError::ExpectedSourceInfoRef)`. No `SourceInfo::default()` fallback, no silent stamping.
 - [ ] TS: export `USER_EDIT_SOURCE_INFO_ID = 0` as a typed constant.
 - [ ] Rust test: round-trip a hand-constructed AST through the WASM bridge; assert `sourceInfoPool[0]` decodes as `Generated{by: user_edit}`.
-- [ ] Rust test: deserialize JSON with bare nodes (no `s:` field) and assert the resulting AST nodes carry user_edit source_info.
+- [ ] Rust test: deserialize JSON with bare nodes (no `s:` field) and assert `json_read` returns `Err(JsonReadError::ExpectedSourceInfoRef)`.
 - [ ] TS test (atomic-gate sanity): a node with `s: USER_EDIT_SOURCE_INFO_ID` is not flagged as atomic by `dispatch.tsx`'s atomic gate (the gate's lookup-by-ID resolves to `Generated{by: user_edit}`, which is non-atomic).
 
 ## Phase 5 — Wire-format renames
