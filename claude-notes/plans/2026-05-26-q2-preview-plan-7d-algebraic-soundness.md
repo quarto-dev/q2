@@ -236,9 +236,41 @@ The algebra is sound by construction, but a property test pins the invariant aga
 
 - [ ] Write a proptest generator `gen_pandoc_with_atomic_descendants` that produces ASTs with atomic-Generated descendants at varying depths inside non-atomic containers, plus arbitrary user edits applied.
 - [ ] Write the property `bp_holds` (soundness): given a generated `(AST_old, AST_new, Source)` and a reconciler plan, run the writer. Assert: the output `Source'` does not contain any of the resolved bytes of atomic-Generated descendants. (Implementation: tag the generator's atomic-resolved content with a recognizable marker string; assert the marker doesn't appear in `Source'`.)
-- [ ] Write the property `completeness_holds`: for inputs that don't trigger soft-drop, `parse(Source')` is structurally equivalent to `AST_new`. Implementation: filter the generator to skip cases where the reconciler's plan + atomic-classification would route any node to R1' or R2'; assert byte-level equivalence (or AST-level for cases where helper canonicalization legitimately differs from original — list markers, lazy numbering, block-container shells). The two properties together pin both soundness (no leaks) and completeness (no drops outside soft-drop).
+- [ ] Write the property `completeness_holds`: for inputs that don't trigger soft-drop, `parse(Source')` is structurally equivalent to `AST_new`. Implementation: filter the generator to skip cases where the reconciler's plan + atomic-classification would route any node to R1' or R2'; assert structural equivalence via the reconciler's source-info-blind hash (`compute_block_hash`), which absorbs helper-canonicalization gaps (list markers, lazy numbering, block-container shells) by operating at the AST level rather than byte level. The two properties together pin both soundness (no leaks) and completeness (no drops outside soft-drop).
 - [ ] Add property tests for individual rule soundness: R1 emits bytes from `Source`; R5 emits authored content with no descendants; R3 / R4 emit bytes that are concatenations of shell + children.
-- [ ] Run under `cargo nextest run -p pampa` with high iteration counts. Save regression seeds if any fail.
+
+- [ ] **Dispatch-coverage instrumentation.** Property tests verify every input satisfies the property, but say nothing about *which* dispatch rules the generator actually exercises. Add thread-local counters in `plan_user_writes`, gated behind a `dispatch-coverage` build feature (zero cost in production), that tick per dispatch row each time it fires:
+
+  ```rust
+  #[cfg(feature = "dispatch-coverage")]
+  thread_local! {
+      static DISPATCH_COUNTERS: RefCell<DispatchCounters> = Default::default();
+  }
+
+  #[derive(Default, Clone)]
+  struct DispatchCounters {
+      r1: usize, r1_prime: usize, r2: usize, r2_prime: usize,
+      r3_helper: usize, r3_transparent: usize, r4: usize,
+      r5: usize, r5_special: usize,
+  }
+  ```
+
+  Each property test runs proptest first, then asserts minimum coverage thresholds:
+
+  ```rust
+  assert!(counters.r1        >= 100, "R1 under-exercised: {}",        counters.r1);
+  assert!(counters.r1_prime  >= 50,  "R1' under-exercised: {}",       counters.r1_prime);
+  assert!(counters.r2_prime  >= 20,  "R2' under-exercised: {}",       counters.r2_prime);
+  assert!(counters.r3_helper >= 50,  "R3-helper under-exercised: {}", counters.r3_helper);
+  assert!(counters.r3_transparent >= 50, "R3-transparent under-exercised: {}", counters.r3_transparent);
+  assert!(counters.r4        >= 30,  "R4 under-exercised: {}",        counters.r4);
+  assert!(counters.r5        >= 50,  "R5 under-exercised: {}",        counters.r5);
+  assert!(counters.r5_special >= 20, "R5-special under-exercised: {}", counters.r5_special);
+  ```
+
+  If a row's counter is below threshold, the generator's distribution isn't reaching it — the test fails with a specific message naming the under-exercised row. Coverage thresholds are tuned per row based on expected frequency; rare rows get lower thresholds, common rows get higher ones. This keeps the generator honest as the writer evolves: a future contributor adding a dispatch row must add a corresponding threshold; a future change that accidentally makes a row unreachable will surface as a coverage failure.
+
+- [ ] Run under `cargo nextest run -p pampa --features dispatch-coverage` with high iteration counts. Save regression seeds if any property fails or any row falls below threshold.
 
 **Benchmarking subtask.** Synthetic fixture: ~500 top-level blocks with a mix of plain paragraphs, sectionize wrappers, shortcodes, callouts, and one nested list. Measure end-to-end `incremental_write_qmd` time on (a) a single-block edit and (b) a whole-document edit. Both old `coarsen` and new `plan_user_writes` are O(n); the bench is a sanity check.
 
