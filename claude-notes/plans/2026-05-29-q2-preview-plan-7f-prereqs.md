@@ -74,7 +74,7 @@ Work items:
 
 ## Phase 3 — User-edit stamping at `setLocalAst` boundary
 
-Wrap the `<Node>` component's `setLocalAst` to stamp `Generated{by: user_edit}` on any subtree in the new node that lacks `s:`. The walker:
+Wrap the `<Node>` component's `setLocalAst` to stamp `Generated{by: user_edit}` on any subtree in the new node that lacks `s:`. The walker dispatches on the actual TS `Slot` discriminated union — `{ kind: 'block' | 'inline' | 'blocks' | 'inlines'; value: ... }` (see `ts-packages/preview-renderer/src/framework/types.ts:123-128`) — not on a heuristic `'t' in value` check, which would misread the `Slot` wrapper and silently fail to recurse:
 
 ```ts
 function stampUserEdits(node: BlockNode | InlineNode): BlockNode | InlineNode {
@@ -94,19 +94,24 @@ function stampUserEdits(node: BlockNode | InlineNode): BlockNode | InlineNode {
     }
 
     // Recurse into CustomNode `slots:` (Block::Custom / Inline::Custom shape).
-    // Slots carry typed nested AST: `Block | Inline | Block[] | Inline[]` per slot key.
+    // Each slot value is a `Slot` — a discriminated union `{ kind, value }` —
+    // not a bare AST node. Dispatch on `slot.kind` and recurse into `slot.value`.
     if ('slots' in stamped && stamped.slots && typeof stamped.slots === 'object') {
-        const newSlots: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(stamped.slots)) {
-            if (Array.isArray(value)) {
-                newSlots[key] = value.map(v =>
-                    typeof v === 'object' && v !== null && 't' in v
-                        ? stampUserEdits(v as BlockNode | InlineNode)
-                        : v);
-            } else if (typeof value === 'object' && value !== null && 't' in value) {
-                newSlots[key] = stampUserEdits(value as BlockNode | InlineNode);
-            } else {
-                newSlots[key] = value;
+        const newSlots: Record<string, Slot> = {};
+        for (const [key, slot] of Object.entries(stamped.slots as Record<string, Slot>)) {
+            switch (slot.kind) {
+                case 'block':
+                    newSlots[key] = { kind: 'block', value: stampUserEdits(slot.value) as BlockNode };
+                    break;
+                case 'inline':
+                    newSlots[key] = { kind: 'inline', value: stampUserEdits(slot.value) as InlineNode };
+                    break;
+                case 'blocks':
+                    newSlots[key] = { kind: 'blocks', value: slot.value.map(v => stampUserEdits(v) as BlockNode) };
+                    break;
+                case 'inlines':
+                    newSlots[key] = { kind: 'inlines', value: slot.value.map(v => stampUserEdits(v) as InlineNode) };
+                    break;
             }
         }
         return { ...stamped, slots: newSlots };
@@ -128,63 +133,59 @@ Work items:
 - [ ] TS test: preserved subtree (rebuilt-wrapper case) keeps original `s:` after stamping passes through it.
 - [ ] TS test: user component constructs a new CustomBlock via `setLocalAst({ t: 'CustomBlock', type_name: 'Callout', slots: {...}, ...})`; assert nested nodes inside slots are stamped recursively.
 
-## Phase 4 — Reserved pool slots (user_edit and unknown)
+## Phase 4 — Reserved pool slot (user_edit) and the strict / completing reader split
 
-The Rust JSON writer (`crates/pampa/src/writers/json.rs`) currently builds the `sourceInfoPool` as a used-only intern table during AST traversal. After Phase 4, the serializer pre-populates reserved slots before any intern operation runs.
+The Rust JSON writer (`crates/pampa/src/writers/json.rs`) currently builds the `sourceInfoPool` as a used-only intern table during AST traversal. After Phase 4, the serializer pre-populates **one** reserved slot before any intern operation runs.
 
-Two reserved slots:
+The single reserved slot:
 
-- **`USER_EDIT_SOURCE_INFO_ID`** — `Generated{by: By::user_edit(), from: smallvec![]}`. Referenced by the framework's `stampUserEdits` walker (Phase 3).
-- **`UNKNOWN_SOURCE_INFO_ID`** — `Generated{by: By::unknown(), from: smallvec![]}`. Referenced by `json::read_completing_source_info` for nodes arriving without `s:` from outside the source-tracked world.
+- **`USER_EDIT_SOURCE_INFO_ID`** — `Generated{by: By::user_edit(), from: smallvec![]}`. Referenced by the framework's `stampUserEdits` walker (Phase 3). The framework can't allocate into the Rust pool, so the slot ID has to be agreed in advance.
 
-Layout pinned via named constants in `crates/pampa/src/writers/json.rs` alongside `SourceInfoSerializer`:
+The earlier draft of Phase 4 reserved a second slot, `UNKNOWN_SOURCE_INFO_ID`, for `json::read_completing_source_info` to point at when a node arrived without `s:`. We dropped that on 2026-05-30: the completing reader takes a `default_by: By` parameter (see the per-caller research finding below) and allocates a fresh pool entry every time it fills a missing `s:`. No magic number on the read side, no hand-mirror, no parity test for slot 1.
+
+Layout pinned via a named constant in `crates/pampa/src/writers/json.rs` alongside `SourceInfoSerializer`:
 
 ```rust
 pub const USER_EDIT_SOURCE_INFO_ID: usize = 0;
-pub const UNKNOWN_SOURCE_INFO_ID: usize = USER_EDIT_SOURCE_INFO_ID + 1;
-// future reserved slots: UNKNOWN_SOURCE_INFO_ID + 1, etc.
+// future reserved slots: USER_EDIT_SOURCE_INFO_ID + 1, etc.
 
 impl SourceInfoSerializer {
     pub fn new() -> Self {
         let mut pool = Vec::new();
-        // Push in declaration order; constants pin the layout.
         pool.push(serializable_for_user_edit());   // ID 0
-        pool.push(serializable_for_unknown());      // ID 1
-        // ...
         Self { pool, /* ... */ }
     }
 }
 ```
 
-A unit test next to the constants asserts the pool entries match the constants (`assert_eq!(serializer.pool[USER_EDIT_SOURCE_INFO_ID].kind(), "user-edit")` etc.), so adding or rearranging reserved slots breaks the test rather than silently shifting IDs at consumer sites.
+A unit test next to the constant asserts `pool[USER_EDIT_SOURCE_INFO_ID].kind() == "user-edit"`, so adding or rearranging reserved slots breaks the test rather than silently shifting IDs at consumer sites.
 
 Export TypeScript hand-mirror in `ts-packages/preview-renderer/src/types/sourceInfo.ts`:
 
 ```ts
 export const USER_EDIT_SOURCE_INFO_ID = 0;
-export const UNKNOWN_SOURCE_INFO_ID = 1;
 ```
 
-A Rust-side CI test asserts parity with the TS file (read the TS source, parse the numbers, compare to the Rust constants) — same hand-mirror discipline as `ATOMIC_CUSTOM_NODES`.
+A Rust-side CI test asserts parity with the TS file (read the TS source, parse the number, compare to the Rust constant) — same hand-mirror discipline as `ATOMIC_CUSTOM_NODES` (Rust at `crates/quarto-pandoc-types/src/atomic_custom_nodes.rs`, TS at `ts-packages/preview-renderer/src/utils/atomicCustomNodes.ts`; the parity test reads the TS file textually).
 
-The pool stays Rust-authoritative: the framework references slot IDs by name; it never allocates. The reserved slots exist in every JSON document the writer produces, regardless of whether any node references them.
+The pool stays Rust-authoritative: the framework references the slot ID by name; it never allocates. The reserved slot exists in every JSON document the writer produces, regardless of whether any node references it.
 
 ### Research finding (2026-05-30) — pool intern deduplication
 
 The current `SourceInfoSerializer::intern` (`crates/pampa/src/writers/json.rs:303-404`) allocates a fresh pool entry on every call. The one cache, `arc_parent_ids`, is keyed by `Arc::as_ptr` and fires only at parent edges — `Substring.parent` and `Generated.from` anchors. The top-level intern call for a node's own `source_info` field never consults this cache, and pool entries are never compared by value. The module comment at lines 297-302 makes this explicit: "Each call allocates a fresh pool entry. … Pool entries are not deduplicated by content."
 
-Consequence for the reserved slots. When a node is parsed via `read_completing_source_info`, the reader clones pool slot 1's value into the node's `source_info` field, producing a `Generated{by: unknown, from: smallvec![]}`. On re-serialization the writer's intern call for that field creates a fresh pool entry — structurally equal to slot 1, but at a new ID. For N completed-on-read nodes that survive to write, the pool grows by N entries.
+Consequence for the user-edit reserved slot. When a node round-trips through `read` and back through `write`, the reader clones the user-edit pool entry's value into the node's `source_info` field, producing a `Generated{by: user_edit, from: smallvec![]}`. On re-serialization the writer's intern call for that field creates a fresh pool entry — structurally equal to slot 0, but at a new ID. For N user-edited nodes that round-trip, the pool grows by N entries. The same applies to completing-reader-stamped nodes (`Generated{by: unknown, …}` or `Generated{by: filter, …}`), each of which allocates its own pool entry on read and another on write.
 
 **Decision: accept the duplication (option a).** Reasons:
 
-- The duplication is bounded by the number of completing-reader nodes that survive to write. The completing reader only fires at the four outside-world entry points; most documents see zero completing-reader nodes.
+- The duplication is bounded by the number of round-tripped user-edit or completing-reader nodes. Each new edit produces one entry on serialize.
 - The duplication is per-document, not cumulative: each fresh write rebuilds the pool from scratch.
-- Adding a value-equality short-circuit for the two reserved kinds (`user-edit`, `unknown`) would add a branch on the intern hot path. `SourceInfo` and `By` derive `PartialEq`, so the check is cheap in principle, but the intern path is exercised once per AST node and is already known to be hot (the `QUARTO_PERF_STATS=1` gauge exists for it).
-- The reserved slots' canonical purpose is *referencing* (the framework's `stampUserEdits` cites slot 0 by ID), not deduplication-at-serialize. R5 dispatch in the writer treats every `Generated{by: user_edit}` equivalently regardless of which pool slot supplies it.
+- Adding a value-equality short-circuit for these kinds would add a branch on the intern hot path. `SourceInfo` and `By` derive `PartialEq`, so the check is cheap in principle, but the intern path is exercised once per AST node and is already known to be hot (the `QUARTO_PERF_STATS=1` gauge exists for it).
+- The reserved slot's canonical purpose is *referencing* — the framework's `stampUserEdits` cites slot 0 by ID — not deduplication-at-serialize. R5 dispatch in the writer treats every `Generated{by: user_edit}` equivalently regardless of which pool slot supplies it.
 
 Follow-up: if the q2-debug AST viewer ends up displaying the pool literally and the visual noise from duplicates is distracting, add display-side dedup there rather than serialize-side dedup. The `QUARTO_PERF_STATS=1` gauge already reports `pool_size`; monitor it during smoke tests for any unexpected blow-up.
 
-Work item update: no fix needed. Add a one-line comment near `intern` noting the duplication is by design ("reserved-slot duplication is bounded and accepted; see plan 7f Phase 4 research finding 2026-05-30") so a future reader doesn't try to "fix" it.
+Work item update: no fix needed. Add a one-line comment near `intern` noting the duplication is by design ("user-edit and completing-reader nodes intern as fresh pool entries; see plan 7f Phase 4 research finding 2026-05-30") so a future reader doesn't try to "fix" it.
 
 ### Research finding (2026-05-30) — per-caller verification for the reader split
 
@@ -224,30 +225,32 @@ let (filtered_pandoc, filtered_context) = readers::json::read_completing_source_
 readers::json::read_completing_source_info(&mut cursor, By::unknown())
 ```
 
-Note: `By::filter` is atomic-kind (`is_atomic_kind()` returns `true` for `kind == "filter"` per `crates/quarto-source-map/src/source_info.rs:839`). That makes filter-produced nodes atomic from the framework's perspective. For external filters whose output gets composed back into the document, atomic semantics may be undesirable — flag this for review. If `By::filter` proves wrong, a new `By::filter_output` (non-atomic) constructor is a possible alternative.
+Note: `By::filter` is atomic-kind (`is_atomic_kind()` returns `true` for `kind == "filter"` per `crates/quarto-source-map/src/source_info.rs:839`). That's the correct semantic for the `json_filter.rs` site: the completing reader only fires there on nodes the filter *added* (pass-through nodes keep their original `s:` references), and filter-added nodes shouldn't be source-editable in the preview. No `By::filter_output` alternative needed.
+
+`By::unknown` is **non-atomic**. Nodes carrying it are editable in the preview; user edits re-stamp them as `By::user_edit` on save. This matches the `qmd-syntax-helper` round-trip and CLI `--from json` cases, both of which need their output to remain editable.
 
 Work items:
 
-- [ ] Rust: define `USER_EDIT_SOURCE_INFO_ID` and `UNKNOWN_SOURCE_INFO_ID` constants alongside `SourceInfoSerializer` in `crates/pampa/src/writers/json.rs`. Chain via `+ 1` so future reserved slots derive predictably.
-- [ ] Rust: `SourceInfoSerializer::new()` pre-pushes the user_edit and unknown entries in declaration order (matching the constant values).
-- [ ] Rust: unit test asserting pool entries match the constants (`assert_eq!(serializer.pool[USER_EDIT_SOURCE_INFO_ID].kind(), "user-edit")` and same for unknown). Adding or rearranging reserved slots fails the test.
-- [ ] Rust: adjust all `Vec<SerializableSourceInfo>` traversals that assume "pool starts empty" — they now start with `RESERVED_POOL_SLOTS` entries.
-- [ ] Rust: grep tests for hardcoded pool indices (`sourceInfoPool[0]`, `pool[1]`, etc.); replace literal numbers with the named constants so future slot additions don't break call sites silently.
-- [ ] Rust: add `JsonReadError::MissingSourceInfoRef { node_path: String }` variant to `crates/pampa/src/readers/json.rs:23`. `node_path` is a JSON-pointer-style string (e.g. `"blocks[3].c[0]"`) identifying the offending node for debugging.
-- [ ] Rust: make `json::read` strict — reject missing `s:` with `Err(JsonReadError::MissingSourceInfoRef)`. Add `json::read_completing_source_info(input, default_by: By)` alongside, which fills missing `s:` with a reference to a pool entry constructed from `default_by`. Apply uniformly across Block, Inline, Cell, Row, Head, Body, Foot. (Open question: should the completing reader reuse `UNKNOWN_SOURCE_INFO_ID` when `default_by == By::unknown()`, or always allocate a fresh entry? Symmetric with the intern-dedup decision above; recommend "always allocate fresh" so the function has a single uniform path.)
-- [ ] Rust: add `By::unknown()` constructor in `quarto-source-map` (`kind: "unknown"`, non-atomic). The reserved `UNKNOWN_SOURCE_INFO_ID` pool slot uses it.
-- [ ] Rust: switch the five outside-world callers to `json::read_completing_source_info` with explicit placeholders per the table above:
-  - `json_filter.rs:221` → `By::filter(filter_path, 0)` (flag the atomic-kind concern in the commit; revisit if it causes downstream issues).
+- [ ] Rust: define `USER_EDIT_SOURCE_INFO_ID = 0` constant alongside `SourceInfoSerializer` in `crates/pampa/src/writers/json.rs`. Chain future reserved slots via `+ 1`.
+- [ ] Rust: `SourceInfoSerializer::new()` pre-pushes the user_edit entry at slot 0.
+- [ ] Rust: unit test asserting `serializer.pool[USER_EDIT_SOURCE_INFO_ID].kind() == "user-edit"`. Adding or rearranging reserved slots fails the test.
+- [ ] Rust: adjust any `Vec<SerializableSourceInfo>` traversal that assumes "pool starts empty" — it now starts with one entry.
+- [ ] Rust: grep tests for hardcoded pool indices (`sourceInfoPool[0]`, `pool[0]`, etc.); replace literal numbers with the named constant so future slot additions don't break call sites silently.
+- [ ] Rust: add `JsonReadError::MissingSourceInfoRef { node_path: String }` variant to `crates/pampa/src/readers/json.rs` (the enum is at line 25). `node_path` is a JSON-pointer-style string (e.g. `"blocks[3].c[0]"`) identifying the offending node for debugging.
+- [ ] Rust: make `json::read` strict — reject missing `s:` with `Err(JsonReadError::MissingSourceInfoRef)`. Add `json::read_completing_source_info(input, default_by: By)` alongside; it fills missing `s:` by allocating a **fresh** pool entry constructed from `default_by` (no reused reserved slot, no special-case when `default_by == By::unknown()`). Apply uniformly across Block, Inline, Cell, Row, Head, Body, Foot (the `s:`-bearing wire-format structs live at `crates/pampa/src/writers/json.rs:1068-1195`).
+- [ ] Rust: add `By::unknown()` constructor in `quarto-source-map` (`kind: "unknown"`, **non-atomic** — extend `is_atomic_kind()`'s test to assert `!By::unknown().is_atomic_kind()`).
+- [ ] Rust: switch the five outside-world callers to `json::read_completing_source_info` with explicit placeholders per the per-caller table above:
+  - `json_filter.rs:221` → `By::filter(filter_path.to_string_lossy(), 0)`. Atomic-kind is the correct semantic; no concern to flag.
   - `qmd-syntax-helper`'s `definition_lists.rs:182` and `grid_tables.rs:133` → `By::unknown()`. Note in commit message that writer dispatch shifts from R1-empty to R5-synthesize for these nodes; new behavior is correct.
   - `pampa/src/main.rs:290` → `By::unknown()`.
   - `pampa/src/lua/readwrite.rs:447` → `By::unknown()`.
 - [ ] Rust: grep tests for hand-crafted JSON literals that omit `s:` (`serde_json::json!({"t": "Str", "c": "..."})` patterns, multi-line string-literal JSON used in reader tests). Tests exercising the strict path: update to include valid `s:` references. Tests exercising `read_completing_source_info`: assert nodes carry the expected `Generated{by, …}` after the read.
-- [ ] WASM bridge: verify `MissingSourceInfoRef` propagates through `incremental_write_qmd` as `{success: false, error: "Missing source_info reference at <node_path>", diagnostics: ...}` cleanly. Manual test by patching out one stamping site in Phase 3, observing the error in the browser console, then restoring.
+- [ ] WASM bridge: verify `MissingSourceInfoRef` propagates through `incremental_write_qmd` (`crates/wasm-quarto-hub-client/src/lib.rs:2767`; the two `pampa::readers::json::read as json_read` imports at lines 2691 and 2772 both pick up strictness automatically) as `{success: false, error: "Missing source_info reference at <node_path>", diagnostics: ...}` cleanly. Manual test by patching out one stamping site in Phase 3, observing the error in the browser console, then restoring.
 - [ ] Documentation: update `crates/pampa/src/readers/json.rs` module docs to explain the two-reader split — q2-internal paths use strict, outside-world paths use completing with explicit `default_by`.
-- [ ] Documentation: add a one-line comment near `SourceInfoSerializer::intern` noting reserved-slot duplication is by design (cross-reference this Phase 4 finding).
-- [ ] TS: export `USER_EDIT_SOURCE_INFO_ID = 0` and `UNKNOWN_SOURCE_INFO_ID = 1` as typed constants in `ts-packages/preview-renderer/src/types/sourceInfo.ts`. Add a Rust-side CI test that reads the TS file and asserts the values match the Rust constants (same hand-mirror discipline as `ATOMIC_CUSTOM_NODES`).
+- [ ] Documentation: add a one-line comment near `SourceInfoSerializer::intern` noting fresh-allocation duplication is by design (cross-reference this Phase 4 finding).
+- [ ] TS: export `USER_EDIT_SOURCE_INFO_ID = 0` as a typed constant in `ts-packages/preview-renderer/src/types/sourceInfo.ts`. Add a Rust-side CI test that reads the TS file and asserts the value matches the Rust constant (same hand-mirror discipline as `ATOMIC_CUSTOM_NODES`).
 - [ ] Rust test: round-trip a hand-constructed AST through the WASM bridge; assert `sourceInfoPool[0]` decodes as `Generated{by: user_edit}`.
-- [ ] Rust test: deserialize JSON with bare nodes (no `s:` field) and assert `json_read` returns `Err(JsonReadError::MissingSourceInfoRef)`.
+- [ ] Rust test: deserialize JSON with bare nodes (no `s:` field) and assert `json::read` returns `Err(JsonReadError::MissingSourceInfoRef)`.
 - [ ] TS test (atomic-gate sanity): a node with `s: USER_EDIT_SOURCE_INFO_ID` is not flagged as atomic by `dispatch.tsx`'s atomic gate (the gate's lookup-by-ID resolves to `Generated{by: user_edit}`, which is non-atomic).
 
 **Two readers — strict `json::read` for q2-internal JSON, `read_completing_source_info` for callers that need a fallback.** The current single `json::read` is consumed by both q2-internal paths (the WASM bridge's `incremental_write_qmd`, which reads q2-extended JSON with `s:` populated on every node) *and* by paths that consume JSON from outside the source-tracked world (`json_filter.rs` for external filter output, `qmd-syntax-helper` for Pandoc subprocess output, `pampa/src/main.rs` for CLI stdin, `lua/readwrite.rs` for Lua AST handoff). The outside-world paths produce JSON without `s:` because the upstream producer doesn't know about q2's extension; making the reader universally strict breaks them.
@@ -255,7 +258,7 @@ Work items:
 Split the reader, scoping leniency to specific call sites:
 
 - **`json::read`** becomes strict: rejects nodes missing `s:` with `Err(JsonReadError::MissingSourceInfoRef { node_path })`. Used by the WASM bridge's `incremental_write_qmd` and any future q2-internal JSON consumer.
-- **`json::read_completing_source_info`** fills missing `s:` with a reference to the reserved `UNKNOWN_SOURCE_INFO_ID` pool slot (Phase 4 pre-populates the slot with `Generated{by: By::unknown(), from: smallvec![]}`). Used by the four outside-world consumers above. Callers with more specific provenance (e.g. `filter_source_info` for filter output) overwrite the placeholder immediately; callers without keep `By::unknown` as the honest "we don't know" provenance.
+- **`json::read_completing_source_info(input, default_by: By)`** fills missing `s:` by allocating a fresh pool entry from `default_by` at read time. Used by the four outside-world consumers above with explicit placeholders per the per-caller table — `By::filter(filter_path, 0)` for filter output; `By::unknown()` for the other three.
 
 The function name `read_completing_source_info` matches the surrounding `read_<thing>` convention in `readers/json.rs` (`read_inline`, `read_block`, `read_attr_source`, `make_source_info`) and says exactly what it does: read, then complete any missing source_info. There is no compatibility shim layer — the leniency is a property of the explicit call site, not of the wire format.
 
@@ -263,9 +266,9 @@ The strict-reader rule applies only to JSON under q2's source-tracking contract,
 
 **Phase-ordering constraint.** The strict reader cannot ship before Phase 2 (spread-fix on rebuilt wrappers) and Phase 3 (stampUserEdits on new nodes) — those two together are what guarantee every TS-produced JSON has `s:` on every node. If the strict reader lands first, every incremental write fails. Implementation order is: Phases 1–3 land in sequence, then Phase 4 (which includes the strict-reader change) lands after Phase 3 is verified working end-to-end.
 
-**Scope of the strict-reader rule.** Every JSON-wire-format struct that has an `s:` field must reject missing-`s:` on read. Per `crates/pampa/src/writers/json.rs:1010-1116`, the fields exist on: Block, Inline, Cell, Row, Head, Body, Foot. Apply the strict-reader rule uniformly to all of these in the reader update.
+**Scope of the strict-reader rule.** Every JSON-wire-format struct that has an `s:` field must reject missing-`s:` on read. Per `crates/pampa/src/writers/json.rs:1068-1195` (Cell 1079, Row 1098, Head 1126, Body 1157, Foot 1187; Block at 1196; Inline at 718), the fields exist on: Block, Inline, Cell, Row, Head, Body, Foot. Apply the strict-reader rule uniformly to all of these in the reader update.
 
-**Error variant.** `JsonReadError::ExpectedSourceInfoRef` exists today (`crates/pampa/src/readers/json.rs:30`) but fires when the field is *present but malformed*; its message ("Expected SourceInfo $ref, got inline SourceInfo") is wrong for the missing-entirely case. Add a new variant `MissingSourceInfoRef { node_path: String }` carrying the path-to-the-offender context. A JS-side debugger seeing this error in an `incremental_write_qmd` response should be able to find the responsible producer site immediately.
+**Error variant.** `JsonReadError::ExpectedSourceInfoRef` exists today at `crates/pampa/src/readers/json.rs:31` but fires when the field is *present but malformed*; its message ("Expected SourceInfo $ref, got inline SourceInfo") is wrong for the missing-entirely case. Add a new variant `MissingSourceInfoRef { node_path: String }` carrying the path-to-the-offender context. A JS-side debugger seeing this error in an `incremental_write_qmd` response should be able to find the responsible producer site immediately.
 
 (Phase 4 work items are listed under the per-caller research finding above, which supersedes the earlier checklist.)
 
@@ -284,8 +287,8 @@ Multi-character fields inside `AttrSourceJson` (`classes`, `id`, `kvs`) stay —
 
 Work items:
 
-- [ ] Rust: apply `#[serde(rename = "a")]` to the `attr_s` field; remove the camelCase fallback for it.
-- [ ] Rust: apply `#[serde(rename = "p")]` to the `source_info_pool` field.
+- [ ] Rust: apply `#[serde(rename = "a")]` to the `attr_s` field. The struct's `#[serde(rename_all = "camelCase")]` at `crates/pampa/src/writers/json.rs:146` would otherwise serialize it as `attrS`; the per-field rename overrides that. No separate fallback to remove — the macro effect is what the override replaces.
+- [ ] Rust: apply `#[serde(rename = "p")]` to the `source_info_pool` field (same pattern).
 - [ ] Rust: update `crates/pampa/src/readers/json.rs` to read the renamed fields.
 - [ ] TS: update `ts-packages/preview-renderer/src/types/`, `hub-client/src/types/wasm-quarto-hub-client.d.ts`, **`hub-client/src/components/render/q2-debug/`** (debug AST viewer/editor that decodes the same JSON), and **`q2-preview-spa/src/`** (SPA-side decode) to match.
 - [ ] Test: round-trip the largest existing JSON fixture; assert byte-equivalent after the rename.
@@ -333,7 +336,7 @@ Per-test replacement guidance:
 | Proptest generator; source_info is consistent but not meaningful | `SourceInfo::default()` | `SourceInfo::for_test()` |
 | Integration test with known fixture bytes | `SourceInfo::default()` | `SourceInfo::original(FileId(0), start, end)` with the actual offsets |
 | Simulating React user-edit | `SourceInfo::default()` | `SourceInfo::Generated { by: By::user_edit(), from: smallvec![] }` |
-| Comparison against "no source info" sentinel | `&SourceInfo::default()` | Replace with an `is_default()` predicate or refactor to `Option<SourceInfo>` |
+| Comparison against "no source info" sentinel | `source == &SourceInfo::default()` | Use the `By::is_programmatic_sentinel()` predicate (Phase 6.5 introduces it). Only one site exists today (`crates/quarto-core/src/transforms/navigation_href.rs:382`). No `is_default()` is added — the predicate-on-`By` is more honest after the migration. |
 
 Files to audit (highest concentration first):
 
@@ -357,9 +360,9 @@ Work items:
 
 ## Phase 6.5 — Production-residue fix sweep
 
-The non-test `SourceInfo::default()` usages turn out to be a small, well-characterized set after filtering out the `#[cfg(test)] mod tests` blocks. Per-site decisions follow; each gets a deliberate `By::` kind rather than the default sentinel. Add the three new `By::` constructors first, then apply each fix.
+The non-test `SourceInfo::default()` usages turn out to be a small, well-characterized set after filtering out the `#[cfg(test)] mod tests` blocks. Per-site decisions follow; each gets a deliberate `By::` kind rather than the default sentinel. Add the two new `By::` constructors and one new predicate first, then apply each fix.
 
-### New `By::` constructors
+### New `By::` constructors + predicate
 
 Add to `crates/quarto-source-map/src/source_info.rs`:
 
@@ -371,21 +374,29 @@ impl By {
         Self { kind: "config-default".to_string(), data: Value::Null }
     }
 
-    /// Programmatic construction of ConfigValue via the WASM bridge
-    /// (`ConfigValue::from_path`) — no source bytes exist for these.
+    /// Programmatic construction of ConfigValue (`ConfigValue::from_path`,
+    /// intermediate maps created during `insert_path`, etc.) — no source
+    /// bytes exist for these.
     pub fn programmatic_config() -> Self {
         Self { kind: "programmatic-config".to_string(), data: Value::Null }
     }
 
-    /// AST nodes synthesized by the reconciler during apply_reconciliation
-    /// paths that don't correspond to either input AST.
-    pub fn reconcile_synthesize() -> Self {
-        Self { kind: "reconcile-synthesize".to_string(), data: Value::Null }
+    /// True for kinds whose source bytes don't exist — `config-default`,
+    /// `programmatic-config`, `unknown`. Used by code that needs to
+    /// distinguish "no real source" sentinels from a genuine
+    /// `Original{FileId(0), …}` pointing at a real document.
+    pub fn is_programmatic_sentinel(&self) -> bool {
+        matches!(
+            self.kind.as_str(),
+            "config-default" | "programmatic-config" | "unknown"
+        )
     }
 }
 ```
 
-All three are non-atomic (never match `is_atomic_kind`) and require no `Invocation` anchor.
+Both new constructors are non-atomic (never match `is_atomic_kind`) and require no `Invocation` anchor. `By::unknown()` (added in Phase 4) is the third sentinel kind recognized by `is_programmatic_sentinel`.
+
+An earlier draft also added `By::reconcile_synthesize()`. We dropped it on 2026-05-30: no producer uses it at 7f-landing time, and it was a forward-looking primitive with no current call site. If reconciliation later grows a path that synthesizes new AST without an input `SourceInfo` to inherit from, add the constructor then.
 
 ### Per-site fixes
 
@@ -415,19 +426,46 @@ let source_info = SourceInfo::Generated {
 };
 ```
 
-**`crates/quarto-yaml-validation/src/schema/merge.rs:32, 51, 88`** and **`schema/mod.rs:256`** — `SchemaError::InvalidStructure { location }`. These describe bugs in the schema definition itself, not in the user's YAML. Change the variant's signature:
+**`crates/quarto-pandoc-types/src/config_value.rs:822, 826`** — `ConfigValue::insert_path`. The recursive descent creates intermediate map nodes (`new_map(vec![], SourceInfo::default())` at 822) and intermediate `key_source` slots (`key_source: SourceInfo::default()` at 826) when the path is deeper than the existing structure. Same provenance as `from_path` — programmatic, no source bytes. Replace both with `SourceInfo::Generated { by: By::programmatic_config(), from: smallvec![] }`.
+
+**`crates/quarto-core/src/project_resources.rs:541`** — `canonicalize_within_project(project_root, &absolute, &raw_str, &SourceInfo::default())`. The comment there says "Engine/Lua-filter entries don't have a YAML source location; diagnostics degrade to a span-less message." Replace with `&SourceInfo::Generated { by: By::unknown(), from: smallvec![] }`. The receiver only uses the source location for diagnostic span rendering, which already degrades gracefully when the location can't be mapped to bytes. (Follow-up beads issue: refactor `canonicalize_within_project` to take `Option<&SourceInfo>` instead of requiring a sentinel — out of scope for 7f.)
+
+**`crates/quarto-core/src/transforms/navigation_href.rs:382`** — `if source == &SourceInfo::default()`. The site detects "this is the programmatic sentinel, not a real source" and returns `raw` unchanged. After the migration, no single sentinel value exists; the programmatic-sentinel kinds (`config-default`, `programmatic-config`, `unknown`) all carry the same "no real source bytes" semantic. Replace with:
 
 ```rust
-// In SchemaError enum
+// Before
+if source == &SourceInfo::default() {
+    return raw.to_string();
+}
+
+// After
+if let SourceInfo::Generated { by, .. } = source
+    && by.is_programmatic_sentinel()
+{
+    return raw.to_string();
+}
+```
+
+**`crates/quarto-yaml-validation/src/schema/merge.rs:32, 51, 88`** and **`schema/mod.rs:256`** — `SchemaError::InvalidStructure { location }`. These four sites describe bugs in the schema *definition* itself, not in the user's YAML; they pass `quarto_yaml::SourceInfo::default()` (a re-export of `quarto_source_map::SourceInfo`) as a placeholder. Change the variant's signature:
+
+```rust
+// In SchemaError (crates/quarto-yaml-validation/src/error.rs:9)
 InvalidStructure {
     message: String,
     location: Option<SourceInfo>,   // None for schema-structure errors
 }
 ```
 
-Update the four call sites to use `location: None`. Update any pattern-matching consumers (probably diagnostic formatters) to handle `Option`. Single-crate change; no cross-crate ripple expected.
+The signature change has wider fanout than the four `None` sites suggest:
 
-**`crates/quarto-pandoc-types/src/inline.rs:304-311`** — `InlineAttr::new`. The current `attr_source.combine_all().unwrap_or_default()` fallback is the source of the empty-AttrSourceInfo sentinel. Refactor the signature to require explicit source_info:
+- **Schema-structure-error sites (4)** at `schema/merge.rs:32, 51, 88` and `schema/mod.rs:256` (the variant is actually constructed at line 250; line 256 in the plan refers to the closure's body) → set `location: None`.
+- **User-yaml-validation sites (~11)** at `schema/helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` already pass a real `value.source_info.clone()` → wrap each in `Some(...)`.
+- **Formatter** at `crates/quarto-yaml-validation/src/error.rs:33-46` destructures `InvalidStructure { message, location }` and calls `location.start_offset()` → add a `match Some/None` arm; `None` renders without span.
+- **Test pattern-matching** in `schema/helpers.rs:288, 332, 377, 428, 475, 489, 538, 589, 672, 686` already destructures with `..` → unchanged.
+
+Single-crate change; no cross-crate ripple. The compiler walks you through every site once the enum changes.
+
+**`crates/quarto-pandoc-types/src/inline.rs:333-348`** — `InlineAttr::new`. (Earlier plan drafts cited lines 304-311; the file has drifted.) The current `attr_source.combine_all().unwrap_or_default()` fallback is the source of the empty-AttrSourceInfo sentinel. Refactor the signature to require explicit source_info:
 
 ```rust
 // Before
@@ -481,30 +519,29 @@ The earlier draft listed `crates/quarto-ast-reconcile/src/lib.rs:107, 116, 132, 
 
 **None of the three production `InlineAttr::new` callers passes `AttrSourceInfo::empty()`** — they all pass a real `attr_source` from the parse. So the production-side migration of the `InlineAttr::new` signature is mechanical: change the call to `InlineAttr::new(attr, attr_source, source_info)` where `source_info` comes from the surrounding parse context (each call site has access to a range or `SourceInfo` from the tree-sitter node it's lowering — wire it through). The fallback path through `unwrap_or_default()` only existed for defensive completeness; the signature change makes the defense explicit at the call site.
 
-**Reconciler-side synthesis is a separate concern.** The original prompt asked which of the five reconciler "synthesis sites" warrant a more-specific `By::` kind than `reconcile_synthesize`. The answer is **none** — those sites don't synthesize source_info today; they take a `source: SourceInfo` parameter from the caller (`make_header(level, text, source)` etc.) and copy it into both the block's `source_info` and the empty `attr_source`. The `By::reconcile_synthesize` placeholder is needed only if and when reconciliation grows a path that synthesizes new AST without an input `SourceInfo` to inherit from. Today that doesn't exist; the placeholder is a forward-looking primitive.
-
-The recommended Phase 6.5 work-item update is:
-
-- Keep `By::reconcile_synthesize()` as a constructor (Phase 6.5 still adds it). Document it as "reserved for future reconciler-synthesized paths; no producer uses it today."
-- Drop the line-number list of "reconciler InlineAttr::new sites that need updating" — the list was incorrect.
-- Add Phase 6.5 work items for the three real production `InlineAttr::new` sites in `pampa`'s tree-sitter lowering (`treesitter.rs:559`, `treesitter_utils/caption.rs:50`, `treesitter_utils/paragraph.rs:30`), each of which gets explicit source_info derived from the surrounding parse range.
-
 ### Work items
 
-- [ ] Add `By::config_default()`, `By::programmatic_config()`, `By::reconcile_synthesize()` to `quarto-source-map`. Document `reconcile_synthesize` as reserved for future reconciler-synthesized paths (no producer uses it at 7f-landing time).
-- [ ] Unit test: assert `By::test_scaffold()`, `By::config_default()`, `By::programmatic_config()`, `By::reconcile_synthesize()` all return `false` from `is_atomic_kind()`. Pins the property explicitly so a future producer-contract change can't accidentally promote one to atomic without updating the test.
-- [ ] Apply `config_value.rs:415` (Default impl) fix.
-- [ ] Apply `config_value.rs:539` (from_path) fix.
-- [ ] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update four call sites and any pattern-matching consumers.
-- [ ] Refactor `InlineAttr::new` signature; add `new_from_attr_source` convenience.
+- [ ] Add `By::config_default()`, `By::programmatic_config()`, `By::is_programmatic_sentinel()` to `quarto-source-map`. (Earlier drafts also added `By::reconcile_synthesize()`; dropped — no producer uses it.)
+- [ ] Unit tests in `quarto-source-map`:
+  - Assert `By::test_scaffold()`, `By::config_default()`, `By::programmatic_config()` all return `false` from `is_atomic_kind()`. Pins the property explicitly so a future producer-contract change can't accidentally promote one to atomic.
+  - Assert `By::unknown()` (from Phase 4) returns `false` from `is_atomic_kind()`.
+  - Assert `is_programmatic_sentinel()` returns `true` for `By::config_default()`, `By::programmatic_config()`, `By::unknown()` and `false` for `By::user_edit()`, `By::filter("x.lua", 1)`, `By::shortcode("meta")`.
+- [ ] Apply `config_value.rs:415` (Default impl) fix → `By::config_default()`.
+- [ ] Apply `config_value.rs:539` (from_path) fix → `By::programmatic_config()`.
+- [ ] Apply `config_value.rs:822, 826` (insert_path intermediates) fix → `By::programmatic_config()`.
+- [ ] Apply `project_resources.rs:541` fix → `By::unknown()`. Open a beads follow-up to refactor `canonicalize_within_project` to take `Option<&SourceInfo>`.
+- [ ] Apply `navigation_href.rs:382` fix → replace `source == &SourceInfo::default()` with the `Generated { by, .. } if by.is_programmatic_sentinel()` pattern.
+- [ ] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the ~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`, and adapt the formatter at `crates/quarto-yaml-validation/src/error.rs:33-46` to handle `Option`. Test-side `InvalidStructure { message, .. }` destructures need no change.
+- [ ] Refactor `InlineAttr::new` signature (at `crates/quarto-pandoc-types/src/inline.rs:340`); add `new_from_attr_source` convenience.
 - [ ] Update the three **production** `InlineAttr::new` call sites in `pampa` to pass explicit source_info derived from the surrounding parse range:
   - `crates/pampa/src/pandoc/treesitter.rs:559`
   - `crates/pampa/src/pandoc/treesitter_utils/caption.rs:50`
   - `crates/pampa/src/pandoc/treesitter_utils/paragraph.rs:30`
 - [ ] Update the **test-code** `InlineAttr::new` call sites (`quarto-pandoc-types/src/inline.rs:1455, 1474, 1491`; `pampa/src/filters.rs:1503, 1513, 2123`; `pampa/src/writers/plaintext.rs:887`; `pampa/src/lua/types.rs:2932`; `pampa/src/lua/filter.rs:2254`) to pass `SourceInfo::for_test()`. This is technically Phase 6 work, but it falls out of the signature change and should land in the same commit as the refactor.
-- [ ] Delete `source_info_attr_empty` test at `inline.rs:1452-1463`.
-- [ ] Audit `AttrSourceInfo::empty()` call sites (separate from `InlineAttr::new` callers): the eight reconciler-test sites at `quarto-ast-reconcile/src/lib.rs:107, 116, 132, 322, 1178` and the three block-test sites at `quarto-pandoc-types/src/block.rs:222, 235, 247` are test scaffolding for Block fixtures; they don't trigger any `SourceInfo::default()` path. Leave them as-is unless Phase 6 decides to rename `AttrSourceInfo::empty()` itself (e.g. to `test_scaffold()`).
+- [ ] Delete `source_info_attr_empty` test at `inline.rs:1453`.
+- [ ] Audit `AttrSourceInfo::empty()` call sites (separate from `InlineAttr::new` callers): the eight reconciler-test sites at `quarto-ast-reconcile/src/lib.rs:107, 116, 132, 322, 1178` and the three block-test sites at `quarto-pandoc-types/src/block.rs:222, 235, 247` are test scaffolding for Block fixtures; they don't trigger any `SourceInfo::default()` path. Leave them as-is unless Phase 6 decides to rename `AttrSourceInfo::empty()` itself.
 - [ ] Decide whether `AttrSourceInfo::empty()` should be renamed (`empty()` → `test_scaffold()`) or kept as a clearly-documented test convenience. Recommend keep — the current name is honest ("an empty AttrSourceInfo") and the rename would touch every test fixture that builds a Block-with-attr.
+- [ ] Clean up the stale doc-comment at `crates/quarto-pandoc-types/src/attr.rs:45-46` ("fall back to `SourceInfo::default()` on mismatch"): the real consumers in `crates/quarto-core/src/transforms/theorem.rs:333` and `proof.rs:176` fall back to `None`, not to `SourceInfo::default()`. Tighten the doc.
 - [ ] Verify: `cargo xtask verify --skip-hub-build` clean after all sites are updated.
 
 ## Phase 7 — Deprecate `SourceInfo::default()`
@@ -519,7 +556,7 @@ After Phase 6 brings test usages to the irreducible minimum:
 impl Default for SourceInfo {
     fn default() -> Self {
         SourceInfo::Original {
-            file: FileId(0),
+            file_id: FileId(0),
             start_offset: 0,
             end_offset: 0,
         }
