@@ -2279,10 +2279,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2311,10 +2311,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 1,
-          "size": 1,
-          "lrState": 1327,
-          "sym": "pandoc_str_token1",
+          "column": 2,
+          "size": 2,
+          "lrState": 904,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2343,10 +2343,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 1,
-          "size": 1,
-          "lrState": 1769,
-          "sym": "pandoc_str_token1",
+          "column": 2,
+          "size": 2,
+          "lrState": 897,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2375,10 +2375,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 2,
-          "size": 1,
-          "lrState": 1578,
-          "sym": "pandoc_str_token1",
+          "column": 3,
+          "size": 2,
+          "lrState": 881,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2407,10 +2407,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 2,
-          "size": 1,
-          "lrState": 1327,
-          "sym": "pandoc_str_token1",
+          "column": 3,
+          "size": 2,
+          "lrState": 904,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2439,10 +2439,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 3,
-          "size": 1,
-          "lrState": 2189,
-          "sym": "pandoc_str_token1",
+          "column": 4,
+          "size": 2,
+          "lrState": 814,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2471,10 +2471,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 1,
-          "size": 1,
-          "lrState": 2095,
-          "sym": "pandoc_str_token1",
+          "column": 2,
+          "size": 2,
+          "lrState": 855,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2503,10 +2503,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 1,
-          "size": 1,
-          "lrState": 1992,
-          "sym": "pandoc_str_token1",
+          "column": 2,
+          "size": 2,
+          "lrState": 847,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2535,10 +2535,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 2,
-          "size": 1,
-          "lrState": 1839,
-          "sym": "pandoc_str_token1",
+          "column": 3,
+          "size": 2,
+          "lrState": 839,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2567,10 +2567,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 1,
-          "size": 1,
-          "lrState": 1883,
-          "sym": "pandoc_str_token1",
+          "column": 2,
+          "size": 2,
+          "lrState": 823,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2599,10 +2599,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 1,
-          "size": 1,
-          "lrState": 2355,
-          "sym": "pandoc_str_token1",
+          "column": 2,
+          "size": 2,
+          "lrState": 831,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2631,10 +2631,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 2,
-          "size": 1,
-          "lrState": 2231,
-          "sym": "pandoc_str_token1",
+          "column": 3,
+          "size": 2,
+          "lrState": 864,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2663,10 +2663,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 2,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 3,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2695,10 +2695,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2727,10 +2727,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2759,10 +2759,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2791,10 +2791,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2823,10 +2823,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2855,10 +2855,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2887,10 +2887,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2919,10 +2919,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2951,10 +2951,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -2983,10 +2983,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3015,10 +3015,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3047,10 +3047,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3079,10 +3079,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3111,10 +3111,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3143,10 +3143,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3175,10 +3175,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3207,10 +3207,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
@@ -3239,10 +3239,10 @@
       "captures": [
         {
           "row": 0,
-          "column": 0,
-          "size": 1,
-          "lrState": 1179,
-          "sym": "pandoc_str_token1",
+          "column": 1,
+          "size": 2,
+          "lrState": 799,
+          "sym": "emphasis_delimiter",
           "label": "emphasis-start"
         }
       ],
