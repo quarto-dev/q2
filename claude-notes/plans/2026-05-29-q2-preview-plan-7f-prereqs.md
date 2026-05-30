@@ -132,14 +132,21 @@ The pool stays Rust-authoritative: the framework only ever *references* pool IDs
 
 **Reader is strict, not forgiving.** After Phase 4, the JSON reader rejects nodes missing `s:` rather than synthesizing a fallback. Once 7f completes, every legitimate producer populates `s:` on every node — the Rust writer always emits it, the TS framework's Phase 3 stamping enforces it before any `setLocalAst` propagates to the WASM bridge, and Phase 6's audit removes test fixtures that rely on `SourceInfo::default()`. The only paths that produce bare nodes are producer bugs or adversarial inputs; in both cases, silently fabricating `user_edit` provenance would let pipeline-output bytes be written back to source as if user-authored — exactly the BP violation the contract is built to prevent. The strict reader keeps the contract honest by surfacing producer bugs at the boundary rather than at the writer.
 
-Update `crates/pampa/src/readers/json.rs` to return `Err(JsonReadError::ExpectedSourceInfoRef)` when a node lacks `s:`. The variant already exists for a related case.
+**Phase-ordering constraint.** The strict reader cannot ship before Phase 2 (spread-fix on rebuilt wrappers) and Phase 3 (stampUserEdits on new nodes) — those two together are what guarantee every TS-produced JSON has `s:` on every node. If the strict reader lands first, every incremental write fails. Implementation order is: Phases 1–3 land in sequence, then Phase 4 (which includes the strict-reader change) lands after Phase 3 is verified working end-to-end.
+
+**Scope of the strict-reader rule.** Every JSON-wire-format struct that has an `s:` field must reject missing-`s:` on read. Per `crates/pampa/src/writers/json.rs:1010-1116`, the fields exist on: Block, Inline, Cell, Row, Head, Body, Foot. Apply the strict-reader rule uniformly to all of these in the reader update.
+
+**Error variant.** `JsonReadError::ExpectedSourceInfoRef` exists today (`crates/pampa/src/readers/json.rs:30`) but fires when the field is *present but malformed*; its message ("Expected SourceInfo $ref, got inline SourceInfo") is wrong for the missing-entirely case. Add a new variant `MissingSourceInfoRef { node_path: String }` carrying the path-to-the-offender context. A JS-side debugger seeing this error in an `incremental_write_qmd` response should be able to find the responsible producer site immediately.
 
 Work items:
 
 - [ ] Rust: `SourceInfoSerializer::new()` pre-pushes the user_edit entry at index 0.
 - [ ] Rust: adjust all `Vec<SerializableSourceInfo>` traversals that assume "pool starts empty" — they now start with one entry.
 - [ ] Rust: grep tests for hardcoded pool indices (`sourceInfoPool[0]`, `pool[1]`, etc.); shift expectations by +1 where appropriate.
-- [ ] Rust: JSON reader rejects missing `s:` with `Err(JsonReadError::ExpectedSourceInfoRef)`. No `SourceInfo::default()` fallback, no silent stamping.
+- [ ] Rust: JSON reader rejects missing `s:` with `Err(JsonReadError::MissingSourceInfoRef { node_path })`. No `SourceInfo::default()` fallback, no silent stamping. Apply uniformly across Block, Inline, Cell, Row, Head, Body, Foot.
+- [ ] Rust: add `JsonReadError::MissingSourceInfoRef { node_path: String }` variant to `crates/pampa/src/readers/json.rs:23`. `node_path` is a JSON-pointer-style string (e.g. `"blocks[3].c[0]"`) identifying the offending node for debugging.
+- [ ] Rust: grep tests for hand-crafted JSON literals that omit `s:` (`serde_json::json!({"t": "Str", "c": "..."})` patterns, multi-line string-literal JSON used in reader tests). Update to include valid `s:` references or use Rust-AST-then-serialize round-trips. Separate audit from Phase 6 (which targets Rust `SourceInfo::default()`).
+- [ ] WASM bridge: verify `MissingSourceInfoRef` propagates through `incremental_write_qmd` as `{success: false, error: "Missing source_info reference at <node_path>", diagnostics: ...}` cleanly. Manual test by patching out one stamping site in Phase 3, observing the error in the browser console, then restoring.
 - [ ] TS: export `USER_EDIT_SOURCE_INFO_ID = 0` as a typed constant.
 - [ ] Rust test: round-trip a hand-constructed AST through the WASM bridge; assert `sourceInfoPool[0]` decodes as `Generated{by: user_edit}`.
 - [ ] Rust test: deserialize JSON with bare nodes (no `s:` field) and assert `json_read` returns `Err(JsonReadError::ExpectedSourceInfoRef)`.

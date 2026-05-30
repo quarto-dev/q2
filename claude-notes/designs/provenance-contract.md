@@ -31,6 +31,18 @@ of the transform layer.
 
 ## 1. Decision tree for new transforms
 
+**Wire-format requirement.** Every AST node in the JSON wire format
+carries an `s:` field referencing a valid `sourceInfoPool` entry
+(post-Plan-7f, after the wire-format renames, the field is `s:` and
+the pool is `p:`). The Rust JSON reader rejects bare nodes with
+`Err(JsonReadError::MissingSourceInfoRef { node_path })`. There is no
+fallback to `SourceInfo::default()` and no silent stamping; producers
+are responsible for populating `s:` on every node, and the reader's
+strictness keeps the contract honest by surfacing producer bugs at
+the JSON boundary rather than at the writer. The React framework's
+`stampUserEdits` walker (Plan 7f Phase 3) is the TS-side mechanism
+that satisfies this requirement for user-edit content.
+
 **Pick the shape from where the emitted node's *bytes* come from, not
 from how it was constructed.** Four branches:
 
