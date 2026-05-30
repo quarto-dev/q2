@@ -56,13 +56,17 @@ The function `preimage_in : (SourceInfo, FileId) → Option<Range<usize>>` lifts
 
 `preimage_in` is total and side-effect-free.
 
+**Authored content.** For an AST node `n`, *authored content* refers to the part of `n`'s qmd serialization that traces to user authorship — for a leaf, the entire serialization; for a container, the shell syntax (open, close, per-child separator). Authored content excludes descendants' bytes, which propagate through the recursion.
+
+The producer contract scopes the term: a node whose source_info is atomic-Generated represents pipeline output, not user authorship, and has *no authored content* — its serializable text is the pipeline's, not the user's. The dispatch routes such nodes to non-emitting rules (R1' / R2'), so the writer never tries to serialize the pipeline's bytes as if they were the user's. When the proofs below speak of authored content, they refer to bytes the producer contract attests as user-authored — pipeline-generated nodes have none, by definition.
+
 Let `Source` be the user's qmd file at file identifier `target`, and let `Source'` be the qmd file the writer produces. The invariant binds every byte of `Source'`:
 
 > **(BP)** For every byte `b` in `Source'`, exactly one of the following holds.
 >
 > **(P1) Copied.** `b = Source[i]` for some position `i ∈ preimage_in(n, target)` for some AST node `n` in the new AST.
 >
-> **(P2) Authored.** `b` was produced by serializing the *node-local content* of a single AST node `n` — the part of `n`'s qmd serialization that does not include any of `n`'s descendants' bytes. For a leaf node, node-local content is the entire serialization. For a container node, it is the shell syntax: `> ` for a BlockQuote, `:::{.foo}\n` and `:::\n` for a Div, `- ` for a bullet item, the per-child separator. Children's bytes do not arrive through their parent's serialization; they arrive only when the algebra independently visits each child.
+> **(P2) Authored.** `b` was produced by serializing the *authored content* of a single AST node `n`. Children's bytes do not arrive through their parent's serialization; they arrive only when the algebra independently visits each child.
 
 The two clauses partition the bytes of `Source'`. The algebra never overlaps them; every byte traces to exactly one visited node.
 
@@ -82,25 +86,65 @@ The dispatch is total: every well-formed input lands at exactly one rule. No cat
 
 *Base case R2.* The emission is empty. BP holds vacuously.
 
-*Base case R5.* The emission is `serialize_leaf(n)`, which produces bytes from `n`'s own immediate content. R5's precondition — `n` has no descendants that contribute bytes — makes the "no descendants' bytes" clause of (P2) vacuously satisfied for every emitted byte. (P2) holds. The trust point sits here: `n`'s content is assumed to represent user-authored bytes. The producer contract is what guarantees this; it stamps atomic kinds on non-user-authored leaves, which route to R1' or R2' rather than R5, so any node that reaches R5 carries a source_info shape compatible with user authorship by construction.
+*Base case R5.* The emission is `serialize_leaf(n)`, which produces `n`'s authored content. R5's precondition — `n` has no descendants that contribute bytes — makes the "excludes descendants' bytes" part of authored content vacuous for `n`, so `serialize_leaf(n)` is the entire emission. (P2) holds. The trust point sits at the producer contract's classification: nodes routed to R5 are those whose source_info attests user authorship; nodes whose source_info is atomic-Generated route to R1' or R2' instead and never reach R5, so the writer never tries to serialize pipeline content as authored content.
 
-*Inductive case R3 / R4.* The emission is `shell_open ++ join(separator, [assemble(c) for c in children]) ++ shell_close`. By the inductive hypothesis, each `assemble(c)` produces bytes satisfying BP, and concatenation preserves BP per byte — every byte of every `assemble(c)` continues to satisfy whichever clause it satisfied before. The remaining bytes are the shells and the separators. Shell bytes satisfy either (P1) — when they come from the original block's prefix/suffix preimage (R4) — or (P2) — when they come from the qmd writer's syntax helper, which emits node-local syntax determined entirely by the container kind, with no reference to any descendant (R3). Separator bytes come from either the preserved gap's preimage (P1) or the qmd writer's separator helper (P2), by the same reasoning. Every byte of the full emission therefore satisfies BP.
+*Inductive case R3 / R4.* The emission is `shell_open ++ join(separator, [assemble(c) for c in children]) ++ shell_close`. By the inductive hypothesis, each `assemble(c)` produces bytes satisfying BP, and concatenation preserves BP per byte — every byte of every `assemble(c)` continues to satisfy whichever clause it satisfied before. The remaining bytes are the shells and the separators. Shell bytes satisfy either (P1) — when they come from the original block's prefix/suffix preimage (R4) — or (P2) — when they come from the qmd writer's syntax helper, which emits `n`'s authored content determined entirely by the container kind, with no reference to any descendant (R3). Separator bytes come from either the preserved gap's preimage (P1) or the qmd writer's separator helper (P2), by the same reasoning. Every byte of the full emission therefore satisfies BP.
 
 The induction proceeds on AST size, which is finite, so termination is guaranteed.
 
 The argument depends on the producer contract: a producer that stamps non-atomic source_info on a node whose content is pipeline output will route that node to R5 or R1, and the writer will emit pipeline bytes as if user-authored — satisfying BP's letter but not its spirit. Producer hygiene is the substrate; the writer's dispatch and recursion are the structure built on it. With both contracts in force, BP holds throughout `Source'`. ∎
 
-## What BP does not promise
+## Completeness
 
-- **Position correctness.** BP says each byte has a defensible origin. It does not say each byte landed at the right place in `Source'`. That's the responsibility of `assemble`: separators between entries, shell composition in `Recurse`, gap preservation.
+Soundness rules out *leaks* — pipeline bytes appearing in `Source'`. Completeness rules out *drops* — user-authored bytes failing to appear when they should. Both are necessary: a writer that emits nothing is trivially sound but useless; a writer that emits everything is trivially complete but unsafe. The recursive `plan_user_writes` proves the dual of BP by the same structural induction.
 
-- **Diagnostic fidelity.** Whether the right warnings (`Q-3-42`, `Q-3-43`, future codes) accompany each soft-drop is the diagnostic layer's job. BP is silent on warnings.
+Every byte falls into exactly one of four categories. Two appear in `Source'`; two do not:
 
-- **Marker-character fidelity on lists and blockquotes.** q2's AST normalizes list-item markers (every bullet marker — `*`, `-`, `+` — collapses to `*`; ordered-list numbers regenerate sequentially from the first item's start, so `1. / 1. / 1.` becomes `1. / 2. / 3.` on round-trip) and consumes blockquote `>` prefixes during parsing. Round-tripping content that exercises these surface-level choices canonicalizes on every write. The fix requires a typed-AST extension carrying per-item source_info on list items, which is tracked as a separate work item and is out of scope for the writer-side contract.
+> **(C1) Preserved.** For every AST node `n` in `AST_new` with `preimage_in(n, target) = Some(range)`, every byte at every position `i ∈ range` in `Source` appears in `Source'`.
+>
+> **(C2) Authored.** For every AST node `n` in `AST_new`, if `n` is not at a soft-drop site, every byte of `n`'s authored content appears in `Source'`.
+>
+> **(R) Refused.** A node `n` is at a *soft-drop site* when the reconciler aligned `n` via `UseAfter` or `RecurseIntoContainer` *and* the editability gate returns "not editable" — `n`'s source_info is atomic-Generated, or `n` is an atomic CustomNode with `RecurseIntoContainer` (interior edit, not picker-replacement). At a soft-drop site, the writer refuses to emit `n`'s authored content; instead, it emits `n`'s preimage (R1') or nothing (R2'), and pushes a `Q-3-42` or `Q-3-43` warning into the diagnostic surface.
+>
+> **(D) Deleted.** Bytes at positions in `Source` that no AST node in `AST_new` claims via `preimage_in` do *not* appear in `Source'`.
+
+(C1) is the consumer-side dual of (P1): where (P1) says every emitted copy has a known source position, (C1) says every known source position the new AST still references is emitted. (C2) is the consumer-side dual of (P2): where (P2) says every serialized byte traces to a single visited node's authored content, (C2) says every visited node's authored content is serialized. (R) and (D) are the *negative* completeness clauses — bytes the writer correctly does *not* emit. (R) is the soft-drop feature: the writer's principled refusal to emit pipeline-resolved content as if user-authored, communicated to the user via a warning. (D) is the user's intentional removal: bytes deleted from the AST do not appear in `Source'`.
+
+The four categories partition every byte. Every byte in `Source` is either Preserved (still claimed by a surviving node) or Deleted (no longer claimed). Every byte from a user edit is either Authored (emitted at a non-soft-drop site) or Refused (the writer pushed back at a soft-drop site). A soft-drop site simultaneously triggers (C1) for the node's preimage emission and (R) for the refused authored content; the two clauses speak about different byte sets at the same node.
+
+R5-special (let-user-win on atomic CustomNode wholesale replacement) is *not* a soft-drop site. The user replaced the entire node via a component picker — an unambiguous intent — and the writer emits the new node's qmd via `plain_data`. No warning. R5-special falls under (C2) Authored.
+
+**Claim.** For every input `(Source, AST_old, AST_new, Plan)` produced by a q2 pipeline run that satisfies the producer contract, the bytes produced by `assemble(plan_user_writes(root, target, α))` satisfy (C1), (C2), (R), and (D).
+
+**Proof.** By structural induction on `n` in `AST_new`.
+
+*Base case R1.* The emission is `Source[range]` where `range = preimage_in(n, target)`. Every byte at every position `i ∈ range` appears in the emission. (C1) holds for `n`.
+
+*Base case R1' (soft-drop with preimage).* The emission is identical to R1: `Source[range]`. (C1) holds for `n`'s preimage. (C2) does not apply — `n` is at a soft-drop site. (R) is satisfied: the writer refused `n`'s authored content and pushed a `Q-3-43` warning.
+
+*Base case R2.* The emission is empty. By the producer contract, `n` is atomic-Generated with no preimage — pipeline-synthesized content with no authored content. (C1) and (C2) hold vacuously.
+
+*Base case R2' (soft-drop without preimage).* The emission is empty + `Q-3-43` warning. (C1) holds vacuously (no preimage). (C2) does not apply (soft-drop). (R) is satisfied.
+
+*Base case R5.* The emission is `serialize_leaf(n)`. By R5's classification and the producer contract, `n` has authored content; `serialize_leaf` emits it. Every byte of `n`'s authored content appears in the emission. (C2) holds. R5-special falls here (let-user-win via `plain_data` is still Authored, not Refused).
+
+*Inductive case R3 / R4.* The emission is `shell_open ++ join(separator, [assemble(c) for c in children]) ++ shell_close`. By the inductive hypothesis, each `assemble(c)` emits every (C1) Preserved and (C2) Authored byte in `c`'s subtree. Shell and separator bytes appear by construction: R4 takes them from the original block's prefix/suffix preimage (satisfying (C1) at the shell positions); R3 takes them from the qmd writer's syntax helper (satisfying (C2) for the container's authored content). Every byte at every level of `n`'s subtree appears in the emission.
+
+(D) follows from the per-node coverage: every byte in `Source` is either covered by some `n.preimage_in(target) = Some(...)` for `n` in `AST_new` (Preserved, handled by R1 or R1') or it isn't (Deleted, no rule emits it). The set complement is exact.
+
+∎
+
+## What BP and Completeness do not promise
+
+- **Position correctness.** BP says each byte has a defensible origin and completeness says each authored byte appears. Neither says bytes land at the right place in `Source'`. That's `assemble`'s responsibility: separators between entries, shell composition in `Recurse`, gap preservation.
+
+- **Diagnostic fidelity.** Whether the right warnings (`Q-3-42`, `Q-3-43`, future codes) accompany each soft-drop is the diagnostic layer's job. BP and completeness are silent on warning content.
+
+- **Byte-level fidelity of helper-emitted bytes.** Whenever the writer emits bytes via a syntax helper rather than copying from `Source` — R3 shells for block containers being recursed into, list-item markers, ordered-list numbers — the helper produces canonical bytes determined by the container kind, not by the user's original byte choice. If the user's original differs from the canonical (e.g., `-` instead of `*` for bullets, `1. / 1. / 1.` instead of `1. / 2. / 3.` for lazy numbering, `::::` instead of `:::` for Div fences), the user's original bytes don't round-trip — they're replaced by helper output. This is a **completeness gap**: strict (C1) is not preserved at these positions for nodes whose dispatch fires a helper-emitting rule. Soundness still holds (helper output is honest authored content traceable to (P2)); only the byte-level fidelity of the original syntactic choice is lost. The fix requires per-position fidelity tracking in the AST that's out of scope for the writer-side contract. Inline containers handled by R4 do preserve original shells via prefix/suffix preimage.
 
 - **Engine-output boundary enforcement.** When the pipeline's engine-execution stage runs an engine (Knitr, Jupyter) on the AST, the engine returns a new AST that the reconciler treats as ground truth. q2 currently has no post-execute check that the engine modified only the code blocks of languages it claimed. Tracked separately; blocked on the `claims_language` extension to the engine trait.
 
-- **Producer-side hygiene.** BP inherits the producer contract as a precondition. If a producer attaches misleading source_info — a synthesized leaf with source_info pointing at someone else's bytes — BP will faithfully emit those bytes per (P1) and the result will be wrong. The trust point is narrow (only at R5, where the algebra trusts that a leaf reaching it represents user-authored content), but it is real, and it is the producer contract's job to honor it.
+- **Producer-side hygiene.** Both BP and completeness inherit the producer contract as a precondition. A producer that misclassifies source_info breaks both invariants — non-atomic stamping on pipeline output breaks soundness (the writer emits pipeline bytes as if user-authored); atomic-Generated stamping on user content breaks completeness (the writer refuses to emit content that was actually user-authored). The trust point is narrow (only at R5, where the algebra trusts that a node reaching it has authored content), but it is real, and it is the producer contract's job to honor it.
 
 ## References
 
