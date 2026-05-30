@@ -13,7 +13,7 @@ Four workstreams, none of which involve the writer itself:
 1. **Framework source_info preservation** — the React framework currently strips `s:` on rebuilt wrappers (Emph, Strong, Para, every passthrough except the top-level Ast). Fix the recursion to spread source_info forward.
 2. **User-edit stamping** — a single reserved pool slot for `Generated{by: user_edit, …}`; the framework stamps it on user-constructed nodes (including those nested inside CustomNode slots).
 3. **`SourceInfo::default()` audit** — replace test usages with explicit kinds; deprecate the `Default` impl.
-4. **Production-residue cleanup** — handful of non-test `SourceInfo::default()` sites in `quarto-pandoc-types` and `quarto-yaml-validation`. Each gets a deliberate `By::` kind (three new constructors). Refactors `InlineAttr::new` to require explicit source_info, eliminating the empty-AttrSourceInfo sentinel.
+4. **Production-residue cleanup** — handful of non-test `SourceInfo::default()` sites in `quarto-pandoc-types` and `quarto-yaml-validation`. Each gets a deliberate `By::` kind (four new constructors, including `By::unknown()` for the source-info-completing reader's placeholder). Refactors `InlineAttr::new` to require explicit source_info, eliminating the empty-AttrSourceInfo sentinel. Splits `json::read` into a strict variant for q2-internal paths and `read_completing_source_info` for callers that consume JSON from outside the source-tracked world (qmd-syntax-helper Pandoc subprocess output, CLI `--from json`, external filter binaries, Lua AST handoff).
 
 Plus two minor cleanups bundled along for the ride: wire-format renames `attrS` → `a`, `sourceInfoPool` → `p`.
 
@@ -115,22 +115,57 @@ Work items:
 - [ ] TS test: preserved subtree (rebuilt-wrapper case) keeps original `s:` after stamping passes through it.
 - [ ] TS test: user component constructs a new CustomBlock via `setLocalAst({ t: 'CustomBlock', type_name: 'Callout', slots: {...}, ...})`; assert nested nodes inside slots are stamped recursively.
 
-## Phase 4 — Reserved pool slot for user_edit
+## Phase 4 — Reserved pool slots (user_edit and unknown)
 
-The Rust JSON writer (`crates/pampa/src/writers/json.rs`) currently builds the `sourceInfoPool` as a used-only intern table during AST traversal. Change `SourceInfoSerializer::new()` to pre-push a `Generated{by: By::user_edit(), from: smallvec![]}` entry at index 0 before any traversal interns. All subsequent intern operations get IDs ≥ 1.
+The Rust JSON writer (`crates/pampa/src/writers/json.rs`) currently builds the `sourceInfoPool` as a used-only intern table during AST traversal. After Phase 4, the serializer pre-populates reserved slots before any intern operation runs.
 
-Export a TypeScript constant:
+Two reserved slots:
 
-```ts
-// ts-packages/preview-renderer/src/types/sourceInfo.ts
-export const USER_EDIT_SOURCE_INFO_ID = 0;
+- **`USER_EDIT_SOURCE_INFO_ID`** — `Generated{by: By::user_edit(), from: smallvec![]}`. Referenced by the framework's `stampUserEdits` walker (Phase 3).
+- **`UNKNOWN_SOURCE_INFO_ID`** — `Generated{by: By::unknown(), from: smallvec![]}`. Referenced by `json::read_completing_source_info` for nodes arriving without `s:` from outside the source-tracked world.
+
+Layout pinned via named constants in `crates/pampa/src/writers/json.rs` alongside `SourceInfoSerializer`:
+
+```rust
+pub const USER_EDIT_SOURCE_INFO_ID: usize = 0;
+pub const UNKNOWN_SOURCE_INFO_ID: usize = USER_EDIT_SOURCE_INFO_ID + 1;
+// future reserved slots: UNKNOWN_SOURCE_INFO_ID + 1, etc.
+
+impl SourceInfoSerializer {
+    pub fn new() -> Self {
+        let mut pool = Vec::new();
+        // Push in declaration order; constants pin the layout.
+        pool.push(serializable_for_user_edit());   // ID 0
+        pool.push(serializable_for_unknown());      // ID 1
+        // ...
+        Self { pool, /* ... */ }
+    }
+}
 ```
 
-The framework's stamping references this constant.
+A unit test next to the constants asserts the pool entries match the constants (`assert_eq!(serializer.pool[USER_EDIT_SOURCE_INFO_ID].kind(), "user-edit")` etc.), so adding or rearranging reserved slots breaks the test rather than silently shifting IDs at consumer sites.
 
-The pool stays Rust-authoritative: the framework only ever *references* pool IDs; it never allocates. The user-edit slot exists in every JSON document the writer produces, regardless of whether any node references it.
+Export TypeScript hand-mirror in `ts-packages/preview-renderer/src/types/sourceInfo.ts`:
 
-**Reader is strict, not forgiving.** After Phase 4, the JSON reader rejects nodes missing `s:` rather than synthesizing a fallback. Once 7f completes, every legitimate producer populates `s:` on every node — the Rust writer always emits it, the TS framework's Phase 3 stamping enforces it before any `setLocalAst` propagates to the WASM bridge, and Phase 6's audit removes test fixtures that rely on `SourceInfo::default()`. The only paths that produce bare nodes are producer bugs or adversarial inputs; in both cases, silently fabricating `user_edit` provenance would let pipeline-output bytes be written back to source as if user-authored — exactly the BP violation the contract is built to prevent. The strict reader keeps the contract honest by surfacing producer bugs at the boundary rather than at the writer.
+```ts
+export const USER_EDIT_SOURCE_INFO_ID = 0;
+export const UNKNOWN_SOURCE_INFO_ID = 1;
+```
+
+A Rust-side CI test asserts parity with the TS file (read the TS source, parse the numbers, compare to the Rust constants) — same hand-mirror discipline as `ATOMIC_CUSTOM_NODES`.
+
+The pool stays Rust-authoritative: the framework references slot IDs by name; it never allocates. The reserved slots exist in every JSON document the writer produces, regardless of whether any node references them.
+
+**Two readers — strict `json::read` for q2-internal JSON, `read_completing_source_info` for callers that need a fallback.** The current single `json::read` is consumed by both q2-internal paths (the WASM bridge's `incremental_write_qmd`, which reads q2-extended JSON with `s:` populated on every node) *and* by paths that consume JSON from outside the source-tracked world (`json_filter.rs` for external filter output, `qmd-syntax-helper` for Pandoc subprocess output, `pampa/src/main.rs` for CLI stdin, `lua/readwrite.rs` for Lua AST handoff). The outside-world paths produce JSON without `s:` because the upstream producer doesn't know about q2's extension; making the reader universally strict breaks them.
+
+Split the reader, scoping leniency to specific call sites:
+
+- **`json::read`** becomes strict: rejects nodes missing `s:` with `Err(JsonReadError::MissingSourceInfoRef { node_path })`. Used by the WASM bridge's `incremental_write_qmd` and any future q2-internal JSON consumer.
+- **`json::read_completing_source_info`** fills missing `s:` with a reference to the reserved `UNKNOWN_SOURCE_INFO_ID` pool slot (Phase 4 pre-populates the slot with `Generated{by: By::unknown(), from: smallvec![]}`). Used by the four outside-world consumers above. Callers with more specific provenance (e.g. `filter_source_info` for filter output) overwrite the placeholder immediately; callers without keep `By::unknown` as the honest "we don't know" provenance.
+
+The function name `read_completing_source_info` matches the surrounding `read_<thing>` convention in `readers/json.rs` (`read_inline`, `read_block`, `read_attr_source`, `make_source_info`) and says exactly what it does: read, then complete any missing source_info. There is no compatibility shim layer — the leniency is a property of the explicit call site, not of the wire format.
+
+The strict-reader rule applies only to JSON under q2's source-tracking contract, and surfaces producer bugs there at the boundary rather than at the writer.
 
 **Phase-ordering constraint.** The strict reader cannot ship before Phase 2 (spread-fix on rebuilt wrappers) and Phase 3 (stampUserEdits on new nodes) — those two together are what guarantee every TS-produced JSON has `s:` on every node. If the strict reader lands first, every incremental write fails. Implementation order is: Phases 1–3 land in sequence, then Phase 4 (which includes the strict-reader change) lands after Phase 3 is verified working end-to-end.
 
@@ -140,14 +175,19 @@ The pool stays Rust-authoritative: the framework only ever *references* pool IDs
 
 Work items:
 
-- [ ] Rust: `SourceInfoSerializer::new()` pre-pushes the user_edit entry at index 0.
-- [ ] Rust: adjust all `Vec<SerializableSourceInfo>` traversals that assume "pool starts empty" — they now start with one entry.
-- [ ] Rust: grep tests for hardcoded pool indices (`sourceInfoPool[0]`, `pool[1]`, etc.); shift expectations by +1 where appropriate.
-- [ ] Rust: JSON reader rejects missing `s:` with `Err(JsonReadError::MissingSourceInfoRef { node_path })`. No `SourceInfo::default()` fallback, no silent stamping. Apply uniformly across Block, Inline, Cell, Row, Head, Body, Foot.
+- [ ] Rust: define `USER_EDIT_SOURCE_INFO_ID` and `UNKNOWN_SOURCE_INFO_ID` constants alongside `SourceInfoSerializer` in `crates/pampa/src/writers/json.rs`. Chain via `+ 1` so future reserved slots derive predictably.
+- [ ] Rust: `SourceInfoSerializer::new()` pre-pushes the user_edit and unknown entries in declaration order (matching the constant values).
+- [ ] Rust: unit test asserting pool entries match the constants (`assert_eq!(serializer.pool[USER_EDIT_SOURCE_INFO_ID].kind(), "user-edit")` and same for unknown). Adding or rearranging reserved slots fails the test.
+- [ ] Rust: adjust all `Vec<SerializableSourceInfo>` traversals that assume "pool starts empty" — they now start with `RESERVED_POOL_SLOTS` entries.
+- [ ] Rust: grep tests for hardcoded pool indices (`sourceInfoPool[0]`, `pool[1]`, etc.); replace literal numbers with the named constants so future slot additions don't break call sites silently.
 - [ ] Rust: add `JsonReadError::MissingSourceInfoRef { node_path: String }` variant to `crates/pampa/src/readers/json.rs:23`. `node_path` is a JSON-pointer-style string (e.g. `"blocks[3].c[0]"`) identifying the offending node for debugging.
-- [ ] Rust: grep tests for hand-crafted JSON literals that omit `s:` (`serde_json::json!({"t": "Str", "c": "..."})` patterns, multi-line string-literal JSON used in reader tests). Update to include valid `s:` references or use Rust-AST-then-serialize round-trips. Separate audit from Phase 6 (which targets Rust `SourceInfo::default()`).
+- [ ] Rust: make `json::read` strict — reject missing `s:` with `Err(JsonReadError::MissingSourceInfoRef)`. Add `json::read_completing_source_info` alongside, which fills missing `s:` with a reference to `UNKNOWN_SOURCE_INFO_ID`. Apply uniformly across Block, Inline, Cell, Row, Head, Body, Foot.
+- [ ] Rust: add `By::unknown()` constructor in `quarto-source-map` (`kind: "unknown"`, non-atomic). The reserved `UNKNOWN_SOURCE_INFO_ID` pool slot uses it.
+- [ ] Rust: switch `json_filter.rs`, `qmd-syntax-helper`'s conversions, `pampa/src/main.rs`, and `lua/readwrite.rs` from `json::read` to `json::read_completing_source_info` — these are the call sites that consume JSON from outside the source-tracked world. The WASM bridge (`wasm-quarto-hub-client::incremental_write_qmd`) keeps `json::read` (now strict).
+- [ ] Rust: grep tests for hand-crafted JSON literals that omit `s:` (`serde_json::json!({"t": "Str", "c": "..."})` patterns, multi-line string-literal JSON used in reader tests). Tests exercising the strict path: update to include valid `s:` references. Tests exercising `read_completing_source_info`: assert nodes carry `Generated{by: unknown, …}` after the read.
 - [ ] WASM bridge: verify `MissingSourceInfoRef` propagates through `incremental_write_qmd` as `{success: false, error: "Missing source_info reference at <node_path>", diagnostics: ...}` cleanly. Manual test by patching out one stamping site in Phase 3, observing the error in the browser console, then restoring.
-- [ ] TS: export `USER_EDIT_SOURCE_INFO_ID = 0` as a typed constant.
+- [ ] Documentation: update `crates/pampa/src/readers/json.rs` module docs to explain the two-reader split — q2-internal paths use strict, Pandoc-compatible paths use lenient.
+- [ ] TS: export `USER_EDIT_SOURCE_INFO_ID = 0` and `UNKNOWN_SOURCE_INFO_ID = 1` as typed constants in `ts-packages/preview-renderer/src/types/sourceInfo.ts`. Add a Rust-side CI test that reads the TS file and asserts the values match the Rust constants (same hand-mirror discipline as `ATOMIC_CUSTOM_NODES`).
 - [ ] Rust test: round-trip a hand-constructed AST through the WASM bridge; assert `sourceInfoPool[0]` decodes as `Generated{by: user_edit}`.
 - [ ] Rust test: deserialize JSON with bare nodes (no `s:` field) and assert `json_read` returns `Err(JsonReadError::ExpectedSourceInfoRef)`.
 - [ ] TS test (atomic-gate sanity): a node with `s: USER_EDIT_SOURCE_INFO_ID` is not flagged as atomic by `dispatch.tsx`'s atomic gate (the gate's lookup-by-ID resolves to `Generated{by: user_edit}`, which is non-atomic).
@@ -386,10 +426,13 @@ Work items:
 
 ## Phase 8 — Verification
 
-- [ ] `cargo xtask verify` clean.
+- [ ] `cargo xtask verify` (full, including hub-build) clean. 7f touches `quarto-pandoc-types`, `quarto-source-map`, and `quarto-yaml-validation` — all dependencies of `wasm-quarto-hub-client`. Plain `cargo build --bin q2` does *not* pick these up in `q2 preview`; the embedded SPA loads a stale WASM. Full verify rebuilds the WASM chain. After this lands, anyone testing the preview must run the full verify or follow the `q2 preview` rebuild instructions in CLAUDE.md.
 - [ ] All existing tests pass.
 - [ ] New tests from Phases 2, 3, 4 pass.
+- [ ] `#[derive(Default)]` audit: grep workspace for `#[derive(.*Default.*)]` on structs containing `SourceInfo` fields. The deprecation warning will fire when these derives are exercised. Decide per-site whether to suppress (with a clear comment) or refactor to remove the derive.
 - [ ] Manual smoke test of q2-preview: open a document with shortcodes, edit a paragraph, save, re-open; verify the shortcode tokens are preserved and the framework's `s:` is intact on rebuilt wrappers.
+- [ ] Manual smoke test of q2-debug: open a document; verify the source_info pool display shows `[0] = Generated{by: user_edit, …}` as the reserved slot, and that documents without user edits still display correctly (pool entry 0 is always present even if unreferenced from any node).
+- [ ] Coordinate with Plan 7b's open work: if 7b adds tests via hand-crafted JSON, those tests must rebase after 7f and use the strict-reader pattern (or use the lenient reader explicitly for Pandoc-compatible content).
 
 ## What 7f does not do
 
