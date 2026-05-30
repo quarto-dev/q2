@@ -152,18 +152,26 @@ Same structure as the callout spec, asserting the theorem syntax and `#thm-pytha
 - [ ] Verify locally with `cd hub-client && npx playwright test q2-preview-callout-edit q2-preview-theorem-edit`.
 - [ ] Add the specs to the playwright config's test set so CI picks them up.
 
-## Phase 5 — Verification
+## Phase 5 — Callout-dense benchmark
+
+Plan 7d's Phase 4 benchmark uses a 500-block fixture with one callout. After 7e ships the CustomNode shell helpers, a callout-dense fixture catches any regression specific to the new arms.
+
+- [ ] Build `crates/pampa/tests/fixtures/perf/callout-dense.qmd`: ~500 top-level blocks with ~30% callouts (mix of Callout / Theorem / Proof) and the rest plain Para / Header.
+- [ ] Re-run the 7d benchmark harness on the new fixture. Assert: within 2× of the post-7d baseline on `incremental_write_qmd` for a single-block edit; within 1.5× for a whole-document edit. If the CustomNode arms are within bounds, the shell decomposition is performant.
+
+## Phase 6 — Verification
 
 - [ ] `cargo xtask verify` clean.
 - [ ] All existing tests pass.
 - [ ] New roundtrip tests (Phase 3) pass.
 - [ ] New Playwright specs (Phase 4) pass.
+- [ ] Callout-dense benchmark (Phase 5) within bounds.
 - [ ] Manual smoke: open a qmd with a callout in q2-preview; click the edit affordance; save; reload; observe the callout body shows the edited content and the callout syntax is intact in source.
 
 ## What 7e does not do
 
-- **Inline CustomNodes.** All currently-known production CustomNodes are block-level. If inline CustomNodes (e.g. inline ProofRef, inline FloatRef) materialize as a category, 7e extends to cover them; today's scope is block-level.
-- **Atomic CustomNode handling.** `CrossrefResolvedRef` (and future `IncludeExpansion`) keep their let-user-win R5-special path via `plain_data` reading. No change.
+- **Inline CustomNodes.** Only one inline-level production CustomNode exists today: `CrossrefResolvedRef`, which is **atomic** and routes through the existing let-user-win R5-special path via `plain_data`. 7e does not add Inline::Custom arms in the qmd writer; that arm stays empty and unreachable under the algebra (atomic CustomNodes never reach R3 / R5-leaf). If a future non-atomic inline CustomNode is introduced (e.g. an inline `ProofRef` that's not atomic), 7e extends to cover it; today's production catalog has none.
+- **Atomic CustomNode handling.** `CrossrefResolvedRef` (and future `IncludeExpansion`) keep their let-user-win R5-special path via `plain_data` reading. `ATOMIC_CUSTOM_NODES` is unchanged; the TS hand-mirror at `ts-packages/preview-renderer/src/utils/atomicCustomNodes.ts` is unchanged.
 - **AST extensions.** If a CustomNode shape requires AST changes (new fields, new slot types), those land in a separate plan. 7e works against the existing AST.
 
 ## References

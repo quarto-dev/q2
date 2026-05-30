@@ -130,12 +130,18 @@ The framework's stamping references this constant.
 
 The pool stays Rust-authoritative: the framework only ever *references* pool IDs; it never allocates. The user-edit slot exists in every JSON document the writer produces, regardless of whether any node references it.
 
+**Reader-side fallback.** After Phase 4, the JSON reader should treat a node with missing `s:` field as a reference to `USER_EDIT_SOURCE_INFO_ID` (pool index 0), not as `SourceInfo::default()`. This makes the framework's client-side stamping (Phase 3) belt-and-suspenders rather than load-bearing: even if a TS-side path misses a stamping point, the Rust reader catches the missing reference and routes it to user_edit. Specify this in `crates/pampa/src/readers/json.rs` and add a test that asserts a JSON document with bare nodes (no `s:` field) deserializes with the user_edit source_info attached.
+
 Work items:
 
 - [ ] Rust: `SourceInfoSerializer::new()` pre-pushes the user_edit entry at index 0.
 - [ ] Rust: adjust all `Vec<SerializableSourceInfo>` traversals that assume "pool starts empty" — they now start with one entry.
+- [ ] Rust: grep tests for hardcoded pool indices (`sourceInfoPool[0]`, `pool[1]`, etc.); shift expectations by +1 where appropriate.
+- [ ] Rust: JSON reader treats missing `s:` as reference to `USER_EDIT_SOURCE_INFO_ID`, not `SourceInfo::default()`.
 - [ ] TS: export `USER_EDIT_SOURCE_INFO_ID = 0` as a typed constant.
 - [ ] Rust test: round-trip a hand-constructed AST through the WASM bridge; assert `sourceInfoPool[0]` decodes as `Generated{by: user_edit}`.
+- [ ] Rust test: deserialize JSON with bare nodes (no `s:` field) and assert the resulting AST nodes carry user_edit source_info.
+- [ ] TS test (atomic-gate sanity): a node with `s: USER_EDIT_SOURCE_INFO_ID` is not flagged as atomic by `dispatch.tsx`'s atomic gate (the gate's lookup-by-ID resolves to `Generated{by: user_edit}`, which is non-atomic).
 
 ## Phase 5 — Wire-format renames
 
@@ -146,13 +152,20 @@ Two JSON top-level fields in `crates/pampa/src/writers/json.rs` get single-chara
 
 Multi-character fields inside `AttrSourceJson` (`classes`, `id`, `kvs`) stay — they're Pandoc-standard. `pandoc-api-version` stays — Pandoc-legacy.
 
+**Snapshot regeneration.** The renames + reserved pool slot change *every* JSON snapshot the writer produces. Affected fixture trees include `crates/pampa/src/snapshots/` and any other crate using `insta`-style snapshots that serialize ASTs. Expect a large mechanical commit regenerating snapshots; do it as a separate commit from the rename itself so the snapshot churn doesn't bury the substantive change.
+
+**Wire-format breaking change.** The renames are a breaking change to the JSON envelope. q2's wire format isn't a documented public contract, but anyone holding cached JSON (test fixtures committed to disk, debug-dump files, recorded session traces under `claude-notes/`) will see breakage. The new fields are byte-equivalent in meaning; only the key names change. No semantic regression, but consumer-side coordination is needed.
+
 Work items:
 
 - [ ] Rust: apply `#[serde(rename = "a")]` to the `attr_s` field; remove the camelCase fallback for it.
 - [ ] Rust: apply `#[serde(rename = "p")]` to the `source_info_pool` field.
 - [ ] Rust: update `crates/pampa/src/readers/json.rs` to read the renamed fields.
-- [ ] TS: update `ts-packages/preview-renderer/src/types/` and `hub-client/src/types/wasm-quarto-hub-client.d.ts` to match.
+- [ ] TS: update `ts-packages/preview-renderer/src/types/`, `hub-client/src/types/wasm-quarto-hub-client.d.ts`, **`hub-client/src/components/render/q2-debug/`** (debug AST viewer/editor that decodes the same JSON), and **`q2-preview-spa/src/`** (SPA-side decode) to match.
 - [ ] Test: round-trip the largest existing JSON fixture; assert byte-equivalent after the rename.
+- [ ] Regenerate all `.snap` snapshot fixtures: `INSTA_UPDATE=always cargo nextest run --workspace` (or per-crate equivalent). Commit the regenerated snapshots separately from the rename itself.
+- [ ] Grep `claude-notes/` for `attrS` / `sourceInfoPool`; update any design doc or research note that references the old names.
+- [ ] Verify the hub server (`crates/hub/`) treats AST JSON as opaque blob and does not pattern-match on `attrS` / `sourceInfoPool` field names. If it does inspect specific fields, update accordingly.
 
 ## Phase 6 — Audit `SourceInfo::default()` in tests
 
@@ -206,11 +219,14 @@ Files to audit (highest concentration first):
 
 **Production residue is handled in Phase 6.5** (below). The replacement target is **not** `user_edit`. `user_edit` applies only to React-constructed content. Every other caller decides their own provenance kind.
 
+**Behavior change in writer-exercising tests.** Today, `SourceInfo::default()` is `Original{FileId(0), 0, 0}`. Under the writer, that has `preimage_in(target=FileId(0))` returning `Some(0..0)` — an empty range — so R1 fires and emits zero bytes. After the audit, those tests use `SourceInfo::for_test()` which is `Generated{by: test-scaffold, from: smallvec![]}`. `preimage_in` returns `None` for this shape, so R5 fires (or R3, if the node is a container) — different rule, different output. Any test that asserted on the *specific byte output* of running the writer over hand-constructed AST with `SourceInfo::default()` will see different (correct) bytes after the swap. Expect a small batch of test-expectation updates alongside the audit.
+
 Work items:
 
 - [ ] Add `By::test_scaffold()` constructor in `quarto-source-map`.
 - [ ] Add `SourceInfo::for_test()` convenience in `quarto-source-map`.
 - [ ] Audit test-file usages of `SourceInfo::default()`; replace with one of the four patterns above.
+- [ ] Update writer-exercising test expectations where switching to `for_test()` changes the dispatch rule (R1-empty-range → R5/R3) — the new output is the correct one.
 - [ ] Verify: `cargo nextest run --workspace` passes after replacements.
 
 ## Phase 6.5 — Production-residue fix sweep
@@ -319,6 +335,7 @@ Then update every `InlineAttr::new` call site that uses `AttrSourceInfo::empty()
 ### Work items
 
 - [ ] Add `By::config_default()`, `By::programmatic_config()`, `By::reconcile_synthesize()` to `quarto-source-map`.
+- [ ] Unit test: assert `By::test_scaffold()`, `By::config_default()`, `By::programmatic_config()`, `By::reconcile_synthesize()` all return `false` from `is_atomic_kind()`. Pins the property explicitly so a future producer-contract change can't accidentally promote one to atomic without updating the test.
 - [ ] Apply `config_value.rs:415` (Default impl) fix.
 - [ ] Apply `config_value.rs:539` (from_path) fix.
 - [ ] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update four call sites and any pattern-matching consumers.
