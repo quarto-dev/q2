@@ -94,25 +94,6 @@ pub trait TreeSitterLogObserverTrait {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Fast log observer that only tracks whether errors occurred (no detailed state).
-#[derive(Default)]
-pub struct TreeSitterLogObserverFast {
-    pub saw_error: bool,
-}
-
-impl TreeSitterLogObserverTrait for TreeSitterLogObserverFast {
-    fn had_errors(&self) -> bool {
-        self.saw_error
-    }
-    fn log(&mut self, _log_type: tree_sitter::LogType, message: &str) {
-        if message.starts_with("detect_error") {
-            self.saw_error = true
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /// Full log observer that captures detailed parse state for error message generation.
 pub struct TreeSitterLogObserver {
     pub parses: Vec<TreeSitterParseLog>,

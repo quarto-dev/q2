@@ -122,6 +122,23 @@ const PANDOC_REGEX_STR =
                 regexBracket("[_]" + afterUnderscoreRegex)
             ) + "*");
 
+// DESIGN INVARIANT — no `conflicts:`.
+//
+// This grammar intentionally declares NO `conflicts:` rules, so tree-sitter
+// generates a deterministic LR parser. tree-sitter's GLR nondeterministic
+// multiple-stack mechanism is therefore only ever exercised during *error
+// recovery*, never for benign grammar ambiguity. Lexing ambiguities are
+// resolved deterministically by the external scanner / token precedence, not
+// by GLR.
+//
+// Downstream code relies on this: the qmd reader detects parse errors via
+// `ParseState::has_error` (the parser's "all stack versions are in error"
+// flag, surfaced through the `parse_with_options` progress callback) instead
+// of the old per-lex logger. Because there is no speculative branching outside
+// error recovery, `has_error` corresponds to a genuine parse error rather than
+// a speculative branch that will be pruned. See
+// `crates/tree-sitter-qmd/bindings/rust/parser.rs::MarkdownTree::had_parse_error`
+// and bd-b7eb7. If you ever add `conflicts:`, revisit that error detection.
 module.exports = grammar({
     name: 'markdown',
 

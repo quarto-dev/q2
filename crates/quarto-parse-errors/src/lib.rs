@@ -122,8 +122,8 @@ pub use error_table::{
 };
 
 pub use tree_sitter_log::{
-    ConsumedToken, ProcessMessage, TreeSitterLogObserver, TreeSitterLogObserverFast,
-    TreeSitterLogObserverTrait, TreeSitterLogState, TreeSitterParseLog, TreeSitterProcessLog,
+    ConsumedToken, ProcessMessage, TreeSitterLogObserver, TreeSitterLogObserverTrait,
+    TreeSitterLogState, TreeSitterParseLog, TreeSitterProcessLog,
 };
 
 pub use error_generation::{

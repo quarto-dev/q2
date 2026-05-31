@@ -63,14 +63,17 @@ pub fn read<T: Write>(
     Vec<quarto_error_reporting::DiagnosticMessage>,
 > {
     let mut parser = MarkdownParser::default();
-    let mut fast_log_observer = quarto_parse_errors::TreeSitterLogObserverFast::default();
     let mut log_observer = quarto_parse_errors::TreeSitterLogObserver::default();
 
-    parser.parser.set_logger(Some(Box::new(|log_type, message| {
-        if log_type == LogType::Parse {
-            fast_log_observer.log(log_type, message);
-        }
-    })));
+    // PERF (bd-b7eb7): do NOT attach a logger on the happy-path parse. When
+    // *any* logger is set, tree-sitter's lexer formats a debug string with
+    // snprintf for every lex action — and on macOS snprintf locks the global
+    // locale (localeconv_l), serializing all parser threads (~75% lock-wait
+    // under 16 threads; see claude-notes/research/2026-05-31-q2-render-perf-*).
+    // Instead we read tree-sitter's own error signal via
+    // `MarkdownTree::had_parse_error` (progress-callback `ParseState::has_error`
+    // + final-tree `has_error`), and attach the logger only for the diagnostic
+    // re-parse below, which runs only when the document actually has errors.
 
     // inefficient, but safe: if no trailing newline, add one
     if !input_bytes.ends_with(b"\n") {
@@ -102,7 +105,7 @@ pub fn read<T: Write>(
         .source_context
         .add_file(filename.to_string(), Some(input_str));
 
-    if fast_log_observer.had_errors() {
+    if tree.had_parse_error() {
         parser.parser.set_logger(Some(Box::new(|log_type, message| {
             if log_type == LogType::Parse {
                 log_observer.log(log_type, message);

@@ -3,10 +3,14 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use std::cell::Cell;
 use std::num::NonZeroU16;
+use std::ops::ControlFlow;
 
 use crate::LANGUAGE;
-use tree_sitter::{InputEdit, Language, Node, Parser, Point, Tree, TreeCursor};
+use tree_sitter::{
+    InputEdit, Language, Node, ParseOptions, ParseState, Parser, Point, Tree, TreeCursor,
+};
 
 /// A parser that produces [`MarkdownTree`]s.
 ///
@@ -142,15 +146,18 @@ impl<'a> MarkdownCursor<'a> {
     }
 }
 
-/// An object that holds a combined markdown tree.
+/// An object that holds the parsed (unified) markdown tree.
 #[derive(Debug, Clone)]
 pub struct MarkdownTree {
     block_tree: Tree,
+    /// Whether tree-sitter entered error-correction mode at any point during
+    /// the parse, captured via the `parse_with_options` progress callback's
+    /// [`ParseState::has_error`]. See [`MarkdownTree::had_parse_error`].
+    entered_error_recovery: bool,
 }
 
 impl MarkdownTree {
-    /// Edit the block tree and inline trees to keep them in sync with source code that has been
-    /// edited.
+    /// Edit the tree to keep it in sync with source code that has been edited.
     ///
     /// You must describe the edit both in terms of byte offsets and in terms of
     /// row/column coordinates.
@@ -161,6 +168,29 @@ impl MarkdownTree {
     /// Returns the block tree for the parsed document
     pub fn block_tree(&self) -> &Tree {
         &self.block_tree
+    }
+
+    /// Whether the document had a parse error.
+    ///
+    /// True if tree-sitter entered error-correction mode during the parse
+    /// (`entered_error_recovery`, from the progress callback) OR the final tree
+    /// contains an ERROR/MISSING node ([`Node::has_error`]). Together these are
+    /// a faithful, cheap replacement for the old parse-log "detect_error"
+    /// detection — without the per-lex `snprintf` the logger incurred (bd-b7eb7).
+    /// The tree check backstops the callback, which can miss an error in the
+    /// final operations before the parse ends (the callback fires only every N
+    /// operations).
+    ///
+    /// DESIGN NOTE: tree-sitter-qmd declares **no `conflicts:`** in its grammar,
+    /// so the generated parser is deterministic LR. tree-sitter's GLR
+    /// nondeterministic multiple-stack mechanism is therefore only ever
+    /// exercised during *error recovery* — never for benign grammar ambiguity.
+    /// So `ParseState::has_error` (set when *all* stack versions are in error)
+    /// corresponds to a genuine parse error, not a speculative branch that will
+    /// be pruned. Keep the grammar conflict-free so this invariant holds; if
+    /// `conflicts:` is ever introduced, revisit this error detection.
+    pub fn had_parse_error(&self) -> bool {
+        self.entered_error_recovery || self.block_tree.root_node().has_error()
     }
 
     /// Create a new [`MarkdownCursor`] starting from the root of the tree.
@@ -221,9 +251,30 @@ impl MarkdownParser {
         parser
             .set_language(block_language)
             .expect("Could not load block grammar");
-        let block_tree =
-            parser.parse_with_options(callback, old_tree.map(|tree| &tree.block_tree), None)?;
-        Some(MarkdownTree { block_tree })
+
+        // Detect whether the parser enters error-correction mode WITHOUT
+        // attaching a tree-sitter logger. A logger makes tree-sitter `snprintf`
+        // a debug string for every lex action, and on macOS `snprintf` locks
+        // the global locale (`localeconv_l`), serializing all parser threads
+        // (bd-b7eb7). The progress callback fires only every N operations and
+        // does no formatting, so it is effectively free.
+        let saw_error = Cell::new(false);
+        let mut progress = |state: &ParseState| {
+            if state.has_error() {
+                saw_error.set(true);
+            }
+            ControlFlow::Continue(())
+        };
+        let options = ParseOptions::new().progress_callback(&mut progress);
+        let block_tree = parser.parse_with_options(
+            callback,
+            old_tree.map(|tree| &tree.block_tree),
+            Some(options),
+        )?;
+        Some(MarkdownTree {
+            block_tree,
+            entered_error_recovery: saw_error.get(),
+        })
     }
 
     /// Parse a slice of UTF8 text.
