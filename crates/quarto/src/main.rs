@@ -162,6 +162,12 @@ enum Commands {
         /// `crates/quarto-error-reporting/schemas/`). bd-iey8o.
         #[arg(long = "json-errors")]
         json_errors: bool,
+
+        /// Stop rendering as soon as the first error occurs (Pass-1 or
+        /// Pass-2), instead of best-effort rendering everything. Useful
+        /// for an iterative fix loop.
+        #[arg(long = "fail-fast")]
+        fail_fast: bool,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -577,6 +583,7 @@ fn main() -> Result<()> {
             debug,
             attribution,
             json_errors,
+            fail_fast,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             inputs,
@@ -589,6 +596,7 @@ fn main() -> Result<()> {
             debug,
             attribution,
             json_errors,
+            fail_fast,
         }),
         Commands::Preview {
             path,

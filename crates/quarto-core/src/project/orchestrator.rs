@@ -444,6 +444,11 @@ pub struct ProjectRenderSummary<O = RenderToFileResult> {
     /// non-fatal warnings (e.g. missing favicon source) — failures
     /// surface as a returned `Err` instead.
     pub project_diagnostics: Vec<DiagnosticMessage>,
+    /// `true` when the render was cut short because `--fail-fast` was
+    /// set and at least one per-document error was seen. The reported
+    /// failures are then **not** exhaustive — remaining files were not
+    /// checked. Always `false` without `--fail-fast`.
+    pub stopped_early: bool,
 }
 
 impl<O> ProjectRenderSummary<O> {
@@ -549,6 +554,10 @@ pub struct ProjectPipeline<'a, R: Pass2Renderer> {
     /// supplies its own implementation via
     /// [`Self::with_renderer`].
     renderer: R,
+    /// Stop the render as soon as the first per-document error is
+    /// seen (Pass-1 or Pass-2). Default `false` (best-effort:
+    /// render everything, report all failures at the end).
+    fail_fast: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -602,6 +611,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             mode: RenderMode::Full,
             project_artifacts: crate::artifact::ArtifactStore::new(),
             renderer,
+            fail_fast: false,
         }
     }
 
@@ -610,6 +620,13 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     /// calling [`run`](Self::run).
     pub fn with_mode(mut self, mode: RenderMode) -> Self {
         self.mode = mode;
+        self
+    }
+
+    /// Stop the render as soon as the first per-document error is seen
+    /// (Pass-1 or Pass-2), instead of best-effort rendering everything.
+    pub fn with_fail_fast(mut self, fail_fast: bool) -> Self {
+        self.fail_fast = fail_fast;
         self
     }
 
@@ -633,6 +650,20 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
 
         let (profiles, pass1_failures) = self.pass_one().await;
         let index = Arc::new(ProjectIndex::new(profiles));
+
+        // Fail-fast barrier: if Pass-1 surfaced any error, stop before
+        // running the `pre_render` hook, Pass-2, `post_render`, resource
+        // copy, and the manifest write. We report the failures we have
+        // and flag the summary as truncated.
+        if self.fail_fast && !pass1_failures.is_empty() {
+            return Ok(ProjectRenderSummary {
+                outputs: Vec::new(),
+                pass1_failures,
+                pass2_failures: Vec::new(),
+                project_diagnostics: initial_diagnostics,
+                stopped_early: true,
+            });
+        }
 
         // Map hook errors through so the caller sees exactly which
         // hook failed. The plan specifies hook failures abort the
@@ -747,11 +778,13 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             )?;
         }
 
+        let stopped_early = self.fail_fast && !pass2_failures.is_empty();
         Ok(ProjectRenderSummary {
             outputs,
             pass1_failures,
             pass2_failures,
             project_diagnostics,
+            stopped_early,
         })
     }
 
@@ -839,10 +872,12 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // per-doc future. Native keeps the sync `pass_one_dispatch` for
         // rayon compatibility.
         #[cfg(not(target_arch = "wasm32"))]
-        let (profiles, failures) = pass_one_dispatch(&self.runtime, self.project, &self.format);
+        let (profiles, failures) =
+            pass_one_dispatch(&self.runtime, self.project, &self.format, self.fail_fast);
         #[cfg(target_arch = "wasm32")]
         let (profiles, failures) =
-            pass_one_dispatch_async(&self.runtime, self.project, &self.format).await;
+            pass_one_dispatch_async(&self.runtime, self.project, &self.format, self.fail_fast)
+                .await;
         // bd-m7x9s Phase 0: feed the `perf.pass1` gauge with cumulative
         // doc count and wall time. `pass1_profile_with_cache`
         // increments the thread-set; here we add the per-`pass_one`
@@ -1006,7 +1041,14 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 .await
             {
                 Ok(result) => outputs.push(result),
-                Err(e) => failures.push(file_failure_from_error(doc_info.input.clone(), e)),
+                Err(e) => {
+                    failures.push(file_failure_from_error(doc_info.input.clone(), e));
+                    // Fail-fast: stop rendering the rest of the project
+                    // at the first render error.
+                    if self.fail_fast {
+                        break;
+                    }
+                }
             }
         }
         (outputs, failures)
@@ -1070,15 +1112,16 @@ fn pass_one_dispatch(
     runtime: &Arc<dyn SystemRuntime>,
     project: &ProjectContext,
     format: &Format,
+    fail_fast: bool,
 ) -> (
     Vec<crate::document_profile::DocumentProfile>,
     Vec<FileFailure>,
 ) {
     let workers = pass1_worker_count();
     if workers == 1 || project.files.len() <= 1 {
-        return pass_one_dispatch_sequential(runtime, project, format);
+        return pass_one_dispatch_sequential(runtime, project, format, fail_fast);
     }
-    pass_one_dispatch_parallel(runtime, project, format, workers)
+    pass_one_dispatch_parallel(runtime, project, format, workers, fail_fast)
 }
 
 /// Sequential fan-out — the pre-Phase-2 behavior. Used:
@@ -1090,6 +1133,7 @@ fn pass_one_dispatch_sequential(
     runtime: &Arc<dyn SystemRuntime>,
     project: &ProjectContext,
     format: &Format,
+    fail_fast: bool,
 ) -> (
     Vec<crate::document_profile::DocumentProfile>,
     Vec<FileFailure>,
@@ -1099,7 +1143,14 @@ fn pass_one_dispatch_sequential(
     for doc_info in &project.files {
         match pollster::block_on(pass1_profile_with_cache(runtime, project, format, doc_info)) {
             Ok(profile) => profiles.push(profile),
-            Err(e) => failures.push(file_failure_from_error(doc_info.input.clone(), e)),
+            Err(e) => {
+                failures.push(file_failure_from_error(doc_info.input.clone(), e));
+                // Fail-fast: stop at the first error in document order.
+                // This path is deterministic (single-threaded).
+                if fail_fast {
+                    break;
+                }
+            }
         }
     }
     (profiles, failures)
@@ -1118,6 +1169,7 @@ async fn pass_one_dispatch_async(
     runtime: &Arc<dyn SystemRuntime>,
     project: &ProjectContext,
     format: &Format,
+    fail_fast: bool,
 ) -> (
     Vec<crate::document_profile::DocumentProfile>,
     Vec<FileFailure>,
@@ -1127,7 +1179,12 @@ async fn pass_one_dispatch_async(
     for doc_info in &project.files {
         match pass1_profile_with_cache(runtime, project, format, doc_info).await {
             Ok(profile) => profiles.push(profile),
-            Err(e) => failures.push(file_failure_from_error(doc_info.input.clone(), e)),
+            Err(e) => {
+                failures.push(file_failure_from_error(doc_info.input.clone(), e));
+                if fail_fast {
+                    break;
+                }
+            }
         }
     }
     (profiles, failures)
@@ -1157,6 +1214,7 @@ fn pass_one_dispatch_parallel(
     project: &ProjectContext,
     format: &Format,
     workers: usize,
+    fail_fast: bool,
 ) -> (
     Vec<crate::document_profile::DocumentProfile>,
     Vec<FileFailure>,
@@ -1166,6 +1224,10 @@ fn pass_one_dispatch_parallel(
     enum DocOutcome {
         Profile(crate::document_profile::DocumentProfile),
         Failure(FileFailure),
+        /// Fail-fast short-circuit: another worker already errored, so
+        /// this document was never parsed. Folded away (no profile, no
+        /// failure) when reducing outcomes.
+        Skipped,
     }
 
     // Build a local rayon pool sized to `workers` so `QUARTO_JOBS`
@@ -1186,8 +1248,15 @@ fn pass_one_dispatch_parallel(
         // Pool construction failed (extremely rare — typically an
         // OOM or thread-limit signal from the OS). Degrade to the
         // sequential path rather than aborting the render.
-        Err(_) => return pass_one_dispatch_sequential(runtime, project, format),
+        Err(_) => return pass_one_dispatch_sequential(runtime, project, format, fail_fast),
     };
+
+    // Fail-fast abort flag. A plain local `AtomicBool` is `Sync`, so
+    // `&aborted` can be captured by reference in the rayon closure
+    // without an `Arc`. rayon does not cancel running tasks, so a few
+    // in-flight workers may still error after this is set — accepted
+    // per the fail-fast contract.
+    let aborted = std::sync::atomic::AtomicBool::new(false);
 
     let mut outcomes: Vec<DocOutcome> = Vec::with_capacity(project.files.len());
     pool.install(|| {
@@ -1201,6 +1270,11 @@ fn pass_one_dispatch_parallel(
             .files
             .par_iter()
             .map(|doc_info| {
+                // Fail-fast: if another worker has already errored,
+                // skip parsing this document entirely.
+                if fail_fast && aborted.load(std::sync::atomic::Ordering::Relaxed) {
+                    return DocOutcome::Skipped;
+                }
                 let input = doc_info.input.clone();
                 // catch_unwind so a panic in
                 // `pass1_profile_with_cache` (e.g. tree-sitter
@@ -1215,8 +1289,16 @@ fn pass_one_dispatch_parallel(
                 }));
                 match result {
                     Ok(Ok(profile)) => DocOutcome::Profile(profile),
-                    Ok(Err(e)) => DocOutcome::Failure(file_failure_from_error(input, e)),
+                    Ok(Err(e)) => {
+                        if fail_fast {
+                            aborted.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        DocOutcome::Failure(file_failure_from_error(input, e))
+                    }
                     Err(panic_payload) => {
+                        if fail_fast {
+                            aborted.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
                         let msg = panic_message(&panic_payload);
                         DocOutcome::Failure(file_failure_from_error(
                             input,
@@ -1236,6 +1318,9 @@ fn pass_one_dispatch_parallel(
         match outcome {
             DocOutcome::Profile(p) => profiles.push(p),
             DocOutcome::Failure(f) => failures.push(f),
+            // Fail-fast skip: contributed neither a profile nor a
+            // failure. Dropped here.
+            DocOutcome::Skipped => {}
         }
     }
     (profiles, failures)

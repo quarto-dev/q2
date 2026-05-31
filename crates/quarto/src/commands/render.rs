@@ -79,6 +79,12 @@ pub struct RenderArgs {
     /// `crates/quarto-error-reporting/schemas/`. Exit codes are
     /// unchanged.
     pub json_errors: bool,
+    /// Stop rendering as soon as the first per-document error occurs
+    /// (Pass-1 or Pass-2), instead of best-effort rendering everything.
+    /// Threaded into the orchestrator via
+    /// [`ProjectPipeline::with_fail_fast`]. Useful for an iterative
+    /// fix loop. Exit code is unchanged (any failure → non-zero).
+    pub fail_fast: bool,
 }
 
 /// What to render after argument classification.
@@ -616,7 +622,8 @@ fn execute_single_doc(
         &format_str,
         options,
         runtime_arc.clone(),
-    );
+    )
+    .with_fail_fast(args.fail_fast);
 
     let summary = match pollster::block_on(pipeline.run()) {
         Ok(s) => s,
@@ -677,7 +684,8 @@ fn execute_project(
         format_str,
         options,
         runtime_arc.clone(),
-    );
+    )
+    .with_fail_fast(args.fail_fast);
 
     if let Some(target_set) = targets {
         let set: std::collections::HashSet<PathBuf> = target_set.into_iter().collect();
@@ -825,6 +833,15 @@ fn print_render_diagnostics_text(
         if !quiet {
             info!("Output: {}", result.output_path.display());
         }
+    }
+
+    // bd-gi25b: when `--fail-fast` cut the render short, tell the user
+    // the report isn't exhaustive. Only the text path carries this
+    // note — the `--json-errors` path gets no extra field (a
+    // programmatic caller passing `--fail-fast` already knows the
+    // semantics).
+    if summary.stopped_early {
+        eprintln!("note: stopped at first error (--fail-fast); remaining files not checked");
     }
 }
 
