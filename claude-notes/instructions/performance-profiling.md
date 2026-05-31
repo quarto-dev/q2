@@ -159,6 +159,45 @@ top-N self-time table. The head of the script documents both the
 profile format and the samply sidecar structure — if samply's format
 changes, patch there.
 
+#### When the hotspot is in a system library, use `sample`
+
+samply's `.syms.json` sidecar symbolicates **our** binary, but it does
+**not** resolve system libraries (`libsystem_c.dylib`,
+`libsystem_malloc.dylib`, …). Frames inside them show up as bare
+addresses (`0x4a83 [libsystem_c.dylib]`). If a hotspot — or, in a
+multithreaded profile, the frame *holding a contended lock* — lands in a
+system library, the address tells you nothing, and **guessing what it is
+will burn your session.**
+
+macOS ships `sample`, which symbolicates system libraries from the dyld
+shared cache:
+
+```bash
+target/release-perf/<binary> <args> &   # or run it and grab the pid
+sample $! 4 -file /tmp/s.txt            # sample the live process for 4s
+# then read /tmp/s.txt — system frames now have names
+```
+
+Real example (bd-b7eb7): a multithreaded `q2 render` showed ~75 %
+`__ulock_wait2`/`os_unfair_lock` with the waits charged to tree-sitter's
+`ts_lexer__advance`, and the libc frame below it unsymbolicated. We
+**guessed "malloc" and it was wrong** — swapping in mimalloc (both as
+`#[global_allocator]` *and* via `tree_sitter::set_allocator` for the C
+allocations) changed nothing. `sample` revealed the truth:
+`ts_lexer__advance → snprintf → __vfprintf → localeconv_l` — the
+contended lock was the **global locale lock**, taken by `snprintf`
+formatting tree-sitter's per-lex logger string, not the allocator.
+
+Lessons:
+- **A negative result from a cheap fix (swap the allocator) is decisive
+  evidence**, not a dead end — it ruled out an entire class of cause.
+- When samply leaves a hot/lock-holding frame as a system-lib address,
+  reach for `sample` (or Instruments) before theorizing.
+- `#[global_allocator]` only intercepts **Rust** allocations; a C library
+  vendored into the build (tree-sitter) calls libc `malloc` directly
+  unless separately redirected (`ts_set_allocator`). Don't assume a Rust
+  allocator swap covers C-side allocation.
+
 ### Where native drivers live
 
 `crates/perf-harness/` — an internal (non-published, `publish = false`)
