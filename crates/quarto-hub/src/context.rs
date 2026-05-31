@@ -716,4 +716,94 @@ mod tests {
         let files = ctx.index().get_all_files();
         assert_eq!(files.len(), 1);
     }
+
+    /// Build an automerge text document with the given content.
+    fn text_doc(content: &str) -> Automerge {
+        let mut doc = Automerge::new();
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            let text_obj = tx.put_object(ROOT, "text", ObjType::Text)?;
+            tx.update_text(&text_obj, content)?;
+            Ok(())
+        })
+        .unwrap();
+        doc
+    }
+
+    /// A poisoned index key with `..` must not let an attacker overwrite a file
+    /// outside the project root. Routes through the real `sync_all()` path.
+    #[tokio::test]
+    async fn sync_all_rejects_parent_traversal_write() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        std::fs::write(project_root.join("index.qmd"), "# Hello").unwrap();
+
+        // Victim file *outside* the root (so `.exists()` would pass).
+        let victim = temp.path().join("victim.txt");
+        std::fs::write(&victim, "original").unwrap();
+
+        let storage = StorageManager::new(&project_root).unwrap();
+        let ctx = HubContext::new(storage, HubConfig::default())
+            .await
+            .unwrap();
+
+        // Poison the index exactly as a malicious wire client would: `add_file`
+        // performs no containment by design, so this is a faithful attack model.
+        let doc = ctx.repo().create(text_doc("PWNED")).await.unwrap();
+        ctx.index()
+            .add_file("../victim.txt", &doc.document_id().to_string())
+            .unwrap();
+
+        let result = ctx.sync_all().await;
+
+        assert_eq!(result.rejected, 1, "poisoned entry must be rejected");
+        assert_eq!(
+            std::fs::read_to_string(&victim).unwrap(),
+            "original",
+            "victim file outside root must be untouched"
+        );
+        // Legitimate file still syncs.
+        assert!(result.total_synced() >= 1);
+    }
+
+    /// A symlink *inside* the root pointing outward must not let a poisoned key
+    /// with no `..` (passes the lexical check) write through it.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sync_all_rejects_symlink_escape_write() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+        std::fs::write(project_root.join("index.qmd"), "# Hello").unwrap();
+
+        // Victim dir + file outside the root.
+        let outside = temp.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        let victim = outside.join("victim.txt");
+        std::fs::write(&victim, "original").unwrap();
+
+        // `project/assets` is a symlink to the outside dir.
+        std::os::unix::fs::symlink(&outside, project_root.join("assets")).unwrap();
+
+        let storage = StorageManager::new(&project_root).unwrap();
+        let ctx = HubContext::new(storage, HubConfig::default())
+            .await
+            .unwrap();
+
+        // Key `assets/victim.txt` has no `..` — lexical check passes; only the
+        // canonicalize + starts_with check catches the symlink escape.
+        let doc = ctx.repo().create(text_doc("PWNED")).await.unwrap();
+        ctx.index()
+            .add_file("assets/victim.txt", &doc.document_id().to_string())
+            .unwrap();
+
+        let result = ctx.sync_all().await;
+
+        assert_eq!(result.rejected, 1, "symlink-escape entry must be rejected");
+        assert_eq!(
+            std::fs::read_to_string(&victim).unwrap(),
+            "original",
+            "victim file reachable via symlink must be untouched"
+        );
+    }
 }
