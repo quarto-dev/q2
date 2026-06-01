@@ -82,11 +82,24 @@ jobs:
           chmod +x tree-sitter-linux-x86
           sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
 
-      # Node.js and dependencies
+      # Node.js and dependencies.
+      #
+      # PINNED to 24.15.0 — do NOT bump to a bare '24' (which floats to
+      # >=24.16). Node 24.16.0 introduced a yauzl stream-destruction
+      # regression that hangs `for await` over `openReadStream`, which
+      # makes `playwright install chromium` hang FOREVER right after the
+      # browser download hits 100% (extraction deadlocks; the job then
+      # burns the full 6h cap). It is fixed in Playwright >= 1.60.0, but
+      # we pin @playwright/test at ^1.50.0 -> 1.58.0. 24.15.0 is the last
+      # Node release before the regression, so it keeps Playwright 1.58 /
+      # Chromium 145 and leaves the visual-regression baselines unchanged.
+      # Refs: microsoft/playwright#40724, fixed by #40747 (PW 1.60.0).
+      # REMOVE this pin once @playwright/test is bumped to >= 1.60.0 (and
+      # regenerate the visual baselines for the newer Chromium then).
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: '24.15.0'
           cache: 'npm'
 
       - name: Install npm dependencies
@@ -127,41 +140,8 @@ jobs:
       - name: Pre-build hub binary
         run: cargo build --bin hub
 
-      # Cache the downloaded browser binaries across runs. Keyed on the
-      # lockfile so a Playwright version bump invalidates the cache and
-      # re-downloads; otherwise we skip the 175 MB chromium download
-      # entirely.
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-
-      # Install Playwright browsers.
-      #
-      # The full Chromium (Chrome for Testing) build is served from a
-      # SINGLE mirror with no fallback: cdn.playwright.dev/chrome-for-
-      # testing-public (Playwright's cftUrl() helper). cdn.playwright.dev
-      # is fronted by Azure Front Door, and from the (also-Azure) GitHub
-      # runners that front door sends all ~167 MiB and then holds the
-      # connection open without EOF — so Playwright's download promise
-      # never resolves and the step hangs until the 6h job cap. With no
-      # fallback mirror for Chrome for Testing, Playwright can't recover.
-      # (Carlos report, 2026-05; confirmed from the 100%-then-hang in the
-      # run-26760896905 log.)
-      #
-      # Fix: point the chromium download host at the GCS origin that
-      # cdn.playwright.dev merely redirects to. That origin serves the zip
-      # with a correct content-length and a clean EOF. On linux-x64 BOTH
-      # the full Chromium and the headless-shell resolve via cftUrl(), so
-      # this one var fixes both; ffmpeg's name isn't "chromium*" so the
-      # override doesn't touch it and it keeps its 3-mirror fallback.
-      # PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT is a belt-and-suspenders so
-      # any future post-100% stall aborts in 2 min instead of hanging.
+      # Install Playwright browsers
       - name: Install Playwright
-        env:
-          PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST: https://storage.googleapis.com/chrome-for-testing-public
-          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: '120000'
         run: |
           cd hub-client
           npx playwright install --with-deps chromium
