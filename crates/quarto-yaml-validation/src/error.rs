@@ -10,10 +10,15 @@ pub enum SchemaError {
     /// Invalid schema type name
     InvalidType(String),
 
-    /// Invalid schema structure
+    /// Invalid schema structure.
+    ///
+    /// `location` is `None` for errors that describe a bug in the schema
+    /// definition itself (no user-YAML to point at); `Some(...)` for
+    /// errors that arose while validating user-supplied YAML against
+    /// the schema.
     InvalidStructure {
         message: String,
-        location: SourceInfo,
+        location: Option<SourceInfo>,
     },
 
     /// Missing required field
@@ -30,14 +35,15 @@ impl fmt::Display for SchemaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SchemaError::InvalidType(s) => write!(f, "Invalid schema type: {}", s),
-            SchemaError::InvalidStructure { message, location } => {
-                write!(
+            SchemaError::InvalidStructure { message, location } => match location {
+                Some(loc) => write!(
                     f,
                     "Invalid schema structure: {} (at offset {})",
                     message,
-                    location.start_offset()
-                )
-            }
+                    loc.start_offset()
+                ),
+                None => write!(f, "Invalid schema structure: {}", message),
+            },
             SchemaError::MissingField { field, location } => {
                 write!(
                     f,
@@ -545,7 +551,7 @@ mod tests {
     #[test]
     fn test_schema_error_invalid_structure_display() {
         use quarto_source_map::{FileId, SourceInfo};
-        let location = SourceInfo::original(FileId(0), 10, 20);
+        let location = Some(SourceInfo::original(FileId(0), 10, 20));
         let error = SchemaError::InvalidStructure {
             message: "unexpected array".to_string(),
             location,
@@ -553,6 +559,18 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "Invalid schema structure: unexpected array (at offset 10)"
+        );
+    }
+
+    #[test]
+    fn test_schema_error_invalid_structure_display_no_location() {
+        let error = SchemaError::InvalidStructure {
+            message: "schema bug: malformed combinator".to_string(),
+            location: None,
+        };
+        assert_eq!(
+            error.to_string(),
+            "Invalid schema structure: schema bug: malformed combinator"
         );
     }
 
