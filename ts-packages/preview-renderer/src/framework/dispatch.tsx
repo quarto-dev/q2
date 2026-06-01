@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { RegistryContext } from './RegistryContext';
 import { isAtomicSourceInfo, ATOMIC_KINDS } from '../utils/sourceInfo';
 import { isAtomicCustomNode } from '../utils/atomicCustomNodes';
+import { USER_EDIT_SOURCE_INFO_ID } from '../types/sourceInfo';
 import type {
     BlockNode,
     InlineNode,
@@ -367,6 +368,74 @@ export const renderNode = (args: NodeArgs<BlockNode | InlineNode>, type: string)
 const NOOP_SET_LOCAL_AST: (newNode: BlockNode | InlineNode) => void = () => {};
 
 /**
+ * Stamp every AST node in a subtree that lacks `s:` with the reserved
+ * user-edit source-info pool slot (`USER_EDIT_SOURCE_INFO_ID`, slot 0).
+ * Nodes that already carry an `s:` are returned unchanged so preserved
+ * subtrees keep their original source_info.
+ *
+ * Two recursion shapes are covered:
+ *   - Standard wrapper: `node.c` is a `(BlockNode|InlineNode)[]`, or a
+ *     tuple whose positions hold either node arrays (Header c[2],
+ *     Link c[1], …) or scalars (Header c[0] level, Link c[2] target).
+ *     Scalars and tagged-marker values (`{t: 'DisplayMath'}` etc.) are
+ *     left alone; only objects whose `t:` flags them as a node are
+ *     recursed into. Nested arrays are walked through.
+ *   - CustomNode: `node.slots` is a `Record<string, Slot>` discriminated
+ *     by `slot.kind`. Each slot's value is one of BlockNode,
+ *     InlineNode, BlockNode[], or InlineNode[].
+ *
+ * Wired into `<Node>`'s `setLocalAst` wrapper so every AST a user-edit
+ * affordance hands up the chain has `s:` populated on every node — the
+ * BP precondition the strict JSON reader (Plan 7f Phase 4) requires.
+ * Stamping is idempotent at the per-node level; outer levels rewalking
+ * a previously-stamped subtree is harmless.
+ */
+export function stampUserEdits(node: BlockNode | InlineNode): BlockNode | InlineNode {
+    const stamped: any = (node as any).s === undefined
+        ? { ...(node as any), s: USER_EDIT_SOURCE_INFO_ID }
+        : node;
+
+    // CustomNode: recurse into `slots:` (discriminated by `slot.kind`).
+    if ('slots' in stamped && stamped.slots && typeof stamped.slots === 'object') {
+        const newSlots: Record<string, Slot> = {};
+        for (const [key, slot] of Object.entries(stamped.slots as Record<string, Slot>)) {
+            switch (slot.kind) {
+                case 'block':
+                    newSlots[key] = { kind: 'block', value: stampUserEdits(slot.value) as BlockNode };
+                    break;
+                case 'inline':
+                    newSlots[key] = { kind: 'inline', value: stampUserEdits(slot.value) as InlineNode };
+                    break;
+                case 'blocks':
+                    newSlots[key] = { kind: 'blocks', value: slot.value.map(v => stampUserEdits(v) as BlockNode) };
+                    break;
+                case 'inlines':
+                    newSlots[key] = { kind: 'inlines', value: slot.value.map(v => stampUserEdits(v) as InlineNode) };
+                    break;
+            }
+        }
+        return { ...stamped, slots: newSlots };
+    }
+
+    // Standard wrapper: walk `c:` recursively, only touching node-shaped values.
+    if ('c' in stamped) {
+        return { ...stamped, c: walkChildValue(stamped.c) };
+    }
+
+    return stamped;
+}
+
+function walkChildValue(value: any): any {
+    if (Array.isArray(value)) {
+        return value.map(walkChildValue);
+    }
+    if (value !== null && typeof value === 'object' && 't' in value) {
+        return stampUserEdits(value as BlockNode | InlineNode);
+    }
+    return value;
+}
+
+/**
  * Unified Node component that delegates to the format's 'Block' or
  * 'Inline' dispatcher based on the node's Pandoc tag.
  *
@@ -408,7 +477,14 @@ export function Node({
         isAtomicSourceInfo(node as { s?: number }, sourceInfoPool, ATOMIC_KINDS)
         || (isCustom && isAtomicCustomNode((node as CustomBlockNode | CustomInlineNode).type_name));
 
-    const effectiveSetLocalAst = isAtomic ? NOOP_SET_LOCAL_AST : setLocalAst;
+    // Wrap `setLocalAst` so every user-introduced node (any subtree lacking
+    // `s:`) is stamped with the reserved user-edit pool slot. Preserved
+    // subtrees retain their original `s:`. Skipped on the atomic-gate noop
+    // path — stamping is wasted work when the edit is dropped anyway.
+    const stampedSetLocalAst = (next: BlockNode | InlineNode) =>
+        setLocalAst(stampUserEdits(next));
+
+    const effectiveSetLocalAst = isAtomic ? NOOP_SET_LOCAL_AST : stampedSetLocalAst;
 
     const isBlock = blockTypes.includes(node.t);
 

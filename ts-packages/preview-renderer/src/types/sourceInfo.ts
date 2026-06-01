@@ -1,4 +1,20 @@
 /**
+ * Reserved source-info pool slot for React-constructed (user-edit) content.
+ *
+ * The Rust JSON writer pre-populates pool slot 0 with
+ * `Generated{by: user_edit, from: []}` regardless of whether any node
+ * references it. The framework's `stampUserEdits` walker (Plan 7f Phase 3)
+ * stamps `s: USER_EDIT_SOURCE_INFO_ID` on every AST node a `setLocalAst`
+ * call introduces without an existing `s:`.
+ *
+ * Hand-mirror of the Rust constant `USER_EDIT_SOURCE_INFO_ID` in
+ * `crates/pampa/src/writers/json.rs`. A Rust-side parity test asserts
+ * the two values match (Plan 7f Phase 4) — same hand-mirror discipline
+ * as `ATOMIC_CUSTOM_NODES`.
+ */
+export const USER_EDIT_SOURCE_INFO_ID = 0;
+
+/**
  * Wire-format types for the source-info pool. Hand-mirror of the Rust
  * producers — keep this file aligned with two sources of truth:
  *

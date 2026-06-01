@@ -140,11 +140,12 @@ The constant `USER_EDIT_SOURCE_INFO_ID` is the reserved pool slot (Phase 4).
 
 Work items:
 
-- [ ] Implement `stampUserEdits` walker (both `c:` and `slots:` recursion).
-- [ ] Wire into `<Node>` component's `setLocalAst` propagation.
-- [ ] TS test: user component constructs a new Span via `setLocalAst({ t: 'Span', c: ... })`; assert the resulting node has `s: USER_EDIT_SOURCE_INFO_ID` after stamping.
-- [ ] TS test: preserved subtree (rebuilt-wrapper case) keeps original `s:` after stamping passes through it.
-- [ ] TS test: user component constructs a new CustomBlock via `setLocalAst({ t: 'CustomBlock', type_name: 'Callout', slots: {...}, ...})`; assert nested nodes inside slots are stamped recursively.
+- [x] Implement `stampUserEdits` walker (both `c:` and `slots:` recursion). — `ts-packages/preview-renderer/src/framework/dispatch.tsx`. Walker also handles nested arrays inside `c:` (Header c[2], Link c[1], BulletList items) via the `walkChildValue` helper, so user-constructed wrappers in those shapes get their inner inlines stamped.
+- [x] Wire into `<Node>` component's `setLocalAst` propagation. — `stampedSetLocalAst` wraps `setLocalAst`; the atomic-gate noop path skips stamping (wasted work when the edit is dropped anyway).
+- [x] TS test: user component constructs a new Span via `setLocalAst({ t: 'Span', c: ... })`; assert the resulting node has `s: USER_EDIT_SOURCE_INFO_ID` after stamping.
+- [x] TS test: preserved subtree (rebuilt-wrapper case) keeps original `s:` after stamping passes through it.
+- [x] TS test: user component constructs a new CustomBlock via `setLocalAst({ t: 'CustomBlock', type_name: 'Callout', slots: {...}, ...})`; assert nested nodes inside slots are stamped recursively.
+- [x] (Phase-4 work item, landed early in Phase 3 because the walker depends on the constant.) TS: export `USER_EDIT_SOURCE_INFO_ID = 0` as a typed constant in `ts-packages/preview-renderer/src/types/sourceInfo.ts`. Phase 4 still owns the Rust-side constant + parity test.
 
 ## Phase 4 — Reserved pool slot (user_edit) and the strict / completing reader split
 
