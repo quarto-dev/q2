@@ -125,7 +125,7 @@ fn modify_str_at(ast: &Pandoc, loc: &StrLocation, new_text: &str) -> Pandoc {
         // Top-level Str
         if let Inline::Str(ref mut s) = inlines[loc.inline_idx] {
             s.text = new_text.to_string();
-            s.source_info = SourceInfo::default();
+            s.source_info = SourceInfo::for_test();
         }
     } else {
         // Str inside a container
@@ -140,7 +140,7 @@ fn modify_str_at(ast: &Pandoc, loc: &StrLocation, new_text: &str) -> Pandoc {
         let child_idx = loc.container_path[0];
         if let Inline::Str(ref mut s) = children[child_idx] {
             s.text = new_text.to_string();
-            s.source_info = SourceInfo::default();
+            s.source_info = SourceInfo::for_test();
         }
     }
 
@@ -374,7 +374,7 @@ fn prop6_roundtrip_str_change_in_blockquote() {
         if let Block::Paragraph(ref mut p) = bq.content[0] {
             if let Inline::Str(ref mut s) = p.content[0] {
                 s.text = "Goodbye".to_string();
-                s.source_info = SourceInfo::default();
+                s.source_info = SourceInfo::for_test();
             }
         }
     }
@@ -390,7 +390,7 @@ fn prop6_roundtrip_str_change_in_bullet_list() {
         if let Block::Plain(ref mut p) = bl.content[0][0] {
             if let Inline::Str(ref mut s) = p.content[0] {
                 s.text = "Modified".to_string();
-                s.source_info = SourceInfo::default();
+                s.source_info = SourceInfo::for_test();
             }
         }
     }
@@ -430,10 +430,10 @@ fn prop6_roundtrip_multiple_str_changes_in_one_block() {
             if let Inline::Str(s) = inline {
                 if s.text == "quick" {
                     s.text = "slow".to_string();
-                    s.source_info = SourceInfo::default();
+                    s.source_info = SourceInfo::for_test();
                 } else if s.text.starts_with("fox") {
                     s.text = "cat.".to_string();
-                    s.source_info = SourceInfo::default();
+                    s.source_info = SourceInfo::for_test();
                 }
             }
         }
@@ -450,7 +450,7 @@ fn prop6_roundtrip_in_multiline_blockquote() {
         if let Block::Paragraph(ref mut p) = bq.content[0] {
             if let Inline::Str(ref mut s) = p.content[0] {
                 s.text = "Goodbye".to_string();
-                s.source_info = SourceInfo::default();
+                s.source_info = SourceInfo::for_test();
             }
         }
     }
@@ -466,7 +466,7 @@ fn prop6_roundtrip_in_multiline_bullet_list() {
         if let Block::Plain(ref mut p) = bl.content[0][0] {
             if let Inline::Str(ref mut s) = p.content[0] {
                 s.text = "Goodbye".to_string();
-                s.source_info = SourceInfo::default();
+                s.source_info = SourceInfo::for_test();
             }
         }
     }
@@ -717,7 +717,7 @@ fn prop9_no_newlines_in_blockquote_splice() {
         if let Block::Paragraph(ref mut p) = bq.content[0] {
             if let Inline::Str(ref mut s) = p.content[0] {
                 s.text = "Goodbye".to_string();
-                s.source_info = SourceInfo::default();
+                s.source_info = SourceInfo::for_test();
             }
         }
     }
@@ -743,7 +743,7 @@ fn prop9_no_newlines_in_multiline_blockquote_splice() {
         if let Block::Paragraph(ref mut p) = bq.content[0] {
             if let Inline::Str(ref mut s) = p.content[0] {
                 s.text = "Goodbye".to_string();
-                s.source_info = SourceInfo::default();
+                s.source_info = SourceInfo::for_test();
             }
         }
     }
@@ -802,7 +802,7 @@ fn prop10_splice_equiv_blockquote() {
         if let Block::Paragraph(ref mut p) = bq.content[0] {
             if let Inline::Str(ref mut s) = p.content[0] {
                 s.text = "Goodbye".to_string();
-                s.source_info = SourceInfo::default();
+                s.source_info = SourceInfo::for_test();
             }
         }
     }
@@ -882,7 +882,7 @@ fn stress_deeply_nested_blockquote_list() {
             if let Block::Plain(ref mut p) = bl.content[0][0] {
                 if let Inline::Str(ref mut s) = p.content[0] {
                     s.text = "Goodbye".to_string();
-                    s.source_info = SourceInfo::default();
+                    s.source_info = SourceInfo::for_test();
                 }
             }
         }
@@ -951,7 +951,7 @@ fn stress_many_blocks_first_and_last_change() {
         };
         if let Inline::Str(ref mut s) = inlines[block_last_locs[0].inline_idx] {
             s.text = "Last".to_string();
-            s.source_info = SourceInfo::default();
+            s.source_info = SourceInfo::for_test();
         }
 
         assert_inline_roundtrip(&qmd, &new_ast);

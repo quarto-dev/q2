@@ -204,12 +204,12 @@ description: This is a description
 
     assert_ne!(
         title_offset, 0,
-        "Title key should have non-zero offset (not SourceInfo::default())"
+        "Title key should have non-zero offset (not SourceInfo::for_test())"
     );
 
     assert_ne!(
         desc_offset, 0,
-        "Description key should have non-zero offset (not SourceInfo::default())"
+        "Description key should have non-zero offset (not SourceInfo::for_test())"
     );
 
     // Verify keys are at EXACT expected locations in the YAML

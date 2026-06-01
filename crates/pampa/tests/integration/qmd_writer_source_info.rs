@@ -82,7 +82,7 @@ fn concat_covers_output_with_frontmatter() {
     // Wrap in a map with key "title"
     let entries = vec![quarto_pandoc_types::config_value::ConfigMapEntry {
         key: "title".to_string(),
-        key_source: SourceInfo::default(),
+        key_source: SourceInfo::for_test(),
         value: meta,
     }];
     meta = ConfigValue::new_map(entries, si(0, 0, 25));

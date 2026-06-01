@@ -112,7 +112,7 @@ fn roundtrip_str_source_info(str_source_info: SourceInfo) -> SourceInfo {
     });
     let plain = Plain {
         content: vec![inner],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
     };
     pandoc.blocks.push(Block::Plain(plain));
 

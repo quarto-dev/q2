@@ -14,7 +14,7 @@ use pampa::writers;
 use quarto_source_map::SourceInfo;
 
 fn empty_source() -> SourceInfo {
-    SourceInfo::default()
+    SourceInfo::for_test()
 }
 
 fn empty_attr() -> (String, Vec<String>, LinkedHashMap<String, String>) {

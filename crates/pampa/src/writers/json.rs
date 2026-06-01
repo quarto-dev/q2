@@ -4285,7 +4285,7 @@ mod tests {
                     "title".to_string(),
                     Slot::Inlines(vec![crate::pandoc::Inline::Str(Str {
                         text: "Warning".to_string(),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     })]),
                 );
                 slots.insert(
@@ -4293,16 +4293,16 @@ mod tests {
                     Slot::Blocks(vec![Block::Paragraph(Paragraph {
                         content: vec![crate::pandoc::Inline::Str(Str {
                             text: "Be careful!".to_string(),
-                            source_info: SourceInfo::default(),
+                            source_info: SourceInfo::for_test(),
                         })],
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     })]),
                 );
                 slots
             },
             plain_data: serde_json::json!({"type": "warning", "appearance": "simple"}),
             attr: empty_attr(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         };
 
         let block = Block::Custom(custom);
@@ -4352,14 +4352,14 @@ mod tests {
                     "text".to_string(),
                     Slot::Inlines(vec![Inline::Str(Str {
                         text: "hover me".to_string(),
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                     })]),
                 );
                 slots
             },
             plain_data: serde_json::json!({"tip": "This is a tooltip"}),
             attr: empty_attr(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         };
 
         let inline = Inline::Custom(custom);
@@ -4369,7 +4369,7 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![inline],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
         };
 
@@ -4422,7 +4422,7 @@ mod tests {
             slots: hashlink::LinkedHashMap::new(),
             plain_data: serde_json::Value::Null,
             attr,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         };
 
         let block = Block::Custom(custom);

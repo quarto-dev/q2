@@ -1610,25 +1610,25 @@ mod tests {
         assert_eq!(
             get_inline_type_name(&Inline::Str(Str {
                 text: "".into(),
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Str"
         );
         assert_eq!(
             get_inline_type_name(&Inline::Space(Space {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Space"
         );
         assert_eq!(
             get_inline_type_name(&Inline::SoftBreak(SoftBreak {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "SoftBreak"
         );
         assert_eq!(
             get_inline_type_name(&Inline::LineBreak(LineBreak {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "LineBreak"
         );
@@ -1643,20 +1643,20 @@ mod tests {
         assert_eq!(
             get_block_type_name(&Block::Paragraph(Paragraph {
                 content: vec![],
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Para"
         );
         assert_eq!(
             get_block_type_name(&Block::Plain(Plain {
                 content: vec![],
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "Plain"
         );
         assert_eq!(
             get_block_type_name(&Block::HorizontalRule(HorizontalRule {
-                source_info: SourceInfo::default()
+                source_info: SourceInfo::for_test()
             })),
             "HorizontalRule"
         );

@@ -2303,7 +2303,7 @@ mod coarsen_plan7_tests {
 
         let orig_inlines = vec![make_str("Resolved", gen_info)];
         // New-side inline: a plain user edit (no Invocation anchor).
-        let new_inlines = vec![make_str("Retyped", SourceInfo::default())];
+        let new_inlines = vec![make_str("Retyped", SourceInfo::for_test())];
         let plan = InlineReconciliationPlan {
             inline_alignments: vec![InlineAlignment::UseAfter(0)],
             ..Default::default()

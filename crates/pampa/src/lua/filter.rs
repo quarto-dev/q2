@@ -1881,7 +1881,7 @@ mod unit_tests {
         use hashlink::LinkedHashMap;
         use quarto_source_map::SourceInfo;
 
-        let source_info = SourceInfo::default();
+        let source_info = SourceInfo::for_test();
 
         assert_eq!(
             block_tag(&Block::Plain(Plain {
@@ -2076,7 +2076,7 @@ mod unit_tests {
         use hashlink::LinkedHashMap;
         use quarto_source_map::SourceInfo;
 
-        let source_info = SourceInfo::default();
+        let source_info = SourceInfo::for_test();
 
         assert_eq!(
             inline_tag(&Inline::Str(Str {
@@ -2317,7 +2317,7 @@ mod unit_tests {
 
         let original = Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let result = handle_inline_return(Value::Nil, &original).unwrap();
         assert_eq!(result.len(), 1);
@@ -2337,7 +2337,7 @@ mod unit_tests {
         let empty_table = lua.create_table().unwrap();
         let original = Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let result = handle_inline_return(Value::Table(empty_table), &original).unwrap();
         assert_eq!(result.len(), 0); // Empty table means delete
@@ -2351,7 +2351,7 @@ mod unit_tests {
 
         let original = Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         // Non-nil, non-table, non-userdata returns original unchanged
         let result = handle_inline_return(Value::Integer(42), &original).unwrap();
@@ -2374,7 +2374,7 @@ mod unit_tests {
 
         let original = Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let result = handle_block_return(Value::Nil, &original).unwrap();
         assert_eq!(result.len(), 1);
@@ -2391,7 +2391,7 @@ mod unit_tests {
         let empty_table = lua.create_table().unwrap();
         let original = Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let result = handle_block_return(Value::Table(empty_table), &original).unwrap();
         assert_eq!(result.len(), 0); // Empty table means delete
@@ -2405,7 +2405,7 @@ mod unit_tests {
 
         let original = Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         // Non-nil, non-table, non-userdata returns original unchanged
         let result = handle_block_return(Value::Integer(42), &original).unwrap();
@@ -2425,7 +2425,7 @@ mod unit_tests {
 
         let original = Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let (elements, control) =
             handle_inline_return_with_control(MultiValue::new(), &original).unwrap();
@@ -2441,7 +2441,7 @@ mod unit_tests {
 
         let original = Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
@@ -2459,7 +2459,7 @@ mod unit_tests {
 
         let original = Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
@@ -2477,7 +2477,7 @@ mod unit_tests {
 
         let original = Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let (elements, control) =
             handle_block_return_with_control(MultiValue::new(), &original).unwrap();
@@ -2493,7 +2493,7 @@ mod unit_tests {
 
         let original = Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         });
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
@@ -2511,7 +2511,7 @@ mod unit_tests {
 
         let original = vec![Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
         let (elements, control) =
             handle_blocks_return_with_control(MultiValue::new(), &original).unwrap();
@@ -2527,7 +2527,7 @@ mod unit_tests {
 
         let original = vec![Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
@@ -2545,7 +2545,7 @@ mod unit_tests {
 
         let original = vec![Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
         let (elements, control) =
             handle_inlines_return_with_control(MultiValue::new(), &original).unwrap();
@@ -2561,7 +2561,7 @@ mod unit_tests {
 
         let original = vec![Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
         values.push_front(Value::Nil);
@@ -2579,7 +2579,7 @@ mod unit_tests {
 
         let original = vec![Inline::Str(Str {
             text: "original".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
         values.push_front(Value::Integer(42)); // Not a table or nil
@@ -2596,7 +2596,7 @@ mod unit_tests {
 
         let original = vec![Block::Plain(Plain {
             content: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
         values.push_front(Value::Integer(42)); // Not a table or nil

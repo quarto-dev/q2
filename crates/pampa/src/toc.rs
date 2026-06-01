@@ -498,7 +498,7 @@ mod tests {
     use quarto_pandoc_types::attr::AttrSourceInfo;
 
     fn dummy_source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn make_header(level: usize, id: &str, classes: Vec<&str>, text: &str) -> Block {

@@ -274,7 +274,7 @@ mod tests {
     use crate::pandoc::inline::{Emph, Inline, Space, Str};
 
     fn dummy_source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     fn make_str(text: &str) -> Inline {

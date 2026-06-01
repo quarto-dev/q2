@@ -207,7 +207,7 @@ mod tests {
     use yaml_rust2::Yaml;
 
     fn dummy_source_info() -> SourceInfo {
-        SourceInfo::default()
+        SourceInfo::for_test()
     }
 
     #[test]

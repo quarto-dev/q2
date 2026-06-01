@@ -967,7 +967,7 @@ mod tests {
 
     // Helper to create a default SourceInfo for tests
     fn si() -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::default()
+        quarto_source_map::SourceInfo::for_test()
     }
 
     // Helper to create a Str inline
@@ -1216,12 +1216,12 @@ mod tests {
                     .into_iter()
                     .map(|(key, value)| ConfigMapEntry {
                         key: key.to_string(),
-                        key_source: quarto_source_map::SourceInfo::default(),
+                        key_source: quarto_source_map::SourceInfo::for_test(),
                         value,
                     })
                     .collect(),
             ),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
     }
@@ -1230,7 +1230,7 @@ mod tests {
     fn meta_string(s: &str) -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s.to_string())),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
     }
@@ -1239,7 +1239,7 @@ mod tests {
     fn meta_bool(b: bool) -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b)),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
     }
@@ -1248,7 +1248,7 @@ mod tests {
     fn meta_array(items: Vec<ConfigValue>) -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Array(items),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
     }
@@ -1387,7 +1387,7 @@ mod tests {
     fn meta_int(i: i64) -> ConfigValue {
         ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
     }
@@ -1503,7 +1503,7 @@ mod tests {
         ]);
         let entries = vec![ConfigMapEntry {
             key: "author".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: meta_array(vec![author]),
         }];
         let names = extract_names(&entries, "author").unwrap();
@@ -1524,7 +1524,7 @@ mod tests {
         ]);
         let entries = vec![ConfigMapEntry {
             key: "author".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: meta_array(vec![author1, author2]),
         }];
         let names = extract_names(&entries, "author").unwrap();
@@ -1538,7 +1538,7 @@ mod tests {
         let author = meta_map(vec![("literal", meta_string("World Health Organization"))]);
         let entries = vec![ConfigMapEntry {
             key: "author".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: meta_array(vec![author]),
         }];
         let names = extract_names(&entries, "author").unwrap();
@@ -1559,7 +1559,7 @@ mod tests {
         ]);
         let entries = vec![ConfigMapEntry {
             key: "author".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: meta_array(vec![author]),
         }];
         let names = extract_names(&entries, "author").unwrap();
@@ -1575,7 +1575,7 @@ mod tests {
         let author = meta_map(vec![("suffix", meta_string("Jr."))]); // Only suffix, no name
         let entries = vec![ConfigMapEntry {
             key: "author".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: meta_array(vec![author]),
         }];
         let names = extract_names(&entries, "author");
@@ -1596,7 +1596,7 @@ mod tests {
         let date_map = meta_map(vec![("date-parts", date_parts)]);
         let entries = vec![ConfigMapEntry {
             key: "issued".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: date_map,
         }];
         let date = extract_date(&entries, "issued").unwrap();
@@ -1616,7 +1616,7 @@ mod tests {
         let date_map = meta_map(vec![("date-parts", date_parts)]);
         let entries = vec![ConfigMapEntry {
             key: "issued".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: date_map,
         }];
         let date = extract_date(&entries, "issued").unwrap();
@@ -1634,7 +1634,7 @@ mod tests {
         let date_map = meta_map(vec![("date-parts", date_parts)]);
         let entries = vec![ConfigMapEntry {
             key: "issued".to_string(),
-            key_source: quarto_source_map::SourceInfo::default(),
+            key_source: quarto_source_map::SourceInfo::for_test(),
             value: date_map,
         }];
         let date = extract_date(&entries, "issued").unwrap();

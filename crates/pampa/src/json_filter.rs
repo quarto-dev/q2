@@ -353,9 +353,9 @@ sys.exit(1)
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
                     text: "Hello".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
         };
         let context = ASTContext::new();
@@ -385,9 +385,9 @@ sys.exit(1)
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
                     text: "hello world".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
         };
         let context = ASTContext::new();
@@ -440,9 +440,9 @@ sys.exit(1)
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
         };
         let context = ASTContext::new();
@@ -672,9 +672,9 @@ printf '\xff\xfe'  # Invalid UTF-8 bytes
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
             })],
         };
         let context = ASTContext::new();

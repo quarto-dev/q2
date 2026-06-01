@@ -1153,7 +1153,7 @@ mod tests {
 
     // Helper to create a default SourceInfo for tests
     fn si() -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::default()
+        quarto_source_map::SourceInfo::for_test()
     }
 
     // Helper to create a Str inline

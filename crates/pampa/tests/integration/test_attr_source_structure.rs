@@ -49,11 +49,11 @@ fn test_attr_source_info_empty() {
 #[test]
 fn test_attr_source_info_with_values() {
     let with_values = AttrSourceInfo {
-        id: Some(SourceInfo::default()),
-        classes: vec![Some(SourceInfo::default()), Some(SourceInfo::default())],
+        id: Some(SourceInfo::for_test()),
+        classes: vec![Some(SourceInfo::for_test()), Some(SourceInfo::for_test())],
         attributes: vec![
-            (Some(SourceInfo::default()), Some(SourceInfo::default())),
-            (Some(SourceInfo::default()), Some(SourceInfo::default())),
+            (Some(SourceInfo::for_test()), Some(SourceInfo::for_test())),
+            (Some(SourceInfo::for_test()), Some(SourceInfo::for_test())),
         ],
     };
 
@@ -71,7 +71,7 @@ fn test_attr_source_info_mixed_none_some() {
     // Test the case where id is empty (None) but classes exist
     let mixed = AttrSourceInfo {
         id: None, // Empty id
-        classes: vec![Some(SourceInfo::default())],
+        classes: vec![Some(SourceInfo::for_test())],
         attributes: vec![],
     };
 
@@ -101,8 +101,8 @@ fn test_target_source_info_empty() {
 #[test]
 fn test_target_source_info_with_values() {
     let with_values = TargetSourceInfo {
-        url: Some(SourceInfo::default()),
-        title: Some(SourceInfo::default()),
+        url: Some(SourceInfo::for_test()),
+        title: Some(SourceInfo::for_test()),
     };
 
     assert!(with_values.url.is_some(), "Should have url source");
@@ -113,7 +113,7 @@ fn test_target_source_info_with_values() {
 fn test_target_source_info_url_only() {
     // Test the case where URL exists but title is empty
     let url_only = TargetSourceInfo {
-        url: Some(SourceInfo::default()),
+        url: Some(SourceInfo::for_test()),
         title: None, // No title
     };
 
@@ -134,7 +134,7 @@ fn test_span_has_attr_source_field() {
             LinkedHashMap::new(),
         ),
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -147,7 +147,7 @@ fn test_code_has_attr_source_field() {
     let code = Code {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         text: "code".to_string(),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -160,7 +160,7 @@ fn test_link_has_attr_and_target_source_fields() {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         target: ("url".to_string(), "title".to_string()),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
     };
@@ -176,7 +176,7 @@ fn test_image_has_attr_and_target_source_fields() {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         target: ("url".to_string(), "alt".to_string()),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
     };
@@ -195,7 +195,7 @@ fn test_code_block_has_attr_source_field() {
     let code_block = CodeBlock {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         text: "code".to_string(),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -208,7 +208,7 @@ fn test_header_has_attr_source_field() {
         level: 1,
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -220,7 +220,7 @@ fn test_div_has_attr_source_field() {
     let div = Div {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -234,10 +234,10 @@ fn test_figure_has_attr_source_field() {
         caption: Caption {
             short: None,
             long: None,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         },
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -255,23 +255,23 @@ fn test_table_has_attr_source_field() {
         caption: Caption {
             short: None,
             long: None,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         },
         colspec: vec![],
         head: TableHead {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             rows: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         },
         bodies: vec![],
         foot: TableFoot {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             rows: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         },
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -283,7 +283,7 @@ fn test_table_head_has_attr_source_field() {
     let head = TableHead {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         rows: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -297,7 +297,7 @@ fn test_table_body_has_attr_source_field() {
         rowhead_columns: 0,
         head: vec![],
         body: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -309,7 +309,7 @@ fn test_table_foot_has_attr_source_field() {
     let foot = TableFoot {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         rows: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -321,7 +321,7 @@ fn test_row_has_attr_source_field() {
     let row = Row {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         cells: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -338,7 +338,7 @@ fn test_cell_has_attr_source_field() {
         row_span: 1,
         col_span: 1,
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -373,7 +373,7 @@ fn test_citation_with_id_source_value() {
         mode: CitationMode::NormalCitation,
         note_num: 1,
         hash: 0,
-        id_source: Some(SourceInfo::default()),
+        id_source: Some(SourceInfo::for_test()),
     };
 
     assert!(
@@ -400,7 +400,7 @@ fn test_nested_table_all_components_have_attr_source() {
         caption: Caption {
             short: None,
             long: None,
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         },
         colspec: vec![
             (Alignment::Default, ColWidth::Default),
@@ -417,7 +417,7 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                     Cell {
@@ -426,14 +426,14 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                 ],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
             }],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         },
         bodies: vec![TableBody {
@@ -449,7 +449,7 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                     Cell {
@@ -458,23 +458,23 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
-                        source_info: SourceInfo::default(),
+                        source_info: SourceInfo::for_test(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                 ],
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
             }],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         }],
         foot: TableFoot {
             attr: ("foot-id".to_string(), vec![], LinkedHashMap::new()),
             rows: vec![],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         },
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -506,7 +506,7 @@ fn test_inline_enum_variants_with_source_fields() {
     let span_inline = Inline::Span(Span {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     });
 
@@ -520,7 +520,7 @@ fn test_inline_enum_variants_with_source_fields() {
     let code_inline = Inline::Code(Code {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         text: "code".to_string(),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     });
 
@@ -535,7 +535,7 @@ fn test_inline_enum_variants_with_source_fields() {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         target: (String::new(), String::new()),
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
     });
@@ -558,7 +558,7 @@ fn test_block_enum_variants_with_source_fields() {
         level: 1,
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     });
 
@@ -572,7 +572,7 @@ fn test_block_enum_variants_with_source_fields() {
     let div_block = Block::Div(Div {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
-        source_info: SourceInfo::default(),
+        source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
     });
 

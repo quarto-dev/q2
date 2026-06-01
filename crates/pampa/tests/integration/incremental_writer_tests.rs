@@ -263,7 +263,7 @@ A paragraph.
     if let pampa::pandoc::Block::Paragraph(ref mut p) = new_ast.blocks[0] {
         p.content = vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
             text: "Modified paragraph.".to_string(),
-            source_info: quarto_source_map::SourceInfo::default(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
         })];
     }
 
@@ -371,9 +371,9 @@ fn sectionize_wrapper_with_inner_para_edit_produces_nonempty_output() {
                     attr,
                     content: vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
                         text: "🎉".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                     attr_source: pampa::pandoc::attr::AttrSourceInfo::empty(),
                 }));
         }
@@ -450,9 +450,9 @@ A paragraph that the user will edit.
                     attr,
                     content: vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
                         text: "🎉".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
                     attr_source: pampa::pandoc::attr::AttrSourceInfo::empty(),
                 }));
         }
@@ -534,7 +534,7 @@ fn sectionize_wrapper_with_shortcode_child_edit_does_not_panic() {
             attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             source_info: si,
             attr_source: AttrSourceInfo::empty(),
@@ -544,7 +544,7 @@ fn sectionize_wrapper_with_shortcode_child_edit_does_not_panic() {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             source_info: si,
         })
@@ -571,9 +571,9 @@ fn sectionize_wrapper_with_shortcode_child_edit_does_not_panic() {
             ),
             content: vec![Inline::Str(Str {
                 text: "🎉".to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         }));
     }
@@ -627,7 +627,7 @@ fn sectionize_wrapper_shortcode_child_edit_soft_drops() {
     //      for atomic-Generated with preimage.
     //
     // This test exercises shape #2 by giving the new Para a
-    // SourceInfo::default() (simulating a React-side wholesale
+    // SourceInfo::for_test() (simulating a React-side wholesale
     // replacement that loses provenance), then asserts the soft-drop
     // outcome. Pre-fix: the resolved bytes leak into the qmd. Post-
     // fix: the token is preserved + Q-3-42/43 fires.
@@ -649,7 +649,7 @@ fn sectionize_wrapper_shortcode_child_edit_soft_drops() {
             attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             source_info: si,
             attr_source: AttrSourceInfo::empty(),
@@ -659,7 +659,7 @@ fn sectionize_wrapper_shortcode_child_edit_soft_drops() {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
             source_info: si,
         })
@@ -691,9 +691,9 @@ fn sectionize_wrapper_shortcode_child_edit_soft_drops() {
             ),
             content: vec![Inline::Str(Str {
                 text: "🎉".to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             })],
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         }));
     }
@@ -769,7 +769,7 @@ fn target_file_id_skips_synthesized_first_block() {
         attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
         content: vec![pampa::pandoc::Inline::Str(Str {
             text: "Synthesized title".to_string(),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
         })],
         source_info: SourceInfo::generated(By::title_block()),
         attr_source: AttrSourceInfo::empty(),
@@ -810,7 +810,7 @@ fn target_file_id_skips_synthesized_first_block() {
             }),
             pampa::pandoc::Inline::Str(Str {
                 text: "edited".to_string(),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
             }),
         ],
         source_info: SourceInfo::original(REAL_FILE, 0, 9),

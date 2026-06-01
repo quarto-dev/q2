@@ -1103,7 +1103,7 @@ mod tests {
         // String
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("hello".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1115,7 +1115,7 @@ mod tests {
         // Boolean
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true)),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1124,7 +1124,7 @@ mod tests {
         // Integer
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(42)),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1133,7 +1133,7 @@ mod tests {
         // Real
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real("3.14".to_string())),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1142,7 +1142,7 @@ mod tests {
         // Null
         let config = ConfigValue {
             value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Null),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1159,19 +1159,19 @@ mod tests {
         let items = vec![
             ConfigValue {
                 value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("a".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: MergeOp::default(),
             },
             ConfigValue {
                 value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("b".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: MergeOp::default(),
             },
         ];
 
         let config = ConfigValue {
             value: ConfigValueKind::Array(items),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
 
@@ -1189,17 +1189,17 @@ mod tests {
 
         let entries = vec![ConfigMapEntry {
             key: "key1".to_string(),
-            key_source: SourceInfo::default(),
+            key_source: SourceInfo::for_test(),
             value: ConfigValue {
                 value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("value1".to_string())),
-                source_info: SourceInfo::default(),
+                source_info: SourceInfo::for_test(),
                 merge_op: MergeOp::default(),
             },
         }];
 
         let config = ConfigValue {
             value: ConfigValueKind::Map(entries),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
 
@@ -1219,7 +1219,7 @@ mod tests {
         // Path
         let config = ConfigValue {
             value: ConfigValueKind::Path("/some/path".to_string()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1231,7 +1231,7 @@ mod tests {
         // Glob
         let config = ConfigValue {
             value: ConfigValueKind::Glob("*.md".to_string()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();
@@ -1243,7 +1243,7 @@ mod tests {
         // Expr
         let config = ConfigValue {
             value: ConfigValueKind::Expr("1 + 2".to_string()),
-            source_info: SourceInfo::default(),
+            source_info: SourceInfo::for_test(),
             merge_op: MergeOp::default(),
         };
         let result = config_value_to_lua(&lua, &config).unwrap();

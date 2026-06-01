@@ -390,7 +390,7 @@ fn test_note_source_location() {
     assert_eq!(note_para["t"], "Para");
 
     // CRITICAL: The Paragraph wrapper should have proper source location
-    // not SourceInfo::default() which would be FileId(0) with offset 0
+    // not SourceInfo::for_test() which would be FileId(0) with offset 0
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
         resolve_source_ref(&note_para["s"], pool, &file_info, input);
 
@@ -485,7 +485,7 @@ fn test_note_reference_source_location() {
     assert_eq!(kvs[0][1], "note1");
 
     // CRITICAL: The Span should have proper source location from the NoteReference
-    // not SourceInfo::default() which would be FileId(0) with offset 0
+    // not SourceInfo::for_test() which would be FileId(0) with offset 0
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
         resolve_source_ref(&span["s"], pool, &file_info, input);
 

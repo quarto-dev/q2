@@ -390,7 +390,7 @@ mod tests {
     use quarto_yaml::YamlWithSourceInfo;
 
     fn si() -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::default()
+        quarto_source_map::SourceInfo::for_test()
     }
 
     #[test]
