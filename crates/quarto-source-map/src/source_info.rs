@@ -216,6 +216,18 @@ impl SourceInfo {
         }
     }
 
+    /// Convenience for tests: produce a non-atomic `Generated` source_info
+    /// with `By::test_scaffold()` and no anchors. Use this in test code
+    /// where a constructor requires a `SourceInfo` but there's no real
+    /// provenance to record. Replaces the historical
+    /// `SourceInfo::default()` pattern in tests.
+    pub fn for_test() -> Self {
+        SourceInfo::Generated {
+            by: By::test_scaffold(),
+            from: SmallVec::new(),
+        }
+    }
+
     /// If this is a [`SourceInfo::Generated`], return the first anchor whose
     /// role is [`AnchorRole::Invocation`].
     ///
@@ -635,6 +647,49 @@ impl By {
         }
     }
 
+    /// Producer kind for test scaffolding. Non-atomic; appears only in
+    /// test code where `source_info` is required by a constructor but
+    /// has no real provenance to record. Paired with
+    /// [`SourceInfo::for_test`].
+    pub fn test_scaffold() -> Self {
+        Self {
+            kind: "test-scaffold".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Empty-Map sentinel `ConfigValue` used during metadata merging
+    /// when no value is present. Non-atomic. The bytes don't exist —
+    /// the node is structural. See [`By::is_programmatic_sentinel`].
+    pub fn config_default() -> Self {
+        Self {
+            kind: "config-default".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// Programmatic construction of `ConfigValue` (e.g.
+    /// `ConfigValue::from_path`, intermediate maps created during
+    /// `insert_path`). No source bytes exist for these nodes.
+    /// See [`By::is_programmatic_sentinel`].
+    pub fn programmatic_config() -> Self {
+        Self {
+            kind: "programmatic-config".to_string(),
+            data: serde_json::Value::Null,
+        }
+    }
+
+    /// True for kinds whose source bytes don't exist — `config-default`,
+    /// `programmatic-config`, `unknown`. Used by code that needs to
+    /// distinguish "no real source" sentinels from a genuine
+    /// `Original{FileId(0), …}` pointing at a real document.
+    pub fn is_programmatic_sentinel(&self) -> bool {
+        matches!(
+            self.kind.as_str(),
+            "config-default" | "programmatic-config" | "unknown"
+        )
+    }
+
     /// Escape-hatch constructor for any `kind` string — including built-in
     /// names and extension-defined kinds (`ext/<extension>/<kind>`).
     ///
@@ -863,6 +918,9 @@ mod tests {
         assert!(!By::footnotes().is_atomic_kind());
         assert!(!By::appendix().is_atomic_kind());
         assert!(!By::unknown().is_atomic_kind());
+        assert!(!By::test_scaffold().is_atomic_kind());
+        assert!(!By::config_default().is_atomic_kind());
+        assert!(!By::programmatic_config().is_atomic_kind());
         assert!(!By::raw("ext/anywhere/foo", serde_json::Value::Null).is_atomic_kind());
     }
 
@@ -875,6 +933,57 @@ mod tests {
         // strict reader rejects missing `s:`, the completing reader stamps
         // them with this kind only at the explicit call site.
         assert!(!by.is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_test_scaffold_constructor() {
+        let by = By::test_scaffold();
+        assert_eq!(by.kind, "test-scaffold");
+        assert!(by.data.is_null());
+        assert!(!by.is_atomic_kind());
+        // Not a "no real source" sentinel — it's test scaffolding.
+        assert!(!by.is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_by_config_default_constructor() {
+        let by = By::config_default();
+        assert_eq!(by.kind, "config-default");
+        assert!(by.data.is_null());
+        assert!(!by.is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_programmatic_config_constructor() {
+        let by = By::programmatic_config();
+        assert_eq!(by.kind, "programmatic-config");
+        assert!(by.data.is_null());
+        assert!(!by.is_atomic_kind());
+    }
+
+    #[test]
+    fn test_by_is_programmatic_sentinel() {
+        assert!(By::config_default().is_programmatic_sentinel());
+        assert!(By::programmatic_config().is_programmatic_sentinel());
+        assert!(By::unknown().is_programmatic_sentinel());
+
+        assert!(!By::user_edit().is_programmatic_sentinel());
+        assert!(!By::filter("x.lua", 1).is_programmatic_sentinel());
+        assert!(!By::shortcode("meta").is_programmatic_sentinel());
+        assert!(!By::test_scaffold().is_programmatic_sentinel());
+        assert!(!By::sectionize().is_programmatic_sentinel());
+    }
+
+    #[test]
+    fn test_source_info_for_test() {
+        let si = SourceInfo::for_test();
+        match si {
+            SourceInfo::Generated { by, from } => {
+                assert_eq!(by.kind, "test-scaffold");
+                assert!(from.is_empty());
+            }
+            _ => panic!("for_test() must return Generated"),
+        }
     }
 
     #[test]

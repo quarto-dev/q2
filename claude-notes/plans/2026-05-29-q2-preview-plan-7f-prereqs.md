@@ -374,8 +374,8 @@ Files to audit (highest concentration first):
 
 Work items:
 
-- [ ] Add `By::test_scaffold()` constructor in `quarto-source-map`.
-- [ ] Add `SourceInfo::for_test()` convenience in `quarto-source-map`.
+- [x] Add `By::test_scaffold()` constructor in `quarto-source-map`.
+- [x] Add `SourceInfo::for_test()` convenience in `quarto-source-map`.
 - [ ] Audit test-file usages of `SourceInfo::default()`; replace with one of the four patterns above.
 - [ ] Update writer-exercising test expectations where switching to `for_test()` changes the dispatch rule (R1-empty-range → R5/R3) — the new output is the correct one.
 - [ ] Verify: `cargo nextest run --workspace` passes after replacements.
@@ -559,8 +559,8 @@ Why widen the enum rather than wire through three callers separately: provenance
 
 ### Work items
 
-- [ ] Add `By::config_default()`, `By::programmatic_config()`, `By::is_programmatic_sentinel()` to `quarto-source-map`. (Earlier drafts also added `By::reconcile_synthesize()`; dropped — no producer uses it.)
-- [ ] Unit tests in `quarto-source-map`:
+- [x] Add `By::config_default()`, `By::programmatic_config()`, `By::is_programmatic_sentinel()` to `quarto-source-map`. (Earlier drafts also added `By::reconcile_synthesize()`; dropped — no producer uses it.)
+- [x] Unit tests in `quarto-source-map`:
   - Assert `By::test_scaffold()`, `By::config_default()`, `By::programmatic_config()` all return `false` from `is_atomic_kind()`. Pins the property explicitly so a future producer-contract change can't accidentally promote one to atomic.
   - Assert `By::unknown()` (from Phase 4) returns `false` from `is_atomic_kind()`.
   - Assert `is_programmatic_sentinel()` returns `true` for `By::config_default()`, `By::programmatic_config()`, `By::unknown()` and `false` for `By::user_edit()`, `By::filter("x.lua", 1)`, `By::shortcode("meta")`.
