@@ -58,8 +58,8 @@ This leaves Phase 1's `✗` list at: `Emph`, `Strong`, `Underline`, `Strikeout`,
 
 Work items:
 
-- [ ] Walk every entry in `renderChildrenRegistry`. Record a checklist row per renderer: "preserves" vs "strips."
-- [ ] Verify `makeFlatInlineRenderer` separately (one helper, multiple renderers).
+- [x] Walk every entry in `renderChildrenRegistry`. Record a checklist row per renderer: "preserves" vs "strips." — audited 2026-06-01; matches the strip-list at Phase 1 lines 36-44.
+- [x] Verify `makeFlatInlineRenderer` separately (one helper, multiple renderers). — `dispatch.tsx:254` emits `{ t: tag, c: next }` with no spread; all five callers (`Underline`, `Strikeout`, `Superscript`, `Subscript`, `SmallCaps`) strip `s:`.
 - [x] Verify `renderCustomNodeChildren` (custom-node generic walk). — preserves via spread (see finding above).
 
 ## Phase 2 — Apply the spread-fix
@@ -80,10 +80,10 @@ The spread copies `s:`, `attr`, and any other top-level fields; the `c:` overrid
 
 Work items:
 
-- [ ] Apply the spread pattern to every `✗` renderer in `dispatch.tsx`.
-- [ ] Apply the spread pattern inside `makeFlatInlineRenderer`.
-- [ ] Apply the spread pattern to q2-debug's `Figure` renderer at `hub-client/src/components/render/q2-debug/components.tsx:110`. This is q2-debug's only edit-rebuild path; everything else routes through the framework's `<Node>` and inherits the framework's fix.
-- [ ] For each renderer, add a TS test: simulate a child edit, assert the rebuilt parent's `s:` matches the original.
+- [x] Apply the spread pattern to every `✗` renderer in `dispatch.tsx`.
+- [x] Apply the spread pattern inside `makeFlatInlineRenderer`.
+- [x] Apply the spread pattern to q2-debug's `Figure` renderer at `hub-client/src/components/render/q2-debug/components.tsx:110`. This is q2-debug's only edit-rebuild path; everything else routes through the framework's `<Node>` and inherits the framework's fix.
+- [x] For each renderer, add a TS test: simulate a child edit, assert the rebuilt parent's `s:` matches the original. — `ts-packages/preview-renderer/src/framework/dispatch.test.tsx` (22 cases, 19 ✗ + 3 ✓).
 
 ## Phase 3 — User-edit stamping at `setLocalAst` boundary
 

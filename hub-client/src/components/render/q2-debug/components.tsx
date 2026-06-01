@@ -107,7 +107,7 @@ export const Figure = (args: NodeArgs<FigureBlock>) => (
                     setLocalAst={(newInline) => {
                         const newCaption = [...args.node.c[1][0]!];
                         newCaption[i] = newInline as InlineNode;
-                        args.setLocalAst({ t: 'Figure', c: [args.node.c[0], [newCaption, args.node.c[1][1]], args.node.c[2]] });
+                        args.setLocalAst({ ...args.node, c: [args.node.c[0], [newCaption, args.node.c[1][1]], args.node.c[2]] });
                     }}
                 />
             ))}</div>

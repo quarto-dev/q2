@@ -82,7 +82,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as EmphInline).c];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Emph', c: newChildren });
+                    setLocalAst({ ...(node as EmphInline), c: newChildren });
                 }}
             />
         )),
@@ -92,7 +92,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as StrongInline).c];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Strong', c: newChildren });
+                    setLocalAst({ ...(node as StrongInline), c: newChildren });
                 }}
             />
         )),
@@ -108,7 +108,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as LinkInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Link', c: [(node as LinkInline).c[0], newChildren, (node as LinkInline).c[2]] });
+                    setLocalAst({ ...(node as LinkInline), c: [(node as LinkInline).c[0], newChildren, (node as LinkInline).c[2]] });
                 }}
             />
         )),
@@ -118,7 +118,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as ImageInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Image', c: [(node as ImageInline).c[0], newChildren, (node as ImageInline).c[2]] });
+                    setLocalAst({ ...(node as ImageInline), c: [(node as ImageInline).c[0], newChildren, (node as ImageInline).c[2]] });
                 }}
             />
         )),
@@ -128,7 +128,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as SpanInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Span', c: [(node as SpanInline).c[0], newChildren] });
+                    setLocalAst({ ...(node as SpanInline), c: [(node as SpanInline).c[0], newChildren] });
                 }}
             />
         )),
@@ -138,7 +138,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as QuotedInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Quoted', c: [(node as QuotedInline).c[0], newChildren] });
+                    setLocalAst({ ...(node as QuotedInline), c: [(node as QuotedInline).c[0], newChildren] });
                 }}
             />
         )),
@@ -149,7 +149,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as ParaBlock).c];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Para', c: newChildren });
+                    setLocalAst({ ...(node as ParaBlock), c: newChildren });
                 }}
             />
         )),
@@ -159,7 +159,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as PlainBlock).c];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Plain', c: newChildren });
+                    setLocalAst({ ...(node as PlainBlock), c: newChildren });
                 }}
             />
         )),
@@ -169,7 +169,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as HeaderBlock).c[2]];
                     newChildren[i] = newChild as InlineNode;
-                    setLocalAst({ t: 'Header', c: [(node as HeaderBlock).c[0], (node as HeaderBlock).c[1], newChildren] });
+                    setLocalAst({ ...(node as HeaderBlock), c: [(node as HeaderBlock).c[0], (node as HeaderBlock).c[1], newChildren] });
                 }}
             />
         )),
@@ -179,7 +179,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as BlockQuoteBlock).c];
                     newChildren[i] = newChild as BlockNode;
-                    setLocalAst({ t: 'BlockQuote', c: newChildren });
+                    setLocalAst({ ...(node as BlockQuoteBlock), c: newChildren });
                 }}
             />
         )),
@@ -189,7 +189,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as DivBlock).c[1]];
                     newChildren[i] = newChild as BlockNode;
-                    setLocalAst({ t: 'Div', c: [(node as DivBlock).c[0], newChildren] });
+                    setLocalAst({ ...(node as DivBlock), c: [(node as DivBlock).c[0], newChildren] });
                 }}
             />
         )),
@@ -202,7 +202,7 @@ const renderChildrenRegistry: Record<string, (args: {
                         const newItem = [...newItems[i]];
                         newItem[j] = newBlock as BlockNode;
                         newItems[i] = newItem;
-                        setLocalAst({ t: 'BulletList', c: newItems });
+                        setLocalAst({ ...(node as BulletListBlock), c: newItems });
                     }}
                 />
             ))}</li>
@@ -216,7 +216,7 @@ const renderChildrenRegistry: Record<string, (args: {
                         const newItem = [...newItems[i]];
                         newItem[j] = newBlock as BlockNode;
                         newItems[i] = newItem;
-                        setLocalAst({ t: 'OrderedList', c: [(node as OrderedListBlock).c[0], newItems] });
+                        setLocalAst({ ...(node as OrderedListBlock), c: [(node as OrderedListBlock).c[0], newItems] });
                     }}
                 />
             ))}</li>
@@ -227,7 +227,7 @@ const renderChildrenRegistry: Record<string, (args: {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as FigureBlock).c[2]];
                     newChildren[i] = newChild as BlockNode;
-                    setLocalAst({ t: 'Figure', c: [(node as FigureBlock).c[0], (node as FigureBlock).c[1], newChildren] });
+                    setLocalAst({ ...(node as FigureBlock), c: [(node as FigureBlock).c[0], (node as FigureBlock).c[1], newChildren] });
                 }}
             />
         )),
@@ -239,7 +239,7 @@ const renderChildrenRegistry: Record<string, (args: {
     CustomInline: renderCustomNodeChildren,
 };
 
-function makeFlatInlineRenderer(tag: string) {
+function makeFlatInlineRenderer(_tag: string) {
     return ({ node, setLocalAst, onNavigateToDocument }: {
         node: any;
         setLocalAst: (newNode: any) => void;
@@ -251,7 +251,7 @@ function makeFlatInlineRenderer(tag: string) {
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const next = children.slice();
                     next[i] = newChild as InlineNode;
-                    setLocalAst({ t: tag, c: next });
+                    setLocalAst({ ...node, c: next });
                 }}
             />
         ));
