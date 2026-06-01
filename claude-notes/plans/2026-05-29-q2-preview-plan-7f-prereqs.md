@@ -17,9 +17,21 @@ Four workstreams, none of which involve the writer itself:
 
 Plus two minor cleanups bundled along for the ride: wire-format renames `attrS` → `a`, `sourceInfoPool` → `p`.
 
-## Phase 1 — Audit `dispatch.tsx` for `s:`-stripping
+## Phase 1 — Audit `dispatch.tsx` and `q2-debug/components.tsx` for `s:`-stripping
 
-Walk every renderer in `ts-packages/preview-renderer/src/framework/dispatch.tsx`'s `renderChildrenRegistry`. For each renderer whose `setLocalAst` closure reconstructs a wrapper, confirm whether it preserves the original node's `s:` field.
+Walk every renderer in `ts-packages/preview-renderer/src/framework/dispatch.tsx`'s `renderChildrenRegistry`. For each renderer whose `setLocalAst` closure reconstructs a wrapper, confirm whether it preserves the original node's `s:` field. Then do the same audit for `hub-client/src/components/render/q2-debug/components.tsx`, which carries its own copy of a few renderers that bypass the framework's per-tag registry.
+
+### q2-debug audit (2026-06-01)
+
+`hub-client/src/components/render/q2-debug/components.tsx` has one `setLocalAst` rebuild that strips `s:`:
+
+- `Figure` at line 110 — `args.setLocalAst({ t: 'Figure', c: [args.node.c[0], [newCaption, args.node.c[1][1]], args.node.c[2]] })`. Same `s:`-stripping pattern as the framework's Figure renderer; same spread-fix applies.
+
+The other q2-debug renderers (`Str`, `Space`, `SoftBreak`, etc. in `components.tsx`) are display-only — they don't call `setLocalAst`, so they're not stripping candidates. The custom `Figure` is q2-debug's only edit-rebuild path; everything else routes through the framework's `<Node>` (imported at `entry.tsx:18`) and inherits the framework's fix.
+
+q2-debug **does not call `incremental_write_qmd` directly**. Edits propagate via `postMessage` from the iframe to the parent (`Q2DebugIframe.tsx:35`) and then to the parent's `setAst` handler. The parent (in `ReactRenderer` / `ReactPreview`) is the one that may feed the AST back to `incremental_write_qmd`. The strict-reader contract still applies to q2-debug-edited AST.
+
+q2-debug **inherits Phase 3's `stampUserEdits` for free** because every per-child rebuild routes through the framework's `<Node>` component. The walker fires once per `<Node>` descent regardless of whether the host is q2-preview or q2-debug.
 
 Spot test confirmed widespread; the list as of writing (per `dispatch.tsx:60-240`):
 
@@ -68,8 +80,9 @@ The spread copies `s:`, `attr`, and any other top-level fields; the `c:` overrid
 
 Work items:
 
-- [ ] Apply the spread pattern to every `✗` renderer.
+- [ ] Apply the spread pattern to every `✗` renderer in `dispatch.tsx`.
 - [ ] Apply the spread pattern inside `makeFlatInlineRenderer`.
+- [ ] Apply the spread pattern to q2-debug's `Figure` renderer at `hub-client/src/components/render/q2-debug/components.tsx:110`. This is q2-debug's only edit-rebuild path; everything else routes through the framework's `<Node>` and inherits the framework's fix.
 - [ ] For each renderer, add a TS test: simulate a child edit, assert the rebuilt parent's `s:` matches the original.
 
 ## Phase 3 — User-edit stamping at `setLocalAst` boundary
@@ -281,7 +294,14 @@ Two JSON top-level fields in `crates/pampa/src/writers/json.rs` get single-chara
 
 Multi-character fields inside `AttrSourceJson` (`classes`, `id`, `kvs`) stay — they're Pandoc-standard. `pandoc-api-version` stays — Pandoc-legacy.
 
-**Snapshot regeneration.** The renames + reserved pool slot change *every* JSON snapshot the writer produces. Affected fixture trees include `crates/pampa/src/snapshots/` and any other crate using `insta`-style snapshots that serialize ASTs. Expect a large mechanical commit regenerating snapshots; do it as a separate commit from the rename itself so the snapshot churn doesn't bury the substantive change.
+**Snapshot regeneration (scope audited 2026-06-01).** The renames + reserved pool slot change every JSON snapshot the writer produces, but the scope is narrow: **62 `.snap` files** in `crates/pampa/snapshots/json/` (the workspace has 229 `.snap` files total; the other 167 are native/text/qmd/error-corpus snapshots that don't carry source-info references). No other crate's snapshots are affected. Phase 6's R1-empty → R5-synthesize dispatch shift is expected to produce **zero** snapshot diffs (the snapshot harness parses real `.qmd` fixtures, so its AST carries real `Original` source_info, not defaults) — if any qmd-writer snapshot *does* regenerate during Phase 6, treat it as a red flag and investigate before accepting.
+
+Commit-split for the 62-file regeneration (recommended by the audit):
+
+1. **Phase 5 commit** — rename `attrS → a` and `sourceInfoPool → p`, regenerate the 62 snapshots. Diff is pure renames + alphabetic key reordering.
+2. **Phase 4 commit** — pre-populate pool slot 0, regenerate the same 62 snapshots. Diff is pure numeric `+1` shifts on every `"s":N` reference plus one new pool entry.
+
+Keeping these separate matters because the union looks like a wholesale rewrite, but each individually is mechanically reviewable.
 
 **Wire-format breaking change.** The renames are a breaking change to the JSON envelope. q2's wire format isn't a documented public contract, but anyone holding cached JSON (test fixtures committed to disk, debug-dump files, recorded session traces under `claude-notes/`) will see breakage. The new fields are byte-equivalent in meaning; only the key names change. No semantic regression, but consumer-side coordination is needed.
 
@@ -292,7 +312,7 @@ Work items:
 - [ ] Rust: update `crates/pampa/src/readers/json.rs` to read the renamed fields.
 - [ ] TS: update `ts-packages/preview-renderer/src/types/`, `hub-client/src/types/wasm-quarto-hub-client.d.ts`, **`hub-client/src/components/render/q2-debug/`** (debug AST viewer/editor that decodes the same JSON), and **`q2-preview-spa/src/`** (SPA-side decode) to match.
 - [ ] Test: round-trip the largest existing JSON fixture; assert byte-equivalent after the rename.
-- [ ] Regenerate all `.snap` snapshot fixtures: `INSTA_UPDATE=always cargo nextest run --workspace` (or per-crate equivalent). Commit the regenerated snapshots separately from the rename itself.
+- [ ] Regenerate the 62 `.snap` fixtures in `crates/pampa/snapshots/json/`: `INSTA_UPDATE=always cargo nextest run -p pampa`. Commit the regenerated snapshots in their own commit, sequenced as Phase 5 (renames) → Phase 4 (pool-shift) per the commit-split note above.
 - [ ] Grep `claude-notes/` for `attrS` / `sourceInfoPool`; update any design doc or research note that references the old names.
 - [ ] Verify the hub server (`crates/hub/`) treats AST JSON as opaque blob and does not pattern-match on `attrS` / `sourceInfoPool` field names. If it does inspect specific fields, update accordingly.
 
@@ -509,15 +529,31 @@ The earlier draft listed `crates/quarto-ast-reconcile/src/lib.rs:107, 116, 132, 
 | Site | Status | Treatment |
 |---|---|---|
 | `crates/quarto-pandoc-types/src/inline.rs:1455, 1474, 1491` | Test code (`#[cfg(test)] mod tests`). | Phase 6 — replace with explicit `source_info` once the new signature lands. |
-| `crates/pampa/src/pandoc/treesitter.rs:559` | **Production** — tree-sitter intermediate → `Inline::Attr`. Passes a real `attr_source` from the parse. | Phase 6.5 candidate: pass explicit `source_info` derived from the surrounding parse node's range. The current `unwrap_or_default()` fallback can only fire if `combine_all()` returns `None` on a real-parser attr_source — likely impossible in practice, but the new signature forces the choice to be made consciously. |
-| `crates/pampa/src/pandoc/treesitter_utils/caption.rs:50` | **Production** — caption_attr → `Inline::Attr`. Same as above. | Same treatment. |
-| `crates/pampa/src/pandoc/treesitter_utils/paragraph.rs:30` | **Production** — paragraph attr inline → `Inline::Attr`. Same as above. | Same treatment. |
+| `crates/pampa/src/pandoc/treesitter.rs:559` | **Production** — tree-sitter intermediate → `Inline::Attr`. Destructures `(attr, attr_source)` from `PandocNativeIntermediate::IntermediateAttr`. | Widen the enum variant — see "Production callers via PandocNativeIntermediate" below. |
+| `crates/pampa/src/pandoc/treesitter_utils/caption.rs:50` | **Production** — caption_attr → `Inline::Attr`. Same pattern. | Same treatment. |
+| `crates/pampa/src/pandoc/treesitter_utils/paragraph.rs:30` | **Production** — paragraph attr inline → `Inline::Attr`. Same pattern. | Same treatment. |
 | `crates/pampa/src/filters.rs:1503, 1513, 2123` | Test code. | Phase 6. |
 | `crates/pampa/src/writers/plaintext.rs:887` | Test code (the surrounding context is a `let inlines = vec![make_str("text"), ...]` test fixture). | Phase 6. |
 | `crates/pampa/src/lua/types.rs:2932` | Test code (`#[test] fn test_lua_inline_tag_name_attr`). | Phase 6. |
 | `crates/pampa/src/lua/filter.rs:2254` | Test code (assert inside a `#[test]`). | Phase 6. |
 
-**None of the three production `InlineAttr::new` callers passes `AttrSourceInfo::empty()`** — they all pass a real `attr_source` from the parse. So the production-side migration of the `InlineAttr::new` signature is mechanical: change the call to `InlineAttr::new(attr, attr_source, source_info)` where `source_info` comes from the surrounding parse context (each call site has access to a range or `SourceInfo` from the tree-sitter node it's lowering — wire it through). The fallback path through `unwrap_or_default()` only existed for defensive completeness; the signature change makes the defense explicit at the call site.
+**None of the three production `InlineAttr::new` callers passes `AttrSourceInfo::empty()`** — they all pass a real `attr_source` from the parse. The production-side migration of the `InlineAttr::new` signature happens via **widening the producer-side enum** rather than wiring source_info through each caller's local context, which would require chasing the tree-sitter node back up the call stack in three uneven ways.
+
+### Production callers via `PandocNativeIntermediate` (decision 2026-06-01)
+
+All three production call sites destructure `(attr, attr_source)` from the same enum variant — `PandocNativeIntermediate::IntermediateAttr(Attr, AttrSourceInfo)`. The cleanest migration is to widen that variant once, at the producer side, so it carries source_info from creation:
+
+```rust
+// Before
+PandocNativeIntermediate::IntermediateAttr(Attr, AttrSourceInfo)
+
+// After
+PandocNativeIntermediate::IntermediateAttr(Attr, AttrSourceInfo, SourceInfo)
+```
+
+Then each of the three consumers destructures four fields instead of two and passes the source_info straight through to `InlineAttr::new(attr, attr_source, source_info)`. The producer sites that construct `IntermediateAttr` (search the workspace with `grep -rn 'IntermediateAttr(' crates/`) get a SourceInfo from their local parse context — they have a tree-sitter node in scope, so deriving a `SourceInfo::Original{file_id, start_offset, end_offset}` is local.
+
+Why widen the enum rather than wire through three callers separately: provenance is *carried* with the intermediate, not reconstructed at the consumer. If a future fourth consumer appears, it gets source_info automatically. If the producer's source_info ever drifts (e.g. from a refactor of the parse helper), it's one site to update, not three. And the call-stack chase for the existing three consumers may surface inconsistencies — caption.rs and paragraph.rs in particular destructure from a `child` variant inside a loop, with no easy local handle on the original tree-sitter range.
 
 ### Work items
 
@@ -531,12 +567,13 @@ The earlier draft listed `crates/quarto-ast-reconcile/src/lib.rs:107, 116, 132, 
 - [ ] Apply `config_value.rs:822, 826` (insert_path intermediates) fix → `By::programmatic_config()`.
 - [ ] Apply `project_resources.rs:541` fix → `By::unknown()`. Open a beads follow-up to refactor `canonicalize_within_project` to take `Option<&SourceInfo>`.
 - [ ] Apply `navigation_href.rs:382` fix → replace `source == &SourceInfo::default()` with the `Generated { by, .. } if by.is_programmatic_sentinel()` pattern.
+- [ ] Apply newly-discovered production sites (cross-crate audit 2026-06-01):
+  - `crates/quarto-citeproc/src/output.rs:1274` → `By::raw("citeproc", Value::Null)` (or define a new `By::citeproc()` if the site warrants a dedicated kind; the agent flagged it as a "generated content" producer).
+  - `crates/quarto-config/src/materialize.rs:132, 152, 165` → `By::config_default()` or `By::programmatic_config()` per site (intermediates in `materialize_cursor` where source info is provably lost during merge).
+  - `crates/quarto-core/src/project/listing/feed/stage.rs:596, 602` → `By::unknown()` (synthetic diagnostic builders that degrade to span-less; same shape as `project_resources.rs:541`).
 - [ ] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the ~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`, and adapt the formatter at `crates/quarto-yaml-validation/src/error.rs:33-46` to handle `Option`. Test-side `InvalidStructure { message, .. }` destructures need no change.
 - [ ] Refactor `InlineAttr::new` signature (at `crates/quarto-pandoc-types/src/inline.rs:340`); add `new_from_attr_source` convenience.
-- [ ] Update the three **production** `InlineAttr::new` call sites in `pampa` to pass explicit source_info derived from the surrounding parse range:
-  - `crates/pampa/src/pandoc/treesitter.rs:559`
-  - `crates/pampa/src/pandoc/treesitter_utils/caption.rs:50`
-  - `crates/pampa/src/pandoc/treesitter_utils/paragraph.rs:30`
+- [ ] Widen `PandocNativeIntermediate::IntermediateAttr` from `(Attr, AttrSourceInfo)` to `(Attr, AttrSourceInfo, SourceInfo)`. Update every constructor site (search `grep -rn 'IntermediateAttr(' crates/`) to supply source_info from its local parse context. Update the three consumer sites — `crates/pampa/src/pandoc/treesitter.rs:559`, `crates/pampa/src/pandoc/treesitter_utils/caption.rs:50`, `crates/pampa/src/pandoc/treesitter_utils/paragraph.rs:30` — to destructure three fields and pass source_info through to `InlineAttr::new`.
 - [ ] Update the **test-code** `InlineAttr::new` call sites (`quarto-pandoc-types/src/inline.rs:1455, 1474, 1491`; `pampa/src/filters.rs:1503, 1513, 2123`; `pampa/src/writers/plaintext.rs:887`; `pampa/src/lua/types.rs:2932`; `pampa/src/lua/filter.rs:2254`) to pass `SourceInfo::for_test()`. This is technically Phase 6 work, but it falls out of the signature change and should land in the same commit as the refactor.
 - [ ] Delete `source_info_attr_empty` test at `inline.rs:1453`.
 - [ ] Audit `AttrSourceInfo::empty()` call sites (separate from `InlineAttr::new` callers): the eight reconciler-test sites at `quarto-ast-reconcile/src/lib.rs:107, 116, 132, 322, 1178` and the three block-test sites at `quarto-pandoc-types/src/block.rs:222, 235, 247` are test scaffolding for Block fixtures; they don't trigger any `SourceInfo::default()` path. Leave them as-is unless Phase 6 decides to rename `AttrSourceInfo::empty()` itself.
@@ -564,24 +601,41 @@ impl Default for SourceInfo {
 }
 ```
 
-The `#[deprecated]` attribute surfaces remaining call sites at compile time with a clear message. After Phases 6 and 6.5, every known production site has a deliberate replacement; the deprecation guards against new uses entering the codebase. CI's `-D warnings` strictness means the deprecation is effectively a hard ban on new callers; remaining test-side stragglers can be cleared during Phase 8 verification or, if any are truly load-bearing, get a clearly-commented `#[allow(deprecated)]`.
+The `#[deprecated]` attribute surfaces remaining call sites at compile time with a clear message. After Phases 6 and 6.5, every known production site has a deliberate replacement.
 
-Removing the `Default` impl entirely is a follow-up after the deprecation has had time to surface any forgotten sites. `#[derive(Default)]` consumers of types that include a `SourceInfo` field need separate audit before removal is safe.
+### The `-D deprecated` strategy (2026-06-01 decision)
+
+The deprecation isn't just informational — it's the **enforcement mechanism** for Plan 7d's R5 trust point. After Phase 7 lands the deprecation, run a CI build with `RUSTFLAGS="-D deprecated"` (or a workspace-level `#![deny(deprecated)]`) to turn every remaining `SourceInfo::default()` caller into a compile error. The build is green ⇒ every caller is migrated. The build is red ⇒ the failure list IS the residue list; fix or `#[allow(deprecated)]` per-site with a clear comment.
+
+This is how 7d gets a hard trust point. Once `-D deprecated` is green in CI:
+
+- No new `SourceInfo::default()` callers can land.
+- The "is this a real source or a sentinel?" question collapses to "what's the `By` kind?" — there's no longer an Original{FileId(0),0,0} sentinel to disambiguate.
+- 7d's strict R5 dispatch can assume `Generated` nodes have well-formed `by` kinds and no defaults lurk.
+
+The Phase 6 audit step ("grep for `SourceInfo::default()`") is therefore redundant once the deprecation is in place — the compiler does the audit. Run the deprecation first, fix the failures, ship Phase 7.
+
+### `#[derive(Default)]` exposure (audited 2026-06-01)
+
+Phase 8's `#[derive(Default)]` audit was prompted by a worry that structs with derived `Default` would transitively trigger the deprecation. The audit (2026-06-01) found that the three candidate files (`config_value.rs`, `quarto-lsp-core/src/document.rs`, `quarto-ast-reconcile/src/generators.rs`) contain `#[derive(Default)]` on structs that **do not** contain a `SourceInfo` field — neither directly nor transitively. The deprecation won't fire on them. If `-D deprecated` surfaces unexpected derive-related warnings post-Phase 7, fall back to `#[allow(deprecated)]` with a comment; no audit work is needed up front.
+
+Removing the `Default` impl entirely is a follow-up after the deprecation has had time to surface any forgotten sites.
 
 Work items:
 
-- [ ] Add `#[deprecated]` to `impl Default for SourceInfo`.
-- [ ] Verify: `cargo xtask verify --skip-hub-build` clean with no remaining `SourceInfo::default()` warnings.
-- [ ] If any `#[allow(deprecated)]` survives the audit, add an inline comment explaining why and pointing to the relevant follow-up.
+- [ ] Add `#[deprecated]` to `impl Default for SourceInfo` in `crates/quarto-source-map/src/source_info.rs`.
+- [ ] Add `#![deny(deprecated)]` at the workspace root (`Cargo.toml` lints table, or per-crate `#![deny(deprecated)]` if a workspace-wide table doesn't exist yet). This turns the deprecation into a compile error for new callers.
+- [ ] Run `cargo xtask verify --skip-hub-build` after the deny; iterate on the resulting compile errors until clean. The error list IS the residue list — fix each (preferred) or `#[allow(deprecated)]` with a clear `// SAFETY: <reason>` comment.
+- [ ] CI confirms `-D deprecated` is green. This becomes Plan 7d's trust-point gate.
 
 ## Phase 8 — Verification
 
-- [ ] `cargo xtask verify` (full, including hub-build) clean. 7f touches `quarto-pandoc-types`, `quarto-source-map`, and `quarto-yaml-validation` — all dependencies of `wasm-quarto-hub-client`. Plain `cargo build --bin q2` does *not* pick these up in `q2 preview`; the embedded SPA loads a stale WASM. Full verify rebuilds the WASM chain. After this lands, anyone testing the preview must run the full verify or follow the `q2 preview` rebuild instructions in CLAUDE.md.
+- [ ] `cargo xtask verify` (full, including hub-build) clean **with `-D deprecated` enabled**. 7f touches `quarto-pandoc-types`, `quarto-source-map`, and `quarto-yaml-validation` — all dependencies of `wasm-quarto-hub-client`. Plain `cargo build --bin q2` does *not* pick these up in `q2 preview`; the embedded SPA loads a stale WASM. Full verify rebuilds the WASM chain. After this lands, anyone testing the preview must run the full verify or follow the `q2 preview` rebuild instructions in CLAUDE.md.
 - [ ] All existing tests pass.
 - [ ] New tests from Phases 2, 3, 4 pass.
-- [ ] `#[derive(Default)]` audit: grep workspace for `#[derive(.*Default.*)]` on structs containing `SourceInfo` fields. The deprecation warning will fire when these derives are exercised. Decide per-site whether to suppress (with a clear comment) or refactor to remove the derive.
+- [ ] (Audited 2026-06-01 — no work expected.) `#[derive(Default)]` exposure to the deprecation: the three candidate files don't contain a SourceInfo transitively. If `-D deprecated` surfaces unexpected derive warnings, fall back to `#[allow(deprecated)]` with a comment.
 - [ ] Manual smoke test of q2-preview: open a document with shortcodes, edit a paragraph, save, re-open; verify the shortcode tokens are preserved and the framework's `s:` is intact on rebuilt wrappers.
-- [ ] Manual smoke test of q2-debug: open a document; verify the source_info pool display shows `[0] = Generated{by: user_edit, …}` as the reserved slot, and that documents without user edits still display correctly (pool entry 0 is always present even if unreferenced from any node).
+- [ ] Manual smoke test of q2-debug: open a document; verify the source_info pool display shows `[0] = Generated{by: user_edit, …}` as the reserved slot, and that documents without user edits still display correctly (pool entry 0 is always present even if unreferenced from any node). Also edit a node inside q2-debug; verify the resulting AST round-trips cleanly through `incremental_write_qmd` (no `MissingSourceInfoRef` errors).
 - [ ] Coordinate with Plan 7b's open work: if 7b adds tests via hand-crafted JSON, those tests must rebase after 7f and use the strict-reader pattern (or use the lenient reader explicitly for Pandoc-compatible content).
 
 ## What 7f does not do
